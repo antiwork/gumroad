@@ -63,8 +63,8 @@ const FAQ_ITEMS: {
         sales tax and VAT collected at checkout, affiliate commissions, and other adjustments, so it won't match the
         amount you were paid. Transactions are also grouped into tax years by the date the funds became available
         (usually a couple of days after the charge), so late-December sales may fall into the next year's form. For a
-        charge-by-charge breakdown that adds up to your form's gross amount, use the "Transaction report" button next to
-        your 1099-K above.{" "}
+        charge-by-charge breakdown that adds up to your form's gross amount, request the "Transaction report" listed
+        under your 1099-K above.{" "}
         <a href="/help/article/15-1099s#mismatch" target="_blank" rel="noreferrer">
           Learn more
         </a>
@@ -205,51 +205,78 @@ const TaxCenterIndex = () => {
                   <TableHead>Taxes</TableHead>
                   <TableHead>Affiliate commission</TableHead>
                   <TableHead>Net</TableHead>
-                  <TableHead>Filing Status</TableHead>
+                  <TableHead>Filing status</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {documents.map((doc) => (
-                  <TableRow key={doc.form_type}>
-                    <TableCell data-label="Document">
-                      <div className="flex items-center gap-2">
-                        <span>{doc.document}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell data-label="Type">{doc.type}</TableCell>
-                    <TableCell data-label="Gross">{doc.gross}</TableCell>
-                    <TableCell data-label="Fees">-{doc.fees}</TableCell>
-                    <TableCell data-label="Taxes">-{doc.taxes}</TableCell>
-                    <TableCell data-label="Affiliate commission">-{doc.affiliate_credit}</TableCell>
-                    <TableCell data-label="Net">{doc.net}</TableCell>
-                    <TableCell data-label="Filing Status">
-                      {doc.filed_at ? `Filed with IRS on ${doc.filed_at}` : "Informational only (Not Filed with IRS)"}
-                    </TableCell>
-                    <TableCell data-label="" className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {doc.transaction_report_available ? (
-                          <Button
+                  <React.Fragment key={doc.form_type}>
+                    <TableRow>
+                      <TableCell data-label="Document" className="whitespace-nowrap">
+                        {doc.document}
+                      </TableCell>
+                      <TableCell data-label="Type" className="whitespace-nowrap">
+                        {doc.type}
+                      </TableCell>
+                      <TableCell data-label="Gross" className="whitespace-nowrap">
+                        {doc.gross}
+                      </TableCell>
+                      <TableCell data-label="Fees" className="whitespace-nowrap">
+                        -{doc.fees}
+                      </TableCell>
+                      <TableCell data-label="Taxes" className="whitespace-nowrap">
+                        -{doc.taxes}
+                      </TableCell>
+                      <TableCell data-label="Affiliate commission" className="whitespace-nowrap">
+                        -{doc.affiliate_credit}
+                      </TableCell>
+                      <TableCell data-label="Net" className="whitespace-nowrap">
+                        {doc.net}
+                      </TableCell>
+                      <TableCell data-label="Filing status">
+                        {doc.filed_at ? `Filed with IRS on ${doc.filed_at}` : "Informational only (not filed with IRS)"}
+                      </TableCell>
+                      <TableCell data-label="" className="text-right">
+                        <div className="flex justify-end">
+                          <NavigationButton
                             size="sm"
                             className="w-full sm:w-auto"
-                            disabled={requestingReportFormType === doc.form_type}
-                            onClick={() => handleRequestTransactionReport(doc)}
+                            href={Routes.download_tax_form_path(doc.year, doc.form_type)}
+                            disabled={downloadingFormType === doc.form_type}
+                            onClick={(e) => handleDownload(e, doc.form_type)}
                           >
-                            {requestingReportFormType === doc.form_type ? "Requesting..." : "Transaction report"}
-                          </Button>
-                        ) : null}
-                        <NavigationButton
-                          size="sm"
-                          className="w-full sm:w-auto"
-                          href={Routes.download_tax_form_path(doc.year, doc.form_type)}
-                          disabled={downloadingFormType === doc.form_type}
-                          onClick={(e) => handleDownload(e, doc.form_type)}
-                        >
-                          {downloadingFormType === doc.form_type ? "Downloading..." : "Download"}
-                        </NavigationButton>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                            {downloadingFormType === doc.form_type ? "Downloading..." : "Download"}
+                          </NavigationButton>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {doc.transaction_report_available ? (
+                      <TableRow>
+                        <TableCell data-label="Document" className="whitespace-nowrap">
+                          Transaction report
+                        </TableCell>
+                        <TableCell data-label="Type" className="whitespace-nowrap">
+                          CSV report
+                        </TableCell>
+                        <TableCell colSpan={6} label="Description" hideLabel className="text-muted">
+                          Charge-level breakdown that adds up to your {doc.document}'s gross amount, sent to your email.
+                        </TableCell>
+                        <TableCell label="Actions" hideLabel className="text-right">
+                          <div className="flex justify-end">
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={requestingReportFormType === doc.form_type}
+                              onClick={() => handleRequestTransactionReport(doc)}
+                            >
+                              {requestingReportFormType === doc.form_type ? "Requesting..." : "Request report"}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
