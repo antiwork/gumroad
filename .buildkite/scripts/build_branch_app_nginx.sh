@@ -1,5 +1,11 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+# The nginx tag function lives in ci_scripts/helper.sh so this build step and
+# the nomad deploy scripts always compute the same tag from the same commit —
+# a drifted copy here would push an image the deploy never looks for.
+# (Sourced first: helper.sh also defines a generic logger; ours below wins.)
+source "$(git rev-parse --show-toplevel)/ci_scripts/helper.sh"
 
 GREEN="\033[0;32m"
 NC="\033[0m"
@@ -11,20 +17,6 @@ logger() {
 # touching docker/branch_app_nginx), so it does not depend on compiled assets
 # or the web image and can run in parallel with the rest of the pipeline.
 AWS_BRANCH_APP_NGINX_REPO=${ECR_REGISTRY}/gumroad/branch_app_nginx
-
-function generate_nginx_tag(){
-  local paths=()
-  local app_dir
-  app_dir=$(git rev-parse --show-toplevel)
-
-  # Change relative paths to absolute paths
-  for arg in "$@"; do
-    paths+=("${app_dir}/${arg}")
-  done
-
-  # Get short SHA of the latest commit affecting the paths
-  git rev-list --abbrev-commit --abbrev=12 HEAD -1 -- "${paths[@]}"
-}
 
 BRANCH_APP_NGINX_TAG=$(generate_nginx_tag "docker/branch_app_nginx")
 
