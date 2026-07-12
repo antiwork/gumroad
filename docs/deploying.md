@@ -11,6 +11,8 @@
   - [Logs](#logs)
   - [Hotfixing workers only](#hotfixing-workers-only)
 - [Deploying to a preview app](#deploying-to-a-preview-app)
+  - [Rails console on a preview app](#rails-console-on-a-preview-app)
+  - [Seeding QA state with `preview_qa` rake tasks](#seeding-qa-state-with-preview_qa-rake-tasks)
 - [Deploying to staging](#deploying-to-staging)
 
 ---
@@ -193,3 +195,29 @@ Adding the label triggers a Buildkite build that deploys the branch. Each subseq
 The preview app URL is posted on the pull request as a GitHub deployment: look for the "View deployment" button (and the Deployments section), which shows the deploy in progress and links to the running app once it is ready.
 
 Deployments are removed automatically when the associated branch is deleted in the repository.
+
+### Rails console on a preview app
+
+Preview apps have Rails console access — see [Connect to Rails console](https://github.com/antiwork/gumroad-deployment/blob/main/docs/ssh.md#connect-to-rails-console) in the deployment repo. The `console.sh` script there resolves the preview instance and opens `rails c` in the running container; it also supports `COMMAND=...` for one-shot commands and a `-w` flag for a writable database connection (the default is a read-only replica).
+
+### Seeding QA state with `preview_qa` rake tasks
+
+Use the permanent tasks in `lib/tasks/preview_qa.rake` to seed edge-case state on a preview app instead of adding temporary, param-gated seed hooks to your PR ("TEMP: revert before merge" commits). The tasks are unavailable in production.
+
+Run them through the console one-shot path with a writable connection, for example:
+
+```shell
+# Backdate a subscription purchase past its billing period so a renewal charge is due
+COMMAND='Rake::Task["preview_qa:backdate_purchase"].invoke("<purchase external_id>")' ./console.sh -w <branch>
+
+# Remove the e-mandate linkage from the card charged for a subscription (Indian card QA)
+COMMAND='Rake::Task["preview_qa:clear_mandate"].invoke("<subscription external_id>")' ./console.sh -w <branch>
+
+# Seed a job into the Sidekiq dead set (morgue)
+COMMAND='Rake::Task["preview_qa:seed_dead_job"].invoke("RecurringChargeWorker", "123")' ./console.sh -w <branch>
+
+# Run a worker inline, e.g. to force a renewal charge attempt
+COMMAND='Rake::Task["preview_qa:run_worker"].invoke("RecurringChargeWorker", "123")' ./console.sh -w <branch>
+```
+
+Record ids can be passed as either database ids or external ids. If a QA scenario you need isn't covered, add a task to the namespace (with specs) rather than shipping a temporary hook in your feature PR.
