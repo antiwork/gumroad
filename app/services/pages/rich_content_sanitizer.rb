@@ -15,6 +15,12 @@ class Pages::RichContentSanitizer
 
   ALLOWED_ATTRIBUTES = %w[href src alt title target rel class colspan rowspan].freeze
 
+  # Allowing href/src here does NOT allow arbitrary URI schemes:
+  # Rails::HTML5::SafeListSanitizer only keeps URI attributes whose scheme is
+  # in Loofah's safe list (http, https, mailto, ftp, and a few other inert
+  # ones), so javascript:, data: and vbscript: links are stripped — including
+  # mixed-case and entity-encoded variants. spec/models/page_spec.rb asserts
+  # this so a sanitizer swap can't silently reopen the XSS hole.
   def self.sanitize(html)
     return nil if html.blank?
 

@@ -112,21 +112,10 @@ class Api::V2::PagesController < Api::V2::BaseController
       params[:slug].presence if params[:slug].is_a?(String)
     end
 
-    # Same slug rules as the management UI: parameterized title, "page" for
-    # all-symbol titles, numbered on collision with existing or reserved slugs.
+    # Slug rules live on the model so the API and the management UI stay in
+    # sync: parameterized title, "page" fallback, numbered on collision.
     def generate_slug(title)
-      base = title.parameterize
-      base = "page" if base.blank?
-      return base unless slug_taken?(base)
-
-      (2..).each do |n|
-        candidate = "#{base}-#{n}"
-        return candidate unless slug_taken?(candidate)
-      end
-    end
-
-    def slug_taken?(slug)
-      Page::RESERVED_SLUGS.include?(slug) || current_resource_owner.pages.exists?(slug:)
+      Page.generate_slug_for(current_resource_owner, title)
     end
 
     def page_json(page)

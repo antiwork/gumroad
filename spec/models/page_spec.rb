@@ -82,6 +82,26 @@ describe Page do
       expect(page.errors[:pageable_type]).to be_present
     end
 
+    describe ".generate_slug_for" do
+      it "parameterizes the title" do
+        expect(described_class.generate_slug_for(user, "About Me!")).to eq("about-me")
+      end
+
+      it "falls back to 'page' when the title has no URL-safe characters" do
+        expect(described_class.generate_slug_for(user, "!!!")).to eq("page")
+      end
+
+      it "numbers the slug when it collides with an existing page" do
+        described_class.create!(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>")
+
+        expect(described_class.generate_slug_for(user, "About")).to eq("about-2")
+      end
+
+      it "numbers the slug when it collides with a reserved slug" do
+        expect(described_class.generate_slug_for(user, "Posts")).to eq("posts-2")
+      end
+    end
+
     it "sanitizes rich text content down to editor-supported markup" do
       page = described_class.create!(
         pageable: user, slug: "about", title: "About",
@@ -91,6 +111,27 @@ describe Page do
       expect(page.reload.content).to include("<p>Hello</p>")
       expect(page.content).not_to include("<script>")
       expect(page.content).not_to include("onclick")
+    end
+
+    it "strips unsafe URI schemes from links while keeping safe ones" do
+      page = described_class.create!(
+        pageable: user, slug: "links", title: "Links",
+        content: <<~HTML
+          <p><a href="https://example.com">safe</a></p>
+          <p><a href="javascript:alert(1)">js</a></p>
+          <p><a href="JaVaScRiPt:alert(1)">js mixed case</a></p>
+          <p><a href="java&#115;cript:alert(1)">js entity-encoded</a></p>
+          <p><a href="data:text/html,<script>alert(1)</script>">data uri</a></p>
+          <p><a href="vbscript:msgbox(1)">vbscript</a></p>
+          <img src="javascript:alert(1)">
+        HTML
+      )
+
+      content = page.reload.content
+      expect(content).to include(%(href="https://example.com"))
+      expect(content.downcase).not_to include("javascript:")
+      expect(content).not_to include("data:text/html")
+      expect(content).not_to include("vbscript:")
     end
 
     it "keeps custom_html and content independent so an agent takeover wins over rich text" do

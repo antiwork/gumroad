@@ -62,6 +62,25 @@ class Page < ApplicationRecord
     slug.present?
   end
 
+  # Builds a URL slug from a page title, shared by the management UI and the
+  # API so both create paths follow the same rules: parameterize the title,
+  # fall back to "page" when the title has no URL-safe characters, and append
+  # a number when the slug is already taken (or reserved) for this owner.
+  def self.generate_slug_for(owner, title)
+    base = title.to_s.parameterize
+    base = "page" if base.blank?
+    return base unless slug_taken_for?(owner, base)
+
+    (2..).each do |n|
+      candidate = "#{base}-#{n}"
+      return candidate unless slug_taken_for?(owner, candidate)
+    end
+  end
+
+  def self.slug_taken_for?(owner, slug)
+    RESERVED_SLUGS.include?(slug) || owner.pages.exists?(slug:)
+  end
+
   def to_param
     slug
   end
@@ -75,6 +94,12 @@ class Page < ApplicationRecord
     def only_one_root_page
       scope = Page.roots.where(pageable_type:, pageable_id:)
       scope = scope.where.not(id:) if persisted?
-      errors.add(:slug, "can't be blank — this account already has a root page") if scope.exists?
+      # `.lock` makes this a SELECT ... FOR UPDATE. When the check runs inside
+      # a save (which wraps the validation and the INSERT in one transaction),
+      # InnoDB's gap locking on the (pageable_type, pageable_id, slug) index
+      # blocks a concurrent insert of another slug-NULL row for the same owner
+      # until this transaction commits — closing the race the database index
+      # can't cover (MySQL unique indexes allow multiple NULLs, see above).
+      errors.add(:slug, "can't be blank — this account already has a root page") if scope.lock.exists?
     end
 end

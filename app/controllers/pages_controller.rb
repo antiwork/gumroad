@@ -134,21 +134,10 @@ class PagesController < Sellers::BaseController
       page.errors.to_hash.transform_values(&:first)
     end
 
-    # Slugs come from the title; on collision (or an all-symbols title that
-    # parameterizes to nothing) fall back to a numbered variant.
+    # Slug rules live on the model so the management UI and the API stay in
+    # sync: parameterized title, "page" fallback, numbered on collision.
     def generate_slug(title)
-      base = title.parameterize
-      base = "page" if base.blank?
-      return base unless slug_taken?(base)
-
-      (2..).each do |n|
-        candidate = "#{base}-#{n}"
-        return candidate unless slug_taken?(candidate)
-      end
-    end
-
-    def slug_taken?(slug)
-      Page::RESERVED_SLUGS.include?(slug) || current_seller.pages.exists?(slug:)
+      Page.generate_slug_for(current_seller, title)
     end
 
     # The profile rendered as the root of the page tree: first in the list,
