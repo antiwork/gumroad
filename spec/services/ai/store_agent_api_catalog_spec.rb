@@ -58,4 +58,30 @@ describe Ai::StoreAgentApiCatalog do
       expect(summary).to include("edit_user_custom_html")
     end
   end
+
+  describe "public media endpoints" do
+    it "exposes an upload write so the agent can host a creator's image for use on a custom page" do
+      endpoint = described_class.find("upload_media")
+
+      expect(endpoint).to be_present
+      expect(endpoint.write?).to eq(true)
+      expect(endpoint.method).to eq(:post)
+      expect(endpoint.path).to eq("/media")
+      expect(endpoint.scope).to eq("edit_profile")
+      expect(endpoint.params).to eq(%w[url name])
+    end
+
+    it "exposes a read so the agent can reference previously uploaded files" do
+      endpoint = described_class.find("list_media")
+
+      expect(endpoint).to be_present
+      expect(endpoint.read?).to eq(true)
+      expect(endpoint.scope).to eq("view_profile")
+    end
+
+    it "teaches the model that only hosted urls render on custom pages" do
+      expect(described_class.find("upload_media").summary).to match(/hosted url/i)
+      expect(described_class.find("list_media").summary).to match(/blocked/i)
+    end
+  end
 end

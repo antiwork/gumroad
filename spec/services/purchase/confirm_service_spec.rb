@@ -6,6 +6,60 @@ describe Purchase::ConfirmService, :vcr do
   let(:user) { create(:user) }
   let(:chargeable) { build(:chargeable, card: StripePaymentMethodHelper.success_sca_not_required) }
 
+  context "when the recurring payment was registered on a setup intent" do
+    # The e-mandate check retrieves the setup intent from Stripe, so it runs as a
+    # background job instead of inline in the buyer-facing confirmation request.
+    #
+    # The credit card is built directly rather than via the :credit_card factory: the
+    # factory tokenizes a chargeable against the live Stripe API, which has no VCR
+    # cassette for these examples. The enqueue guard only reads card_country.
+    def create_credit_card(card_country:)
+      CreditCard.create!(
+        card_type: CardType::VISA,
+        visual: "**** **** **** 4242",
+        stripe_fingerprint: "india_mandate_check_fp",
+        stripe_customer_id: "cus_india_mandate_check",
+        expiry_month: 12,
+        expiry_year: 5.years.from_now.year,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        card_country:
+      )
+    end
+
+    def perform_confirm(purchase)
+      service = Purchase::ConfirmService.new(purchase:, params: {})
+      allow(service).to receive(:handle_purchase_success)
+      service.perform
+    end
+
+    it "enqueues the Indian card e-mandate check once the buyer has confirmed" do
+      purchase = create(:purchase_in_progress, credit_card: create_credit_card(card_country: "IN"),
+                                               processor_setup_intent_id: "seti_india_registration")
+
+      perform_confirm(purchase)
+
+      expect(CheckIndianCardMandateRegistrationJob.jobs.size).to eq(1)
+      expect(CheckIndianCardMandateRegistrationJob.jobs.last["args"]).to eq([purchase.id])
+    end
+
+    it "does not enqueue the check for non-Indian cards" do
+      purchase = create(:purchase_in_progress, credit_card: create_credit_card(card_country: "US"),
+                                               processor_setup_intent_id: "seti_registration")
+
+      perform_confirm(purchase)
+
+      expect(CheckIndianCardMandateRegistrationJob.jobs.size).to eq(0)
+    end
+
+    it "does not enqueue the check for purchases without a setup intent" do
+      purchase = create(:purchase_in_progress, credit_card: create_credit_card(card_country: "IN"))
+
+      perform_confirm(purchase)
+
+      expect(CheckIndianCardMandateRegistrationJob.jobs.size).to eq(0)
+    end
+  end
+
   context "when purchase has been marked as failed" do
     # Sometimes we mark a purchase failed before the confirmation request comes from the UI,
     # if time to complete SCA expired or a parallel purchase has been made.

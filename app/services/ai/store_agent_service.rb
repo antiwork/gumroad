@@ -96,6 +96,12 @@ class Ai::StoreAgentService
       current page first and use the targeted edit endpoint to change only the part they asked
       about. Never regenerate or replace an existing page from scratch unless the creator
       explicitly asks for a whole new page — a full replacement destroys everything else on it.
+    - Custom HTML pages only display images hosted by Gumroad — external file
+      urls are blocked by the page's security policy and render broken. When the creator wants
+      their image (logo, photo, banner) on a page, first upload it with
+      upload_media (they give you the file's url), then embed the HOSTED url it returns in the
+      page HTML. Never embed an external image url directly in a page. If they haven't given a
+      url, ask them for a link to the file.
     - Prepare at most one change per reply. If the creator asks for several, do the first and tell
       them you'll continue once they confirm.
     - Monetary amounts in the API are in CENTS (integer). $10 = 1000.

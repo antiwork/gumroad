@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_05_000002) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_05_000003) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1898,6 +1898,14 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_05_000002) do
     t.decimal "pst_tax_rate", precision: 8, scale: 7
     t.decimal "qst_tax_rate", precision: 8, scale: 7
     t.index ["purchase_id"], name: "index_purchase_taxjar_infos_on_purchase_id"
+  end
+
+  create_table "purchase_url_parameters", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "purchase_id", null: false
+    t.json "params", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["purchase_id"], name: "index_purchase_url_parameters_on_purchase_id", unique: true
   end
 
   create_table "purchase_wallet_types", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

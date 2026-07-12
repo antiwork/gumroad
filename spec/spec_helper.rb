@@ -17,11 +17,16 @@ JsonMatchers.schema_root = "spec/support/schemas"
 
 KnapsackPro::Adapters::RSpecAdapter.bind
 
+# Load TestProf only when one of its profilers is explicitly requested through an
+# environment variable, e.g. FPROF=1 or EVENT_PROF=factory.create. When none of
+# these are set the gem is never required, so normal test runs are unaffected.
+require "test_prof" if ENV["FPROF"] || ENV["EVENT_PROF"] || ENV["TEST_RUBY_PROF"] || ENV["TEST_STACK_PROF"] || ENV["TAG_PROF"]
+
 ActiveRecord::Migration.maintain_test_schema!
 
 # Capybara settings
 Capybara.test_id = "data-testid"
-Capybara.default_max_wait_time = 25
+Capybara.default_max_wait_time = 10
 Capybara.app_host = "#{PROTOCOL}://#{DOMAIN}"
 Capybara.server = :puma
 Capybara.server_port = URI(Capybara.app_host).port

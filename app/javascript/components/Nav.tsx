@@ -109,9 +109,11 @@ export const NavLinkDropdownItem = ({
   component?: "a" | React.ComponentType<Record<string, unknown>>;
 }) => (
   <MenuItem asChild>
-    <Component href={href} onClick={onClick} className="no-underline">
+    <Component href={href} onClick={onClick} className="min-w-0 no-underline">
       {icon}
-      {text}
+      <span className="min-w-0 flex-1 truncate" title={text}>
+        {text}
+      </span>
     </Component>
   </MenuItem>
 );

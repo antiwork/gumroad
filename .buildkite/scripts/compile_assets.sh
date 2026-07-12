@@ -59,7 +59,9 @@ if [[ ! $(docker images -q --filter "reference=$WEB_REPO:web-$WEB_TAG") ]]; then
   pull_web_image || exit 1
 fi
 
-if [[ $BUILDKITE_PARALLEL_JOB = 0 && $BUILDKITE_BRANCH != "main" ]]; then
+# BUILDKITE_PARALLEL_JOB is unset when the step has no parallelism configured
+# (preview.yml runs a single asset job); default to 0 so the staging build runs.
+if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
   logger "Building staging assets"
   docker rm staging-assets || :
   COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_staging \
