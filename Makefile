@@ -21,6 +21,13 @@ DOCKER_BUILD ?= $(DOCKER_CMD) build --compress
 # CI overrides them with --cache-from/--cache-to type=registry against ECR.
 BASE_CACHE_OPTS ?= --cache-from $(NEW_BASE_REPO):latest
 WEB_CACHE_OPTS ?= --cache-from $(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) --cache-from $(NEW_WEB_REPO):web-$(NEW_WEB_TAG)
+# How the built web image leaves the builder, and what runs after. The defaults
+# reproduce the classic flow: build into the local Docker engine tagged
+# :latest, then add the commit-specific web-<sha> tag (the caller pushes it).
+# CI's BuildKit path overrides these to push the web-<sha> tag straight from
+# the builder to ECR, skipping the slow export back into the local engine.
+WEB_OUTPUT_OPTS ?= -t $(NEW_WEB_REPO):latest
+WEB_POST_BUILD ?= $(DOCKER_CMD) tag $(NEW_WEB_REPO):latest $(NEW_WEB_REPO):web-$(NEW_WEB_TAG)
 NGINX_CACHE_OPTS ?=
 BRANCH_APP_NGINX_CACHE_OPTS ?=
 DOCKER_COMPOSE_CMD ?= docker compose
@@ -58,13 +65,13 @@ build:
 	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	echo $(NEW_WEB_TAG) > revision
 	WEB_DOCKERFILE_FROM=$(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) \
-	$(DOCKER_BUILD) -t $(NEW_WEB_REPO):latest \
+	$(DOCKER_BUILD) $(WEB_OUTPUT_OPTS) \
 		--build-arg BUNDLE_GEMS__CONTRIBSYS__COM \
 		$(WEB_CACHE_OPTS) \
 		--build-arg WEB_DOCKERFILE_FROM \
 		--file docker/web/Dockerfile \
 		.
-	$(DOCKER_CMD) tag $(NEW_WEB_REPO):latest $(NEW_WEB_REPO):web-$(NEW_WEB_TAG)
+	$(WEB_POST_BUILD)
 
 build_nginx:
 	$(DOCKER_BUILD) -t $(NGINX_REPO):$(NGINX_TAG) \
