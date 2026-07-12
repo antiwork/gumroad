@@ -99,7 +99,7 @@ if PreviewQa.safe_environment?
         # Subscription#period would raise — so those need an explicit days argument instead.
         days = (purchase.subscription.period / 1.day).ceil + 1
       end
-      abort "Pass a positive number of days (this purchase has no subscription with a recurrence to derive a billing period from)." if days.nil? || days <= 0
+      abort "Pass a positive number of days (this purchase #{purchase.subscription.present? ? "has a subscription with no recurrence" : "has no subscription"} to derive a billing period from)." if days.nil? || days <= 0
 
       purchases_to_shift = [purchase]
       if purchase.subscription.present?
