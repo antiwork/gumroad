@@ -110,7 +110,7 @@ export const PreviewSidebar = ({
             <div
               role="tablist"
               aria-label="Edit or preview"
-              className="flex gap-1 rounded-full border border-border bg-background p-1 shadow"
+              className="flex gap-1 rounded-full border border-border bg-background p-1"
             >
               <Button
                 role="tab"
