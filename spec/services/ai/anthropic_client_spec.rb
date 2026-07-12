@@ -253,6 +253,21 @@ describe Ai::AnthropicClient do
       expect(client).to have_received(:sleep).once
     end
 
+    it "treats a 200 response carrying an error body as a failure instead of a blank reply" do
+      # OpenRouter returns HTTP 200 with an error object when the failure happened after the
+      # upstream model started processing; a transient error type there gets retried like any other.
+      allow(client).to receive(:sleep)
+      good = { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }
+      stub_request(:post, openrouter_url)
+        .to_return({ status: 200, body: { error: { type: "overloaded_error", message: "Overloaded" } }.to_json, headers: { "Content-Type" => "application/json" } },
+                   { status: 200, body: good.to_json, headers: { "Content-Type" => "application/json" } })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(result.text).to eq("ok")
+      expect(client).to have_received(:sleep).once
+    end
+
     it "does not send fallbacks or touch OpenRouter when the key is not configured" do
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("")
       captured = nil

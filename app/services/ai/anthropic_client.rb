@@ -310,8 +310,15 @@ class Ai::AnthropicClient
 
     # Normalize a buffered Messages response into a Result. Content is an array of typed blocks; we
     # pull the joined text and any tool_use blocks (each with parsed input).
+    #
+    # OpenRouter can return HTTP 200 with an error object in the body when the failure happened
+    # after the upstream model started processing (Anthropic directly never does this for buffered
+    # requests). Without the check below, such a response would silently become an empty Result and
+    # the agent would render a blank reply; classifying it through the same transient-vs-real logic
+    # as mid-stream errors lets the retry loop recover from the transient ones.
     def parse_message(body)
       return Result.new(text: "", tool_uses: [], stop_reason: nil) unless body.is_a?(Hash)
+      raise stream_error(body) if body["error"].is_a?(Hash)
 
       content = Array(body["content"])
       text = content.filter_map { |b| b["text"].to_s if b.is_a?(Hash) && b["type"] == "text" }.join
