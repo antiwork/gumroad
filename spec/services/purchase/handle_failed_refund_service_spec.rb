@@ -107,6 +107,31 @@ describe Purchase::HandleFailedRefundService do
       expect(refund.reload.balance_transactions.count).to eq(transactions_after_first)
     end
 
+    it "is a no-op when another worker already recorded the reversal (stale in-memory guard)" do
+      # Simulates two workers racing on the same refund.failed webhook: this worker's
+      # in-memory refund still has balance_reversed_on_failure unset, but by the time
+      # it takes the row lock the other worker has committed the reversal. The
+      # post-lock re-check must catch it — otherwise the seller is credited twice.
+      stale_refund = Refund.find(refund.id)
+      expect(described_class.new(refund:).perform).to eq(true)
+      transactions_after_first = refund.reload.balance_transactions.count
+
+      expect(ErrorNotifier).not_to receive(:notify)
+      expect(described_class.new(refund: stale_refund).perform).to eq(false)
+      expect(refund.reload.balance_transactions.count).to eq(transactions_after_first)
+    end
+
+    it "counts legacy NULL-status refunds when recomputing the refunded flags" do
+      # Refunds created before the status column existed have status NULL; they were
+      # real, completed refunds and must still count as refunded money.
+      create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: nil)
+
+      described_class.new(refund:).perform
+
+      expect(purchase.reload.stripe_refunded?).to eq(false)
+      expect(purchase.stripe_partially_refunded?).to eq(true)
+    end
+
     it "reverses presentment refunds using the recorded canonical amounts" do
       refund.presentment_currency = Currency::EUR
       refund.presentment_amount_cents = 1850

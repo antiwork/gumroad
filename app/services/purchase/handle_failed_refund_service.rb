@@ -40,13 +40,27 @@ class Purchase::HandleFailedRefundService
   def perform
     return false if refund.balance_reversed_on_failure
 
+    reversed = false
     ActiveRecord::Base.transaction do
+      # Take a row lock on the refund before reversing anything. Stripe can deliver
+      # the same refund.failed webhook to two workers at once (retries make this more
+      # likely); without the lock both workers would pass the in-memory guard above
+      # and each create a full set of offsetting balance transactions, over-crediting
+      # the seller by the refund amount. lock! reloads the row under SELECT ... FOR
+      # UPDATE, so re-checking the flag here is consistent with what's committed.
+      # The reload first discards the in-memory json_data touch that merely READING
+      # balance_reversed_on_failure leaves behind (lock! refuses dirty records).
+      refund.reload.lock!
+      next if refund.balance_reversed_on_failure
+
       refund.update!(status: "failed")
       reverse_balance_transactions!
       recompute_purchase_refunded_flags!
       refund.balance_reversed_on_failure = true
       refund.save!
+      reversed = true
     end
+    return false unless reversed
 
     notify_internally
     true
@@ -86,13 +100,14 @@ class Purchase::HandleFailedRefundService
 
     # Recompute the purchase's refunded flags as if the failed refund never counted.
     # Failed refunds still exist as rows (audit trail), so sum only the others.
+    # Uses the Refund.effective scope (not `where.not(status: "failed")`) so that
+    # legacy refunds with a NULL status still count — a bare `status != 'failed'`
+    # comparison evaluates to NULL for those rows and would silently drop them,
+    # diverging from the refunded-cents sums on Purchase which use the same scope.
     def recompute_purchase_refunded_flags!
-      other_refunded_cents = purchase.refunds.where.not(id: refund.id)
-                                     .where.not(status: "failed")
-                                     .sum(:amount_cents) +
-                             purchase.refunds.where.not(id: refund.id)
-                                     .where.not(status: "failed")
-                                     .sum(:gumroad_tax_cents)
+      other_refunds = purchase.refunds.effective.where.not(id: refund.id)
+      other_refunded_cents = other_refunds.sum(:amount_cents) +
+                             other_refunds.sum(:gumroad_tax_cents)
       purchase.stripe_refunded = other_refunded_cents >= purchase.total_transaction_cents
       purchase.stripe_partially_refunded = !purchase.stripe_refunded && other_refunded_cents > 0
       purchase.save!
