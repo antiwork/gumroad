@@ -298,8 +298,10 @@ export default function SettingsPage() {
     <PreviewSidebar
       previewLink={(props) => (
         <NavigationButton
-          {...props}
+          // Icon size is only a default: the preview sidebar/sheet overrides it via props
+          // (the mobile sheet asks for a full-size button with a text label).
           size="icon"
+          {...props}
           disabled={isSaving}
           href={profileUrl}
           onClick={(evt) => {

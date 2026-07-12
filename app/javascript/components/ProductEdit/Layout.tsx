@@ -337,8 +337,10 @@ export const Layout = ({
             {...(showNavigationButton && {
               previewLink: (props) => (
                 <NavigationButton
-                  {...props}
+                  // Icon size is only a default: the preview sidebar/sheet overrides it via
+                  // props (the mobile sheet asks for a full-size button with a text label).
                   size="icon"
+                  {...props}
                   disabled={isBusy}
                   href={url}
                   onClick={(evt) => {

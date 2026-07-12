@@ -21,7 +21,12 @@ export const PreviewSidebar = ({
   ...props
 }: {
   children: React.ReactNode;
-  previewLink?: (props: React.AriaAttributes & { children: React.ReactNode }) => React.ReactNode;
+  // `size` lets each rendering context pick the button shape: the desktop sidebar keeps its
+  // compact icon button, while the mobile sheet asks for a regular button with a visible text
+  // label (icon-only buttons aren't intuitive enough on their own).
+  previewLink?: (
+    props: React.AriaAttributes & { children: React.ReactNode; size?: "default" | "icon" },
+  ) => React.ReactNode;
 } & React.ComponentProps<"aside">) => {
   const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -53,21 +58,32 @@ export const PreviewSidebar = ({
       {!isDesktop ? (
         <>
           <div className="fixed right-4 z-30 lg:hidden" style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}>
-            <Button color="primary" onClick={() => setMobilePreviewOpen(true)} aria-label="Preview">
+            <Button color="primary" onClick={() => setMobilePreviewOpen(true)}>
               <Eye className="size-5" />
               Preview
             </Button>
           </div>
           <Sheet modal open={mobilePreviewOpen} onOpenChange={setMobilePreviewOpen} className="lg:hidden">
-            <div className="flex items-start gap-4">
+            {/* Buttons here carry visible text labels rather than bare icons — icon-only
+                buttons aren't intuitive, especially for the mobile sellers this sheet serves. */}
+            <div className="flex items-center gap-4">
               <h2>Preview</h2>
-              {previewLink ? (
-                <WithTooltip tip="Open in new tab">
-                  {previewLink({ "aria-label": "Open in new tab", children: <ArrowUpRight className="size-5" /> })}
-                </WithTooltip>
-              ) : null}
-              <DialogClose className="ml-auto cursor-pointer all-unset" aria-label="Close">
-                <X className="size-5" />
+              {previewLink
+                ? previewLink({
+                    size: "default",
+                    children: (
+                      <>
+                        <ArrowUpRight className="size-5" />
+                        Open in new tab
+                      </>
+                    ),
+                  })
+                : null}
+              <DialogClose asChild>
+                <Button className="ml-auto">
+                  <X className="size-5" />
+                  Close
+                </Button>
               </DialogClose>
             </div>
             <div className="flex flex-1 flex-col gap-4">{children}</div>
