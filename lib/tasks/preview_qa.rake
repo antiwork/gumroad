@@ -13,15 +13,26 @@
 #
 #   COMMAND='Rake::Task["preview_qa:backdate_purchase"].invoke("<purchase external_id>")' ./console.sh -w <branch>
 #
-# Every task hard-aborts in production; the guard is intentionally belt-and-braces (the whole
-# namespace is skipped when the file loads in production, and each task re-checks at run time in
-# case the file is ever loaded by other means).
+# These tasks mutate data, so they only exist where mutating data is safe: preview apps,
+# development, and the test suite. Production is obviously off-limits, but so is shared staging
+# (staging.gumroad.com) — it runs the same staging Rails env as preview apps and is shared by QA
+# and reviewers, so doctoring records there would trample other people's testing. Preview apps
+# are told apart from shared staging by ENV["BRANCH_DEPLOYMENT"], the same flag the rest of the
+# app uses for per-branch deploys (see config/domain.rb and
+# config/initializers/prefix_for_branch_apps_es_index.rb). The guard is intentionally
+# belt-and-braces: the whole namespace is skipped when the file loads in a disallowed
+# environment, and each task re-checks at run time in case the file is ever loaded by other means.
 
 module PreviewQa
   module_function
 
-  def ensure_not_production!
-    abort "preview_qa tasks are for preview/staging QA only and cannot run in production." if Rails.env.production?
+  def safe_environment?
+    return true if Rails.env.development? || Rails.env.test?
+    Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true"
+  end
+
+  def ensure_safe_environment!
+    abort "preview_qa tasks mutate data and only run on preview apps, development, or the test suite." unless safe_environment?
   end
 
   # Accepts either a numeric database id or an external_id, so you can paste whichever
@@ -64,11 +75,11 @@ module PreviewQa
   end
 end
 
-unless Rails.env.production?
+if PreviewQa.safe_environment?
   namespace :preview_qa do
     desc "Backdate a purchase's created_at/succeeded_at by N days (default: one billing period + 1 day for subscription purchases) so renewal paths can be exercised"
     task :backdate_purchase, [:purchase_id, :days] => :environment do |_task, args|
-      PreviewQa.ensure_not_production!
+      PreviewQa.ensure_safe_environment!
 
       purchase = PreviewQa.find_record!(Purchase, args[:purchase_id])
 
@@ -80,20 +91,38 @@ unless Rails.env.production?
       end
       abort "Pass a positive number of days (this purchase has no subscription to derive a billing period from)." if days.nil? || days <= 0
 
-      backdated_to = days.days.ago
-      # update_columns on purpose: this is a QA time-travel edit, and running the full
-      # callback/validation stack against a doctored timestamp is exactly what we don't want.
-      purchase.update_columns(
-        created_at: backdated_to,
-        succeeded_at: (backdated_to if purchase.succeeded_at.present?)
-      )
+      purchases_to_shift = [purchase]
+      if purchase.subscription.present?
+        # Backdating only the named purchase is not enough once a subscription has renewal
+        # charges: the different "is a renewal due?" code paths don't all look at the same
+        # purchase. RecurringChargeWorker's own gate reads the latest successful purchase's
+        # created_at, while Subscription#overdue_for_charge? (and the renewal scheduling
+        # paths) read the newest succeeded_at across ALL successful, non-refunded charges.
+        # A newer sibling charge left untouched would keep the subscription looking
+        # not-yet-due to those paths. Shifting every successful charge by the same offset
+        # keeps their relative order intact and makes the subscription overdue by every
+        # code path.
+        purchases_to_shift |= purchase.subscription.purchases.successful.to_a
+      end
 
-      puts "Backdated purchase #{purchase.external_id} (id #{purchase.id}) by #{days} days: created_at/succeeded_at now #{backdated_to}."
+      offset = days.days
+      purchases_to_shift.each do |record|
+        # update_columns on purpose: this is a QA time-travel edit, and running the full
+        # callback/validation stack against a doctored timestamp is exactly what we don't want.
+        record.update_columns(
+          created_at: record.created_at - offset,
+          succeeded_at: (record.succeeded_at - offset if record.succeeded_at.present?)
+        )
+      end
+
+      siblings = purchases_to_shift.size - 1
+      sibling_note = siblings.positive? ? " (plus #{siblings} other successful charge(s) on its subscription)" : ""
+      puts "Backdated purchase #{purchase.external_id} (id #{purchase.id})#{sibling_note} by #{days} days."
     end
 
     desc "Remove the Stripe e-mandate linkage (stripe_setup_intent_id) from the card charged for a subscription, to QA the missing-mandate path for Indian cards"
     task :clear_mandate, [:subscription_id] => :environment do |_task, args|
-      PreviewQa.ensure_not_production!
+      PreviewQa.ensure_safe_environment!
 
       subscription = PreviewQa.find_record!(Subscription, args[:subscription_id])
       credit_card = subscription.credit_card_to_charge
@@ -111,7 +140,7 @@ unless Rails.env.production?
 
     desc "Seed a job into the Sidekiq dead set (morgue), e.g. to QA dead-job alerting/UI. Usage: preview_qa:seed_dead_job[WorkerClass,arg1,arg2,...]"
     task :seed_dead_job, [:worker_class] => :environment do |_task, args|
-      PreviewQa.ensure_not_production!
+      PreviewQa.ensure_safe_environment!
 
       worker_class = PreviewQa.worker_class!(args[:worker_class])
       job_args = args.extras.map { |value| PreviewQa.cast_argument(value) }
@@ -138,7 +167,7 @@ unless Rails.env.production?
 
     desc "Run a Sidekiq worker inline (synchronously). Usage: preview_qa:run_worker[RecurringChargeWorker,123]"
     task :run_worker, [:worker_class] => :environment do |_task, args|
-      PreviewQa.ensure_not_production!
+      PreviewQa.ensure_safe_environment!
 
       worker_class = PreviewQa.worker_class!(args[:worker_class])
       job_args = args.extras.map { |value| PreviewQa.cast_argument(value) }

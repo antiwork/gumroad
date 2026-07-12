@@ -202,7 +202,7 @@ Preview apps have Rails console access — see [Connect to Rails console](https:
 
 ### Seeding QA state with `preview_qa` rake tasks
 
-Use the permanent tasks in `lib/tasks/preview_qa.rake` to seed edge-case state on a preview app instead of adding temporary, param-gated seed hooks to your PR ("TEMP: revert before merge" commits). The tasks are unavailable in production.
+Use the permanent tasks in `lib/tasks/preview_qa.rake` to seed edge-case state on a preview app instead of adding temporary, param-gated seed hooks to your PR ("TEMP: revert before merge" commits). The tasks only run on preview apps, development, and the test suite — they are unavailable in production and on shared staging (staging.gumroad.com), where mutating records would interfere with other people's testing.
 
 Run them through the console one-shot path with a writable connection, for example:
 

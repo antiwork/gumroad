@@ -39,20 +39,50 @@ describe "preview_qa rake tasks" do
     card
   end
 
-  describe "the production guard" do
-    it "aborts every task before doing any work when running in production" do
-      allow(Rails.env).to receive(:production?).and_return(true)
-
+  describe "the environment guard" do
+    let(:all_tasks) do
       %w[
         preview_qa:backdate_purchase
         preview_qa:clear_mandate
         preview_qa:seed_dead_job
         preview_qa:run_worker
-      ].each do |task_name|
+      ]
+    end
+
+    # Make Rails.env report the given environment instead of "test", so we can exercise
+    # the guard as it would behave on each deployed environment.
+    def stub_rails_env(env)
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new(env))
+    end
+
+    it "aborts every task before doing any work when running in production" do
+      stub_rails_env("production")
+
+      all_tasks.each do |task_name|
         expect do
           run_task(task_name, "irrelevant")
         end.to raise_error(SystemExit), "expected #{task_name} to abort in production"
       end
+    end
+
+    it "aborts every task on shared staging (staging Rails env without the preview-app flag)" do
+      stub_rails_env("staging")
+      allow(ENV).to receive(:[]).and_call_original
+      allow(ENV).to receive(:[]).with("BRANCH_DEPLOYMENT").and_return(nil)
+
+      all_tasks.each do |task_name|
+        expect do
+          run_task(task_name, "irrelevant")
+        end.to raise_error(SystemExit), "expected #{task_name} to abort on shared staging"
+      end
+    end
+
+    it "allows tasks on preview apps (staging Rails env with BRANCH_DEPLOYMENT set)" do
+      stub_rails_env("staging")
+      allow(ENV).to receive(:[]).and_call_original
+      allow(ENV).to receive(:[]).with("BRANCH_DEPLOYMENT").and_return("true")
+
+      expect(PreviewQa.safe_environment?).to be(true)
     end
   end
 
