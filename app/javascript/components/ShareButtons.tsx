@@ -21,7 +21,7 @@ export const ShareButtons = ({
     <TwitterShareButton url={url} text={twitterText} />
     <FacebookShareButton url={url} text={facebookText} />
     <CopyToClipboard text={url} tooltipPosition="top">
-      <Button color="primary">
+      <Button>
         <LinkIcon className="size-5" />
         Copy URL
       </Button>
