@@ -21,6 +21,13 @@ class Refund < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
+  # Refunds whose money actually left (or is leaving) our account. A "failed" refund is
+  # one the buyer's bank returned after Stripe initially accepted it — the buyer never
+  # received the money — so failed rows must not count toward how much of a purchase has
+  # been refunded. status is NULL for refunds created before we started persisting
+  # processor status, all of which completed, so NULL counts as effective.
+  scope :effective, -> { where("refunds.status IS NULL OR refunds.status != 'failed'") }
+
   attr_json_data_accessor :note
   attr_json_data_accessor :business_vat_id
   attr_json_data_accessor :debited_stripe_transfer

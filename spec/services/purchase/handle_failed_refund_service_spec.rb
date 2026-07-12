@@ -70,6 +70,17 @@ describe Purchase::HandleFailedRefundService do
       expect(purchase.stripe_partially_refunded?).to eq(false)
     end
 
+    it "restores the refundable amount so the purchase can actually be re-refunded" do
+      # Regression: preview QA (PR #5779) found that although the refunded flags were
+      # reset, refunds.sum(:amount_cents) still counted the failed row, leaving
+      # amount_refundable_cents at 0 and refund_and_save! silently returning false.
+      # Failed refunds must not count as refunded money anywhere.
+      expect { described_class.new(refund:).perform }
+        .to change { purchase.reload.amount_refundable_cents }.from(0).to(2000)
+      expect(purchase.amount_refunded_cents).to eq(0)
+      expect(purchase.gross_amount_refunded_cents).to eq(0)
+    end
+
     it "keeps a partial refund flag when another non-failed refund remains" do
       create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
 

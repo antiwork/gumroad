@@ -1823,20 +1823,24 @@ class Purchase < ApplicationRecord
     amount_refunded_cents + gumroad_tax_refunded_cents
   end
 
+  # All four "refunded so far" sums exclude failed refunds: a failed refund is one the
+  # buyer's bank returned after acceptance (async bank-transfer methods), meaning the
+  # buyer never received the money. Counting those rows would permanently understate
+  # amount_refundable_cents and block re-refunding the purchase.
   def amount_refunded_cents
-    refunds.sum(:amount_cents)
+    refunds.effective.sum(:amount_cents)
   end
 
   def fee_refunded_cents
-    refunds.sum(:fee_cents)
+    refunds.effective.sum(:fee_cents)
   end
 
   def tax_refunded_cents
-    refunds.sum(:creator_tax_cents)
+    refunds.effective.sum(:creator_tax_cents)
   end
 
   def gumroad_tax_refunded_cents
-    refunds.sum(:gumroad_tax_cents)
+    refunds.effective.sum(:gumroad_tax_cents)
   end
 
   def gross_amount_refundable_cents
