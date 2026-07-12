@@ -1,5 +1,5 @@
 import { ArrowUpRight, Eye, X } from "@boxicons/react";
-import { Close as DialogClose } from "@radix-ui/react-dialog";
+import { Close as DialogClose, Title as DialogTitle } from "@radix-ui/react-dialog";
 import cx from "classnames";
 import * as React from "react";
 
@@ -25,7 +25,7 @@ export const PreviewSidebar = ({
   // compact icon button, while the mobile sheet asks for a regular button with a visible text
   // label (icon-only buttons aren't intuitive enough on their own).
   previewLink?: (
-    props: React.AriaAttributes & { children: React.ReactNode; size?: "default" | "icon" },
+    props: React.AriaAttributes & { children: React.ReactNode; size?: "default" | "sm" | "icon" },
   ) => React.ReactNode;
 } & React.ComponentProps<"aside">) => {
   const uid = React.useId();
@@ -57,7 +57,9 @@ export const PreviewSidebar = ({
           Give them the same live preview in a full-screen sheet, opened from a floating button. */}
       {!isDesktop ? (
         <>
-          <div className="fixed right-4 z-30 lg:hidden" style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}>
+          {/* z-[9] keeps the button above page content but below the mobile nav menu (z-10),
+              so it doesn't float over the opened hamburger menu. */}
+          <div className="fixed right-4 z-[9] lg:hidden" style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}>
             <Button color="primary" onClick={() => setMobilePreviewOpen(true)}>
               <Eye className="size-5" />
               Preview
@@ -66,22 +68,26 @@ export const PreviewSidebar = ({
           <Sheet modal open={mobilePreviewOpen} onOpenChange={setMobilePreviewOpen} className="lg:hidden">
             {/* Buttons here carry visible text labels rather than bare icons — icon-only
                 buttons aren't intuitive, especially for the mobile sellers this sheet serves. */}
-            <div className="flex items-center gap-4">
-              <h2>Preview</h2>
+            <div className="flex items-center gap-2">
+              {/* Radix wires the dialog's accessible name through Dialog.Title — a bare h2 would
+                  leave the modal unlabeled for screen readers (and log a dev-mode warning). */}
+              <DialogTitle asChild>
+                <h2 className="mr-auto">Preview</h2>
+              </DialogTitle>
               {previewLink
                 ? previewLink({
-                    size: "default",
+                    size: "sm",
                     children: (
                       <>
-                        <ArrowUpRight className="size-5" />
+                        <ArrowUpRight className="size-4" />
                         Open in new tab
                       </>
                     ),
                   })
                 : null}
               <DialogClose asChild>
-                <Button className="ml-auto">
-                  <X className="size-5" />
+                <Button size="sm">
+                  <X className="size-4" />
                   Close
                 </Button>
               </DialogClose>
