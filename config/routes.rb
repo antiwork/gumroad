@@ -331,6 +331,7 @@ Rails.application.routes.draw do
         get "/agent/meta", to: "agent#meta"
         get "/agent/conversations/latest", to: "agent#latest_conversation"
         post "/agent/messages", to: "agent#create"
+        post "/agent/messages/stream", to: "agent_streams#create"
         post "/agent/actions", to: "agent#execute"
         resources :devices, only: :create
         resources :installments, only: :show
