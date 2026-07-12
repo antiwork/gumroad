@@ -122,19 +122,26 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
     # image or triggers the full recompile.
     logger "Syncing cached assets to S3"
     local container_id
-    container_id=$(docker run -d --entrypoint="bash" --volume /app $WEB_REPO:staging-$WEB_TAG) || return 1
-    if ! docker run --rm \
-      -e AWS_ACCESS_KEY_ID=$GUM_AWS_ACCESS_KEY_ID \
-      -e AWS_SECRET_ACCESS_KEY=$GUM_AWS_SECRET_ACCESS_KEY \
-      -e ASSETS_S3_BUCKET=gumroad-staging-assets \
-      --volumes-from $container_id \
-      garland/aws-cli-docker \
-      sh /app/docker/web/push_assets_to_s3.sh; then
-      logger "S3 asset sync failed — continuing with the cached staging image (assets were already uploaded when the cache entry was created)"
+    if container_id=$(docker run -d --entrypoint="bash" --volume /app $WEB_REPO:staging-$WEB_TAG); then
+      if ! docker run --rm \
+        -e AWS_ACCESS_KEY_ID=$GUM_AWS_ACCESS_KEY_ID \
+        -e AWS_SECRET_ACCESS_KEY=$GUM_AWS_SECRET_ACCESS_KEY \
+        -e ASSETS_S3_BUCKET=gumroad-staging-assets \
+        --volumes-from $container_id \
+        garland/aws-cli-docker \
+        sh /app/docker/web/push_assets_to_s3.sh; then
+        logger "S3 asset sync failed — continuing with the cached staging image (assets were already uploaded when the cache entry was created)"
+      fi
+      # -v also removes the anonymous /app volume the data container created,
+      # so cache-hit builds don't leak a volume on the CI agent every deploy.
+      docker rm -fv $container_id >/dev/null 2>&1 || true
+    else
+      # Even the data container for the sync couldn't be created — still fine.
+      # The staging image is already committed and the assets were uploaded to
+      # S3 when the cache entry was created, so skip the sync rather than
+      # throwing away the committed image with a full recompile.
+      logger "Could not start the S3 sync container — skipping the best-effort asset sync"
     fi
-    # -v also removes the anonymous /app volume the data container created,
-    # so cache-hit builds don't leak a volume on the CI agent every deploy.
-    docker rm -fv $container_id >/dev/null 2>&1 || true
     return 0
   }
 
