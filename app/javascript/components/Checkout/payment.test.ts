@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   canUseStripePaymentElement,
@@ -805,6 +805,108 @@ describe("reduceCheckoutState", () => {
     const next = reduceCheckoutState(state(), { type: "set-value", tip: { type: "fixed", amount: 1_00 } });
 
     expect(next.surcharges).toEqual({ type: "pending" });
+  });
+
+  // Every field the server tax/shipping quote depends on must invalidate the loaded surcharges
+  // (flipping them to "pending" is what triggers the debounced refetch) — a missing trigger
+  // means the buyer-currency quote token submitted with the purchase was minted for different
+  // totals than the ones charged.
+  describe("total-affecting changes invalidate surcharges and queue a refetch", () => {
+    it.each([
+      ["country", { country: "CA" }, state()],
+      ["tip", { tip: { type: "fixed", amount: 1_00 } } as const, state()],
+      ["vatId", { vatId: "IE6388047V" }, state({ country: "IE" })],
+      ["gift", { gift: { type: "normal", email: "friend@example.com", note: "" } } as const, state()],
+      ["CA province", { state: "QC" }, state({ country: "CA", state: "ON" })],
+      ["products", { products: [product({ permalink: "b" })] }, state()],
+    ])("%s change flips loaded surcharges to pending", (_field, action, initial) => {
+      const next = reduceCheckoutState(initial, { type: "set-value", ...action });
+      expect(next.surcharges).toEqual({ type: "pending" });
+    });
+
+    it("aborts an in-flight surcharges request before invalidating", () => {
+      const abort = vi.fn();
+      const next = reduceCheckoutState(state({ surcharges: { type: "loading", abort } }), {
+        type: "set-value",
+        tip: { type: "fixed", amount: 1_00 },
+      });
+      expect(abort).toHaveBeenCalledOnce();
+      expect(next.surcharges).toEqual({ type: "pending" });
+    });
+
+    it("leaves loaded surcharges alone for changes the quote does not depend on", () => {
+      const initial = state();
+      // Non-US zip and non-CA state edits don't feed the server tax calculation.
+      for (const action of [
+        { type: "set-value", email: "other@example.com" } as const,
+        { type: "set-value", fullName: "Other Buyer" } as const,
+        { type: "set-value", zipCode: "SW1A 1AA" } as const,
+        { type: "set-value", state: "NY" } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ ...initial, country: "GB" }), action);
+        expect(next.surcharges).toBe(initial.surcharges);
+      }
+    });
+  });
+
+  // The quote token is read from state.surcharges when the purchase payload is built, at the
+  // END of the input → offering → validating → starting → captcha → finished pipeline. These
+  // guards pin that read to the totals the buyer confirmed when the pipeline started.
+  describe("stale-total submit guards", () => {
+    it("refuses to offer while a surcharges refetch is queued or in flight", () => {
+      for (const surcharges of [
+        { type: "pending" } as const,
+        { type: "loading", abort: vi.fn() } as const,
+        { type: "error" } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ surcharges }), { type: "offer" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("refuses to validate while a surcharges refetch is queued, cancelling back to input", () => {
+      // The cross-sell offer pipeline dispatches "validate" from the "offering" status; the
+      // refusal must return to "input" rather than strand the checkout mid-pipeline.
+      const next = reduceCheckoutState(
+        state({ surcharges: { type: "pending" }, status: { type: "offering" } }),
+        { type: "validate" },
+      );
+      expect(next.status).toEqual({ type: "input", errors: new Set() });
+    });
+
+    it("offers and validates normally once surcharges are loaded", () => {
+      const offered = reduceCheckoutState(state(), { type: "offer" });
+      expect(offered.status).toEqual({ type: "offering" });
+
+      const validated = reduceCheckoutState(state({ status: { type: "offering" } }), { type: "validate" });
+      expect(validated.status).toEqual({ type: "validating" });
+    });
+
+    it("cancels an in-progress payment when a total-affecting change lands mid-pipeline", () => {
+      // e.g. the buyer changes the tip and the pipeline is already past "input" (debounce
+      // window race): the quote the pipeline was confirming is no longer the one that would be
+      // charged, so the payment must fall back to input instead of finishing on stale totals.
+      for (const status of [
+        { type: "offering" } as const,
+        { type: "validating" } as const,
+        { type: "starting" } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ status }), {
+          type: "set-value",
+          tip: { type: "fixed", amount: 2_00 },
+        });
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("does not cancel an in-progress payment for changes that keep the totals intact", () => {
+      const next = reduceCheckoutState(state({ status: { type: "validating" } }), {
+        type: "set-value",
+        fullName: "Other Buyer",
+      });
+      expect(next.status).toEqual({ type: "validating" });
+    });
   });
 });
 

@@ -573,6 +573,11 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       ) {
         if (state.surcharges.type === "loading") state.surcharges.abort();
         state.surcharges = { type: "pending" };
+        // The totals (and the buyer-currency quote token) the in-progress payment was built on
+        // are no longer the totals that will be charged, so a payment already past "input" must
+        // be cancelled — otherwise the payload built at the end of the pipeline reads a
+        // different (or missing) quote than the one the buyer confirmed.
+        if (state.status.type !== "input") state.status = { type: "input", errors: new Set() };
       }
       if (state.status.type === "input") {
         for (const key in action) state.status.errors.delete(key);
@@ -592,11 +597,26 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         state.availablePaymentMethods.push(action.paymentMethod);
       break;
     case "offer": {
+      // Never start a payment on a stale total: while surcharges are pending/loading (or
+      // errored), the on-screen totals and the buyer-currency quote token aren't the ones the
+      // charge would use. The submit button is disabled in this window, but other dispatch
+      // paths (wallets, offer pipeline, keyboard) must be refused here too.
+      if (state.surcharges.type !== "loaded") {
+        state.status = { type: "input", errors: new Set() };
+        return;
+      }
       const errors = validatePaymentMethodIndependentFields(state);
       state.status = errors.size ? { type: "input", errors } : { type: "offering" };
       break;
     }
     case "validate": {
+      // Same stale-total refusal as "offer". The offer pipeline dispatches "validate" from the
+      // "offering" status, so the refusal must cancel back to "input" (not bail silently) —
+      // otherwise the checkout would be stranded in a processing state with the button disabled.
+      if (state.surcharges.type !== "loaded") {
+        state.status = { type: "input", errors: new Set() };
+        return;
+      }
       const errors = validatePaymentMethodIndependentFields(state);
       state.status = errors.size ? { type: "input", errors } : { type: "validating" };
       break;
