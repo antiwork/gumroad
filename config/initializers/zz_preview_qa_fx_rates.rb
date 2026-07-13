@@ -55,14 +55,34 @@ class PreviewQaDebugMiddleware
     return @app.call(env) unless Stripe.api_key.to_s.start_with?("sk_test_")
     return @app.call(env) unless preview_or_development_host?(env)
 
-    spoof = env["HTTP_X_QA_SPOOF_IP"]
+    req = Rack::Request.new(env)
+
+    # Cookie mode for human testers on phones/tablets, where sending a custom header is
+    # impractical: GET /qa/spoof?ip=<addr> stores the spoof IP in a cookie and every
+    # later request behaves as if it came from that IP; /qa/spoof?off=1 clears it.
+    # Same test-key + preview-host gates as the header mode, so production and shared
+    # staging are untouched.
+    if req.path == "/qa/spoof"
+      headers = { "Content-Type" => "text/html" }
+      if req.params["off"].present?
+        Rack::Utils.delete_cookie_header!(headers, "qa_spoof_ip", { path: "/" })
+        return [200, headers, ["<html><body><h2>QA IP spoof cleared.</h2></body></html>"]]
+      end
+      ip_param = req.params["ip"].to_s
+      unless ip_param.match?(/\A[0-9a-fA-F.:]+\z/)
+        return [400, headers, ["<html><body><h2>Pass ?ip=&lt;address&gt; or ?off=1</h2></body></html>"]]
+      end
+      Rack::Utils.set_cookie_header!(headers, "qa_spoof_ip", { value: ip_param, path: "/" })
+      return [200, headers, ["<html><body><h2>QA IP spoof set to #{Rack::Utils.escape_html(ip_param)}.</h2><p>Every request from this browser now appears to come from that IP. <a href=\"/qa/preview_debug\">Verify</a> &middot; <a href=\"/qa/spoof?off=1\">Turn off</a></p></body></html>"]]
+    end
+
+    spoof = env["HTTP_X_QA_SPOOF_IP"].presence || req.cookies["qa_spoof_ip"]
     if spoof.present? && spoof.match?(/\A[0-9a-fA-F.:]+\z/)
       env["HTTP_CF_CONNECTING_IP"] = spoof
       env["HTTP_X_FORWARDED_FOR"] = spoof
       env["REMOTE_ADDR"] = spoof
     end
 
-    req = Rack::Request.new(env)
     return @app.call(env) unless req.path == "/qa/preview_debug"
 
     helper = Class.new { include CurrencyHelper }.new
