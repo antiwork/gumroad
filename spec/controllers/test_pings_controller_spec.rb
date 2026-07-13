@@ -19,13 +19,13 @@ describe TestPingsController do
   end
 
   describe "POST create" do
-    it "posts a test ping containing latest sale details to the specified endpoint" do
+    it "posts a test ping containing latest sale details to the specified endpoint and reports the endpoint's status" do
       create(:purchase, link: product, created_at: 2.days.ago)
       create(:purchase, link: product)
       last_purchase = create(:purchase, link: product, created_at: 2.hours.from_now)
       ping_url = last_purchase.seller.notification_endpoint
       ping_params = last_purchase.payload_for_ping_notification
-      http_double = double
+      http_double = double(success?: true, code: 200)
       expect(HTTParty).to receive(:post).with(ping_url,
                                               timeout: 5,
                                               body: ping_params.merge(test: true).deep_stringify_keys,
@@ -33,6 +33,27 @@ describe TestPingsController do
                                         .and_return(http_double)
       post :create, params: { url: ping_url }
       expect(response.body).to include "Your last sale's data has been sent to your Ping URL."
+      expect(response.body).to include "200"
+    end
+
+    it "reports failure with the HTTP status when the endpoint rejects the ping" do
+      create(:purchase, link: product)
+      ping_url = seller.notification_endpoint
+      http_double = double(success?: false, code: 403)
+      expect(HTTParty).to receive(:post).and_return(http_double)
+      post :create, params: { url: ping_url }
+      parsed = response.parsed_body
+      expect(parsed["success"]).to eq(false)
+      expect(parsed["error_message"]).to include "403"
+    end
+
+    it "reports failure when the endpoint is unreachable" do
+      create(:purchase, link: product)
+      expect(HTTParty).to receive(:post).and_raise(Errno::ECONNREFUSED)
+      post :create, params: { url: seller.notification_endpoint }
+      parsed = response.parsed_body
+      expect(parsed["success"]).to eq(false)
+      expect(parsed["error_message"]).to include "couldn't reach your Ping URL"
     end
 
     it "fails and displays error if no sale present for the user" do
