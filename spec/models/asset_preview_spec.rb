@@ -393,6 +393,26 @@ describe AssetPreview, :vcr do
       expect(asset_preview.thumbnail_url).to be_nil
     end
 
+    it "remembers failed generation and does not retry on the next call" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      allow(asset_preview.file).to receive(:preview).and_raise(ActiveStorage::UnpreviewableError)
+
+      expect(asset_preview.thumbnail_url).to be_nil
+      expect(asset_preview.file).to have_received(:preview).once
+
+      expect(asset_preview.thumbnail_url).to be_nil
+      expect(asset_preview.file).to have_received(:preview).once
+    end
+
+    it "gives up and returns nil when generation exceeds the processing timeout" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      allow(Timeout).to receive(:timeout).with(AssetPreview::IMAGE_PROCESSING_TIMEOUT_SECONDS).and_raise(Timeout::Error)
+
+      expect(asset_preview.thumbnail_url).to be_nil
+    end
+
     it "is exposed as the thumbnail in as_json" do
       asset_preview = create(:asset_preview_mov)
       allow(asset_preview).to receive(:video_poster_url).and_return("https://files.example.com/poster.jpg")

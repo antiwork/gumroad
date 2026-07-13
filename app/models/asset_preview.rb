@@ -131,17 +131,40 @@ class AssetPreview < ApplicationRecord
     video_poster_url
   end
 
+  # Generating a poster means downloading the video and running ffmpeg, which
+  # can take a while for large files. Two protections keep that work from
+  # hurting product page renders:
+  #   - a hard timeout (same 30s budget as retina_variant above), so a
+  #     pathological video degrades to "no poster" instead of hogging a
+  #     request thread indefinitely;
+  #   - the result is cached both ways — success caches the URL, failure
+  #     caches an empty string so we don't re-download and re-run ffmpeg on
+  #     every page view of a product whose video can't be previewed.
+  # The cache is warmed at upload time: creating a cover renders its JSON
+  # (which calls this method) in the same request, so buyers almost never
+  # pay the generation cost.
+  FAILED_POSTER_SENTINEL = ""
+  FAILED_POSTER_RETRY_INTERVAL = 1.hour
+
   def video_poster_url
     return nil unless file.attached? && file.video? && file.previewable?
 
-    Rails.cache.fetch("attachment_#{file.id}_poster_url") do
+    cache_key = "attachment_#{file.id}_poster_url"
+    cached = Rails.cache.read(cache_key)
+    return (cached == FAILED_POSTER_SENTINEL ? nil : cached) unless cached.nil?
+
+    url = Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
       preview = file.preview(resize_to_limit: [retina_width || RETINA_DISPLAY_WIDTH, nil]).processed
       cdn_url_for(preview.url)
     end
+    Rails.cache.write(cache_key, url)
+    url
   rescue StandardError => e
     # A missing poster only costs us the nicety of a preview frame, so never
-    # let preview generation break product rendering. Log so we can spot
-    # systemic failures (e.g. ffmpeg misconfigured on a box).
+    # let preview generation break product rendering. Remember the failure
+    # for a while (instead of retrying on every render), and log so we can
+    # spot systemic failures (e.g. ffmpeg misconfigured on a box).
+    Rails.cache.write(cache_key, FAILED_POSTER_SENTINEL, expires_in: FAILED_POSTER_RETRY_INTERVAL)
     Rails.logger.warn("AssetPreview#video_poster_url failed for asset_preview #{id}: #{e.message}")
     nil
   end
