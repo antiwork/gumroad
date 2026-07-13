@@ -489,6 +489,85 @@ describe StripePayoutProcessor, :vcr do
     end
   end
 
+  describe "alert_if_payout_credited_retired_account" do
+    let(:user) { create(:user) }
+    let(:retired_account) do
+      create(:merchant_account, user:, charge_processor_merchant_id: "acct_retired",
+                                charge_processor_alive_at: nil, deleted_at: Time.current)
+    end
+    let(:payment) do
+      create(:payment, user:, processor: PayoutProcessorType::STRIPE,
+                       stripe_connect_account_id: retired_account.charge_processor_merchant_id,
+                       stripe_transfer_id: "po_test_returned")
+    end
+
+    context "when the payout's account is no longer the user's active merchant account" do
+      let!(:active_account) do
+        create(:merchant_account, user:, charge_processor_merchant_id: "acct_active")
+      end
+
+      it "adds a payout note and notifies the error tracker" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          a_string_including("retired Stripe account acct_retired"),
+          payment_id: payment.id,
+          user_id: user.id
+        )
+
+        described_class.alert_if_payout_credited_retired_account(payment)
+
+        note = user.reload.comments.with_type_payout_note.last
+        expect(note.content).to include("[PAYOUT][DRIFT]")
+        expect(note.content).to include("acct_retired")
+        expect(note.content).to include("acct_active")
+      end
+    end
+
+    context "when the user has no active merchant account at all" do
+      it "still adds a payout note and notifies the error tracker" do
+        expect(ErrorNotifier).to receive(:notify)
+
+        described_class.alert_if_payout_credited_retired_account(payment)
+
+        note = user.reload.comments.with_type_payout_note.last
+        expect(note.content).to include("[PAYOUT][DRIFT]")
+      end
+    end
+
+    context "when the payout's account is still the user's active merchant account" do
+      let(:active_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_live") }
+      let(:payment) do
+        create(:payment, user:, processor: PayoutProcessorType::STRIPE,
+                         stripe_connect_account_id: active_account.charge_processor_merchant_id,
+                         stripe_transfer_id: "po_test_returned")
+      end
+
+      it "does nothing" do
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect do
+          described_class.alert_if_payout_credited_retired_account(payment)
+        end.not_to change { user.comments.count }
+      end
+    end
+
+    context "when the payout went to a user-connected Stripe Standard account" do
+      let(:connect_account) { create(:merchant_account_stripe_connect, user:) }
+      let(:payment) do
+        create(:payment, user:, processor: PayoutProcessorType::STRIPE,
+                         stripe_connect_account_id: connect_account.charge_processor_merchant_id,
+                         stripe_transfer_id: "po_test_returned")
+      end
+
+      it "does nothing because Gumroad does not manage that account's balance" do
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect do
+          described_class.alert_if_payout_credited_retired_account(payment)
+        end.not_to change { user.comments.count }
+      end
+    end
+  end
+
   describe "prepare_payment_and_set_amount when balance_transaction is nil" do
     let(:user) { create(:user) }
     let(:merchant_account) { create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
