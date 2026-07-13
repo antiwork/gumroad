@@ -27,21 +27,11 @@ module Onetime
 
     private
       def backfill_exception(refund)
-        return if FailedRefundException.exists?(refund_id: refund.id)
-
-        owner = FailedRefundException.default_owner
-        FailedRefundException.create!(
-          refund:,
-          owner:,
-          notification_room: FailedRefundException.default_notification_room(owner:),
-          state: "pending",
-          due_at: FailedRefundException.response_sla.from_now,
-          balance_reversed: refund.balance_reversed_on_failure.present?
-        )
-        puts "Created failed-refund exception for Refund #{refund.id}"
+        Purchase::HandleFailedRefundService.new(refund:).perform
+        puts "Created or repaired failed-refund exception for Refund #{refund.id}"
       rescue ActiveRecord::RecordNotUnique
-        # A live webhook redelivery can create the row between our existence check
-        # and the insert; the unique index on refund_id makes that a safe skip.
+        # A live webhook redelivery can create the row between the service's lookup
+        # and insert; the unique index on refund_id makes that a safe skip.
       end
   end
 end

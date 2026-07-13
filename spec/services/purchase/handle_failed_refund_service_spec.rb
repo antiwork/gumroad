@@ -244,14 +244,17 @@ describe Purchase::HandleFailedRefundService do
       expect(NotifyFailedRefundExceptionJob.jobs.size).to eq(0)
     end
 
-    it "creates a missing queue record for a refund already marked failed" do
+    it "reverses and creates a missing queue record for a refund already marked failed" do
       refund.update!(status: "failed")
 
       expect { described_class.new(refund: Refund.find(refund.id)).perform }
         .to change(FailedRefundException, :count).by(1)
 
       failed_refund_exception = refund.reload.failed_refund_exception
-      expect(failed_refund_exception.balance_reversed?).to eq(false)
+      expect(refund.balance_reversed_on_failure).to eq(true)
+      expect(refund.balance_transactions.where("issued_amount_gross_cents > 0").count).to eq(1)
+      expect(purchase.reload.stripe_refunded?).to eq(false)
+      expect(failed_refund_exception.balance_reversed?).to eq(true)
       expect(NotifyFailedRefundExceptionJob).to have_enqueued_sidekiq_job(failed_refund_exception.id)
     end
 

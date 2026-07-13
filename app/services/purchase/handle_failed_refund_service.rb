@@ -62,9 +62,11 @@ class Purchase::HandleFailedRefundService
       # The reload first discards the in-memory json_data touch that merely READING
       # balance_reversed_on_failure leaves behind (lock! refuses dirty records).
       refund.reload.lock!
-      unless refund.balance_reversed_on_failure || refund.status == "failed"
-        refund.update!(status: "failed")
-        if auto_reversal_eligible?
+      needs_status_update = refund.status != "failed"
+      needs_balance_reversal = !refund.balance_reversed_on_failure && auto_reversal_eligible?
+      if needs_status_update || needs_balance_reversal
+        refund.update!(status: "failed") if needs_status_update
+        if needs_balance_reversal
           reverse_balance_transactions!
           recompute_purchase_refunded_flags!
           refund.balance_reversed_on_failure = true
