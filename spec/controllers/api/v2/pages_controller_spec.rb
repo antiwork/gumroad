@@ -126,6 +126,16 @@ describe Api::V2::PagesController do
       expect(page.content).to be_nil
     end
 
+    it "clears custom_html when switching back to rich text, even with empty content" do
+      Feature.activate_user(:custom_html_pages, @user)
+      page.update!(content: nil, custom_html: "<h1>Takeover</h1>")
+
+      put :update, params: { format: :json, access_token: @token.token, id: "about", content: "" }
+
+      expect(page.reload.custom_html).to be_nil
+      expect(page.content).to be_nil
+    end
+
     it "cannot touch another seller's page" do
       create(:user_page, slug: "theirs", title: "Not yours")
 

@@ -101,10 +101,13 @@ class Api::V2::PagesController < Api::V2::BaseController
     def assign_content(page)
       if params.key?(:custom_html)
         page.custom_html = params[:custom_html].presence
-        page.content = nil if page.custom_html.present?
+        # Clear the other representation even when the new value is blank —
+        # sending an empty custom_html means "this is now an (empty) custom
+        # HTML page", so any previous rich text must stop being served.
+        page.content = nil
       elsif params.key?(:content)
         page.content = params[:content].presence
-        page.custom_html = nil if page.content.present?
+        page.custom_html = nil
       end
     end
 
