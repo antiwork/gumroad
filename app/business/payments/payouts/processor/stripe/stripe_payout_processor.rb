@@ -299,9 +299,42 @@ class StripePayoutProcessor
     "Destination Stripe balance mismatch on #{merchant_account.charge_processor_merchant_id}: " \
       "expected #{expected_destination_cents} #{destination_currency} cents, " \
       "Stripe has #{available_cents} cents available + #{pending_cents} cents pending (gap: #{gap_cents} cents). " \
-      "Reconcile destination balance before retry."
+      "Reconcile destination balance before retry." \
+      "#{retired_account_balances_hint(merchant_account)}"
   end
   private_class_method :destination_balance_drift_error
+
+  # Every drift-guard case investigated so far had the same root cause: the seller changed
+  # country (or otherwise got a new Stripe account), and a returned payout or leftover funds
+  # stayed on the retired account. Finding that used to take a manual Stripe trace per case,
+  # so when the guard trips, look up the seller's retired Gumroad-managed accounts and name
+  # any that still hold money — the diagnosis then ships inside the error message itself.
+  def self.retired_account_balances_hint(merchant_account)
+    retired_accounts = merchant_account.user.merchant_accounts.stripe.deleted
+      .where.not(id: merchant_account.id)
+      .select(&:is_a_gumroad_managed_stripe_account?)
+
+    balances_found = retired_accounts.filter_map do |retired_account|
+      stripe_balance = Stripe::Balance.retrieve({}, { stripe_account: retired_account.charge_processor_merchant_id })
+      residual_cents = (stripe_balance.available + stripe_balance.pending).sum { |b| [b.amount, 0].max }
+      next if residual_cents <= 0
+
+      amounts = (stripe_balance.available + stripe_balance.pending)
+        .filter_map { |b| "#{b.amount} #{b.currency} cents" if b.amount > 0 }
+        .join(" + ")
+      "#{retired_account.charge_processor_merchant_id} holds #{amounts}"
+    rescue Stripe::StripeError
+      # The retired account may be gone at Stripe entirely; the hint is best-effort and the
+      # drift error itself must still get through, so skip accounts we can't read.
+      nil
+    end
+    return "" if balances_found.empty?
+
+    " Possible cause: the seller has retired Stripe account(s) still holding funds — " \
+      "#{balances_found.join("; ")}. A returned payout may have re-credited a retired account " \
+      "after a country change; move those funds to the active account."
+  end
+  private_class_method :retired_account_balances_hint
 
   def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     user_ids.each do |user_id|

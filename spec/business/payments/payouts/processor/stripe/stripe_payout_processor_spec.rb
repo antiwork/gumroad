@@ -315,6 +315,75 @@ describe StripePayoutProcessor, :vcr do
         expect(payment.errors.full_messages.first).to include("Destination Stripe balance mismatch")
         expect(payment.errors.full_messages.first).to include("gap: 25969 cents")
       end
+
+      context "when the seller has a retired Gumroad-managed account still holding funds" do
+        let!(:retired_account) do
+          create(:merchant_account, user:, charge_processor_merchant_id: "acct_retired_with_funds",
+                                    currency: Currency::EUR, country: "ES", deleted_at: Time.current)
+        end
+
+        before do
+          allow(Stripe::Balance).to receive(:retrieve)
+            .with({}, { stripe_account: "acct_retired_with_funds" })
+            .and_return(
+              Stripe::Balance.construct_from(object: "balance",
+                                             available: [{ amount: 25_969, currency: "eur" }],
+                                             pending: [{ amount: 0, currency: "eur" }])
+            )
+        end
+
+        it "names the retired account and its residual balance in the error message" do
+          errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+          expect(errors.first).to include("Destination Stripe balance mismatch")
+          expect(errors.first).to include("acct_retired_with_funds holds 25969 eur cents")
+          expect(errors.first).to include("retired Stripe account(s) still holding funds")
+        end
+      end
+
+      context "when the seller has a retired account but it holds nothing" do
+        let!(:retired_account) do
+          create(:merchant_account, user:, charge_processor_merchant_id: "acct_retired_empty",
+                                    currency: Currency::EUR, country: "ES", deleted_at: Time.current)
+        end
+
+        before do
+          allow(Stripe::Balance).to receive(:retrieve)
+            .with({}, { stripe_account: "acct_retired_empty" })
+            .and_return(
+              Stripe::Balance.construct_from(object: "balance",
+                                             available: [{ amount: 0, currency: "eur" }],
+                                             pending: [{ amount: 0, currency: "eur" }])
+            )
+        end
+
+        it "keeps the plain drift message without a retired-account hint" do
+          errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+          expect(errors.first).to include("Destination Stripe balance mismatch")
+          expect(errors.first).not_to include("retired Stripe account(s)")
+        end
+      end
+
+      context "when reading the retired account's balance fails at Stripe" do
+        let!(:retired_account) do
+          create(:merchant_account, user:, charge_processor_merchant_id: "acct_retired_gone",
+                                    currency: Currency::EUR, country: "ES", deleted_at: Time.current)
+        end
+
+        before do
+          allow(Stripe::Balance).to receive(:retrieve)
+            .with({}, { stripe_account: "acct_retired_gone" })
+            .and_raise(Stripe::PermissionError.new("account does not exist"))
+        end
+
+        it "still returns the drift error without the hint" do
+          errors = described_class.prepare_payment_and_set_amount(payment, [eur_balance])
+
+          expect(errors.first).to include("Destination Stripe balance mismatch")
+          expect(errors.first).not_to include("retired Stripe account(s)")
+        end
+      end
     end
 
     context "when Stripe's pending balance covers the gap (funds settling, no true drift)" do
