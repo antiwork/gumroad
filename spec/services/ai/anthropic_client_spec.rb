@@ -321,6 +321,42 @@ describe Ai::AnthropicClient do
       expect(stub).to have_been_requested
       expect(captured).not_to have_key("fallbacks")
     end
+
+    describe "served-model logging" do
+      before { allow(Rails.logger).to receive(:warn) }
+
+      it "warns when a buffered response was served by a different model than requested" do
+        body = { "model" => "openai/gpt-5", "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }
+        stub_request(:post, openrouter_url).to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+        client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        expect(Rails.logger).to have_received(:warn).with(/served by fallback model openai\/gpt-5 \(requested #{described_class::DEFAULT_MODEL}\)/o)
+      end
+
+      it "warns when a stream's message_start names a different model than requested" do
+        stream = "event: message_start\ndata: #{{ message: { model: "openai/gpt-5" } }.to_json}\n\n" \
+                 "event: content_block_start\ndata: #{{ index: 0, content_block: { type: "text" } }.to_json}\n\n" \
+                 "event: content_block_delta\ndata: #{{ index: 0, delta: { type: "text_delta", text: "hi" } }.to_json}\n\n" \
+                 "event: message_delta\ndata: #{{ delta: { stop_reason: "end_turn" } }.to_json}\n\n"
+        stub_request(:post, openrouter_url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+        client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
+
+        expect(Rails.logger).to have_received(:warn).with(/served by fallback model openai\/gpt-5/)
+      end
+
+      it "does not warn when the served model is the requested one, even with a version suffix" do
+        # Providers report the fully-versioned name (e.g. a dated snapshot of the requested model);
+        # that's still the model we asked for, not a fallback.
+        body = { "model" => "#{described_class::DEFAULT_MODEL}-20260115", "content" => [], "stop_reason" => "end_turn" }
+        stub_request(:post, openrouter_url).to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+        client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        expect(Rails.logger).not_to have_received(:warn)
+      end
+    end
   end
 
   describe "#stream_messages" do

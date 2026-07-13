@@ -145,6 +145,10 @@ class Ai::AnthropicClient
 
       each_sse_event(response.body) do |event, data|
         case event
+        when "message_start"
+          # The first stream event names the model actually generating this reply — the only
+          # place a fallback shows up on a stream. Log it so fallback turns are visible in app logs.
+          log_served_model(data.dig("message", "model"))
         when "content_block_start"
           index = data["index"]
           block = data["content_block"] || {}
@@ -355,6 +359,19 @@ class Ai::AnthropicClient
       GlobalConfig.get("OPENROUTER_FALLBACK_MODEL").presence || DEFAULT_FALLBACK_MODEL
     end
 
+    # Warn when the model that generated the response isn't the one we asked for — i.e. OpenRouter
+    # fell back to GPT because Claude errored. Without this, time spent on the fallback would be
+    # invisible in app logs (OpenRouter's dashboard would be the only place to see it). The
+    # comparison is a substring match, not equality, because the served name can carry provider
+    # prefixes or version suffixes (e.g. "anthropic/claude-opus-4-7-20260115") while still being
+    # the requested model — only a genuinely different family should warn.
+    def log_served_model(served_model)
+      return if served_model.blank?
+      return if served_model.include?(model) || model.include?(served_model)
+
+      Rails.logger.warn("Anthropic request served by fallback model #{served_model} (requested #{model})")
+    end
+
     # Normalize a buffered Messages response into a Result. Content is an array of typed blocks; we
     # pull the joined text and any tool_use blocks (each with parsed input).
     #
@@ -366,6 +383,8 @@ class Ai::AnthropicClient
     def parse_message(body)
       return Result.new(text: "", tool_uses: [], stop_reason: nil) unless body.is_a?(Hash)
       raise embedded_error(body, kind: "response") if body["error"].is_a?(Hash)
+
+      log_served_model(body["model"])
 
       content = Array(body["content"])
       text = content.filter_map { |b| b["text"].to_s if b.is_a?(Hash) && b["type"] == "text" }.join
