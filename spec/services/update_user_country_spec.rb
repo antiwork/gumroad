@@ -12,23 +12,25 @@ describe UpdateUserCountry do
   end
 
   describe "#process" do
-    context "when the user has a payout still processing" do
-      before do
-        create(:payment, user: @user, state: "processing")
-      end
+    UpdateUserCountry::PAYOUT_IN_FLIGHT_STATES.each do |in_flight_state|
+      context "when the user has a payout still in the #{in_flight_state} state" do
+        before do
+          create(:payment, user: @user, state: in_flight_state)
+        end
 
-      it "raises PayoutInProcessingError and changes nothing" do
-        old_compliance_info = @user.alive_user_compliance_info
-        old_stripe_account = @user.stripe_account
-        old_bank_account = @user.active_bank_account
+        it "raises PayoutInProcessingError and changes nothing" do
+          old_compliance_info = @user.alive_user_compliance_info
+          old_stripe_account = @user.stripe_account
+          old_bank_account = @user.active_bank_account
 
-        expect do
-          UpdateUserCountry.new(new_country_code: "GB", user: @user).process
-        end.to raise_error(UpdateUserCountry::PayoutInProcessingError)
+          expect do
+            UpdateUserCountry.new(new_country_code: "GB", user: @user).process
+          end.to raise_error(UpdateUserCountry::PayoutInProcessingError)
 
-        expect(old_compliance_info.reload.deleted?).to eq(false)
-        expect(old_stripe_account.reload.deleted?).to eq(false)
-        expect(old_bank_account.reload.deleted?).to eq(false)
+          expect(old_compliance_info.reload.deleted?).to eq(false)
+          expect(old_stripe_account.reload.deleted?).to eq(false)
+          expect(old_bank_account.reload.deleted?).to eq(false)
+        end
       end
     end
 
