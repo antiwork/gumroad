@@ -108,6 +108,22 @@ describe InvoicePresenter::OrderInfo do
         )
       end
 
+      context "when the purchase is fully refunded" do
+        before do
+          purchase.update!(stripe_refunded: true)
+          create(:refund, purchase:, amount_cents: purchase.price_cents, gumroad_tax_cents: 0)
+        end
+
+        it "shows a zero payment total" do
+          expect(presenter.pdf_attributes).to include(
+            {
+              label: "Payment Total",
+              value: "$0",
+            }
+          )
+        end
+      end
+
       context "when country is Australia" do
         before do
           purchase.update!(gumroad_tax_cents: 100, was_purchase_taxable: true)

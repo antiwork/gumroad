@@ -1500,8 +1500,13 @@ class Purchase < ApplicationRecord
     format_price_in_cents(total_in_product_currency)
   end
 
+  # The amount the buyer has actually paid after refunds, in USD cents.
+  # total_transaction_cents is the original charge (price + Gumroad-collected tax),
+  # so we subtract everything refunded so far: the refunded principal plus the
+  # refunded tax. A fully refunded purchase returns 0, which keeps regenerated
+  # invoices honest — they show a $0 payment total instead of the original amount.
   def non_refunded_total_transaction_amount
-    total_transaction_cents - gumroad_tax_refunded_cents
+    total_transaction_cents - gross_amount_refunded_cents
   end
 
   def formatted_gumroad_tax_amount
