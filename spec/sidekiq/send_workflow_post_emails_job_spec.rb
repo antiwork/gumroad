@@ -152,6 +152,13 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, @sales[4].id, nil, nil).immediately
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, @sales[5].id, nil, nil).at(18.hours.from_now)
       end
+
+      it "loads the audience with a raised statement execution cap" do
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 1.hour.to_i).and_call_original
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs.size).to eq(7)
+      end
     end
   end
 end

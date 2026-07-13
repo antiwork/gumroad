@@ -10,19 +10,22 @@ export const ShareButtons = ({
   url,
   twitterText,
   facebookText,
+  children,
 }: {
   url: string;
   twitterText: string;
   facebookText: string;
+  children?: React.ReactNode;
 }) => (
   <div className="flex flex-wrap gap-2">
     <TwitterShareButton url={url} text={twitterText} />
     <FacebookShareButton url={url} text={facebookText} />
     <CopyToClipboard text={url} tooltipPosition="top">
-      <Button color="primary">
+      <Button>
         <LinkIcon className="size-5" />
         Copy URL
       </Button>
     </CopyToClipboard>
+    {children}
   </div>
 );

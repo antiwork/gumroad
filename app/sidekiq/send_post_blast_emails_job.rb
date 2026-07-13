@@ -16,7 +16,13 @@ class SendPostBlastEmailsJob
     @filters = @post.audience_members_filter_params
     # The filter query can be expensive to run, it's better to run it on the replica DB.
     Makara::Context.release_all
-    @members = AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+    # For sellers with very large audiences (hundreds of thousands of members) the filter
+    # query can take longer than the database's default 5-minute statement cap, which made
+    # big blasts fail with a StatementTimeout on every attempt and never send anything.
+    # Raise the cap for this one query, the same way the sales report jobs do.
+    @members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+      AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+    end
 
     if @blast.to_non_openers?
       keep_emails = @post.unopened_recipient_emails.to_set
@@ -192,5 +198,10 @@ class SendPostBlastEmailsJob
       @recipients_slice_size ||= begin
         $redis.get(RedisKey.blast_recipients_slice_size) || PostEmailApi.max_recipients
       end.to_i.clamp(1..PostEmailApi.max_recipients)
+    end
+
+    # Tunable via Redis so a stuck blast can be unblocked without a deploy.
+    def audience_load_timeout_seconds
+      ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
     end
 end
