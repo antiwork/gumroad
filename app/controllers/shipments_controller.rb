@@ -13,8 +13,20 @@ class ShipmentsController < ApplicationController
     "country" => "country"
   }.freeze
 
+  # How long we're willing to wait for EasyPost when verifying a buyer's shipping address.
+  # The gem's defaults are 30 seconds to connect and 60 seconds to read — when EasyPost is
+  # slow or unreachable, the buyer sits on a frozen "Processing..." checkout for that whole
+  # time before we fail open. Address verification is a nice-to-have (we already accept the
+  # address as entered when EasyPost errors), so give it a few seconds and then move on.
+  EASYPOST_OPEN_TIMEOUT_SECONDS = 5
+  EASYPOST_READ_TIMEOUT_SECONDS = 10
+
   def verify_shipping_address
-    easy_post = EasyPost::Client.new(api_key: GlobalConfig.get("EASYPOST_API_KEY"))
+    easy_post = EasyPost::Client.new(
+      api_key: GlobalConfig.get("EASYPOST_API_KEY"),
+      open_timeout: EASYPOST_OPEN_TIMEOUT_SECONDS,
+      read_timeout: EASYPOST_READ_TIMEOUT_SECONDS
+    )
     address = easy_post.address.create(
       verify: ["delivery"],
       street1: params.require(:street_address),

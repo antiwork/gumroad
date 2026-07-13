@@ -167,6 +167,35 @@ describe ShipmentsController, :vcr  do
         expect(response.parsed_body["success"]).to be(false)
         expect(response.parsed_body["error_message"]).to eq "We are unable to verify your shipping address. Is your address correct?"
       end
+
+      it "accepts the buyer's address as entered when the request to EasyPost times out" do
+        expect_any_instance_of(EasyPost::Services::Address).to receive(:create)
+          .and_raise(EasyPost::Errors::TimeoutError.new("Net::ReadTimeout"))
+        expect(ErrorNotifier).to receive(:notify).with(
+          an_instance_of(EasyPost::Errors::TimeoutError),
+          context: { action: "verify_shipping_address" }
+        )
+
+        post :verify_shipping_address, params: @params
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body["street_address"]).to eq "1640 17th St"
+      end
+
+      it "gives EasyPost a short connect and read deadline instead of the gem's defaults" do
+        expect(EasyPost::Client).to receive(:new).with(
+          api_key: anything,
+          open_timeout: ShipmentsController::EASYPOST_OPEN_TIMEOUT_SECONDS,
+          read_timeout: ShipmentsController::EASYPOST_READ_TIMEOUT_SECONDS
+        ).and_call_original
+        expect_any_instance_of(EasyPost::Services::Address).to receive(:create)
+          .and_raise(EasyPost::Errors::TimeoutError.new("Net::OpenTimeout"))
+        allow(ErrorNotifier).to receive(:notify)
+
+        post :verify_shipping_address, params: @params
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
     end
   end
 
