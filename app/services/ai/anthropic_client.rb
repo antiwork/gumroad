@@ -361,15 +361,22 @@ class Ai::AnthropicClient
 
     # Warn when the model that generated the response isn't the one we asked for — i.e. OpenRouter
     # fell back to GPT because Claude errored. Without this, time spent on the fallback would be
-    # invisible in app logs (OpenRouter's dashboard would be the only place to see it). The
-    # comparison is a substring match, not equality, because the served name can carry provider
-    # prefixes or version suffixes (e.g. "anthropic/claude-opus-4-7-20260115") while still being
-    # the requested model — only a genuinely different family should warn.
+    # invisible in app logs (OpenRouter's dashboard would be the only place to see it). The names
+    # are normalized before comparing because providers restyle the same model: we request
+    # "claude-opus-4-7" and OpenRouter reports "anthropic/claude-opus-4.7" (provider prefix, dotted
+    # version) — still the requested model, not a fallback. Only a genuinely different model warns.
     def log_served_model(served_model)
       return if served_model.blank?
-      return if served_model.include?(model) || model.include?(served_model)
+
+      requested = normalize_model_name(model)
+      served = normalize_model_name(served_model)
+      return if served.include?(requested) || requested.include?(served)
 
       Rails.logger.warn("Anthropic request served by fallback model #{served_model} (requested #{model})")
+    end
+
+    def normalize_model_name(name)
+      name.to_s.downcase.tr(".", "-")
     end
 
     # Normalize a buffered Messages response into a Result. Content is an array of typed blocks; we

@@ -346,10 +346,11 @@ describe Ai::AnthropicClient do
         expect(Rails.logger).to have_received(:warn).with(/served by fallback model openai\/gpt-5/)
       end
 
-      it "does not warn when the served model is the requested one, even with a version suffix" do
-        # Providers report the fully-versioned name (e.g. a dated snapshot of the requested model);
-        # that's still the model we asked for, not a fallback.
-        body = { "model" => "#{described_class::DEFAULT_MODEL}-20260115", "content" => [], "stop_reason" => "end_turn" }
+      it "does not warn when the served model is the requested one restyled by the provider" do
+        # OpenRouter reports the model as "anthropic/claude-opus-4.7" (provider prefix, dotted
+        # version) for a request naming "claude-opus-4-7" — same model, so no warning. Verified
+        # against the live endpoint 2026-07-13.
+        body = { "model" => "anthropic/#{described_class::DEFAULT_MODEL.tr("-", ".")}", "content" => [], "stop_reason" => "end_turn" }
         stub_request(:post, openrouter_url).to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
 
         client.messages(system: "s", messages: [{ role: "user", content: "x" }])
