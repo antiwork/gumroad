@@ -683,6 +683,57 @@ describe CheckoutPresenter do
       purchase_queries = queries.select { |sql| sql.match?(/purchases/i) }
       expect(purchase_queries.size).to be <= 2
     end
+
+    it "hides a cross-sell the buyer has already purchased" do
+      seller = create(:named_user)
+      product = create(:product, user: seller)
+      offered_product = create(:product, user: seller)
+      create(:upsell, selected_products: [product], seller:, product: offered_product, cross_sell: true)
+
+      buyer = create(:user)
+      instance = described_class.new(logged_in_user: buyer, ip: "127.0.0.1")
+      cart_item = product.cart_item({})
+
+      expect(instance.checkout_product(product, cart_item, {})[:product][:cross_sells]).to be_present
+
+      create(:purchase, link: offered_product, purchaser: buyer)
+
+      instance = described_class.new(logged_in_user: buyer, ip: "127.0.0.1")
+      expect(instance.checkout_product(product, cart_item, {})[:product][:cross_sells]).to be_empty
+    end
+
+    it "only queries purchases of the cross-sell candidate products, not the buyer's whole history" do
+      seller = create(:named_user)
+      product = create(:product, user: seller)
+      offered_product = create(:product, user: seller)
+      create(:upsell, selected_products: [product], seller:, product: offered_product, cross_sell: true)
+
+      # A buyer with purchases of many unrelated products. The cross-sell check should
+      # not load these — it should only look at purchases of the offered product.
+      buyer = create(:user)
+      create_list(:product, 5, user: seller).each do |unrelated_product|
+        create(:purchase, link: unrelated_product, purchaser: buyer)
+      end
+
+      instance = described_class.new(logged_in_user: buyer, ip: "127.0.0.1")
+      cart_item = product.cart_item({})
+
+      queries = []
+      callback = lambda { |_name, _start, _finish, _id, payload|
+        queries << payload[:sql] if payload[:sql] && !payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+      }
+
+      cross_sells = nil
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        cross_sells = instance.checkout_product(product, cart_item, {})[:product][:cross_sells]
+      end
+
+      expect(cross_sells).to be_present
+      purchase_queries = queries.select { |sql| sql.match?(/FROM `purchases`/i) }
+      # One query for the offered product's purchases; none should be an unscoped load
+      # of the buyer's full purchase history.
+      expect(purchase_queries).to all(match(/`purchases`\.`link_id`/))
+    end
   end
 
   describe "#subscription_manager_props", :vcr do
