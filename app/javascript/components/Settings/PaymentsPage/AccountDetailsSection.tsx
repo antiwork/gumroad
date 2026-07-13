@@ -224,7 +224,7 @@ const AccountDetailsSection = ({
       },
       SG: {
         label: "NRIC number / FIN",
-        placeholder: "123456789",
+        placeholder: "S1234567A",
         minLength: 9,
         maxLength: 9,
         idSuffix: "singapore-id-number",
