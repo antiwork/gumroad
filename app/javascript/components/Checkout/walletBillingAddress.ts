@@ -31,18 +31,33 @@ import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/
 // unknowable means we always collect the federal portion the buyer owes regardless of
 // where they live, and we never charge them another province's higher HST/PST or remit
 // provincial tax to a jurisdiction they may not be in.
+// Returns whether applying the address changed checkout's tax location — mirroring exactly the
+// conditions under which the checkout reducer invalidates the surcharges quote (a country
+// change, a completed 5-digit US ZIP change, or a Canadian province change). Callers holding a
+// tokenized wallet payment use this to know the wallet-approved total may no longer match the
+// recalculated charge and the submission must wait for the surcharges reload (see the held
+// wallet submission handling in PaymentForm.tsx).
 export const applyWalletBillingAddressToCheckout = (
   billingAddress: { country: string | null; postal_code: string | null; state: string | null } | null | undefined,
-  checkout: { country: string; state: string },
+  checkout: { country: string; state: string; zipCode: string },
   dispatch: (action: { type: "set-value"; country?: string; zipCode?: string | undefined; state?: string }) => void,
-) => {
-  if (!billingAddress?.country) return;
+): boolean => {
+  if (!billingAddress?.country) return false;
   const billingState =
     billingAddress.state ||
     (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null) ||
     (billingAddress.country === checkout.country ? checkout.state : null) ||
     (billingAddress.country === "CA" ? GST_ONLY_FALLBACK_PROVINCE : null);
+  const billingZipCode = billingAddress.postal_code || undefined;
   dispatch({ type: "set-value", country: billingAddress.country });
-  dispatch({ type: "set-value", zipCode: billingAddress.postal_code || undefined });
+  dispatch({ type: "set-value", zipCode: billingZipCode });
   dispatch({ type: "set-value", state: billingState ?? "" });
+  // Each condition matches the reducer's surcharge-invalidation rule for the corresponding
+  // dispatch above, evaluated the way the reducer sees it (the country dispatch lands first, so
+  // the ZIP and state rules key on the wallet's country).
+  return (
+    billingAddress.country !== checkout.country ||
+    (billingAddress.country === "US" && billingZipCode !== checkout.zipCode && billingZipCode?.length === 5) ||
+    (billingAddress.country === "CA" && (billingState ?? "") !== checkout.state)
+  );
 };

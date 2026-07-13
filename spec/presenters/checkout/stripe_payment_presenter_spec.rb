@@ -779,6 +779,41 @@ describe Checkout::StripePaymentPresenter do
         .to eq(card_element_fallback("setup_or_installment_flow"))
     end
 
+    it "keeps element wallets off when the cart disables wallets, even with the seller flagged" do
+      # The method-forced buyer-currency QA shape reaches client-confirm with disable_wallets:
+      # true (a wallet payment would charge through the canonical USD path while the cart shows
+      # buyer-currency totals). The constraint is server-owned: the props must never say both
+      # "wallets are disabled" and "render wallets in the element".
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::CAD,
+          }
+        )
+      ]
+
+      props = stripe_payment_props(add_products:)
+
+      expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
+      expect(props[:disable_wallets]).to be(true)
+      expect(props[:payment_element_wallets]).to be(false)
+    ensure
+      if seller
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+    end
+
     it "does not enable wallets when the seller is not flagged" do
       expect(stripe_payment_props(add_products: [flagged_seller_product]))
         .to eq(payment_element_props(payment_element_wallets: false))

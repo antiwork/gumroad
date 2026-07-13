@@ -40,6 +40,7 @@ import { persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedE
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
+import { resolveHeldWalletPayment, type HeldWalletPayment } from "$app/components/Checkout/heldWalletPayment";
 import {
   addressFields,
   canUseStripePaymentElement,
@@ -712,6 +713,11 @@ const CreditCardContent = ({
   // effect and shouldn't cause re-renders. Defaults to "card": with wallets disabled the element
   // only ever shows the card form.
   const paymentElementTypeRef = React.useRef("card");
+  // A tokenized wallet payment held back because the wallet's billing address changed checkout's
+  // tax location (see the submit effect below). A ref, not state: it's produced inside the async
+  // submit effect and consumed by the resolution effect — it never drives rendering itself (the
+  // resolution effect re-runs on the surcharges/status changes that decide its fate).
+  const heldWalletPaymentRef = React.useRef<HeldWalletPayment<PurchasePaymentMethod> | null>(null);
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
@@ -815,18 +821,33 @@ const CreditCardContent = ({
         // checkout's tax location (same shared rules as the Payment Request Button path) before
         // the purchase params are posted. Skipped for shippable carts, where the shipping
         // address governs the tax location — matching the Payment Request Button behavior.
+        const clientConfirmPaymentMethod: PurchasePaymentMethod = {
+          type: "payment-element-client-confirm",
+          confirmationTokenId: tokenResult.confirmationTokenId,
+          cardCountry: tokenResult.cardCountry,
+          walletType: tokenResult.wallet?.type ?? null,
+        };
         if (tokenResult.wallet && !hasShipping(state)) {
-          applyWalletBillingAddressToCheckout(tokenResult.wallet.billingAddress, state, dispatch);
+          const taxLocationChanged = applyWalletBillingAddressToCheckout(
+            tokenResult.wallet.billingAddress,
+            state,
+            dispatch,
+          );
+          // The wallet's billing address changed the tax location, invalidating the surcharges
+          // quote — the server may now calculate a different total than the wallet sheet showed.
+          // Hold the tokenized payment instead of submitting; the held-payment effect below
+          // resumes it once surcharges reload, and only if the total the buyer approved still
+          // matches. `state` here is the pre-change snapshot, so the recorded approved amount is
+          // exactly what the wallet sheet displayed.
+          if (taxLocationChanged) {
+            heldWalletPaymentRef.current = {
+              paymentMethod: clientConfirmPaymentMethod,
+              approvedAmount: getStripePaymentElementAmount(state),
+            };
+            return;
+          }
         }
-        return dispatch({
-          type: "set-payment-method",
-          paymentMethod: {
-            type: "payment-element-client-confirm",
-            confirmationTokenId: tokenResult.confirmationTokenId,
-            cardCountry: tokenResult.cardCountry,
-            walletType: tokenResult.wallet?.type ?? null,
-          },
-        });
+        return dispatch({ type: "set-payment-method", paymentMethod: clientConfirmPaymentMethod });
       }
 
       if (!useSavedCard && !useStripePaymentElement && !cardElementRef.current) {
@@ -886,15 +907,51 @@ const CreditCardContent = ({
         paymentMethod.cardParamsResult.cardParams.wallet &&
         !hasShipping(state)
       ) {
-        applyWalletBillingAddressToCheckout(
+        const taxLocationChanged = applyWalletBillingAddressToCheckout(
           paymentMethod.cardParamsResult.cardParams.wallet.billingAddress,
           state,
           dispatch,
         );
+        // Same held-submission rule as the client-confirm wallet lane above: a tax-location
+        // change invalidates the surcharges quote, so hold the tokenized payment until the
+        // reload confirms the total still matches what the wallet sheet showed the buyer.
+        if (taxLocationChanged) {
+          heldWalletPaymentRef.current = {
+            paymentMethod,
+            approvedAmount: getStripePaymentElementAmount(state),
+          };
+          return;
+        }
       }
       dispatch({ type: "set-payment-method", paymentMethod });
     })().catch(fail);
   }, [paymentElementReady, state.status.type, usesPaymentElement]);
+
+  // Resolves a held wallet payment as checkout state settles (see the submit effect above for
+  // why one exists). Re-runs whenever surcharges or the submission status move: while the
+  // reload for the wallet's tax location is in flight, keep waiting; once it lands, submit the
+  // held payment only if the recalculated total still matches the one the buyer approved on the
+  // wallet sheet. On a mismatch the buyer must re-confirm — the Payment Element's amount has
+  // already been updated to the recalculated total by the amount effect in
+  // PaymentElementInput.tsx (it tracks getStripePaymentElementAmount), so the next wallet sheet
+  // shows the new total. Charging a total the buyer never saw is never an option.
+  React.useEffect(() => {
+    const held = heldWalletPaymentRef.current;
+    if (!held) return;
+    const resolution = resolveHeldWalletPayment(state, held);
+    if (resolution.type === "wait") return;
+    heldWalletPaymentRef.current = null;
+    if (resolution.type === "continue") {
+      dispatch({ type: "set-payment-method", paymentMethod: resolution.paymentMethod });
+    } else if (resolution.type === "re-confirm") {
+      dispatch({ type: "cancel" });
+      showAlert(
+        "Your total changed after applying your payment method's billing address. Please review the updated total and try again.",
+        "warning",
+      );
+    }
+    // "abort": the submission was cancelled or failed elsewhere while holding — just drop it.
+  }, [state.surcharges, state.status.type]);
 
   return (
     <div className="flex flex-col gap-4">

@@ -178,6 +178,12 @@ class Checkout::StripePaymentPresenter
       resolution = payment_method_resolver.resolve
       payment_method_types = resolution.payment_method_types
       method_forced = method_forced_qa_shape?(items)
+      # Presentment candidates only reach client-confirm through the method-forced QA shape
+      # (every other candidate still falls back to CardElement above); for them the PR-1
+      # wallet-disable rationale carries over — a wallet payment would charge through the
+      # canonical USD path while the cart displays buyer-currency totals. Everyone else
+      # keeps wallets enabled, exactly as before.
+      disable_wallets = items.any? { buyer_currency_presentment_candidate?(_1) }
       if method_forced
         # The EUR-only methods (iDEAL/Bancontact) never render on a USD-mode Payment Element —
         # Stripe hides methods that can't charge in the element's currency — so the QA surface
@@ -195,14 +201,12 @@ class Checkout::StripePaymentPresenter
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
-        # Presentment candidates only reach client-confirm through the method-forced QA shape
-        # (every other candidate still falls back to CardElement above); for them the PR-1
-        # wallet-disable rationale carries over — a wallet payment would charge through the
-        # canonical USD path while the cart displays buyer-currency totals. Everyone else
-        # keeps wallets enabled, exactly as before.
-        disable_wallets: items.any? { buyer_currency_presentment_candidate?(_1) },
+        disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
-        payment_element_wallets: payment_element_wallets?,
+        # The disable_wallets constraint is server-owned: when the cart can't take a wallet
+        # payment (the buyer-currency presentment case above), the element wallet surface stays
+        # off no matter what the rollout flag says — the client never has to reconcile the two.
+        payment_element_wallets: payment_element_wallets? && !disable_wallets,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: method_forced ? method_forced_element_currency : CLIENT_CONFIRM_CURRENCY,
