@@ -372,6 +372,30 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "audience load statement timeout" do
+    it "loads the audience with a raised statement execution cap of one hour by default" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 1.hour.to_i).and_call_original
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "honors the Redis override for the statement execution cap" do
+      $redis.set(RedisKey.audience_member_load_max_execution_time_seconds, 2.hours.to_i)
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 2.hours.to_i).and_call_original
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+    ensure
+      $redis.del(RedisKey.audience_member_load_max_execution_time_seconds)
+    end
+  end
+
   describe "error handling" do
     it "deletes sent_post_emails records if PostEmailApi.process raises an error" do
       # Setup post and blast
