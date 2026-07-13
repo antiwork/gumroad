@@ -19,6 +19,7 @@ class Order::PreparePaymentIntentService
   def perform
     mark_free_or_test_purchases_successful
     return responses if purchases_to_charge.empty?
+    return responses if block_unexpected_buyer_currency_quote
     return responses if block_multiple_sellers
     return responses if block_ineligible_for_client_confirm
     return responses if block_purchases_with_blocked_customer_emails
@@ -81,6 +82,22 @@ class Order::PreparePaymentIntentService
 
       Rails.logger.error("Multi-seller client-confirm prepare blocked for order #{order.id}")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
+    end
+
+    # The browser sends a buyer-currency quote token only when the checkout displayed
+    # local-currency totals, meaning the buyer confirmed that local amount. The client-confirm
+    # lane always charges canonical USD and has no machinery to honor a quote, so accepting a
+    # token here would silently charge a different amount than the buyer saw — the invariant
+    # the buyer-currency feature must never break (mirrors Charge::CreateService's fail-closed
+    # behavior on the server-confirm lane). Failing with the quote-invalid error code makes the
+    # checkout cancel, re-fetch surcharges, and re-run the display gates.
+    def block_unexpected_buyer_currency_quote
+      return false if params[:buyer_currency_quote].blank?
+
+      Rails.logger.error("Client-confirm prepare received a buyer_currency_quote for order #{order.id}; failing closed rather than charging canonical USD")
+      purchases_to_charge.each { |purchase| purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID }
+      fail_purchases_with(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
       true
     end
 
