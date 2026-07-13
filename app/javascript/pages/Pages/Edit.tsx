@@ -59,21 +59,40 @@ export default function PagesEdit() {
   const isEditable = canEdit && !is_profile && !page.custom_html;
   const isDirty = isEditable && (title !== previewTitle || content !== previewContent);
 
-  // Warn before a full navigation (close tab, hard link) discards unsaved
-  // edits. Inertia navigations from the Cancel button confirm explicitly.
+  // Warn before navigating away with unsaved edits. `beforeunload` covers full
+  // navigations (close tab, hard link); the Inertia "before" listener covers
+  // in-app navigations like the sidebar, which are SPA visits the browser
+  // event never sees. Background visits (prefetch, async reloads, or ones that
+  // preserve component state) don't discard the editor's local state, so they
+  // don't prompt. The Cancel button confirms explicitly in backToList.
+  const isDirtyRef = React.useRef(isDirty);
+  isDirtyRef.current = isDirty;
   React.useEffect(() => {
-    if (!isDirty) return;
-
-    const beforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
-
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current) e.preventDefault();
+    };
     window.addEventListener("beforeunload", beforeUnload);
 
-    return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [isDirty]);
+    const removeInertiaListener = router.on("before", (event) => {
+      const visit = event.detail.visit;
+      if (!isDirtyRef.current || visit.method !== "get") return;
+      if (visit.prefetch || visit.async || visit.preserveState === true) return;
+      // eslint-disable-next-line no-alert
+      if (!window.confirm("You have unsaved changes. Discard them and leave this page?")) event.preventDefault();
+    });
+
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      removeInertiaListener();
+    };
+  }, []);
 
   const backToList = () => {
     // eslint-disable-next-line no-alert
     if (isDirty && !window.confirm("You have unsaved changes. Discard them and go back to Pages?")) return;
+    // Clear the dirty flag first so the router listener above doesn't prompt a
+    // second time for the navigation the user just confirmed.
+    isDirtyRef.current = false;
     router.visit(Routes.pages_path());
   };
 
