@@ -36,6 +36,23 @@ describe "PurchaseRefunds", :vcr do
       @purchase.refund_and_save!(@user.id)
     end
 
+    it "surfaces a Gumroad-held Stripe balance shortfall without blaming the creator" do
+      expect(ChargeProcessor).to receive(:refund!)
+        .and_raise(ChargeProcessorInsufficientFundsError.new("balance_insufficient"))
+
+      expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors[:base]).to include(Purchase::Refundable::INSUFFICIENT_FUNDS_GUMROAD_BALANCE_ERROR_MESSAGE)
+    end
+
+    it "surfaces a creator-held Stripe balance shortfall as a connected-account issue" do
+      allow(@purchase.merchant_account).to receive(:holder_of_funds).and_return(HolderOfFunds::CREATOR)
+      expect(ChargeProcessor).to receive(:refund!)
+        .and_raise(ChargeProcessorInsufficientFundsError.new("balance_insufficient"))
+
+      expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors[:base]).to include(Purchase::Refundable::INSUFFICIENT_FUNDS_CREATOR_STRIPE_BALANCE_ERROR_MESSAGE)
+    end
+
     describe "buyer-presentment purchases" do
       let(:merchant_account) { create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
@@ -813,6 +830,20 @@ describe "PurchaseRefunds", :vcr do
           expect(Refund.last.note).to eq "VAT_ID_1234_Dummy"
           expect(Refund.last.processor_refund_id).to be_present
           expect(@purchase.reload.stripe_refunded).to be(false)
+        end
+
+        it "returns an insufficient-funds error for Gumroad tax refunds instead of raising" do
+          expect(ChargeProcessor).to receive(:refund!)
+            .with(@purchase.charge_processor_id, @purchase.stripe_transaction_id,
+                  amount_cents: 20,
+                  reverse_transfer: false,
+                  merchant_account: @purchase.merchant_account,
+                  paypal_order_purchase_unit_refund: false,
+                  purchase: @purchase)
+            .and_raise(ChargeProcessorInsufficientFundsError.new("balance_insufficient"))
+
+          expect(@purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "VAT_ID_1234_Dummy")).to be(false)
+          expect(@purchase.errors[:base]).to include(Purchase::Refundable::INSUFFICIENT_FUNDS_GUMROAD_BALANCE_ERROR_MESSAGE)
         end
 
         describe "buyer-presentment purchases" do
