@@ -363,6 +363,105 @@ describe AssetPreview, :vcr do
     end
   end
 
+  describe "#thumbnail_url" do
+    let(:asset_preview) { build(:asset_preview) }
+
+    it "returns the oembed thumbnail when the cover is an embedded player" do
+      asset_preview.oembed = { "info" => { "thumbnail_url" => "https://example.com/thumb.jpg" } }
+      expect(asset_preview.thumbnail_url).to eq("https://example.com/thumb.jpg")
+    end
+
+    it "returns nil for image covers" do
+      image = create(:asset_preview_jpg)
+      expect(image.thumbnail_url).to be_nil
+    end
+
+    it "returns the cached poster frame URL for uploaded video covers" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      Rails.cache.write("attachment_#{asset_preview.file.id}_poster_url", "https://files.example.com/poster.jpg")
+
+      expect(asset_preview.thumbnail_url).to eq("https://files.example.com/poster.jpg")
+    end
+
+    it "returns nil and enqueues generation when no poster has been generated yet" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+
+      expect(asset_preview.thumbnail_url).to be_nil
+      expect(GenerateVideoPosterWorker).to have_enqueued_sidekiq_job(asset_preview.id)
+    end
+
+    it "returns nil without re-enqueueing when generation previously failed" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      Rails.cache.write("attachment_#{asset_preview.file.id}_poster_url", AssetPreview::FAILED_POSTER_SENTINEL)
+      GenerateVideoPosterWorker.jobs.clear
+
+      expect(asset_preview.thumbnail_url).to be_nil
+      expect(GenerateVideoPosterWorker.jobs).to be_empty
+    end
+
+    it "is exposed as the thumbnail in as_json" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview).to receive(:video_poster_url).and_return("https://files.example.com/poster.jpg")
+
+      expect(asset_preview.as_json[:thumbnail]).to eq("https://files.example.com/poster.jpg")
+    end
+  end
+
+  describe "#generate_video_poster!" do
+    it "extracts a poster frame and caches its URL" do
+      asset_preview = create(:asset_preview_mov)
+      preview = instance_double(ActiveStorage::Preview, url: "https://files.example.com/poster.jpg")
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      allow(asset_preview.file).to receive(:preview).and_return(instance_double(ActiveStorage::Preview, processed: preview))
+
+      expect(asset_preview.generate_video_poster!).to eq("https://files.example.com/poster.jpg")
+      expect(Rails.cache.read("attachment_#{asset_preview.file.id}_poster_url")).to eq("https://files.example.com/poster.jpg")
+    end
+
+    it "returns nil instead of raising when poster generation fails" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      allow(asset_preview.file).to receive(:preview).and_raise(ActiveStorage::UnpreviewableError)
+
+      expect(asset_preview.generate_video_poster!).to be_nil
+    end
+
+    it "remembers failed generation and does not retry on the next call" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      allow(asset_preview.file).to receive(:preview).and_raise(ActiveStorage::UnpreviewableError)
+
+      expect(asset_preview.generate_video_poster!).to be_nil
+      expect(asset_preview.file).to have_received(:preview).once
+
+      expect(asset_preview.generate_video_poster!).to be_nil
+      expect(asset_preview.file).to have_received(:preview).once
+    end
+
+    it "gives up and returns nil when generation exceeds the processing timeout" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      allow(Timeout).to receive(:timeout).with(AssetPreview::IMAGE_PROCESSING_TIMEOUT_SECONDS).and_raise(Timeout::Error)
+
+      expect(asset_preview.generate_video_poster!).to be_nil
+    end
+  end
+
+  describe "poster generation enqueueing on create" do
+    it "enqueues poster generation when a video cover is created" do
+      asset_preview = create(:asset_preview_mov)
+      expect(GenerateVideoPosterWorker).to have_enqueued_sidekiq_job(asset_preview.id)
+    end
+
+    it "does not enqueue poster generation for image covers" do
+      create(:asset_preview_jpg)
+      expect(GenerateVideoPosterWorker.jobs).to be_empty
+    end
+  end
+
   describe "#oembed_url" do
     let(:asset_preview) { build(:asset_preview) }
 

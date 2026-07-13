@@ -343,7 +343,7 @@ class CheckoutPresenter
         currency_code: product.price_currency_type.downcase,
         price_cents: product.price_cents,
         buyer_currency_display:,
-        supports_paypal: supports_paypal(product, buyer_currency_display:),
+        supports_paypal: supports_paypal(product),
         custom_fields: product.custom_field_descriptors,
         exchange_rate: get_rate(product.price_currency_type).to_f / (is_currency_type_single_unit?(product.price_currency_type) ? 100 : 1),
         is_tiered_membership: product.is_tiered_membership,
@@ -358,10 +358,13 @@ class CheckoutPresenter
       }
     end
 
-    def supports_paypal(product, buyer_currency_display:)
+    # PayPal stays available to buyers on the presentment-display lane: selecting the
+    # PayPal tab flips the cart display and charge to canonical USD, and the current browser
+    # bundle withholds the quote token. Charge::CreateService also ignores quote tokens after
+    # resolving a non-Stripe charge so an older bundle cannot strand a PayPal checkout.
+    def supports_paypal(product)
       return if Feature.active?(:disable_paypal_sales)
       return if Feature.active?(:disable_nsfw_paypal_connect_sales) && product.rated_as_adult?
-      return if Checkout::BuyerCurrencyEligibility.buyer_presentment_candidate?(seller: product.user, buyer_currency_display:)
 
       if Feature.active?(:disable_paypal_connect_sales)
         return if product.is_recurring_billing? || !product.user.pay_with_paypal_enabled?
@@ -373,18 +376,24 @@ class CheckoutPresenter
       end
     end
 
-    def purchases
-      @_purchases ||= logged_in_user&.purchases&.includes(:link, :variant_attributes)&.map { |purchase| { product: purchase.link, variant: purchase.variant_attributes.first } } || []
-    end
-
-    def purchased_product_variant_set
-      @_purchased_product_variant_set ||= purchases.each_with_object(Set.new) do |purchase, set|
-        set.add([purchase[:product]&.id, purchase[:variant]&.id])
-      end
-    end
-
+    # Answers "has the logged-in buyer already bought this exact product + variant
+    # combination?" for upsell and cross-sell filtering. We only ever check the handful
+    # of upsell/cross-sell candidates attached to the cart, so we query the buyer's
+    # purchases of each candidate product individually instead of loading their entire
+    # purchase history. Buyers with thousands of purchases used to time out the whole
+    # checkout page when a cart item had a cross-sell, because the old implementation
+    # materialized every purchase (with products and variants) just to build a lookup set.
     def already_purchased?(product, variant)
-      purchased_product_variant_set.include?([product&.id, variant&.id])
+      return false if logged_in_user.nil? || product.nil?
+      purchased_variant_ids_for(product).include?(variant&.id)
+    end
+
+    # For one product, returns the set of variant ids the buyer's purchases were made
+    # with (nil when a purchase had no variant). Memoized per product so repeated checks
+    # for the same product (e.g. several upsell variants) reuse the single query.
+    def purchased_variant_ids_for(product)
+      @_purchased_variant_ids_by_product ||= {}
+      @_purchased_variant_ids_by_product[product.id] ||= logged_in_user.purchases.where(link_id: product.id).includes(:variant_attributes).map { |purchase| purchase.variant_attributes.first&.id }.to_set
     end
 
     def subscription_discount_for_next_charge(subscription, buyer: logged_in_user)

@@ -192,6 +192,13 @@ class Charge::CreateService
   end
 
   def buyer_currency_presentment_processor_args
+    # Buyer-currency quotes apply only to Stripe charges. A checkout running an older browser
+    # bundle can still submit its card quote after the buyer switches to PayPal, so discard that
+    # stale token once the resolved merchant account identifies a non-Stripe charge. Stripe keeps
+    # the strict rule below: a submitted token means the buyer confirmed a locked local-currency
+    # amount, and any eligibility or quote failure must stop the charge.
+    quote_token = params[:buyer_currency_quote].presence if merchant_account&.stripe_charge_processor?
+
     eligibility_decision = Checkout::BuyerCurrencyEligibility.new(
       order:,
       seller:,
@@ -205,11 +212,24 @@ class Charge::CreateService
 
     unless eligibility_decision.eligible?
       Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: #{eligibility_decision.fallback_reason}")
+      # Without a token the checkout displayed canonical USD, so the canonical charge the
+      # caller proceeds with is exactly the amount the buyer confirmed.
+      return {} if quote_token.blank?
+
+      # With a token, a charge-time-only gate (GeoIP re-check, merchant account model, etc.)
+      # is now blocking the presentment charge. Charging canonical USD here would charge an
+      # amount different from the local-currency total the buyer confirmed — the invariant
+      # this feature must never break — so fail closed: the buyer is asked to review the
+      # updated total and try again, and the reloaded checkout re-runs the display gates.
+      raise BuyerCurrencyQuoteInvalid, "charge-time eligibility fallback (#{eligibility_decision.fallback_reason}) with a quote token present"
+    end
+
+    if quote_token.blank?
+      Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: missing_buyer_currency_quote")
       return {}
     end
 
-    locked_quote = locked_buyer_currency_quote!(eligibility_decision)
-    return {} if locked_quote.blank?
+    locked_quote = locked_buyer_currency_quote!(quote_token, eligibility_decision)
 
     presentment_result = Charge::PresentmentOrchestrator.new(
       charge:,
@@ -220,7 +240,10 @@ class Charge::CreateService
       eligibility_decision:,
       locked_quote:
     ).perform
-    return {} if presentment_result.blank?
+    # The orchestrator returns nil only on unexpected snapshot/allocation failures (it
+    # notifies and logs internally). The buyer confirmed the locked local-currency total,
+    # so this must also fail closed rather than silently charge canonical USD.
+    raise BuyerCurrencyQuoteInvalid, "presentment orchestration failed" if presentment_result.blank?
 
     {
       processor_amount_cents: presentment_result.processor_amount_cents,
@@ -230,13 +253,7 @@ class Charge::CreateService
     }
   end
 
-  def locked_buyer_currency_quote!(eligibility_decision)
-    quote_token = params[:buyer_currency_quote].presence
-    unless quote_token
-      Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: missing_buyer_currency_quote")
-      return nil
-    end
-
+  def locked_buyer_currency_quote!(quote_token, eligibility_decision)
     Checkout::BuyerCurrencyQuote.verify!(
       token: quote_token,
       seller:,

@@ -1,6 +1,21 @@
 # frozen_string_literal: true
 
 class UpdateUserCountry
+  # Raised when the user has a payout that is still in flight. Changing country deletes the
+  # user's current Stripe account, so if a payout that is still in flight later fails or is
+  # returned by the bank, the money is re-credited to an account nobody watches anymore and
+  # the funds strand there. Callers should ask the user to wait until the payout settles.
+  class PayoutInProcessingError < StandardError; end
+
+  # Payout states that mean money is still moving: the payout has been created or sent but has
+  # not reached a settled outcome yet. "unclaimed" is PayPal-specific (the recipient hasn't
+  # accepted the money), and "creating" is the brief window before the payout is submitted.
+  # Completed payouts are not included: a completed Stripe payout can still be returned by the
+  # bank later, but Gumroad pays out weekly, so blocking on recent completions would lock
+  # nearly every active seller out of country changes. That residual case is handled by
+  # alerting when a returned payout lands on a retired account.
+  PAYOUT_IN_FLIGHT_STATES = %w[creating processing unclaimed]
+
   attr_reader :new_country_code, :user
 
   def initialize(new_country_code:, user:)
@@ -10,6 +25,8 @@ class UpdateUserCountry
   end
 
   def process
+    raise PayoutInProcessingError if @user.payments.where(state: PAYOUT_IN_FLIGHT_STATES).exists?
+
     keep_payment_address = !@user.native_payouts_supported? && !@user.native_payouts_supported?(country_code: @new_country_code)
     @user.update!(payment_address: "") unless keep_payment_address
 

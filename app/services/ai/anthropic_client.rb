@@ -16,6 +16,12 @@
 #
 # The API key stays server-side (GlobalConfig). Nothing here is creator-specific; the seller scoping
 # lives entirely in StoreAgentApiClient, which this never touches.
+#
+# When OPENROUTER_API_KEY is configured, all traffic routes through OpenRouter's
+# Anthropic-compatible endpoint instead of Anthropic directly. OpenRouter acts as a gateway:
+# it fails over between Anthropic's hosting providers, and falls back to GPT (via the request's
+# `fallbacks` parameter) when Claude is entirely unavailable — so an Anthropic outage degrades
+# the agent instead of taking it down. Without the key, behavior is byte-identical to before.
 class Ai::AnthropicClient
   class Error < StandardError; end
 
@@ -33,11 +39,24 @@ class Ai::AnthropicClient
   end
 
   API_URL = "https://api.anthropic.com/v1/messages"
+  # OpenRouter exposes an endpoint compatible with Anthropic's Messages API — same request and
+  # response shapes, same streaming protocol — so routing through it is just a different URL and
+  # API key. We use it as a reliability layer: OpenRouter fails over between Anthropic's own
+  # providers and, via the `fallbacks` request parameter below, to a non-Anthropic model when
+  # Anthropic is entirely down. Routing is opt-in: it turns on only when OPENROUTER_API_KEY is
+  # configured, and without it every request goes straight to Anthropic exactly as before.
+  OPENROUTER_API_URL = "https://openrouter.ai/api/v1/messages"
   API_VERSION = "2023-06-01"
   # Claude Opus 4.7 — top of the vending-bench leaderboard for autonomous commercial operation, which
   # is exactly the store-management job the agent does for creators.
   DEFAULT_MODEL = "claude-opus-4-7"
   DEFAULT_MAX_TOKENS = 1024
+  # When requests go through OpenRouter, this model is tried if Claude itself errors out (provider
+  # down, rate limited, overloaded). OpenRouter translates the Anthropic-format request for the
+  # fallback provider, so no OpenAI-specific code is needed here. The `~` prefix is OpenRouter's
+  # "latest in this family" resolution, so we always fall back to the current GPT flagship without
+  # having to bump a pinned version. Overridable via the OPENROUTER_FALLBACK_MODEL config.
+  DEFAULT_FALLBACK_MODEL = "~openai/gpt-latest"
 
   # How long we wait to open the connection and to send the request. These are short on purpose:
   # if Anthropic isn't reachable quickly, we want to fail fast and retry rather than sit on a dead
@@ -58,11 +77,15 @@ class Ai::AnthropicClient
   # failures surface immediately instead of sleeping.
   RETRY_SLEEP_BUDGET_IN_SECONDS = 6
 
-  # Response statuses worth a retry: rate limit (429), server errors (5xx), and Anthropic's
-  # "overloaded" status (529). Anything else (400 bad request, 401 bad key, ...) is deterministic —
-  # retrying would just repeat the same failure slower.
-  RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504, 529].freeze
-  # Mid-stream `error` events with these types are the streaming equivalents of the statuses above.
+  # Response statuses worth a retry: request timeout (408), rate limit (429), server errors (5xx),
+  # and Anthropic's "overloaded" status (529). 408 was added for OpenRouter (it returns 408 when the
+  # upstream model times out; Anthropic itself doesn't use it today), but the list applies to both
+  # routing modes — so if a proxy in front of api.anthropic.com ever returned a 408, we'd retry that
+  # too, which is the right call for a timeout either way. Anything else (400 bad request, 401 bad
+  # key, ...) is deterministic — retrying would just repeat the same failure slower.
+  RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504, 529].freeze
+  # `error` objects with these types — arriving mid-stream or inside a buffered 200 body — are the
+  # embedded equivalents of the retryable statuses above.
   RETRYABLE_STREAM_ERROR_TYPES = %w[overloaded_error api_error rate_limit_error timeout_error].freeze
 
   Result = Struct.new(:text, :tool_uses, :stop_reason, keyword_init: true)
@@ -87,7 +110,7 @@ class Ai::AnthropicClient
   def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
     with_retries do
-      response = http.post(API_URL, json: body)
+      response = http.post(api_url, json: body)
       raise_for_status!(response, kind: "request")
 
       parse_message(response.parse)
@@ -117,11 +140,15 @@ class Ai::AnthropicClient
       blocks = {}
       stop_reason = nil
 
-      response = http.post(API_URL, json: body)
+      response = http.post(api_url, json: body)
       raise_for_status!(response, kind: "stream")
 
       each_sse_event(response.body) do |event, data|
         case event
+        when "message_start"
+          # The first stream event names the model actually generating this reply — the only
+          # place a fallback shows up on a stream. Log it so fallback turns are visible in app logs.
+          log_served_model(data.dig("message", "model"))
         when "content_block_start"
           index = data["index"]
           block = data["content_block"] || {}
@@ -146,7 +173,7 @@ class Ai::AnthropicClient
         when "message_delta"
           stop_reason = data.dig("delta", "stop_reason") || stop_reason
         when "error"
-          raise stream_error(data)
+          raise embedded_error(data, kind: "stream")
         end
       end
 
@@ -209,11 +236,14 @@ class Ai::AnthropicClient
       nil
     end
 
-    # Classify a mid-stream `error` event. Overload/rate-limit/server errors are transient (the
-    # retry loop may replay the request if nothing was yielded yet); anything else is a real error.
-    def stream_error(data)
+    # Classify an `error` object embedded in an otherwise-successful response — either a mid-stream
+    # `error` event, or (OpenRouter only) an HTTP 200 whose buffered body carries an error object.
+    # Overload/rate-limit/server errors are transient (the retry loop may replay the request if
+    # nothing was yielded yet); anything else is a real error. `kind` keeps the raised message
+    # accurate for the path it came from ("stream" vs "response").
+    def embedded_error(data, kind:)
       error = data["error"] || {}
-      message = "Anthropic stream error: #{error["message"] || "unknown"}"
+      message = "Anthropic #{kind} error: #{error["message"] || "unknown"}"
       return TransientError.new(message) if RETRYABLE_STREAM_ERROR_TYPES.include?(error["type"])
 
       Error.new(message)
@@ -242,6 +272,12 @@ class Ai::AnthropicClient
         stream:,
       }
       body[:tools] = cacheable_tools(tools) if tools.present?
+      # OpenRouter's Anthropic-compatible endpoint accepts a `fallbacks` list (same shape as
+      # Anthropic's SDKs): if Claude errors — rate limit, overload, provider downtime — OpenRouter
+      # retries the request against the fallback model and translates the wire format for it, so
+      # the agent stays up on GPT when Anthropic is down. Sent only when routing through
+      # OpenRouter; Anthropic's own API would reject the unknown parameter.
+      body[:fallbacks] = [{ model: fallback_model }] if openrouter?
       body
     end
 
@@ -290,7 +326,13 @@ class Ai::AnthropicClient
     # generic "Sorry, I ran into a problem" error. Remove the fallback once ANTHROPIC_API_KEY is set.
     # Failing fast here with a clear message (rather than shipping a blank key upstream) keeps a future
     # config gap legible instead of surfacing as a confusing upstream 401.
+    #
+    # When OPENROUTER_API_KEY is configured, requests route through OpenRouter instead and that key
+    # is sent in the same x-api-key header — OpenRouter's Anthropic-compatible endpoint accepts it
+    # there, so nothing else about the request changes.
     def api_key
+      return openrouter_api_key if openrouter?
+
       key = GlobalConfig.get("ANTHROPIC_API_KEY").presence ||
             GlobalConfig.get("WALKS_ANTHROPIC_API_KEY").presence
       raise Error, "Anthropic API key is not configured (set ANTHROPIC_API_KEY)." if key.blank?
@@ -298,10 +340,58 @@ class Ai::AnthropicClient
       key
     end
 
+    # OpenRouter routing is on when its key is configured, off otherwise. A plain config check (no
+    # feature flag) keeps the switch trivially auditable: delete the key and traffic is back on
+    # Anthropic directly.
+    def openrouter?
+      openrouter_api_key.present?
+    end
+
+    def openrouter_api_key
+      GlobalConfig.get("OPENROUTER_API_KEY").presence
+    end
+
+    def api_url
+      openrouter? ? OPENROUTER_API_URL : API_URL
+    end
+
+    def fallback_model
+      GlobalConfig.get("OPENROUTER_FALLBACK_MODEL").presence || DEFAULT_FALLBACK_MODEL
+    end
+
+    # Warn when the model that generated the response isn't the one we asked for — i.e. OpenRouter
+    # fell back to GPT because Claude errored. Without this, time spent on the fallback would be
+    # invisible in app logs (OpenRouter's dashboard would be the only place to see it). The names
+    # are normalized before comparing because providers restyle the same model: we request
+    # "claude-opus-4-7" and OpenRouter reports "anthropic/claude-opus-4.7" (provider prefix, dotted
+    # version) — still the requested model, not a fallback. Only a genuinely different model warns.
+    def log_served_model(served_model)
+      return if served_model.blank?
+
+      requested = normalize_model_name(model)
+      served = normalize_model_name(served_model)
+      return if served.include?(requested) || requested.include?(served)
+
+      Rails.logger.warn("Anthropic request served by fallback model #{served_model} (requested #{model})")
+    end
+
+    def normalize_model_name(name)
+      name.to_s.downcase.tr(".", "-")
+    end
+
     # Normalize a buffered Messages response into a Result. Content is an array of typed blocks; we
     # pull the joined text and any tool_use blocks (each with parsed input).
+    #
+    # OpenRouter can return HTTP 200 with an error object in the body when the failure happened
+    # after the upstream model started processing (Anthropic directly never does this for buffered
+    # requests). Without the check below, such a response would silently become an empty Result and
+    # the agent would render a blank reply; classifying it through the same transient-vs-real logic
+    # as mid-stream errors lets the retry loop recover from the transient ones.
     def parse_message(body)
       return Result.new(text: "", tool_uses: [], stop_reason: nil) unless body.is_a?(Hash)
+      raise embedded_error(body, kind: "response") if body["error"].is_a?(Hash)
+
+      log_served_model(body["model"])
 
       content = Array(body["content"])
       text = content.filter_map { |b| b["text"].to_s if b.is_a?(Hash) && b["type"] == "text" }.join

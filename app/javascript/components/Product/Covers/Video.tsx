@@ -20,7 +20,15 @@ const Video = ({ cover, dimensions }: Props) => {
     const url = dimensions == null || dimensions.width > DEFAULT_IMAGE_WIDTH ? cover.original_url : cover.url;
 
     const options: JWPlayerOptions = {
-      playlist: [{ sources: [{ file: url, type: cover.filetype?.toLowerCase() }] }],
+      // "image" is JW Player's poster frame — the still shown before playback
+      // starts. Without it the player idles as a solid black rectangle (the
+      // subject of gumroad-private#1074). For uploaded videos the backend
+      // extracts a frame with ffmpeg (AssetPreview#video_poster_url); when no
+      // poster could be generated this is null and JW Player keeps the old
+      // black idle state.
+      playlist: [
+        { image: cover.thumbnail ?? undefined, sources: [{ file: url, type: cover.filetype?.toLowerCase() }] },
+      ],
     };
     if (dimensions != null) {
       options.height = `${dimensions.height}px`;

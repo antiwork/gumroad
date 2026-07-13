@@ -415,6 +415,24 @@ class ContactingCreatorMailer < ApplicationMailer
     end
   end
 
+  def tax_form_transaction_report(user_id, year, csv_tempfile)
+    @seller = User.find(user_id)
+    @year = year
+    @subject = "Your #{year} 1099-K transaction report"
+    file_or_url = MailerAttachmentOrLinkService.new(
+      file: csv_tempfile,
+      extension: "csv",
+      filename: "1099k-transaction-reports/1099-K-transactions_#{year}_#{user_id}_#{SecureRandom.hex}.csv"
+    ).perform
+    file = file_or_url[:file]
+    if file
+      file.rewind
+      attachments["1099-K-transactions-#{year}.csv"] = { data: file.read }
+    else
+      @report_csv_url = file_or_url[:url]
+    end
+  end
+
   def payout_data(attachment_name, extension, tempfile, recipient_user_id)
     @recipient = User.find(recipient_user_id)
     @subject = "Here's your payout data!"

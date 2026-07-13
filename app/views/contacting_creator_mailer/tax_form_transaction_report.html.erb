@@ -1,0 +1,9 @@
+<%= header_section("Your 1099-K transaction report") %>
+<div>
+  <% if @report_csv_url.present? %>
+    <p>Please click this <%= link_to "link", @report_csv_url %> to download the transaction report for your <%= @year %> 1099-K.</p>
+  <% else %>
+    <p>We've attached the transaction report for your <%= @year %> 1099-K to this email.</p>
+  <% end %>
+  <p>The report lists the Stripe transactions behind your form, matched to the corresponding Gumroad sales. Transactions are grouped into tax years by the date the funds became available rather than the date of the charge, which is why late-December sales can appear on the following year's form.</p>
+</div>

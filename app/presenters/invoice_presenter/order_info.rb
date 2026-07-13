@@ -38,6 +38,7 @@ class InvoicePresenter::OrderInfo
       payment_info.today_shipping_price_attribute,
       non_refunded_tax_price_attributes,
       non_refunded_total_payment_attribute,
+      refund_status_attribute,
       payment_info.payment_method_attribute,
     ].flatten.compact
   end
@@ -53,6 +54,7 @@ class InvoicePresenter::OrderInfo
       payment_info.today_shipping_price_attribute,
       payment_info.today_tax_price_attributes,
       non_refunded_total_payment_attribute,
+      refund_status_attribute,
       payment_info.payment_method_attribute,
     ].flatten.compact
   end
@@ -233,6 +235,22 @@ class InvoicePresenter::OrderInfo
       {
         label: "Payment Total",
         value: formatted_dollar_amount(amount_cents),
+      }
+    end
+
+    # Marks the invoice when money has been returned, so a buyer's books
+    # reflect the refund instead of just showing a reduced payment total.
+    def refund_status_attribute
+      purchases = chargeable.successful_purchases.reject(&:is_free_trial_purchase?)
+      return if purchases.none? { _1.stripe_refunded? || _1.stripe_partially_refunded? }
+
+      value = purchases.all?(&:stripe_refunded?) ? "Fully refunded" : "Partially refunded"
+      last_refunded_at = purchases.flat_map(&:refunds).map(&:created_at).compact.max
+      value += " on #{last_refunded_at.to_fs(:formatted_date_abbrev_month)}" if last_refunded_at.present?
+
+      {
+        label: "Refund status",
+        value:,
       }
     end
 

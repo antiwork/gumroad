@@ -12,6 +12,41 @@ describe UpdateUserCountry do
   end
 
   describe "#process" do
+    UpdateUserCountry::PAYOUT_IN_FLIGHT_STATES.each do |in_flight_state|
+      context "when the user has a payout still in the #{in_flight_state} state" do
+        before do
+          create(:payment, user: @user, state: in_flight_state)
+        end
+
+        it "raises PayoutInProcessingError and changes nothing" do
+          old_compliance_info = @user.alive_user_compliance_info
+          old_stripe_account = @user.stripe_account
+          old_bank_account = @user.active_bank_account
+
+          expect do
+            UpdateUserCountry.new(new_country_code: "GB", user: @user).process
+          end.to raise_error(UpdateUserCountry::PayoutInProcessingError)
+
+          expect(old_compliance_info.reload.deleted?).to eq(false)
+          expect(old_stripe_account.reload.deleted?).to eq(false)
+          expect(old_bank_account.reload.deleted?).to eq(false)
+        end
+      end
+    end
+
+    context "when the user's payouts have all settled" do
+      before do
+        create(:payment_completed, user: @user)
+        create(:payment_failed, user: @user)
+      end
+
+      it "allows the country change" do
+        UpdateUserCountry.new(new_country_code: "GB", user: @user).process
+
+        expect(@user.alive_user_compliance_info.legal_entity_country_code).to eq("GB")
+      end
+    end
+
     it "deletes the old compliance info and creates a new one" do
       old_compliance_info = @user.alive_user_compliance_info
       UpdateUserCountry.new(new_country_code: "GB", user: @user).process
