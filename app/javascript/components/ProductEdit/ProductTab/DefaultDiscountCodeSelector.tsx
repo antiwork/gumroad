@@ -5,7 +5,7 @@ import { searchProductOfferCodes } from "$app/data/offer_code";
 import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
-import { OfferCode, useProductEditContext } from "$app/components/ProductEdit/state";
+import { OfferCode } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -14,17 +14,27 @@ import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 
-export const DefaultDiscountCodeSelector = () => {
-  const { uniquePermalink, product, updateProduct } = useProductEditContext();
-
-  const selectedDiscountCode = product.default_offer_code;
-
+// This selector is shared between the regular product editor (which stores its
+// state in ProductEditContext) and the bundle editor (which uses Inertia form
+// state), so it takes its value and change handler as plain props instead of
+// reading a specific state store.
+export const DefaultDiscountCodeSelector = ({
+  uniquePermalink,
+  selectedOfferCode,
+  onChange,
+}: {
+  uniquePermalink: string;
+  selectedOfferCode: OfferCode | null;
+  onChange: (offerCode: OfferCode | null) => void;
+}) => {
   const getLabel = (code: OfferCode) => code.name || code.code;
 
-  const [query, setQuery] = React.useState(() => (selectedDiscountCode ? getLabel(selectedDiscountCode) : ""));
+  const [query, setQuery] = React.useState(() => (selectedOfferCode ? getLabel(selectedOfferCode) : ""));
   const [options, setOptions] = React.useState<OfferCode[]>([]);
   const [isOpen, setIsOpen] = React.useState(false);
-  const [isToggleOn, setIsToggleOn] = React.useState(false);
+  // Start the toggle in the "on" position when the editor opens with a default
+  // code already selected, so it doesn't flash from off to on during the first render.
+  const [isToggleOn, setIsToggleOn] = React.useState(() => Boolean(selectedOfferCode));
 
   const resetSearch = React.useCallback(() => {
     setQuery("");
@@ -33,10 +43,10 @@ export const DefaultDiscountCodeSelector = () => {
   }, []);
 
   React.useEffect(() => {
-    if (product.default_offer_code) {
+    if (selectedOfferCode) {
       setIsToggleOn(true);
     }
-  }, [product.default_offer_code]);
+  }, [selectedOfferCode]);
 
   const fetchOptions = React.useCallback(
     async (search: string) => {
@@ -63,15 +73,12 @@ export const DefaultDiscountCodeSelector = () => {
         setIsToggleOn(true);
         resetSearch();
       } else {
-        updateProduct({
-          default_offer_code_id: null,
-          default_offer_code: null,
-        });
+        onChange(null);
         setIsToggleOn(false);
         resetSearch();
       }
     },
-    [resetSearch, updateProduct],
+    [resetSearch, onChange],
   );
 
   return (
@@ -118,14 +125,11 @@ export const DefaultDiscountCodeSelector = () => {
               option={(code, props) => (
                 <div
                   {...props}
-                  aria-selected={code.id === product.default_offer_code?.id}
+                  aria-selected={code.id === selectedOfferCode?.id}
                   onClick={(event) => {
                     props.onClick?.(event);
 
-                    updateProduct({
-                      default_offer_code_id: code.id,
-                      default_offer_code: code,
-                    });
+                    onChange(code);
 
                     setQuery(getLabel(code));
                     setIsOpen(false);

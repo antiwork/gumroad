@@ -116,26 +116,14 @@ const suggestEmail = (email: string): EmailSuggestion | null => {
     POPULAR_SECOND_LEVEL_DOMAINS,
     SECOND_LEVEL_THRESHOLD,
   );
-  const closestTopLevelDomain = findClosestDomain(
-    emailParts.topLevelDomain,
-    POPULAR_TOP_LEVEL_DOMAINS,
-    TOP_LEVEL_THRESHOLD,
-  );
+  const secondLevelDomain = closestSecondLevelDomain ?? emailParts.secondLevelDomain;
+  const topLevelDomain = TOP_LEVEL_DOMAIN_TYPOS[emailParts.topLevelDomain] ?? emailParts.topLevelDomain;
+  // Rebuild the domain from its parts instead of using String.replace, which substitutes the
+  // FIRST occurrence of the substring: "concast.con".replace("con", "com") would yield
+  // "comcast.con" because "con" also appears at the start of the second-level domain.
+  const domain = secondLevelDomain === "" ? topLevelDomain : `${secondLevelDomain}.${topLevelDomain}`;
 
-  let domain = emailParts.domain;
-  let hasSuggestion = false;
-
-  if (closestSecondLevelDomain && closestSecondLevelDomain !== emailParts.secondLevelDomain) {
-    domain = domain.replace(emailParts.secondLevelDomain, closestSecondLevelDomain);
-    hasSuggestion = true;
-  }
-
-  if (closestTopLevelDomain && closestTopLevelDomain !== emailParts.topLevelDomain) {
-    domain = domain.replace(emailParts.topLevelDomain, closestTopLevelDomain);
-    hasSuggestion = true;
-  }
-
-  return hasSuggestion
+  return domain !== emailParts.domain
     ? {
         address: emailParts.address,
         domain,
@@ -151,7 +139,20 @@ export const checkEmailForTypos = (email: string, cb: (suggestion: EmailSuggesti
 
 const DOMAIN_THRESHOLD = 2;
 const SECOND_LEVEL_THRESHOLD = 2;
-const TOP_LEVEL_THRESHOLD = 2;
+
+// Fuzzy-matching TLDs doesn't work: they are so short that nearly every real TLD sits within
+// edit distance of a popular one (.land ↔ .ca, .dev ↔ .de, .io ↔ .ie, .co ↔ .com), so buyers
+// with perfectly valid addresses got nagged with wrong suggestions on every checkout. Instead,
+// only fix this explicit list of common typos — none of these keys are real TLDs.
+const TOP_LEVEL_DOMAIN_TYPOS: Record<string, string> = {
+  con: "com",
+  cmo: "com",
+  ocm: "com",
+  vom: "com",
+  comm: "com",
+  nte: "net",
+  ogr: "org",
+};
 
 const POPULAR_SECOND_LEVEL_DOMAINS = ["yahoo", "hotmail", "mail", "live", "outlook", "gmx"];
 

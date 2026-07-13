@@ -3585,6 +3585,49 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "when buyer has a membership purchase whose payment is still settling" do
+      # A slow payment method (like an ACH bank debit) leaves the original membership
+      # purchase in_progress for days before the subscription becomes active, so the
+      # active-subscription check can't catch a second attempt on its own.
+      before do
+        create(:membership_purchase,
+               link: membership_product,
+               purchaser: buyer,
+               email: "other-email@example.com", # a different checkout email must not bypass the block
+               purchase_state: "in_progress",
+               stripe_status: "processing",
+               created_at: 2.days.ago)
+      end
+
+      it "returns an error and does not create a new purchase" do
+        expect do
+          purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:).perform
+
+          expect(purchase).to be_nil
+          expect(error).to eq("Your payment for this membership is still processing. We will email you a receipt as soon as it completes — please do not pay again.")
+        end.not_to change(Purchase, :count)
+      end
+    end
+
+    context "when buyer has an abandoned in-progress membership purchase" do
+      before do
+        create(:membership_purchase,
+               link: membership_product,
+               purchaser: buyer,
+               email: email,
+               purchase_state: "in_progress",
+               stripe_status: nil,
+               created_at: 2.days.ago)
+      end
+
+      it "allows the purchase" do
+        purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:).perform
+
+        expect(error).to be_nil
+        expect(purchase).to be_present
+      end
+    end
+
     context "when buyer has a restartable subscription" do
       let!(:subscription) do
         create_subscription_for(

@@ -36,6 +36,7 @@ import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
+import { persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedEmails";
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
@@ -45,7 +46,7 @@ import {
   canUseStripePaymentElementClientConfirm,
   getErrors,
   getStripePaymentElementAmount,
-  getStripePaymentElementPresentment,
+  getStripePaymentElementMountCurrency,
   getChargeTodayPrice,
   hasShipping,
   isCardReadyToPay,
@@ -225,11 +226,14 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
   };
 
   const rejectEmailTypoSuggestion = () => {
+    // Persist here rather than in the reducer so the reducer stays free of side effects.
+    persistAcknowledgedEmail(state.email);
     dispatch({ type: "acknowledge-email-typo", email: state.email });
   };
 
   const acceptEmailTypoSuggestion = () => {
     if (!state.emailTypoSuggestion) return;
+    persistAcknowledgedEmail(state.emailTypoSuggestion);
     dispatch({ type: "set-value", email: state.emailTypoSuggestion });
     dispatch({ type: "acknowledge-email-typo", email: state.emailTypoSuggestion });
   };
@@ -363,7 +367,9 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
                     onBlur={checkForEmailTypos}
                   />
                 </PopoverAnchor>
-                <PopoverContent className="grid gap-2" matchTriggerWidth>
+                {/* Open upward: the pay/download button sits right below the email field, and a
+                    downward popover covers it, blocking the purchase until the buyer answers. */}
+                <PopoverContent className="grid gap-2" matchTriggerWidth side="top">
                   <div>Did you mean {state.emailTypoSuggestion}?</div>
                   <div className="flex gap-2">
                     <Button onClick={rejectEmailTypoSuggestion}>No</Button>
@@ -701,10 +707,11 @@ const CreditCardContent = ({
       ? state.checkoutPayment.elements_options
       : null;
   const stripePaymentElementAmount = getStripePaymentElementAmount(state);
-  // Non-null only on the buyer-currency presentment lane with a live FX quote: the element then
-  // mounts in the quote's currency (stripePaymentElementAmount already carries the quote's
-  // local-currency total for that case).
-  const stripePaymentElementPresentment = getStripePaymentElementPresentment(state);
+  // The element's mount currency — the FX quote's currency on the buyer-currency presentment
+  // lane (stripePaymentElementAmount then carries the quote's local-currency total), canonical
+  // USD otherwise, or null while an in-flight surcharge refresh makes it unknowable so the
+  // input keeps its current mount instead of remounting and wiping entered card details.
+  const stripePaymentElementMountCurrency = getStripePaymentElementMountCurrency(state);
   const handlePaymentElementReady = React.useCallback((controller: PaymentElementController | null) => {
     paymentElementRef.current = controller;
     setPaymentElementReady(controller !== null);
@@ -832,7 +839,7 @@ const CreditCardContent = ({
           ) : null}
           <PaymentElementInput
             amount={stripePaymentElementAmount}
-            currencyOverride={stripePaymentElementPresentment?.currency}
+            mountCurrency={stripePaymentElementMountCurrency}
             elementsOptions={stripePaymentElementConfig}
             disabled={isProcessing(state)}
             defaultEmail={state.email}

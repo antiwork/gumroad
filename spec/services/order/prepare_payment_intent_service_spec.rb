@@ -97,6 +97,9 @@ describe Order::PreparePaymentIntentService, :vcr do
         response = responses["unique-id-0"]
         expect(response[:success]).to eq(false)
         expect(response[:error_code]).to eq(PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING)
+        # The buyer must receive the actionable explanation, not a null message that the UI
+        # renders as a generic "something went wrong" (#5784).
+        expect(response[:error_message]).to include("purchasing power parity discount")
         expect(order.charges).to be_empty
         expect(purchase.reload).to be_failed
         expect(ProcessorPaymentIntent.where(purchase:)).to be_empty
@@ -208,14 +211,93 @@ describe Order::PreparePaymentIntentService, :vcr do
     context "when no confirmation token is supplied" do
       before { create(:merchant_account, user: seller) }
 
-      it "fails the purchases without creating an intent" do
+      it "fails the purchases with the generic processing_error, not stripe_unavailable" do
         order, params = build_order
 
         responses = described_class.new(order:, params:, confirmation_token: nil).perform
 
         expect(responses["unique-id-0"][:success]).to eq(false)
         expect(order.charges).to be_empty
-        expect(order.purchases.first.reload).to be_failed
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSING_ERROR)
+      end
+    end
+
+    context "when Stripe rejects the ConfirmationToken retrieve as an invalid request" do
+      before { create(:merchant_account, user: seller) }
+
+      it "fails the purchases with processor_invalid_request and keeps Stripe's error code" do
+        order, params = build_order
+        stripe_error = Stripe::InvalidRequestError.new("No such confirmation token", nil, code: "resource_missing")
+        allow(Stripe::ConfirmationToken).to receive(:retrieve).and_raise(stripe_error)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSOR_INVALID_REQUEST)
+        expect(purchase.stripe_error_code).to eq("resource_missing")
+      end
+    end
+
+    context "when Stripe is unreachable during the ConfirmationToken retrieve" do
+      before { create(:merchant_account, user: seller) }
+
+      it "fails the purchases with stripe_unavailable" do
+        order, params = build_order
+        allow(Stripe::ConfirmationToken).to receive(:retrieve).and_raise(Stripe::APIConnectionError.new("Connection reset"))
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
+      end
+    end
+
+    context "when Stripe is unreachable during the intent create" do
+      before { create(:merchant_account, user: seller) }
+
+      it "fails the purchases with stripe_unavailable" do
+        order, params = build_order
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        stripe_error = Stripe::APIConnectionError.new("Connection reset")
+        allow(StripeDeferredPaymentIntent).to receive(:create)
+          .and_raise(ChargeProcessorUnavailableError.new(original_error: stripe_error))
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
+      end
+    end
+
+    context "when Stripe synchronously rejects the intent create as an invalid request" do
+      before { create(:merchant_account, user: seller) }
+
+      it "fails the purchases with processor_invalid_request and keeps Stripe's error code, not stripe_unavailable" do
+        order, params = build_order
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        stripe_error = Stripe::InvalidRequestError.new("The payment method type \"cashapp\" is invalid.", nil, code: "payment_intent_invalid_parameter")
+        allow(StripeDeferredPaymentIntent).to receive(:create)
+          .and_raise(ChargeProcessorInvalidRequestError.new(original_error: stripe_error))
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSOR_INVALID_REQUEST)
+        expect(purchase.stripe_error_code).to eq("payment_intent_invalid_parameter")
       end
     end
 
@@ -442,6 +524,12 @@ describe Order::PreparePaymentIntentService, :vcr do
       let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
 
       before do
+        # A capability snapshot must exist for the account to offer anything beyond card
+        # (an uncached connect account resolves card-only while the refresh worker runs).
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
         allow(Stripe).to receive(:api_key).and_return("sk_test_currency")

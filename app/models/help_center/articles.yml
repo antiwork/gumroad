@@ -172,7 +172,7 @@
 - id: 128
   slug: "128-discount-codes"
   title: "Discount codes"
-  description: "In this article: Create a discount code Allow customers to enter discount codes Discounts for memberships Discount code customization Edit discount codes FAQs C"
+  description: "In this article: Create a discount code Allow customers to enter discount codes Automatically apply a discount code Discounts for memberships Discount code cus"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 130
   slug: "130-pdf-stamping"

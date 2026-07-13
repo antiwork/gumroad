@@ -105,6 +105,7 @@ class BundlePresenter
 
     def shared_props
       collaborator = bundle.collaborator_for_display
+      default_offer_code = bundle.default_offer_code
       {
         bundle: {
           name: bundle.name,
@@ -135,6 +136,12 @@ class BundlePresenter
           collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
           public_files: bundle.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
           audio_previews_enabled: Feature.active?(:audio_previews, bundle.user),
+          default_offer_code: default_offer_code ? {
+            id: default_offer_code.external_id,
+            code: default_offer_code.code,
+            name: default_offer_code.name.presence || "",
+            discount: default_offer_code.configured_discount_for_display,
+          } : nil,
         },
         id: bundle.external_id,
         unique_permalink: bundle.unique_permalink,

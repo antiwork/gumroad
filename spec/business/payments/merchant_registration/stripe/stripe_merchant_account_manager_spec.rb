@@ -591,6 +591,58 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "Luxembourg postal codes written with the conventional 'L-' prefix" do
+      # Regression coverage for gumroad-private#1014: LU residents habitually write postal
+      # codes as "L-9767". Stripe only accepts the bare four digits and rejects the prefixed
+      # form with `postal_code_invalid`, which (because account creation runs async) left the
+      # seller silently unable to publish. Normalize at the Stripe boundary so both fresh
+      # saves and retry-job re-attempts of already-saved records succeed.
+      let(:user_compliance_info) do
+        create(:user_compliance_info,
+               user:,
+               street_address: "2 Rue du Château",
+               city: "Ettelbruck",
+               state: nil,
+               zip_code: "L-9767",
+               country: "Luxembourg")
+      end
+
+      it "strips the 'L-' prefix from the individual address postal code" do
+        person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(person_hash[:address]).to include(country: "LU", postal_code: "9767")
+      end
+
+      it "strips the prefix from the legal-entity address on business accounts" do
+        business_info = create(:user_compliance_info_business,
+                               user:,
+                               business_street_address: "2 Rue du Château",
+                               business_city: "Ettelbruck",
+                               business_state: nil,
+                               business_zip_code: "l 9767",
+                               business_country: "Luxembourg")
+        company_hash = described_class.send(:company_hash, business_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(company_hash[:company][:address]).to include(country: "LU", postal_code: "9767")
+      end
+
+      describe ".normalize_postal_code" do
+        it "normalizes prefixed LU postal codes and leaves everything else untouched" do
+          expect(described_class.send(:normalize_postal_code, "L-9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "l-9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "L 9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "L9767", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, " L-9767 ", "LU")).to eq("9767")
+          expect(described_class.send(:normalize_postal_code, "9767", "LU")).to eq("9767")
+          # Not the L-prefix shape: pass through so Stripe can report its own validation error.
+          expect(described_class.send(:normalize_postal_code, "L-97", "LU")).to eq("L-97")
+          expect(described_class.send(:normalize_postal_code, "Lot 5", "LU")).to eq("Lot 5")
+          # Other countries are untouched, even when the value looks prefixed.
+          expect(described_class.send(:normalize_postal_code, "L-1234", "FR")).to eq("L-1234")
+          expect(described_class.send(:normalize_postal_code, "94107", "US")).to eq("94107")
+          expect(described_class.send(:normalize_postal_code, nil, "LU")).to be_nil
+        end
+      end
+    end
+
     describe "Bangladesh business with a rep resident outside Bangladesh (person_hash)" do
       # Reverse direction of the foreign-rep fix: gating nationality on the account country instead
       # of the rep's residential country also means BGD/SGP/PAK/UAE *accounts* keep submitting
@@ -12264,6 +12316,77 @@ describe StripeMerchantAccountManager, :vcr do
       it "does nothing and returns" do
         expect { described_class.handle_stripe_event(stripe_event) }.not_to change(UserComplianceInfoRequest, :count)
       end
+    end
+  end
+
+  describe "payment method availability refresh on account/capability webhooks" do
+    let(:seller) { create(:user) }
+    let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+    def capability_updated_event(account_id)
+      {
+        "api_version" => API_VERSION,
+        "type" => "capability.updated",
+        "id" => "stripe-event-id",
+        "data" => {
+          "object" => {
+            "object" => "capability",
+            "id" => "cashapp_payments",
+            "account" => account_id,
+            "status" => "active",
+          }
+        }
+      }
+    end
+
+    def account_updated_event(account_id)
+      {
+        "api_version" => API_VERSION,
+        "type" => "account.updated",
+        "id" => "stripe-event-id",
+        "account" => account_id,
+        "user_id" => account_id,
+        "data" => {
+          "object" => {
+            "object" => "account",
+            "id" => account_id,
+            "type" => "standard",
+            "requirements" => { "currently_due" => [], "eventually_due" => [], "past_due" => [] }
+          }
+        }
+      }
+    end
+
+    it "enqueues a refresh for a connect account on capability.updated — including non-JP accounts, which the JP-only guard below the call returns early for" do
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+      described_class.handle_stripe_event(capability_updated_event(connect_account.charge_processor_merchant_id))
+    end
+
+    it "enqueues a refresh for a connect account on account.updated — including standard accounts, which handle_stripe_info_requirements returns early for" do
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
+
+      described_class.handle_stripe_event(account_updated_event(connect_account.charge_processor_merchant_id))
+    end
+
+    it "does not enqueue for an unknown account" do
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+      described_class.handle_stripe_event(capability_updated_event("acct_nonexistent"))
+    end
+
+    it "does not enqueue for a non-connect (Gumroad-managed) account" do
+      managed_account = create(:merchant_account)
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+      described_class.handle_stripe_event(capability_updated_event(managed_account.charge_processor_merchant_id))
+    end
+
+    it "does not enqueue for a deauthorized (charge-processor-dead) connect account" do
+      connect_account.update!(charge_processor_alive_at: nil)
+      expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+      described_class.handle_stripe_event(capability_updated_event(connect_account.charge_processor_merchant_id))
     end
   end
 

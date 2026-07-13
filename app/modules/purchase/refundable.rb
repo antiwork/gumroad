@@ -9,9 +9,13 @@ class Purchase
     BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE = "Refunds are temporarily unavailable for buyer-local-currency purchases."
 
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
-    def refund!(refunding_user_id:, amount: nil)
+    # * reason - free-text explanation of why the sale is being refunded. It is stored on
+    #   the refund record and shown to the creator in the notification email when a Gumroad
+    #   team member issues the refund. Required for team-member refunds (except fraud
+    #   refunds, which send their own dedicated email); optional otherwise.
+    def refund!(refunding_user_id:, amount: nil, reason: nil)
       if amount.blank?
-        refund_and_save!(refunding_user_id)
+        refund_and_save!(refunding_user_id, reason:)
       else
         refund_amount_cents = refunding_amount_cents(amount)
         if refund_amount_cents > amount_refundable_cents
@@ -21,9 +25,9 @@ class Purchase
           # User attempted a partial refund with same amount as total purchase or
           # remaining refundable amount.
           # Short-circuit this, so we don't need to handle edge cases about taxes
-          refund_and_save!(refunding_user_id)
+          refund_and_save!(refunding_user_id, reason:)
         else
-          refund_and_save!(refunding_user_id, amount_cents: refund_amount_cents)
+          refund_and_save!(refunding_user_id, amount_cents: refund_amount_cents, reason:)
         end
       end
     end
@@ -32,7 +36,7 @@ class Purchase
     # refunding_user_id can't be enforced from console, in which case it will be nil
     #
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
-    def refund_and_save!(refunding_user_id, amount_cents: nil, is_for_fraud: false)
+    def refund_and_save!(refunding_user_id, amount_cents: nil, is_for_fraud: false, reason: nil)
       return if stripe_transaction_id.blank? || stripe_refunded || amount_refundable_cents <= 0
 
       if chargedback_not_reversed?
@@ -48,7 +52,28 @@ class Purchase
         return false
       end
 
-      if refunding_user_id.blank? || !User.find(refunding_user_id)&.is_team_member?
+      # A refund can be initiated by the creator themselves, by a Gumroad team member
+      # (support/admin), or from the console with no user at all. Look the user up once
+      # here; the answer gates the reason requirement and balance checks below, and the
+      # creator-notification email after the refund succeeds.
+      refunded_by_team_member = refunding_user_id.present? && User.find(refunding_user_id).is_team_member?
+
+      # A team member refunding a sale THEY made as the seller is just a creator refunding
+      # their own sale — no reason needed and no email, because they already know about it.
+      # This matters for Gumroad staff who also sell on Gumroad.
+      refunded_on_creators_behalf = refunded_by_team_member && refunding_user_id != seller_id
+
+      # A refund made on the creator's behalf must always carry a reason — it is shown in
+      # the email that tells the creator their sale was refunded, and "A sale has been
+      # refunded" with no explanation is exactly the kind of message that sends the creator
+      # to support asking what happened. Fraud refunds are exempt because that path sends
+      # its own dedicated email (see refund_for_fraud!).
+      if refunded_on_creators_behalf && !is_for_fraud && reason.blank?
+        errors.add :base, "A reason is required when refunding on the creator's behalf."
+        return false
+      end
+
+      unless refunded_by_team_member
         if seller.refunds_disabled?
           errors.add :base, "Refunds are temporarily disabled in your account."
           return false
@@ -119,9 +144,23 @@ class Purchase
         if charge_refund.flow_of_funds.nil? && StripeChargeProcessor.charge_processor_id != charge_processor_id
           charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -(gross_amount_cents.presence || gross_amount_refundable_cents))
         end
-        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud,
-                         canonical_gross_refund_cents: (presentment_refund ? (gross_amount_cents.presence || gross_amount_refundable_cents) : nil),
-                         presentment_refund:)
+        refunded = refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud,
+                                    canonical_gross_refund_cents: (presentment_refund ? (gross_amount_cents.presence || gross_amount_refundable_cents) : nil),
+                                    presentment_refund:,
+                                    note: reason)
+        # When a Gumroad team member (support/admin) refunds a sale on the creator's
+        # behalf, tell the creator by email — otherwise they only discover the refund by
+        # stumbling on the refunded row in their dashboard. Creator-initiated refunds stay
+        # silent (they did it themselves), fraud refunds already send their own email
+        # (see refund_for_fraud!), and suspended sellers are skipped to match that path.
+        # Processor-initiated refunds (issued from the Stripe dashboard) don't go through
+        # this method — Charge::Refundable handles the creator email for those.
+        # The refund record just created (refunds.last) carries the optional reason so the
+        # email can tell the creator why the sale was refunded.
+        if refunded && !is_for_fraud && refunded_on_creators_behalf && !seller.suspended?
+          ContactingCreatorMailer.purchase_refunded(id, refunds.last&.id).deliver_later(queue: "default")
+        end
+        refunded
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
         false
@@ -216,7 +255,7 @@ class Purchase
   # consistent derivation is possible the refund fails closed rather than booking buyer-currency
   # cents as canonical USD.
   def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false,
-                       canonical_gross_refund_cents: nil, presentment_refund: nil)
+                       canonical_gross_refund_cents: nil, presentment_refund: nil, note: nil)
     if buyer_presentment? && canonical_gross_refund_cents.nil?
       derived = derive_presentment_refund_from_flow_of_funds(flow_of_funds)
       return false if derived.blank?
@@ -256,6 +295,9 @@ class Purchase
         end
       end
       refund.is_for_fraud = is_for_fraud
+      # Free-text explanation of why the refund happened (e.g. "Buyer was charged twice").
+      # Shown to the creator in the notification email when a team member issued the refund.
+      refund.note = note if note.present?
       refunds << refund
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
       mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase

@@ -21,7 +21,7 @@ class SyncStuckPurchasesJob
         .where("created_at > ?", purchase.created_at)
         .any? { |subsequent_purchase| subsequent_purchase.variant_attributes.pluck(:id).sort == purchase.variant_attributes.pluck(:id).sort }
 
-        success = purchase.refund_and_save!(GUMROAD_ADMIN_ID)
+        success = purchase.refund_and_save!(GUMROAD_ADMIN_ID, reason: "Duplicate purchase detected and refunded automatically")
 
         unless success
           Rails.logger.warn("SyncStuckPurchasesJob: Did not refund purchase with ID #{purchase.id}")

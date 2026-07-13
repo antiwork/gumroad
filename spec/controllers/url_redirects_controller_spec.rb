@@ -281,7 +281,16 @@ describe UrlRedirectsController, inertia: true do
           expect do
             get :download_page, params: { id: purchase.url_redirect.token }
           end.not_to change(ConsumptionEvent, :count)
-          expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id }))
+          expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+        end
+
+        it "redirects to the library page on the app domain even when requested from the seller's subdomain" do
+          # Regression test: /library requires authentication, and /login is not routed on
+          # seller subdomains or custom domains. If this redirect kept the seller's host, a
+          # signed-out buyer would be bounced to /login on that host and get a 404.
+          @request.host = "#{purchase.seller.username}.test.gumroad.com"
+          get :download_page, params: { id: purchase.url_redirect.token }
+          expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
         end
 
         context "when the url_redirect doesn't belong to a product" do
@@ -295,14 +304,14 @@ describe UrlRedirectsController, inertia: true do
             expect do
               get :download_page, params: { id: purchase.url_redirect.token }
             end.not_to change(ConsumptionEvent, :count)
-            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id }))
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
           end
         end
 
         context "when the receipt parameter is present" do
           it "includes the purchase_id parameter when redirecting" do
             get :download_page, params: { id: purchase.url_redirect.token, receipt: true }
-            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, purchase_id: purchase.external_id }))
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, purchase_id: purchase.external_id, host: DOMAIN, protocol: PROTOCOL }))
           end
         end
       end

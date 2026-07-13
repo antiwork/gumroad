@@ -325,6 +325,27 @@ describe Payouts do
       described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
     end
 
+    it "walks the cohort in bounded slices so each slice's payments are enqueued before the next slice is evaluated" do
+      # Regression test for gumroad-private#1021: the whole-cohort single pass ran
+      # ~110 minutes before enqueueing anything, so a worker restart mid-pass lost
+      # all progress and the Friday batch produced zero payments. Slicing must
+      # produce one enqueue call per slice, covering every holding-balance user.
+      stub_const("Payouts::USER_LOOKUP_BATCH_SIZE", 2)
+      users = create_list(:user, 5, unpaid_balance_cents: 100)
+
+      enqueued = []
+      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).exactly(3).times do |_date, _processor, slice_users, **kwargs|
+        # Each slice must be enqueued asynchronously; a synchronous call would
+        # reintroduce the long single pass this test exists to prevent.
+        expect(kwargs[:perform_async]).to eq(true)
+        enqueued.concat(slice_users.to_a)
+      end
+
+      described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
+
+      expect(enqueued).to match_array(users)
+    end
+
     it "calls create_payments_for_balances_up_to_date_for_users with all users holding balance who have an active Stripe Connect account" do
       u1 = create(:user, unpaid_balance_cents: 0) # Has an active Stripe Connect account but no balance
       u2 = create(:user, unpaid_balance_cents: 200) # Has balance and a Stripe account but no Stripe Connect account

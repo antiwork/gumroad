@@ -343,7 +343,7 @@ class CheckoutPresenter
         currency_code: product.price_currency_type.downcase,
         price_cents: product.price_cents,
         buyer_currency_display:,
-        supports_paypal: supports_paypal(product, buyer_currency_display:),
+        supports_paypal: supports_paypal(product),
         custom_fields: product.custom_field_descriptors,
         exchange_rate: get_rate(product.price_currency_type).to_f / (is_currency_type_single_unit?(product.price_currency_type) ? 100 : 1),
         is_tiered_membership: product.is_tiered_membership,
@@ -358,10 +358,14 @@ class CheckoutPresenter
       }
     end
 
-    def supports_paypal(product, buyer_currency_display:)
+    # PayPal stays available to buyers on the presentment-display lane: selecting the
+    # PayPal tab flips the cart display (and the charge) to canonical USD in the
+    # browser, so a presentment quote is never sent with a PayPal order. That display
+    # flip is what makes lifting the earlier server-side suppression safe — see the
+    # payment-method gate in Checkout/buyerCurrencyDisplay.ts.
+    def supports_paypal(product)
       return if Feature.active?(:disable_paypal_sales)
       return if Feature.active?(:disable_nsfw_paypal_connect_sales) && product.rated_as_adult?
-      return if Checkout::BuyerCurrencyEligibility.buyer_presentment_candidate?(seller: product.user, buyer_currency_display:)
 
       if Feature.active?(:disable_paypal_connect_sales)
         return if product.is_recurring_billing? || !product.user.pay_with_paypal_enabled?

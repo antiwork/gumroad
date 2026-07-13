@@ -13,6 +13,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
+import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
 import { Creator } from "$app/components/Checkout/cartState";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -361,11 +362,29 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   if (state.surcharges.type !== "loaded") return null;
 
   const quote = state.surcharges.result.buyer_currency_quote;
-  // Mirrors the display/token gate (getCheckoutBuyerCurrencyDisplay): saving a card charges
-  // canonically, so the element must not present local currency the buyer won't be charged.
-  if (!quote || state.willSaveCard) return null;
+  // Mirrors the display/token gate (getCheckoutBuyerCurrencyDisplay): saving a card or
+  // selecting a non-card payment method (PayPal) charges canonically, so the element must
+  // not present local currency the buyer won't be charged.
+  if (!quote || state.willSaveCard || state.paymentMethod !== "card") return null;
 
   return { currency: quote.currency, amountCents: quote.presentment_total_cents };
+}
+
+// The currency the server-confirm Payment Element should mount in, or null while it cannot be
+// known. On the buyer-currency presentment lane the currency lives in the FX quote of the
+// surcharge response, and every surcharge refresh (tip, address, VAT ID, or cart edits) passes
+// through pending/loading states with no quote. Returning null in that window — rather than
+// prematurely reporting canonical USD — lets PaymentElementInput keep the last mounted
+// currency, because a currency change destroys and recreates the Stripe element (it is part of
+// the Elements provider key), wiping any card details the buyer already entered. Definite
+// canonical states (a loaded response without a quote, or the buyer opting to save the card)
+// return "usd" so those transitions genuinely remount.
+export function getStripePaymentElementMountCurrency(state: State): string | null {
+  if (state.checkoutPayment.integration !== "payment_element") return null;
+  const elementsOptions = state.checkoutPayment.elements_options;
+  if (!elementsOptions.buyer_currency_presentment) return elementsOptions.currency;
+  if (state.surcharges.type !== "loaded") return null;
+  return getStripePaymentElementPresentment(state)?.currency ?? elementsOptions.currency;
 }
 
 export function isProcessing(state: State) {
@@ -679,7 +698,9 @@ export function createReducer(initial: {
       status: { type: "input", errors: new Set() },
       availablePaymentMethods: [],
       emailTypoSuggestion: null,
-      acknowledgedEmails: new Set<string>(),
+      // Seed with previously-dismissed addresses so a buyer who already said "No, my email is
+      // right" on an earlier visit isn't asked about the same address again.
+      acknowledgedEmails: loadAcknowledgedEmails(),
       requireEmailTypoAcknowledgment: initial.requireEmailTypoAcknowledgment,
     };
   });

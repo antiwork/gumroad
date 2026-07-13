@@ -20,7 +20,7 @@ class Bundles::ProductController < Bundles::BaseController
       @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
       @bundle.assign_attributes(product_permitted_params.except(
         :custom_button_text_option, :custom_summary, :custom_attributes, :covers, :refund_policy, :product_refund_policy_enabled,
-        :seller_refund_policy_enabled, :installment_plan)
+        :seller_refund_policy_enabled, :installment_plan, :default_offer_code_id)
       )
       @bundle.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
       @bundle.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
@@ -36,6 +36,7 @@ class Bundles::ProductController < Bundles::BaseController
       end
 
       update_installment_plan
+      update_default_offer_code
       @bundle.save!
 
       @bundle.unpublish! if should_unpublish
@@ -72,6 +73,7 @@ class Bundles::ProductController < Bundles::BaseController
         :is_epublication,
         :product_refund_policy_enabled,
         :seller_refund_policy_enabled,
+        :default_offer_code_id,
         refund_policy: [:max_refund_period_in_days, :title, :fine_print],
         covers: [],
         custom_attributes: [:name, :value],
@@ -93,5 +95,27 @@ class Bundles::ProductController < Bundles::BaseController
       if product_permitted_params[:installment_plan].present?
         @bundle.create_installment_plan!(product_permitted_params[:installment_plan])
       end
+    end
+
+    # Mirrors LinksController#update_default_offer_code so bundles support the
+    # "Automatically apply discount code" toggle the same way regular products do.
+    def update_default_offer_code
+      # Only touch the default offer code when the request includes the field.
+      # Requests from flows that don't render the toggle (like converting a
+      # product to a bundle) shouldn't silently clear an existing default code.
+      return unless params.key?(:default_offer_code_id)
+
+      default_offer_code_id = product_permitted_params[:default_offer_code_id]
+
+      return @bundle.default_offer_code = nil if default_offer_code_id.blank?
+
+      offer_code = @bundle.user.offer_codes.alive.find_by_external_id!(default_offer_code_id)
+
+      raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
+      raise Link::LinkInvalid, "Offer code must apply to this product" unless offer_code.applicable?(@bundle)
+
+      @bundle.default_offer_code = offer_code
+    rescue ActiveRecord::RecordNotFound
+      raise Link::LinkInvalid, "Invalid offer code"
     end
 end

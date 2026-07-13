@@ -6,6 +6,7 @@ import {
   getChargeTodayPrice,
   getFutureInstallmentsTotal,
   getStripePaymentElementAmount,
+  getStripePaymentElementMountCurrency,
   getStripePaymentElementPresentment,
   isCardReadyToPay,
   reduceCheckoutState,
@@ -680,6 +681,21 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementAmount(s)).toBe(1_300);
   });
 
+  it("mounts canonical USD while a non-card payment method is selected", () => {
+    // PayPal charges canonical USD (its merchant account can never pass presentment
+    // eligibility), so the quote must be suppressed with the display: the buyer sees and
+    // confirms the USD totals PayPal will charge, and no quote token is sent that the
+    // charge path would fail closed on.
+    const s = state({
+      checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      surcharges: loadedSurchargesWithQuote,
+      paymentMethod: "paypal",
+    });
+    expect(getStripePaymentElementPresentment(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
   it("ignores the quote when the server did not choose the presentment lane", () => {
     const s = state({ surcharges: loadedSurchargesWithQuote });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
@@ -692,6 +708,57 @@ describe("buyer-currency presentment lane", () => {
         state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges: { type: "pending" } }),
       ),
     ).toBeNull();
+  });
+
+  describe("getStripePaymentElementMountCurrency", () => {
+    it("mounts in the quote's currency when the surcharge response carries one", () => {
+      const s = state({
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+        surcharges: loadedSurchargesWithQuote,
+      });
+      expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+    });
+
+    it("reports the currency as unknowable while a surcharge refresh is in flight, so the element keeps its mount", () => {
+      // Tip/address/VAT/cart edits move surcharges through pending and loading before the
+      // refreshed quote lands. Reporting canonical USD in that window would remount the
+      // element twice (CAD → USD → CAD), wiping the buyer's entered card details.
+      for (const surcharges of [{ type: "pending" as const }, { type: "loading" as const, abort: () => {} }]) {
+        const s = state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges });
+        expect(getStripePaymentElementMountCurrency(s)).toBeNull();
+      }
+    });
+
+    it("mounts canonical USD when a loaded surcharge response has no quote", () => {
+      const s = state({
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+        surcharges: {
+          type: "loaded",
+          result: { ...loadedSurchargesWithQuote.result, buyer_currency_quote: null },
+        },
+      });
+      expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+    });
+
+    it("mounts canonical USD when the buyer opts to save the card", () => {
+      const s = state({
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+        surcharges: loadedSurchargesWithQuote,
+        willSaveCard: true,
+      });
+      expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+    });
+
+    it("always reports canonical USD on the non-presentment Payment Element lane, even mid-refresh", () => {
+      // The plain lane's currency never depends on the quote, so it must never go null —
+      // otherwise this change would alter mount behavior outside the presentment lane.
+      expect(getStripePaymentElementMountCurrency(state())).toBe("usd");
+      expect(getStripePaymentElementMountCurrency(state({ surcharges: { type: "pending" } }))).toBe("usd");
+    });
+
+    it("returns null for non-Payment-Element integrations", () => {
+      expect(getStripePaymentElementMountCurrency(state({ checkoutPayment: cardElementConfig }))).toBeNull();
+    });
   });
 });
 

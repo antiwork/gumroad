@@ -502,7 +502,7 @@ describe CheckoutPresenter do
     end
 
     context "when buyer-currency presentment is available" do
-      it "returns nil for supports_paypal because PR1 supports Stripe card checkout only" do
+      it "keeps PayPal available because selecting it flips the checkout to canonical USD" do
         seller = create(:user, disable_buyer_local_currency: false)
         create(:merchant_account_paypal, user: seller)
         product = create(:product, user: seller)
@@ -515,7 +515,11 @@ describe CheckoutPresenter do
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
 
-        expect(@instance.checkout_product(product, product.cart_item({}), {})[:product][:supports_paypal]).to be_nil
+        # PR 1 suppressed PayPal server-side for presentment candidates because a quote
+        # token sent with a PayPal order failed closed. The browser now gates the quote
+        # and the display on the selected payment method (PayPal selected => canonical
+        # USD end to end), so the server no longer needs to hide the option.
+        expect(@instance.checkout_product(product, product.cart_item({}), {})[:product][:supports_paypal]).to eq "native"
       ensure
         Feature.deactivate_user(:buyer_local_currency, seller) if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller

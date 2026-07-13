@@ -11,6 +11,8 @@
   - [Logs](#logs)
   - [Hotfixing workers only](#hotfixing-workers-only)
 - [Deploying to a preview app](#deploying-to-a-preview-app)
+  - [Rails console on a preview app](#rails-console-on-a-preview-app)
+  - [Seeding QA state with `preview_qa` rake tasks](#seeding-qa-state-with-preview_qa-rake-tasks)
 - [Deploying to staging](#deploying-to-staging)
 
 ---
@@ -193,3 +195,51 @@ Adding the label triggers a Buildkite build that deploys the branch. Each subseq
 The preview app URL is posted on the pull request as a GitHub deployment: look for the "View deployment" button (and the Deployments section), which shows the deploy in progress and links to the running app once it is ready.
 
 Deployments are removed automatically when the associated branch is deleted in the repository.
+
+### Rails console on a preview app
+
+Preview apps have Rails console access — see [Connect to Rails console](https://github.com/antiwork/gumroad-deployment/blob/main/docs/ssh.md#connect-to-rails-console) in the deployment repo. The `console.sh` script there resolves the preview instance from the `BRANCH=<branch name>` environment variable (it falls back to the deployment repo's own checked-out branch, so always set it explicitly) and opens `rails c` in the running container. It also supports `COMMAND=...` for one-shot commands — the value is executed directly as the container command, so it must be a runnable program like `bundle exec rake "..."`, not a bare Ruby snippet — and a standalone `-w` flag for a writable database connection (the default is a read-only replica).
+
+### Seeding QA state with `preview_qa` rake tasks
+
+Use the permanent tasks in `lib/tasks/preview_qa.rake` to seed edge-case state on a preview app instead of adding temporary, param-gated seed hooks to your PR ("TEMP: revert before merge" commits). The tasks only run on preview apps, development, and the test suite — they are unavailable in production and on shared staging (staging.gumroad.com), where mutating records would interfere with other people's testing.
+
+Run them through the preview app's Rails console (see the section above for how `console.sh` resolves the branch and the `-w` writable flag — the seeding tasks write, so they need `-w`).
+
+The simplest path is to open an interactive writable console and shell out to rake from the prompt (rake tasks aren't preloaded in a console session, so `bundle exec rake` in a subprocess is the entrypoint):
+
+```shell
+cd nomad/staging/deploy_branch && BRANCH=<branch name> ./console.sh -w
+# then, at the console prompt:
+system 'bundle exec rake "preview_qa:backdate_purchase[<purchase external_id>]"'
+```
+
+Alternatively, run a task as a one-shot. `COMMAND` is executed directly in the container as a shell command (not evaluated as Ruby), so it must be a full `bundle exec rake` invocation:
+
+```shell
+cd nomad/staging/deploy_branch && \
+  BRANCH=<branch name> \
+  COMMAND='bundle exec rake "preview_qa:backdate_purchase[<purchase external_id>]"' \
+  ./console.sh -w
+```
+
+The available tasks (all need the writable connection except `inspect_subscription`, which is read-only):
+
+```shell
+# Backdate a subscription purchase past its billing period so a renewal charge is due
+bundle exec rake "preview_qa:backdate_purchase[<purchase external_id>]"
+
+# Remove the e-mandate linkage from the card charged for a subscription (Indian card QA)
+bundle exec rake "preview_qa:clear_mandate[<subscription external_id>]"
+
+# Seed a job into the Sidekiq dead set (morgue)
+bundle exec rake "preview_qa:seed_dead_job[RecurringChargeWorker,123]"
+
+# Run a worker inline, e.g. to force a renewal charge attempt
+bundle exec rake "preview_qa:run_worker[RecurringChargeWorker,123]"
+
+# Inspect a subscription after a QA run: renewal timing, mandate linkage, recent charges (read-only)
+bundle exec rake "preview_qa:inspect_subscription[<subscription external_id>]"
+```
+
+Record ids can be passed as either database ids or external ids. If a QA scenario you need isn't covered, add a task to the namespace (with specs) rather than shipping a temporary hook in your feature PR.

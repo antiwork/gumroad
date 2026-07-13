@@ -431,6 +431,24 @@ module StripeMerchantAccountManager
     error.is_a?(Stripe::InvalidRequestError) && error.respond_to?(:code) && error.code == "postal_code_invalid"
   end
 
+  # Luxembourg postal codes are four digits, but residents habitually write them with the
+  # conventional "L-" prefix (e.g. "L-9767"). Stripe rejects the prefixed form with
+  # `postal_code_invalid`, and the resulting account-creation failure is invisible to the
+  # seller at save time (creation runs async), so strip the prefix at the Stripe boundary.
+  # Normalizing here (rather than at input time) also repairs already-saved compliance
+  # records when the retry job re-attempts account creation.
+  private_class_method
+  def self.normalize_postal_code(postal_code, country_code)
+    return postal_code if postal_code.blank?
+
+    if country_code == Compliance::Countries::LUX.alpha2
+      normalized = postal_code.to_s.strip[/\AL[-\s]?(\d{4})\z/i, 1]
+      return normalized if normalized.present?
+    end
+
+    postal_code
+  end
+
   private_class_method
   def self.bank_account_invalid_error?(error)
     return true if error.is_a?(Stripe::CardError)
@@ -716,7 +734,7 @@ module StripeMerchantAccountManager
                              line2: nil,
                              city: user_compliance_info.city,
                              state: user_compliance_info.state,
-                             postal_code: user_compliance_info.zip_code,
+                             postal_code: normalize_postal_code(user_compliance_info.zip_code, country_code),
                              country: country_code
                            },
                          })
@@ -763,7 +781,7 @@ module StripeMerchantAccountManager
           line2: nil,
           city: user_compliance_info.legal_entity_city,
           state: user_compliance_info.legal_entity_state,
-          postal_code: user_compliance_info.legal_entity_zip_code,
+          postal_code: normalize_postal_code(user_compliance_info.legal_entity_zip_code, user_compliance_info.legal_entity_country_code),
           country: user_compliance_info.legal_entity_country_code
         },
         tax_id: business_tax_id.presence,
@@ -872,6 +890,7 @@ module StripeMerchantAccountManager
     merchant_account = MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
                                              charge_processor_merchant_id: stripe_account_id)
                                       .alive.charge_processor_alive.last
+    refresh_payment_method_availability(merchant_account)
     return unless merchant_account&.country == Compliance::Countries::JPN.alpha2
 
     stripe_account = Stripe::Account.retrieve(stripe_account_id)
@@ -883,7 +902,24 @@ module StripeMerchantAccountManager
     stripe_account = stripe_event["data"]["object"]
     stripe_previous_attributes = stripe_event["data"]["previous_attributes"] || {}
     raise "Stripe Event #{stripe_event_id} does not contain an 'account' object." if stripe_account["object"] != "account"
+    refresh_payment_method_availability(
+      MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                            charge_processor_merchant_id: stripe_account["id"]).alive.charge_processor_alive.last
+    )
     handle_stripe_info_requirements(stripe_event_id, stripe_account, stripe_previous_attributes)
+  end
+
+  # A capability or account change on a Stripe Connect (direct-charge) account may mean the
+  # seller (de)activated Cash App Pay or ACH in their own Stripe dashboard, which changes what
+  # checkout may offer on their account (see Checkout::PaymentMethodResolver). Refresh the
+  # cached availability snapshot in the background. This must run BEFORE the early returns
+  # below/around it: the JP-only guard and the standard-account guard in
+  # handle_stripe_info_requirements would otherwise skip connect accounts entirely — and connect
+  # accounts are exactly the population this cache is for.
+  def self.refresh_payment_method_availability(merchant_account)
+    return unless merchant_account&.is_a_stripe_connect_account?
+
+    RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(merchant_account.id)
   end
 
   def self.handle_stripe_info_requirements(stripe_event_id, stripe_account, stripe_previous_attributes)

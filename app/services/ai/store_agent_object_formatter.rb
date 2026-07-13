@@ -5,7 +5,7 @@
 # in prose. Each display object is intentionally small and presentation-ready:
 #
 #   {
-#     type:     "product" | "discount" | "sale" | "payout" | "email" | "upsell" | "object",
+#     type:     "product" | "discount" | "sale" | "payout" | "email" | "upsell" | "media" | "object",
 #     title:    String,                      # headline (product name, discount code, ...)
 #     subtitle: String | nil,                # one-line secondary (price, amount off, ...)
 #     fields:   [{ label:, value: }, ...],   # a few key/value rows for a definition list
@@ -53,6 +53,10 @@ module Ai::StoreAgentObjectFormatter
       Array(response["emails"] || response["installments"]).filter_map { |e| email(e) }
     when "get_email", "create_email"
       [email(response["email"] || response["installment"] || response)].compact
+    when "list_media"
+      Array(response["media"]).filter_map { |m| media(m) }
+    when "upload_media"
+      [media(response["media"] || response)].compact
     else
       []
     end
@@ -158,6 +162,22 @@ module Ai::StoreAgentObjectFormatter
                              ]),
       url: json["published_url"].presence,
       copy: json["published_url"].presence || json["id"],
+    }
+  end
+
+  def media(json)
+    return nil unless json.is_a?(Hash) && (json["name"] || json["id"])
+    size = json["file_size"].present? ? ActiveSupport::NumberHelper.number_to_human_size(json["file_size"]) : nil
+    {
+      type: "media",
+      title: json["name"].to_s,
+      subtitle: json["file_group"].presence&.capitalize,
+      fields: compact_fields([
+                               ["Type", json["extension"]],
+                               ["Size", size],
+                             ]),
+      url: json["url"].presence,
+      copy: json["url"].presence || json["id"], # the hosted url is what gets embedded in a page
     }
   end
 

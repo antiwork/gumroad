@@ -60,7 +60,6 @@ module PayoutsHelper
       payout_period_end_date = current_payout_end_date(user)
 
       payout_period_data[:displayable_payout_period_range] = displayable_payout_period_range(previous_payment, payout_period_end_date)
-      payout_period_data[:payout_currency] = user.currency_type
       payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
       payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
       payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)
@@ -191,6 +190,7 @@ module PayoutsHelper
 
     bank_account = payment.present? ? payment.bank_account : user.active_bank_account
     stripe_connect_account_id = nil
+    merchant_account = nil
 
     if payment.present?
       merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
@@ -201,7 +201,7 @@ module PayoutsHelper
       stripe_connect_account_id = merchant_account.charge_processor_merchant_id if merchant_account&.is_a_stripe_connect_account?
     end
 
-    if stripe_connect_account_id
+    details = if stripe_connect_account_id
       { payout_method_type: "stripe_connect", stripe_connect_account_id: }
     elsif bank_account.present?
       bank_account.to_hash.merge(payout_method_type: "bank")
@@ -217,5 +217,23 @@ module PayoutsHelper
         end
       end
     end
+
+    # For the upcoming payout there is no Payment record to read the currency
+    # from yet, so we derive it from the destination itself: bank payouts go
+    # out in the bank's local currency and Stripe Connect payouts in the
+    # connected account's default currency, while PayPal payouts are always
+    # sent in USD. The seller's selling currency (user.currency_type) is
+    # unrelated to where the money lands, so it must not be used here — it
+    # made the "Will be converted to X" notice disappear for sellers who
+    # sell in USD but are paid out in another currency.
+    if payment.blank?
+      details[:payout_currency] = case details[:payout_method_type]
+                                  when "bank" then bank_account.currency
+                                  when "stripe_connect" then merchant_account&.currency || Currency::USD
+                                  else Currency::USD
+      end
+    end
+
+    details
   end
 end

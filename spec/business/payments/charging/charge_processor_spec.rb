@@ -112,7 +112,8 @@ describe ChargeProcessor do
         transfer_group: nil,
         off_session: true,
         setup_future_charges: true,
-        mandate_options: nil
+        mandate_options: nil,
+        mandate_expected: false
       )
       ChargeProcessor.create_payment_intent_or_charge!(
         merchant_account,
@@ -156,7 +157,8 @@ describe ChargeProcessor do
         transfer_group: nil,
         off_session: true,
         setup_future_charges: true,
-        mandate_options:
+        mandate_options:,
+        mandate_expected: false
       )
 
       ChargeProcessor.create_payment_intent_or_charge!(

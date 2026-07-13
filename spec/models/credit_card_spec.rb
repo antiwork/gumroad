@@ -69,7 +69,7 @@ describe CreditCard do
         it "stores errors in 'errors'" do
           credit_card = CreditCard.create(chargeable)
           expect(credit_card.errors).to be_present
-          expect(credit_card.error_code).to be_present
+          expect(credit_card.error_code).to eq PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
         end
       end
     end
