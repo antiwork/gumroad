@@ -6773,6 +6773,38 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#non_refunded_total_transaction_amount" do
+    let(:purchase) { create(:purchase, price_cents: 24_00) }
+
+    it "returns the full transaction amount when nothing has been refunded" do
+      expect(purchase.non_refunded_total_transaction_amount).to eq(24_00)
+    end
+
+    it "returns zero when the purchase is fully refunded" do
+      create(:refund, purchase:, amount_cents: purchase.price_cents, gumroad_tax_cents: 0)
+      expect(purchase.reload.non_refunded_total_transaction_amount).to eq(0)
+    end
+
+    it "subtracts a partial refund of the principal" do
+      create(:refund, purchase:, amount_cents: 10_00, gumroad_tax_cents: 0)
+      expect(purchase.reload.non_refunded_total_transaction_amount).to eq(14_00)
+    end
+
+    context "when Gumroad-collected tax was charged and refunded" do
+      let(:purchase) { create(:purchase, price_cents: 24_00, gumroad_tax_cents: 4_00, total_transaction_cents: 28_00) }
+
+      it "subtracts only the refunded tax when just the tax was refunded" do
+        create(:refund, purchase:, amount_cents: 0, gumroad_tax_cents: 4_00)
+        expect(purchase.reload.non_refunded_total_transaction_amount).to eq(24_00)
+      end
+
+      it "returns zero when both the principal and the tax were refunded" do
+        create(:refund, purchase:, amount_cents: 24_00, gumroad_tax_cents: 4_00)
+        expect(purchase.reload.non_refunded_total_transaction_amount).to eq(0)
+      end
+    end
+  end
+
   describe "#amount_refundable_cents_in_currency" do
     let(:purchase) { create(:purchase, link: create(:product, price_currency_type: Currency::EUR), price_cents: 200) }
 
