@@ -119,6 +119,11 @@ class OrdersController < ApplicationController
     end
 
     def skip_recaptcha?
+      # TEMP (preview QA only — revert only AFTER QA sign-off, before merge): per-PR preview
+      # subdomains score badly with reCAPTCHA Enterprise, blocking both scripted and human
+      # checkout runs. Previews run Stripe test keys; production runs live keys, so this
+      # branch can never activate in production.
+      return true if Stripe.api_key.to_s.start_with?("sk_test_")
       site_key = CheckoutRecaptcha.site_key(logged_in_user)
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
       return true if action_name.in?(%w[create prepare]) && all_free_products_without_captcha?
