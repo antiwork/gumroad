@@ -1,6 +1,12 @@
 # frozen_string_literal: true
 
 class UpdateUserCountry
+  # Raised when the user has a payout that is still in flight. Changing country deletes the
+  # user's current Stripe account, so if a payout that is still processing later fails or is
+  # returned by the bank, the money is re-credited to an account nobody watches anymore and
+  # the funds strand there. Callers should ask the user to wait until the payout settles.
+  class PayoutInProcessingError < StandardError; end
+
   attr_reader :new_country_code, :user
 
   def initialize(new_country_code:, user:)
@@ -10,6 +16,8 @@ class UpdateUserCountry
   end
 
   def process
+    raise PayoutInProcessingError if @user.payments.processing.exists?
+
     keep_payment_address = !@user.native_payouts_supported? && !@user.native_payouts_supported?(country_code: @new_country_code)
     @user.update!(payment_address: "") unless keep_payment_address
 
