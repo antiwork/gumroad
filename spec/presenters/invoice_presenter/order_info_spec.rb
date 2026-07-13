@@ -111,7 +111,7 @@ describe InvoicePresenter::OrderInfo do
       context "when the purchase is fully refunded" do
         before do
           purchase.update!(stripe_refunded: true)
-          create(:refund, purchase:, amount_cents: purchase.price_cents, gumroad_tax_cents: 0)
+          create(:refund, purchase:, amount_cents: purchase.price_cents, gumroad_tax_cents: 0, created_at: DateTime.parse("February 1, 2023"))
         end
 
         it "shows a zero payment total" do
@@ -121,6 +121,37 @@ describe InvoicePresenter::OrderInfo do
               value: "$0",
             }
           )
+        end
+
+        it "shows the refund status" do
+          expect(presenter.pdf_attributes).to include(
+            {
+              label: "Refund status",
+              value: "Fully refunded on Feb 1, 2023",
+            }
+          )
+        end
+      end
+
+      context "when the purchase is partially refunded" do
+        before do
+          purchase.update!(stripe_partially_refunded: true)
+          create(:refund, purchase:, amount_cents: 5_00, gumroad_tax_cents: 0, created_at: DateTime.parse("February 1, 2023"))
+        end
+
+        it "shows the refund status" do
+          expect(presenter.pdf_attributes).to include(
+            {
+              label: "Refund status",
+              value: "Partially refunded on Feb 1, 2023",
+            }
+          )
+        end
+      end
+
+      context "when the purchase is not refunded" do
+        it "omits the refund status" do
+          expect(presenter.pdf_attributes.map { _1[:label] }).not_to include("Refund status")
         end
       end
 
