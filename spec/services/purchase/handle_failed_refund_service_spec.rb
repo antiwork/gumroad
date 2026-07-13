@@ -38,7 +38,10 @@ describe Purchase::HandleFailedRefundService do
     purchase.update!(stripe_refunded: true, stripe_partially_refunded: false)
   end
 
-  before { record_refund_side_effects! }
+  before do
+    record_refund_side_effects!
+    NotifyFailedRefundExceptionJob.jobs.clear
+  end
 
   describe "#perform" do
     it "marks the refund failed" do
@@ -145,25 +148,37 @@ describe Purchase::HandleFailedRefundService do
       it "marks the refund failed but reverses nothing for a Stripe Connect purchase" do
         allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
 
-        expect(ErrorNotifier).to receive(:notify).with(
-          a_string_including("NOTHING was reversed automatically"),
-          context: hash_including(refund_id: refund.id, balance_reversed: false)
-        )
-
-        expect(described_class.new(refund:).perform).to eq(true)
+        expect { described_class.new(refund:).perform }
+          .to change(FailedRefundException, :count).by(1)
 
         expect(refund.reload.status).to eq("failed")
         expect(refund.balance_reversed_on_failure).to be_falsey
         expect(refund.balance_transactions.count).to eq(1) # only the original debit
-        expect(purchase.reload.stripe_refunded?).to eq(true) # untouched — human queue owns it
+        expect(purchase.reload.stripe_refunded?).to eq(true) # untouched pending exception resolution
+        failed_refund_exception = refund.failed_refund_exception
+        expect(failed_refund_exception.balance_reversed?).to eq(false)
+        expect(NotifyFailedRefundExceptionJob).to have_enqueued_sidekiq_job(failed_refund_exception.id)
       end
 
-      it "does not notify twice for a re-delivered webhook on a manual-review case" do
+      it "re-enqueues an unsent durable exception without creating another record" do
         allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
         expect(described_class.new(refund:).perform).to eq(true)
+        failed_refund_exception = refund.failed_refund_exception
+        NotifyFailedRefundExceptionJob.jobs.clear
 
-        expect(ErrorNotifier).not_to receive(:notify)
+        expect { described_class.new(refund: Refund.find(refund.id)).perform }
+          .not_to change(FailedRefundException, :count)
+        expect(NotifyFailedRefundExceptionJob).to have_enqueued_sidekiq_job(failed_refund_exception.id)
+      end
+
+      it "does not enqueue a sent notification again" do
+        allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
+        expect(described_class.new(refund:).perform).to eq(true)
+        refund.failed_refund_exception.update!(notification_sent_at: Time.current)
+        NotifyFailedRefundExceptionJob.jobs.clear
+
         expect(described_class.new(refund: Refund.find(refund.id)).perform).to eq(false)
+        expect(NotifyFailedRefundExceptionJob.jobs.size).to eq(0)
       end
     end
 
@@ -176,13 +191,68 @@ describe Purchase::HandleFailedRefundService do
       expect(purchase.stripe_partially_refunded?).to eq(true)
     end
 
-    it "notifies internally with the human-queue context" do
-      expect(ErrorNotifier).to receive(:notify).with(
-        a_string_including("buyer was NOT made whole"),
-        context: hash_including(refund_id: refund.id, purchase_id: purchase.id)
-      )
+    it "persists the configured routing policy with the exception record" do
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get)
+        .with("FAILED_REFUND_EXCEPTION_OWNER", FailedRefundException::DEFAULT_OWNER)
+        .and_return("refund-operations")
+      allow(GlobalConfig).to receive(:get)
+        .with("FAILED_REFUND_EXCEPTION_RESPONSE_SLA_HOURS", FailedRefundException::DEFAULT_RESPONSE_SLA_HOURS)
+        .and_return("48")
+      allow(GlobalConfig).to receive(:get)
+        .with("FAILED_REFUND_EXCEPTION_NOTIFICATION_ROOM", "refund-operations")
+        .and_return("risk")
 
-      described_class.new(refund:).perform
+      freeze_time do
+        expect { described_class.new(refund:).perform }
+          .to change(FailedRefundException, :count).by(1)
+
+        failed_refund_exception = refund.failed_refund_exception
+        expect(failed_refund_exception).to have_attributes(
+          owner: "refund-operations",
+          notification_room: "risk",
+          state: "pending",
+          due_at: 48.hours.from_now,
+          balance_reversed: true,
+          notification_sent_at: nil
+        )
+        expect(NotifyFailedRefundExceptionJob).to have_enqueued_sidekiq_job(failed_refund_exception.id)
+      end
+    end
+
+    it "rolls back failure handling when the configured notification room is invalid" do
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get)
+        .with("FAILED_REFUND_EXCEPTION_NOTIFICATION_ROOM", FailedRefundException::DEFAULT_OWNER)
+        .and_return("unknown-room")
+
+      expect { described_class.new(refund:).perform }
+        .to raise_error(ArgumentError, /Unknown failed-refund notification room/)
+
+      expect(refund.reload).to have_attributes(status: "pending", balance_reversed_on_failure: be_falsey)
+      expect(FailedRefundException.where(refund:).exists?).to eq(false)
+      expect(NotifyFailedRefundExceptionJob.jobs.size).to eq(0)
+    end
+
+    it "rolls back the queue record when the reversal fails" do
+      allow_any_instance_of(described_class).to receive(:reverse_balance_transactions!).and_raise("reversal failed")
+
+      expect { described_class.new(refund:).perform }.to raise_error("reversal failed")
+
+      expect(FailedRefundException.where(refund:).exists?).to eq(false)
+      expect(refund.reload.status).to eq("pending")
+      expect(NotifyFailedRefundExceptionJob.jobs.size).to eq(0)
+    end
+
+    it "creates a missing queue record for a refund already marked failed" do
+      refund.update!(status: "failed")
+
+      expect { described_class.new(refund: Refund.find(refund.id)).perform }
+        .to change(FailedRefundException, :count).by(1)
+
+      failed_refund_exception = refund.reload.failed_refund_exception
+      expect(failed_refund_exception.balance_reversed?).to eq(false)
+      expect(NotifyFailedRefundExceptionJob).to have_enqueued_sidekiq_job(failed_refund_exception.id)
     end
 
     it "is idempotent across re-delivered webhooks" do

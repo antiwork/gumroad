@@ -11,6 +11,7 @@ class Refund < ApplicationRecord
   belongs_to :seller, class_name: "User"
   has_many :balance_transactions
   has_one :credit
+  has_one :failed_refund_exception
 
   before_validation :assign_product, on: :create
   before_validation :assign_seller, on: :create

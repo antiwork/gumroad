@@ -7,7 +7,9 @@
 # the money, but our books already recorded the refund as if they had.
 #
 # Reversal depth follows the decision on PR #5779 ("Option B"): automatically reverse
-# only the unambiguous money facts, and hand everything that needs judgment to a human:
+# only the unambiguous money facts, and put everything that needs judgment in a durable
+# exception queue. Operational policy determines who handles each new exception and its
+# response deadline:
 #
 #   REVERSED HERE (only when the refund's money lives entirely in Gumroad's own
 #   balance ledger — see #auto_reversal_eligible?):
@@ -21,10 +23,10 @@
 #     no other refund remains, so the purchase becomes re-refundable once the buyer's
 #     payment details are sorted out.
 #
-#   DELIBERATELY NOT REVERSED (human queue, via the internal notification):
+#   DELIBERATELY NOT REVERSED (durable exception queue):
 #   - Buyer communication: the buyer received a "you've been refunded" email that
 #     turned out to be false. What to tell them (and whether to re-refund to a
-#     different bank account) is a support decision.
+#     different bank account) is an exception-resolution decision.
 #   - Subscription state: if the original refund cancelled a subscription, resuming
 #     it could silently restart recurring billing on a buyer who believes they left.
 #   - Fee/VAT side effects and already-paid-out balances: rare enough that automated
@@ -32,7 +34,7 @@
 #   - Everything, when the refund also moved money OUTSIDE our ledger (Stripe Connect
 #     accounts, Stripe-held custom accounts, PayPal, or an active dispute): offsetting
 #     our balance rows would not undo transfer reversals or connected-account debits,
-#     so those cases are flagged for manual review instead of auto-reversed.
+#     so those cases are queued whole instead of auto-reversed.
 #
 # Idempotent: a re-delivered refund.failed webhook is a no-op once the failure has
 # been handled (recorded on the refund inside the same transaction as the reversal).
@@ -45,10 +47,10 @@ class Purchase::HandleFailedRefundService
   end
 
   def perform
-    return false if refund.balance_reversed_on_failure
-
     handled = false
     reversed = false
+    queue_created = false
+    failed_refund_exception = nil
     ActiveRecord::Base.transaction do
       # Take a row lock on the refund before reversing anything. Stripe can deliver
       # the same failure twice concurrently — retries, and a refund.updated carrying
@@ -60,23 +62,45 @@ class Purchase::HandleFailedRefundService
       # The reload first discards the in-memory json_data touch that merely READING
       # balance_reversed_on_failure leaves behind (lock! refuses dirty records).
       refund.reload.lock!
-      # status == "failed" doubles as the handled marker for the manual-review path:
-      # every failed-status write goes through this service (the event builder routes
-      # any refund event carrying status=failed here), so a refund already marked
-      # failed has already been handled and notified.
-      next if refund.balance_reversed_on_failure || refund.status == "failed"
-
-      refund.update!(status: "failed")
-      if auto_reversal_eligible?
-        reverse_balance_transactions!
-        recompute_purchase_refunded_flags!
-        refund.balance_reversed_on_failure = true
-        refund.save!
-        reversed = true
+      unless refund.balance_reversed_on_failure || refund.status == "failed"
+        refund.update!(status: "failed")
+        if auto_reversal_eligible?
+          reverse_balance_transactions!
+          recompute_purchase_refunded_flags!
+          refund.balance_reversed_on_failure = true
+          refund.save!
+          reversed = true
+        end
+        handled = true
       end
-      handled = true
+
+      # The queue row commits atomically with the failure state and any balance
+      # reversal. It is deliberately separate from balance_reversed_on_failure: a
+      # refund can be financially handled while its buyer/subscription/payout follow-up
+      # is still pending, and a retry must be able to repair a missing notification.
+      failed_refund_exception = FailedRefundException.find_or_initialize_by(refund:)
+      if failed_refund_exception.new_record?
+        owner = FailedRefundException.default_owner
+        failed_refund_exception.assign_attributes(
+          owner:,
+          notification_room: FailedRefundException.default_notification_room(owner:),
+          state: "pending",
+          due_at: FailedRefundException.response_sla.from_now,
+          balance_reversed: refund.balance_reversed_on_failure.present?
+        )
+        failed_refund_exception.save!
+        queue_created = true
+      elsif refund.balance_reversed_on_failure.present? && !failed_refund_exception.balance_reversed?
+        failed_refund_exception.update!(balance_reversed: true)
+      end
     end
-    return false unless handled
+
+    # Enqueue only after the queue row commits. If the process exits in this narrow
+    # window, Stripe redelivery and the scheduled dispatcher both find the pending row
+    # and enqueue it again; notification delivery has its own retrying worker.
+    if failed_refund_exception.state == "pending" && failed_refund_exception.notification_sent_at.nil?
+      NotifyFailedRefundExceptionJob.perform_async(failed_refund_exception.id)
+    end
 
     if reversed
       # The same side effects a refund triggers, in reverse: creator analytics and
@@ -87,8 +111,7 @@ class Purchase::HandleFailedRefundService
       purchase.send(:send_to_elasticsearch, "index")
     end
 
-    notify_internally(reversed:)
-    true
+    handled || queue_created
   end
 
   private
@@ -98,7 +121,7 @@ class Purchase::HandleFailedRefundService
     # Stripe custom accounts (funds held by Stripe), or PayPal also moved money
     # outside our ledger (transfer reversals, connected-account debits), so offsetting
     # our rows would leave the books claiming money the external account no longer
-    # has. Those cases go to the human queue whole.
+    # has. Those cases go to the durable exception queue whole.
     def auto_reversal_eligible?
       purchase.charged_using_gumroad_merchant_account? &&
         funds_held_by_gumroad? &&
@@ -189,32 +212,5 @@ class Purchase::HandleFailedRefundService
           stripe_partially_refunded: purchase.stripe_partially_refunded
         )
       end
-    end
-
-    def notify_internally(reversed:)
-      message = if reversed
-        "Refund failed after acceptance — buyer was NOT made whole. Balance debits reversed " \
-        "automatically; buyer communication, re-refund, and any subscription/payout follow-up " \
-        "need a human (see PR #5779 reversal-depth decision)."
-      else
-        "Refund failed after acceptance — buyer was NOT made whole, and the refund moved " \
-        "money outside Gumroad's balance ledger (Connect/Stripe-held/PayPal account or an " \
-        "active dispute), so NOTHING was reversed automatically. Full manual review needed: " \
-        "books, buyer communication, re-refund, and any subscription/payout follow-up."
-      end
-      ErrorNotifier.notify(
-        message,
-        context: {
-          refund_id: refund.id,
-          processor_refund_id: refund.processor_refund_id,
-          purchase_id: purchase.id,
-          purchase_external_id: purchase.external_id,
-          seller_id: purchase.seller_id,
-          refund_amount_cents: refund.amount_cents,
-          presentment_currency: refund.presentment_currency,
-          presentment_amount_cents: refund.presentment_amount_cents,
-          balance_reversed: reversed,
-        }
-      )
     end
 end
