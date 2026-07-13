@@ -60,10 +60,21 @@ class TaxCenterPresenter
       end
 
       documents << cached_data.merge(
-        filed_at: tax_form.filed? ? Time.at(tax_form.filed_at).strftime("%B %-d, %Y") : nil
+        filed_at: tax_form.filed? ? Time.at(tax_form.filed_at).strftime("%B %-d, %Y") : nil,
+        transaction_report_available: transaction_report_available?(tax_form)
       )
 
       documents
+    end
+
+    # The transaction report is built from the connected Stripe account's
+    # balance transactions, so it is only offered for 1099-K forms whose
+    # Stripe account still belongs to this seller.
+    def transaction_report_available?(tax_form)
+      return false unless tax_form.tax_form_type == "us_1099_k"
+
+      stripe_account_id = tax_form.stripe_account_id || seller.stripe_account&.charge_processor_merchant_id
+      stripe_account_id.present? && seller.merchant_accounts.alive.charge_processor_alive.stripe.exists?(charge_processor_merchant_id: stripe_account_id)
     end
 
     def calculate_gross

@@ -31,6 +31,14 @@ class UpdateUserComplianceInfo
   MAX_ENCRYPTED_FIELD_LENGTH = 200
   MASKED_TAX_ID_PATTERN = /[\u2022*]/
   PERU_DNI_DIGIT_COUNT = 9
+  # A Singapore NRIC/FIN is a leading letter (S/T for citizens and permanent residents,
+  # F/G/M for foreigners), seven digits, and a trailing checksum letter — e.g. S1234567A.
+  # Stripe verifies the full string, so a value missing the leading letter (only digits +
+  # checksum) saves fine on our side but fails Stripe verification forever with a generic
+  # "id_number mismatch" the seller cannot see or fix. Validate the shape up front so the
+  # seller gets an actionable error at save time instead. Case-insensitive: Stripe accepts
+  # lowercase, so we don't reject it.
+  SINGAPORE_NRIC_FIN_PATTERN = /\A[STFGM]\d{7}[A-Z]\z/i
   ENCRYPTED_FIELD_LABELS = {
     individual_tax_id: "Individual tax id",
     ssn_last_four: "Individual tax id",
@@ -99,6 +107,9 @@ class UpdateUserComplianceInfo
 
       peru_dni_error = peru_individual_dni_error(old_compliance_info)
       return { success: false, error_message: peru_dni_error } if peru_dni_error
+
+      singapore_nric_error = singapore_individual_nric_error(old_compliance_info)
+      return { success: false, error_message: singapore_nric_error } if singapore_nric_error
 
       saved, new_compliance_info = if encrypted_compliance_info_params_present?
         dup_and_save_compliance_info(old_compliance_info)
@@ -278,6 +289,19 @@ class UpdateUserComplianceInfo
       return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::PER.alpha2
       return if submitted.gsub(/\D/, "").length == PERU_DNI_DIGIT_COUNT
       "Your Peru DNI must include the verification digit (for example, 12345678-9)."
+    end
+
+    def singapore_individual_nric_error(old_compliance_info)
+      submitted = submitted_tax_id_for(:individual_tax_id)
+      return if submitted.blank?
+      return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::SGP.alpha2
+      # Sellers sometimes paste the NRIC with spaces or dashes; those are harmless, so ignore
+      # them when checking the shape (the submitted value is still stored as entered).
+      # [[:space:]] instead of \s so Unicode spaces (like the non-breaking space that
+      # often comes along when copying from a PDF or website) are also tolerated,
+      # matching what the browser-side check accepts.
+      return if submitted.gsub(/[[:space:]-]/, "").match?(SINGAPORE_NRIC_FIN_PATTERN)
+      "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID."
     end
 
     def effective_legal_entity_country_code(old_compliance_info)

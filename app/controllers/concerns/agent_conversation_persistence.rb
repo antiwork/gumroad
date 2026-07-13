@@ -36,6 +36,28 @@ module AgentConversationPersistence
       current_seller.ai_conversations.create!(title: AiConversation.title_from(first_user_message))
     end
 
+    # Cleans the client-posted chat history down to what the agent actually accepts: an array of
+    # { role:, content: } hashes where the role is "user" or "assistant" and the content is
+    # non-blank. Everything else — non-array payloads, non-hash entries, unknown roles (a client
+    # can't inject "system" messages), blank messages — is dropped rather than rejected, so one
+    # malformed entry doesn't fail the whole request. Shared by every agent endpoint (web and
+    # mobile, buffered and streaming) so a change to message validation lands in one place.
+    def sanitize_messages(raw)
+      return [] unless raw.is_a?(ActionController::Parameters) || raw.is_a?(Array)
+
+      Array(raw).filter_map do |message|
+        message = message.respond_to?(:to_unsafe_h) ? message.to_unsafe_h : message
+        next unless message.is_a?(Hash)
+
+        role = message[:role] || message["role"]
+        content = (message[:content] || message["content"]).to_s
+        next unless %w[user assistant].include?(role)
+        next if content.strip.blank?
+
+        { role:, content: }
+      end
+    end
+
     # Persists one full turn (creating the conversation when needed) atomically. Without the
     # transaction, a failure between the user-message insert and the assistant-message insert would
     # strand a half-written turn: `latest` would hydrate a user message with no reply, and a resumed

@@ -80,6 +80,15 @@ describe TaxCenterPresenter do
         expect(document[:affiliate_credit]).to eq("$1.50")
         expect(document[:net]).to eq("$24.25")
         expect(document[:filed_at]).to be nil
+        expect(document[:transaction_report_available]).to be(false)
+      end
+
+      it "marks the transaction report as available when the seller has a matching Stripe account" do
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_1234567890")
+        tax_form.update!(stripe_account_id: "acct_1234567890")
+
+        document = presenter.props[:documents].sole
+        expect(document[:transaction_report_available]).to be(true)
       end
 
       it "returns document with necessary data including filing date when present" do

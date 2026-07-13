@@ -1670,6 +1670,16 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(response).to have_http_status :found
         expect(session[:inertia_errors][:base]).to include("Country update failed")
       end
+
+      it "rejects the change with a clear message when a payout is still processing" do
+        create(:payment, user:, state: "processing")
+
+        put :update, params: { user: { updated_country_code: "GB" } }
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(session[:inertia_errors][:base]).to include("You have a payout in progress. You can change your country once it has been processed.")
+        expect(user.reload.alive_user_compliance_info.legal_entity_country_code).not_to eq("GB")
+      end
     end
   end
 

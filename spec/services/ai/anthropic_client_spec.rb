@@ -18,7 +18,7 @@ describe Ai::AnthropicClient do
       stub = stub_request(:post, url)
         .with(
           headers: { "x-api-key" => "sk-ant-test", "anthropic-version" => "2023-06-01" },
-          body: hash_including("model" => described_class::DEFAULT_MODEL, "system" => "be helpful", "stream" => false),
+          body: hash_including("model" => described_class::DEFAULT_MODEL, "stream" => false),
         )
         .to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
 
@@ -28,6 +28,23 @@ describe Ai::AnthropicClient do
       expect(result.text).to eq("You have 3 products.")
       expect(result.tool_uses).to eq([])
       expect(result.stop_reason).to eq("end_turn")
+    end
+
+    it "marks the system prompt and the last tool as cacheable so Anthropic can reuse the shared prefix" do
+      captured = nil
+      stub_request(:post, url)
+        .with { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(
+        system: "be helpful",
+        messages: [{ role: "user", content: "x" }],
+        tools: [{ name: "api_read" }, { name: "api_write" }],
+      )
+
+      expect(captured["system"]).to eq([{ "type" => "text", "text" => "be helpful", "cache_control" => { "type" => "ephemeral" } }])
+      expect(captured["tools"][0]).not_to have_key("cache_control")
+      expect(captured["tools"][1]["cache_control"]).to eq("type" => "ephemeral")
     end
 
     it "parses tool_use blocks with their input" do
@@ -47,10 +64,130 @@ describe Ai::AnthropicClient do
     end
 
     it "raises Error on a non-success status" do
-      stub_request(:post, url).to_return(status: 500, body: "boom")
+      stub_request(:post, url).to_return(status: 400, body: "boom")
 
       expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
         .to raise_error(described_class::Error, /failed/i)
+    end
+  end
+
+  describe "retries" do
+    before { allow(client).to receive(:sleep) } # keep specs fast; retry delays are exercised via the stub
+
+    it "retries a buffered request on a retryable status and succeeds" do
+      body = { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }
+      stub_request(:post, url)
+        .to_return({ status: 529, body: { error: { type: "overloaded_error", message: "Overloaded" } }.to_json },
+                   { status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" } })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(result.text).to eq("ok")
+      expect(client).to have_received(:sleep).once
+    end
+
+    it "retries a network timeout and surfaces TransientError after exhausting attempts" do
+      stub_request(:post, url).to_timeout
+
+      expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::TransientError, /network error/i)
+      expect(client).to have_received(:sleep).twice # MAX_ATTEMPTS - 1 backoffs
+    end
+
+    it "does not retry a deterministic failure like a 400" do
+      stub = stub_request(:post, url).to_return(status: 400, body: { error: { message: "bad request" } }.to_json)
+
+      expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::Error, /bad request/)
+      expect(stub).to have_been_requested.once
+    end
+
+    it "sleeps the Retry-After header value on a 429 instead of the default backoff" do
+      body = { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }
+      stub_request(:post, url)
+        .to_return({ status: 429, body: { error: { type: "rate_limit_error", message: "rate limited" } }.to_json, headers: { "Retry-After" => "4" } },
+                   { status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" } })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(result.text).to eq("ok")
+      expect(client).to have_received(:sleep).with(4.0)
+    end
+
+    it "gives up instead of sleeping when Retry-After exceeds the retry sleep budget" do
+      # A long server-mandated wait would block the calling (Rack request) thread; surfacing the
+      # failure immediately is better than holding the request hostage.
+      stub = stub_request(:post, url)
+        .to_return(status: 429, body: { error: { type: "rate_limit_error", message: "rate limited" } }.to_json, headers: { "Retry-After" => "30" })
+
+      expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::TransientError, /rate limited/)
+      expect(stub).to have_been_requested.once
+      expect(client).not_to have_received(:sleep)
+    end
+
+    it "caps total retry sleep across calls on the same client instance" do
+      # The agent's tool loop chains several buffered calls on one client inside a single web
+      # request; the shared budget keeps repeated transient failures from stacking up blocked time.
+      failure = { status: 529, body: { error: { type: "overloaded_error", message: "Overloaded" } }.to_json }
+      success = { status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" } }
+      stub_request(:post, url).to_return(failure, success, failure, success, failure, failure)
+
+      slept = 0.0
+      allow(client).to receive(:sleep) { |seconds| slept += seconds }
+
+      2.times { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) } # 1s + 1s spent
+      expect { 3.times { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) } }
+        .to raise_error(described_class::TransientError)
+
+      expect(slept).to be <= described_class::RETRY_SLEEP_BUDGET_IN_SECONDS
+    end
+
+    it "retries a streaming request that fails before any output reached the caller" do
+      good_stream = "event: content_block_start\ndata: #{{ index: 0, content_block: { type: "text" } }.to_json}\n\n" \
+                    "event: content_block_delta\ndata: #{{ index: 0, delta: { type: "text_delta", text: "hi" } }.to_json}\n\n" \
+                    "event: message_delta\ndata: #{{ delta: { stop_reason: "end_turn" } }.to_json}\n\n"
+      stub_request(:post, url)
+        .to_return({ status: 529, body: { error: { type: "overloaded_error", message: "Overloaded" } }.to_json },
+                   { status: 200, body: good_stream, headers: { "Content-Type" => "text/event-stream" } })
+
+      chunks = []
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text }
+
+      expect(chunks).to eq(["hi"])
+      expect(result.text).to eq("hi")
+    end
+
+    it "does not retry a stream that already yielded output to the caller" do
+      # The first token has already rendered on the seller's screen when the overload event arrives;
+      # replaying the request would restart the reply mid-sentence, so the failure must surface.
+      broken_stream = "event: content_block_start\ndata: #{{ index: 0, content_block: { type: "text" } }.to_json}\n\n" \
+                      "event: content_block_delta\ndata: #{{ index: 0, delta: { type: "text_delta", text: "partial" } }.to_json}\n\n" \
+                      "event: error\ndata: #{{ error: { type: "overloaded_error", message: "Overloaded" } }.to_json}\n\n"
+      stub = stub_request(:post, url).to_return(status: 200, body: broken_stream, headers: { "Content-Type" => "text/event-stream" })
+
+      expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| } }
+        .to raise_error(described_class::TransientError, /overloaded/i)
+      expect(stub).to have_been_requested.once
+    end
+  end
+
+  describe "timeouts" do
+    it "uses per-operation timeouts with the configured value as the read (silence) timeout" do
+      # A per-operation read timeout bounds silence between chunks, not total stream duration — the
+      # old single global timeout killed healthy long generations mid-stream.
+      chain = HTTP.timeout(connect: 1) # any chainable; we only assert what the client requests
+      allow(HTTP).to receive(:timeout).and_return(chain)
+      allow(chain).to receive(:headers).and_call_original
+
+      stub_request(:post, url).to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+      described_class.new(timeout: 45).messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(HTTP).to have_received(:timeout).with(
+        connect: described_class::CONNECT_TIMEOUT_IN_SECONDS,
+        write: described_class::WRITE_TIMEOUT_IN_SECONDS,
+        read: 45,
+      )
     end
   end
 

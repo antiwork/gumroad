@@ -331,6 +331,7 @@ Rails.application.routes.draw do
         get "/agent/meta", to: "agent#meta"
         get "/agent/conversations/latest", to: "agent#latest_conversation"
         post "/agent/messages", to: "agent#create"
+        post "/agent/messages/stream", to: "agent_streams#create"
         post "/agent/actions", to: "agent#execute"
         resources :devices, only: :create
         resources :installments, only: :show
@@ -1050,6 +1051,7 @@ Rails.application.routes.draw do
     # tax center
     get "/payouts/taxes", to: "tax_center#index", as: :tax_center
     get "/payouts/taxes/:year/:form_type/download", to: "tax_center#download", as: :download_tax_form
+    post "/payouts/taxes/:year/transaction_report", to: "tax_center#request_transaction_report", as: :tax_form_transaction_report
 
     # wishlists
     namespace :wishlists do

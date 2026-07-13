@@ -179,22 +179,6 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
       render json: { success: false, error: "You don't have access to the store agent." }, status: :forbidden
     end
 
-    def sanitize_messages(raw)
-      return [] unless raw.is_a?(ActionController::Parameters) || raw.is_a?(Array)
-
-      Array(raw).filter_map do |message|
-        message = message.respond_to?(:to_unsafe_h) ? message.to_unsafe_h : message
-        next unless message.is_a?(Hash)
-
-        role = message[:role] || message["role"]
-        content = (message[:content] || message["content"]).to_s
-        next unless %w[user assistant].include?(role)
-        next if content.strip.blank?
-
-        { role:, content: }
-      end
-    end
-
     def action_params
       raw = params[:params]
       return {} if raw.blank?

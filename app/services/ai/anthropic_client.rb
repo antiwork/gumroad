@@ -19,6 +19,19 @@
 class Ai::AnthropicClient
   class Error < StandardError; end
 
+  # A failure that is safe and worthwhile to retry: the upstream was momentarily overloaded, rate
+  # limited, returned a 5xx, or the network dropped. Distinct from Error so callers (and our own
+  # retry loop) never retry a real bug like a malformed tool call. `retry_after` carries the
+  # server's own back-off hint (the Retry-After header on a 429) in seconds, when it sent one.
+  class TransientError < Error
+    attr_reader :retry_after
+
+    def initialize(message, retry_after: nil)
+      super(message)
+      @retry_after = retry_after
+    end
+  end
+
   API_URL = "https://api.anthropic.com/v1/messages"
   API_VERSION = "2023-06-01"
   # Claude Opus 4.7 — top of the vending-bench leaderboard for autonomous commercial operation, which
@@ -26,78 +39,185 @@ class Ai::AnthropicClient
   DEFAULT_MODEL = "claude-opus-4-7"
   DEFAULT_MAX_TOKENS = 1024
 
+  # How long we wait to open the connection and to send the request. These are short on purpose:
+  # if Anthropic isn't reachable quickly, we want to fail fast and retry rather than sit on a dead
+  # socket while the seller stares at a spinner.
+  CONNECT_TIMEOUT_IN_SECONDS = 10
+  WRITE_TIMEOUT_IN_SECONDS = 30
+
+  # Total attempts per request (1 original + up to 2 retries) and the base delay between them
+  # (attempt N sleeps N * base). Retries only fire for TransientError, and a streaming request is
+  # never retried once any output has reached the caller — the seller would see the reply restart.
+  MAX_ATTEMPTS = 3
+  RETRY_BASE_DELAY_IN_SECONDS = 1
+
+  # Ceiling on the TOTAL seconds one client instance may spend asleep between retries, across all
+  # of its calls. The agent's buffered tool loop makes several requests on one client from the web
+  # request thread (which Rack::Timeout is watching), so without a shared cap each request could
+  # add its own retry delays and stack up many seconds of blocked time. Once the budget is spent,
+  # failures surface immediately instead of sleeping.
+  RETRY_SLEEP_BUDGET_IN_SECONDS = 6
+
+  # Response statuses worth a retry: rate limit (429), server errors (5xx), and Anthropic's
+  # "overloaded" status (529). Anything else (400 bad request, 401 bad key, ...) is deterministic —
+  # retrying would just repeat the same failure slower.
+  RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504, 529].freeze
+  # Mid-stream `error` events with these types are the streaming equivalents of the statuses above.
+  RETRYABLE_STREAM_ERROR_TYPES = %w[overloaded_error api_error rate_limit_error timeout_error].freeze
+
   Result = Struct.new(:text, :tool_uses, :stop_reason, keyword_init: true)
 
+  # `timeout` is the READ timeout: how long a single read from Anthropic may block before we give
+  # up. For a streaming request that means "seconds of silence between chunks", not the total
+  # duration of the response — a healthy stream that takes minutes to finish is fine as long as
+  # tokens keep arriving. For a buffered request it bounds the wait for the response to start,
+  # which is effectively the model's full generation time (nothing is sent until it finishes).
   def initialize(timeout: 60, model: DEFAULT_MODEL)
     @timeout = timeout
     @model = model
+    # Seconds already spent sleeping between retries; compared against RETRY_SLEEP_BUDGET_IN_SECONDS.
+    @retry_sleep_spent = 0.0
   end
 
   # Buffered request. `system` is Anthropic's top-level system prompt; `messages` is the Anthropic
   # message array (role + content); `tools` is the Anthropic tool-schema array (optional).
+  # Transient upstream failures (timeouts, 5xx/429/529) are retried a couple of times before
+  # surfacing, because a buffered call has no partial output to worry about.
   # @return [Result]
   def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
-    response = http.post(API_URL, json: body)
-    raise Error, "Anthropic request failed: #{response.status} — #{error_detail(response)}" unless response.status.success?
+    with_retries do
+      response = http.post(API_URL, json: body)
+      raise_for_status!(response, kind: "request")
 
-    parse_message(response.parse)
-  rescue HTTP::Error => e
-    raise Error, "Anthropic network error: #{e.message}"
+      parse_message(response.parse)
+    rescue HTTP::Error => e
+      raise TransientError, "Anthropic network error: #{e.message}"
+    end
   end
 
   # Streaming request. Yields each text delta (String) to the block as it arrives, and returns the
   # assembled Result once the stream ends. Tool-use blocks are streamed as a `content_block_start`
   # (carrying id + name) followed by `input_json_delta` fragments we concatenate and JSON-parse.
+  #
+  # Transient failures are retried ONLY while nothing has been yielded to the caller yet (a failed
+  # connect, an immediate 529, silence before the first token). Once any delta has reached the
+  # caller a retry would replay the reply from the start on the seller's screen, so mid-stream
+  # failures surface immediately instead.
   # @yieldparam text [String] a chunk of assistant text
   # @return [Result]
   def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, &on_text)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
-    text = +""
-    # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
-    # we parse when the block closes.
-    blocks = {}
-    stop_reason = nil
+    yielded_any = false
 
-    response = http.post(API_URL, json: body)
-    raise Error, "Anthropic stream failed: #{response.status} — #{error_detail(response)}" unless response.status.success?
+    with_retries(retryable: -> { !yielded_any }) do
+      text = +""
+      # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
+      # we parse when the block closes.
+      blocks = {}
+      stop_reason = nil
 
-    each_sse_event(response.body) do |event, data|
-      case event
-      when "content_block_start"
-        index = data["index"]
-        block = data["content_block"] || {}
-        if block["type"] == "tool_use"
-          blocks[index] = { type: "tool_use", id: block["id"], name: block["name"], json: +"" }
-        else
-          blocks[index] = { type: "text" }
-        end
-      when "content_block_delta"
-        delta = data["delta"] || {}
-        case delta["type"]
-        when "text_delta"
-          chunk = delta["text"].to_s
-          next if chunk.empty?
-          text << chunk
-          on_text&.call(chunk)
-        when "input_json_delta"
+      response = http.post(API_URL, json: body)
+      raise_for_status!(response, kind: "stream")
+
+      each_sse_event(response.body) do |event, data|
+        case event
+        when "content_block_start"
           index = data["index"]
-          blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
+          block = data["content_block"] || {}
+          if block["type"] == "tool_use"
+            blocks[index] = { type: "tool_use", id: block["id"], name: block["name"], json: +"" }
+          else
+            blocks[index] = { type: "text" }
+          end
+        when "content_block_delta"
+          delta = data["delta"] || {}
+          case delta["type"]
+          when "text_delta"
+            chunk = delta["text"].to_s
+            next if chunk.empty?
+            text << chunk
+            yielded_any = true
+            on_text&.call(chunk)
+          when "input_json_delta"
+            index = data["index"]
+            blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
+          end
+        when "message_delta"
+          stop_reason = data.dig("delta", "stop_reason") || stop_reason
+        when "error"
+          raise stream_error(data)
         end
-      when "message_delta"
-        stop_reason = data.dig("delta", "stop_reason") || stop_reason
-      when "error"
-        raise Error, "Anthropic stream error: #{data.dig("error", "message") || "unknown"}"
       end
-    end
 
-    Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
-  rescue HTTP::Error => e
-    raise Error, "Anthropic network error: #{e.message}"
+      Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
+    rescue HTTP::Error => e
+      raise TransientError, "Anthropic network error: #{e.message}"
+    end
   end
 
   private
     attr_reader :timeout, :model
+
+    # Run the block, retrying on TransientError. The wait between attempts is the server's own
+    # Retry-After hint when it sent one (a rate-limited 429 says exactly how long to back off —
+    # retrying sooner just burns an attempt on another guaranteed 429), otherwise a short linear
+    # backoff. `retryable` lets the caller veto a retry at failure time — the streaming path uses
+    # it to stop retrying once any output has already reached the seller.
+    #
+    # Every sleep is charged against the instance-wide RETRY_SLEEP_BUDGET_IN_SECONDS, so a web
+    # request that chains several calls on one client (the agent's tool loop) can never accumulate
+    # more than that much blocked time. If the next wait would blow the budget — including a
+    # Retry-After longer than we're willing to hold the request thread — the failure surfaces
+    # immediately instead.
+    def with_retries(retryable: -> { true })
+      attempt = 1
+      begin
+        yield
+      rescue TransientError => e
+        raise if attempt >= MAX_ATTEMPTS || !retryable.call
+
+        delay = e.retry_after || attempt * RETRY_BASE_DELAY_IN_SECONDS
+        raise if @retry_sleep_spent + delay > RETRY_SLEEP_BUDGET_IN_SECONDS
+
+        @retry_sleep_spent += delay
+        sleep(delay)
+        attempt += 1
+        retry
+      end
+    end
+
+    # Raise the right error class for a non-success response: TransientError for statuses a retry
+    # can plausibly fix, plain Error for deterministic failures (bad request, bad key, ...).
+    def raise_for_status!(response, kind:)
+      return if response.status.success?
+
+      message = "Anthropic #{kind} failed: #{response.status} — #{error_detail(response)}"
+      if RETRYABLE_STATUS_CODES.include?(response.status.code)
+        raise TransientError.new(message, retry_after: parse_retry_after(response))
+      end
+
+      raise Error, message
+    end
+
+    # The Retry-After header on a rate-limited response, as a number of seconds. Anthropic sends the
+    # numeric form; the header can technically also be an HTTP date, which we treat the same as "no
+    # hint" and fall back to the linear backoff.
+    def parse_retry_after(response)
+      Float(response.headers["Retry-After"])
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    # Classify a mid-stream `error` event. Overload/rate-limit/server errors are transient (the
+    # retry loop may replay the request if nothing was yielded yet); anything else is a real error.
+    def stream_error(data)
+      error = data["error"] || {}
+      message = "Anthropic stream error: #{error["message"] || "unknown"}"
+      return TransientError.new(message) if RETRYABLE_STREAM_ERROR_TYPES.include?(error["type"])
+
+      Error.new(message)
+    end
 
     # A concise failure detail for an error response. Anthropic returns { "error": { "message": ... } };
     # surface just that message rather than dumping the raw body (which can be large and may echo
@@ -117,16 +237,46 @@ class Ai::AnthropicClient
       body = {
         model:,
         max_tokens:,
-        system:,
+        system: cacheable_system(system),
         messages:,
         stream:,
       }
-      body[:tools] = tools if tools.present?
+      body[:tools] = cacheable_tools(tools) if tools.present?
       body
     end
 
+    # Mark the system prompt as cacheable. The store agent's system prompt embeds the full endpoint
+    # manifest, so it is large and byte-identical across requests; letting Anthropic cache it means
+    # subsequent requests skip re-processing those tokens, which meaningfully cuts time-to-first-token
+    # and cost. Prompts too short to cache are simply not cached — the marker is harmless. A caller
+    # already passing structured content blocks is left untouched.
+    def cacheable_system(system)
+      return system unless system.is_a?(String)
+
+      [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+    end
+
+    # Cache the tool schemas too. Anthropic caches the prefix up to each cache_control marker, so
+    # tagging the LAST tool covers the whole (static) tool list. Tools already carrying a
+    # cache_control are left alone.
+    def cacheable_tools(tools)
+      tools = tools.map { |tool| tool.deep_symbolize_keys }
+      last = tools.last
+      last[:cache_control] = { type: "ephemeral" } unless last.key?(:cache_control)
+      tools
+    end
+
+    # Per-operation timeouts instead of one global deadline. A global timeout (the old behavior)
+    # counts the ENTIRE request — for a streamed reply that killed healthy generations that simply
+    # took longer than the budget even while tokens were still arriving. With per-operation
+    # timeouts, `read` bounds each individual read (i.e. silence), so a slow-but-alive stream can
+    # finish while a genuinely stalled connection still fails after `timeout` seconds of nothing.
     def http
-      HTTP.timeout(timeout).headers(
+      HTTP.timeout(
+        connect: CONNECT_TIMEOUT_IN_SECONDS,
+        write: WRITE_TIMEOUT_IN_SECONDS,
+        read: timeout,
+      ).headers(
         "x-api-key" => api_key,
         "anthropic-version" => API_VERSION,
         "content-type" => "application/json",
