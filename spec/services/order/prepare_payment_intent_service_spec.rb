@@ -301,6 +301,30 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    # The browser attaches a buyer-currency quote token exactly when the checkout displayed
+    # local-currency totals. Client-confirm charges canonical USD with no quote machinery, so a
+    # token arriving here means the buyer confirmed an amount this lane cannot charge — it must
+    # fail closed (like Charge::CreateService does) instead of silently charging USD.
+    context "when the params carry a buyer-currency quote token" do
+      before { create(:merchant_account, user: seller) }
+
+      it "fails closed with the quote-invalid error code instead of preparing a canonical-USD intent" do
+        order, params = build_order
+        params[:buyer_currency_quote] = "some-signed-quote-token"
+
+        expect(Stripe::ConfirmationToken).not_to receive(:retrieve)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.charges).to be_empty
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      end
+    end
+
     context "with a multi-seller cart" do
       let(:other_seller) { create(:user) }
       let(:other_product) { create(:product, user: other_seller, price_cents: 5_00) }
