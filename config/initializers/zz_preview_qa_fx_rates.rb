@@ -39,13 +39,21 @@ end
 # middleware runs before ActionDispatch::RemoteIp and rewrites the forwarding headers
 # from the custom header (which the LB passes through untouched), restoring the ability
 # to QA non-US buyer flows. Production runs live Stripe keys, so this can never activate there.
+#
+# Scope: the spoof and the debug endpoint only respond on per-PR preview app hosts
+# (*.apps.staging.gumroad.org) and local development. The shared staging site also runs
+# test Stripe keys, so without this host check anyone could rewrite their apparent IP
+# there — the QA helper is only needed on the throwaway preview apps.
 class PreviewQaDebugMiddleware
+  PREVIEW_HOST_SUFFIX = ".apps.staging.gumroad.org"
+
   def initialize(app)
     @app = app
   end
 
   def call(env)
     return @app.call(env) unless Stripe.api_key.to_s.start_with?("sk_test_")
+    return @app.call(env) unless preview_or_development_host?(env)
 
     spoof = env["HTTP_X_QA_SPOOF_IP"]
     if spoof.present? && spoof.match?(/\A[0-9a-fA-F.:]+\z/)
@@ -75,5 +83,13 @@ class PreviewQaDebugMiddleware
     }
     [200, { "Content-Type" => "application/json" }, [body.to_json]]
   end
+
+  private
+    # Rack::Request#host strips the port and handles a missing Host header.
+    def preview_or_development_host?(env)
+      return true if Rails.env.development?
+
+      Rack::Request.new(env).host.to_s.end_with?(PREVIEW_HOST_SUFFIX)
+    end
 end
 Rails.application.config.middleware.insert_before(0, PreviewQaDebugMiddleware) if Rails.env.staging? || Rails.env.development?
