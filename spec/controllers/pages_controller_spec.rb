@@ -28,6 +28,15 @@ describe PagesController, type: :controller, inertia: true do
       expect(inertia.props[:profile][:username]).to eq(seller.username)
     end
 
+    it "includes the live product count for the product-pages row" do
+      create(:product, user: seller)
+      create(:product, user: seller, deleted_at: Time.current)
+
+      get :index
+
+      expect(inertia.props[:products_count]).to eq(1)
+    end
+
     it "does not include another seller's pages" do
       create(:user_page, slug: "other", title: "Other")
 

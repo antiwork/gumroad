@@ -1,4 +1,4 @@
-import { FileDetail, MagicWand, Pencil, Store, Trash } from "@boxicons/react";
+import { Box, FileDetail, MagicWand, Pencil, Store, Trash } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -6,6 +6,7 @@ import typia from "typia";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
@@ -30,36 +31,40 @@ type ProfileEntry = {
 };
 
 export default function PagesIndex() {
-  const { pages, profile } = typia.assert<{ pages: PageEntry[]; profile: ProfileEntry }>(usePage().props);
+  const { pages, profile, products_count } = typia.assert<{
+    pages: PageEntry[];
+    profile: ProfileEntry;
+    products_count: number;
+  }>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const canManage = !!loggedInUser?.policies.page.create;
   const [deleting, setDeleting] = React.useState<{ slug: string; title: string; busy: boolean } | null>(null);
 
-  const newPageButton = (
-    <Button asChild color="accent">
-      <Link
-        href={Routes.new_page_path()}
-        inert={!canManage || undefined}
-        className={!canManage ? "opacity-30" : undefined}
-      >
-        New page
-      </Link>
-    </Button>
-  );
-
   return (
     <>
-      <PageHeader className="sticky-top" title="Pages" actions={newPageButton} />
+      <PageHeader
+        className="sticky-top"
+        title="Pages"
+        actions={
+          // Roles that can't create pages don't get a button whose request
+          // would fail — they can still browse the list and open pages.
+          canManage ? (
+            <Button asChild color="accent">
+              <Link href={Routes.new_page_path()}>New page</Link>
+            </Button>
+          ) : undefined
+        }
+      />
       <section className="grid gap-4 p-4 md:p-8">
         <p className="max-w-prose text-muted">
-          Your profile is the home page of your store. Every other page lives under it at its own link — use them for
-          about pages, licenses, FAQs, or anything else your audience needs.
+          Add pages to your store — an about page, FAQs, licenses, anything your audience needs. Each page gets its own
+          URL to share or link from your home page.
         </p>
 
         <Rows role="list">
-          {/* The profile row: pinned first, undeletable. It renders the default
+          {/* The home row: pinned first, undeletable. It renders the default
               storefront template until the seller (or their agent) replaces it
-              with fully custom HTML. */}
+              with fully custom HTML — one state or the other, never both. */}
           <Row role="listitem">
             <RowContent className="gap-4">
               <div className="flex size-10 shrink-0 items-center justify-center rounded bg-black text-white dark:bg-white dark:text-black">
@@ -71,7 +76,6 @@ export default function PagesIndex() {
                     {profile.title}
                   </Link>
                   <Pill size="small">Home</Pill>
-                  {profile.custom_html ? <Pill size="small">Custom HTML</Pill> : null}
                 </div>
                 <a
                   href={profile.profile_url}
@@ -84,14 +88,45 @@ export default function PagesIndex() {
               </div>
             </RowContent>
             <RowActions>
-              <span className="hidden text-sm text-muted sm:block">Default template</span>
-              <NavigationButton size="icon" href={Routes.edit_page_path("profile")} aria-label="Edit profile page">
+              <span className="hidden text-sm text-muted sm:block">
+                {profile.custom_html ? "Custom HTML" : "Default template"}
+              </span>
+              <NavigationButton size="icon" href={Routes.edit_page_path("profile")} aria-label="Edit home page">
                 <Pencil className="size-4" />
               </NavigationButton>
             </RowActions>
           </Row>
 
-          {/* Every other page hangs off the profile at its slug. */}
+          {/* Product pages are edited from each product's Share tab, not here.
+              This row points sellers there so a page built for a product
+              doesn't look like it went missing. */}
+          {products_count > 0 ? (
+            <Row role="listitem" className="sm:pl-8">
+              <RowContent className="gap-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded border border-border text-muted">
+                  <Box className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <Link href={Routes.products_path()} className="truncate font-medium hover:underline">
+                    Product pages
+                  </Link>
+                  <span className="block truncate text-sm text-muted">
+                    Edited from each product's Share tab in Products
+                  </span>
+                </div>
+              </RowContent>
+              <RowActions>
+                <span className="hidden text-sm text-muted sm:block">
+                  {products_count === 1 ? "1 product" : `${products_count} products`}
+                </span>
+                <NavigationButton size="icon" href={Routes.products_path()} aria-label="Open Products">
+                  <Pencil className="size-4" />
+                </NavigationButton>
+              </RowActions>
+            </Row>
+          ) : null}
+
+          {/* Every other page hangs off the home page at its slug. */}
           {pages.map((page) => (
             <Row key={page.slug} role="listitem" className="sm:pl-8">
               <RowContent className="gap-4">
@@ -119,16 +154,17 @@ export default function PagesIndex() {
                 <NavigationButton size="icon" href={Routes.edit_page_path(page.slug)} aria-label={`Edit ${page.title}`}>
                   <Pencil className="size-4" />
                 </NavigationButton>
-                <Button
-                  size="icon"
-                  outline
-                  color="danger"
-                  disabled={!canManage}
-                  aria-label={`Delete ${page.title}`}
-                  onClick={() => setDeleting({ slug: page.slug, title: page.title, busy: false })}
-                >
-                  <Trash className="size-4" />
-                </Button>
+                {canManage ? (
+                  <Button
+                    size="icon"
+                    outline
+                    color="danger"
+                    aria-label={`Delete ${page.title}`}
+                    onClick={() => setDeleting({ slug: page.slug, title: page.title, busy: false })}
+                  >
+                    <Trash className="size-4" />
+                  </Button>
+                ) : null}
               </RowActions>
             </Row>
           ))}
@@ -153,7 +189,10 @@ export default function PagesIndex() {
                   setDeleting({ ...deleting, busy: true });
                   router.delete(Routes.page_path(deleting.slug), {
                     onSuccess: () => setDeleting(null),
-                    onError: () => setDeleting({ ...deleting, busy: false }),
+                    onError: () => {
+                      showAlert("Failed to delete the page. Please try again.", "error");
+                      setDeleting({ ...deleting, busy: false });
+                    },
                   });
                 }}
               >

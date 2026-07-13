@@ -18,6 +18,10 @@ class PagesController < Sellers::BaseController
     render inertia: "Pages/Index", props: {
       pages: current_seller.pages.map { page_props(_1) },
       profile: profile_entry,
+      # Product pages are edited from each product's Share tab, not here. The
+      # list links to Products (with the count) so a seller whose agent built a
+      # custom product page doesn't look in Pages and think it's gone.
+      products_count: current_seller.links.alive.count,
     }
   end
 

@@ -5,8 +5,10 @@ import typia from "typia";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { RichTextEditor } from "$app/components/RichTextEditor";
+import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -28,9 +30,8 @@ type PageProps = {
   profile_url: string;
 };
 
-// The copy-paste prompt for building a page with an agent. The agent path is
-// the recommended way to build a page; the CLI commands it references are the
-// same ones a seller can run by hand.
+// The copy-paste prompt for building a page with an agent. The CLI commands it
+// references are the same ones a seller can run by hand.
 const agentPrompt = (username: string, slug: string | null, isProfile: boolean) =>
   isProfile
     ? `Build and publish a custom landing page for my Gumroad profile (@${username}). Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push profile\`. The page replaces my entire profile, so link visitors to my product pages instead of adding checkout elements.`
@@ -38,14 +39,43 @@ const agentPrompt = (username: string, slug: string | null, isProfile: boolean) 
 
 export default function PagesEdit() {
   const { page, is_profile, is_new, username, profile_url } = typia.assert<PageProps>(usePage().props);
+  const loggedInUser = useLoggedInUser();
+  // Mirrors PagePolicy: create? also gates update? and destroy?, so one flag
+  // covers everything the editor can change. Viewers without it get a
+  // read-only editor instead of buttons whose requests would fail.
+  const canEdit = !!loggedInUser?.policies.page.create;
 
   const [title, setTitle] = React.useState(page.title);
   const [content, setContent] = React.useState(page.content);
   // The preview refreshes on save, not on every keystroke — it renders the
-  // saved page through the same wrapper the public page uses.
+  // saved page through the same wrapper the public page uses. These also
+  // double as the last-saved values for unsaved-changes detection.
   const [previewContent, setPreviewContent] = React.useState(page.content);
   const [previewTitle, setPreviewTitle] = React.useState(page.title);
   const [isSaving, setIsSaving] = React.useState(false);
+
+  // Only rich-text pages are editable in place; the profile and custom HTML
+  // pages change through profile settings or the agent/CLI.
+  const isEditable = canEdit && !is_profile && !page.custom_html;
+  const isDirty = isEditable && (title !== previewTitle || content !== previewContent);
+
+  // Warn before a full navigation (close tab, hard link) discards unsaved
+  // edits. Inertia navigations from the Cancel button confirm explicitly.
+  React.useEffect(() => {
+    if (!isDirty) return;
+
+    const beforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+
+    window.addEventListener("beforeunload", beforeUnload);
+
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [isDirty]);
+
+  const backToList = () => {
+    // eslint-disable-next-line no-alert
+    if (isDirty && !window.confirm("You have unsaved changes. Discard them and go back to Pages?")) return;
+    router.visit(Routes.pages_path());
+  };
 
   const publicUrl = is_profile
     ? profile_url
@@ -58,6 +88,10 @@ export default function PagesEdit() {
       onSuccess: () => {
         setPreviewContent(content);
         setPreviewTitle(title);
+      },
+      onError: (errors: Record<string, unknown>) => {
+        const message = Object.values(errors).find((value) => typeof value === "string");
+        showAlert(typeof message === "string" ? message : "Sorry, something went wrong. Please try again.", "error");
       },
       onFinish: () => setIsSaving(false),
     };
@@ -73,20 +107,30 @@ export default function PagesEdit() {
     router.patch(
       Routes.page_path("profile"),
       { remove_custom_html: true },
-      { onFinish: () => setIsRemovingCustomHtml(false) },
+      {
+        onError: () => showAlert("Failed to remove the custom page. Please try again.", "error"),
+        onFinish: () => setIsRemovingCustomHtml(false),
+      },
     );
   };
+
+  // The panel's pitch depends on where the seller is standing: on a custom
+  // HTML page the agent is the ONLY way to edit, on a rich-text page it's an
+  // upgrade path, and on the profile it replaces the default template.
+  const agentPanelHeading = !is_profile && page.custom_html ? "Update with your agent" : "Build with your agent";
+  const agentPanelIntro = is_profile
+    ? "Replace the default template with a page your agent designs as full HTML — custom layout, animations, anything. Copy this prompt to get started:"
+    : page.custom_html
+      ? "This page is custom HTML, so your agent (or the CLI) is how you change it. Copy this prompt to get started:"
+      : "Want more than rich text? Your agent can redesign this page as full HTML — custom layout, animations, anything — and publish it for you. Copy this prompt to get started:";
 
   const agentPanel = (
     <div className="grid gap-3 rounded border border-border p-4">
       <div className="flex items-center gap-2">
         <MagicWand className="size-5" />
-        <h3>Build with your agent</h3>
+        <h3>{agentPanelHeading}</h3>
       </div>
-      <p className="text-sm text-muted">
-        The best way to build a page. Your agent designs it as full HTML — custom layout, animations, anything — and
-        publishes it for you. Copy this prompt to get started:
-      </p>
+      <p className="text-sm text-muted">{agentPanelIntro}</p>
       <div className="flex items-start gap-2 rounded bg-active-bg p-3">
         <p className="min-w-0 flex-1 text-sm">{agentPrompt(username, page.slug, is_profile)}</p>
         <CopyToClipboard text={agentPrompt(username, page.slug, is_profile)}>
@@ -105,11 +149,23 @@ export default function PagesEdit() {
     </div>
   );
 
+  // The caption has to match how each page actually updates: rich-text pages
+  // refresh on save, the profile and custom HTML pages frame the live page,
+  // and a new page has no public URL until it's created.
+  const previewCaption = is_new
+    ? "Your page will live at this link once you create it."
+    : is_profile || page.custom_html
+      ? "The preview shows the live page."
+      : "The preview refreshes when you save.";
+
   const previewSidebar = (
     <PreviewSidebar
-      previewLink={(props) => (
-        <NavigationButton {...props} size="icon" href={publicUrl} target="_blank" rel="noreferrer" />
-      )}
+      previewLink={
+        // A new page has nothing to open yet — the link would 404.
+        is_new
+          ? undefined
+          : (props) => <NavigationButton {...props} size="icon" href={publicUrl} target="_blank" rel="noreferrer" />
+      }
     >
       <div className="overflow-hidden rounded border border-border bg-background">
         <div className="border-b border-border p-3">
@@ -139,7 +195,7 @@ export default function PagesEdit() {
           />
         )}
       </div>
-      <p className="text-xs text-muted">The preview refreshes when you save.</p>
+      <p className="text-xs text-muted">{previewCaption}</p>
     </PreviewSidebar>
   );
 
@@ -148,30 +204,34 @@ export default function PagesEdit() {
       <>
         <PageHeader
           className="sticky-top"
-          title="Profile"
+          // "Home" matches the pinned entry in the Pages list — the same page
+          // shouldn't change names between the list and its editor.
+          title="Home"
           actions={<NavigationButton href={Routes.settings_profile_path()}>Open profile settings</NavigationButton>}
         />
         <WithPreviewSidebar className="flex-1">
           <section className="grid content-start gap-8 p-4! md:p-8!">
             <Alert role="status" variant="info">
-              Your profile is the home page of your store. It ships with the default template — product grid, follow
-              form, tabs — with the details editable in profile settings. It's yours to change completely: have your
-              agent replace it with a fully custom page.
+              Your home page is your public profile. It ships with the default template — product grid, follow form,
+              tabs — with the details editable in profile settings. It's yours to change completely: have your agent
+              replace it with a fully custom page.
             </Alert>
             {page.custom_html ? (
               <Alert role="status" variant="success">
                 <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                   <span>
-                    Your custom profile page is live — it replaces the default template. Update it with your agent or
-                    the CLI, or remove it to restore the default template.
+                    Your custom home page is live — it replaces the default template. Update it with your agent or the
+                    CLI, or remove it to restore the default template.
                   </span>
-                  <Button color="danger" outline disabled={isRemovingCustomHtml} onClick={removeProfileCustomHtml}>
-                    {isRemovingCustomHtml ? "Removing..." : "Remove custom page"}
-                  </Button>
+                  {canEdit ? (
+                    <Button color="danger" outline disabled={isRemovingCustomHtml} onClick={removeProfileCustomHtml}>
+                      {isRemovingCustomHtml ? "Removing..." : "Remove custom page"}
+                    </Button>
+                  ) : null}
                 </div>
               </Alert>
             ) : null}
-            {agentPanel}
+            {canEdit ? agentPanel : null}
           </section>
           {previewSidebar}
         </WithPreviewSidebar>
@@ -185,20 +245,36 @@ export default function PagesEdit() {
         className="sticky-top"
         title={is_new ? "New page" : page.title}
         actions={
-          <Button color="accent" disabled={isSaving || title.trim() === ""} onClick={save}>
-            {isSaving ? "Saving..." : is_new ? "Create page" : "Save changes"}
-          </Button>
+          // Custom HTML pages can't be edited here, so a save button would be
+          // a dead control; read-only roles get no buttons for the same reason.
+          isEditable ? (
+            <div className="flex items-center gap-2">
+              <Button disabled={isSaving} onClick={backToList}>
+                Cancel
+              </Button>
+              <Button color="accent" disabled={isSaving || title.trim() === ""} onClick={save}>
+                {isSaving ? "Saving..." : is_new ? "Create page" : "Save changes"}
+              </Button>
+            </div>
+          ) : (
+            <NavigationButton href={Routes.pages_path()}>Back to Pages</NavigationButton>
+          )
         }
       />
       <WithPreviewSidebar className="flex-1">
         <section className="grid content-start gap-8 p-4! md:p-8!">
+          {!canEdit ? (
+            <Alert role="status" variant="info">
+              Your role can view this page but can't make changes. Ask an admin or marketing teammate to edit it.
+            </Alert>
+          ) : null}
           {page.custom_html ? (
             <>
               <Alert role="status" variant="info">
                 This page was built with custom HTML by your agent, so it can't be edited here — editing it manually
                 would lose the custom layout. Update it with your agent or the CLI instead.
               </Alert>
-              {agentPanel}
+              {canEdit ? agentPanel : null}
             </>
           ) : (
             <>
@@ -209,6 +285,7 @@ export default function PagesEdit() {
                   type="text"
                   value={title}
                   placeholder="About"
+                  disabled={!canEdit}
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </Fieldset>
@@ -220,10 +297,11 @@ export default function PagesEdit() {
                   ariaLabel="Page content"
                   placeholder="Write your page..."
                   initialValue={page.content}
+                  editable={canEdit}
                   onChange={setContent}
                 />
               </Fieldset>
-              {agentPanel}
+              {canEdit ? agentPanel : null}
             </>
           )}
         </section>
