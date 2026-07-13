@@ -1342,6 +1342,28 @@ describe CustomerMailer do
       end
     end
 
+    context "when the product's display currency is not USD" do
+      let(:product) { create(:product, user: seller, price_currency_type: Currency::EUR) }
+      let(:refund) do
+        refund = create(:refund, purchase:, amount_cents: 2016)
+        refund.presentment_currency = Currency::CAD
+        refund.presentment_amount_cents = 28_83
+        refund.save!
+        refund
+      end
+
+      before do
+        purchase.update!(displayed_price_currency_type: Currency::EUR, rate_converted_to_usd: 0.9)
+      end
+
+      it "formats the amount labeled USD in dollars, not the display currency" do
+        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id, refund.id)
+        usd_total = MoneyFormatter.format(purchase.total_transaction_cents, :usd, no_cents_if_whole: true, symbol: true)
+        expect(mail.body.encoded).to include("(#{usd_total} USD)")
+        expect(mail.body.encoded).not_to include("(#{purchase.formatted_total_transaction_amount} USD)")
+      end
+    end
+
     context "when the refund belongs to a different purchase" do
       let(:other_purchase) { create(:purchase, link: product, seller:) }
       let(:refund) do
@@ -1398,6 +1420,29 @@ describe CustomerMailer do
         mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", refund.id)
         expect(mail.body.encoded).to include("partial refund of $5 for your #{purchase.formatted_total_transaction_amount} purchase")
         expect(mail.body.encoded).not_to include("USD)")
+      end
+    end
+
+    context "when the product's display currency is not USD" do
+      let(:product) { create(:product, user: seller, price_currency_type: Currency::EUR) }
+      let(:refund) do
+        refund = create(:refund, purchase:, amount_cents: 500)
+        refund.presentment_currency = Currency::CAD
+        refund.presentment_amount_cents = 7_15
+        refund.save!
+        refund
+      end
+
+      before do
+        purchase.update!(displayed_price_currency_type: Currency::EUR, rate_converted_to_usd: 0.9)
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::CAD)
+      end
+
+      it "formats the amounts labeled USD in dollars, not the product currency" do
+        mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", refund.id)
+        usd_total = MoneyFormatter.format(purchase.total_transaction_cents, :usd, no_cents_if_whole: true, symbol: true)
+        expect(mail.body.encoded).to include("partial refund of CAD$7.15 ($5 USD)")
+        expect(mail.body.encoded).to include("(#{usd_total} USD) purchase")
       end
     end
   end

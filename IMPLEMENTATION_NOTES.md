@@ -61,3 +61,6 @@ Branch: `presentment-refund-views` off main (scaffold 613b16b57).
 - [x] Rubocop clean on all touched Ruby files. Pushed as 3 commits (…→97205c91f).
 - Not done: vitest component test — the repo has zero *.test.tsx files and no React testing
   library; admin UI logic is null-gated display covered via presenter specs instead.
+- [x] Greptile P1 fix: amounts labeled "USD" in the refund emails were formatted in the
+  product/display currency (wrong for non-USD products). The mailers now format the USD
+  figures explicitly (`formatted_price("usd", …)`); new specs cover a EUR-display product.

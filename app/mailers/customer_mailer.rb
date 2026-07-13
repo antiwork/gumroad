@@ -110,6 +110,10 @@ class CustomerMailer < ApplicationMailer
     # before this parameter existed still deliver.
     refund = refund_id ? Refund.find_by(id: refund_id) : nil
     @formatted_presentment_refund_amount = refund&.formatted_presentment_amount if refund&.purchase_id == @purchase&.id
+    # The "(… USD)" figure shown alongside must actually be in USD.
+    # formatted_total_transaction_amount is in the product's display currency, which is
+    # not necessarily USD, so format the USD cents explicitly here instead.
+    @formatted_usd_total = formatted_price("usd", @purchase.total_transaction_cents) if @formatted_presentment_refund_amount && @purchase
     mail(
       to: email,
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
@@ -129,6 +133,14 @@ class CustomerMailer < ApplicationMailer
     # compatibility with already-queued jobs.
     refund = refund_id ? Refund.find_by(id: refund_id) : nil
     @formatted_presentment_refund_amount = refund&.formatted_presentment_amount if refund&.purchase_id == @purchase&.id
+    if @formatted_presentment_refund_amount
+      # Amounts shown next to a "USD" label must actually be formatted in USD.
+      # @formatted_refund_amount above is in the product's price currency and
+      # formatted_total_transaction_amount is in the display currency — neither is
+      # guaranteed to be USD, so format the USD cents explicitly for those labels.
+      @formatted_usd_refund_amount = formatted_price("usd", refund_amount_cents_usd)
+      @formatted_usd_total = formatted_price("usd", @purchase.total_transaction_cents) if @purchase
+    end
     @refund_type = refund_type
     mail(
       to: email,
