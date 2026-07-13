@@ -656,6 +656,14 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.products = action.products;
       if (state.surcharges.type === "loading") state.surcharges.abort();
       state.surcharges = action.surcharges ? { type: "loaded", result: action.surcharges } : { type: "pending" };
+      // Accepting a cross-sell updates the products mid-pipeline on purpose, and it always
+      // arrives with a freshly loaded quote precomputed for the accepted cart (so the Apple Pay
+      // sheet can show the new total synchronously) — that flow may continue. Any other product
+      // update that lands after the payment pipeline has started leaves the quote pending, which
+      // means the payload at the end of the pipeline would be built on totals the buyer never
+      // confirmed — cancel back to "input", same as the total-affecting "set-value" path above.
+      if (state.surcharges.type !== "loaded" && state.status.type !== "input")
+        state.status = { type: "input", errors: new Set() };
       break;
   }
 });

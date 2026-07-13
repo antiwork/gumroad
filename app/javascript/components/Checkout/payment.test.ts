@@ -878,10 +878,9 @@ describe("reduceCheckoutState", () => {
     it("refuses to validate while a surcharges refetch is queued, cancelling back to input", () => {
       // The cross-sell offer pipeline dispatches "validate" from the "offering" status; the
       // refusal must return to "input" rather than strand the checkout mid-pipeline.
-      const next = reduceCheckoutState(
-        state({ surcharges: { type: "pending" }, status: { type: "offering" } }),
-        { type: "validate" },
-      );
+      const next = reduceCheckoutState(state({ surcharges: { type: "pending" }, status: { type: "offering" } }), {
+        type: "validate",
+      });
       expect(next.status).toEqual({ type: "input", errors: new Set() });
     });
 
@@ -917,6 +916,36 @@ describe("reduceCheckoutState", () => {
         fullName: "Other Buyer",
       });
       expect(next.status).toEqual({ type: "validating" });
+    });
+
+    it("cancels an in-progress payment when a product update without a precomputed quote lands mid-pipeline", () => {
+      // A cart update arriving after "offer"/"validate" without a fresh quote leaves surcharges
+      // pending — the payload built at the end of the pipeline would carry totals the buyer
+      // never confirmed, so the payment must fall back to input.
+      for (const status of [
+        { type: "offering" } as const,
+        { type: "validating" } as const,
+        { type: "starting" } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ status }), {
+          type: "update-products",
+          products: [product({ price: 2_000 })],
+        });
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("lets a cross-sell acceptance continue the pipeline when it carries a precomputed quote", () => {
+      // Accepting an offer replaces the products mid-pipeline on purpose, and the offer flow
+      // precomputes the surcharges for the accepted cart — the pipeline may continue on them.
+      const next = reduceCheckoutState(state({ status: { type: "offering" } }), {
+        type: "update-products",
+        products: [product({ price: 2_000 })],
+        surcharges: loadedSurcharges({ subtotal: 2_000 }).result,
+      });
+      expect(next.surcharges.type).toBe("loaded");
+      expect(next.status).toEqual({ type: "offering" });
     });
   });
 });
