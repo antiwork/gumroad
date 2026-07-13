@@ -32,3 +32,24 @@ Branch: `presentment-refund-views` off main (scaffold 613b16b57).
 
 ## Progress log
 - [x] Scouted mailers/views/presenter/component/factories.
+- [x] Slice 1 (mailers): `Refund#presentment_snapshot?` / `#formatted_presentment_amount`,
+  `CustomerMailer#refund`/`#partial_refund` take optional trailing `refund_id`, both callers in
+  `Purchase::Refundable` pass it, views render buyer currency + "(… USD)" only when the snapshot
+  exists. Previews: `refund_presentment` / `partial_refund` / `partial_refund_presentment` added.
+  Safety guard: the mailer ignores a `refund_id` whose refund belongs to a different purchase.
+  Specs: `spec/mailers/customer_mailer_spec.rb` — 7 examples, 0 failures (snapshot, no-snapshot
+  exact-fallback with `not_to include("USD)")` revert guard, mismatched-refund).
+  Formatting note: `MoneyFormatter` renders CAD as `CAD$28.83` (not `CA$`).
+- [x] Slice 2 (admin): presenter adds `formatted_presentment_total` (purchase level, from
+  `Purchase#formatted_buyer_presentment_total`) and per-refund `formatted_presentment_amount` +
+  `formatted_usd_amount` (USD figure only emitted when a snapshot exists, so old rows stay
+  unchanged). Component types + rendering: Transaction Total gets "(CAD$13.50)" suffix; refund
+  rows get an "Amount: $10 (CAD$14.30)" line only when snapshot data exists. Specs:
+  `spec/presenters/admin/purchase_presenter_spec.rb` — 12 examples, 0 failures.
+  No `*.test.tsx` exists anywhere in `app/javascript` (no @testing-library), so there is no
+  component-test pattern to follow — admin coverage lives in the presenter spec; component
+  change is display-only null-gated rendering. `npx tsc --noEmit` reports only a pre-existing
+  environment error (`Cannot find type definition file for 'vite/client'` via symlinked
+  node_modules); the LSP confirmed no new type errors in the edited component.
+- Test env notes: worktree needed `node_modules` and `public/vite-test` symlinked from
+  `~/code/gumroad` (Vite manifest missing otherwise → every mailer spec fails on email.ts).

@@ -382,7 +382,7 @@ describe "PurchaseRefunds", :vcr do
 
       it "notifies customer about the refund" do
         expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, anything).and_call_original
-        expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 50, "partially").and_call_original
+        expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 50, "partially", an_instance_of(Integer)).and_call_original
         @purchase.refund_and_save!(@user.id, amount_cents: 50)
       end
 
@@ -1747,7 +1747,7 @@ describe "PurchaseRefunds", :vcr do
 
     it "notifies customer about the refund" do
       expect(@purchase.stripe_partially_refunded).to_not be(true)
-      expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 10, "partially").and_call_original
+      expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 10, "partially", an_instance_of(Integer)).and_call_original
       @purchase.refund_partial_purchase!(10, @user.id)
       @purchase.reload
       expect(@purchase.stripe_partially_refunded).to be(true)
