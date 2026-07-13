@@ -918,6 +918,44 @@ describe("reduceCheckoutState", () => {
       expect(next.status).toEqual({ type: "validating" });
     });
 
+    it("does not cancel an in-progress wallet payment when its own address updates land", () => {
+      // The Apple Pay / Google Pay sheet dispatches address set-values as part of its own
+      // payment flow (shipping address change, billing details from the chosen card). Wallet
+      // payments never attach the buyer-currency quote token, so there is no stale-quote risk —
+      // and cancelling here would break the sheet's completion handshake.
+      for (const action of [
+        { type: "set-value", country: "CA" } as const,
+        { type: "set-value", zipCode: "94103" } as const,
+        { type: "set-value", tip: { type: "fixed", amount: 2_00 } } as const,
+      ]) {
+        const next = reduceCheckoutState(
+          state({ status: { type: "starting" }, paymentMethod: "stripePaymentRequest" }),
+          action,
+        );
+        // The quote still invalidates (totals may change), but the payment continues.
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "starting" });
+      }
+    });
+
+    it("refuses start-payment for card payments while a surcharges refetch is queued", () => {
+      // The address-verification dialog dispatches corrected address values (invalidating the
+      // quote) and then start-payment unconditionally — the pipeline must not re-enter on the
+      // stale quote.
+      const next = reduceCheckoutState(state({ surcharges: { type: "pending" } }), { type: "start-payment" });
+      expect(next.status).toEqual({ type: "input", errors: new Set() });
+    });
+
+    it("lets start-payment through for wallet payments regardless of surcharge state", () => {
+      // Wallets never carry the quote token; blocking them on surcharge readiness would only
+      // break the payment-sheet flow.
+      const next = reduceCheckoutState(
+        state({ surcharges: { type: "pending" }, paymentMethod: "stripePaymentRequest" }),
+        { type: "start-payment" },
+      );
+      expect(next.status).toEqual({ type: "starting" });
+    });
+
     it("cancels an in-progress payment when a product update without a precomputed quote lands mid-pipeline", () => {
       // A cart update arriving after "offer"/"validate" without a fresh quote leaves surcharges
       // pending — the payload built at the end of the pipeline would carry totals the buyer

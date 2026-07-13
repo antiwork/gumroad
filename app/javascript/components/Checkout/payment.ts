@@ -579,7 +579,14 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // are no longer the totals that will be charged, so a payment already past "input" must
         // be cancelled — otherwise the payload built at the end of the pipeline reads a
         // different (or missing) quote than the one the buyer confirmed.
-        if (state.status.type !== "input") state.status = { type: "input", errors: new Set() };
+        //
+        // Card payments only: the quote token is never attached to wallet or PayPal payments
+        // (those charge canonical USD and display USD totals), so a stale quote cannot diverge
+        // there. The wallet (Apple Pay / Google Pay) sheet in particular dispatches its own
+        // address updates mid-payment — cancelling on those would break the sheet's
+        // completion handshake.
+        if (state.status.type !== "input" && state.paymentMethod === "card")
+          state.status = { type: "input", errors: new Set() };
       }
       if (state.status.type === "input") {
         for (const key in action) state.status.errors.delete(key);
@@ -624,6 +631,16 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       break;
     }
     case "start-payment":
+      // Same stale-total refusal as "offer"/"validate": paths like the address-verification
+      // dialog dispatch corrected address values (which invalidate the surcharge quote) and
+      // then "start-payment" unconditionally — without this check the pipeline would re-enter
+      // and build its payload on a quote that no longer matches the corrected totals. Card
+      // payments only, same reasoning as the invalidation cancel above: other methods never
+      // attach the quote token, and the wallet sheet manages its own mid-payment state.
+      if (state.paymentMethod === "card" && state.surcharges.type !== "loaded") {
+        state.status = { type: "input", errors: new Set() };
+        return;
+      }
       state.status = { type: "starting" };
       break;
     case "acknowledge-email-typo":
