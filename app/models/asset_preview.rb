@@ -9,6 +9,9 @@ class AssetPreview < ApplicationRecord
   RETINA_DISPLAY_WIDTH = (DEFAULT_DISPLAY_WIDTH * 1.5).to_i
 
   after_commit :invalidate_product_cache
+  # Kick off poster-frame extraction right away so the poster is usually
+  # ready by the time anyone views the product page.
+  after_create_commit :enqueue_video_poster_generation
 
   # Update updated_at of product to regenerate the sitemap in RefreshSitemapMonthlyWorker
   belongs_to :link, touch: true, optional: true
@@ -132,40 +135,57 @@ class AssetPreview < ApplicationRecord
   end
 
   # Generating a poster means downloading the video and running ffmpeg, which
-  # can take a while for large files. Two protections keep that work from
-  # hurting product page renders:
-  #   - a hard timeout (same 30s budget as retina_variant above), so a
-  #     pathological video degrades to "no poster" instead of hogging a
-  #     request thread indefinitely;
-  #   - the result is cached both ways — success caches the URL, failure
-  #     caches an empty string so we don't re-download and re-run ffmpeg on
-  #     every page view of a product whose video can't be previewed.
-  # The cache is warmed at upload time: creating a cover renders its JSON
-  # (which calls this method) in the same request, so buyers almost never
-  # pay the generation cost.
+  # can take a while for large files. That work never happens on a web
+  # request thread: GenerateVideoPosterWorker is enqueued when the cover is
+  # created and does the generation in the background, writing the result to
+  # the cache. Renders only ever read the cache.
+  #   - success caches the poster URL;
+  #   - failure caches an empty-string sentinel (for an hour) so the worker's
+  #     retries don't re-download and re-run ffmpeg on a video that can't be
+  #     previewed.
+  # If a render happens before the worker has finished (or for covers created
+  # before this existed), this returns nil — the player shows its plain idle
+  # state — and we enqueue a generation so the poster appears on later views.
   FAILED_POSTER_SENTINEL = ""
   FAILED_POSTER_RETRY_INTERVAL = 1.hour
 
   def video_poster_url
     return nil unless file.attached? && file.video? && file.previewable?
 
-    cache_key = "attachment_#{file.id}_poster_url"
-    cached = Rails.cache.read(cache_key)
+    cached = Rails.cache.read(video_poster_cache_key)
+    if cached.nil?
+      # Nothing generated yet — covers created before poster support existed
+      # land here. Kick off a background generation so the poster shows up on
+      # subsequent views; this view renders without one.
+      GenerateVideoPosterWorker.perform_async(id)
+      return nil
+    end
+
+    cached == FAILED_POSTER_SENTINEL ? nil : cached
+  end
+
+  # Does the actual download + ffmpeg frame extraction. Only called from
+  # GenerateVideoPosterWorker — web requests read the cached result via
+  # video_poster_url above.
+  def generate_video_poster!
+    return nil unless file.attached? && file.video? && file.previewable?
+
+    cached = Rails.cache.read(video_poster_cache_key)
     return (cached == FAILED_POSTER_SENTINEL ? nil : cached) unless cached.nil?
 
     url = Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
       preview = file.preview(resize_to_limit: [retina_width || RETINA_DISPLAY_WIDTH, nil]).processed
       cdn_url_for(preview.url)
     end
-    Rails.cache.write(cache_key, url)
+    Rails.cache.write(video_poster_cache_key, url)
     url
   rescue StandardError => e
     # A missing poster only costs us the nicety of a preview frame, so never
-    # let preview generation break product rendering. Remember the failure
-    # for a while (instead of retrying on every render), and log so we can
-    # spot systemic failures (e.g. ffmpeg misconfigured on a box).
-    Rails.cache.write(cache_key, FAILED_POSTER_SENTINEL, expires_in: FAILED_POSTER_RETRY_INTERVAL)
-    Rails.logger.warn("AssetPreview#video_poster_url failed for asset_preview #{id}: #{e.message}")
+    # let generation raise out of the worker into endless retries. Remember
+    # the failure for a while, and log so we can spot systemic failures
+    # (e.g. ffmpeg misconfigured on a box).
+    Rails.cache.write(video_poster_cache_key, FAILED_POSTER_SENTINEL, expires_in: FAILED_POSTER_RETRY_INTERVAL)
+    Rails.logger.warn("AssetPreview#generate_video_poster! failed for asset_preview #{id}: #{e.message}")
     nil
   end
 
@@ -260,6 +280,16 @@ class AssetPreview < ApplicationRecord
   end
 
   private
+    def video_poster_cache_key
+      "attachment_#{file.id}_poster_url"
+    end
+
+    def enqueue_video_poster_generation
+      return unless file.attached? && file.video?
+
+      GenerateVideoPosterWorker.perform_async(id)
+    end
+
     def set_position
       previous = link.asset_previews.in_order.last
       if previous
