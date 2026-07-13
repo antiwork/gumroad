@@ -38,6 +38,7 @@ describe Admin::PurchasePresenter do
             formatted_shipping_amount: nil,
             formatted_affiliate_credit_amount: nil,
             formatted_total_transaction_amount: purchase.formatted_total_transaction_amount,
+            formatted_presentment_total: nil,
             charge_processor_id: purchase.charge_processor_id&.capitalize,
             stripe_transaction: {
               id: purchase.stripe_transaction_id,
@@ -95,6 +96,42 @@ describe Admin::PurchasePresenter do
             disputes: [],
             stripe_risk_level: nil,
           )
+        end
+      end
+
+      context "when the purchase was charged in the buyer's own currency" do
+        before do
+          create(:purchase_presentment, purchase:, presentment_currency: Currency::CAD, presentment_total_cents: 13_50)
+        end
+
+        it "includes the formatted buyer-currency total" do
+          expect(props[:formatted_presentment_total]).to eq("CAD$13.50")
+        end
+      end
+
+      context "when a refund carries a presentment snapshot" do
+        let!(:refund) do
+          refund = create(:refund, purchase:, total_transaction_cents: 10_00)
+          refund.presentment_currency = Currency::CAD
+          refund.presentment_amount_cents = 14_30
+          refund.save!
+          refund
+        end
+
+        it "includes the buyer-currency and USD amounts for the refund" do
+          refund_props = props[:refunds].first
+          expect(refund_props[:formatted_presentment_amount]).to eq("CAD$14.30")
+          expect(refund_props[:formatted_usd_amount]).to eq("$10")
+        end
+      end
+
+      context "when a refund has no presentment snapshot" do
+        let!(:refund) { create(:refund, purchase:) }
+
+        it "leaves both presentment fields nil so the page renders as before" do
+          refund_props = props[:refunds].first
+          expect(refund_props[:formatted_presentment_amount]).to be_nil
+          expect(refund_props[:formatted_usd_amount]).to be_nil
         end
       end
 
