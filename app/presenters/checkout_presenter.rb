@@ -359,10 +359,9 @@ class CheckoutPresenter
     end
 
     # PayPal stays available to buyers on the presentment-display lane: selecting the
-    # PayPal tab flips the cart display (and the charge) to canonical USD in the
-    # browser, so a presentment quote is never sent with a PayPal order. That display
-    # flip is what makes lifting the earlier server-side suppression safe — see the
-    # payment-method gate in Checkout/buyerCurrencyDisplay.ts.
+    # PayPal tab flips the cart display and charge to canonical USD, and the current browser
+    # bundle withholds the quote token. Charge::CreateService also ignores quote tokens after
+    # resolving a non-Stripe charge so an older bundle cannot strand a PayPal checkout.
     def supports_paypal(product)
       return if Feature.active?(:disable_paypal_sales)
       return if Feature.active?(:disable_nsfw_paypal_connect_sales) && product.rated_as_adult?

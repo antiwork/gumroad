@@ -287,6 +287,61 @@ describe Charge::CreateService, :vcr do
                                 params: { buyer_currency_quote: "locked-token" }).perform
     end
 
+    {
+      "native PayPal" => PaypalChargeProcessor.charge_processor_id,
+      "Braintree PayPal" => BraintreeChargeProcessor.charge_processor_id,
+    }.each do |processor_name, charge_processor_id|
+      it "ignores a stale buyer-currency quote token for a #{processor_name} charge" do
+        seller = create(:user, disable_buyer_local_currency: false)
+        product = create(:product, user: seller, price_cents: 10_00)
+        order = create(:order)
+        merchant_account = create(:merchant_account_paypal, user: seller, charge_processor_id:)
+        chargeable = instance_double(Chargeable, fingerprint: "paypal-fingerprint")
+        purchase = create(:purchase,
+                          link: product,
+                          seller:,
+                          merchant_account:,
+                          purchase_state: "in_progress",
+                          total_transaction_cents: 10_00)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(:buyer_local_currency, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+        expect(Checkout::BuyerCurrencyQuote).not_to receive(:verify!)
+        expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!).with(
+          merchant_account,
+          chargeable,
+          10_00,
+          3_00,
+          instance_of(String),
+          instance_of(String),
+          statement_description: seller.name_or_username,
+          transfer_group: instance_of(String),
+          off_session: false,
+          setup_future_charges: false,
+          metadata: { "purchases{0}" => purchase.external_id },
+          mandate_options: nil
+        ).and_return(nil)
+
+        Charge::CreateService.new(order:,
+                                  seller:,
+                                  merchant_account:,
+                                  chargeable:,
+                                  purchases: [purchase],
+                                  amount_cents: 10_00,
+                                  gumroad_amount_cents: 3_00,
+                                  setup_future_charges: false,
+                                  off_session: false,
+                                  statement_description: seller.name_or_username,
+                                  params: { buyer_currency_quote: "stale-token" }).perform
+
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors[:base]).to be_empty
+      ensure
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+        Feature.deactivate_user(:buyer_local_currency, seller) if seller
+      end
+    end
+
     it "asks the buyer to re-quote and clears snapshots when Stripe invalidates the locked quote" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
