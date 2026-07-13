@@ -65,7 +65,10 @@ module Product::Searchable
 
     index_name "products"
 
-    settings number_of_shards: 1, number_of_replicas: 0, analysis: {
+    # One replica so product search can be served by a second node when the node
+    # holding the primary shard is unavailable or paused in garbage collection.
+    # With zero replicas, a single node's GC pause fails every product search.
+    settings number_of_shards: 1, number_of_replicas: 1, analysis: {
       filter: {
         edge_ngram_filter: {
           type: "edge_ngram",
