@@ -39,6 +39,22 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :presentment_settled_currency
   attr_json_data_accessor :presentment_settled_amount_cents
 
+  # True when this refund carries a buyer-currency (presentment) snapshot. Presentment
+  # refunds record the amount actually returned to the buyer in the currency they paid
+  # with; refunds created before that feature (or for non-presentment purchases) have
+  # neither field and should keep rendering canonical USD amounts only.
+  def presentment_snapshot?
+    presentment_currency.present? && presentment_amount_cents.to_i > 0
+  end
+
+  # The refunded amount in the buyer's own currency, formatted for display
+  # (e.g. "CA$28.83"). Nil when there is no presentment snapshot.
+  def formatted_presentment_amount
+    return nil unless presentment_snapshot?
+
+    MoneyFormatter.format(presentment_amount_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true)
+  end
+
   private
     def assign_product
       self.link_id = purchase.link_id

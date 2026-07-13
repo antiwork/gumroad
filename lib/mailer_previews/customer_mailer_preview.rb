@@ -57,6 +57,24 @@ class CustomerMailerPreview < ActionMailer::Preview
     CustomerMailer.refund("sahil@gumroad.com", Link.last&.id, Purchase.last&.id)
   end
 
+  # Refund email for a buyer-currency (presentment) purchase: the amount is shown in the
+  # currency the buyer paid with, with the canonical USD amount alongside.
+  def refund_presentment
+    refund = Refund.order(id: :desc).limit(500).detect(&:presentment_snapshot?)
+    CustomerMailer.refund("sahil@gumroad.com", refund&.link_id, refund&.purchase_id, refund&.id)
+  end
+
+  def partial_refund
+    purchase = Purchase.last
+    CustomerMailer.partial_refund("sahil@gumroad.com", purchase&.link_id, purchase&.id, (purchase&.total_transaction_cents.to_i / 2), "partially")
+  end
+
+  # Partial refund email for a buyer-currency (presentment) purchase.
+  def partial_refund_presentment
+    refund = Refund.order(id: :desc).limit(500).detect(&:presentment_snapshot?)
+    CustomerMailer.partial_refund("sahil@gumroad.com", refund&.link_id, refund&.purchase_id, refund&.amount_cents, "partially", refund&.id)
+  end
+
   def receipt_subscription_original_charge
     CustomerMailer.receipt(Purchase.is_original_subscription_purchase.last&.id)
   end

@@ -101,9 +101,15 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
-  def refund(email, link_id, purchase_id)
+  def refund(email, link_id, purchase_id, refund_id = nil)
     @product = Link.find(link_id)
     @purchase = purchase_id ? Purchase.find(purchase_id) : nil
+    # When the refund carries a buyer-currency (presentment) snapshot, the email leads
+    # with the amount in the currency the buyer actually paid — that's the number that
+    # matches their card statement. refund_id is optional so emails already queued
+    # before this parameter existed still deliver.
+    refund = refund_id ? Refund.find_by(id: refund_id) : nil
+    @formatted_presentment_refund_amount = refund&.formatted_presentment_amount if refund&.purchase_id == @purchase&.id
     mail(
       to: email,
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
@@ -113,11 +119,16 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
-  def partial_refund(email, link_id, purchase_id, refund_amount_cents_usd, refund_type)
+  def partial_refund(email, link_id, purchase_id, refund_amount_cents_usd, refund_type, refund_id = nil)
     @product = Link.find(link_id)
     @purchase = purchase_id ? Purchase.find(purchase_id) : nil
     amount_cents = usd_cents_to_currency(@product.price_currency_type, refund_amount_cents_usd, @purchase.rate_converted_to_usd)
     @formatted_refund_amount = formatted_price(@product.price_currency_type, amount_cents)
+    # Same idea as #refund: prefer the buyer-currency amount from the refund's
+    # presentment snapshot when one exists. refund_id is optional for backward
+    # compatibility with already-queued jobs.
+    refund = refund_id ? Refund.find_by(id: refund_id) : nil
+    @formatted_presentment_refund_amount = refund&.formatted_presentment_amount if refund&.purchase_id == @purchase&.id
     @refund_type = refund_type
     mail(
       to: email,
