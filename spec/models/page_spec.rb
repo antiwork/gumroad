@@ -100,6 +100,27 @@ describe Page do
       it "numbers the slug when it collides with a reserved slug" do
         expect(described_class.generate_slug_for(user, "Posts")).to eq("posts-2")
       end
+
+      it "truncates long titles so the slug fits within the length limit" do
+        long_title = (["word"] * 40).join(" ") # 199 characters — valid title, but slugs to ~199
+        slug = described_class.generate_slug_for(user, long_title)
+
+        expect(slug.length).to be <= Page::MAX_SLUG_LENGTH
+        expect(slug).not_to end_with("-")
+        expect(described_class.new(pageable: user, slug:, title: long_title, content: "<p>Hi</p>")).to be_valid
+      end
+
+      it "keeps numbered candidates within the length limit when the base uses the full length" do
+        long_title = (["word"] * 40).join(" ")
+        first_slug = described_class.generate_slug_for(user, long_title)
+        described_class.create!(pageable: user, slug: first_slug, title: long_title, content: "<p>Hi</p>")
+
+        second_slug = described_class.generate_slug_for(user, long_title)
+
+        expect(second_slug.length).to be <= Page::MAX_SLUG_LENGTH
+        expect(second_slug).to end_with("-2")
+        expect(second_slug).not_to eq(first_slug)
+      end
     end
 
     it "sanitizes rich text content down to editor-supported markup" do

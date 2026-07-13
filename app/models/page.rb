@@ -71,13 +71,22 @@ class Page < ApplicationRecord
   # API so both create paths follow the same rules: parameterize the title,
   # fall back to "page" when the title has no URL-safe characters, and append
   # a number when the slug is already taken (or reserved) for this owner.
+  #
+  # Titles can be up to MAX_TITLE_LENGTH (255) characters while slugs max out
+  # at MAX_SLUG_LENGTH (100), so the base is truncated before any collision
+  # checks — otherwise a long-but-valid title would generate a slug the length
+  # validation rejects and the create would fail instead of succeeding.
   def self.generate_slug_for(owner, title)
     base = title.to_s.parameterize
     base = "page" if base.blank?
+    base = truncate_slug(base, MAX_SLUG_LENGTH)
     return base unless slug_taken_for?(owner, base)
 
     (2..).each do |n|
-      candidate = "#{base}-#{n}"
+      suffix = "-#{n}"
+      # Re-truncate so the numbered candidate also fits within the limit even
+      # when the base already uses the full length.
+      candidate = truncate_slug(base, MAX_SLUG_LENGTH - suffix.length) + suffix
       return candidate unless slug_taken_for?(owner, candidate)
     end
   end
@@ -85,6 +94,14 @@ class Page < ApplicationRecord
   def self.slug_taken_for?(owner, slug)
     RESERVED_SLUGS.include?(slug) || owner.pages.exists?(slug:)
   end
+
+  # Cuts a slug down to `max` characters without leaving a trailing hyphen
+  # (the slug format validation rejects trailing hyphens, and a cut can land
+  # in the middle of a word boundary like "my-long-...-").
+  def self.truncate_slug(slug, max)
+    slug[0, max].sub(/-+\z/, "")
+  end
+  private_class_method :truncate_slug
 
   def to_param
     slug
