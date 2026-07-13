@@ -3,7 +3,10 @@
 module User::PingNotification
   def send_test_ping(url)
     latest_sale = sales.last
-    return nil if latest_sale.blank?
+    # Distinct sentinel rather than nil: HTTParty::Response overrides #nil? to
+    # return true for empty-bodied responses, so callers must never use nil/truthiness
+    # checks to distinguish "no sales" from a real response (see TestPingsController).
+    return :no_sales if latest_sale.blank?
 
     URI.parse(url) # TestPingsController.create catches URI::InvalidURIError
 

@@ -11,7 +11,11 @@ class TestPingsController < Sellers::BaseController
 
     response = current_seller.send_test_ping params[:url]
 
-    if response.nil?
+    # send_test_ping returns the :no_sales sentinel (never nil) when there's nothing
+    # to ping with. Do NOT test the response with nil?/truthiness: HTTParty::Response
+    # overrides #nil? to return true for empty-bodied responses, which would misroute
+    # a real 200-or-403-with-empty-body here.
+    if response == :no_sales
       render json: { success: true, message: "There are no sales on your account to test with. Please make a test purchase and try again." }
     elsif response.success?
       render json: { success: true, message: "Your last sale's data has been sent to your Ping URL. Your endpoint responded with HTTP #{response.code}." }
