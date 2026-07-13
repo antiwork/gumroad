@@ -1579,7 +1579,10 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1", from: "Day")
         select("January", from: "Month")
         select("1980", from: "Year")
-        fill_in("NRIC number / FIN", with: "000000000")
+        # Must be a real NRIC/FIN shape (letter + 7 digits + letter) — the save path now
+        # rejects letterless values like "000000000" so sellers can't get stuck in a
+        # Stripe verification loop with an ID Stripe will never match.
+        fill_in("NRIC number / FIN", with: "S1234567D")
         select("India", from: "Nationality")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
