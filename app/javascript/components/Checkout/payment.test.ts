@@ -834,6 +834,17 @@ describe("reduceCheckoutState", () => {
       expect(next.surcharges).toEqual({ type: "pending" });
     });
 
+    // The server derives the US taxable state and the TaxJar destination zip from the postal
+    // code, and the purchase submits the current zip — so ANY US zip edit (not only a completed
+    // 5-digit one) makes the loaded quote stale relative to what would be charged.
+    it("any US zip edit flips loaded surcharges to pending", () => {
+      const partial = reduceCheckoutState(state({ zipCode: "10001" }), { type: "set-value", zipCode: "1000" });
+      expect(partial.surcharges).toEqual({ type: "pending" });
+
+      const cleared = reduceCheckoutState(state({ zipCode: "10001" }), { type: "set-value", zipCode: "" });
+      expect(cleared.surcharges).toEqual({ type: "pending" });
+    });
+
     it("leaves loaded surcharges alone for changes the quote does not depend on", () => {
       const initial = state();
       // Non-US zip and non-CA state edits don't feed the server tax calculation.

@@ -561,10 +561,12 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
     case "set-value":
       if (
         ("country" in action && action.country !== state.country) ||
-        ("zipCode" in action &&
-          action.zipCode !== state.zipCode &&
-          state.country === "US" &&
-          action.zipCode?.length === 5) ||
+        // Any US zip edit invalidates: the server derives the taxable state and the TaxJar
+        // destination from the postal code whenever the country is US, and the purchase payload
+        // submits the current zip — so even a partial edit (or clearing the field) leaves the
+        // loaded quote stale relative to what will be charged. The 300ms refetch debounce
+        // already absorbs individual keystrokes.
+        ("zipCode" in action && action.zipCode !== state.zipCode && state.country === "US") ||
         ("state" in action && action.state !== state.state && state.country === "CA") ||
         ("vatId" in action && action.vatId !== state.vatId) ||
         ("gift" in action && action.gift?.type !== state.gift?.type) ||
