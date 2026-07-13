@@ -32,7 +32,7 @@ class AssetPreview < ApplicationRecord
   def as_json(*)
     { url:,
       original_url: url(style: :original),
-      thumbnail: oembed_thumbnail_url,
+      thumbnail: thumbnail_url,
       id: guid,
       type: display_type,
       filetype:,
@@ -115,6 +115,35 @@ class AssetPreview < ApplicationRecord
     return nil unless safe_url?(url)
 
     url
+  end
+
+  # A still image to show for this cover before playback starts.
+  # For embedded players (YouTube/Vimeo) this is the thumbnail the platform
+  # provides via oEmbed. For video files uploaded directly to Gumroad we ask
+  # ActiveStorage for a preview — a frame ffmpeg extracts from the video — so
+  # the product page can show that frame instead of a black rectangle while
+  # the player is idle. Returns nil for images (they don't need a poster) and
+  # when no preview can be generated (e.g. ffmpeg missing or a corrupt file);
+  # the player then falls back to the old black idle state.
+  def thumbnail_url
+    return oembed_thumbnail_url if oembed
+
+    video_poster_url
+  end
+
+  def video_poster_url
+    return nil unless file.attached? && file.video? && file.previewable?
+
+    Rails.cache.fetch("attachment_#{file.id}_poster_url") do
+      preview = file.preview(resize_to_limit: [retina_width || RETINA_DISPLAY_WIDTH, nil]).processed
+      cdn_url_for(preview.url)
+    end
+  rescue StandardError => e
+    # A missing poster only costs us the nicety of a preview frame, so never
+    # let preview generation break product rendering. Log so we can spot
+    # systemic failures (e.g. ffmpeg misconfigured on a box).
+    Rails.logger.warn("AssetPreview#video_poster_url failed for asset_preview #{id}: #{e.message}")
+    nil
   end
 
   def oembed_url

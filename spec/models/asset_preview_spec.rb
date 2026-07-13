@@ -363,6 +363,44 @@ describe AssetPreview, :vcr do
     end
   end
 
+  describe "#thumbnail_url" do
+    let(:asset_preview) { build(:asset_preview) }
+
+    it "returns the oembed thumbnail when the cover is an embedded player" do
+      asset_preview.oembed = { "info" => { "thumbnail_url" => "https://example.com/thumb.jpg" } }
+      expect(asset_preview.thumbnail_url).to eq("https://example.com/thumb.jpg")
+    end
+
+    it "returns nil for image covers" do
+      image = create(:asset_preview_jpg)
+      expect(image.thumbnail_url).to be_nil
+    end
+
+    it "returns a poster frame URL for uploaded video covers" do
+      asset_preview = create(:asset_preview_mov)
+      preview = instance_double(ActiveStorage::Preview, url: "https://files.example.com/poster.jpg")
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      allow(asset_preview.file).to receive(:preview).and_return(instance_double(ActiveStorage::Preview, processed: preview))
+
+      expect(asset_preview.thumbnail_url).to eq("https://files.example.com/poster.jpg")
+    end
+
+    it "returns nil instead of raising when poster generation fails" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview.file).to receive(:previewable?).and_return(true)
+      allow(asset_preview.file).to receive(:preview).and_raise(ActiveStorage::UnpreviewableError)
+
+      expect(asset_preview.thumbnail_url).to be_nil
+    end
+
+    it "is exposed as the thumbnail in as_json" do
+      asset_preview = create(:asset_preview_mov)
+      allow(asset_preview).to receive(:video_poster_url).and_return("https://files.example.com/poster.jpg")
+
+      expect(asset_preview.as_json[:thumbnail]).to eq("https://files.example.com/poster.jpg")
+    end
+  end
+
   describe "#oembed_url" do
     let(:asset_preview) { build(:asset_preview) }
 
