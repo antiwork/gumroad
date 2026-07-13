@@ -121,14 +121,11 @@ class OrdersController < ApplicationController
     def skip_recaptcha?
       # TEMP (preview QA only — revert only AFTER QA sign-off, before merge): per-PR preview
       # subdomains score badly with reCAPTCHA Enterprise, blocking both scripted and human
-      # checkout runs. Scoped to Stripe test keys AND per-PR preview hosts (or local
-      # development) — shared staging also runs test keys, so the key check alone would
-      # disable checkout captcha there too.
-      return true if Stripe.api_key.to_s.start_with?("sk_test_") && preview_qa_host?
+      # checkout runs. Scoped the same way as PreviewQaDebugMiddleware: Stripe test keys
+      # AND a per-PR preview app host (or local development). The shared staging site also
+      # runs test keys, so the key check alone would disable reCAPTCHA there — the host
       # check keeps this bypass limited to the throwaway preview apps it exists for.
       # Production runs live keys, so this branch can never activate in production.
-      return true if Stripe.api_key.to_s.start_with?("sk_test_") && preview_qa_host?
-      # checkout there would skip reCAPTCHA. Mirrors the host guard in PreviewQaDebugMiddleware.
       if Stripe.api_key.to_s.start_with?("sk_test_")
         return true if Rails.env.development? ||
           request.host.to_s.end_with?(PreviewQaDebugMiddleware::PREVIEW_HOST_SUFFIX)
