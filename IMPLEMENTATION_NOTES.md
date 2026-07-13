@@ -53,3 +53,11 @@ Branch: `presentment-refund-views` off main (scaffold 613b16b57).
   node_modules); the LSP confirmed no new type errors in the edited component.
 - Test env notes: worktree needed `node_modules` and `public/vite-test` symlinked from
   `~/code/gumroad` (Vite manifest missing otherwise → every mailer spec fails on email.ts).
+- [x] Fail-on-revert verified: with app code reverted to the scaffold commit, the new mailer
+  examples (4) and presenter examples (2) fail; restored code turns them green.
+- [x] Existing callers' specs updated: `spec/models/purchase/purchase_refunds_spec.rb` mailer
+  argument expectations now include the refund id (`an_instance_of(Integer)`); targeted runs of
+  those 2 examples + `purchases_controller_spec.rb:319` green.
+- [x] Rubocop clean on all touched Ruby files. Pushed as 3 commits (…→97205c91f).
+- Not done: vitest component test — the repo has zero *.test.tsx files and no React testing
+  library; admin UI logic is null-gated display covered via presenter specs instead.
