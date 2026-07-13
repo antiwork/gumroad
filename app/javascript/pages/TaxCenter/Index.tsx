@@ -260,7 +260,8 @@ const TaxCenterIndex = () => {
                           CSV report
                         </TableCell>
                         <TableCell colSpan={6} label="Description" hideLabel className="text-muted">
-                          Breakdown of the Stripe transactions behind your {doc.document}, matched to your Gumroad sales and sent to your email.
+                          Breakdown of the Stripe transactions behind your {doc.document}, matched to your Gumroad sales
+                          and sent to your email.
                         </TableCell>
                         <TableCell label="Actions" hideLabel className="text-right">
                           <div className="flex justify-end">
