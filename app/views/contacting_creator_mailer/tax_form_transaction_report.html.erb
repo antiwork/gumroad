@@ -5,5 +5,5 @@
   <% else %>
     <p>We've attached the transaction report for your <%= @year %> 1099-K to this email.</p>
   <% end %>
-  <p>The report lists every charge included in your form's gross amount, matched to the corresponding Gumroad sale. The gross amount includes sales tax collected at checkout, and transactions are grouped into tax years by the date the funds became available rather than the date of the charge.</p>
+  <p>The report lists the Stripe transactions behind your form, matched to the corresponding Gumroad sales. Transactions are grouped into tax years by the date the funds became available rather than the date of the charge, which is why late-December sales can appear on the following year's form.</p>
 </div>

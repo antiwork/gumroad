@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe TaxFormTransactionReportWorker do
+describe TaxFormTransactionReportJob do
   let(:seller) { create(:user) }
   let(:year) { 2025 }
   let(:stripe_account_id) { "acct_1234567890" }
@@ -35,6 +35,18 @@ describe TaxFormTransactionReportWorker do
     before do
       tax_form.stripe_account_id = "acct_someone_else"
       tax_form.save!
+    end
+
+    it "does nothing" do
+      expect(ContactingCreatorMailer).not_to receive(:tax_form_transaction_report)
+
+      described_class.new.perform(seller.id, year)
+    end
+  end
+
+  context "when the seller's matching merchant account has been deleted" do
+    before do
+      merchant_account.mark_deleted!
     end
 
     it "does nothing" do

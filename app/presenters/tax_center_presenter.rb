@@ -74,7 +74,7 @@ class TaxCenterPresenter
       return false unless tax_form.tax_form_type == "us_1099_k"
 
       stripe_account_id = tax_form.stripe_account_id || seller.stripe_account&.charge_processor_merchant_id
-      stripe_account_id.present? && seller.merchant_accounts.stripe.exists?(charge_processor_merchant_id: stripe_account_id)
+      stripe_account_id.present? && seller.merchant_accounts.alive.charge_processor_alive.stripe.exists?(charge_processor_merchant_id: stripe_account_id)
     end
 
     def calculate_gross

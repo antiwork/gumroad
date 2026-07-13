@@ -288,7 +288,7 @@ describe TaxCenterController, type: :controller, inertia: true do
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to be(true)
-      expect(TaxFormTransactionReportWorker).to have_enqueued_sidekiq_job(seller.id, year)
+      expect(TaxFormTransactionReportJob).to have_enqueued_sidekiq_job(seller.id, year)
     end
 
     context "when no 1099-K exists for the year" do
@@ -296,7 +296,7 @@ describe TaxCenterController, type: :controller, inertia: true do
         post :request_transaction_report, params: { year: 2020 }
 
         expect(response).to have_http_status(:not_found)
-        expect(TaxFormTransactionReportWorker.jobs).to be_empty
+        expect(TaxFormTransactionReportJob.jobs).to be_empty
       end
     end
 
@@ -311,7 +311,7 @@ describe TaxCenterController, type: :controller, inertia: true do
         post :request_transaction_report, params: { year: }
 
         expect(response).to have_http_status(:not_found)
-        expect(TaxFormTransactionReportWorker.jobs).to be_empty
+        expect(TaxFormTransactionReportJob.jobs).to be_empty
       end
     end
 

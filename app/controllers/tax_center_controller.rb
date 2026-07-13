@@ -65,12 +65,12 @@ class TaxCenterController < Sellers::BaseController
     end
 
     stripe_account_id = tax_form.stripe_account_id || current_seller.stripe_account&.charge_processor_merchant_id
-    if stripe_account_id.blank? || !current_seller.merchant_accounts.stripe.exists?(charge_processor_merchant_id: stripe_account_id)
+    if stripe_account_id.blank? || !current_seller.merchant_accounts.alive.charge_processor_alive.stripe.exists?(charge_processor_merchant_id: stripe_account_id)
       render json: { success: false, error: "Transaction report not available." }, status: :not_found
       return
     end
 
-    TaxFormTransactionReportWorker.perform_async(current_seller.id, year)
+    TaxFormTransactionReportJob.perform_async(current_seller.id, year)
 
     render json: { success: true }
   end

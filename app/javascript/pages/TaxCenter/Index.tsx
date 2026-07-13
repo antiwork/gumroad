@@ -63,8 +63,8 @@ const FAQ_ITEMS: {
         sales tax and VAT collected at checkout, affiliate commissions, and other adjustments, so it won't match the
         amount you were paid. Transactions are also grouped into tax years by the date the funds became available
         (usually a couple of days after the charge), so late-December sales may fall into the next year's form. For a
-        charge-by-charge breakdown that adds up to your form's gross amount, request the "Transaction report" listed
-        under your 1099-K above.{" "}
+        transaction-by-transaction breakdown of your form, request the "Transaction report" listed under your 1099-K
+        above.{" "}
         <a href="/help/article/15-1099s#mismatch" target="_blank" rel="noreferrer">
           Learn more
         </a>
@@ -260,7 +260,7 @@ const TaxCenterIndex = () => {
                           CSV report
                         </TableCell>
                         <TableCell colSpan={6} label="Description" hideLabel className="text-muted">
-                          Charge-level breakdown that adds up to your {doc.document}'s gross amount, sent to your email.
+                          Breakdown of the Stripe transactions behind your {doc.document}, matched to your Gumroad sales and sent to your email.
                         </TableCell>
                         <TableCell label="Actions" hideLabel className="text-right">
                           <div className="flex justify-end">
