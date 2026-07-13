@@ -226,7 +226,9 @@ const AccountDetailsSection = ({
         label: "NRIC number / FIN",
         placeholder: "S1234567A",
         minLength: 9,
-        maxLength: 9,
+        // 11, not 9: the server tolerates spaces/dashes inside a pasted NRIC
+        // ("S 1234567-A"), so the input must not truncate such a paste.
+        maxLength: 11,
         idSuffix: "singapore-id-number",
       },
       AE: {

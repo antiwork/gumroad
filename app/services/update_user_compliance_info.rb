@@ -297,8 +297,11 @@ class UpdateUserComplianceInfo
       return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::SGP.alpha2
       # Sellers sometimes paste the NRIC with spaces or dashes; those are harmless, so ignore
       # them when checking the shape (the submitted value is still stored as entered).
-      return if submitted.gsub(/[\s-]/, "").match?(SINGAPORE_NRIC_FIN_PATTERN)
-      "Your NRIC/FIN must start with a letter and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID."
+      # [[:space:]] instead of \s so Unicode spaces (like the non-breaking space that
+      # often comes along when copying from a PDF or website) are also tolerated,
+      # matching what the browser-side check accepts.
+      return if submitted.gsub(/[[:space:]-]/, "").match?(SINGAPORE_NRIC_FIN_PATTERN)
+      "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID."
     end
 
     def effective_legal_entity_country_code(old_compliance_info)

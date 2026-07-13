@@ -698,7 +698,7 @@ export default function PaymentsPage() {
       markFieldInvalid("individual_tax_id");
       setClientErrorMessage({
         message:
-          "Your NRIC/FIN must start with a letter and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.",
+          "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.",
       });
     }
     if (form.data.user.is_business) {

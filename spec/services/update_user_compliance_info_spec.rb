@@ -598,7 +598,7 @@ describe UpdateUserComplianceInfo do
         end.not_to change { UserComplianceInfo.count }
 
         expect(result[:success]).to be false
-        expect(result[:error_message]).to eq("Your NRIC/FIN must start with a letter and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.")
+        expect(result[:error_message]).to eq("Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.")
         expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
       end
 
@@ -615,7 +615,7 @@ describe UpdateUserComplianceInfo do
         result = described_class.new(compliance_params: params, user:).process
 
         expect(result[:success]).to be false
-        expect(result[:error_message]).to eq("Your NRIC/FIN must start with a letter and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.")
+        expect(result[:error_message]).to eq("Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.")
       end
 
       it "accepts a well-formed NRIC and stores it exactly as entered" do
@@ -653,9 +653,11 @@ describe UpdateUserComplianceInfo do
       it "tolerates spaces and dashes when checking the shape" do
         user = create_singapore_individual_user(individual_tax_id: "S0000000A")
 
+        # Includes a non-breaking space (common when the ID is copied from a PDF
+        # or website) alongside a regular space and a dash.
         params = ActionController::Parameters.new(
           is_business: false,
-          individual_tax_id: "S 1234567-A",
+          individual_tax_id: "S 1234567-\u00A0A",
         )
 
         expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
@@ -665,18 +667,23 @@ describe UpdateUserComplianceInfo do
         expect(result[:success]).to be true
       end
 
-      it "ignores a masked NRIC resubmission" do
+      it "ignores a masked NRIC resubmission while saving other edited fields" do
         user = create_singapore_individual_user(individual_tax_id: "S1234567A")
 
+        # The city differs from the stored record so the save path actually runs —
+        # otherwise the service early-returns "nothing changed" before the NRIC
+        # guard executes and this spec would pass even if the masked-value filter
+        # were removed.
         params = ActionController::Parameters.new(
           is_business: false,
           individual_tax_id: "•••••567A",
-          city: "Singapore",
+          city: "Bukit Timah",
         )
 
         result = described_class.new(compliance_params: params, user:).process
 
         expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.city).to eq("Bukit Timah")
       end
     end
 
