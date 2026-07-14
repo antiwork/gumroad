@@ -37,7 +37,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     it "calls the tax endpoint for a real zip code that doesn't show in the enterprise zip codes database" do
       visit("/l/#{@product.unique_permalink}")
       add_to_cart(@product)
-      check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+      check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }) do
         expect(page).to have_select("State", selected: "AZ")
         set_zip_code_via_js("85144")
         expect(page).to have_text("Sales tax", normalize_ws: true)
@@ -78,7 +78,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         visit("/l/#{@product.unique_permalink}")
         add_to_cart(@product, option: "type 1")
-        check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+        check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }) do
           set_zip_code_via_js("85144")
           expect(page).to have_text("Total US$555.16", normalize_ws: true)
         end
@@ -110,7 +110,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         visit "/l/#{@product.unique_permalink}/taxoffer"
         add_to_cart(@product, offer_code:)
-        check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+        check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }) do
           set_zip_code_via_js("85144")
           expect(page).to have_text("Total US$442.80", normalize_ws: true)
         end
@@ -156,7 +156,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("Total US$658.85", normalize_ws: true)
 
         click_on "Pay"
-        confirm_shipping_address_if_prompted
         expect(page).to have_alert(text: "Your purchase was successful!")
 
         purchase = Purchase.last
@@ -200,13 +199,13 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "calculates and charges sales tax when WI customer makes purchase of a physical product", :mock_easypost do
+    it "calculates and charges sales tax when WI customer makes purchase of a physical product" do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
 
       add_to_cart(product)
-      check_out(product, address: { street: "1 S Pinckney St", state: "WI", city: "Madison", zip_code: "53703" }, should_verify_address: true) do
+      check_out(product, address: { street: "1 S Pinckney St", state: "WI", city: "Madison", zip_code: "53703" }) do
         set_zip_code_via_js("53703")
         expect(page).to have_text("Total US$105.50", normalize_ws: true)
       end
@@ -238,13 +237,13 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "calculates and charges sales tax when WA customer makes purchase of a physical product", :mock_easypost do
+    it "calculates and charges sales tax when WA customer makes purchase of a physical product" do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
 
       add_to_cart(product)
-      check_out(product, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" }, should_verify_address: true) do
+      check_out(product, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" }) do
         set_zip_code_via_js("98121")
         expect(page).to have_text("Total US$110.35", normalize_ws: true)
       end
@@ -405,7 +404,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "charges VAT for a physical product", :mock_easypost do
+    it "charges VAT for a physical product" do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
@@ -421,7 +420,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "displays the correct VAT and charges the right amount", :mock_easypost do
+    it "displays the correct VAT and charges the right amount" do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
@@ -492,7 +491,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to(have_text("51824753556"))
     end
 
-    it "applies GST for physical products", :mock_easypost do
+    it "applies GST for physical products" do
       @product = create(:physical_product, price_cents: 100_00)
 
       create(:user_compliance_info_empty, user: @product.user,
@@ -515,7 +514,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "applies GST for physical products", :mock_easypost do
+    it "applies GST for physical products" do
       product = create(:physical_product, price_cents: 100_00)
 
       create(:user_compliance_info_empty, user: product.user,
@@ -605,7 +604,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       end
     end
 
-    it "applies GST for physical products", :mock_easypost do
+    it "applies GST for physical products" do
       travel_to(Time.find_zone("UTC").local(2023, 4, 1)) do
         @product = create(:physical_product, price_cents: 100_00)
 
@@ -630,7 +629,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       end
     end
 
-    it "applies GST for physical products", :mock_easypost do
+    it "applies GST for physical products" do
       travel_to(Time.find_zone("UTC").local(2023, 4, 1)) do
         product = create(:physical_product, price_cents: 100_00)
 
@@ -1361,14 +1360,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Manama", zip_code: "12345", state: "BH", country: "BH" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Manama", zip_code: "12345", state: "BH", country: "BH" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -1452,14 +1451,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Minsk", zip_code: "220000", state: "BY", country: "BY" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Minsk", zip_code: "220000", state: "BY", country: "BY" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -1545,14 +1544,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Santiago", zip_code: "7500000", state: "CL", country: "CL" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Santiago", zip_code: "7500000", state: "CL", country: "CL" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -1638,7 +1637,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -1731,14 +1730,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "San José", zip_code: "110111", state: "CR", country: "CR" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "San José", zip_code: "110111", state: "CR", country: "CR" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -1824,14 +1823,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Quito", zip_code: "170101", state: "EC", country: "EC" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Quito", zip_code: "170101", state: "EC", country: "EC" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -1917,14 +1916,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Cairo", zip_code: "11511", state: "CA", country: "EG" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Cairo", zip_code: "11511", state: "CA", country: "EG" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2010,7 +2009,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -2103,14 +2102,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Almaty", zip_code: "050000", state: "AL", country: "KZ" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Almaty", zip_code: "050000", state: "AL", country: "KZ" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2196,14 +2195,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Nairobi", zip_code: "00100", state: "NA", country: "KE" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Nairobi", zip_code: "00100", state: "NA", country: "KE" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2289,14 +2288,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Kuala Lumpur", zip_code: "50000", state: "WP", country: "MY" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Kuala Lumpur", zip_code: "50000", state: "WP", country: "MY" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2414,14 +2413,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Chisinau", zip_code: "MD-2001", state: "Chisinau", country: "MD" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Chisinau", zip_code: "MD-2001", state: "Chisinau", country: "MD" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2507,14 +2506,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Rabat", zip_code: "10000", state: "Rabat", country: "MA" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Rabat", zip_code: "10000", state: "Rabat", country: "MA" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2600,14 +2599,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Lagos", zip_code: "10000", state: "Lagos", country: "NG" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Lagos", zip_code: "10000", state: "Lagos", country: "NG" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2691,14 +2690,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Muscat", zip_code: "10000", state: "Muscat", country: "OM" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Muscat", zip_code: "10000", state: "Muscat", country: "OM" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2780,14 +2779,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Moscow", zip_code: "10000", state: "Moscow", country: "RU" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Moscow", zip_code: "10000", state: "Moscow", country: "RU" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2873,14 +2872,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Riyadh", zip_code: "10000", state: "Riyadh", country: "SA" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Riyadh", zip_code: "10000", state: "Riyadh", country: "SA" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2966,14 +2965,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Belgrade", zip_code: "10000", state: "Belgrade", country: "RS" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Belgrade", zip_code: "10000", state: "Belgrade", country: "RS" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -3059,7 +3058,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
@@ -3152,14 +3151,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Dar es Salaam", zip_code: "10000", state: "Dar es Salaam", country: "TZ" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Dar es Salaam", zip_code: "10000", state: "Dar es Salaam", country: "TZ" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -3243,14 +3242,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Bangkok", zip_code: "10000", state: "Bangkok", country: "TH" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Bangkok", zip_code: "10000", state: "Bangkok", country: "TH" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -3336,14 +3335,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Istanbul", zip_code: "34000", state: "Istanbul", country: "TR" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Istanbul", zip_code: "34000", state: "Istanbul", country: "TR" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -3429,14 +3428,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Kyiv", zip_code: "01001", state: "Kyiv", country: "UA" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Kyiv", zip_code: "01001", state: "Kyiv", country: "UA" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -3522,14 +3521,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Tashkent", zip_code: "100000", state: "Tashkent", country: "UZ" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Tashkent", zip_code: "100000", state: "Tashkent", country: "UZ" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -3615,14 +3614,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
-      it "does not apply tax for physical products", :mock_easypost do
+      it "does not apply tax for physical products" do
         physical_product = create(:physical_product, price_cents: 100_00)
 
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Hanoi", zip_code: "100000", state: "Hanoi", country: "VN" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
+        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Hanoi", zip_code: "100000", state: "Hanoi", country: "VN" }, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -3730,7 +3729,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         page.execute_script("document.activeElement.blur()")
         expect(page).to have_text("Total US$112", normalize_ws: true)
 
-        check_out(product, address: { street: "568 Beatty St", city: "Vancouver", state: "BC", zip_code: "V6B 2L3" }, should_verify_address: true) do
+        check_out(product, address: { street: "568 Beatty St", city: "Vancouver", state: "BC", zip_code: "V6B 2L3" }) do
           expect(page).to have_text("Total US$112", normalize_ws: true)
         end
 

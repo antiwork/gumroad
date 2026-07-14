@@ -222,8 +222,6 @@ Rails.application.routes.draw do
       resources :setup_intents, only: :create
     end
 
-    post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address"
-
     # discover/autocomplete_search
     delete "/discover_search_autocomplete", to: "discover/search_autocomplete#delete_search_suggestion"
 
@@ -1037,7 +1035,6 @@ Rails.application.routes.draw do
     end
 
     # shipments
-    post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address
     post "/shipments/:purchase_id/mark_as_shipped", to: "shipments#mark_as_shipped", as: :mark_as_shipped
 
     # balances
