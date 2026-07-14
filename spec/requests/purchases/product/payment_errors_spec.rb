@@ -98,11 +98,6 @@ describe("Purchase from a product page", type: :system, js: true) do
   it "focuses the correct fields with errors" do
     product = create(:physical_product, user: @creator)
 
-    # Pass-through the params to bypass address verification
-    allow_any_instance_of(ShipmentsController).to receive(:verify_shipping_address) do |controller|
-      controller.render json: { success: true, **controller.params.permit! }
-    end
-
     visit product.long_url
     add_to_cart(product)
 
