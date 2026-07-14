@@ -185,7 +185,7 @@ class Purchase::HandleFailedRefundService
     # for those the retention was a pure ledger debit — no Stripe transfer to unwind.
     def reverse_fee_retention_credits!
       retention_credits = Credit.where(fee_retention_refund: refund).to_a
-      reversals, retentions = retention_credits.partition { |credit| credit.failed_refund_fee_reversal.present? }
+      reversals, retentions = retention_credits.partition { |credit| credit.failed_refund_id.present? }
       already_reversed_amounts = reversals.map(&:amount_cents).tally
       retentions.each do |retention_credit|
         offset_amount = -retention_credit.amount_cents

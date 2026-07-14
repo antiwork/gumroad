@@ -766,8 +766,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000000) do
     t.bigint "backtax_agreement_id"
     t.text "json_data"
     t.text "reason"
+    t.bigint "failed_refund_id"
     t.index ["balance_id"], name: "index_credits_on_balance_id"
     t.index ["dispute_id"], name: "index_credits_on_dispute_id"
+    t.index ["failed_refund_id"], name: "index_credits_on_failed_refund_id"
     t.index ["user_id", "created_at", "id"], name: "index_credits_on_user_id_and_created_at_and_id"
   end
 

@@ -60,7 +60,7 @@ class NotifyFailedRefundExceptionJob
 
       summary = "Balance debits recorded on the refund were reversed automatically."
       # The retained processor fee is debited through a separate Credit; the automatic
-      # reversal gives it back with an offset credit (marked failed_refund_fee_reversal).
+      # reversal gives it back with an offset credit linked via failed_refund.
       # Legacy rows handled before that existed may still be short the fee, so report
       # what actually happened for THIS refund instead of assuming.
       retained_fee_cents = refund.retained_fee_cents.to_i

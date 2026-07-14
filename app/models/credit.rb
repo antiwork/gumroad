@@ -13,6 +13,13 @@ class Credit < ApplicationRecord
   belongs_to :refund, optional: true
   belongs_to :financing_paydown_purchase, class_name: "Purchase", optional: true
   belongs_to :fee_retention_refund, class_name: "Refund", optional: true
+  # Set on a credit that gives back a previously retained refund fee because the refund
+  # itself later FAILED (the buyer's bank returned an async bank-transfer refund after
+  # Stripe had accepted it). Distinguishes these give-backs from the original retention
+  # debits — payout exports and finance reports must not present them as new refund
+  # debits or unexplained credits. Such a credit carries BOTH associations: the
+  # fee_retention_refund it pairs with and this marker of why it exists.
+  belongs_to :failed_refund, class_name: "Refund", optional: true
   belongs_to :backtax_agreement, optional: true
 
   has_one :balance_transaction
@@ -24,14 +31,8 @@ class Credit < ApplicationRecord
   validate :validate_associated_entity
 
   attr_json_data_accessor :stripe_loan_paydown_id
-  # Marks a credit that gives back a previously retained refund fee because the refund
-  # itself later FAILED (the buyer's bank returned an async bank-transfer refund after
-  # Stripe had accepted it). Distinguishes these offsets from the original retention
-  # debits — payout exports and finance reports must not present them as new refund
-  # debits or unexplained credits.
-  attr_json_data_accessor :failed_refund_fee_reversal
 
-  scope :failed_refund_fee_reversals, -> { where("json_data->>'$.failed_refund_fee_reversal' = 'true'") }
+  scope :failed_refund_fee_reversals, -> { where.not(failed_refund_id: nil) }
 
   def self.create_for_credit!(user:, amount_cents:, crediting_user:, reason: nil)
     credit = new
@@ -396,16 +397,17 @@ class Credit < ApplicationRecord
   # retention above there is never a Stripe transfer to unwind here; the retention
   # for Gumroad-held funds was a pure ledger debit.
   #
-  # The offset links to the same fee_retention_refund (so payout exports can pair
-  # the two rows) and is marked failed_refund_fee_reversal so consumers can tell
-  # the give-back from the original retention without relying on its sign.
+  # The give-back links to the same fee_retention_refund as the original retention (so
+  # payout exports can pair the two rows) and sets failed_refund to record why it
+  # exists, so consumers can tell the give-back from the original retention without
+  # relying on its sign.
   def self.create_for_failed_refund_fee_reversal!(refund:, retention_credit:)
     credit = new
     credit.user = retention_credit.user
     credit.amount_cents = -retention_credit.amount_cents
     credit.merchant_account = retention_credit.merchant_account
     credit.fee_retention_refund = refund
-    credit.failed_refund_fee_reversal = true
+    credit.failed_refund = refund
     credit.save!
 
     balance_transaction_amount = BalanceTransaction::Amount.new(

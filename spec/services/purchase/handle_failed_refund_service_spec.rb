@@ -195,9 +195,10 @@ describe Purchase::HandleFailedRefundService do
 
         reversal = Credit.where(fee_retention_refund: refund).failed_refund_fee_reversals.sole
         expect(reversal.amount_cents).to eq(fee_cents)
+        expect(reversal.failed_refund).to eq(refund)
         expect(reversal.user).to eq(retention_credit.user)
         expect(reversal.merchant_account).to eq(retention_credit.merchant_account)
-        expect(retention_credit.reload.failed_refund_fee_reversal).to be_falsey
+        expect(retention_credit.reload.failed_refund_id).to be_nil
 
         offset_transaction = reversal.balance_transaction
         expect(offset_transaction.issued_amount_gross_cents).to eq(fee_cents)
