@@ -43,8 +43,15 @@ class StripeChargeIntent < ChargeIntent
     end
 
     def validate_next_action
-      if payment_intent.status == StripeIntentStatus::REQUIRES_ACTION && payment_intent.next_action.type != StripeIntentStatus::ACTION_TYPE_USE_SDK
-        ErrorNotifier.notify "Stripe charge intent #{id} requires an unsupported action: #{payment_intent.next_action.type}"
-      end
+      return unless payment_intent.status == StripeIntentStatus::REQUIRES_ACTION
+
+      next_action_type = payment_intent.next_action.type
+      return if next_action_type == StripeIntentStatus::ACTION_TYPE_USE_SDK
+      # Actions like Cash App Pay's QR code are handled by Stripe.js in the buyer's browser,
+      # so retrieving an intent that still carries one (e.g. the buyer came back to the
+      # checkout return page without completing the QR flow) is expected, not an error.
+      return if next_action_type.in?(StripeIntentStatus::CLIENT_HANDLED_ACTION_TYPES)
+
+      ErrorNotifier.notify "Stripe charge intent #{id} requires an unsupported action: #{next_action_type}"
     end
 end
