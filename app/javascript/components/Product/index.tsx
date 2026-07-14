@@ -783,10 +783,14 @@ const ExistingPurchaseCard = ({
                 {isBundle
                   ? purchase.is_gift_receiver_purchase
                     ? "You've received this bundle as a gift"
-                    : "You've purchased this bundle"
+                    : purchase.was_paid
+                      ? "You've purchased this bundle"
+                      : "You already own this bundle"
                   : purchase.is_gift_receiver_purchase
                     ? "You've received this product as a gift"
-                    : "You've purchased this product"}
+                    : purchase.was_paid
+                      ? "You've purchased this product"
+                      : "You already own this product"}
               </h3>
               {viewContentButton}
             </li>
