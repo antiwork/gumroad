@@ -35,15 +35,24 @@ class AudienceMember < ApplicationRecord
     params
   end
 
-  def self.filter(seller_id:, params: {}, with_ids: false)
+  # Filters a seller's audience by the given params (see FILTER_PARAM_KEYS).
+  #
+  # ids: optionally restricts the filter to a known set of audience_members ids. Every
+  # subquery the filter builds becomes primary-key-bound, so re-checking a previously
+  # resolved member list against the CURRENT filter criteria is cheap even when running
+  # the unrestricted filter over the whole audience would be slow. Used by blast retries
+  # to revalidate their snapshotted recipient lists.
+  def self.filter(seller_id:, params: {}, with_ids: false, ids: nil)
     params = normalize_filter_params(params)
+    base_scope = where(seller_id:)
+    base_scope = base_scope.where(id: ids) if ids
 
     if params[:type]
-      types_sql = where(:seller_id => seller_id, params[:type] => true).to_sql
+      types_sql = base_scope.where(params[:type] => true).to_sql
     end
 
     if params[:bought_product_ids]
-      products_relation = where(seller_id:)
+      products_relation = base_scope
       json_contains = "JSON_CONTAINS(details->'$.purchases[*].product_id', ?)"
       products_where_sql = ([json_contains] * params[:bought_product_ids].size).join(" OR ")
       products_relation = products_relation.where(products_where_sql, *params[:bought_product_ids])
@@ -51,7 +60,7 @@ class AudienceMember < ApplicationRecord
     end
 
     if params[:bought_variant_ids]
-      variants_relation = where(seller_id:)
+      variants_relation = base_scope
       json_contains = "JSON_CONTAINS(details->'$.purchases[*].variant_ids[*]', ?)"
       variants_where_sql = ([json_contains] * params[:bought_variant_ids].size).join(" OR ")
       variants_relation = variants_relation.where(variants_where_sql, *params[:bought_variant_ids])
@@ -61,7 +70,7 @@ class AudienceMember < ApplicationRecord
     bought_products_union_variants_sql = [products_sql, variants_sql].compact.join(" UNION ").presence
 
     if params[:not_bought_product_ids]
-      products_relation = where(seller_id:)
+      products_relation = base_scope
       json_contains = "JSON_CONTAINS(details->'$.purchases[*].product_id', ?)"
       products_where_sql = (["(#{json_contains} IS NULL OR #{json_contains} = 0)"] * params[:not_bought_product_ids].size).join(" AND ")
       products_relation = products_relation.where(products_where_sql, *(params[:not_bought_product_ids].zip(params[:not_bought_product_ids]).flatten))
@@ -69,7 +78,7 @@ class AudienceMember < ApplicationRecord
     end
 
     if params[:not_bought_variant_ids]
-      variants_relation = where(seller_id:)
+      variants_relation = base_scope
       json_contains = "JSON_CONTAINS(details->'$.purchases[*].variant_ids[*]', ?)"
       variants_where_sql = (["(#{json_contains} IS NULL OR #{json_contains} = 0)"] * params[:not_bought_variant_ids].size).join(" AND ")
       variants_relation = variants_relation.where(variants_where_sql, *(params[:not_bought_variant_ids].zip(params[:not_bought_variant_ids]).flatten))
@@ -77,14 +86,14 @@ class AudienceMember < ApplicationRecord
     end
 
     if params[:paid_more_than_cents] || params[:paid_less_than_cents]
-      prices_relation = where(seller_id:)
+      prices_relation = base_scope
       prices_relation = prices_relation.where("max_paid_cents > ?", params[:paid_more_than_cents]) if params[:paid_more_than_cents]
       prices_relation = prices_relation.where("min_paid_cents < ?", params[:paid_less_than_cents]) if params[:paid_less_than_cents]
       prices_sql = prices_relation.to_sql
     end
 
     if params[:created_after] || params[:created_before]
-      created_at_relation = where(seller_id:)
+      created_at_relation = base_scope
       min_created_at_column, max_created_at_column = \
         case params[:type]
         when "customer" then [:min_purchase_created_at, :max_purchase_created_at]
@@ -98,12 +107,12 @@ class AudienceMember < ApplicationRecord
     end
 
     if params[:bought_from]
-      country_relation = where(seller_id:).where("JSON_CONTAINS(details->'$.purchases[*].country', ?)", %("#{params[:bought_from]}"))
+      country_relation = base_scope.where("JSON_CONTAINS(details->'$.purchases[*].country', ?)", %("#{params[:bought_from]}"))
       country_sql = country_relation.to_sql
     end
 
     if params[:affiliate_product_ids]
-      affiliates_relation = where(seller_id:)
+      affiliates_relation = base_scope
       json_contains = "JSON_CONTAINS(details->'$.affiliates[*].product_id', ?)"
       affiliates_where_sql = ([json_contains] * params[:affiliate_product_ids].size).join(" OR ")
       affiliates_relation = affiliates_relation.where(affiliates_where_sql, *params[:affiliate_product_ids])
@@ -126,7 +135,7 @@ class AudienceMember < ApplicationRecord
     filter_purchases_when ||= (params[:created_after] && params[:created_before])
     filter_purchases_when ||= params[:active_customers_only] || params[:minimum_license_uses]
     if filter_purchases_when || with_ids
-      json_filter = where(seller_id:)
+      json_filter = base_scope
       json_table = <<~SQL.squish
         JSON_TABLE(details, '$' COLUMNS (
           NESTED PATH '$.follower' COLUMNS (
@@ -222,7 +231,7 @@ class AudienceMember < ApplicationRecord
       affiliates_sql,
       json_filter_sql,
     ].compact
-    return where(seller_id:) if subqueries.empty?
+    return base_scope if subqueries.empty?
 
 
     relation = from("(#{subqueries.first}) AS audience_members")

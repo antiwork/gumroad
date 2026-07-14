@@ -79,31 +79,53 @@ class SendPostBlastEmailsJob
     #    retry resumes sending within seconds instead of repaying the minutes-long load
     #    and re-racing the next deploy.
     #
-    # Rehydrated members are re-checked against audience_members, so anyone who left the
-    # audience after the snapshot was taken (unsubscribed, erased) is dropped from the
-    # retry rather than emailed from stale data. Members ADDED after the first attempt
-    # won't be picked up by a retry — acceptable for a send already mid-flight.
+    # Rehydrated members are re-verified against audience_members before sending: the row
+    # must still exist AND (when the blast targets a specific role) still hold that role.
+    # The role check matters because a person with multiple relationships to the seller
+    # (e.g. a customer who also follows) KEEPS their audience_members row when they
+    # unsubscribe from just one role — the row's `customer`/`follower`/`affiliate` boolean
+    # flips instead. Checking existence alone would let a retry email someone who opted
+    # out between attempts. Members ADDED after the first attempt won't be picked up by a
+    # retry — acceptable for a send already mid-flight.
     def load_audience_members
-      snapshot_key = RedisKey.blast_audience_member_ids(@blast.id)
+      snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
       snapshot = $redis.lrange(snapshot_key, 0, -1)
 
       if snapshot.empty?
         members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end
-        if members.any?
-          members.each_slice(10_000) do |slice|
-            $redis.rpush(snapshot_key, slice.map { |m| [m.id, m.email, m.purchase_id, m.follower_id, m.affiliate_id].to_json })
-          end
-          $redis.expire(snapshot_key, AUDIENCE_SNAPSHOT_TTL.to_i)
-        end
+        write_audience_snapshot(snapshot_key, members)
         members
       else
         Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from audience snapshot (#{snapshot.size} members)")
         members = snapshot.map { SnapshotMember.new(*JSON.parse(_1)) }
-        still_present = AudienceMember.where(id: members.map(&:id)).pluck(:id).to_set
-        members.select { still_present.include?(_1.id) }
+        still_eligible_ids = members.map(&:id).each_slice(10_000).flat_map do |ids_slice|
+          scope = AudienceMember.where(id: ids_slice)
+          # `customer`/`follower`/`affiliate` are real, indexed boolean columns.
+          scope = scope.where(@filters[:type] => true) if @filters[:type]
+          scope.pluck(:id)
+        end.to_set
+        members.select { still_eligible_ids.include?(_1.id) }
       end
+    end
+
+    # Writes the snapshot to a temporary key first, then atomically renames it into
+    # place. The retry path treats ANY non-empty list at the real key as the complete
+    # audience, so a worker killed partway through the slice-by-slice write must never
+    # leave a partial list there — that would make a retry send to a fraction of the
+    # audience and mark the blast completed. With the rename, the real key either
+    # doesn't exist (retry re-runs the filter) or is complete with its TTL already set.
+    def write_audience_snapshot(snapshot_key, members)
+      return if members.empty?
+
+      tmp_key = "#{snapshot_key}:tmp"
+      $redis.del(tmp_key)
+      members.each_slice(10_000) do |slice|
+        $redis.rpush(tmp_key, slice.map { |m| [m.id, m.email, m.purchase_id, m.follower_id, m.affiliate_id].to_json })
+      end
+      $redis.expire(tmp_key, AUDIENCE_SNAPSHOT_TTL.to_i)
+      $redis.rename(tmp_key, snapshot_key)
     end
 
     def prepare_recipients(members)
@@ -216,8 +238,11 @@ class SendPostBlastEmailsJob
 
     def mark_blast_as_completed
       @blast.update!(completed_at: Time.current)
-      # The blast is done, so the retry-resume snapshot has served its purpose.
-      $redis.del(RedisKey.blast_audience_member_ids(@blast.id))
+      # The blast is done, so the retry-resume snapshot has served its purpose. Also
+      # remove the temporary write-in-progress key in case a previous attempt died
+      # mid-write (it carries a TTL, but no reason to keep it around).
+      snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
+      $redis.del(snapshot_key, "#{snapshot_key}:tmp")
     end
 
     # Stores email addresses in SentPostEmail, just before sending the emails.
