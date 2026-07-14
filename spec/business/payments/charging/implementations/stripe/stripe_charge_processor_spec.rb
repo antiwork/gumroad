@@ -2128,7 +2128,9 @@ describe StripeChargeProcessor, :vcr do
           charge = create(:charge, amount_cents: 1700, processor_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
           charge.purchases << purchase
           charge.purchases << purchase_2
-          expect_any_instance_of(Purchase).to receive(:handle_event_refund_updated!).and_call_original
+          # Refund events on a combined charge resolve to the canonical Charge, not an
+          # arbitrary member purchase (see Charge::Chargeable.find_by_stripe_event).
+          expect_any_instance_of(Charge).to receive(:handle_event_refund_updated!).and_call_original
 
           expect do
             StripeChargeProcessor.handle_stripe_event(stripe_event)
