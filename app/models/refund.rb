@@ -43,6 +43,15 @@ class Refund < ApplicationRecord
     SQL
   }
 
+  # The complement of .effective among failed rows: refunds that failed after
+  # acceptance AND whose balance debits have been offset by
+  # Purchase::HandleFailedRefundService. Payout exports render these as an explicit
+  # debit + reversal pair instead of ordinary refund rows.
+  scope :reversed_failures, -> {
+    where(status: "failed")
+      .where("COALESCE(refunds.json_data->>'$.balance_reversed_on_failure', 'false') = 'true'")
+  }
+
   attr_json_data_accessor :note
   attr_json_data_accessor :business_vat_id
   attr_json_data_accessor :debited_stripe_transfer
