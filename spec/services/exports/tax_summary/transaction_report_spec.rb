@@ -48,6 +48,17 @@ describe Exports::TaxSummary::TransactionReport do
     )
   end
 
+  # The report writes through CsvSafe, which prefixes any cell that looks
+  # like a spreadsheet formula (for example one starting with "-") with an
+  # apostrophe. Purchase external IDs are random URL-safe base64, so they
+  # sometimes start with "-" — expected sale-ID cells must go through the
+  # same sanitization or the comparison fails whenever the generated ID
+  # happens to draw a leading dash.
+  def csv_sale_id(*purchases)
+    cell = purchases.map(&:external_id).join("; ")
+    CSV.parse_line(CsvSafe.generate { |csv| csv << [cell] }).first
+  end
+
   def stub_transaction_list(charge_transactions: [], payment_transactions: [])
     { "charge" => charge_transactions, "payment" => payment_transactions }.each do |type, transactions|
       list = double("list_#{type}")
@@ -78,7 +89,7 @@ describe Exports::TaxSummary::TransactionReport do
     # Rows are sorted by the funds-available date, so the orphan charge from
     # January comes before the matched charge from March.
     expect(rows[1]).to eq(["2024-12-31", "2025-01-02", "ch_orphan", nil, nil, nil, "5.00"])
-    expect(rows[2]).to eq(["2025-03-10", "2025-03-12", "ch_matched", purchase.external_id, "10.00", "0.80", "10.80"])
+    expect(rows[2]).to eq(["2025-03-10", "2025-03-12", "ch_matched", csv_sale_id(purchase), "10.00", "0.80", "10.80"])
     expect(rows[3]).to eq(["Total", nil, nil, nil, nil, nil, "15.80"])
   end
 
@@ -94,7 +105,7 @@ describe Exports::TaxSummary::TransactionReport do
     tempfile = described_class.new(user: seller, year:, stripe_account_id:).perform
     rows = CSV.parse(tempfile.read)
 
-    expect(rows[1]).to eq(["2025-06-01", "2025-06-03", "ch_matched", purchase.external_id, "10.00", "0.80", "7.90"])
+    expect(rows[1]).to eq(["2025-06-01", "2025-06-03", "ch_matched", csv_sale_id(purchase), "10.00", "0.80", "7.90"])
     expect(rows[2]).to eq(["Total", nil, nil, nil, nil, nil, "7.90"])
   end
 
@@ -115,7 +126,7 @@ describe Exports::TaxSummary::TransactionReport do
 
     expect(rows[1]).to eq([
                             "2025-03-10", "2025-03-12", "ch_matched",
-                            "#{purchase.external_id}; #{second_purchase.external_id}",
+                            csv_sale_id(purchase, second_purchase),
                             "15.00", "1.20", "16.20"
                           ])
     expect(rows[2]).to eq(["Total", nil, nil, nil, nil, nil, "16.20"])
