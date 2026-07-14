@@ -58,7 +58,7 @@ describe Page do
     end
 
     it "rejects reserved slugs that would shadow storefront routes" do
-      %w[l d p posts library follow subscribe pages profile].each do |slug|
+      %w[l d p posts library follow subscribe pages profile edit].each do |slug|
         page = described_class.new(pageable: user, slug:, title: "About", content: "<p>Hi</p>")
         expect(page).not_to be_valid, "expected #{slug.inspect} to be reserved"
         expect(page.errors[:slug]).to include("is reserved")
