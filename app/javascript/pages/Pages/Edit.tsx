@@ -1,4 +1,4 @@
-import { MagicWand } from "@boxicons/react";
+import { ArrowUpRight, MagicWand } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -15,6 +15,7 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 type PageProps = {
   page: {
@@ -196,60 +197,93 @@ export default function PagesEdit() {
     if (frame && height) frame.style.height = `${Math.min(height, window.innerHeight)}px`;
   };
 
-  const previewSidebar = (
-    <PreviewSidebar
-      previewLink={
-        // A new page has nothing to open yet — the link would 404.
-        is_new
-          ? undefined
-          : (props) => <NavigationButton {...props} size="icon" href={publicUrl} target="_blank" rel="noreferrer" />
-      }
-    >
-      {is_profile && !page.custom_html ? (
-        // The default-template home page frames the live storefront.
-        // `allow-same-origin` is needed for the storefront's own scripts to
-        // boot — without it the page loads but renders blank. The frame
-        // shows our own domain (the seller's public profile), same trust
-        // level as the parent page.
-        // eslint-disable-next-line react/iframe-missing-sandbox -- allow-scripts + allow-same-origin is intentional for framing our own storefront
-        <iframe
-          title="Page preview"
-          src={publicUrl}
-          sandbox="allow-scripts allow-forms allow-same-origin"
-          className="h-[75vh] min-h-150 w-full rounded border border-border bg-white"
-        />
-      ) : page.custom_html && previewPath ? (
-        // Agent-built pages (and a custom HTML home page) render through the
-        // dashboard's same-origin preview endpoint — see the note on
-        // previewPath above for why the public URL can't be framed. The
-        // sandbox makes the document unreadable from here, so it can't be
-        // sized to content; it gets the same tall frame as the profile.
-        <iframe
-          title="Page preview"
-          src={previewPath}
-          sandbox="allow-scripts"
-          className="h-[75vh] min-h-150 w-full rounded border border-border bg-white"
-        />
-      ) : is_new ? (
-        <div className="rounded border border-border bg-background p-4 text-sm text-muted">
-          Create the page to see a preview.
+  // The preview renders inside a browser-style chrome: a top bar with the
+  // page's title and URL centered (like a browser tab + address bar) and an
+  // arrow on the right that opens the live page in a new tab. The chrome IS
+  // the preview's identity strip, so the sidebar's own preview link and the
+  // separate URL caption are gone — everything lives in one place.
+  const displayTitle = is_profile ? "Home" : is_new ? title || "New page" : page.title;
+  const displayUrl = publicUrl.replace(/^https?:\/\//u, "");
+  const previewChrome = (frame: React.ReactNode) => (
+    <div className="flex flex-col overflow-hidden rounded border border-border bg-white">
+      <div className="relative border-b border-border bg-background px-12 py-2">
+        <div className="min-w-0 text-center">
+          <div className="truncate text-sm font-medium">{displayTitle}</div>
+          <div className="truncate text-xs text-muted">{displayUrl}</div>
         </div>
-      ) : previewPath ? (
-        // The real page document, sized to its content. The endpoint renders
-        // sanitized rich text — no seller scripts can run (the sandbox has no
-        // allow-scripts) — and `allow-same-origin` keeps the same-origin
-        // document readable so the frame can be measured.
-        <iframe
-          ref={richTextFrameRef}
-          title="Page preview"
-          key={previewVersion}
-          src={`${previewPath}?v=${previewVersion}`}
-          sandbox="allow-same-origin"
-          onLoad={sizeRichTextPreview}
-          className="w-full rounded border border-border bg-white"
-        />
-      ) : null}
-      <p className="truncate text-xs text-muted">{publicUrl.replace(/^https?:\/\//u, "")}</p>
+        {/* A new page has nothing to open yet — the link would 404. */}
+        {!is_new ? (
+          <div className="absolute inset-y-0 right-2 flex items-center">
+            <WithTooltip tip="Open in new tab">
+              <NavigationButton
+                size="icon"
+                aria-label="Open in new tab"
+                href={publicUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ArrowUpRight className="size-5" />
+              </NavigationButton>
+            </WithTooltip>
+          </div>
+        ) : null}
+      </div>
+      {frame}
+    </div>
+  );
+
+  const previewSidebar = (
+    <PreviewSidebar>
+      {is_profile && !page.custom_html
+        ? previewChrome(
+            // The default-template home page frames the live storefront.
+            // `allow-same-origin` is needed for the storefront's own scripts to
+            // boot — without it the page loads but renders blank. The frame
+            // shows our own domain (the seller's public profile), same trust
+            // level as the parent page.
+            // eslint-disable-next-line react/iframe-missing-sandbox -- allow-scripts + allow-same-origin is intentional for framing our own storefront
+            <iframe
+              title="Page preview"
+              src={publicUrl}
+              sandbox="allow-scripts allow-forms allow-same-origin"
+              className="h-[75vh] min-h-150 w-full bg-white"
+            />,
+          )
+        : page.custom_html && previewPath
+          ? previewChrome(
+              // Agent-built pages (and a custom HTML home page) render through the
+              // dashboard's same-origin preview endpoint — see the note on
+              // previewPath above for why the public URL can't be framed. The
+              // sandbox makes the document unreadable from here, so it can't be
+              // sized to content; it gets the same tall frame as the profile.
+              <iframe
+                title="Page preview"
+                src={previewPath}
+                sandbox="allow-scripts"
+                className="h-[75vh] min-h-150 w-full bg-white"
+              />,
+            )
+          : is_new
+            ? previewChrome(
+                <div className="bg-background p-4 text-sm text-muted">Create the page to see a preview.</div>,
+              )
+            : previewPath
+              ? previewChrome(
+                  // The real page document, sized to its content. The endpoint renders
+                  // sanitized rich text — no seller scripts can run (the sandbox has no
+                  // allow-scripts) — and `allow-same-origin` keeps the same-origin
+                  // document readable so the frame can be measured.
+                  <iframe
+                    ref={richTextFrameRef}
+                    title="Page preview"
+                    key={previewVersion}
+                    src={`${previewPath}?v=${previewVersion}`}
+                    sandbox="allow-same-origin"
+                    onLoad={sizeRichTextPreview}
+                    className="w-full bg-white"
+                  />,
+                )
+              : null}
       {isEditable ? <p className="text-xs text-muted">The preview refreshes when you save.</p> : null}
     </PreviewSidebar>
   );
