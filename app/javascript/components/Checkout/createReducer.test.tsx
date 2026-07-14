@@ -147,6 +147,40 @@ describe("createReducer surcharge refetches", () => {
     expect(result.current[0].surcharges).toEqual({ type: "loaded", result: freshResult });
   });
 
+  it("ignores a stale response that resolves during the debounce window, before the next request starts", async () => {
+    // Trickiest shape of the race: a total-affecting edit marks surcharges "pending", but the
+    // previous request's response resolves inside the 300ms debounce window — before the fresh
+    // request (and its new generation) even exists. The stale response must not publish a
+    // "loaded" quote over the pending state, which would re-enable Pay on the old totals and
+    // suppress the refetch's effect on the visible quote.
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests).toHaveLength(1);
+
+    // Total-affecting change → surcharges go pending, debounced refetch scheduled but not fired.
+    act(() => result.current[1]({ type: "set-value", tip: { type: "fixed", amount: 2_00 } }));
+    expect(result.current[0].surcharges.type).toBe("pending");
+
+    // The original request resolves while the debounce is still pending — it must be ignored.
+    await act(async () => {
+      requests[0]?.resolve(surchargesResponse({ buyer_currency_quote: quote("stale-token") }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current[0].surcharges.type).toBe("pending");
+    expect(requests).toHaveLength(1);
+
+    // The debounce fires, the fresh request runs, and its quote is the one that lands.
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests).toHaveLength(2);
+    const freshResult = surchargesResponse({ subtotal: 1_200, buyer_currency_quote: quote("fresh-token") });
+    await act(async () => {
+      requests[1]?.resolve(freshResult);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current[0].surcharges).toEqual({ type: "loaded", result: freshResult });
+  });
+
   it("ignores a stale failure while a fresh request is still loading", async () => {
     // A stale request erroring must not flip the fresh request's loading state to error (which
     // would both surface a bogus alert and leave the checkout stuck until the fresh response

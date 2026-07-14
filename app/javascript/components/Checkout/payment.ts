@@ -817,7 +817,15 @@ export function createReducer(initial: {
     300,
   );
   React.useEffect(() => {
-    if (state.surcharges.type === "pending") updateSurcharges();
+    if (state.surcharges.type === "pending") {
+      // Invalidate any in-flight request immediately, not just when the debounced refetch
+      // starts. A total-affecting edit marks surcharges "pending", but the previous request's
+      // response can still resolve during the 300ms debounce window — without this bump it
+      // would carry the current generation, publish a stale "loaded" quote over the pending
+      // state, and re-enable Pay on totals that no longer match what will be charged.
+      surchargesRequestGeneration.current++;
+      updateSurcharges();
+    }
   }, [state.surcharges]);
 
   return reducer;
