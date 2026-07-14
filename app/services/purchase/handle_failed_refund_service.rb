@@ -258,6 +258,13 @@ class Purchase::HandleFailedRefundService
       affiliate_credit = purchase.affiliate_credit
       return if affiliate_credit.nil?
 
+      # Re-read the affiliate credit under a row lock. Like the purchase flag
+      # recomputation, this method runs while holding the purchase lock, but plain
+      # reads inside the transaction still come from a REPEATABLE READ snapshot
+      # that can predate a concurrent worker's commit — the refund-balance pointer
+      # comparison below must see the value that worker actually persisted.
+      affiliate_credit.lock!
+
       failed_affiliate_balance_ids = refund.balance_transactions
                                            .where(user: affiliate_credit.affiliate_user)
                                            .where("issued_amount_gross_cents < 0")
@@ -277,14 +284,17 @@ class Purchase::HandleFailedRefundService
       # The pointer was set by the refund that just failed. If an earlier effective
       # refund also debited the affiliate, re-point at that refund's balance (the
       # pointer records "this commission was refunded", which is still true);
-      # otherwise clear it so the commission counts as earned again.
+      # otherwise clear it so the commission counts as earned again. A locking
+      # read, for the same snapshot-staleness reason as the seller repointing in
+      # recompute_purchase_refunded_flags!: a refund another worker just failed
+      # must not be picked as the "remaining effective" one.
       remaining_affiliate_debit = BalanceTransaction.joins(:refund)
                                                     .merge(Refund.effective)
                                                     .where(refunds: { purchase_id: purchase.id })
                                                     .where.not(refund_id: refund.id)
                                                     .where(user: affiliate_credit.affiliate_user)
                                                     .where("balance_transactions.issued_amount_gross_cents < 0")
-                                                    .order(:id).last
+                                                    .order(:id).lock.last
       affiliate_credit.update!(affiliate_credit_refund_balance_id: remaining_affiliate_debit&.balance_id)
     end
 
@@ -317,13 +327,20 @@ class Purchase::HandleFailedRefundService
       # refunds through this pointer. When no effective refund remains it comes out
       # nil, making the purchase re-refundable. Mirrors the AffiliateCredit
       # repointing in restore_affiliate_refund_state!.
+      #
+      # This must be a locking read for the same reason as the sums above: when two
+      # different refunds of this purchase fail concurrently, the worker that gets
+      # the purchase lock second would otherwise read from a REPEATABLE READ
+      # snapshot taken before the first worker committed, still see the first
+      # worker's refund as effective, and repoint the purchase at a balance that
+      # belongs to a failed refund.
       remaining_seller_debit = BalanceTransaction.joins(:refund)
                                                  .merge(Refund.effective)
                                                  .where(refunds: { purchase_id: purchase.id })
                                                  .where.not(refund_id: refund.id)
                                                  .where(user: purchase.seller)
                                                  .where("balance_transactions.issued_amount_gross_cents < 0")
-                                                 .order(:id).last
+                                                 .order(:id).lock.last
       purchase.purchase_refund_balance_id = remaining_seller_debit&.balance_id
       purchase.save!
 
