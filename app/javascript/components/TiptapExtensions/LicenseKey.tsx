@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Key } from "@boxicons/react";
+import { Key } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -44,7 +44,6 @@ export const LicenseKey = TiptapNode.create({
 });
 
 const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
-  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const { licenseKey, isMultiSeatLicense, seats, onIsMultiSeatLicenseChange, productId } = useLicense();
   const uid = React.useId();
 
@@ -70,17 +69,11 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
                 <Button>Copy</Button>
               </CopyToClipboard>
             ) : null}
-            {editor.isEditable ? (
-              <Button
-                size="icon"
-                onClick={() => setIsDrawerOpen(!isDrawerOpen)}
-                aria-label={isDrawerOpen ? "Close drawer" : "Edit"}
-              >
-                {isDrawerOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
-              </Button>
-            ) : null}
           </RowActions>
-          {editor.isEditable && isDrawerOpen ? (
+          {/* The settings (seat toggle and product ID) are always visible while editing. The product ID is
+              required for the license verification API, and hiding it behind an expand button made it hard
+              for creators to find (see issue #5838). */}
+          {editor.isEditable ? (
             <RowDetails asChild>
               <Drawer>
                 {isMultiSeatLicense !== null ? (
