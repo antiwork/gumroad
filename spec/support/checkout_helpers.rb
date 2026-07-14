@@ -174,9 +174,11 @@ module CheckoutHelpers
         expect(page).to have_text(product.name)
 
         if logged_in_user.present? || User.alive.where(email:).exists?
-          expect(page).to_not have_text("Create an account to access all of your purchases anytime.")
+          expect(page).to_not have_text("Create an account to access all of your purchases")
         else
-          expect(page).to have_text("Create an account to access all of your purchases anytime.")
+          # Free purchases land on the download page, paid ones on the receipt; the two
+          # surfaces word the signup prompt differently, so match their shared prefix.
+          expect(page).to have_text("Create an account to access all of your purchases")
         end
       end
     end.to change { product.preorder_link.present? ? product.sales.preorder_authorization_successful.count : product.sales.successful.count }.by(error.blank? && logged_in_user&.id != product.user.id && (product.not_free_trial_enabled || gift.present?) ? cart_item_count : 0)
