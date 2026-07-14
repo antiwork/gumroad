@@ -1,4 +1,4 @@
-import { Box, FileDetail, MagicWand, Pencil, Store, Trash } from "@boxicons/react";
+import { ArrowRight, Box, FileDetail, MagicWand, Pencil, Store, Trash } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -23,19 +23,18 @@ type PageEntry = {
 };
 
 // The profile is the special root of the page tree: it serves at the
-// storefront root, sits first in the list, and can't be deleted.
+// storefront root, sits first in the list (as "Home"), and can't be deleted.
 type ProfileEntry = {
-  title: string;
   username: string;
   profile_url: string;
   custom_html: boolean;
 };
 
 export default function PagesIndex() {
-  const { pages, profile, products_count } = typia.assert<{
+  const { pages, profile, product_pages_count } = typia.assert<{
     pages: PageEntry[];
     profile: ProfileEntry;
-    products_count: number;
+    product_pages_count: number;
   }>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const canManage = !!loggedInUser?.policies.page.create;
@@ -83,9 +82,8 @@ export default function PagesIndex() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <Link href={Routes.edit_page_path("profile")} className="truncate font-medium hover:underline">
-                      {profile.title}
+                      Home
                     </Link>
-                    <Pill size="small">Home</Pill>
                   </div>
                   <a
                     href={profile.profile_url}
@@ -106,35 +104,6 @@ export default function PagesIndex() {
                 </NavigationButton>
               </RowActions>
             </Row>
-
-            {/* Product pages are edited from each product's Share tab, not here.
-              This row points sellers there so a page built for a product
-              doesn't look like it went missing. */}
-            {products_count > 0 ? (
-              <Row role="listitem" className="sm:pl-8">
-                <RowContent className="gap-4">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded border border-border text-muted">
-                    <Box className="size-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <Link href={Routes.products_path()} className="truncate font-medium hover:underline">
-                      Product pages
-                    </Link>
-                    <span className="block truncate text-sm text-muted">
-                      Edited from each product's Share tab in Products
-                    </span>
-                  </div>
-                </RowContent>
-                <RowActions>
-                  <span className="hidden text-sm text-muted sm:block">
-                    {products_count === 1 ? "1 product" : `${products_count} products`}
-                  </span>
-                  <NavigationButton size="icon" href={Routes.products_path()} aria-label="Open Products">
-                    <Pencil className="size-4" />
-                  </NavigationButton>
-                </RowActions>
-              </Row>
-            ) : null}
 
             {/* Every other page hangs off the home page at its slug. */}
             {pages.map((page) => (
@@ -182,6 +151,36 @@ export default function PagesIndex() {
                 </RowActions>
               </Row>
             ))}
+
+            {/* Product pages are edited from each product's Share tab, not here.
+              This row only appears once a product actually has a custom page,
+              sits after the seller's own pages, and navigates to Products —
+              hence the arrow instead of a pencil. */}
+            {product_pages_count > 0 ? (
+              <Row role="listitem" className="sm:pl-8">
+                <RowContent className="gap-4">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded border border-border text-muted">
+                    <Box className="size-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <Link href={Routes.products_path()} className="truncate font-medium hover:underline">
+                      Product pages
+                    </Link>
+                    <span className="block truncate text-sm text-muted">
+                      Edited from each product's Share tab in Products
+                    </span>
+                  </div>
+                </RowContent>
+                <RowActions>
+                  <span className="hidden text-sm text-muted sm:block">
+                    {product_pages_count === 1 ? "1 page" : `${product_pages_count} pages`}
+                  </span>
+                  <NavigationButton size="icon" href={Routes.products_path()} aria-label="Open Products">
+                    <ArrowRight className="size-4" />
+                  </NavigationButton>
+                </RowActions>
+              </Row>
+            ) : null}
           </Rows>
         )}
       </section>

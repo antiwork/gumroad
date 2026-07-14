@@ -1,4 +1,4 @@
-import { Copy, MagicWand, Terminal } from "@boxicons/react";
+import { MagicWand } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -10,6 +10,7 @@ import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSideb
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -100,6 +101,13 @@ export default function PagesEdit() {
     ? profile_url
     : `${profile_url.replace(/\/$/u, "")}/${page.slug ?? title.toLowerCase().replace(/[^a-z0-9]+/gu, "-")}`;
 
+  // Custom HTML pages can't frame their public URL from the dashboard: the
+  // public page is a wrapper whose nested embed answers with
+  // X-Frame-Options: SAMEORIGIN, and the dashboard is a different origin, so
+  // the browser blocks the frame. The dashboard's own preview endpoint serves
+  // the same sanitized document same-origin instead.
+  const customHtmlPreviewUrl = page.custom_html && page.slug ? Routes.preview_page_path(page.slug) : null;
+
   const save = () => {
     setIsSaving(true);
     const params = { title, content };
@@ -134,15 +142,20 @@ export default function PagesEdit() {
   };
 
   // The panel's pitch depends on where the seller is standing: on a custom
-  // HTML page the agent is the ONLY way to edit, on a rich-text page it's an
-  // upgrade path, and on the profile it replaces the default template.
+  // HTML page the agent is the ONLY way to edit (this line doubles as the
+  // "why is there no editor here" explanation — no separate alert repeats
+  // it), on a rich-text page it's an upgrade path, and on the profile it
+  // replaces the default template.
   const agentPanelHeading = !is_profile && page.custom_html ? "Update with your agent" : "Build with your agent";
   const agentPanelIntro = is_profile
-    ? "Replace the default template with a page your agent designs as full HTML — custom layout, animations, anything. Copy this prompt to get started:"
+    ? "Replace the default template with a page your agent designs as full HTML — custom layout, animations, anything."
     : page.custom_html
-      ? "This page is custom HTML, so your agent (or the CLI) is how you change it. Copy this prompt to get started:"
-      : "Want more than rich text? Your agent can redesign this page as full HTML — custom layout, animations, anything — and publish it for you. Copy this prompt to get started:";
+      ? "This page is custom HTML built by your agent, so it can't be edited here — hand your agent this prompt to change it."
+      : "Want more than rich text? Your agent can redesign this page as full HTML and publish it for you.";
 
+  // Matches the product Share tab's landing-page pattern: one-sentence pitch,
+  // a Copy prompt button, and the full prompt tucked behind a toggle. The
+  // prompt is there to be copied, not read.
   const agentPanel = (
     <div className="grid gap-3 rounded border border-border p-4">
       <div className="flex items-center gap-2">
@@ -150,21 +163,20 @@ export default function PagesEdit() {
         <h3>{agentPanelHeading}</h3>
       </div>
       <p className="text-sm text-muted">{agentPanelIntro}</p>
-      <div className="flex items-start gap-2 rounded bg-active-bg p-3">
-        <p className="min-w-0 flex-1 text-sm">{agentPrompt(username, page.slug, is_profile)}</p>
+      <div className="flex flex-wrap gap-3">
         <CopyToClipboard text={agentPrompt(username, page.slug, is_profile)}>
-          <Button size="icon" aria-label="Copy agent prompt">
-            <Copy className="size-4" />
-          </Button>
+          <Button color="primary">Copy prompt</Button>
         </CopyToClipboard>
       </div>
-      <div className="flex items-center gap-2 text-sm text-muted">
-        <Terminal className="size-4" />
-        <span>
-          Prefer the command line? <code>gumroad pages list</code>, <code>create</code>, <code>push</code>, and{" "}
-          <code>preview</code> do the same thing by hand.
-        </span>
-      </div>
+      <Details>
+        <DetailsToggle>Show prompt</DetailsToggle>
+        <pre className="rounded border border-border bg-background p-4 text-sm whitespace-pre-wrap">
+          {agentPrompt(username, page.slug, is_profile)}
+        </pre>
+      </Details>
+      <p className="text-sm text-muted">
+        Or use the CLI: <code>gumroad pages list / create / push / preview</code>.
+      </p>
     </div>
   );
 
@@ -191,11 +203,12 @@ export default function PagesEdit() {
           <div className="text-sm font-medium">{previewTitle || "Untitled page"}</div>
           <div className="truncate text-xs text-muted">{publicUrl.replace(/^https?:\/\//u, "")}</div>
         </div>
-        {is_profile ? (
-          // The live storefront in a frame. `allow-same-origin` is needed for the
-          // storefront's own scripts to boot — without it the page loads but
-          // renders blank. The frame shows our own domain (the seller's public
-          // profile), same trust level as the parent page.
+        {is_profile && !page.custom_html ? (
+          // The default-template home page frames the live storefront.
+          // `allow-same-origin` is needed for the storefront's own scripts to
+          // boot — without it the page loads but renders blank. The frame
+          // shows our own domain (the seller's public profile), same trust
+          // level as the parent page.
           // eslint-disable-next-line react/iframe-missing-sandbox -- allow-scripts + allow-same-origin is intentional for framing our own storefront
           <iframe
             title="Page preview"
@@ -203,10 +216,16 @@ export default function PagesEdit() {
             sandbox="allow-scripts allow-forms allow-same-origin"
             className="aspect-[3/4] w-full"
           />
-        ) : page.custom_html ? (
-          // Agent-built pages frame the live public page, which serves the
-          // stored HTML through the sandboxed wrapper pipeline.
-          <iframe title="Page preview" src={publicUrl} sandbox="allow-scripts" className="aspect-[3/4] w-full" />
+        ) : customHtmlPreviewUrl ? (
+          // Agent-built pages (and a custom HTML home page) render through the
+          // dashboard's same-origin preview endpoint — see the note on
+          // customHtmlPreviewUrl above for why the public URL can't be framed.
+          <iframe
+            title="Page preview"
+            src={customHtmlPreviewUrl}
+            sandbox="allow-scripts"
+            className="aspect-[3/4] w-full"
+          />
         ) : (
           <div
             className="rich-text aspect-[3/4] w-full overflow-y-auto p-4"
@@ -230,11 +249,6 @@ export default function PagesEdit() {
         />
         <WithPreviewSidebar className="flex-1">
           <section className="grid content-start gap-8 p-4! md:p-8!">
-            <Alert role="status" variant="info">
-              Your home page is your public profile. It ships with the default template — product grid, follow form,
-              tabs — with the details editable in profile settings. It's yours to change completely: have your agent
-              replace it with a fully custom page.
-            </Alert>
             {page.custom_html ? (
               <Alert role="status" variant="success">
                 <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
@@ -288,13 +302,11 @@ export default function PagesEdit() {
             </Alert>
           ) : null}
           {page.custom_html ? (
-            <>
-              <Alert role="status" variant="info">
-                This page was built with custom HTML by your agent, so it can't be edited here — editing it manually
-                would lose the custom layout. Update it with your agent or the CLI instead.
-              </Alert>
-              {canEdit ? agentPanel : null}
-            </>
+            // The agent panel's intro already explains why there's no editor
+            // here ("custom HTML, can't be edited here"), so no separate alert.
+            canEdit ? (
+              agentPanel
+            ) : null
           ) : (
             <>
               <Fieldset>

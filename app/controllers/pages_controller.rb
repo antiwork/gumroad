@@ -8,9 +8,11 @@
 # the agent path instead of the rich text editor — there is no lossy
 # HTML → rich text conversion.
 class PagesController < Sellers::BaseController
+  include RendersCustomHtmlPages
+
   layout "inertia"
 
-  before_action :set_page, only: [:edit, :update, :destroy]
+  before_action :set_page, only: [:edit, :update, :destroy, :preview]
 
   def index
     authorize :page
@@ -19,9 +21,13 @@ class PagesController < Sellers::BaseController
       pages: current_seller.pages.map { page_props(_1) },
       profile: profile_entry,
       # Product pages are edited from each product's Share tab, not here. The
-      # list links to Products (with the count) so a seller whose agent built a
-      # custom product page doesn't look in Pages and think it's gone.
-      products_count: current_seller.links.alive.count,
+      # list shows a row linking to Products so a seller whose agent built a
+      # custom product page doesn't look in Pages and think it's gone — but
+      # only once at least one live product actually has one (mirroring how
+      # the Home row waits for a first page), so the count is custom pages,
+      # not products.
+      product_pages_count: Page.roots.where(pageable_type: "Link", pageable_id: current_seller.links.alive.select(:id))
+                               .where.not(custom_html: nil).count,
     }
   end
 
@@ -59,8 +65,11 @@ class PagesController < Sellers::BaseController
       # profile settings. Sellers keep it 100% customizable by replacing it
       # with fully custom HTML via their agent or the CLI, so the editor
       # renders the template view with that takeover path.
+      # "Home" matches the pinned entry in the Pages list — the same page
+      # shouldn't change names between the list, the editor header, and the
+      # preview pane.
       render inertia: "Pages/Edit", props: {
-        page: { slug: "profile", title: "Profile", content: "", custom_html: current_seller.custom_html.present? },
+        page: { slug: "profile", title: "Home", content: "", custom_html: current_seller.custom_html.present? },
         is_profile: true,
         is_new: false,
         username: current_seller.username.to_s,
@@ -114,6 +123,37 @@ class PagesController < Sellers::BaseController
     redirect_to pages_path, notice: "Page deleted!", status: :see_other
   end
 
+  # Renders a custom HTML page for the editor's preview pane. The public page
+  # can't be framed here: it's a wrapper whose nested embed responds with
+  # X-Frame-Options: SAMEORIGIN, and the dashboard is a different origin than
+  # the seller's subdomain, so the browser blocks the frame. This serves the
+  # same sanitized document same-origin instead, with the same strict CSP +
+  # sandbox headers as the public embed (the editor's iframe adds its own
+  # sandbox attribute on top).
+  def preview
+    authorize :page
+
+    custom_html = @profile_page ? current_seller.custom_html : @page.custom_html
+    return head :not_found if custom_html.blank?
+
+    apply_custom_html_response_headers
+    interpolated = Pages::Interpolator.interpolate_profile(custom_html, profile: current_seller)
+    render html: <<~HTML.html_safe, layout: false
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          #{SANDBOX_COMPAT_SCRIPT}
+          #{self.class.pages_tailwind_inline}
+        </head>
+        <body>
+          #{interpolated}
+        </body>
+      </html>
+    HTML
+  end
+
   private
     def set_page
       if params[:slug] == "profile"
@@ -144,11 +184,10 @@ class PagesController < Sellers::BaseController
       Page.generate_slug_for(current_seller, title)
     end
 
-    # The profile rendered as the root of the page tree: first in the list,
-    # can't be deleted, serves at the storefront root.
+    # The profile rendered as the root of the page tree: first in the list
+    # (named "Home" there), can't be deleted, serves at the storefront root.
     def profile_entry
       {
-        title: current_seller.name.presence || current_seller.username.to_s,
         username: current_seller.username.to_s,
         profile_url: current_seller.profile_url,
         custom_html: current_seller.custom_html.present?,

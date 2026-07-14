@@ -1024,7 +1024,12 @@ Rails.application.routes.draw do
     get "/posts", to: redirect("/emails")
 
     # custom pages (design draft for the first-class Pages feature)
-    resources :pages, only: [:index, :new, :create, :edit, :update, :destroy], param: :slug
+    resources :pages, only: [:index, :new, :create, :edit, :update, :destroy], param: :slug do
+      # Same-origin render of a custom HTML page for the editor's preview pane.
+      # The public page can't be framed from the dashboard (its embed sends
+      # X-Frame-Options: SAMEORIGIN and the dashboard is a different origin).
+      get :preview, on: :member
+    end
 
     # workflows
     resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do

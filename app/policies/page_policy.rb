@@ -25,6 +25,12 @@ class PagePolicy < ApplicationPolicy
     index?
   end
 
+  # The editor's preview pane renders custom HTML pages through the dashboard
+  # (see PagesController#preview) — anyone who can open the editor can see it.
+  def preview?
+    edit?
+  end
+
   def update?
     create?
   end

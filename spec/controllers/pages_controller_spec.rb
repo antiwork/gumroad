@@ -28,13 +28,20 @@ describe PagesController, type: :controller, inertia: true do
       expect(inertia.props[:profile][:username]).to eq(seller.username)
     end
 
-    it "includes the live product count for the product-pages row" do
+    it "counts only live products' custom pages for the product-pages row" do
+      # A live product with a custom page counts; a live product without one
+      # and a deleted product with one don't.
+      with_page = create(:product, user: seller)
+      with_page.custom_html = "<h1>Landing</h1>"
+      with_page.save!
       create(:product, user: seller)
-      create(:product, user: seller, deleted_at: Time.current)
+      deleted = create(:product, user: seller, deleted_at: Time.current)
+      deleted.custom_html = "<h1>Gone</h1>"
+      deleted.save!
 
       get :index
 
-      expect(inertia.props[:products_count]).to eq(1)
+      expect(inertia.props[:product_pages_count]).to eq(1)
     end
 
     it "does not include another seller's pages" do
@@ -162,6 +169,39 @@ describe PagesController, type: :controller, inertia: true do
 
       expect(response).to redirect_to(pages_path)
       expect(seller.pages.count).to eq(1)
+    end
+  end
+
+  describe "GET preview" do
+    let!(:page) { create(:user_page, pageable: seller, slug: "about", title: "About", custom_html: "<h1>Agent-built</h1><script>window.ok = true;</script>") }
+
+    it "renders the page's custom HTML same-origin with the strict CSP" do
+      get :preview, params: { slug: "about" }
+
+      expect(response).to be_successful
+      expect(response.body).to include("Agent-built")
+      csp = response.headers["Content-Security-Policy"]
+      expect(csp).to include("sandbox allow-scripts")
+      expect(csp).not_to include("allow-same-origin")
+      expect(csp).to include("default-src 'none'")
+    end
+
+    it "renders the profile's custom HTML takeover for the profile slug" do
+      seller.custom_html = "<h1>Home takeover</h1>"
+      seller.save!
+
+      get :preview, params: { slug: "profile" }
+
+      expect(response).to be_successful
+      expect(response.body).to include("Home takeover")
+    end
+
+    it "404s for a rich text page (nothing to render here)" do
+      page.update!(custom_html: nil, content: "<p>Rich text</p>")
+
+      get :preview, params: { slug: "about" }
+
+      expect(response).to have_http_status(:not_found)
     end
   end
 end
