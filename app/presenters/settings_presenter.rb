@@ -75,6 +75,7 @@ class SettingsPresenter
         announcement_notification_enabled: seller.announcement_notification_enabled,
         disable_comments_email: seller.disable_comments_email,
         disable_reviews_email: seller.disable_reviews_email,
+        disable_review_reminders: seller.disable_review_reminders?,
         show_nsfw_products: seller.show_nsfw_products?,
         disable_affiliate_requests: seller.disable_affiliate_requests?,
         seller_refund_policy:,

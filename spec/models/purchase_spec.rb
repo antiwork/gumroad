@@ -7010,6 +7010,47 @@ describe Purchase, :vcr do
         expect(purchase.eligible_for_review_reminder?).to be true
       end
     end
+
+    context "when the seller has disabled review reminders" do
+      before { purchase.seller.update!(disable_review_reminders: true) }
+
+      it "returns false" do
+        expect(purchase.eligible_for_review_reminder?).to be false
+      end
+    end
+  end
+
+  describe "#schedule_order_review_reminder" do
+    let(:product) { create(:product, price_cents: 10_00) }
+
+    it "schedules the order review reminder when a purchase transitions to successful" do
+      purchase = create(:purchase_in_progress, link: product)
+      order = create(:order, purchases: [purchase])
+      order.cart = create(:cart, order:)
+
+      expect do
+        purchase.mark_successful!
+      end.to change { order.reload.review_reminder_scheduled_at }.from(nil)
+      expect(OrderReviewReminderJob.jobs.size).to eq(1)
+    end
+
+    it "does not schedule a reminder when the purchase fails" do
+      purchase = create(:purchase_in_progress, link: product)
+      order = create(:order, purchases: [purchase])
+      order.cart = create(:cart, order:)
+
+      expect do
+        purchase.mark_failed!
+      end.not_to change { order.reload.review_reminder_scheduled_at }
+      expect(OrderReviewReminderJob.jobs).to be_empty
+    end
+
+    it "does nothing when the purchase has no order" do
+      purchase = create(:purchase_in_progress, link: product)
+
+      expect { purchase.mark_successful! }.not_to raise_error
+      expect(OrderReviewReminderJob.jobs).to be_empty
+    end
   end
 
   describe "#license" do

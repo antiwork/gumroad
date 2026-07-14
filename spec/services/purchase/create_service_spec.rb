@@ -3833,4 +3833,48 @@ describe Purchase::CreateService, :vcr do
       end
     end
   end
+
+  describe "payment flow analytics recording" do
+    let(:payment_flow_params) do
+      # `payment_details_source` + a Stripe payment param make
+      # PurchasePaymentFlow.attributes_for_checkout_params return attributes,
+      # which triggers the analytics-recording branch in the service.
+      # `is_part_of_combined_charge` mirrors how OrdersController#prepare invokes
+      # this service (charging happens later, in Charge::CreateService).
+      params.merge(
+        payment_details_source: "payment_element",
+        stripe_payment_method_id: "pm_123",
+        is_part_of_combined_charge: true,
+      )
+    end
+
+    it "records a payment flow for a successfully built purchase" do
+      purchase, error = Purchase::CreateService.new(product:, params: payment_flow_params).perform
+
+      expect(error).to be_nil
+      expect(purchase.purchase_payment_flow).to be_present
+    end
+
+    context "when the purchase fails validation and is never saved" do
+      before do
+        # An invalid email fails the `must_have_valid_email` validation, so the
+        # save inside `prepare_for_charge!` leaves the purchase unpersisted.
+        payment_flow_params[:purchase][:email] = "not-an-email"
+      end
+
+      it "skips payment flow recording instead of reporting ActiveRecord::RecordNotSaved" do
+        # Attempting to create the dependent row on an unsaved purchase raises
+        # ActiveRecord::RecordNotSaved, which the rescue below reports to Sentry.
+        # Nothing should be reported: a purchase that never saved has no
+        # analytics row to record.
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        purchase, error = Purchase::CreateService.new(product:, params: payment_flow_params).perform
+
+        expect(purchase).not_to be_persisted
+        expect(purchase.purchase_payment_flow).to be_nil
+        expect(error).to be_present
+      end
+    end
+  end
 end

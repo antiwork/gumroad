@@ -405,16 +405,43 @@ describe Ai::AnthropicClient do
       expect(result.stop_reason).to eq("tool_use")
     end
 
-    it "raises an error for malformed streamed tool_use input" do
+    it "raises an error for malformed streamed tool_use input on a completed turn" do
       stream = sse(
         ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_read" } }],
         ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{not json" } }],
         ["content_block_stop", { index: 0 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
       )
       stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
 
       expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) }
         .to raise_error(described_class::Error, /unreadable tool call/i)
+    end
+
+    it "retries when the stream drops mid-tool-call, leaving cut-off JSON and no stop_reason" do
+      # A complete Anthropic stream always sends a stop_reason before ending. When the connection
+      # drops mid-tool-call, the accumulated JSON is cut off at the disconnect and no stop_reason
+      # ever arrives — that's a network failure, so the client should retry the request (nothing
+      # reached the caller yet) instead of failing the turn as an unreadable tool call.
+      allow(client).to receive(:sleep)
+      dropped = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"description":"cut off here' } }],
+      )
+      complete = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product"}' } }],
+        ["content_block_stop", { index: 0 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .to_return({ status: 200, body: dropped, headers: { "Content-Type" => "text/event-stream" } },
+                   { status: 200, body: complete, headers: { "Content-Type" => "text/event-stream" } })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "update my description" }])
+
+      expect(result.tool_uses).to eq([{ id: "toolu_x", name: "api_write", input: { "endpoint" => "update_product" } }])
+      expect(client).to have_received(:sleep).once
     end
 
     it "drops a tool call whose JSON was cut off by max_tokens instead of raising" do

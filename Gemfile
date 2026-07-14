@@ -36,6 +36,12 @@ group :test do
   gem "capybara", "~> 3.38"
   gem "factory_bot_rails", "~> 6.4"
   gem "faker", "~> 3.1"
+  # Pin minitest to 5.x. Rails 7.1's test runner is not compatible with
+  # Minitest 6.x APIs, and the rubygems index has a stub `minitest 6.0.6`
+  # with no actual code (just metadata + a `bin/minitest` script) that
+  # bundler happily resolves to for any `>= 5.x` constraint from transitive
+  # deps, which breaks `require "minitest/mock"` and friends.
+  gem "minitest", "~> 5.25"
   gem "rspec", "~> 3.12"
   gem "rspec-github", "~> 2.4.0", require: false
   gem "rspec-rails", "~> 6.0"
@@ -87,7 +93,6 @@ gem "devise", "~> 4.8"
 gem "devise-pwned_password", "~> 0.1"
 gem "discordrb", "~> 3.4"
 gem "doorkeeper", "5.7.1"
-gem "easypost", "~> 6.0"
 gem "elasticsearch", "7.11.2"
 gem "elasticsearch-api", "7.11.2"
 gem "elasticsearch-dsl", "0.1.10"

@@ -307,6 +307,64 @@ jobs:
               || logger "Failed to push test-cache (non-fatal)"
           fi
 
+  test_minitest:
+    name: Test Minitest${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    services:
+      mysql:
+        image: mysql:8.0.32
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: gumroad_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+      stripe_mock:
+        image: stripemock/stripe-mock:latest
+        ports:
+          - 12111:12111
+          - 12112:12112
+      mongo:
+        image: mongo:4.4
+        ports:
+          - 27017:27017
+
+    env:
+      RAILS_ENV: test
+      BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Prepare test database
+        run: bundle exec rake db:prepare
+
+      - name: Run Minitest
+        run: bundle exec rails test
+        env:
+          RUBY_YJIT_ENABLE: 1
+          CI: true
+
   test_fast:
     name: Test Fast ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
@@ -640,7 +698,7 @@ jobs:
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-2
-    needs: [test_fast, test_slow]
+    needs: [test_fast, test_slow, test_minitest]
     if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Unblock corresponding Buildkite build

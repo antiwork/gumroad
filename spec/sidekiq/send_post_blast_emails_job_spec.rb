@@ -396,6 +396,151 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "audience snapshot for retry resume" do
+    it "snapshots the audience member ids in Redis and clears the snapshot on completion" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+
+      snapshot_during_run = nil
+      allow(PostEmailApi).to receive(:process) do |**_kwargs|
+        snapshot_during_run = $redis.lrange(snapshot_key, 0, -1)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expected_ids = AudienceMember.where(seller_id: post.seller_id).pluck(:id)
+      expect(snapshot_during_run.map(&:to_i)).to match_array(expected_ids)
+      expect($redis.exists?(snapshot_key)).to eq(false)
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "resumes from the snapshot on retry using only an id-restricted filter" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      snapshotted_ids = AudienceMember.where(seller_id: post.seller_id).pluck(:id)
+      $redis.rpush(snapshot_key, snapshotted_ids)
+
+      # The retry must never run the unrestricted filter (that's the expensive query the
+      # snapshot exists to avoid) — every call must be bounded to the snapshotted ids.
+      expect(AudienceMember).to receive(:filter).with(hash_including(ids: snapshotted_ids)).and_call_original
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(snapshot_key)).to eq(false)
+    ensure
+      $redis.del(snapshot_key)
+    end
+
+    it "drops snapshotted members who have since left the audience" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      snapshotted_ids = AudienceMember.where(seller_id: post.seller_id).pluck(:id)
+      departed_id = snapshotted_ids.max + 1_000
+      $redis.rpush(snapshot_key, snapshotted_ids + [departed_id])
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(snapshot_key)
+    end
+
+    it "drops snapshotted members who lost the targeted role but kept their audience row" do
+      # A follower who is ALSO a customer keeps their audience_members row when they
+      # unsubscribe from follower updates — only the follower entry leaves the row's
+      # details. A follower-targeted retry must not email them from the stale snapshot.
+      post = create(:follower_post, :published, seller: @seller)
+      follower = create(:active_follower, user: @seller)
+      # Give the follower a purchase too, so their audience_members row SURVIVES the
+      # follower opt-out below — the mixed-role case this test is about.
+      create(:free_purchase, link: create(:product, user: @seller), seller: @seller, email: follower.email)
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      snapshotted_ids = AudienceMember.filter(seller_id: post.seller_id, params: post.audience_members_filter_params).pluck(:id)
+      expect(snapshotted_ids).not_to be_empty
+      $redis.rpush(snapshot_key, snapshotted_ids)
+
+      # Simulate the mixed-role opt-out between attempts: unsubscribing removes the
+      # follower entry from the member's details, but the row survives because they're
+      # still a customer.
+      follower.mark_deleted!
+      expect(AudienceMember.find_by(email: follower.email, seller: @seller)).to be_present
+
+      described_class.new.perform(blast.id)
+
+      expect(PostSendgridApi.mails[follower.email]).to be_blank
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(snapshot_key)
+    end
+
+    it "drops snapshotted members whose qualifying purchase left the audience even though their row survives" do
+      # A buyer who is ALSO a follower: refunding the purchase removes it from the
+      # member's details but keeps the audience_members row (they're still a follower).
+      # A retried product blast must not email them from the stale snapshot.
+      product = create(:product, user: @seller)
+      purchase = create(:free_purchase, link: product, seller: @seller)
+      create(:active_follower, user: @seller, email: purchase.email)
+      post = create(:product_post, :published, seller: @seller, link: product, bought_products: [product.unique_permalink])
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      snapshotted_ids = AudienceMember.filter(seller_id: post.seller_id, params: post.audience_members_filter_params).pluck(:id)
+      expect(snapshotted_ids).not_to be_empty
+      $redis.rpush(snapshot_key, snapshotted_ids)
+
+      # Simulate the purchase leaving the audience (refund) between snapshot and retry.
+      purchase.remove_from_audience_member_details
+      expect(AudienceMember.find_by(email: purchase.email, seller: @seller)).to be_present
+
+      described_class.new.perform(blast.id)
+
+      expect(PostSendgridApi.mails[purchase.email]).to be_blank
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(snapshot_key) if snapshot_key
+    end
+
+    it "ignores a leftover partial write at the temporary key and re-runs the filter" do
+      # If a worker dies partway through writing the snapshot, the half-written list
+      # lives only at the :tmp key — the real key must stay absent so a retry re-runs
+      # the full audience filter instead of sending to a fraction of the audience.
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush("#{snapshot_key}:tmp", 1)
+
+      expect(AudienceMember).to receive(:filter).and_call_original
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect($redis.exists?("#{snapshot_key}:tmp")).to eq(false)
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(snapshot_key, "#{snapshot_key}:tmp")
+    end
+
+    it "keeps the snapshot when the send fails so the retry can reuse it" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+
+      expect(PostEmailApi).to receive(:process).and_raise(StandardError.new("API failure"))
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(StandardError, "API failure")
+
+      expect($redis.exists?(snapshot_key)).to eq(true)
+    ensure
+      $redis.del(snapshot_key)
+    end
+  end
+
   describe "error handling" do
     it "deletes sent_post_emails records if PostEmailApi.process raises an error" do
       # Setup post and blast
