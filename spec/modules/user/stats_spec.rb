@@ -177,6 +177,23 @@ describe User::Stats, :vcr do
         refunds_cents_for_balances = @user.refunds_cents_for_balances(balance_ids)
         expect(refunds_cents_for_balances).to eq(purchase1.price_cents + purchase2.price_cents - 10)
       end
+
+      it "keeps a failed refund in the totals until its balance debits are reversed" do
+        purchase = Purchase.last
+        purchase.refund_and_save!(nil)
+        refund = purchase.refunds.last
+        balance_ids = @user.unpaid_balances.map(&:id)
+
+        # Failed but not yet reversed: the seller is still debited, so the refund
+        # still counts.
+        refund.update!(status: "failed")
+        expect(@user.refunds_cents_for_balances(balance_ids)).to eq purchase.price_cents
+
+        # Reversed: the money came back, so the refund stops counting.
+        Purchase::HandleFailedRefundService.new(refund: refund.reload).perform
+        expect(refund.reload.balance_reversed_on_failure).to eq(true)
+        expect(@user.refunds_cents_for_balances(balance_ids)).to eq 0
+      end
     end
 
     describe "affiliate_credit_cents_for_balances" do
