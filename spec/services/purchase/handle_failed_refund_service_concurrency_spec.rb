@@ -53,6 +53,11 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
   def create_failed_candidate_refund!(amount_cents:, processor_refund_id:)
     refund = create(:refund,
                     purchase: @purchase,
+                    # The factory default creates a brand-new refunding user. This file
+                    # runs outside the test transaction, so that user would outlive the
+                    # example and pollute later specs (users table is shared); reuse the
+                    # seller, who the after block already destroys.
+                    refunding_user_id: @seller.id,
                     amount_cents: amount_cents,
                     total_transaction_cents: amount_cents,
                     gumroad_tax_cents: 0,
