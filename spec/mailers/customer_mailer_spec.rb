@@ -1316,27 +1316,30 @@ describe CustomerMailer do
       expect(mail.subject).to eq("You have been refunded.")
     end
 
-    context "when the refund carries a presentment snapshot" do
-      let(:refund) do
-        refund = create(:refund, purchase:, amount_cents: 2016)
-        refund.presentment_currency = Currency::CAD
-        refund.presentment_amount_cents = 28_83
-        refund.save!
-        refund
+    context "when the purchase was charged in the buyer's own currency" do
+      before do
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::CAD, presentment_price_cents: 28_83, presentment_gumroad_tax_cents: 0, presentment_total_cents: 28_83)
       end
 
-      it "shows the buyer-currency amount with the canonical USD amount alongside" do
-        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id, refund.id)
+      it "shows the buyer-currency purchase total with the canonical USD total alongside" do
+        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id)
         expect(mail.body.encoded).to include("CAD$28.83")
         expect(mail.body.encoded).to include("(#{purchase.formatted_total_transaction_amount} USD)")
       end
+
+      it "shows the full purchase total even when earlier partial refunds preceded this one" do
+        # A tax-only or partial refund before the final refund must not shrink the
+        # "your purchase ... for <amount>" figure — that copy describes the original
+        # purchase, not the last refund's remainder.
+        create(:refund, purchase:, amount_cents: 0, gumroad_tax_cents: 1_50, total_transaction_cents: 1_50)
+        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id)
+        expect(mail.body.encoded).to include("for CAD$28.83")
+      end
     end
 
-    context "when the refund has no presentment snapshot" do
-      let(:refund) { create(:refund, purchase:) }
-
+    context "when the purchase has no presentment record" do
       it "renders the canonical amount exactly as before" do
-        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id, refund.id)
+        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id)
         expect(mail.body.encoded).to include("for #{purchase.formatted_total_transaction_amount} on Gumroad")
         expect(mail.body.encoded).not_to include("USD)")
       end
@@ -1344,39 +1347,17 @@ describe CustomerMailer do
 
     context "when the product's display currency is not USD" do
       let(:product) { create(:product, user: seller, price_currency_type: Currency::EUR) }
-      let(:refund) do
-        refund = create(:refund, purchase:, amount_cents: 2016)
-        refund.presentment_currency = Currency::CAD
-        refund.presentment_amount_cents = 28_83
-        refund.save!
-        refund
-      end
 
       before do
         purchase.update!(displayed_price_currency_type: Currency::EUR, rate_converted_to_usd: 0.9)
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::CAD, presentment_price_cents: 28_83, presentment_gumroad_tax_cents: 0, presentment_total_cents: 28_83)
       end
 
       it "formats the amount labeled USD in dollars, not the display currency" do
-        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id, refund.id)
+        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id)
         usd_total = MoneyFormatter.format(purchase.total_transaction_cents, :usd, no_cents_if_whole: true, symbol: true)
         expect(mail.body.encoded).to include("(#{usd_total} USD)")
         expect(mail.body.encoded).not_to include("(#{purchase.formatted_total_transaction_amount} USD)")
-      end
-    end
-
-    context "when the refund belongs to a different purchase" do
-      let(:other_purchase) { create(:purchase, link: product, seller:) }
-      let(:refund) do
-        refund = create(:refund, purchase: other_purchase)
-        refund.presentment_currency = Currency::CAD
-        refund.presentment_amount_cents = 28_83
-        refund.save!
-        refund
-      end
-
-      it "ignores the mismatched refund and renders the canonical amount" do
-        mail = CustomerMailer.refund("test@example.com", product.id, purchase.id, refund.id)
-        expect(mail.body.encoded).not_to include("CAD$")
       end
     end
   end
@@ -1393,31 +1374,21 @@ describe CustomerMailer do
       expect(mail.body.encoded).to include("$5")
     end
 
-    context "when the refund carries a presentment snapshot" do
-      let(:refund) do
-        refund = create(:refund, purchase:, amount_cents: 500)
-        refund.presentment_currency = Currency::CAD
-        refund.presentment_amount_cents = 7_15
-        refund.save!
-        refund
-      end
-
+    context "when the refund carries a presentment amount" do
       before do
         create(:purchase_presentment, purchase:, presentment_currency: Currency::CAD)
       end
 
       it "shows the buyer-currency refund amount and purchase total with USD alongside" do
-        mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", refund.id)
+        mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", 7_15, Currency::CAD)
         expect(mail.body.encoded).to include("partial refund of CAD$7.15 ($5 USD)")
         expect(mail.body.encoded).to include("#{purchase.formatted_buyer_presentment_total} (#{purchase.formatted_total_transaction_amount} USD) purchase")
       end
     end
 
-    context "when the refund has no presentment snapshot" do
-      let(:refund) { create(:refund, purchase:, amount_cents: 500) }
-
+    context "when the refund has no presentment amount" do
       it "renders the canonical amounts exactly as before" do
-        mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", refund.id)
+        mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", nil, nil)
         expect(mail.body.encoded).to include("partial refund of $5 for your #{purchase.formatted_total_transaction_amount} purchase")
         expect(mail.body.encoded).not_to include("USD)")
       end
@@ -1425,13 +1396,6 @@ describe CustomerMailer do
 
     context "when the product's display currency is not USD" do
       let(:product) { create(:product, user: seller, price_currency_type: Currency::EUR) }
-      let(:refund) do
-        refund = create(:refund, purchase:, amount_cents: 500)
-        refund.presentment_currency = Currency::CAD
-        refund.presentment_amount_cents = 7_15
-        refund.save!
-        refund
-      end
 
       before do
         purchase.update!(displayed_price_currency_type: Currency::EUR, rate_converted_to_usd: 0.9)
@@ -1439,7 +1403,7 @@ describe CustomerMailer do
       end
 
       it "formats the amounts labeled USD in dollars, not the product currency" do
-        mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", refund.id)
+        mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", 7_15, Currency::CAD)
         usd_total = MoneyFormatter.format(purchase.total_transaction_cents, :usd, no_cents_if_whole: true, symbol: true)
         expect(mail.body.encoded).to include("partial refund of CAD$7.15 ($5 USD)")
         expect(mail.body.encoded).to include("(#{usd_total} USD) purchase")

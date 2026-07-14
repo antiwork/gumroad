@@ -67,6 +67,7 @@ export type Purchase = PurchaseStatesInfo & {
   purchase_state: string;
   formatted_total_transaction_amount: string;
   formatted_presentment_total: string | null;
+  formatted_usd_transaction_total: string | null;
   charge_processor_id: string | null;
   stripe_transaction: { id: string; search_url: string | null } | null;
   external_id_numeric: number;
@@ -244,10 +245,13 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
 
       <dt>Transaction Total</dt>
       <dd>
-        {purchase.formatted_total_transaction_amount}
-        {/* Purchases charged in the buyer's own currency also show that amount, so support
-            can match the number on the buyer's card statement. */}
-        {purchase.formatted_presentment_total ? ` (${purchase.formatted_presentment_total})` : null}
+        {/* Purchases charged in the buyer's own currency show an explicitly-USD canonical
+            total paired with the buyer-currency amount, so support can match the number on
+            the buyer's card statement. formatted_total_transaction_amount is in the product's
+            display currency (not necessarily USD), so it can't be the USD side of the pair. */}
+        {purchase.formatted_usd_transaction_total && purchase.formatted_presentment_total
+          ? `${purchase.formatted_usd_transaction_total} (${purchase.formatted_presentment_total})`
+          : purchase.formatted_total_transaction_amount}
       </dd>
 
       <dt>{purchase.charge_processor_id} transaction ID</dt>

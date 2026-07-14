@@ -312,11 +312,12 @@ class Purchase
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
       send_refunded_notification_webhook
       if partially_refunded_previously || self.stripe_partially_refunded
-        # Pass the refund's id so the email can show the buyer-currency amount from the
-        # refund's presentment snapshot when one exists.
-        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state, refund.id).deliver_later(queue: "critical")
+        # Pass the refund's buyer-currency amount as plain values (not the Refund id):
+        # this enqueue happens inside the transaction, so the mailer job could run
+        # before the Refund row is committed/visible and would miss it.
+        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state, refund.presentment_amount_cents, refund.presentment_currency).deliver_later(queue: "critical")
       else
-        CustomerMailer.refund(email, link.id, id, refund.id).deliver_later(queue: "critical")
+        CustomerMailer.refund(email, link.id, id).deliver_later(queue: "critical")
       end
       # Those callbacks are manually invoked because of a rails issue: https://github.com/rails/rails/issues/39972
       update_creator_analytics_cache(force: true)
@@ -361,9 +362,11 @@ class Purchase
       save!
       Credit.create_for_vat_exclusive_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
-      # refund can be nil here (build_partial_full_refund may return nothing); pass its id
-      # when present so the email can show the buyer-currency snapshot amount.
-      CustomerMailer.partial_refund(email, link.id, id, gross_refund_amount_cents, formatted_refund_state, refund&.id).deliver_later(queue: "critical")
+      # refund can be nil here (build_partial_full_refund may return nothing). Pass the
+      # refund's buyer-currency amount as plain values (not the Refund id): this enqueue
+      # happens inside the transaction, so the mailer job could run before the Refund row
+      # is committed/visible and would miss it.
+      CustomerMailer.partial_refund(email, link.id, id, gross_refund_amount_cents, formatted_refund_state, refund&.presentment_amount_cents, refund&.presentment_currency).deliver_later(queue: "critical")
       true
     end
   end

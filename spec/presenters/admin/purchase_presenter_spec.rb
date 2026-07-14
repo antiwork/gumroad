@@ -39,6 +39,7 @@ describe Admin::PurchasePresenter do
             formatted_affiliate_credit_amount: nil,
             formatted_total_transaction_amount: purchase.formatted_total_transaction_amount,
             formatted_presentment_total: nil,
+            formatted_usd_transaction_total: nil,
             charge_processor_id: purchase.charge_processor_id&.capitalize,
             stripe_transaction: {
               id: purchase.stripe_transaction_id,
@@ -106,6 +107,26 @@ describe Admin::PurchasePresenter do
 
         it "includes the formatted buyer-currency total" do
           expect(props[:formatted_presentment_total]).to eq("CAD$13.50")
+        end
+
+        it "includes an explicitly-USD canonical total" do
+          expect(props[:formatted_usd_transaction_total]).to eq(MoneyFormatter.format(purchase.total_transaction_cents, :usd, no_cents_if_whole: true, symbol: true))
+        end
+      end
+
+      context "when the purchase is presentment on a non-USD-listed product" do
+        let(:product) { create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 1500) }
+
+        before do
+          purchase.update!(displayed_price_currency_type: Currency::EUR, rate_converted_to_usd: 0.8, total_transaction_cents: 18_75)
+          create(:purchase_presentment, purchase:, presentment_currency: Currency::EUR, presentment_price_cents: 15_00, presentment_gumroad_tax_cents: 0, presentment_total_cents: 15_00)
+        end
+
+        it "formats the canonical total in USD, not the product's display currency" do
+          # formatted_total_transaction_amount converts to the display currency (€15 here);
+          # the transaction total pairing must show the true USD figure ($18.75).
+          expect(props[:formatted_usd_transaction_total]).to eq("$18.75")
+          expect(props[:formatted_presentment_total]).to eq("€15")
         end
       end
 
