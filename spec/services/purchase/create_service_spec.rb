@@ -3515,7 +3515,9 @@ describe Purchase::CreateService, :vcr do
 
       purchase, error = Purchase::CreateService.new(product:, params:).perform
 
-      expect(error).to include("The price just changed!")
+      # This error string is returned to the checkout page as-is, so assert the exact
+      # buyer-facing message (no "Price cents" attribute prefix from full_messages).
+      expect(error).to eq("The price just changed! Refresh the page for the updated price.")
       expect(purchase).to have_attributes(
         purchase_state: "failed",
         is_installment_payment: false,

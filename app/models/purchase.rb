@@ -4211,7 +4211,10 @@ class Purchase < ApplicationRecord
       return if customizable_price_that_has_not_changed?
 
       self.error_code = PurchaseErrorCode::PERCEIVED_PRICE_CENTS_NOT_MATCHING
-      errors.add(:price_cents, "The price just changed! Refresh the page for the updated price.")
+      # This message is shown to buyers verbatim (checkout surfaces errors via
+      # errors.full_messages), so it must live on :base — attaching it to an attribute
+      # would prepend "Price cents" to the buyer-facing alert.
+      errors.add(:base, "The price just changed! Refresh the page for the updated price.")
       true
     end
 
