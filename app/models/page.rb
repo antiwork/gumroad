@@ -116,12 +116,16 @@ class Page < ApplicationRecord
     def only_one_root_page
       scope = Page.roots.where(pageable_type:, pageable_id:)
       scope = scope.where.not(id:) if persisted?
-      # `.lock` makes this a SELECT ... FOR UPDATE. When the check runs inside
-      # a save (which wraps the validation and the INSERT in one transaction),
-      # InnoDB's gap locking on the (pageable_type, pageable_id, slug) index
-      # blocks a concurrent insert of another slug-NULL row for the same owner
-      # until this transaction commits — closing the race the database index
-      # can't cover (MySQL unique indexes allow multiple NULLs, see above).
+      # `.lock` makes this a SELECT ... FOR UPDATE. A save wraps validation and
+      # the INSERT in one transaction, so when two saves race to create a root
+      # page for the same owner, both locking reads take gap locks on the
+      # (pageable_type, pageable_id, slug) index range where the new row would
+      # land. Gap locks coexist, but each INSERT then needs an insert intention
+      # lock that conflicts with the other transaction's gap lock — InnoDB
+      # detects the deadlock and aborts one transaction, so at most one root
+      # page is created. This depends on the REPEATABLE READ isolation level
+      # (our default); it exists because the database index can't enforce the
+      # rule itself — MySQL unique indexes allow multiple NULL slugs (see above).
       errors.add(:slug, "can't be blank — this account already has a root page") if scope.lock.exists?
     end
 end
