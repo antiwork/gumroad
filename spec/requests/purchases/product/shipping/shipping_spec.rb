@@ -120,8 +120,8 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
     check_out(link, logged_in_user: user, credit_card: nil)
 
     purchaser = Purchase.last.purchaser
-    expect(purchaser.street_address).to eq("1640 17TH ST")
-    expect(purchaser.city).to eq("SAN FRANCISCO")
+    expect(purchaser.street_address).to eq("1640 17th St")
+    expect(purchaser.city).to eq("San Francisco")
     expect(purchaser.state).to eq("CA")
     expect(purchaser.zip_code).to eq("94107")
   end
