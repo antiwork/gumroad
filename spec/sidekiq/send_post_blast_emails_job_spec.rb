@@ -396,6 +396,79 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "audience snapshot for retry resume" do
+    def snapshot_entry(member)
+      [member.id, member.email, member.purchase_id, member.follower_id, member.affiliate_id].to_json
+    end
+
+    it "snapshots the audience members in Redis and clears the snapshot on completion" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_member_ids(blast.id)
+
+      snapshot_during_run = nil
+      allow(PostEmailApi).to receive(:process) do |**_kwargs|
+        snapshot_during_run = $redis.lrange(snapshot_key, 0, -1)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expected_ids = AudienceMember.where(seller_id: post.seller_id).pluck(:id)
+      expect(snapshot_during_run.map { JSON.parse(_1).first }).to match_array(expected_ids)
+      expect($redis.exists?(snapshot_key)).to eq(false)
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "resumes from the snapshot on retry without re-running the audience filter" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_member_ids(blast.id)
+      members = AudienceMember.filter(seller_id: post.seller_id, params: post.audience_members_filter_params, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+      $redis.rpush(snapshot_key, members.map { snapshot_entry(_1) })
+
+      expect(AudienceMember).not_to receive(:filter)
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(snapshot_key)).to eq(false)
+    ensure
+      $redis.del(snapshot_key)
+    end
+
+    it "drops snapshotted members who have since left the audience" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_member_ids(blast.id)
+      members = AudienceMember.filter(seller_id: post.seller_id, params: post.audience_members_filter_params, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+      departed = SendPostBlastEmailsJob::SnapshotMember.new(members.map(&:id).max + 1_000, "departed@example.com", nil, nil, nil)
+      $redis.rpush(snapshot_key, (members + [departed]).map { snapshot_entry(_1) })
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(PostSendgridApi.mails["departed@example.com"]).to be_blank
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(snapshot_key)
+    end
+
+    it "keeps the snapshot when the send fails so the retry can reuse it" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_member_ids(blast.id)
+
+      expect(PostEmailApi).to receive(:process).and_raise(StandardError.new("API failure"))
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(StandardError, "API failure")
+
+      expect($redis.exists?(snapshot_key)).to eq(true)
+    ensure
+      $redis.del(snapshot_key)
+    end
+  end
+
   describe "error handling" do
     it "deletes sent_post_emails records if PostEmailApi.process raises an error" do
       # Setup post and blast

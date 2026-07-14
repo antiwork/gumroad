@@ -16,13 +16,7 @@ class SendPostBlastEmailsJob
     @filters = @post.audience_members_filter_params
     # The filter query can be expensive to run, it's better to run it on the replica DB.
     Makara::Context.release_all
-    # For sellers with very large audiences (hundreds of thousands of members) the filter
-    # query can take longer than the database's default 5-minute statement cap, which made
-    # big blasts fail with a StatementTimeout on every attempt and never send anything.
-    # Raise the cap for this one query, the same way the sales report jobs do.
-    @members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
-      AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
-    end
+    @members = load_audience_members
 
     if @blast.to_non_openers?
       keep_emails = @post.unopened_recipient_emails.to_set
@@ -60,6 +54,58 @@ class SendPostBlastEmailsJob
   end
 
   private
+    # How long the audience snapshot survives in Redis. Long enough to cover the full
+    # Sidekiq retry schedule of this job (10 retries spans roughly a day), short enough
+    # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
+    AUDIENCE_SNAPSHOT_TTL = 3.days
+
+    # A snapshotted recipient. Quacks like the AudienceMember rows the filter query
+    # returns (the send loop only uses these five attributes). purchase_id / follower_id /
+    # affiliate_id are DERIVED by the filter's JSON_TABLE subquery — they are not columns
+    # on audience_members — which is why the snapshot must store full tuples instead of
+    # bare ids.
+    SnapshotMember = Struct.new(:id, :email, :purchase_id, :follower_id, :affiliate_id)
+
+    # Loads the recipient list for the blast. For sellers with very large audiences
+    # (hundreds of thousands of members) the filter query is the slowest, most fragile
+    # part of the job: it can exceed the database's default 5-minute statement cap, and a
+    # deploy or worker restart mid-run loses all its progress. Two protections here:
+    #
+    # 1. The query runs under a raised statement-time cap (Redis-tunable), the same way
+    #    the sales report jobs handle long queries.
+    # 2. The resolved members are snapshotted in Redis keyed by blast id. When a retry of
+    #    the SAME blast runs after a mid-run kill (deploys will only get more frequent),
+    #    it skips the expensive filter entirely and rehydrates from the snapshot, so each
+    #    retry resumes sending within seconds instead of repaying the minutes-long load
+    #    and re-racing the next deploy.
+    #
+    # Rehydrated members are re-checked against audience_members, so anyone who left the
+    # audience after the snapshot was taken (unsubscribed, erased) is dropped from the
+    # retry rather than emailed from stale data. Members ADDED after the first attempt
+    # won't be picked up by a retry — acceptable for a send already mid-flight.
+    def load_audience_members
+      snapshot_key = RedisKey.blast_audience_member_ids(@blast.id)
+      snapshot = $redis.lrange(snapshot_key, 0, -1)
+
+      if snapshot.empty?
+        members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+          AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+        end
+        if members.any?
+          members.each_slice(10_000) do |slice|
+            $redis.rpush(snapshot_key, slice.map { |m| [m.id, m.email, m.purchase_id, m.follower_id, m.affiliate_id].to_json })
+          end
+          $redis.expire(snapshot_key, AUDIENCE_SNAPSHOT_TTL.to_i)
+        end
+        members
+      else
+        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from audience snapshot (#{snapshot.size} members)")
+        members = snapshot.map { SnapshotMember.new(*JSON.parse(_1)) }
+        still_present = AudienceMember.where(id: members.map(&:id)).pluck(:id).to_set
+        members.select { still_present.include?(_1.id) }
+      end
+    end
+
     def prepare_recipients(members)
       members_with_specifics = members.index_with { { email: _1.email } }
       enrich_with_gathered_records(members_with_specifics)
@@ -170,6 +216,8 @@ class SendPostBlastEmailsJob
 
     def mark_blast_as_completed
       @blast.update!(completed_at: Time.current)
+      # The blast is done, so the retry-resume snapshot has served its purpose.
+      $redis.del(RedisKey.blast_audience_member_ids(@blast.id))
     end
 
     # Stores email addresses in SentPostEmail, just before sending the emails.
