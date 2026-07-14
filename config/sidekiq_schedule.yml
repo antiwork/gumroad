@@ -358,9 +358,13 @@ daily_finance_ledger_report:
   class: SendDailyFinanceLedgerReportJob
   description: Daily event-ledger finance report (funds received, refunds, disputes) for the previous UTC day
 stripe_currency_balances_report:
-  cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
+  cron: "5 0 1 * *" # UTC 00:05 on 1st of every month — the balance is read live (point-in-time), so run as close to month-end as possible
   class: SendStripeCurrencyBalancesReportJob
   description: Email with Stripe currency balances report
+stripe_balance_summaries_report:
+  cron: "0 11 2 * *" # UTC 11:00 on 2nd of every month — Stripe's balance reports lag ~24h, so the full previous month isn't queryable on the 1st
+  class: SendStripeBalanceSummariesReportJob
+  description: Email with Stripe balance summary reports (all Antiwork Stripe accounts) for the previous month
 reset_admin_action_call_counts:
   cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
   class: ResetAdminActionCallCountsJob

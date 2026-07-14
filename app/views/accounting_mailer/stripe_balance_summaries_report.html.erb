@@ -1,0 +1,13 @@
+<%= header_section("Stripe Balance Summaries Report") %>
+<div>
+  <p>
+    Attached are the Stripe balance summary reports for <%= "#{@month}/#{@year}" %> — one CSV per
+    Stripe account, each combining the balance summary, balance change from activity, and payouts
+    reports for the month.
+  </p>
+  <% if @skipped_entities.present? %>
+    <p>
+      Not included (no Stripe API key configured): <%= @skipped_entities.join(", ") %>.
+    </p>
+  <% end %>
+</div>

@@ -46,6 +46,23 @@ class AccountingMailer < ApplicationMailer
          cc: %w[gumclaw@gumroad.com]
   end
 
+  # One Stripe dashboard-style balance summary CSV per Antiwork Stripe account (Gumroad,
+  # Flexile, Helper, Iffy) for the given month — the month-end close inputs that were
+  # previously pulled by hand. `skipped_entities` names accounts whose API key isn't
+  # configured, so a silently missing attachment is called out in the email body instead.
+  def stripe_balance_summaries_report(csvs_by_entity, skipped_entities, month, year)
+    @month = month
+    @year = year
+    @skipped_entities = skipped_entities
+
+    csvs_by_entity.each do |entity, csv|
+      attachments["stripe-balance-#{entity.downcase}-#{month}-#{year}.csv"] = { data: csv }
+    end
+    mail subject: "#{SUBJECT_PREFIX}Stripe Balance Summaries Report – #{month}/#{year}",
+         to: FINANCE_EMAIL,
+         cc: %w[gumclaw@gumroad.com]
+  end
+
   def stripe_currency_balances_report(balances_csv)
     last_month = Time.current.last_month
     month = last_month.month
