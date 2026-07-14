@@ -59,14 +59,17 @@ class NotifyFailedRefundExceptionJob
       end
 
       summary = "Balance debits recorded on the refund were reversed automatically."
-      # The retained processor fee is debited through a separate Credit whose balance
-      # transaction is not linked to the refund, so the automatic reversal does not
-      # cover it — the seller is still short that fee, and a re-refund would retain
-      # it a second time. Call it out so the reviewer doesn't read "reversed
-      # automatically" as "fully reversed".
+      # The retained processor fee is debited through a separate Credit; the automatic
+      # reversal gives it back with an offset credit (marked failed_refund_fee_reversal).
+      # Legacy rows handled before that existed may still be short the fee, so report
+      # what actually happened for THIS refund instead of assuming.
       retained_fee_cents = refund.retained_fee_cents.to_i
       if retained_fee_cents > 0
-        summary += " The #{retained_fee_cents}-cent processor fee retained via a separate credit was NOT reversed; the seller is still debited that fee, and a re-refund will retain it again."
+        if Credit.where(fee_retention_refund: refund).failed_refund_fee_reversals.exists?
+          summary += " The #{retained_fee_cents}-cent processor fee retained via a separate credit was also given back to the seller."
+        else
+          summary += " The #{retained_fee_cents}-cent processor fee retained via a separate credit was NOT reversed; the seller is still debited that fee, and a re-refund will retain it again."
+        end
       end
       summary
     end

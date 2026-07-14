@@ -182,6 +182,57 @@ describe Purchase::HandleFailedRefundService do
       end
     end
 
+    context "when the refund retained the processor fee through a separate credit" do
+      let!(:retention_credit) { Credit.create_for_refund_fee_retention!(refund:) }
+
+      it "gives the retained fee back with an explicitly typed offset credit" do
+        fee_cents = retention_credit.amount_cents.abs
+        expect(fee_cents).to be > 0
+        expect(refund.reload.retained_fee_cents.to_i).to eq(fee_cents)
+
+        expect { described_class.new(refund:).perform }
+          .to change { Credit.where(fee_retention_refund: refund).count }.from(1).to(2)
+
+        reversal = Credit.where(fee_retention_refund: refund).failed_refund_fee_reversals.sole
+        expect(reversal.amount_cents).to eq(fee_cents)
+        expect(reversal.user).to eq(retention_credit.user)
+        expect(reversal.merchant_account).to eq(retention_credit.merchant_account)
+        expect(retention_credit.reload.failed_refund_fee_reversal).to be_falsey
+
+        offset_transaction = reversal.balance_transaction
+        expect(offset_transaction.issued_amount_gross_cents).to eq(fee_cents)
+        expect(offset_transaction.holding_amount_gross_cents).to eq(fee_cents)
+        expect(offset_transaction.balance_id).to be_present
+      end
+
+      it "does not create another offset on a re-delivered webhook" do
+        described_class.new(refund:).perform
+
+        expect { described_class.new(refund: Refund.find(refund.id)).perform }
+          .not_to change { Credit.where(fee_retention_refund: refund).count }
+      end
+
+      it "leaves the retention credit alone when the money moved outside Gumroad's ledger" do
+        allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
+
+        expect { described_class.new(refund:).perform }
+          .not_to change { Credit.where(fee_retention_refund: refund).count }
+      end
+
+      it "tells the exception reviewer the retained fee was given back" do
+        described_class.new(refund:).perform
+        failed_refund_exception = refund.reload.failed_refund_exception
+
+        expect do
+          NotifyFailedRefundExceptionJob.new.perform(failed_refund_exception.id)
+        end.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+        body = ActionMailer::Base.deliveries.last.body.encoded
+        expect(body).to include("also given back to the seller")
+        expect(body).not_to include("NOT reversed")
+      end
+    end
+
     it "keeps a partial refund flag when another non-failed refund remains" do
       create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
 

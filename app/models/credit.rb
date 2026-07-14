@@ -24,6 +24,14 @@ class Credit < ApplicationRecord
   validate :validate_associated_entity
 
   attr_json_data_accessor :stripe_loan_paydown_id
+  # Marks a credit that gives back a previously retained refund fee because the refund
+  # itself later FAILED (the buyer's bank returned an async bank-transfer refund after
+  # Stripe had accepted it). Distinguishes these offsets from the original retention
+  # debits — payout exports and finance reports must not present them as new refund
+  # debits or unexplained credits.
+  attr_json_data_accessor :failed_refund_fee_reversal
+
+  scope :failed_refund_fee_reversals, -> { where("json_data->>'$.failed_refund_fee_reversal' = 'true'") }
 
   def self.create_for_credit!(user:, amount_cents:, crediting_user:, reason: nil)
     credit = new
@@ -374,6 +382,43 @@ class Credit < ApplicationRecord
       credit:,
       issued_amount: balance_transaction_amount,
       holding_amount: balance_transaction_holding_amount
+    )
+
+    credit.balance = balance_transaction.balance
+    credit.save!
+    credit
+  end
+
+  # Give back the fee that create_for_refund_fee_retention! retained, because the
+  # refund it was retained for later FAILED (async bank-transfer refunds can be
+  # returned by the buyer's bank after Stripe accepted them). Only used on the
+  # auto-reversal path, which is restricted to Gumroad-held funds — so unlike the
+  # retention above there is never a Stripe transfer to unwind here; the retention
+  # for Gumroad-held funds was a pure ledger debit.
+  #
+  # The offset links to the same fee_retention_refund (so payout exports can pair
+  # the two rows) and is marked failed_refund_fee_reversal so consumers can tell
+  # the give-back from the original retention without relying on its sign.
+  def self.create_for_failed_refund_fee_reversal!(refund:, retention_credit:)
+    credit = new
+    credit.user = retention_credit.user
+    credit.amount_cents = -retention_credit.amount_cents
+    credit.merchant_account = retention_credit.merchant_account
+    credit.fee_retention_refund = refund
+    credit.failed_refund_fee_reversal = true
+    credit.save!
+
+    balance_transaction_amount = BalanceTransaction::Amount.new(
+      currency: Currency::USD,
+      gross_cents: credit.amount_cents,
+      net_cents: credit.amount_cents
+    )
+    balance_transaction = BalanceTransaction.create!(
+      user: credit.user,
+      merchant_account: credit.merchant_account,
+      credit:,
+      issued_amount: balance_transaction_amount,
+      holding_amount: balance_transaction_amount
     )
 
     credit.balance = balance_transaction.balance

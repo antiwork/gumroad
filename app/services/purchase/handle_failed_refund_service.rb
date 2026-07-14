@@ -68,6 +68,7 @@ class Purchase::HandleFailedRefundService
         refund.update!(status: "failed") if needs_status_update
         if needs_balance_reversal
           reverse_balance_transactions!
+          reverse_fee_retention_credits!
           recompute_purchase_refunded_flags!
           refund.balance_reversed_on_failure = true
           refund.save!
@@ -168,6 +169,30 @@ class Purchase::HandleFailedRefundService
           # its offset credit a live balance the original never debited.
           update_user_balance: original.balance_id.present?
         )
+      end
+    end
+
+    # The refund also retained the processor fee through a separate Credit (see
+    # Credit.create_for_refund_fee_retention!) whose balance transaction links to the
+    # credit, not the refund — so reverse_balance_transactions! above cannot see it.
+    # Without this, the seller stays short the retained fee for a refund that never
+    # happened, and a re-refund would retain the fee a second time. Give it back with
+    # an explicitly typed offset credit. Skip credits that already have a matching
+    # reversal so a partially-completed earlier run cannot double-credit.
+    #
+    # Auto-reversal is restricted to Gumroad-held funds (auto_reversal_eligible?), and
+    # for those the retention was a pure ledger debit — no Stripe transfer to unwind.
+    def reverse_fee_retention_credits!
+      retention_credits = Credit.where(fee_retention_refund: refund).to_a
+      reversals, retentions = retention_credits.partition { |credit| credit.failed_refund_fee_reversal.present? }
+      already_reversed_amounts = reversals.map(&:amount_cents).tally
+      retentions.each do |retention_credit|
+        offset_amount = -retention_credit.amount_cents
+        if already_reversed_amounts[offset_amount].to_i > 0
+          already_reversed_amounts[offset_amount] -= 1
+          next
+        end
+        Credit.create_for_failed_refund_fee_reversal!(refund:, retention_credit:)
       end
     end
 
