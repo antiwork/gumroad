@@ -83,6 +83,17 @@ describe Api::V2::PagesController do
       expect(response).to have_http_status(:forbidden)
     end
 
+    it "refuses a broad account-scope token without edit_profile" do
+      # The v2 base controller accepts the legacy `account` scope as a fallback for
+      # doorkeeper_authorize!; page writes must still demand edit_profile itself.
+      broad = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+
+      post :create, params: { format: :json, access_token: broad.token, title: "FAQ", content: "<p>Hi</p>" }
+
+      expect(response).to have_http_status(:forbidden)
+      expect(@user.pages.count).to eq(0)
+    end
+
     it "creates a custom HTML page when the feature is enabled" do
       Feature.activate_user(:custom_html_pages, @user)
 

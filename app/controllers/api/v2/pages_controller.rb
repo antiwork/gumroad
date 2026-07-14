@@ -12,6 +12,14 @@
 class Api::V2::PagesController < Api::V2::BaseController
   before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:index, :show]
   before_action(only: [:create, :update, :destroy]) { doorkeeper_authorize! :edit_profile }
+  # The base controller's doorkeeper_authorize! also accepts the broad legacy `account` scope.
+  # Writes to storefront pages are gated on the narrower edit_profile scope specifically, so
+  # refuse account-only tokens here (same pattern as Api::V2::MediaController).
+  before_action(only: [:create, :update, :destroy]) { require_oauth_scope! :edit_profile }
+  # The base controller adds the broad legacy `account` scope as a fallback to every
+  # doorkeeper_authorize! call. Writes to storefront pages are a narrower boundary, so
+  # additionally require the edit_profile scope itself (same pattern as MediaController).
+  before_action(only: [:create, :update, :destroy]) { require_oauth_scope! :edit_profile }
   before_action :ensure_confirmed_user, only: [:create, :update, :destroy]
   before_action :set_page, only: [:show, :update, :destroy]
 
