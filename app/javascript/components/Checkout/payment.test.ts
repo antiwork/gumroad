@@ -940,6 +940,24 @@ describe("reduceCheckoutState", () => {
       expect(next.status).toEqual({ type: "validating" });
     });
 
+    it("keeps a finished payment locked when a total-affecting change lands", () => {
+      // "finished" means the purchase request has already been dispatched (pay() runs off a
+      // status effect) and cannot be cancelled from the reducer. Resetting to "input" here would
+      // not stop that charge — it would only re-enable the Pay button while the request is in
+      // flight, allowing a second submission and a duplicate charge. The quote still invalidates
+      // (the UI should not display totals it can no longer honor), but the status must not move.
+      const finished = { type: "finished", paymentMethod: { type: "not-applicable" } } as const;
+      for (const action of [
+        { type: "set-value", tip: { type: "fixed", amount: 2_00 } } as const,
+        { type: "set-value", gift: { type: "normal", email: "friend@example.com", note: "" } } as const,
+        { type: "update-products", products: [product({ price: 2_000 })] } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ status: finished }), action);
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual(finished);
+      }
+    });
+
     it("does not cancel an in-progress wallet payment when its own address updates land", () => {
       // The Apple Pay / Google Pay sheet dispatches address set-values as part of its own
       // payment flow (shipping address change, billing details from the chosen card). Wallet

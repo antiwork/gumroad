@@ -506,25 +506,28 @@ export const hasShipping = (state: State) => state.products.some((item) => item.
 
 export const getErrors = (state: State) => (state.status.type === "input" ? state.status.errors : new Set());
 
-export const loadSurcharges = (state: State) => {
+export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
   const isGift = state.gift !== null;
 
-  return getSurcharges({
-    products: state.products.map((item) => ({
-      permalink: item.permalink,
-      quantity: item.quantity,
-      price:
-        item.hasFreeTrial && !isGift
-          ? 0
-          : Math.round(item.price + (computeTipForPrice(state, item.price, item.permalink) ?? 0)),
-      subscription_id: item.subscription_id,
-      recommended_by: item.recommended_by,
-    })),
-    country: state.country,
-    state: state.state,
-    vat_id: state.vatId,
-    postal_code: state.zipCode,
-  });
+  return getSurcharges(
+    {
+      products: state.products.map((item) => ({
+        permalink: item.permalink,
+        quantity: item.quantity,
+        price:
+          item.hasFreeTrial && !isGift
+            ? 0
+            : Math.round(item.price + (computeTipForPrice(state, item.price, item.permalink) ?? 0)),
+        subscription_id: item.subscription_id,
+        recommended_by: item.recommended_by,
+      })),
+      country: state.country,
+      state: state.state,
+      vat_id: state.vatId,
+      postal_code: state.zipCode,
+    },
+    abortSignal,
+  );
 };
 
 function validatePaymentMethodIndependentFields(state: State) {
@@ -585,7 +588,15 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // there. The wallet (Apple Pay / Google Pay) sheet in particular dispatches its own
         // address updates mid-payment — cancelling on those would break the sheet's
         // completion handshake.
-        if (state.status.type !== "input" && state.paymentMethod === "card")
+        //
+        // "finished" is the point of no return: reaching it fires the purchase request
+        // (pay()/updateSubscription() run off a status effect), and that request cannot be
+        // cancelled from here. Resetting "finished" back to "input" would not stop the charge —
+        // it would only re-enable the Pay button while the first charge is still in flight,
+        // inviting a second submission and a duplicate charge. So a total-affecting change
+        // landing at "finished" leaves the status alone; the payment proceeds on the totals it
+        // was built with (the running request captured its state when it started).
+        if (state.status.type !== "input" && state.status.type !== "finished" && state.paymentMethod === "card")
           state.status = { type: "input", errors: new Set() };
       }
       if (state.status.type === "input") {
@@ -694,7 +705,9 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // update that lands after the payment pipeline has started leaves the quote pending, which
       // means the payload at the end of the pipeline would be built on totals the buyer never
       // confirmed — cancel back to "input", same as the total-affecting "set-value" path above.
-      if (state.surcharges.type !== "loaded" && state.status.type !== "input")
+      // "finished" is excluded for the same reason as there: the purchase request is already in
+      // flight and un-cancellable, so resetting would only invite a duplicate submission.
+      if (state.surcharges.type !== "loaded" && state.status.type !== "input" && state.status.type !== "finished")
         state.status = { type: "input", errors: new Set() };
       break;
   }
@@ -777,17 +790,26 @@ export function createReducer(initial: {
     window.history.replaceState(window.history.state, "", url.toString());
   });
 
+  // Identifies the latest surcharge request. Aborting the fetch is best-effort (the response
+  // may already be in the microtask queue when a newer request starts), so each request also
+  // records its generation and only the latest one may publish its result — a stale response
+  // must never overwrite a newer quote, re-enable Pay on old totals, or clobber a fresher
+  // request's loading state with an error.
+  const surchargesRequestGeneration = React.useRef(0);
   const updateSurcharges = useDebouncedCallback(
     asyncVoid(async () => {
       if (!state.products.length) return;
+      const generation = ++surchargesRequestGeneration.current;
       try {
         const abort = new AbortController();
         dispatch({ type: "set-value", surcharges: { type: "loading", abort: () => abort.abort() } });
-        const result = await loadSurcharges(state);
+        const result = await loadSurcharges(state, abort.signal);
+        if (generation !== surchargesRequestGeneration.current) return;
         dispatch({ type: "set-value", surcharges: { type: "loaded", result } });
       } catch (e) {
         if (e instanceof AbortError) return;
         assertResponseError(e);
+        if (generation !== surchargesRequestGeneration.current) return;
         dispatch({ type: "set-value", surcharges: { type: "error" } });
         showAlert("Sorry, something went wrong. Please try again.", "error");
       }
