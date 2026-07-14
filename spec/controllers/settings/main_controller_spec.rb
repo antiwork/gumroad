@@ -332,6 +332,26 @@ describe Settings::MainController, type: :controller, inertia: true do
       }.from(true).to(false)
     end
 
+    it "updates the disable_review_reminders flag correctly" do
+      expect do
+        put :update, params: { user: user_params.merge(disable_review_reminders: true) }
+        expect(response).to redirect_to(settings_main_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Your account has been updated!")
+      end.to change {
+        seller.reload.disable_review_reminders
+      }.from(false).to(true)
+
+      expect do
+        put :update, params: { user: user_params.merge(disable_review_reminders: false) }
+        expect(response).to redirect_to(settings_main_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Your account has been updated!")
+      end.to change {
+        seller.reload.disable_review_reminders
+      }.from(true).to(false)
+    end
+
     it "updates the show_nsfw_products flag correctly" do
       expect do
         put :update, params: { user: user_params.merge(show_nsfw_products: true) }
