@@ -52,7 +52,15 @@ class Purchase::HandleFailedRefundService
     queue_created = false
     failed_refund_exception = nil
     ActiveRecord::Base.transaction do
-      # Take a row lock on the refund before reversing anything. Stripe can deliver
+      # Take a row lock on the purchase FIRST. Two different refunds of the same
+      # purchase can fail in separate webhook jobs at the same time; both jobs
+      # eventually recompute the purchase's shared refunded flags, and both need to
+      # lock each other's refund rows to sum them. Serializing on the purchase up
+      # front gives every worker the same lock order (purchase → own refund → other
+      # refunds), so the two jobs cannot deadlock: the second one simply waits here
+      # until the first commits.
+      purchase.reload.lock!
+      # Then a row lock on the refund before reversing anything. Stripe can deliver
       # the same failure twice concurrently — retries, and a refund.updated carrying
       # status=failed routes here alongside refund.failed — as separate Sidekiq jobs.
       # Without the lock both workers would pass the in-memory guard above and each
@@ -85,7 +93,14 @@ class Purchase::HandleFailedRefundService
       # reversal. It is deliberately separate from balance_reversed_on_failure: a
       # refund can be financially handled while its buyer/subscription/payout follow-up
       # is still pending, and a retry must be able to repair a missing notification.
-      failed_refund_exception = FailedRefundException.find_or_initialize_by(refund:)
+      #
+      # The lookup must be a locking read (.lock). Under MySQL's default REPEATABLE
+      # READ, this transaction's plain reads see a snapshot taken before another
+      # worker holding the refund row lock committed — so a re-delivered event that
+      # queued behind the lock would miss the freshly committed queue row, try to
+      # insert its own, and die on the unique refund_id index. A locking read always
+      # sees the latest committed row.
+      failed_refund_exception = FailedRefundException.lock.find_by(refund:) || FailedRefundException.new(refund:)
       if failed_refund_exception.new_record?
         owner = FailedRefundException.default_owner
         failed_refund_exception.assign_attributes(
@@ -249,7 +264,13 @@ class Purchase::HandleFailedRefundService
     # comparison evaluates to NULL for those rows and would silently drop them,
     # diverging from the refunded-cents sums on Purchase which use the same scope.
     def recompute_purchase_refunded_flags!
-      other_refunds = purchase.refunds.effective.where.not(id: refund.id)
+      # The purchase row lock taken at the top of perform serializes this whole
+      # recomputation between concurrent workers. The sums must still be locking
+      # reads (.lock): under MySQL's REPEATABLE READ, a plain read here could use a
+      # snapshot taken before the other worker committed, so the worker that got the
+      # purchase lock second would still see the first worker's refund as effective
+      # and persist stale flags. FOR UPDATE always reads the latest committed rows.
+      other_refunds = purchase.refunds.effective.where.not(id: refund.id).lock
       other_refunded_cents = other_refunds.sum(:amount_cents) +
                              other_refunds.sum(:gumroad_tax_cents)
       purchase.stripe_refunded = other_refunded_cents >= purchase.total_transaction_cents
