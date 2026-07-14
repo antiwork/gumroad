@@ -38,6 +38,23 @@ describe Purchase::HandleFailedRefundService do
     purchase.update!(stripe_refunded: true, stripe_partially_refunded: false)
   end
 
+  # A seller debit for an arbitrary refund, pinned to a specific balance —
+  # for cross-balance pointer scenarios.
+  def record_seller_debit!(refund:, balance:, cents:)
+    issued_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -cents, net_cents: -cents)
+    holding_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -cents, net_cents: -cents)
+    debit = BalanceTransaction.create!(
+      user: seller,
+      merchant_account: purchase.merchant_account,
+      refund:,
+      issued_amount:,
+      holding_amount:,
+      update_user_balance: false
+    )
+    debit.update!(balance:)
+    debit
+  end
+
   before do
     record_refund_side_effects!
     NotifyFailedRefundExceptionJob.jobs.clear
@@ -46,6 +63,37 @@ describe Purchase::HandleFailedRefundService do
   describe "#perform" do
     it "marks the refund failed" do
       described_class.new(refund:).perform
+
+      expect(refund.reload.status).to eq("failed")
+    end
+
+    it "persists Stripe's canceled status while reversing exactly the same way" do
+      # Stripe delivers a canceled refund only as refund.updated with
+      # status=canceled (no refund.canceled event type). It is just as terminal as
+      # failed — the buyer never got the money — so the seller debit must be
+      # unwound exactly once and the refund must stop counting as effective, while
+      # the record keeps Stripe's actual status.
+      original = refund.balance_transactions.first
+      balance_before = original.balance.reload.amount_cents
+
+      expect { described_class.new(refund:, failure_status: "canceled").perform }
+        .to change(FailedRefundException, :count).by(1)
+
+      expect(refund.reload.status).to eq("canceled")
+      expect(refund.effective?).to eq(false)
+      expect(Refund.effective).not_to include(refund)
+      expect(refund.balance_transactions.where("issued_amount_gross_cents > 0").count).to eq(1)
+      expect(original.balance.reload.amount_cents).to eq(balance_before + 1800)
+      expect(purchase.reload.stripe_refunded?).to eq(false)
+      expect(purchase.amount_refundable_cents).to eq(2000)
+
+      # Re-delivery must not reverse a second time.
+      expect(described_class.new(refund: Refund.find(refund.id), failure_status: "canceled").perform).to eq(false)
+      expect(refund.reload.balance_transactions.where("issued_amount_gross_cents > 0").count).to eq(1)
+    end
+
+    it "coerces an unexpected failure_status to failed" do
+      described_class.new(refund:, failure_status: "pending").perform
 
       expect(refund.reload.status).to eq("failed")
     end
@@ -106,14 +154,50 @@ describe Purchase::HandleFailedRefundService do
       expect(purchase.seller_balance_update_eligible?).to eq(true)
     end
 
-    it "keeps the purchase_refund_balance pointer when another effective refund remains" do
-      create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+    it "keeps the purchase_refund_balance pointer when the surviving effective refund debited the same balance" do
       balance = refund.balance_transactions.first.balance
+      surviving_refund = create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+      record_seller_debit!(refund: surviving_refund, balance:, cents: 500)
       purchase.update!(purchase_refund_balance: balance)
 
       described_class.new(refund:).perform
 
       expect(purchase.reload.purchase_refund_balance).to eq(balance)
+    end
+
+    it "repoints purchase_refund_balance at the surviving refund's balance when the refunds debited different balances" do
+      # Regression: partial refund A debits balance A, a balance transition happens,
+      # partial refund B debits balance B and overwrites purchase_refund_balance
+      # (decrement_balance_for_refund_or_chargeback! always points at the latest
+      # refund's balance). When B then fails while A survives, keeping the pointer
+      # would leave it at balance B — per-balance refund stats (User::Stats) and
+      # payout exports would attribute the surviving refund A to the wrong balance.
+      surviving_refund = create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+      balance_a = create(:balance, user: seller, merchant_account: purchase.merchant_account, date: 3.days.ago.to_date)
+      record_seller_debit!(refund: surviving_refund, balance: balance_a, cents: 500)
+      balance_b = refund.balance_transactions.first.balance
+      expect(balance_a).not_to eq(balance_b)
+      purchase.update!(purchase_refund_balance: balance_b)
+
+      described_class.new(refund:).perform
+
+      expect(purchase.reload.purchase_refund_balance_id).to eq(balance_a.id)
+      # Per-balance refunded-sales attribution follows the pointer: the purchase now
+      # counts against the surviving refund's balance, not the failed one's.
+      expect(Purchase.where(purchase_refund_balance_id: balance_a.id)).to include(purchase)
+      expect(Purchase.where(purchase_refund_balance_id: balance_b.id)).not_to include(purchase)
+    end
+
+    it "clears purchase_refund_balance when the surviving refund left no seller debit to point at" do
+      # A surviving refund without a seller balance debit (e.g. it was recorded
+      # before balance transactions existed) leaves nothing to repoint at; the
+      # pointer must not stay on the FAILED refund's balance.
+      create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+      purchase.update!(purchase_refund_balance: refund.balance_transactions.first.balance)
+
+      described_class.new(refund:).perform
+
+      expect(purchase.reload.purchase_refund_balance).to be_nil
     end
 
     it "restores the giftee purchase's refunded flags alongside the main purchase" do

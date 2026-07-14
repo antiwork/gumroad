@@ -2269,6 +2269,24 @@ describe StripeChargeProcessor, :vcr do
           expect(refund.reload.status).to eq("failed")
         end
 
+        it "routes refund.updated with a canceled status through the failure handler" do
+          # Regression: canceled is a terminal Stripe refund status (canceling a
+          # pending refund returns the money to the platform balance) and arrives
+          # only as refund.updated — there is no refund.canceled event. Taking the
+          # ordinary update path would leave the seller debited and the refund
+          # counting as effective money the buyer never received.
+          refund_event["type"] = "refund.updated"
+          refund_event["data"]["object"]["status"] = "canceled"
+
+          expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_failed!).and_call_original
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(refund.reload.status).to eq("canceled")
+          expect(refund.effective?).to eq(false)
+        end
+
         it "marks the refund failed when charge.refund.updated carries a failed status" do
           refund_event["type"] = "charge.refund.updated"
 

@@ -3,6 +3,15 @@
 class Refund < ApplicationRecord
   FRAUD = "fraud"
 
+  # Stripe refund statuses that mean the buyer did NOT receive the money and never
+  # will through this refund. "failed" is a refund the buyer's bank returned after
+  # Stripe accepted it; "canceled" is a pending refund that was canceled before it
+  # completed (Stripe documents both as terminal and returns the money to the
+  # platform balance either way). Both must stop counting as refunded money once
+  # their balance debits are reversed — treat them identically everywhere except
+  # for the persisted status itself, which keeps Stripe's actual value.
+  TERMINAL_FAILURE_STATUSES = %w(failed canceled).freeze
+
   include JsonData, FlagShihTzu
 
   belongs_to :user, foreign_key: :refunding_user_id, optional: true
@@ -22,33 +31,34 @@ class Refund < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
-  # Refunds whose money actually left (or is leaving) our account. A "failed" refund is
-  # one the buyer's bank returned after Stripe initially accepted it — the buyer never
-  # received the money — so failed rows must not count toward how much of a purchase has
-  # been refunded. status is NULL for refunds created before we started persisting
-  # processor status, all of which completed, so NULL counts as effective.
+  # Refunds whose money actually left (or is leaving) our account. A refund with a
+  # terminal-failure status ("failed" or "canceled" — see TERMINAL_FAILURE_STATUSES)
+  # is one the buyer never received the money for, so those rows must not count
+  # toward how much of a purchase has been refunded. status is NULL for refunds
+  # created before we started persisting processor status, all of which completed,
+  # so NULL counts as effective.
   #
-  # A failed refund stops counting only once Purchase::HandleFailedRefundService has
-  # actually reversed the balance debits it created (balance_reversed_on_failure).
-  # A failed refund that was NOT auto-reversed (external funds, dispute, legacy rows)
+  # A terminally-failed refund stops counting only once Purchase::HandleFailedRefundService
+  # has actually reversed the balance debits it created (balance_reversed_on_failure).
+  # One that was NOT auto-reversed (external funds, dispute, legacy rows)
   # still has the seller debited, so it must keep counting toward the refunded sums —
   # otherwise amount_refundable_cents would look refundable while the purchase's
   # stripe_refunded flag (which only the reversal path recomputes) still blocks the
   # admin refund action.
   scope :effective, -> {
-    where(<<~SQL.squish)
+    where(<<~SQL.squish, statuses: TERMINAL_FAILURE_STATUSES)
       refunds.status IS NULL
-      OR refunds.status != 'failed'
+      OR refunds.status NOT IN (:statuses)
       OR COALESCE(refunds.json_data->>'$.balance_reversed_on_failure', 'false') != 'true'
     SQL
   }
 
-  # The complement of .effective among failed rows: refunds that failed after
-  # acceptance AND whose balance debits have been offset by
+  # The complement of .effective among terminally-failed rows: refunds that failed
+  # or were canceled after acceptance AND whose balance debits have been offset by
   # Purchase::HandleFailedRefundService. Payout exports render these as an explicit
   # debit + reversal pair instead of ordinary refund rows.
   scope :reversed_failures, -> {
-    where(status: "failed")
+    where(status: TERMINAL_FAILURE_STATUSES)
       .where("COALESCE(refunds.json_data->>'$.balance_reversed_on_failure', 'false') = 'true'")
   }
 
@@ -83,7 +93,11 @@ class Refund < ApplicationRecord
   # In-memory mirror of the .effective scope, for callers working with preloaded
   # refunds. Keep the two in sync.
   def effective?
-    status != "failed" || !balance_reversed_on_failure
+    !TERMINAL_FAILURE_STATUSES.include?(status) || !balance_reversed_on_failure
+  end
+
+  def terminally_failed?
+    TERMINAL_FAILURE_STATUSES.include?(status)
   end
 
   private

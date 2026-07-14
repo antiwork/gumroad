@@ -19,7 +19,7 @@ module Onetime
     end
 
     def process(batch_size: BATCH_SIZE)
-      Refund.where(status: "failed").in_batches(of: batch_size) do |batch|
+      Refund.where(status: Refund::TERMINAL_FAILURE_STATUSES).in_batches(of: batch_size) do |batch|
         ReplicaLagWatcher.watch
         batch.each { |refund| backfill_exception(refund) }
       end

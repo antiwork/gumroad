@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
-# Handles a refund that FAILED after Stripe had accepted it. This only happens on
-# asynchronous bank-transfer refunds (iDEAL, Bancontact, ACH): the buyer's bank can
-# return the money days after the refund was created — Stripe puts the funds back in
-# our balance and marks the refund failed. At that point the buyer has NOT received
-# the money, but our books already recorded the refund as if they had.
+# Handles a refund that reached a terminal unsuccessful status ("failed" or
+# "canceled") after Stripe had accepted it. Failures happen on asynchronous
+# bank-transfer refunds (iDEAL, Bancontact, ACH): the buyer's bank can return the
+# money days after the refund was created. Cancellation happens when a pending
+# refund is canceled before completing. In both cases Stripe puts the funds back
+# in our balance, the buyer has NOT received the money, but our books already
+# recorded the refund as if they had.
 #
 # Reversal depth follows the decision on PR #5779 ("Option B"): automatically reverse
 # only the unambiguous money facts, and put everything that needs judgment in a durable
@@ -12,25 +14,46 @@
 # response deadline:
 #
 #   REVERSED HERE (only when the refund's money lives entirely in Gumroad's own
-#   balance ledger — see #auto_reversal_eligible?):
+#   balance ledger — see #auto_reversal_eligible?, which checks the merchant
+#   account and dispute state; whether a balance was already paid out does NOT
+#   affect eligibility, see below):
 #   - Seller/affiliate balance debits: every BalanceTransaction the refund created is
 #     offset by an equal-and-opposite transaction, so balances return to their
 #     pre-refund state regardless of how the original split seller/affiliate/presentment
 #     amounts (mirroring beats recomputing — the original rows are the ground truth).
-#   - Purchase refunded flags: stripe_refunded / stripe_partially_refunded are
-#     recomputed WITHOUT the failed refund's amount (on the purchase and on its gift /
-#     bundle mirror purchases), and the purchase_refund_balance pointer is cleared when
-#     no other refund remains, so the purchase becomes re-refundable once the buyer's
-#     payment details are sorted out.
+#     If the debited balance was already paid out, the offset credits a live balance
+#     instead — the seller is made whole either way, and the paid-out balance's own
+#     records stay untouched.
+#   - Retained processor fees: the Credit that retained the fee (see
+#     Credit.create_for_refund_fee_retention!) is given back with an offsetting
+#     credit marked failed_refund_id, so payout exports show the retention and its
+#     give-back as an explicit pair (#reverse_fee_retention_credits!).
+#   - Affiliate refund state: AffiliatePartialRefund rows from this refund are
+#     removed and the AffiliateCredit refund-balance pointer is repointed to a
+#     remaining effective refund's balance (or cleared), so affiliate stats and
+#     payout eligibility stop treating the failed refund as real.
+#   - Purchase refunded flags and refund-balance pointer: stripe_refunded /
+#     stripe_partially_refunded are recomputed WITHOUT the failed refund's amount
+#     (on the purchase and on its gift / bundle mirror purchases), and
+#     purchase_refund_balance is recomputed from the remaining effective refunds'
+#     seller debits (or cleared when none remains), so the purchase becomes
+#     re-refundable and per-balance refund stats attribute the surviving refunds
+#     to the right balance.
+#   - Reporting: this service writes no report rows itself, but every financial /
+#     tax / payout report reads refunded sums through Refund.effective, so a
+#     reversed refund drops out of them; the immutable finance event ledger books
+#     the reversal as its own dated compensating event instead of rewriting the
+#     original refund's day.
 #
-#   DELIBERATELY NOT REVERSED (durable exception queue):
+#   DELIBERATELY NOT REVERSED (durable exception queue — FailedRefundException):
 #   - Buyer communication: the buyer received a "you've been refunded" email that
 #     turned out to be false. What to tell them (and whether to re-refund to a
 #     different bank account) is an exception-resolution decision.
 #   - Subscription state: if the original refund cancelled a subscription, resuming
 #     it could silently restart recurring billing on a buyer who believes they left.
-#   - Fee/VAT side effects and already-paid-out balances: rare enough that automated
-#     unwinding is more likely to hide a bug than to help.
+#   - VAT remitted to tax authorities: the reversal takes the refund out of future
+#     VAT/sales-tax report output (via Refund.effective), but any remittance already
+#     made from an earlier report run needs human follow-up.
 #   - Everything, when the refund also moved money OUTSIDE our ledger (Stripe Connect
 #     accounts, Stripe-held custom accounts, PayPal, or an active dispute): offsetting
 #     our balance rows would not undo transfer reversals or connected-account debits,
@@ -39,11 +62,15 @@
 # Idempotent: a re-delivered refund.failed webhook is a no-op once the failure has
 # been handled (recorded on the refund inside the same transaction as the reversal).
 class Purchase::HandleFailedRefundService
-  attr_reader :refund, :purchase
+  attr_reader :refund, :purchase, :failure_status
 
-  def initialize(refund:)
+  # failure_status is the terminal status Stripe reported ("failed" or "canceled");
+  # it is persisted as-is so the record keeps Stripe's actual value. The reversal
+  # behavior is identical for both.
+  def initialize(refund:, failure_status: "failed")
     @refund = refund
     @purchase = refund.purchase
+    @failure_status = Refund::TERMINAL_FAILURE_STATUSES.include?(failure_status) ? failure_status : "failed"
   end
 
   def perform
@@ -70,10 +97,10 @@ class Purchase::HandleFailedRefundService
       # The reload first discards the in-memory json_data touch that merely READING
       # balance_reversed_on_failure leaves behind (lock! refuses dirty records).
       refund.reload.lock!
-      needs_status_update = refund.status != "failed"
+      needs_status_update = !refund.terminally_failed?
       needs_balance_reversal = !refund.balance_reversed_on_failure && auto_reversal_eligible?
       if needs_status_update || needs_balance_reversal
-        refund.update!(status: "failed") if needs_status_update
+        refund.update!(status: failure_status) if needs_status_update
         if needs_balance_reversal
           reverse_balance_transactions!
           reverse_fee_retention_credits!
@@ -282,9 +309,22 @@ class Purchase::HandleFailedRefundService
       # The original refund parked the seller's debited balance here, and
       # seller_balance_update_eligible? refuses to debit again while it's set (unless
       # partially refunded) — without clearing it, a re-refund would move real money
-      # at Stripe but never debit the seller. Only clear when no other refund
-      # remains; a surviving partial refund's balance pointer is still meaningful.
-      purchase.purchase_refund_balance = nil unless purchase.stripe_partially_refunded
+      # at Stripe but never debit the seller. Recompute it from the remaining
+      # effective refunds' seller debits rather than just keeping the current value:
+      # the failed refund may itself be the one whose balance the pointer records
+      # (each refund overwrites it in decrement_balance_for_refund_or_chargeback!),
+      # and per-balance refund stats and payout exports attribute the surviving
+      # refunds through this pointer. When no effective refund remains it comes out
+      # nil, making the purchase re-refundable. Mirrors the AffiliateCredit
+      # repointing in restore_affiliate_refund_state!.
+      remaining_seller_debit = BalanceTransaction.joins(:refund)
+                                                 .merge(Refund.effective)
+                                                 .where(refunds: { purchase_id: purchase.id })
+                                                 .where.not(refund_id: refund.id)
+                                                 .where(user: purchase.seller)
+                                                 .where("balance_transactions.issued_amount_gross_cents < 0")
+                                                 .order(:id).last
+      purchase.purchase_refund_balance_id = remaining_seller_debit&.balance_id
       purchase.save!
 
       restore_mirror_purchase_flags!

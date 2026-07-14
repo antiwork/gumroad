@@ -92,7 +92,7 @@ class Exports::Payouts::Base
           # instead, so the pair is visible and nets to zero.
           retention_refund = credit.fee_retention_refund
           reversed_failure = retention_refund.present? &&
-            retention_refund.status == "failed" &&
+            retention_refund.terminally_failed? &&
             retention_refund.balance_reversed_on_failure.present?
           next if retention_refund.present? && credit.amount_cents <= 0 && !reversed_failure
 

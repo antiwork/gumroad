@@ -3,12 +3,14 @@
 module Charge::Refundable
   extend ActiveSupport::Concern
 
-  # A refund failed after Stripe had accepted it. Asynchronous bank-transfer refunds
-  # (iDEAL, Bancontact, ACH) can be returned by the buyer's bank days after creation —
-  # the money is back in our Stripe balance and the buyer did NOT receive it. Per the
-  # reversal-depth decision on PR #5779: automatically reverse the balance debits and
-  # refunded flags (the unambiguous money facts), alert a human for everything that
-  # needs judgment (buyer communication, re-refund, subscription/payout follow-up).
+  # A refund reached a terminal unsuccessful status after Stripe had accepted it.
+  # "failed" means the buyer's bank returned an asynchronous bank-transfer refund
+  # (iDEAL, Bancontact, ACH) days after creation; "canceled" means a pending refund
+  # was canceled before completing. Either way the money is back in our Stripe
+  # balance and the buyer did NOT receive it. Per the reversal-depth decision on
+  # PR #5779: automatically reverse the balance debits and refunded flags (the
+  # unambiguous money facts), alert a human for everything that needs judgment
+  # (buyer communication, re-refund, subscription/payout follow-up).
   def handle_event_refund_failed!(event)
     db_refunds = Refund.where(processor_refund_id: event.refund_id)
     if db_refunds.blank?
@@ -22,8 +24,12 @@ module Charge::Refundable
       return
     end
 
+    # Persist Stripe's actual terminal status ("failed" or "canceled") rather than
+    # coercing everything to "failed"; the reversal handling is identical for both.
+    failure_status = event.extras&.dig(:refund_status)
+    failure_status = "failed" unless Refund::TERMINAL_FAILURE_STATUSES.include?(failure_status)
     db_refunds.each do |db_refund|
-      Purchase::HandleFailedRefundService.new(refund: db_refund).perform
+      Purchase::HandleFailedRefundService.new(refund: db_refund, failure_status:).perform
     end
   end
 
@@ -41,10 +47,11 @@ module Charge::Refundable
         # letting a redelivered refund.failed reverse the same money twice.
         db_refund.with_lock do
           # Never let a late or re-delivered refund.updated (e.g. a stale "pending"
-          # retried by Stripe after the failure landed) overwrite a failed status: the
-          # failure handling already reversed the balance debits, and resurrecting the
-          # status would make the bounced refund count as delivered money again.
-          next if db_refund.status == "failed" || db_refund.balance_reversed_on_failure
+          # retried by Stripe after the failure landed) overwrite a terminal failure
+          # status ("failed"/"canceled"): the failure handling already reversed the
+          # balance debits, and resurrecting the status would make the bounced refund
+          # count as delivered money again.
+          next if db_refund.terminally_failed? || db_refund.balance_reversed_on_failure
 
           db_refund.status = event.extras[:refund_status]
           db_refund.save!

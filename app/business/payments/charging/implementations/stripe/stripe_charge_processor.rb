@@ -899,10 +899,14 @@ class StripeChargeProcessor
       # A refund that fails after Stripe accepted it (asynchronous bank-transfer refunds —
       # iDEAL, Bancontact, ACH — can be returned by the buyer's bank days later) needs its
       # own handling: the money came back to our Stripe balance and the buyer was NOT made
-      # whole, so the canonical refund/balance records must be unwound. refund.updated can
-      # also carry the failed status (e.g. when the failure and a metadata update coalesce),
-      # so route on the status, not only on the event name.
-      event.type = if stripe_event["type"] == "refund.failed" || stripe_event["data"]["object"]["status"] == "failed"
+      # whole, so the canonical refund/balance records must be unwound. The same applies
+      # to a "canceled" refund — Stripe documents canceling a pending refund as a terminal
+      # outcome that returns the money to the platform balance, and it arrives only as a
+      # refund.updated carrying that status (there is no refund.canceled event type).
+      # refund.updated can also carry the failed status (e.g. when the failure and a
+      # metadata update coalesce), so route on the status, not only on the event name.
+      event.type = if stripe_event["type"] == "refund.failed" ||
+                      Refund::TERMINAL_FAILURE_STATUSES.include?(stripe_event["data"]["object"]["status"])
         ChargeEvent::TYPE_REFUND_FAILED
       else
         ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
