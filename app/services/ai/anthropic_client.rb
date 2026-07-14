@@ -405,10 +405,15 @@ class Ai::AnthropicClient
 
     # Turn the accumulated streamed blocks into the same tool_use shape #parse_message returns. A
     # tool_use block with no input fragments is a no-arg call; malformed non-empty input must fail the
-    # turn instead of dispatching a lossy {} tool call — EXCEPT when the model was cut off by
-    # max_tokens. A turn truncated mid-tool-call always ends with half-written (unparseable) JSON;
-    # that isn't the model misbehaving, it's the token cap. Dropping the cut-off block and letting
-    # the caller see stop_reason == "max_tokens" lets it respond honestly instead of erroring out.
+    # turn instead of dispatching a lossy {} tool call — with two exceptions where half-written JSON
+    # is expected rather than the model misbehaving:
+    #   - stop_reason == "max_tokens": the token cap cut the call off mid-arguments. Drop the block
+    #     and let the caller see the stop_reason so it can respond honestly instead of erroring out.
+    #   - stop_reason is nil: a complete Anthropic stream always delivers a stop_reason (via
+    #     message_delta) before it ends, so its absence means the connection dropped mid-stream and
+    #     the tool call's JSON was cut off by the disconnect. That is a network failure, not a bad
+    #     tool call, so raise TransientError — the retry loop in #stream_messages re-requests the
+    #     turn when nothing has reached the caller yet, exactly as it does for other dropped streams.
     def assemble_tool_uses(blocks, stop_reason: nil)
       truncated = stop_reason == "max_tokens"
       blocks.keys.sort.filter_map do |index|
@@ -418,9 +423,10 @@ class Ai::AnthropicClient
         input = begin
           parse_tool_use_input(block)
         rescue Error
-          # Only swallow the parse failure for a truncated turn; otherwise it is a real error.
-          raise unless truncated
-          next
+          next if truncated
+          raise TransientError, "Anthropic stream ended mid-tool-call for #{block[:name].presence || "unknown tool"}." if stop_reason.nil?
+          # A completed turn produced unparseable tool arguments: a real error.
+          raise
         end
         { id: block[:id], name: block[:name], input: }
       end
