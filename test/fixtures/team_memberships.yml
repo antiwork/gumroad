@@ -1,0 +1,44 @@
+# Team memberships for the standard policy-test seller.
+#
+# Every seller needs an owner-role self-membership: the TeamMembership
+# validation `owner_membership_must_exist` requires it before any non-owner
+# role is valid. Factory code does this via a `before(:create)` hook on the
+# user factory; fixtures bypass callbacks, so the row is inlined here.
+#
+# `seller` is a renamed FK to users (seller_id), so Rails' short-form
+# association syntax doesn't apply — use FixtureSet.identify.
+
+named_seller_owner:
+  user: named_seller
+  seller_id: <%= ActiveRecord::FixtureSet.identify(:named_seller) %>
+  role: owner
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+accountant_for_named_seller_membership:
+  user: accountant_for_named_seller
+  seller_id: <%= ActiveRecord::FixtureSet.identify(:named_seller) %>
+  role: accountant
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+admin_for_named_seller_membership:
+  user: admin_for_named_seller
+  seller_id: <%= ActiveRecord::FixtureSet.identify(:named_seller) %>
+  role: admin
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+marketing_for_named_seller_membership:
+  user: marketing_for_named_seller
+  seller_id: <%= ActiveRecord::FixtureSet.identify(:named_seller) %>
+  role: marketing
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+support_for_named_seller_membership:
+  user: support_for_named_seller
+  seller_id: <%= ActiveRecord::FixtureSet.identify(:named_seller) %>
+  role: support
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>

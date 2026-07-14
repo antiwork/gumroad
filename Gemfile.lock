@@ -1193,6 +1193,7 @@ DEPENDENCIES
   maxmind-geoip2 (~> 1.1)
   mime-types (~> 3.4)
   mini_magick (~> 4.12)
+  minitest (~> 5.25)
   money (~> 6.16)
   mongo (~> 2.20.0)
   mongoid (~> 9.0, >= 9.0.3)
