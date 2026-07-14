@@ -768,6 +768,34 @@ describe ReceiptPresenter::ItemInfo do
             "You can manage your payment settings <a target=\"_blank\" href=\"#{url}\">here</a>."
           )
         end
+
+        it "omits the final charge date when the expected completion time is unknown" do
+          travel_to(Time.zone.parse("2025-03-14"))
+
+          product_installment_plan = create(
+            :product_installment_plan,
+            number_of_installments: 5,
+            recurrence: "monthly",
+          )
+          purchase = create(:installment_plan_purchase, link: product_installment_plan.link)
+          subscription = purchase.subscription
+
+          # Fully refunding the only successful charge leaves the subscription
+          # without a paid period to project the final charge date from.
+          purchase.update!(stripe_refunded: true)
+          expect(subscription.expected_completion_time).to be_nil
+
+          props = described_class.new(purchase).props
+
+          url = Rails.application.routes.url_helpers.manage_subscription_url(
+            subscription.external_id,
+            host: UrlService.domain_with_protocol,
+          )
+          expect(props[:manage_subscription_note]).to eq(
+            "Installment plan initiated on Mar 14, 2025. " \
+            "You can manage your payment settings <a target=\"_blank\" href=\"#{url}\">here</a>."
+          )
+        end
       end
     end
 
