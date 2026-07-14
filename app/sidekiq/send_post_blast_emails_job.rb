@@ -59,13 +59,6 @@ class SendPostBlastEmailsJob
     # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
     AUDIENCE_SNAPSHOT_TTL = 3.days
 
-    # A snapshotted recipient. Quacks like the AudienceMember rows the filter query
-    # returns (the send loop only uses these five attributes). purchase_id / follower_id /
-    # affiliate_id are DERIVED by the filter's JSON_TABLE subquery — they are not columns
-    # on audience_members — which is why the snapshot must store full tuples instead of
-    # bare ids.
-    SnapshotMember = Struct.new(:id, :email, :purchase_id, :follower_id, :affiliate_id)
-
     # Loads the recipient list for the blast. For sellers with very large audiences
     # (hundreds of thousands of members) the filter query is the slowest, most fragile
     # part of the job: it can exceed the database's default 5-minute statement cap, and a
@@ -73,41 +66,58 @@ class SendPostBlastEmailsJob
     #
     # 1. The query runs under a raised statement-time cap (Redis-tunable), the same way
     #    the sales report jobs handle long queries.
-    # 2. The resolved members are snapshotted in Redis keyed by blast id. When a retry of
-    #    the SAME blast runs after a mid-run kill (deploys will only get more frequent),
-    #    it skips the expensive filter entirely and rehydrates from the snapshot, so each
-    #    retry resumes sending within seconds instead of repaying the minutes-long load
-    #    and re-racing the next deploy.
+    # 2. The resolved member ids are snapshotted in Redis keyed by blast id. When a retry
+    #    of the SAME blast runs after a mid-run kill (deploys will only get more
+    #    frequent), it re-runs the filter restricted to just those ids — cheap,
+    #    primary-key-bound — instead of the unrestricted filter over the whole audience,
+    #    so each retry resumes sending within seconds instead of repaying the
+    #    minutes-long load and re-racing the next deploy.
     #
-    # Rehydrated members are re-verified against audience_members before sending: the row
-    # must still exist AND (when the blast targets a specific role) still hold that role.
-    # The role check matters because a person with multiple relationships to the seller
-    # (e.g. a customer who also follows) KEEPS their audience_members row when they
-    # unsubscribe from just one role — the row's `customer`/`follower`/`affiliate` boolean
-    # flips instead. Checking existence alone would let a retry email someone who opted
-    # out between attempts. Members ADDED after the first attempt won't be picked up by a
-    # retry — acceptable for a send already mid-flight.
+    # Because the retry re-applies the ORIGINAL filter criteria to the snapshotted ids,
+    # anyone whose eligibility changed after the snapshot was taken (unsubscribed,
+    # erased, refunded the qualifying purchase, removed as an affiliate) is dropped from
+    # the retry rather than emailed from stale data. Members ADDED after the first
+    # attempt won't be picked up by a retry — acceptable for a send already mid-flight.
     def load_audience_members
       snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
-      snapshot = $redis.lrange(snapshot_key, 0, -1)
+      snapshotted_ids = $redis.lrange(snapshot_key, 0, -1)
 
-      if snapshot.empty?
+      if snapshotted_ids.empty?
         members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end
         write_audience_snapshot(snapshot_key, members)
         members
       else
-        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from audience snapshot (#{snapshot.size} members)")
-        members = snapshot.map { SnapshotMember.new(*JSON.parse(_1)) }
-        still_eligible_ids = members.map(&:id).each_slice(10_000).flat_map do |ids_slice|
-          scope = AudienceMember.where(id: ids_slice)
-          # `customer`/`follower`/`affiliate` are real, indexed boolean columns.
-          scope = scope.where(@filters[:type] => true) if @filters[:type]
-          scope.pluck(:id)
-        end.to_set
-        members.select { still_eligible_ids.include?(_1.id) }
+        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from audience snapshot (#{snapshotted_ids.size} members)")
+        revalidate_snapshotted_members(snapshotted_ids.map(&:to_i))
       end
+    end
+
+    # A snapshot can be up to a day old by the time the last retry runs, and audience
+    # membership changes in that window: buyers refund, followers unsubscribe, affiliates
+    # get removed. Simply checking that the audience_members row still exists is not
+    # enough — a person with multiple relationships to the seller (e.g. a customer who
+    # also follows) KEEPS their row when they leave just one role, so a follower who
+    # unsubscribed (but also bought something) would still be emailed by a follower
+    # blast from the stale snapshot.
+    #
+    # So the retry re-runs the SAME audience filter the first attempt used, restricted
+    # to the snapshotted ids. Primary-key-bounding every subquery (the `ids:` option)
+    # makes this cheap even for huge audiences — unlike the unrestricted filter the
+    # snapshot exists to avoid — while re-checking every original criterion (role,
+    # bought products, price/date bounds). The filter also returns FRESH rows, so the
+    # send uses current emails and current purchase/follower/affiliate ids rather than
+    # anything stale from the first attempt.
+    def revalidate_snapshotted_members(snapshotted_ids)
+      members = snapshotted_ids.each_slice(10_000).flat_map do |ids_slice|
+        AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
+          .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+      end
+
+      dropped = snapshotted_ids.size - members.size
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped} snapshotted members no longer in the audience") if dropped > 0
+      members
     end
 
     # Writes the snapshot to a temporary key first, then atomically renames it into
@@ -122,7 +132,7 @@ class SendPostBlastEmailsJob
       tmp_key = "#{snapshot_key}:tmp"
       $redis.del(tmp_key)
       members.each_slice(10_000) do |slice|
-        $redis.rpush(tmp_key, slice.map { |m| [m.id, m.email, m.purchase_id, m.follower_id, m.affiliate_id].to_json })
+        $redis.rpush(tmp_key, slice.map(&:id))
       end
       $redis.expire(tmp_key, AUDIENCE_SNAPSHOT_TTL.to_i)
       $redis.rename(tmp_key, snapshot_key)
