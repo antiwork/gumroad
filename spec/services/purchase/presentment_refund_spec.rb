@@ -210,4 +210,65 @@ describe Purchase::PresentmentRefund do
       expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 0)).to be_nil
     end
   end
+
+  describe "failed EUR refunds and re-refunds" do
+    # Direct proof for the local-methods launch shape (iDEAL/Bancontact charge in
+    # EUR): a refund the buyer's bank returned consumes NO refundable presentment
+    # amount once reversed, and the subsequent re-refund derives the same full
+    # canonical/presentment allocation a first refund would have.
+    let(:eur_purchase) do
+      build(:purchase,
+            link: product,
+            price_cents: 100,
+            total_transaction_cents: 100,
+            purchase_state: "successful").tap { _1.save!(validate: false) }
+    end
+
+    before do
+      create(:purchase_presentment,
+             purchase: eur_purchase,
+             presentment_currency: Currency::EUR,
+             presentment_price_cents: 90,
+             presentment_tip_cents: 0,
+             presentment_seller_tax_cents: 0,
+             presentment_gumroad_tax_cents: 0,
+             presentment_shipping_cents: 0,
+             presentment_total_cents: 90)
+    end
+
+    def record_failed_full_refund!(reversed:)
+      refund = build(:refund, purchase: eur_purchase, total_transaction_cents: 100, amount_cents: 100,
+                              processor_refund_id: "pyr_eur_failed", status: "failed")
+      refund.presentment_currency = Currency::EUR
+      refund.presentment_amount_cents = 90
+      refund.presentment_price_cents = 90
+      refund.balance_reversed_on_failure = true if reversed
+      eur_purchase.refunds << refund
+      refund
+    end
+
+    it "gives a reversed failed EUR refund no weight, so a full re-refund is derivable" do
+      record_failed_full_refund!(reversed: true)
+
+      # Full presentment amount is still refundable — the failed refund consumed none.
+      derived = described_class.from_presentment_amount(purchase: eur_purchase.reload, presentment_amount_cents: 90)
+      expect(derived).to be_present
+      expect(derived.canonical_gross_refund_cents).to eq(100)
+      expect(derived.presentment_refund.currency).to eq(Currency::EUR)
+      expect(derived.presentment_refund.presentment_amount_cents).to eq(90)
+
+      # And the forward direction (admin re-refund) computes the full snapshot too.
+      result = described_class.new(purchase: eur_purchase, canonical_gross_refund_cents: 100).result
+      expect(result.presentment_amount_cents).to eq(90)
+      expect(result.currency).to eq(Currency::EUR)
+    end
+
+    it "keeps counting a failed EUR refund that was NOT reversed, blocking a double refund" do
+      # Until the balance reversal runs, the seller is still debited — the presentment
+      # amount must stay consumed or a second refund would move the money twice.
+      record_failed_full_refund!(reversed: false)
+
+      expect(described_class.from_presentment_amount(purchase: eur_purchase.reload, presentment_amount_cents: 90)).to be_nil
+    end
+  end
 end

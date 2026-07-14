@@ -3,6 +3,39 @@
 require "spec_helper"
 
 describe Charge::Refundable do
+  describe "#handle_event_refund_failed!" do
+    let(:purchase) { create(:purchase, stripe_transaction_id: "ch_failed_#{SecureRandom.hex(6)}") }
+
+    def build_failed_event(refund_id:, refund_status: "failed")
+      event = ChargeEvent.new
+      event.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      event.charge_event_id = "evt_#{SecureRandom.hex(6)}"
+      event.charge_id = purchase.stripe_transaction_id
+      event.refund_id = refund_id
+      event.type = ChargeEvent::TYPE_REFUND_FAILED
+      event.extras = { refund_status:, refunded_amount_cents: 100, refund_reason: nil }
+      event
+    end
+
+    it "alerts on a failure for a refund with no Gumroad record" do
+      # An unmatched FAILURE on the platform endpoint means money moved back to us
+      # with no book entry to reconcile against — it must be alerted, not dropped.
+      expect(ErrorNotifier).to receive(:notify).with(/no Gumroad record/)
+
+      purchase.handle_event_refund_failed!(build_failed_event(refund_id: "re_unmatched_#{SecureRandom.hex(6)}"))
+    end
+
+    it "routes a matched failure through the failure handler with Stripe's actual status" do
+      refund = create(:refund, purchase:, processor_refund_id: "re_matched_#{SecureRandom.hex(6)}", status: "pending")
+
+      service = instance_double(Purchase::HandleFailedRefundService, perform: true)
+      expect(Purchase::HandleFailedRefundService).to receive(:new)
+        .with(refund:, failure_status: "canceled").and_return(service)
+
+      purchase.handle_event_refund_failed!(build_failed_event(refund_id: refund.processor_refund_id, refund_status: "canceled"))
+    end
+  end
+
   describe "#handle_event_refund_updated!" do
     describe "failed refunds are frozen" do
       let(:purchase) { create(:purchase, stripe_transaction_id: "ch_frozen_#{SecureRandom.hex(6)}") }
@@ -24,6 +57,45 @@ describe Charge::Refundable do
         purchase.handle_event_refund_updated!(event)
 
         expect(refund.reload.status).to eq("failed")
+      end
+
+      it "does not let a late refund.updated overwrite a canceled status" do
+        # "canceled" is just as terminal as "failed": the unwind already ran, so a
+        # stale update must not resurrect the refund as pending/succeeded money.
+        refund = create(:refund, purchase:, processor_refund_id: "re_frozen_#{SecureRandom.hex(6)}", status: "canceled")
+
+        event = ChargeEvent.new
+        event.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        event.charge_id = purchase.stripe_transaction_id
+        event.refund_id = refund.processor_refund_id
+        event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+        event.extras = { refund_status: "pending", refunded_amount_cents: 100, refund_reason: nil }
+
+        purchase.handle_event_refund_updated!(event)
+
+        expect(refund.reload.status).to eq("canceled")
+      end
+
+      it "freezes a refund whose balance was reversed even if its status is not terminal" do
+        # The balance_reversed_on_failure marker alone must block status writes: if a
+        # stale update rewrote the row, the save would also write back the stale
+        # (unset) marker, letting a redelivered failure reverse the same money twice.
+        refund = create(:refund, purchase:, processor_refund_id: "re_frozen_#{SecureRandom.hex(6)}", status: "pending")
+        refund.balance_reversed_on_failure = true
+        refund.save!
+
+        event = ChargeEvent.new
+        event.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        event.charge_id = purchase.stripe_transaction_id
+        event.refund_id = refund.processor_refund_id
+        event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+        event.extras = { refund_status: "succeeded", refunded_amount_cents: 100, refund_reason: nil }
+
+        purchase.handle_event_refund_updated!(event)
+
+        refund.reload
+        expect(refund.status).to eq("pending")
+        expect(refund.balance_reversed_on_failure).to eq(true)
       end
 
       it "re-checks the guard under the row lock so a failure landing mid-flight is not overwritten" do

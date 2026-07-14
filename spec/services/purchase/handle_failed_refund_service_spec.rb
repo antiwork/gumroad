@@ -55,12 +55,12 @@ describe Purchase::HandleFailedRefundService do
     debit
   end
 
-  before do
-    record_refund_side_effects!
-    NotifyFailedRefundExceptionJob.jobs.clear
-  end
-
   describe "#perform" do
+    before do
+      record_refund_side_effects!
+      NotifyFailedRefundExceptionJob.jobs.clear
+    end
+
     it "marks the refund failed" do
       described_class.new(refund:).perform
 
@@ -211,6 +211,60 @@ describe Purchase::HandleFailedRefundService do
       expect(giftee_purchase.reload.stripe_refunded?).to eq(false)
     end
 
+    it "restores both refunded flags on the giftee purchase after a partial-failure sequence" do
+      # A surviving partial refund leaves the main purchase partially refunded; the
+      # giftee mirror must land on the same pair of flags, not just have
+      # stripe_refunded flipped off.
+      gift = create(:gift, gifter_purchase: purchase, link: product)
+      giftee_purchase = create(:purchase, link: product, is_gift_receiver_purchase: true,
+                                          stripe_refunded: true, stripe_partially_refunded: false)
+      gift.update!(giftee_purchase:)
+      purchase.update!(is_gift_sender_purchase: true)
+      create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+
+      described_class.new(refund:).perform
+
+      expect(purchase.reload.stripe_refunded?).to eq(false)
+      expect(purchase.stripe_partially_refunded?).to eq(true)
+      expect(giftee_purchase.reload.stripe_refunded?).to eq(false)
+      expect(giftee_purchase.stripe_partially_refunded?).to eq(true)
+    end
+
+    it "restores both refunded flags on bundle product purchases after full and partial failure sequences" do
+      # A refund of a bundle purchase marks each product purchase as refunded (see
+      # mark_product_purchases_as_refunded!); the reversal must un-mark them the same
+      # way, in both the full-failure (all flags off) and the surviving-partial
+      # (partially-refunded pair) shapes — otherwise a buyer who was never made whole
+      # keeps "refunded" product purchases with revoked access.
+      purchase.update!(is_bundle_purchase: true)
+      product_purchase = create(:purchase, link: product, is_bundle_product_purchase: true,
+                                           stripe_refunded: true, stripe_partially_refunded: false)
+      create(:bundle_product_purchase, bundle_purchase: purchase, product_purchase:)
+      purchase.reload
+
+      # Full-failure shape: the only refund fails, so every flag comes off.
+      described_class.new(refund:).perform
+      expect(purchase.reload.stripe_refunded?).to eq(false)
+      expect(purchase.stripe_partially_refunded?).to eq(false)
+      expect(product_purchase.reload.stripe_refunded?).to eq(false)
+      expect(product_purchase.stripe_partially_refunded?).to eq(false)
+
+      # Partial shape: a later effective partial refund survives a second failure,
+      # so the mirrors must show partially refunded, not fully refunded.
+      surviving = create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+      failing = create(:refund, purchase:, amount_cents: 700, total_transaction_cents: 700,
+                                processor_refund_id: "re_bundle_partial_fail", status: "pending")
+      purchase.update!(stripe_refunded: false, stripe_partially_refunded: true)
+      product_purchase.update!(stripe_refunded: false, stripe_partially_refunded: true)
+
+      described_class.new(refund: failing).perform
+      expect(purchase.reload.stripe_partially_refunded?).to eq(true)
+      expect(purchase.stripe_refunded?).to eq(false)
+      expect(product_purchase.reload.stripe_partially_refunded?).to eq(true)
+      expect(product_purchase.stripe_refunded?).to eq(false)
+      expect(surviving.reload.effective?).to be(true)
+    end
+
     it "mirrors update_user_balance from the original transaction" do
       # An original debit created with update_user_balance: false (e.g. an affiliate
       # debit during a merchant migration) has no balance attached; its offset must
@@ -237,6 +291,23 @@ describe Purchase::HandleFailedRefundService do
     end
 
     context "when the refund's money moved outside Gumroad's ledger" do
+      it "reverses nothing for a real Stripe Connect merchant account" do
+        # Real (unstubbed) state: a Stripe Connect account makes
+        # charged_using_gumroad_merchant_account? false, so auto-reversal is refused
+        # and the whole case goes to the durable exception queue.
+        connect_account = create(:merchant_account_stripe_connect, user: seller)
+        purchase.update!(merchant_account: connect_account)
+        expect(purchase.charged_using_gumroad_merchant_account?).to eq(false)
+
+        expect { described_class.new(refund:).perform }
+          .to change(FailedRefundException, :count).by(1)
+
+        expect(refund.reload.status).to eq("failed")
+        expect(refund.balance_reversed_on_failure).to be_falsey
+        expect(refund.balance_transactions.count).to eq(1) # only the original debit
+        expect(purchase.reload.stripe_refunded?).to eq(true)
+      end
+
       it "marks the refund failed but reverses nothing for a Stripe Connect purchase" do
         allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
 
@@ -627,6 +698,118 @@ describe Purchase::HandleFailedRefundService do
       seller_debits = new_refund.balance_transactions.where(user: seller)
                                 .where("issued_amount_gross_cents < 0")
       expect(seller_debits).to be_present
+    end
+  end
+
+  describe "#perform with side effects created through the real refund path" do
+    # The fixtures above hand-build the refund's balance transactions. This block
+    # drives the ORIGINAL side effects through the real path instead —
+    # Purchase#refund_and_save! → decrement_balance_for_refund_or_chargeback! →
+    # fee-retention credit → affiliate debit — with only the external Stripe call
+    # stubbed, so the reversal is proven against exactly the rows production
+    # writes: seller and affiliate balances, the fee-retention credit pair, the
+    # refund-balance pointers, purchase flags, and effective sums.
+    let(:affiliate_user) { create(:affiliate_user) }
+    let(:product) { create(:product, price_cents: 10_00) }
+    let(:seller) { product.user }
+    let(:affiliate) { create(:direct_affiliate, affiliate_user:, seller:, affiliate_basis_points: 1000, products: [product]) }
+    let(:purchase) { create(:purchase_in_progress, link: product, seller:, affiliate:, chargeable: create(:chargeable)) }
+
+    def stub_processor_refund!(purchase, amount_cents: nil)
+      refunded_cents = amount_cents || purchase.total_transaction_cents
+      stripe_refund = double("stripe_refund", status: "pending", id: "pyr_real_path_#{SecureRandom.hex(6)}")
+      charge_refund = ChargeRefund.new
+      charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      charge_refund.id = stripe_refund.id
+      charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -refunded_cents)
+      charge_refund.instance_variable_set(:@refund, stripe_refund)
+      expect(ChargeProcessor).to receive(:refund!).and_return(charge_refund)
+      charge_refund
+    end
+
+    before do
+      purchase.process!
+      purchase.update_balance_and_mark_successful!
+      NotifyFailedRefundExceptionJob.jobs.clear
+    end
+
+    it "restores every real-path side effect after a full refund fails: balances, fee credit, affiliate state, flags, sums", :vcr do
+      admin = create(:admin_user)
+      seller_balance_before = seller.reload.unpaid_balance_cents
+      affiliate_balance_before = affiliate_user.reload.unpaid_balance_cents
+
+      stub_processor_refund!(purchase)
+      expect(purchase.refund_and_save!(admin.id, reason: "buyer requested")).to be(true)
+      purchase.reload
+      refund = purchase.refunds.sole
+      expect(purchase.stripe_refunded?).to be(true)
+      expect(purchase.purchase_refund_balance_id).to be_present
+      expect(purchase.affiliate_credit.affiliate_credit_refund_balance_id).to be_present
+      retention_credit = Credit.where(fee_retention_refund: refund).sole
+      expect(retention_credit.amount_cents).to be < 0
+      expect(seller.reload.unpaid_balance_cents).to be < seller_balance_before
+      expect(affiliate_user.reload.unpaid_balance_cents).to be < affiliate_balance_before
+
+      described_class.new(refund:).perform
+      purchase.reload
+      refund.reload
+
+      # Money: seller and affiliate balances return to their pre-refund values,
+      # including the retained processor fee given back as an explicit credit pair.
+      expect(seller.reload.unpaid_balance_cents).to eq(seller_balance_before)
+      expect(affiliate_user.reload.unpaid_balance_cents).to eq(affiliate_balance_before)
+      expect(Credit.where(fee_retention_refund: refund).count).to eq(2)
+      expect(Credit.where(fee_retention_refund: refund).sum(:amount_cents)).to eq(0)
+
+      # State: flags, pointers, and effective sums all treat the refund as never landed.
+      expect(refund.status).to eq("failed")
+      expect(refund.balance_reversed_on_failure).to eq(true)
+      expect(purchase.stripe_refunded?).to eq(false)
+      expect(purchase.stripe_partially_refunded?).to eq(false)
+      expect(purchase.purchase_refund_balance_id).to be_nil
+      expect(purchase.affiliate_credit.reload.affiliate_credit_refund_balance_id).to be_nil
+      expect(purchase.amount_refundable_cents).to eq(purchase.price_cents)
+      expect(purchase.amount_refunded_cents).to eq(0)
+      expect(purchase.seller_balance_update_eligible?).to eq(true)
+    end
+
+    it "restores partial-refund side effects and keeps the surviving refund's attribution", :vcr do
+      admin = create(:admin_user)
+      seller.reload.unpaid_balance_cents
+
+      # First partial refund succeeds and survives.
+      stub_processor_refund!(purchase, amount_cents: 300)
+      expect(purchase.refund_and_save!(admin.id, amount_cents: 300, reason: "partial one")).to be(true)
+      purchase.reload
+      surviving_refund = purchase.refunds.order(:id).last
+      surviving_refund.update!(status: "succeeded")
+      seller_balance_after_first = seller.reload.unpaid_balance_cents
+      surviving_pointer = purchase.purchase_refund_balance_id
+      expect(surviving_pointer).to be_present
+
+      # Second partial refund is accepted, then fails.
+      stub_processor_refund!(purchase, amount_cents: 400)
+      expect(purchase.refund_and_save!(admin.id, amount_cents: 400, reason: "partial two")).to be(true)
+      purchase.reload
+      failing_refund = purchase.refunds.order(:id).last
+      expect(failing_refund.id).not_to eq(surviving_refund.id)
+
+      described_class.new(refund: failing_refund).perform
+      purchase.reload
+
+      # The surviving refund's money stays refunded; the failed one's comes back.
+      expect(seller.reload.unpaid_balance_cents).to eq(seller_balance_after_first)
+      expect(purchase.stripe_partially_refunded?).to eq(true)
+      expect(purchase.stripe_refunded?).to eq(false)
+      expect(purchase.amount_refunded_cents).to eq(300)
+      # The pointer names the surviving refund's own seller-debit balance.
+      surviving_debit_balance = surviving_refund.balance_transactions
+                                                .where(user: seller)
+                                                .where("issued_amount_gross_cents < 0")
+                                                .sole.balance_id
+      expect(purchase.purchase_refund_balance_id).to eq(surviving_debit_balance)
+      expect(Credit.where(fee_retention_refund: failing_refund).sum(:amount_cents)).to eq(0)
+      expect(Credit.where(fee_retention_refund: surviving_refund).count).to eq(1)
     end
   end
 end
