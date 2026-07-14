@@ -24,7 +24,7 @@ class Api::V2::PagesController < Api::V2::BaseController
   end
 
   def show
-    render_response(true, page: page_json(@page))
+    render_response(true, page: page_json(@page), rendered_html: rendered_html_for(@page))
   end
 
   def create
@@ -137,5 +137,16 @@ class Api::V2::PagesController < Api::V2::BaseController
         created_at: page.created_at,
         updated_at: page.updated_at,
       }
+    end
+
+    # The eject path: a faithful standalone-HTML render of the page as it
+    # serves publicly today. When an agent takes over a rich text page with
+    # custom HTML, it starts from this instead of reverse-engineering the
+    # public layout from raw rich text. Custom HTML pages return the stored
+    # HTML itself — that already IS the document.
+    def rendered_html_for(page)
+      return page.custom_html if page.custom_html.present?
+
+      Pages::RichTextDocument.render(page:, seller_name: current_resource_owner.name_or_username).to_str
     end
 end

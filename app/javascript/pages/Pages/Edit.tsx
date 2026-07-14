@@ -48,17 +48,18 @@ export default function PagesEdit() {
 
   const [title, setTitle] = React.useState(page.title);
   const [content, setContent] = React.useState(page.content);
-  // The preview refreshes on save, not on every keystroke — it renders the
-  // saved page through the same wrapper the public page uses. These also
-  // double as the last-saved values for unsaved-changes detection.
-  const [previewContent, setPreviewContent] = React.useState(page.content);
-  const [previewTitle, setPreviewTitle] = React.useState(page.title);
+  // The last-saved values, for unsaved-changes detection. The preview pane
+  // frames the saved page, so it refreshes on save (previewVersion below), not
+  // on every keystroke.
+  const [savedTitle, setSavedTitle] = React.useState(page.title);
+  const [savedContent, setSavedContent] = React.useState(page.content);
+  const [previewVersion, setPreviewVersion] = React.useState(0);
   const [isSaving, setIsSaving] = React.useState(false);
 
   // Only rich-text pages are editable in place; the profile and custom HTML
   // pages change through profile settings or the agent/CLI.
   const isEditable = canEdit && !is_profile && !page.custom_html;
-  const isDirty = isEditable && (title !== previewTitle || content !== previewContent);
+  const isDirty = isEditable && (title !== savedTitle || content !== savedContent);
 
   // Warn before navigating away with unsaved edits. `beforeunload` covers full
   // navigations (close tab, hard link); the Inertia "before" listener covers
@@ -105,16 +106,20 @@ export default function PagesEdit() {
   // public page is a wrapper whose nested embed answers with
   // X-Frame-Options: SAMEORIGIN, and the dashboard is a different origin, so
   // the browser blocks the frame. The dashboard's own preview endpoint serves
-  // the same sanitized document same-origin instead.
-  const customHtmlPreviewUrl = page.custom_html && page.slug ? Routes.preview_page_path(page.slug) : null;
+  // the same document same-origin instead — the sanitized custom HTML for
+  // agent-built pages, or the real styled document for rich text pages.
+  const previewPath = page.slug ? Routes.preview_page_path(page.slug) : null;
 
   const save = () => {
     setIsSaving(true);
     const params = { title, content };
     const options = {
       onSuccess: () => {
-        setPreviewContent(content);
-        setPreviewTitle(title);
+        setSavedTitle(title);
+        setSavedContent(content);
+        // Bump the preview frame's cache-busting param so it reloads and shows
+        // the page as just saved.
+        setPreviewVersion((version) => version + 1);
       },
       onError: (errors: Record<string, unknown>) => {
         const message = Object.values(errors).find((value) => typeof value === "string");
@@ -180,14 +185,16 @@ export default function PagesEdit() {
     </div>
   );
 
-  // The caption has to match how each page actually updates: rich-text pages
-  // refresh on save, the profile and custom HTML pages frame the live page,
-  // and a new page has no public URL until it's created.
-  const previewCaption = is_new
-    ? "Your page will live at this link once you create it."
-    : is_profile || page.custom_html
-      ? "The preview shows the live page."
-      : "The preview refreshes when you save.";
+  // Rich text previews render through the dashboard's same-origin preview
+  // endpoint (the same styled document the public page serves), so the frame's
+  // document is readable — size the frame to its content like the other
+  // previews in the app instead of forcing a fixed box shape.
+  const richTextFrameRef = React.useRef<HTMLIFrameElement>(null);
+  const sizeRichTextPreview = () => {
+    const frame = richTextFrameRef.current;
+    const height = frame?.contentDocument?.documentElement.scrollHeight;
+    if (frame && height) frame.style.height = `${Math.min(height, window.innerHeight)}px`;
+  };
 
   const previewSidebar = (
     <PreviewSidebar
@@ -198,42 +205,52 @@ export default function PagesEdit() {
           : (props) => <NavigationButton {...props} size="icon" href={publicUrl} target="_blank" rel="noreferrer" />
       }
     >
-      <div className="overflow-hidden rounded border border-border bg-background">
-        <div className="border-b border-border p-3">
-          <div className="text-sm font-medium">{previewTitle || "Untitled page"}</div>
-          <div className="truncate text-xs text-muted">{publicUrl.replace(/^https?:\/\//u, "")}</div>
+      {is_profile && !page.custom_html ? (
+        // The default-template home page frames the live storefront.
+        // `allow-same-origin` is needed for the storefront's own scripts to
+        // boot — without it the page loads but renders blank. The frame
+        // shows our own domain (the seller's public profile), same trust
+        // level as the parent page.
+        // eslint-disable-next-line react/iframe-missing-sandbox -- allow-scripts + allow-same-origin is intentional for framing our own storefront
+        <iframe
+          title="Page preview"
+          src={publicUrl}
+          sandbox="allow-scripts allow-forms allow-same-origin"
+          className="h-[75vh] min-h-150 w-full rounded border border-border bg-white"
+        />
+      ) : page.custom_html && previewPath ? (
+        // Agent-built pages (and a custom HTML home page) render through the
+        // dashboard's same-origin preview endpoint — see the note on
+        // previewPath above for why the public URL can't be framed. The
+        // sandbox makes the document unreadable from here, so it can't be
+        // sized to content; it gets the same tall frame as the profile.
+        <iframe
+          title="Page preview"
+          src={previewPath}
+          sandbox="allow-scripts"
+          className="h-[75vh] min-h-150 w-full rounded border border-border bg-white"
+        />
+      ) : is_new ? (
+        <div className="rounded border border-border bg-background p-4 text-sm text-muted">
+          Create the page to see a preview.
         </div>
-        {is_profile && !page.custom_html ? (
-          // The default-template home page frames the live storefront.
-          // `allow-same-origin` is needed for the storefront's own scripts to
-          // boot — without it the page loads but renders blank. The frame
-          // shows our own domain (the seller's public profile), same trust
-          // level as the parent page.
-          // eslint-disable-next-line react/iframe-missing-sandbox -- allow-scripts + allow-same-origin is intentional for framing our own storefront
-          <iframe
-            title="Page preview"
-            src={publicUrl}
-            sandbox="allow-scripts allow-forms allow-same-origin"
-            className="aspect-[3/4] w-full"
-          />
-        ) : customHtmlPreviewUrl ? (
-          // Agent-built pages (and a custom HTML home page) render through the
-          // dashboard's same-origin preview endpoint — see the note on
-          // customHtmlPreviewUrl above for why the public URL can't be framed.
-          <iframe
-            title="Page preview"
-            src={customHtmlPreviewUrl}
-            sandbox="allow-scripts"
-            className="aspect-[3/4] w-full"
-          />
-        ) : (
-          <div
-            className="rich-text aspect-[3/4] w-full overflow-y-auto p-4"
-            dangerouslySetInnerHTML={{ __html: previewContent || "<p style='opacity:.5'>Nothing here yet.</p>" }}
-          />
-        )}
-      </div>
-      <p className="text-xs text-muted">{previewCaption}</p>
+      ) : previewPath ? (
+        // The real page document, sized to its content. The endpoint renders
+        // sanitized rich text — no seller scripts can run (the sandbox has no
+        // allow-scripts) — and `allow-same-origin` keeps the same-origin
+        // document readable so the frame can be measured.
+        <iframe
+          ref={richTextFrameRef}
+          title="Page preview"
+          key={previewVersion}
+          src={`${previewPath}?v=${previewVersion}`}
+          sandbox="allow-same-origin"
+          onLoad={sizeRichTextPreview}
+          className="w-full rounded border border-border bg-white"
+        />
+      ) : null}
+      <p className="truncate text-xs text-muted">{publicUrl.replace(/^https?:\/\//u, "")}</p>
+      {isEditable ? <p className="text-xs text-muted">The preview refreshes when you save.</p> : null}
     </PreviewSidebar>
   );
 

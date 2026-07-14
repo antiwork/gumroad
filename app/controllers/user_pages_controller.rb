@@ -80,10 +80,8 @@ class UserPagesController < ApplicationController
 
     def page_meta_head
       title = ERB::Util.h(@page.title.to_s)
-      seller = ERB::Util.h(@user.name_or_username.to_s)
       canonical = ERB::Util.h(page_url)
       <<~HTML
-        <title>#{title} — #{seller}</title>
         <link rel="canonical" href="#{canonical}">
         <meta property="og:title" content="#{title}">
         <meta property="og:type" content="website">
@@ -92,44 +90,11 @@ class UserPagesController < ApplicationController
     end
 
     # Sanitized rich text renders directly — it can't carry scripts, so it
-    # doesn't need the sandboxed-iframe pipeline. Styling is a small
-    # self-contained stylesheet (not the custom-HTML Tailwind build, which is a
-    # utility bundle, not typography defaults) with a plain header linking back
-    # to the seller's storefront.
+    # doesn't need the sandboxed-iframe pipeline. The document itself comes
+    # from Pages::RichTextDocument, shared with the API's eject render.
     def rich_text_page_document
-      profile_href = @is_user_custom_domain ? "/" : ERB::Util.h(@user.profile_url)
-      <<~HTML.html_safe
-        <!doctype html>
-        <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            #{page_meta_head}
-            <style>
-              :root { color-scheme: light dark; }
-              body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background: #fff; color: #000; }
-              main { max-width: 42rem; margin: 0 auto; padding: 3rem 1.5rem; }
-              header a { font-size: 0.875rem; color: inherit; }
-              h1.page-title { margin: 0.5rem 0 2rem; font-size: 2rem; line-height: 1.2; }
-              article img { max-width: 100%; height: auto; }
-              article pre { overflow-x: auto; padding: 1rem; background: rgba(127, 127, 127, 0.1); border-radius: 4px; }
-              article blockquote { margin: 1rem 0; padding-left: 1rem; border-left: 3px solid currentColor; opacity: 0.8; }
-              article table { border-collapse: collapse; }
-              article th, article td { border: 1px solid rgba(127, 127, 127, 0.4); padding: 0.4rem 0.6rem; }
-              @media (prefers-color-scheme: dark) { body { background: #000; color: #fff; } }
-            </style>
-          </head>
-          <body>
-            <main>
-              <header>
-                <a href="#{profile_href}">#{ERB::Util.h(@user.name_or_username.to_s)}</a>
-                <h1 class="page-title">#{ERB::Util.h(@page.title.to_s)}</h1>
-              </header>
-              <article>#{@page.content}</article>
-            </main>
-          </body>
-        </html>
-      HTML
+      profile_href = @is_user_custom_domain ? "/" : @user.profile_url
+      Pages::RichTextDocument.render(page: @page, seller_name: @user.name_or_username, profile_href:, head_extra: page_meta_head)
     end
 
     # Mirrors UsersController#profile_custom_html_wrapper_document, scoped to a

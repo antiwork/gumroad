@@ -37,6 +37,17 @@ describe Api::V2::PagesController do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["page"]["title"]).to eq("FAQ")
       expect(response.parsed_body["page"]["content"]).to eq("<p>Q &amp; A</p>")
+      expect(response.parsed_body["rendered_html"]).to include("<h1 class=\"page-title\">FAQ</h1>")
+      expect(response.parsed_body["rendered_html"]).to include("<p>Q &amp; A</p>")
+    end
+
+    it "returns the stored HTML as the render for a custom HTML page" do
+      create(:user_page, pageable: @user, slug: "studio", title: "Studio", content: nil, custom_html: "<h1>Studio</h1>")
+
+      get :show, params: { format: :json, access_token: @token.token, id: "studio" }
+
+      expect(response.parsed_body["rendered_html"]).to include("<h1>Studio</h1>")
+      expect(response.parsed_body["rendered_html"]).not_to include("page-title")
     end
 
     it "reports a missing page" do

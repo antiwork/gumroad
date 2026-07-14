@@ -123,18 +123,29 @@ class PagesController < Sellers::BaseController
     redirect_to pages_path, notice: "Page deleted!", status: :see_other
   end
 
-  # Renders a custom HTML page for the editor's preview pane. The public page
+  # Renders a page for the editor's preview pane, same-origin. The public page
   # can't be framed here: it's a wrapper whose nested embed responds with
   # X-Frame-Options: SAMEORIGIN, and the dashboard is a different origin than
-  # the seller's subdomain, so the browser blocks the frame. This serves the
-  # same sanitized document same-origin instead, with the same strict CSP +
-  # sandbox headers as the public embed (the editor's iframe adds its own
-  # sandbox attribute on top).
+  # the seller's subdomain, so the browser blocks the frame.
+  #
+  # - Rich text pages render the same styled document the public page serves
+  #   (Pages::RichTextDocument), so the preview shows the real page — title,
+  #   byline, typography — not the editor's raw HTML.
+  # - Custom HTML pages render the sanitized document with the same strict
+  #   CSP + sandbox headers as the public embed (the editor's iframe adds its
+  #   own sandbox attribute on top).
   def preview
     authorize :page
 
     custom_html = @profile_page ? current_seller.custom_html : @page.custom_html
-    return head :not_found if custom_html.blank?
+    if custom_html.blank?
+      # The profile's default template is framed live from the storefront, so
+      # there is nothing for this endpoint to render for it.
+      return head :not_found if @profile_page
+
+      return render html: Pages::RichTextDocument.render(page: @page, seller_name: current_seller.name_or_username, profile_href: current_seller.profile_url),
+                    layout: false
+    end
 
     apply_custom_html_response_headers
     interpolated = Pages::Interpolator.interpolate_profile(custom_html, profile: current_seller)

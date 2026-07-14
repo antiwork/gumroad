@@ -196,10 +196,21 @@ describe PagesController, type: :controller, inertia: true do
       expect(response.body).to include("Home takeover")
     end
 
-    it "404s for a rich text page (nothing to render here)" do
+    it "renders the styled public document for a rich text page" do
       page.update!(custom_html: nil, content: "<p>Rich text</p>")
 
       get :preview, params: { slug: "about" }
+
+      expect(response).to be_successful
+      expect(response.body).to include("<h1 class=\"page-title\">About</h1>")
+      expect(response.body).to include("<p>Rich text</p>")
+    end
+
+    it "404s for the profile slug without a custom HTML takeover (the editor frames the live storefront instead)" do
+      seller.custom_html = nil
+      seller.save!
+
+      get :preview, params: { slug: "profile" }
 
       expect(response).to have_http_status(:not_found)
     end
