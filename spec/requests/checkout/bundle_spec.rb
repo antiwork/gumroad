@@ -86,8 +86,8 @@ describe "Checkout bundles", :js, type: :system do
       expect(page).to have_alert(text: "Your purchase was successful!")
 
       purchase = Purchase.last
-      expect(purchase.street_address).to eq("2031 7TH AVE")
-      expect(purchase.city).to eq("SEATTLE")
+      expect(purchase.street_address).to eq("2031 7th Ave")
+      expect(purchase.city).to eq("Seattle")
       expect(purchase.state).to eq("WA")
       expect(purchase.zip_code).to eq("98121")
     end
