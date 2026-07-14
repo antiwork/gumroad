@@ -69,6 +69,7 @@ class Purchase::HandleFailedRefundService
         if needs_balance_reversal
           reverse_balance_transactions!
           reverse_fee_retention_credits!
+          restore_affiliate_refund_state!
           recompute_purchase_refunded_flags!
           refund.balance_reversed_on_failure = true
           refund.save!
@@ -194,6 +195,48 @@ class Purchase::HandleFailedRefundService
         end
         Credit.create_for_failed_refund_fee_reversal!(refund:, retention_credit:)
       end
+    end
+
+    # A refund debits the affiliate's balance AND records state on the affiliate
+    # rows: the AffiliateCredit gets its refund-balance pointer set (which makes
+    # scopes like AffiliateCredit.not_refunded_or_chargebacked treat the commission
+    # as refunded), and partial refunds add an AffiliatePartialRefund row that
+    # affiliate stats subtract from earnings. reverse_balance_transactions! above
+    # already gave the affiliate their money back; this restores the state so the
+    # affiliate's stats and payout eligibility stop treating the failed refund as
+    # real.
+    def restore_affiliate_refund_state!
+      affiliate_credit = purchase.affiliate_credit
+      return if affiliate_credit.nil?
+
+      failed_affiliate_balance_ids = refund.balance_transactions
+                                           .where(user: affiliate_credit.affiliate_user)
+                                           .where("issued_amount_gross_cents < 0")
+                                           .pluck(:balance_id)
+                                           .compact
+      return if failed_affiliate_balance_ids.empty?
+
+      # Partial-refund rows carry no refund reference, only the balance the
+      # affiliate debit landed in — match them through this refund's own affiliate
+      # balance transactions so rows from other (still effective) refunds survive.
+      purchase.affiliate_partial_refunds
+              .where(affiliate_credit:, balance_id: failed_affiliate_balance_ids)
+              .find_each(&:destroy!)
+
+      return unless failed_affiliate_balance_ids.include?(affiliate_credit.affiliate_credit_refund_balance_id)
+
+      # The pointer was set by the refund that just failed. If an earlier effective
+      # refund also debited the affiliate, re-point at that refund's balance (the
+      # pointer records "this commission was refunded", which is still true);
+      # otherwise clear it so the commission counts as earned again.
+      remaining_affiliate_debit = BalanceTransaction.joins(:refund)
+                                                    .merge(Refund.effective)
+                                                    .where(refunds: { purchase_id: purchase.id })
+                                                    .where.not(refund_id: refund.id)
+                                                    .where(user: affiliate_credit.affiliate_user)
+                                                    .where("balance_transactions.issued_amount_gross_cents < 0")
+                                                    .order(:id).last
+      affiliate_credit.update!(affiliate_credit_refund_balance_id: remaining_affiliate_debit&.balance_id)
     end
 
     # Recompute the purchase's refunded flags as if the failed refund never counted.

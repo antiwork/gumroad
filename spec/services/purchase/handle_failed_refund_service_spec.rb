@@ -233,6 +233,119 @@ describe Purchase::HandleFailedRefundService do
       end
     end
 
+    context "when the refund also debited an affiliate" do
+      let(:affiliate_user) { create(:affiliate_user) }
+      let(:affiliate) { create(:direct_affiliate, affiliate_user:, seller:) }
+      let!(:affiliate_credit) do
+        create(:affiliate_credit,
+               purchase:,
+               affiliate_user:,
+               affiliate:,
+               seller:,
+               amount_cents: 300)
+      end
+
+      # Mirror what process_refund_or_chargeback_for_affiliate_credit_balance records:
+      # a negative affiliate balance transaction linked to the refund, the refund-balance
+      # pointer on the AffiliateCredit, and (for partial refunds) an AffiliatePartialRefund.
+      def record_affiliate_refund_side_effects!(partial: false)
+        issued_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -300, net_cents: -300)
+        holding_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -300, net_cents: -300)
+        affiliate_transaction = BalanceTransaction.create!(
+          user: affiliate_user,
+          merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+          refund:,
+          issued_amount:,
+          holding_amount:
+        )
+        affiliate_credit.update!(affiliate_credit_refund_balance_id: affiliate_transaction.balance_id)
+        if partial
+          purchase.affiliate_partial_refunds.create!(
+            total_credit_cents: 300,
+            amount_cents: 150,
+            balance: affiliate_transaction.balance,
+            seller:,
+            affiliate:,
+            affiliate_user:,
+            affiliate_credit:
+          )
+        end
+        affiliate_transaction
+      end
+
+      it "clears the refund-balance pointer so the commission counts as earned again" do
+        record_affiliate_refund_side_effects!
+        expect(AffiliateCredit.not_refunded_or_chargebacked.where(id: affiliate_credit.id)).to be_empty
+
+        described_class.new(refund:).perform
+
+        expect(affiliate_credit.reload.affiliate_credit_refund_balance_id).to be_nil
+        expect(AffiliateCredit.not_refunded_or_chargebacked.where(id: affiliate_credit.id)).to be_present
+      end
+
+      it "destroys the failed refund's partial-refund row but keeps other refunds' rows" do
+        affiliate_transaction = record_affiliate_refund_side_effects!(partial: true)
+        surviving_row = purchase.affiliate_partial_refunds.create!(
+          total_credit_cents: 300,
+          amount_cents: 100,
+          balance: create(:balance, user: affiliate_user, date: 1.week.ago.to_date),
+          seller:,
+          affiliate:,
+          affiliate_user:,
+          affiliate_credit:
+        )
+
+        described_class.new(refund:).perform
+
+        remaining = purchase.affiliate_partial_refunds.reload
+        expect(remaining).to contain_exactly(surviving_row)
+        expect(remaining.where(balance_id: affiliate_transaction.balance_id)).to be_empty
+      end
+
+      it "re-points the pointer at an earlier effective refund's affiliate debit" do
+        earlier_refund = create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+        issued_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -75, net_cents: -75)
+        earlier_transaction = BalanceTransaction.create!(
+          user: affiliate_user,
+          merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+          refund: earlier_refund,
+          issued_amount:,
+          holding_amount: issued_amount,
+          update_user_balance: false
+        )
+        # Record the failed refund's own debit FIRST (live balance selection would
+        # otherwise drop it into whatever unpaid balance exists), then park the
+        # earlier refund's debit in its own distinct balance so the assertion below
+        # proves the pointer actually moves to the surviving refund's balance.
+        record_affiliate_refund_side_effects!
+        earlier_balance = create(:balance, user: affiliate_user, date: 2.weeks.ago.to_date)
+        earlier_transaction.update_column(:balance_id, earlier_balance.id)
+        expect(affiliate_credit.reload.affiliate_credit_refund_balance_id).not_to eq(earlier_balance.id)
+
+        described_class.new(refund:).perform
+
+        expect(affiliate_credit.reload.affiliate_credit_refund_balance_id).to eq(earlier_balance.id)
+      end
+
+      it "leaves affiliate state alone when the failed refund never touched the affiliate" do
+        pointer_balance = create(:balance, user: affiliate_user, date: 2.weeks.ago.to_date)
+        affiliate_credit.update!(affiliate_credit_refund_balance_id: pointer_balance.id)
+
+        described_class.new(refund:).perform
+
+        expect(affiliate_credit.reload.affiliate_credit_refund_balance_id).to eq(pointer_balance.id)
+      end
+
+      it "leaves affiliate state alone when the money moved outside Gumroad's ledger" do
+        record_affiliate_refund_side_effects!(partial: true)
+        allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
+
+        expect { described_class.new(refund:).perform }
+          .not_to change { purchase.affiliate_partial_refunds.count }
+        expect(affiliate_credit.reload.affiliate_credit_refund_balance_id).to be_present
+      end
+    end
+
     it "keeps a partial refund flag when another non-failed refund remains" do
       create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
 
