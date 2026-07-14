@@ -1,0 +1,67 @@
+# Shared seed users for the Minitest + fixtures suite.
+#
+# Conventions (see docs/minitest-migration.md):
+# - Descriptive names, not :one/:two.
+# - Fixtures bypass validations, callbacks, and `attribute ... default:`
+#   declarations, so any column with both a default and a validator must be
+#   spelled out (user_risk_state, recommendation_type).
+# - Plain password for every user below: "test-password-123!"
+
+basic_user:
+  email: fixture-basic@example.com
+  encrypted_password: <%= User.new.send(:password_digest, "test-password-123!") %>
+  confirmed_at: <%= Time.current %>
+  user_risk_state: not_reviewed
+  recommendation_type: own_products
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+# The standard seller + 4-role team used by policy tests (mirrors the RSpec
+# `create(:named_seller)` + team_membership factory setup).
+named_seller:
+  email: fixture-seller@example.com
+  username: fixtureseller
+  name: Seller
+  payment_address: fixture-seller-payments@example.com
+  encrypted_password: <%= User.new.send(:password_digest, "test-password-123!") %>
+  confirmed_at: <%= Time.current %>
+  user_risk_state: not_reviewed
+  recommendation_type: own_products
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+accountant_for_named_seller:
+  email: fixture-accountant@example.com
+  encrypted_password: <%= User.new.send(:password_digest, "test-password-123!") %>
+  confirmed_at: <%= Time.current %>
+  user_risk_state: not_reviewed
+  recommendation_type: own_products
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+admin_for_named_seller:
+  email: fixture-admin@example.com
+  encrypted_password: <%= User.new.send(:password_digest, "test-password-123!") %>
+  confirmed_at: <%= Time.current %>
+  user_risk_state: not_reviewed
+  recommendation_type: own_products
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+marketing_for_named_seller:
+  email: fixture-marketing@example.com
+  encrypted_password: <%= User.new.send(:password_digest, "test-password-123!") %>
+  confirmed_at: <%= Time.current %>
+  user_risk_state: not_reviewed
+  recommendation_type: own_products
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+support_for_named_seller:
+  email: fixture-support@example.com
+  encrypted_password: <%= User.new.send(:password_digest, "test-password-123!") %>
+  confirmed_at: <%= Time.current %>
+  user_risk_state: not_reviewed
+  recommendation_type: own_products
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>

@@ -79,7 +79,6 @@ def configure_vcr
     config.filter_sensitive_data("<SENDGRID_GR_CREATORS_API_KEY>") { GlobalConfig.get("SENDGRID_GR_CREATORS_API_KEY") }
     config.filter_sensitive_data("<SENDGRID_GR_CUSTOMERS_LEVEL_2_API_KEY>") { GlobalConfig.get("SENDGRID_GR_CUSTOMERS_LEVEL_2_API_KEY") }
     config.filter_sensitive_data("<SENDGRID_GUMROAD_FOLLOWER_CONFIRMATION_API_KEY>") { GlobalConfig.get("SENDGRID_GUMROAD_FOLLOWER_CONFIRMATION_API_KEY") }
-    config.filter_sensitive_data("<EASYPOST_API_KEY>") { GlobalConfig.get("EASYPOST_API_KEY") }
     config.filter_sensitive_data("<BRAINTREE_API_PRIVATE_KEY>") { GlobalConfig.get("BRAINTREE_API_PRIVATE_KEY") }
     config.filter_sensitive_data("<BRAINTREE_MERCHANT_ID>") { GlobalConfig.get("BRAINTREE_MERCHANT_ID") }
     config.filter_sensitive_data("<BRAINTREE_PUBLIC_KEY>") { GlobalConfig.get("BRAINTREE_PUBLIC_KEY") }
@@ -110,11 +109,6 @@ def configure_vcr
     config.filter_sensitive_data("<GOOGLE_CLIENT_ID>") { GlobalConfig.get("GOOGLE_CLIENT_ID") }
     config.filter_sensitive_data("<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>") { GlobalConfig.get("RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID") }
     config.filter_sensitive_data("<CLOUDFRONT_KEYPAIR_ID>") { GlobalConfig.get("CLOUDFRONT_KEYPAIR_ID") }
-
-    # Filter EasyPost API key (Base64-encoded for Basic Auth headers)
-    config.filter_sensitive_data("<EASYPOST_API_KEY_BASE64>") do
-      Base64.strict_encode64("#{GlobalConfig.get('EASYPOST_API_KEY')}:")
-    end
   end
 end
 
@@ -421,7 +415,7 @@ RSpec.configure do |config|
 
   config.around(:each, :shipping) do |example|
     vcr_turned_on do
-      only_matching_vcr_request_from(["easypost", "taxjar"]) do
+      only_matching_vcr_request_from(["taxjar"]) do
         VCR.use_cassette("ShippingScenarios/#{example.description}", allow_playback_repeats: example.metadata[:js]) do
           # Debug flaky specs.
           puts "*" * 100
@@ -443,30 +437,6 @@ RSpec.configure do |config|
           example.run
         end
       end
-    end
-  end
-
-  # Mock EasyPost address verification for physical product tests without VCR
-  config.before(:each, :mock_easypost) do
-    allow_any_instance_of(EasyPost::Services::Address).to receive(:create) do |_instance, params|
-      # Echo back the input address with successful verification
-      OpenStruct.new(
-        id: "adr_mock_#{SecureRandom.hex(8)}",
-        object: "Address",
-        street1: params[:street1]&.upcase || "1640 17TH ST",
-        street2: params[:street2] || "",
-        city: params[:city]&.upcase || "SAN FRANCISCO",
-        state: params[:state]&.upcase || "CA",
-        zip: params[:zip] || "94107",
-        country: params[:country] || "US",
-        verifications: OpenStruct.new(
-          delivery: OpenStruct.new(
-            success: true,
-            errors: [],
-            details: OpenStruct.new(latitude: 37.76493, longitude: -122.40005, time_zone: "America/Los_Angeles")
-          )
-        )
-      )
     end
   end
 

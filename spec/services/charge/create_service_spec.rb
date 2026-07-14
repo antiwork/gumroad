@@ -287,6 +287,61 @@ describe Charge::CreateService, :vcr do
                                 params: { buyer_currency_quote: "locked-token" }).perform
     end
 
+    {
+      "native PayPal" => PaypalChargeProcessor.charge_processor_id,
+      "Braintree PayPal" => BraintreeChargeProcessor.charge_processor_id,
+    }.each do |processor_name, charge_processor_id|
+      it "ignores a stale buyer-currency quote token for a #{processor_name} charge" do
+        seller = create(:user, disable_buyer_local_currency: false)
+        product = create(:product, user: seller, price_cents: 10_00)
+        order = create(:order)
+        merchant_account = create(:merchant_account_paypal, user: seller, charge_processor_id:)
+        chargeable = instance_double(Chargeable, fingerprint: "paypal-fingerprint")
+        purchase = create(:purchase,
+                          link: product,
+                          seller:,
+                          merchant_account:,
+                          purchase_state: "in_progress",
+                          total_transaction_cents: 10_00)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(:buyer_local_currency, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+        expect(Checkout::BuyerCurrencyQuote).not_to receive(:verify!)
+        expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!).with(
+          merchant_account,
+          chargeable,
+          10_00,
+          3_00,
+          instance_of(String),
+          instance_of(String),
+          statement_description: seller.name_or_username,
+          transfer_group: instance_of(String),
+          off_session: false,
+          setup_future_charges: false,
+          metadata: { "purchases{0}" => purchase.external_id },
+          mandate_options: nil
+        ).and_return(nil)
+
+        Charge::CreateService.new(order:,
+                                  seller:,
+                                  merchant_account:,
+                                  chargeable:,
+                                  purchases: [purchase],
+                                  amount_cents: 10_00,
+                                  gumroad_amount_cents: 3_00,
+                                  setup_future_charges: false,
+                                  off_session: false,
+                                  statement_description: seller.name_or_username,
+                                  params: { buyer_currency_quote: "stale-token" }).perform
+
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors[:base]).to be_empty
+      ensure
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+        Feature.deactivate_user(:buyer_local_currency, seller) if seller
+      end
+    end
+
     it "asks the buyer to re-quote and clears snapshots when Stripe invalidates the locked quote" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
@@ -425,6 +480,131 @@ describe Charge::CreateService, :vcr do
       allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
       allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_raise(Checkout::BuyerCurrencyQuote::InvalidToken, "expired buyer currency quote")
       expect(ErrorNotifier).not_to receive(:notify)
+      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+      charge = Charge::CreateService.new(order:,
+                                         seller: seller_1,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases: [purchase],
+                                         amount_cents: 10_00,
+                                         gumroad_amount_cents: 3_00,
+                                         setup_future_charges: false,
+                                         off_session: false,
+                                         statement_description: seller_1.name_or_username,
+                                         params: { buyer_currency_quote: "locked-token" }).perform
+
+      expect(charge.charge_intent).to be_nil
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    end
+
+    it "fails closed instead of charging canonical USD when charge-time eligibility falls back but the buyer confirmed a local-currency total" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      # The quote token proves the checkout displayed a locked local-currency total; a
+      # charge-time gate failing after that must not silently charge a different amount.
+      eligibility_decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: false, currency: nil, fallback_reason: :missing_buyer_currency)
+
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
+      expect(Checkout::BuyerCurrencyQuote).not_to receive(:verify!)
+      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+      charge = Charge::CreateService.new(order:,
+                                         seller: seller_1,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases: [purchase],
+                                         amount_cents: 10_00,
+                                         gumroad_amount_cents: 3_00,
+                                         setup_future_charges: false,
+                                         off_session: false,
+                                         statement_description: seller_1.name_or_username,
+                                         params: { buyer_currency_quote: "locked-token" }).perform
+
+      expect(charge.charge_intent).to be_nil
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    end
+
+    it "charges canonical USD when charge-time eligibility falls back and no quote token was sent" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      eligibility_decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: false, currency: nil, fallback_reason: :feature_disabled)
+
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
+      # No token means the checkout displayed canonical USD, so the canonical charge is the
+      # amount the buyer confirmed — the exact argument list pins that no presentment
+      # processor arguments (and no fail-closed error) sneak into this path.
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!).with(
+        merchant_account,
+        chargeable,
+        10_00,
+        3_00,
+        instance_of(String),
+        instance_of(String),
+        statement_description: seller_1.name_or_username,
+        transfer_group: instance_of(String),
+        off_session: false,
+        setup_future_charges: false,
+        metadata: { "purchases{0}" => purchase.external_id },
+        mandate_options: nil
+      ).and_return(nil)
+
+      Charge::CreateService.new(order:,
+                                seller: seller_1,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 10_00,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller_1.name_or_username,
+                                params: {}).perform
+
+      expect(purchase.error_code).to be_nil
+      expect(purchase.errors[:base]).to be_empty
+    end
+
+    it "fails closed when presentment snapshots cannot be persisted for a confirmed local-currency total" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      eligibility_decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::CAD, fallback_reason: nil)
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(token: "locked-token",
+                                                              currency: Currency::CAD,
+                                                              canonical_total_cents: 10_00,
+                                                              presentment_total_cents: 12_50,
+                                                              fx_rate: BigDecimal("0.8"),
+                                                              stripe_fx_quote_id: "fxq_test",
+                                                              stripe_fx_quote_expires_at: 1.hour.from_now)
+
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
+      allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_quote)
+      # The orchestrator rescues unexpected snapshot/allocation failures and returns nil;
+      # the charge must then error out instead of proceeding as canonical USD.
+      allow_any_instance_of(Charge::PresentmentOrchestrator).to receive(:perform).and_return(nil)
       expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
 
       charge = Charge::CreateService.new(order:,

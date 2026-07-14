@@ -49,6 +49,15 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
     expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { willSaveCard: true })).toBeNull();
     expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { willSaveCard: false })).not.toBeNull();
   });
+
+  it("does not use buyer-currency display while a non-card payment method is selected", () => {
+    // PayPal and wallet charges can only be canonical USD, so the cart must show the USD
+    // totals those methods will actually charge — and withhold the quote token, which would
+    // otherwise dead-end the charge (it fails closed on a token it cannot present).
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "paypal" })).toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "stripePaymentRequest" })).toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "card" })).not.toBeNull();
+  });
 });
 
 describe("getCheckoutBuyerCurrencyQuoteToken", () => {
@@ -56,6 +65,9 @@ describe("getCheckoutBuyerCurrencyQuoteToken", () => {
     expect(getCheckoutBuyerCurrencyQuoteToken(surcharges())).toBe("quote-token");
     // Saving the card charges canonically, so the token must be withheld with the display.
     expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { willSaveCard: true })).toBeNull();
+    // A non-card method (PayPal) also charges canonically; sending the token with it would
+    // make the charge fail closed on every attempt instead of completing in USD.
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { paymentMethod: "paypal" })).toBeNull();
     expect(getCheckoutBuyerCurrencyQuoteToken(surcharges({ buyer_currency_quote: null }))).toBeNull();
     expect(getCheckoutBuyerCurrencyQuoteToken(null)).toBeNull();
   });

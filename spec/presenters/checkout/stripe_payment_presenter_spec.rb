@@ -15,6 +15,10 @@ describe Checkout::StripePaymentPresenter do
         # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
         # which sets currency_code on every real add_products entry.
         currency_code: product.price_currency_type.to_s.downcase,
+        installment_plan: product.installment_plan.present? ? {
+          number_of_installments: product.installment_plan.number_of_installments,
+          recurrence: product.installment_plan.recurrence,
+        } : nil,
       },
       price:,
       recurrence:,
@@ -61,15 +65,16 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
-      disable_wallets: false,
+      disable_wallets:,
       request_apple_pay_merchant_tokens:,
       elements_options: {
         stripe_elements_mode:,
         currency: "usd",
+        buyer_currency_presentment:,
         payment_method_types: ["card"],
         payment_method_creation: "manual",
         stripe_link_enabled:,
@@ -118,7 +123,7 @@ describe Checkout::StripePaymentPresenter do
       .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
   end
 
-  it "falls back to CardElement when buyer-currency presentment is enabled for the checkout" do
+  it "selects the buyer-currency presentment Payment Element for a single USD one-time item with presentment enabled" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
@@ -128,6 +133,100 @@ describe Checkout::StripePaymentPresenter do
     add_products = [
       checkout_product_for(
         product,
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "falls back to CardElement when a presentment candidate's cart shape is unsupported" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    other_product = create(:product, user: seller, price_cents: 500)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    buyer_currency_display = {
+      display_mode: "buyer_local",
+      buyer_currency_shown: Currency::CAD,
+    }
+    # A second item breaks the single-item shape the presentment charge path supports
+    # (Checkout::BuyerCurrencyEligibility rejects multi-item checkouts), so the cart must
+    # keep riding CardElement rather than mount a presentment element the charge path
+    # would fall back on.
+    add_products = [
+      checkout_product_for(product, buyer_currency_display:),
+      checkout_product_for(other_product, buyer_currency_display:),
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason: "buyer_currency_presentment_unsupported",
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      elements_options: nil,
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "falls back to CardElement when a one-time purchase offers an installment plan" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    create(:product_installment_plan, link: product)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        pay_in_installments: false,
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason: "buyer_currency_presentment_unsupported",
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      elements_options: nil,
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "falls back to CardElement when the presentment candidate item is recurring" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:membership_product, user: seller, price_cents: 1234)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        # Membership products keep their price on tiers, so the checkout item's price must be
+        # passed explicitly or the cart totals zero and trips the earlier not_charged fallback
+        # before reaching the presentment gate this example is about.
+        price: 1234,
+        recurrence: "monthly",
         buyer_currency_display: {
           display_mode: "buyer_local",
           buyer_currency_shown: Currency::CAD,
@@ -592,7 +691,7 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
-    it "keeps the CardElement fallback for a non-US buyer of a USD-priced product with the flags on" do
+    it "selects the buyer-currency presentment Payment Element for a non-US buyer of a USD-priced product with the flags on" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
@@ -606,12 +705,13 @@ describe Checkout::StripePaymentPresenter do
         )
       ]
 
+      # This cart used to dead-end on CardElement ("buyer_currency_presentment_unsupported"):
+      # the method-forced QA surface only covers products priced in a forced currency, and the
+      # canonical USD element couldn't present buyer currency. The presentment element shape
+      # now carries it — a server-confirm Payment Element the browser mounts in the buyer's
+      # FX-quote currency.
       expect(stripe_payment_props(add_products:)).to eq(
-        integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
-        fallback_reason: "buyer_currency_presentment_unsupported",
-        disable_wallets: true,
-        request_apple_pay_merchant_tokens: false,
-        elements_options: nil,
+        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller

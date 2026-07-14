@@ -39,6 +39,7 @@ const CONTACT_PREFILL_DEBOUNCE_MS = 800;
 
 export const PaymentElementInput = ({
   amount,
+  mountCurrency,
   elementsOptions,
   disabled,
   defaultEmail,
@@ -48,6 +49,16 @@ export const PaymentElementInput = ({
   onChange,
 }: {
   amount: number | null;
+  // Mounts the element in this currency instead of elementsOptions.currency (from
+  // getStripePaymentElementMountCurrency). Used by the buyer-currency presentment lane, where
+  // the currency comes from the checkout's FX quote (browser state) rather than from the
+  // server-rendered config. When set, `amount` must be minor units of this currency. Like
+  // `amount`, null means "not knowable right now" and keeps the last mounted currency (see
+  // mountedCurrency below) — a currency change remounts the element (it's part of the provider
+  // key, because Stripe does not allow currency updates on a live element), which wipes any
+  // card details the buyer already entered, so it must only happen on real transitions, never
+  // while a surcharge refresh is merely in flight.
+  mountCurrency?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
   disabled?: boolean | undefined;
   defaultEmail: string;
@@ -61,6 +72,12 @@ export const PaymentElementInput = ({
   React.useEffect(() => {
     if (amount !== null) setMountedAmount(amount);
   }, [amount]);
+
+  const [mountedCurrency, setMountedCurrency] = React.useState(mountCurrency ?? null);
+
+  React.useEffect(() => {
+    if (mountCurrency != null) setMountedCurrency(mountCurrency);
+  }, [mountCurrency]);
 
   const [linkPrefillContact, setLinkPrefillContact] = React.useState<LinkPrefillContact>(() => ({
     email: defaultEmail,
@@ -83,7 +100,11 @@ export const PaymentElementInput = ({
   return (
     <Fieldset state={invalid ? "danger" : undefined} aria-label="Card information">
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
-        <StripePaymentElementProvider amount={mountedAmount} elementsOptions={elementsOptions}>
+        <StripePaymentElementProvider
+          amount={mountedAmount}
+          currencyOverride={mountedCurrency}
+          elementsOptions={elementsOptions}
+        >
           <PaymentElementControllerInput
             amount={mountedAmount}
             disabled={disabled}
@@ -178,10 +199,12 @@ const PaymentElementControllerInput = ({
 
 const StripePaymentElementProvider = ({
   amount,
+  currencyOverride,
   elementsOptions,
   children,
 }: {
   amount: number | null;
+  currencyOverride?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
   children: React.ReactNode;
 }) => {
@@ -190,7 +213,18 @@ const StripePaymentElementProvider = ({
       "stripe_connect_account_id" in elementsOptions ? elementsOptions.stripe_connect_account_id : null,
     ),
   );
-  const [initialAmount] = React.useState(amount);
+  const currency = currencyOverride ?? elementsOptions.currency;
+  // The amount and currency Elements is CREATED with, captured together. Later amount
+  // changes reach the live element through elements.update() in
+  // PaymentElementControllerInput, so this deliberately does not follow every amount
+  // change. But a currency change remounts Elements (the currency is part of its key
+  // below), and the new instance must not be created with an amount captured under the
+  // previous currency — that value is denominated in the previous currency's minor
+  // units (e.g. a CAD total reused for a USD mount). Re-capture the amount at the
+  // moment the currency changes so creation options are always internally consistent.
+  const [creation, setCreation] = React.useState({ currency, amount });
+  if (creation.currency !== currency) setCreation({ currency, amount });
+  const initialAmount = creation.amount;
   const font = useFont();
   const color = getCssVariable("color").split(" ").join(",");
   const backgroundColor = `rgb(${getCssVariable("filled").split(" ").join(",")})`;
@@ -202,7 +236,7 @@ const StripePaymentElementProvider = ({
   const options = React.useMemo<StripeElementsOptions>(
     () => ({
       mode: elementsOptions.stripe_elements_mode,
-      currency: elementsOptions.currency,
+      currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       paymentMethodTypes: elementsOptions.payment_method_types,
       // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
@@ -257,6 +291,7 @@ const StripePaymentElementProvider = ({
       backgroundColor,
       borderColor,
       color,
+      currency,
       dangerColor,
       elementsOptions,
       font.name,
@@ -268,11 +303,11 @@ const StripePaymentElementProvider = ({
   );
 
   return (
-    <Elements
-      stripe={stripePromise}
-      options={options}
-      key={`${elementsOptions.stripe_elements_mode}-${elementsOptions.currency}`}
-    >
+    // The key includes the effective mount currency so a currency change (e.g. the buyer-currency
+    // FX quote arriving after the initial USD mount, or disappearing when the buyer opts to save
+    // their card) remounts Elements — Stripe supports amount updates on a live element but not
+    // currency changes.
+    <Elements stripe={stripePromise} options={options} key={`${elementsOptions.stripe_elements_mode}-${currency}`}>
       {children}
     </Elements>
   );

@@ -25,7 +25,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }) do
       expect(page).to have_field("ZIP code", with: "85144")
       page.execute_script("document.activeElement.blur()")
       wait_for_ajax
@@ -48,7 +48,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }) do
       expect(page).to have_field("ZIP code", with: "85144")
       page.execute_script("document.activeElement.blur()")
       wait_for_ajax
@@ -93,7 +93,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
     expect(page).to have_selector("[role='status']", text: "$50 off will be applied at checkout (Code #{@offer_code.code.upcase})")
     expect(page).to have_selector("[itemprop='price']", text: "$100 $50")
     add_to_cart(@product, quantity: 2, offer_code: @offer_code)
-    check_out(@product, should_verify_address: true)
+    check_out(@product)
 
     expect(Purchase.last.price_cents).to eq(13500)
     expect(Purchase.last.shipping_cents).to eq(3500)
@@ -105,23 +105,23 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product, should_verify_address: true)
+    check_out(@product)
 
     expect(Purchase.last.variant_attributes).to eq(@product.skus.is_default_sku)
   end
 
-  it "saves shipping address to purchaser if logged in", :mock_easypost do
+  it "saves shipping address to purchaser if logged in" do
     link = create(:product, price_cents: 200, require_shipping: true)
     user = create(:user, credit_card: create(:credit_card))
     login_as(user)
     visit "#{link.user.subdomain_with_protocol}/l/#{link.unique_permalink}"
 
     add_to_cart(link)
-    check_out(link, logged_in_user: user, credit_card: nil, should_verify_address: true)
+    check_out(link, logged_in_user: user, credit_card: nil)
 
     purchaser = Purchase.last.purchaser
-    expect(purchaser.street_address).to eq("1640 17TH ST")
-    expect(purchaser.city).to eq("SAN FRANCISCO")
+    expect(purchaser.street_address).to eq("1640 17th St")
+    expect(purchaser.city).to eq("San Francisco")
     expect(purchaser.state).to eq("CA")
     expect(purchaser.zip_code).to eq("94107")
   end
@@ -133,7 +133,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
       visit product.long_url
       add_to_cart(product)
-      check_out(product, should_verify_address: true)
+      check_out(product)
 
       expect(Purchase.last.price_cents).to eq(1276)
       expect(Purchase.last.shipping_cents).to eq(638)
@@ -152,7 +152,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
       login_as buyer
       visit product.long_url
       add_to_cart(product)
-      check_out(product, logged_in_user: buyer, should_verify_address: true)
+      check_out(product, logged_in_user: buyer)
 
       purchase = Purchase.last
       expect(purchase.country).to eq("United States")

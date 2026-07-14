@@ -64,6 +64,7 @@ type MainPageProps = {
     announcement_notification_enabled: boolean;
     disable_comments_email: boolean;
     disable_reviews_email: boolean;
+    disable_review_reminders: boolean;
     show_nsfw_products: boolean;
     disable_affiliate_requests: boolean;
     seller_refund_policy: {
@@ -304,6 +305,20 @@ export default function MainPage() {
                 </TableRow>
               </TableBody>
             </Table>
+          </Fieldset>
+        </FormSection>
+        <FormSection header={<h2>Review reminders</h2>}>
+          <Fieldset>
+            <ToggleSettingRow
+              value={!form.data.user.disable_review_reminders}
+              onChange={(value) => updateUserSettings({ disable_review_reminders: !value })}
+              disabled={isFormDisabled}
+              label="Send review reminder emails to your customers"
+            />
+            <FieldsetDescription>
+              Customers receive a one-time email reminder asking them to review their purchase. Turning this off stops
+              these reminders for all of your products.
+            </FieldsetDescription>
           </Fieldset>
         </FormSection>
         <FormSection header={<h2>Support</h2>}>

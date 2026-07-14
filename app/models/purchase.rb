@@ -248,6 +248,7 @@ class Purchase < ApplicationRecord
                                                                                                                                    purchase.not_charged_and_not_free_trial?
                                                                                                                                  }
     after_transition any => :successful, :do => :block_fraudulent_free_purchases!
+    after_transition any => %i[successful not_charged gift_receiver_purchase_successful], :do => :schedule_order_review_reminder
     after_transition any => any, :do => :log_transition
 
     # normal purchase transitions:
@@ -1500,8 +1501,13 @@ class Purchase < ApplicationRecord
     format_price_in_cents(total_in_product_currency)
   end
 
+  # The amount the buyer has actually paid after refunds, in USD cents.
+  # total_transaction_cents is the original charge (price + Gumroad-collected tax),
+  # so we subtract everything refunded so far: the refunded principal plus the
+  # refunded tax. A fully refunded purchase returns 0, which keeps regenerated
+  # invoices honest — they show a $0 payment total instead of the original amount.
   def non_refunded_total_transaction_amount
-    total_transaction_cents - gumroad_tax_refunded_cents
+    total_transaction_cents - gross_amount_refunded_cents
   end
 
   def formatted_gumroad_tax_amount
@@ -3283,7 +3289,19 @@ class Purchase < ApplicationRecord
       not_is_bundle_purchase? &&
       product_review.blank? &&
       !chargedback_not_reversed_or_refunded? &&
+      !seller&.disable_review_reminders? &&
       (purchaser.present? ? !purchaser.opted_out_of_review_reminders? : true)
+  end
+
+  # Review reminders are scheduled at the order level, but the order row is only
+  # saved at creation — before any purchase has succeeded — so the order's own
+  # after_save hook can't see an eligible purchase yet. Scheduling from the
+  # purchase-success transition instead guarantees the reminder is evaluated once
+  # a purchase actually reaches a reviewable state.
+  def schedule_order_review_reminder
+    return if is_test_purchase?
+
+    order&.schedule_review_reminder
   end
 
   def check_for_blocked_customer_emails

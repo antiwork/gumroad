@@ -46,6 +46,19 @@ class Checkout::StripePaymentPresenter
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
 
+    # Buyer-currency presentment candidates whose cart shape the presentment path supports get
+    # the server-confirm Payment Element instead of the client-confirm lane: the client-confirm
+    # ConfirmationToken inherits the element's mount currency, and the deferred-intent prepare
+    # service only knows how to build presentment intents for the method-forced (iDEAL/Bancontact)
+    # shape — not for this GeoIP-driven card mode. The server-confirm lane creates a plain card
+    # PaymentMethod (currency-less), so the element can mount in the buyer's currency purely for
+    # display/method-filtering while the charge path prices the intent from the verified quote
+    # token. Wallets stay disabled for the same reason as CardElement candidates: a wallet payment
+    # would charge canonical USD while the cart displays buyer-currency totals.
+    if buyer_currency_presentment_element_shape?(checkout_items)
+      return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, buyer_currency_presentment: true, disable_wallets: true)
+    end
+
     # Client-confirm eligible carts are always one-time charges, so check them before setup mode.
     return client_confirm_props if client_confirm_eligible?
 
@@ -81,15 +94,23 @@ class Checkout::StripePaymentPresenter
       }
     end
 
-    def payment_element_props(stripe_elements_mode)
+    def payment_element_props(stripe_elements_mode, buyer_currency_presentment: false, disable_wallets: false)
       {
         integration: STRIPE_PAYMENT_ELEMENT_INTEGRATION,
         fallback_reason: nil,
-        disable_wallets: false,
+        disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
         elements_options: {
           stripe_elements_mode:,
           currency: "usd",
+          # True only for the buyer-currency presentment element shape. The browser owns the
+          # effective mount currency/amount for that shape because both come from the FX quote
+          # in the surcharge response — the same quote whose signed token the charge path later
+          # verifies. Deriving both sides from one quote means the element display and the
+          # charged amount cannot drift; when no quote is present (expired, errored, or the
+          # buyer chose to save the card, which forces the canonical USD charge path in PR 1)
+          # the browser mounts canonical USD exactly as if this flag were false.
+          buyer_currency_presentment:,
           payment_method_types: ["card"],
           payment_method_creation: "manual",
           # Link auto-enables with the Payment Element: it's inline (PaymentMethod-mode here, no
@@ -222,20 +243,49 @@ class Checkout::StripePaymentPresenter
       return "not_charged" unless total_price_cents.positive?
       return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
       if items.any? { buyer_currency_presentment_candidate?(_1) }
-        # PR-1 safety gate: presentment candidates ride CardElement because the canonical USD
-        # Payment Element can't carry buyer-currency presentment. The one exception is the
-        # method-forced QA shape (test mode + seller flags + single item priced in a forced
-        # currency) when the cart is client-confirm eligible: that path now handles presentment
-        # end-to-end (forced-currency element in client_confirm_props, forced-currency intent in
-        # Order::PreparePaymentIntentService), so kicking it back to CardElement would make the
-        # iDEAL/Bancontact tabs unreachable for any tester whose GeoIP currency differs from the
-        # product's. Live mode and non-flagged sellers never produce a candidate
-        # (buyer_presentment_candidate? checks both), so this branch cannot change production
+        # PR-1 safety gate, progressively narrowed: presentment candidates originally rode
+        # CardElement because the canonical USD Payment Element couldn't carry buyer-currency
+        # presentment. Two shapes now stay on the Payment Element:
+        #   1. The method-forced QA shape (test mode + seller flags + single item priced in a
+        #      forced currency) when the cart is client-confirm eligible — that path handles
+        #      presentment end-to-end (forced-currency element in client_confirm_props,
+        #      forced-currency intent in Order::PreparePaymentIntentService); kicking it back
+        #      to CardElement would make the iDEAL/Bancontact tabs unreachable for any tester
+        #      whose GeoIP currency differs from the product's.
+        #   2. The buyer-currency card shape (single USD-priced one-time item — the same cart
+        #      shape the eligibility service's card mode accepts), which mounts the
+        #      server-confirm Payment Element in the buyer's quote currency (see props).
+        # Live mode and non-flagged sellers never produce a candidate
+        # (buyer_presentment_candidate? checks both), so neither branch changes production
         # behavior.
-        return "buyer_currency_presentment_unsupported" unless method_forced_qa_shape?(items) && client_confirm_eligible?
+        supported = (method_forced_qa_shape?(items) && client_confirm_eligible?) ||
+          buyer_currency_presentment_element_shape?(items)
+        return "buyer_currency_presentment_unsupported" unless supported
       end
 
       nil
+    end
+
+    # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
+    # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
+    # a single one-time, USD-priced, non-commission item from a presentment-candidate seller
+    # (candidate? already covers test mode, the seller's flags, and an active buyer-local
+    # display). Products that offer installments stay on CardElement even when the buyer chooses
+    # a one-time purchase because quote creation cannot see that choice and rejects the product.
+    # Charge-time-only gates (merchant account model, wallet params, GeoIP re-check, quote
+    # verification) stay in the eligibility service — when any of them falls back, the charge
+    # simply runs canonical USD, which the currency-less card PaymentMethod the server-confirm
+    # element mints supports just as well.
+    def buyer_currency_presentment_element_shape?(items)
+      return false unless items.one?
+
+      item = items.first
+      return false unless buyer_currency_presentment_candidate?(item)
+      return false if item[:recurrence].present?
+      return false if item[:pay_in_installments] || item[:offers_installment_plan] || item[:is_preorder] || item[:has_free_trial]
+      return false if item[:native_type] == Link::NATIVE_TYPE_COMMISSION
+
+      item[:product_currency] == Currency::USD
     end
 
     # The method-forced QA surface's cart shape, mirroring the gates under which
@@ -277,13 +327,14 @@ class Checkout::StripePaymentPresenter
     def cart_items
       return [] if cart.blank?
 
-      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(product: :user).map do |cart_product|
+      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(product: [:user, :installment_plan]).map do |cart_product|
         product = cart_product.product
         item(
           seller: product.user,
           price_cents: cart_product.price,
           recurrence: cart_product.recurrence,
           pay_in_installments: cart_product.pay_in_installments,
+          offers_installment_plan: product.installment_plan.present?,
           is_preorder: product.is_in_preorder_state,
           has_free_trial: product.free_trial_enabled,
           native_type: product.native_type,
@@ -305,6 +356,7 @@ class Checkout::StripePaymentPresenter
           price_cents: checkout_product[:price],
           recurrence: checkout_product[:recurrence],
           pay_in_installments: checkout_product[:pay_in_installments],
+          offers_installment_plan: product[:installment_plan].present?,
           is_preorder: product[:is_preorder],
           has_free_trial: product[:free_trial].present?,
           native_type: product[:native_type],
@@ -317,12 +369,13 @@ class Checkout::StripePaymentPresenter
       end
     end
 
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, product_currency: nil, ppp_discounted: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, product_currency: nil, ppp_discounted: false)
       {
         seller:,
         price_cents:,
         recurrence:,
         pay_in_installments:,
+        offers_installment_plan:,
         is_preorder:,
         has_free_trial:,
         native_type:,

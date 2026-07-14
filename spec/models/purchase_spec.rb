@@ -6773,6 +6773,38 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#non_refunded_total_transaction_amount" do
+    let(:purchase) { create(:purchase, price_cents: 24_00) }
+
+    it "returns the full transaction amount when nothing has been refunded" do
+      expect(purchase.non_refunded_total_transaction_amount).to eq(24_00)
+    end
+
+    it "returns zero when the purchase is fully refunded" do
+      create(:refund, purchase:, amount_cents: purchase.price_cents, gumroad_tax_cents: 0)
+      expect(purchase.reload.non_refunded_total_transaction_amount).to eq(0)
+    end
+
+    it "subtracts a partial refund of the principal" do
+      create(:refund, purchase:, amount_cents: 10_00, gumroad_tax_cents: 0)
+      expect(purchase.reload.non_refunded_total_transaction_amount).to eq(14_00)
+    end
+
+    context "when Gumroad-collected tax was charged and refunded" do
+      let(:purchase) { create(:purchase, price_cents: 24_00, gumroad_tax_cents: 4_00, total_transaction_cents: 28_00) }
+
+      it "subtracts only the refunded tax when just the tax was refunded" do
+        create(:refund, purchase:, amount_cents: 0, gumroad_tax_cents: 4_00)
+        expect(purchase.reload.non_refunded_total_transaction_amount).to eq(24_00)
+      end
+
+      it "returns zero when both the principal and the tax were refunded" do
+        create(:refund, purchase:, amount_cents: 24_00, gumroad_tax_cents: 4_00)
+        expect(purchase.reload.non_refunded_total_transaction_amount).to eq(0)
+      end
+    end
+  end
+
   describe "#amount_refundable_cents_in_currency" do
     let(:purchase) { create(:purchase, link: create(:product, price_currency_type: Currency::EUR), price_cents: 200) }
 
@@ -6977,6 +7009,47 @@ describe Purchase, :vcr do
       it "returns true" do
         expect(purchase.eligible_for_review_reminder?).to be true
       end
+    end
+
+    context "when the seller has disabled review reminders" do
+      before { purchase.seller.update!(disable_review_reminders: true) }
+
+      it "returns false" do
+        expect(purchase.eligible_for_review_reminder?).to be false
+      end
+    end
+  end
+
+  describe "#schedule_order_review_reminder" do
+    let(:product) { create(:product, price_cents: 10_00) }
+
+    it "schedules the order review reminder when a purchase transitions to successful" do
+      purchase = create(:purchase_in_progress, link: product)
+      order = create(:order, purchases: [purchase])
+      order.cart = create(:cart, order:)
+
+      expect do
+        purchase.mark_successful!
+      end.to change { order.reload.review_reminder_scheduled_at }.from(nil)
+      expect(OrderReviewReminderJob.jobs.size).to eq(1)
+    end
+
+    it "does not schedule a reminder when the purchase fails" do
+      purchase = create(:purchase_in_progress, link: product)
+      order = create(:order, purchases: [purchase])
+      order.cart = create(:cart, order:)
+
+      expect do
+        purchase.mark_failed!
+      end.not_to change { order.reload.review_reminder_scheduled_at }
+      expect(OrderReviewReminderJob.jobs).to be_empty
+    end
+
+    it "does nothing when the purchase has no order" do
+      purchase = create(:purchase_in_progress, link: product)
+
+      expect { purchase.mark_successful! }.not_to raise_error
+      expect(OrderReviewReminderJob.jobs).to be_empty
     end
   end
 

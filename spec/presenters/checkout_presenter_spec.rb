@@ -502,7 +502,7 @@ describe CheckoutPresenter do
     end
 
     context "when buyer-currency presentment is available" do
-      it "returns nil for supports_paypal because PR1 supports Stripe card checkout only" do
+      it "keeps PayPal available because selecting it flips the checkout to canonical USD" do
         seller = create(:user, disable_buyer_local_currency: false)
         create(:merchant_account_paypal, user: seller)
         product = create(:product, user: seller)
@@ -515,7 +515,11 @@ describe CheckoutPresenter do
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
 
-        expect(@instance.checkout_product(product, product.cart_item({}), {})[:product][:supports_paypal]).to be_nil
+        # PR 1 suppressed PayPal server-side for presentment candidates because a quote
+        # token sent with a PayPal order failed closed. The browser now gates the quote
+        # and the display on the selected payment method (PayPal selected => canonical
+        # USD end to end), so the server no longer needs to hide the option.
+        expect(@instance.checkout_product(product, product.cart_item({}), {})[:product][:supports_paypal]).to eq "native"
       ensure
         Feature.deactivate_user(:buyer_local_currency, seller) if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
@@ -682,6 +686,57 @@ describe CheckoutPresenter do
 
       purchase_queries = queries.select { |sql| sql.match?(/purchases/i) }
       expect(purchase_queries.size).to be <= 2
+    end
+
+    it "hides a cross-sell the buyer has already purchased" do
+      seller = create(:named_user)
+      product = create(:product, user: seller)
+      offered_product = create(:product, user: seller)
+      create(:upsell, selected_products: [product], seller:, product: offered_product, cross_sell: true)
+
+      buyer = create(:user)
+      instance = described_class.new(logged_in_user: buyer, ip: "127.0.0.1")
+      cart_item = product.cart_item({})
+
+      expect(instance.checkout_product(product, cart_item, {})[:product][:cross_sells]).to be_present
+
+      create(:purchase, link: offered_product, purchaser: buyer)
+
+      instance = described_class.new(logged_in_user: buyer, ip: "127.0.0.1")
+      expect(instance.checkout_product(product, cart_item, {})[:product][:cross_sells]).to be_empty
+    end
+
+    it "only queries purchases of the cross-sell candidate products, not the buyer's whole history" do
+      seller = create(:named_user)
+      product = create(:product, user: seller)
+      offered_product = create(:product, user: seller)
+      create(:upsell, selected_products: [product], seller:, product: offered_product, cross_sell: true)
+
+      # A buyer with purchases of many unrelated products. The cross-sell check should
+      # not load these — it should only look at purchases of the offered product.
+      buyer = create(:user)
+      create_list(:product, 5, user: seller).each do |unrelated_product|
+        create(:purchase, link: unrelated_product, purchaser: buyer)
+      end
+
+      instance = described_class.new(logged_in_user: buyer, ip: "127.0.0.1")
+      cart_item = product.cart_item({})
+
+      queries = []
+      callback = lambda { |_name, _start, _finish, _id, payload|
+        queries << payload[:sql] if payload[:sql] && !payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+      }
+
+      cross_sells = nil
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        cross_sells = instance.checkout_product(product, cart_item, {})[:product][:cross_sells]
+      end
+
+      expect(cross_sells).to be_present
+      purchase_queries = queries.select { |sql| sql.match?(/FROM `purchases`/i) }
+      # One query for the offered product's purchases; none should be an unscoped load
+      # of the buyer's full purchase history.
+      expect(purchase_queries).to all(match(/`purchases`\.`link_id`/))
     end
   end
 

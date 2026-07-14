@@ -66,6 +66,15 @@ class Order < ApplicationRecord
     purchase_as_orderable&.unsubscribe_buyer
   end
 
+  # Called from Purchase when a purchase transitions to a successful state. The
+  # `after_save` hook above never fires for real checkouts because the order row is
+  # saved once at creation, while its purchases are still in progress — purchases
+  # only succeed a few seconds later, without touching the order row again. This
+  # entry point lets the purchase-success path schedule the reminder.
+  def schedule_review_reminder
+    schedule_review_reminder! if should_schedule_review_reminder?
+  end
+
   def schedule_review_reminder!
     OrderReviewReminderJob.perform_in(reminder_email_delay, id)
     update!(review_reminder_scheduled_at: Time.current)

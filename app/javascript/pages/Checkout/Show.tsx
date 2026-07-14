@@ -193,7 +193,7 @@ const CheckoutIndexPage = () => {
   const [state, dispatch] = reducer;
   const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
     state.surcharges.type === "loaded" ? state.surcharges.result : null,
-    { willSaveCard: state.willSaveCard },
+    { willSaveCard: state.willSaveCard, paymentMethod: state.paymentMethod },
   );
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
@@ -393,7 +393,7 @@ const CheckoutIndexPage = () => {
         recaptchaResponse: state.status.recaptchaResponse ?? null,
         buyerCurrencyQuote: getCheckoutBuyerCurrencyQuoteToken(
           state.surcharges.type === "loaded" ? state.surcharges.result : null,
-          { willSaveCard: state.willSaveCard },
+          { willSaveCard: state.willSaveCard, paymentMethod: state.paymentMethod },
         ),
         lineItems: cartForm.data.cart.items.map((item) => {
           const discounted = getDiscountedPrice(cartForm.data.cart, item);

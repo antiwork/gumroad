@@ -415,7 +415,7 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
     end
 
-    it "keeps commission checkouts on the canonical deposit charge even when a quote token is present" do
+    it "fails closed when a stale quote token reaches an unsupported commission checkout" do
       seller_1.update!(check_merchant_account_is_linked: true,
                        disable_buyer_local_currency: false,
                        created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
@@ -457,9 +457,11 @@ describe Order::ChargeService, :vcr do
                                                  ip: "24.48.0.1")).to be_nil
 
       # Commissions charge only the deposit, so a locked full-total quote can never match.
-      # Simulate a stale token (minted for a same-seller, same-total product) reaching the
-      # charge path to prove it falls back silently instead of dead-ending checkout on a
-      # total mismatch.
+      # Simulate a stale token minted for a same-seller, same-total product. The checkout
+      # never displays local-currency totals for a commission (no quote is issued above), so
+      # a token arriving here means a buggy or crafted client. Erroring out beats silently
+      # charging canonical USD: a quote token is the buyer's confirmation of a local-currency
+      # total, and the charge must never diverge from what was displayed.
       decoy_product = create(:product, user: seller_1, price_cents: 10_00)
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
@@ -480,23 +482,12 @@ describe Order::ChargeService, :vcr do
         ]
       }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
       order, = Order::CreateService.new(params:).perform
-      charge_processor_call = {}
-      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
-        charge_processor_call.replace(amount_cents:, options:)
-        stripe_charge_intent_for_buyer_presentment(
-          merchant_account: merchant_account_arg,
-          canonical_total_cents: amount_cents,
-          presentment_total_cents: amount_cents,
-          gumroad_amount_cents:
-        )
-      end
+      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
 
       Order::ChargeService.new(order:, params:).perform
 
       purchase = order.reload.purchases.sole
-      expect(charge_processor_call.fetch(:amount_cents)).to eq(deposit_cents)
-      expect(charge_processor_call.fetch(:options)).not_to include(:processor_amount_cents, :processor_currency, :stripe_fx_quote_id)
-      expect(purchase.error_code).not_to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
       expect(ChargePresentment.count).to eq(0)
       expect(PurchasePresentment.count).to eq(0)
     ensure

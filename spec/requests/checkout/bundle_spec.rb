@@ -72,7 +72,7 @@ describe "Checkout bundles", :js, type: :system do
     end
   end
 
-  context "when the bundle has a physical product", :mock_easypost do
+  context "when the bundle has a physical product" do
     let(:physical_bundle) { create(:product, :bundle, user: seller) }
 
     let(:physical_product) { create(:physical_product, user: seller, name: "Physical product", skus: [create(:sku)]) }
@@ -86,8 +86,8 @@ describe "Checkout bundles", :js, type: :system do
       expect(page).to have_alert(text: "Your purchase was successful!")
 
       purchase = Purchase.last
-      expect(purchase.street_address).to eq("2031 7TH AVE")
-      expect(purchase.city).to eq("SEATTLE")
+      expect(purchase.street_address).to eq("2031 7th Ave")
+      expect(purchase.city).to eq("Seattle")
       expect(purchase.state).to eq("WA")
       expect(purchase.zip_code).to eq("98121")
     end

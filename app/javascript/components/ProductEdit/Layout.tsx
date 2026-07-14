@@ -1,4 +1,3 @@
-import { CartPlus, Link as LinkIcon } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
@@ -10,7 +9,6 @@ import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Preview } from "$app/components/Preview";
@@ -143,7 +141,6 @@ export const Layout = ({
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
   const url = useProductUrl();
-  const checkoutUrl = useProductUrl({ wanted: true });
 
   const [match] = useMatches();
   const tab = match?.handle ?? "product";
@@ -249,20 +246,13 @@ export const Layout = ({
         actions={
           product.is_published ? (
             <>
+              {/* Just these two actions, on desktop and mobile alike. Copying the product /
+                  checkout links lives at the top of the Share tab instead of crowding the
+                  header. */}
               <Button disabled={isBusy} onClick={() => void setPublished(false)}>
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
-              <CopyToClipboard text={url} copyTooltip="Copy product URL">
-                <Button size="icon">
-                  <LinkIcon className="size-5" />
-                </Button>
-              </CopyToClipboard>
-              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
-                <Button size="icon">
-                  <CartPlus className="size-5" />
-                </Button>
-              </CopyToClipboard>
             </>
           ) : tab === "product" && !isCoffee ? (
             <Button
@@ -337,13 +327,24 @@ export const Layout = ({
             {...(showNavigationButton && {
               previewLink: (props) => (
                 <NavigationButton
-                  {...props}
+                  // Icon size is only a default: the preview sidebar/sheet overrides it via
+                  // props (the mobile sheet asks for a full-size button with a text label).
                   size="icon"
+                  {...props}
                   disabled={isBusy}
                   href={url}
                   onClick={(evt) => {
                     evt.preventDefault();
-                    void save().then(() => window.open(url, "_blank"));
+                    // Open the tab NOW, while we still have the user's click activation, then
+                    // point it at the product page once the save finishes. Calling window.open
+                    // after the await instead gets popup-blocked on iOS Safari (the async gap
+                    // consumes the transient activation), which matters because the mobile
+                    // preview sheet is this button's main audience.
+                    const previewWindow = window.open("about:blank", "_blank");
+                    void save().then(() => {
+                      if (previewWindow) previewWindow.location.href = url;
+                      else window.open(url, "_blank");
+                    });
                   }}
                 />
               ),

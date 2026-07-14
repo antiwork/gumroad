@@ -33,7 +33,7 @@
     <p>This feature is currently only available for <a href="82-membership-products">Membership</a> products.</p>
   </div>
   <p>The “Multi-seat license” setting allows you to issue multiple seats for a single purchase or license key.</p>
-  <p>Expand the License key module on your content page and toggle on "Allow customers to choose number of seats per license purchased"</p>
+  <p>In the License key block on your content page, toggle on "Allow customers to choose number of seats per license purchased". The setting is shown directly under the block while you are editing.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9e3495d8fe340f3481960/file-MYl4EnL4Of.png" %></figure>
   <p>If you'd like to prepopulate the number of seats for a given customer, you can use the quantity <a href="270-url-parameters">URL parameter</a> (Example: <a href="https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4">https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4)</a></p>
   <p>You will be able to view and manage the number of seats linked with a license key from the customer’s drawer in the <a href="https://gumroad.com/customers/">Audience dashboard</a>, while your customers can do this from their “Manage membership” page.</p>
@@ -46,7 +46,7 @@
   <h3 id="verification"> Verifying a license key in your application</h3>
   <p>Use these parameters to verify a license key:</p>
   <ul>
-    <li><strong>product_id</strong> (the unique ID of the product, get this by expanding the license key module on the content page)</li>
+    <li><strong>product_id</strong> (the unique ID of the product, shown in the License key block on your product's content page while editing)</li>
     <li><strong>license_key</strong> (the license key provided by your customer)</li>
     <li><strong>increment_uses_count</strong> ("true"/"false", optional, default: "true")</li>
   </ul>

@@ -1,5 +1,8 @@
+import { CartPlus } from "@boxicons/react";
 import * as React from "react";
 
+import { Button } from "$app/components/Button";
+import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
@@ -23,6 +26,7 @@ export const ShareTab = () => {
   const { product, updateProduct, profileSections, taxonomies, isListedOnDiscover } = useProductEditContext();
 
   const url = useProductUrl();
+  const checkoutUrl = useProductUrl({ wanted: true });
   const discoverUrl = useDiscoverUrl();
 
   if (!currentSeller) return;
@@ -38,7 +42,16 @@ export const ShareTab = () => {
             <header>
               <h2>Share</h2>
             </header>
-            <ShareButtons url={url} twitterText={`Buy ${product.name} on @Gumroad`} facebookText={product.name} />
+            <ShareButtons url={url} twitterText={`Buy ${product.name} on @Gumroad`} facebookText={product.name}>
+              {/* The header used to carry a "Copy checkout link" button; it lives here now so the
+                  header stays at just Unpublish + Save changes. */}
+              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="top">
+                <Button>
+                  <CartPlus className="size-5" />
+                  Copy checkout URL
+                </Button>
+              </CopyToClipboard>
+            </ShareButtons>
           </section>
           <LandingPageEditor />
           <ProfileSectionsEditor
