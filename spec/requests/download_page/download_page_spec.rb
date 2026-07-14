@@ -450,7 +450,7 @@ describe("Download Page", type: :system, js: true) do
       fill_in("Your password", with: "123456")
       click_on("Create")
       wait_for_ajax
-      expect(page).to_not have_text("Create an account to access all of your purchases in one place")
+      expect(page).to_not have_text("Create an account to access all of your purchases anytime.")
       expect(User.exists?(email: "user@testing.com")).to(be(true))
       user = User.last
       expect(Purchase.last.purchaser_id).to eq user.id
@@ -687,13 +687,13 @@ describe("Download Page", type: :system, js: true) do
       expect(page).to have_text("You've viewed this product a few times already")
       expect(page).to_not have_text("Liked it? Give it a rating")
       expect(page).to_not have_disclosure("Receipt")
-      expect(page).to_not have_text("Create an account to access all of your purchases in one place")
+      expect(page).to_not have_text("Create an account to access all of your purchases anytime.")
       fill_in "Email address", with: purchase.email
       click_on "Confirm email"
       expect(page).to_not have_text("You've viewed this product a few times already")
       expect(page).to have_text("Liked it? Give it a rating")
       expect(page).to have_disclosure("Receipt")
-      expect(page).to have_text("Create an account to access all of your purchases in one place")
+      expect(page).to have_text("Create an account to access all of your purchases anytime.")
       expect(page).to have_text(product.name)
     end
 

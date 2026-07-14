@@ -81,7 +81,9 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
   return (
     <>
       <CardContent>
-        <Card borderless asChild>
+        {/* grow makes this row span the full card width so the price lands at the card
+            edge, matching the failed line item's layout. */}
+        <Card borderless asChild className="grow">
           <section>
             <CardContent>
               <LineItem
@@ -120,7 +122,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
             {result.is_gift_sender_purchase ? (
               <CardContent>
                 <div className="grow text-muted">
-                  {result.gift_sender_text}
+                  {result.gift_sender_text}{" "}
                   {result.has_files
                     ? "They'll get an email with your note and a download link."
                     : "They'll get an email with your note."}
@@ -159,7 +161,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
 
       {result.has_shipping_to_show ? (
         <CardContent>
-          <Card borderless asChild>
+          <Card borderless asChild className="grow">
             <section>
               <CardContent>
                 <LineItem name="Shipping" price={result.shipping_amount} card />
@@ -171,7 +173,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
 
       {result.has_sales_tax_to_show ? (
         <CardContent>
-          <Card borderless asChild>
+          <Card borderless asChild className="grow">
             <section>
               <CardContent>
                 <LineItem name={result.sales_tax_label ?? ""} price={result.sales_tax_amount} card />
@@ -254,7 +256,13 @@ export const CreateAccountForm = ({
               {status === "processing" ? "Signing up..." : "Sign up"}
             </Button>
             <FieldsetDescription className="text-center">
-              By signing up, you agree to our <a href="https://gumroad.com/terms">Terms of Use</a>.
+              By signing up, you agree to our{" "}
+              {/* Opens in a new tab: the receipt is in-memory checkout state, so navigating
+                  away would destroy it with no way back. */}
+              <a href="https://gumroad.com/terms" target="_blank" rel="noreferrer">
+                Terms of Use
+              </a>
+              .
             </FieldsetDescription>
           </div>
         </>
