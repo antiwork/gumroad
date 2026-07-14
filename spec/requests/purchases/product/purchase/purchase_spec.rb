@@ -524,7 +524,7 @@ describe("Purchases from the product page", type: :system, js: true) do
       expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
       expect(page).to have_link(@product1.name, href: Purchase.last.url_redirect.download_page_url)
       expect(page).to have_link("#{@product2.name} - Untitled 1", href: Purchase.second_to_last.url_redirect.download_page_url)
-      expect(page).to have_text("Create an account to access all of your purchases in one place")
+      expect(page).to have_text("Create an account to access all of your purchases anytime.")
       expect(page).to have_field("Email", with: "test@gumroad.com")
     end
   end
@@ -589,7 +589,7 @@ describe("Purchases from the product page", type: :system, js: true) do
         expect(page).to have_link("#{@product3.name} - Untitled 1", href: Purchase.second_to_last.url_redirect.download_page_url)
         expect(page).to have_link(@product4.name, href: Purchase.last(3).first.url_redirect.download_page_url)
         expect(page).to have_link("#{@product6.name} - Untitled 1", href: Purchase.last(4).first.url_redirect.download_page_url)
-        expect(page).to have_text("Create an account to access all of your purchases in one place")
+        expect(page).to have_text("Create an account to access all of your purchases anytime.")
         expect(page).to have_field("Email", with: "test@gumroad.com")
       end
     end
@@ -624,7 +624,7 @@ describe("Purchases from the product page", type: :system, js: true) do
         expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
         expect(page).to have_link(@product1.name, href: Purchase.last.url_redirect.download_page_url)
         expect(page).to have_link("#{@product3.name} - Untitled 1", href: Purchase.second_to_last.url_redirect.download_page_url)
-        expect(page).to have_text("Create an account to access all of your purchases in one place")
+        expect(page).to have_text("Create an account to access all of your purchases anytime.")
         expect(page).to have_field("Email", with: "test@gumroad.com")
       end
     end

@@ -174,9 +174,9 @@ module CheckoutHelpers
         expect(page).to have_text(product.name)
 
         if logged_in_user.present? || User.alive.where(email:).exists?
-          expect(page).to_not have_text("Create an account to access all of your purchases in one place")
+          expect(page).to_not have_text("Create an account to access all of your purchases anytime.")
         else
-          expect(page).to have_text("Create an account to access all of your purchases in one place")
+          expect(page).to have_text("Create an account to access all of your purchases anytime.")
         end
       end
     end.to change { product.preorder_link.present? ? product.sales.preorder_authorization_successful.count : product.sales.successful.count }.by(error.blank? && logged_in_user&.id != product.user.id && (product.not_free_trial_enabled || gift.present?) ? cart_item_count : 0)
