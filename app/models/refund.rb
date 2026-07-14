@@ -27,7 +27,21 @@ class Refund < ApplicationRecord
   # received the money — so failed rows must not count toward how much of a purchase has
   # been refunded. status is NULL for refunds created before we started persisting
   # processor status, all of which completed, so NULL counts as effective.
-  scope :effective, -> { where("refunds.status IS NULL OR refunds.status != 'failed'") }
+  #
+  # A failed refund stops counting only once Purchase::HandleFailedRefundService has
+  # actually reversed the balance debits it created (balance_reversed_on_failure).
+  # A failed refund that was NOT auto-reversed (external funds, dispute, legacy rows)
+  # still has the seller debited, so it must keep counting toward the refunded sums —
+  # otherwise amount_refundable_cents would look refundable while the purchase's
+  # stripe_refunded flag (which only the reversal path recomputes) still blocks the
+  # admin refund action.
+  scope :effective, -> {
+    where(<<~SQL.squish)
+      refunds.status IS NULL
+      OR refunds.status != 'failed'
+      OR COALESCE(refunds.json_data->>'$.balance_reversed_on_failure', 'false') != 'true'
+    SQL
+  }
 
   attr_json_data_accessor :note
   attr_json_data_accessor :business_vat_id
@@ -51,6 +65,12 @@ class Refund < ApplicationRecord
   # the balance debits this refund created. Guards the reversal against re-delivered
   # refund.failed webhooks.
   attr_json_data_accessor :balance_reversed_on_failure
+
+  # In-memory mirror of the .effective scope, for callers working with preloaded
+  # refunds. Keep the two in sync.
+  def effective?
+    status != "failed" || !balance_reversed_on_failure
+  end
 
   private
     def assign_product
