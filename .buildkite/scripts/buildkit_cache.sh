@@ -56,6 +56,17 @@ buildkit_docker_build() {
   echo "docker buildx build --builder ${BUILDX_BUILDER_NAME} --load"
 }
 
+# Like buildkit_docker_build, but pushes the tagged image straight from the
+# builder to the registry (--push) instead of exporting it back into the local
+# docker engine (--load). For the multi-GB web image the --load export alone
+# costs about a minute per build, and the image was going to be pushed right
+# after anyway — pushing from the builder does the upload once and skips the
+# export entirely. Downstream steps that need the image locally (asset compile
+# on another agent, for example) already pull it from ECR when it is missing.
+buildkit_docker_build_push() {
+  echo "docker buildx build --builder ${BUILDX_BUILDER_NAME} --push"
+}
+
 # buildkit_fallback_notice <image-name> <reason>
 # The plain-docker-build fallback is safe but slow (no registry cache). Log it,
 # and surface a Buildkite annotation so persistent degradation on an agent is

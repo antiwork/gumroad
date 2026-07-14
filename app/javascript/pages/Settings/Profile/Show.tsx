@@ -298,8 +298,10 @@ export default function SettingsPage() {
     <PreviewSidebar
       previewLink={(props) => (
         <NavigationButton
-          {...props}
+          // Icon size is only a default: the preview sidebar/sheet overrides it via props
+          // (the mobile sheet asks for a full-size button with a text label).
           size="icon"
+          {...props}
           disabled={isSaving}
           href={profileUrl}
           onClick={(evt) => {
@@ -307,13 +309,19 @@ export default function SettingsPage() {
             // Persist pending edits before previewing, but only when there's something to save -
             // settings (name/bio/avatar) are sent on every save with no freshness check, so an
             // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
-            // Open only after a successful save so a failed save doesn't surface a stale preview.
-            const openProfile = () => window.open(profileUrl, "_blank");
-            if (canSave)
+            if (canSave) {
+              // Open the tab NOW, while we still have the user's click activation, then point it
+              // at the profile once the save finishes. Calling window.open after the await instead
+              // gets popup-blocked on iOS Safari (the async gap consumes the transient activation),
+              // which matters because the mobile preview sheet is this button's main audience.
+              // On a failed save, close the reserved tab so we don't surface a stale preview.
+              const previewWindow = window.open("about:blank", "_blank");
               void save().then((saved) => {
-                if (saved) openProfile();
+                if (!saved) previewWindow?.close();
+                else if (previewWindow) previewWindow.location.href = profileUrl;
+                else window.open(profileUrl, "_blank");
               });
-            else openProfile();
+            } else window.open(profileUrl, "_blank");
           }}
         />
       )}

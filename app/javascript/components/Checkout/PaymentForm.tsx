@@ -28,7 +28,6 @@ import {
 } from "$app/data/payment_method_result";
 import { createBillingAgreement, createBillingAgreementToken } from "$app/data/paypal";
 import { PurchasePaymentMethod } from "$app/data/purchase";
-import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
 import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
 import { classNames } from "$app/utils/classNames";
@@ -60,7 +59,6 @@ import {
   useState,
 } from "$app/components/Checkout/payment";
 import { PaymentElementController, PaymentElementInput } from "$app/components/Checkout/PaymentElementInput";
-import { Dropdown } from "$app/components/Dropdown";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
@@ -479,45 +477,15 @@ const CustomerDetails = ({ className }: { className?: string }) => {
   const isLoggedIn = !!useLoggedInUser();
   const [state, dispatch] = useState();
   const uid = React.useId();
-  const fail = useFail();
-
-  const [addressVerification, setAddressVerification] = React.useState<VerificationResult | null>(null);
-  const verifyAddress = () =>
-    setAddressVerification({
-      type: "done",
-      verifiedAddress: { state: state.state, city: state.city, street_address: state.address, zip_code: state.zipCode },
-    });
   const errors = getErrors(state);
 
   React.useEffect(() => {
-    if (state.status.type === "input") setAddressVerification(null);
+    // Shipping addresses used to be checked against a third-party address-verification service
+    // here (with a suggested-correction dialog); that integration was removed, so validation now
+    // proceeds straight to payment with the address exactly as the buyer entered it.
     if (state.status.type !== "validating") return;
-    if (hasShipping(state)) {
-      verifyShippingAddress({
-        country: state.country,
-        state: state.state,
-        city: state.city,
-        street_address: state.address,
-        zip_code: state.zipCode,
-      }).then((result) => {
-        if (state.status.type === "validating") setAddressVerification(result);
-      }, fail);
-    } else dispatch({ type: "start-payment" });
+    dispatch({ type: "start-payment" });
   }, [state.status.type]);
-
-  React.useEffect(() => {
-    if (addressVerification?.type === "done") {
-      const { verifiedAddress } = addressVerification;
-      dispatch({
-        type: "set-value",
-        address: verifiedAddress.street_address,
-        city: verifiedAddress.city,
-        state: verifiedAddress.state,
-        zipCode: verifiedAddress.zip_code,
-      });
-      dispatch({ type: "start-payment" });
-    }
-  }, [addressVerification]);
 
   return (
     <>
@@ -584,43 +552,6 @@ const CustomerDetails = ({ className }: { className?: string }) => {
               ) : null}
             </div>
           </div>
-          {addressVerification && addressVerification.type !== "done" ? (
-            <Dropdown className="flex flex-col gap-4">
-              {addressVerification.type === "verification-required" ? (
-                <>
-                  <div>
-                    <strong>You entered this address:</strong>
-                    <br />
-                    {addressVerification.formattedOriginalAddress}
-                  </div>
-                  <div>
-                    <strong>We recommend using this format:</strong>
-                    <br />
-                    {addressVerification.formattedSuggestedAddress}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={verifyAddress}>No, continue</Button>
-                    <Button
-                      color="primary"
-                      onClick={() =>
-                        setAddressVerification({ type: "done", verifiedAddress: addressVerification.suggestedAddress })
-                      }
-                    >
-                      Yes, update
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {addressVerification.type === "invalid"
-                    ? addressVerification.message
-                    : "We are unable to verify your shipping address. Is your address correct?"}
-                  <Button onClick={() => dispatch({ type: "cancel" })}>No</Button>
-                  <Button onClick={verifyAddress}>Yes, it is</Button>
-                </>
-              )}
-            </Dropdown>
-          ) : null}
         </Card>
       ) : null}
       {state.warning ? (

@@ -265,4 +265,67 @@ describe TaxCenterController, type: :controller, inertia: true do
       end
     end
   end
+
+  describe "POST request_transaction_report" do
+    include_context "with user signed in as admin for seller"
+
+    let(:year) { 2024 }
+    let(:stripe_account_id) { "acct_1234567890" }
+
+    before do
+      create(:user_tax_form, user: seller, tax_year: year, tax_form_type: "us_1099_k")
+      create(:merchant_account, user: seller, charge_processor_merchant_id: stripe_account_id)
+    end
+
+    it_behaves_like "authorize called for action", :post, :request_transaction_report do
+      let(:record) { :balance }
+      let(:policy_method) { :index? }
+      let(:request_params) { { year: } }
+    end
+
+    it "enqueues the report worker and responds with success" do
+      post :request_transaction_report, params: { year: }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(TaxFormTransactionReportJob).to have_enqueued_sidekiq_job(seller.id, year)
+    end
+
+    context "when no 1099-K exists for the year" do
+      it "responds with not found and does not enqueue the worker" do
+        post :request_transaction_report, params: { year: 2020 }
+
+        expect(response).to have_http_status(:not_found)
+        expect(TaxFormTransactionReportJob.jobs).to be_empty
+      end
+    end
+
+    context "when the stored stripe_account_id does not belong to the seller" do
+      before do
+        tax_form = UserTaxForm.last
+        tax_form.stripe_account_id = "acct_someone_else"
+        tax_form.save!
+      end
+
+      it "responds with not found and does not enqueue the worker" do
+        post :request_transaction_report, params: { year: }
+
+        expect(response).to have_http_status(:not_found)
+        expect(TaxFormTransactionReportJob.jobs).to be_empty
+      end
+    end
+
+    context "when tax_center feature is disabled" do
+      before do
+        Feature.deactivate_user(:tax_center, seller)
+      end
+
+      it "redirects to dashboard with alert" do
+        post :request_transaction_report, params: { year: }
+
+        expect(response).to redirect_to(dashboard_path)
+        expect(flash[:alert]).to eq("Tax center is not enabled for your account.")
+      end
+    end
+  end
 end

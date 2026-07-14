@@ -24,7 +24,12 @@ class Ai::StoreAgentService
   class Error < StandardError; end
 
   MODEL = Ai::AnthropicClient::DEFAULT_MODEL
-  REQUEST_TIMEOUT_IN_SECONDS = 60
+  # Passed to Ai::AnthropicClient as its READ timeout. For the streamed reply this bounds silence
+  # between chunks (not the total generation time — a long healthy stream is fine); for the buffered
+  # calls it bounds the wait for the full response. Production showed a steady stream of 60-second
+  # network timeouts on real (slow but working) generations, so this is deliberately generous — the
+  # client fails fast on connect problems and retries transient failures on its own.
+  REQUEST_TIMEOUT_IN_SECONDS = 120
   MAX_TOOL_ITERATIONS = 5
   MAX_MESSAGE_LENGTH = 2_000
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat

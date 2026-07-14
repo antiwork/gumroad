@@ -299,9 +299,42 @@ class StripePayoutProcessor
     "Destination Stripe balance mismatch on #{merchant_account.charge_processor_merchant_id}: " \
       "expected #{expected_destination_cents} #{destination_currency} cents, " \
       "Stripe has #{available_cents} cents available + #{pending_cents} cents pending (gap: #{gap_cents} cents). " \
-      "Reconcile destination balance before retry."
+      "Reconcile destination balance before retry." \
+      "#{retired_account_balances_hint(merchant_account)}"
   end
   private_class_method :destination_balance_drift_error
+
+  # Every drift-guard case investigated so far had the same root cause: the seller changed
+  # country (or otherwise got a new Stripe account), and a returned payout or leftover funds
+  # stayed on the retired account. Finding that used to take a manual Stripe trace per case,
+  # so when the guard trips, look up the seller's retired Gumroad-managed accounts and name
+  # any that still hold money — the diagnosis then ships inside the error message itself.
+  def self.retired_account_balances_hint(merchant_account)
+    retired_accounts = merchant_account.user.merchant_accounts.stripe.deleted
+      .where.not(id: merchant_account.id)
+      .select(&:is_a_gumroad_managed_stripe_account?)
+
+    balances_found = retired_accounts.filter_map do |retired_account|
+      stripe_balance = Stripe::Balance.retrieve({}, { stripe_account: retired_account.charge_processor_merchant_id })
+      residual_cents = (stripe_balance.available + stripe_balance.pending).sum { |b| [b.amount, 0].max }
+      next if residual_cents <= 0
+
+      amounts = (stripe_balance.available + stripe_balance.pending)
+        .filter_map { |b| "#{b.amount} #{b.currency} cents" if b.amount > 0 }
+        .join(" + ")
+      "#{retired_account.charge_processor_merchant_id} holds #{amounts}"
+    rescue Stripe::StripeError
+      # The retired account may be gone at Stripe entirely; the hint is best-effort and the
+      # drift error itself must still get through, so skip accounts we can't read.
+      nil
+    end
+    return "" if balances_found.empty?
+
+    " Possible cause: the seller has retired Stripe account(s) still holding funds — " \
+      "#{balances_found.join("; ")}. A returned payout may have re-credited a retired account " \
+      "after a country change; move those funds to the active account."
+  end
+  private_class_method :retired_account_balances_hint
 
   def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     user_ids.each do |user_id|
@@ -522,6 +555,8 @@ class StripePayoutProcessor
       payment.processor_reversing_payout_id = reversing_payout_id
       payment.save!
     end
+
+    alert_if_payout_credited_retired_account(payment)
   end
 
   def self.handle_stripe_event_payout_reversal_failed(payment, reversing_payout_id)
@@ -579,6 +614,32 @@ class StripePayoutProcessor
       payment.save!
       payment.send_payout_failure_email
     end
+
+    alert_if_payout_credited_retired_account(payment)
+  end
+
+  # When a bank payout fails or is returned, Stripe re-credits the money to the Connect account
+  # the payout was made from. If the seller has since changed country (which deletes that account
+  # and creates a fresh one), the re-credited funds sit on the retired account where nothing looks
+  # at them: the seller's ledger balance says they are owed money, but future payouts draw from
+  # the NEW account, whose Stripe balance is short by exactly the returned amount — so the payout
+  # drift guard refuses every payout from then on. Raise the alarm the day it happens instead of
+  # letting the seller discover it weeks later through blocked payouts.
+  def self.alert_if_payout_credited_retired_account(payment)
+    merchant_account = MerchantAccount.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
+    return if merchant_account.nil?
+    return unless merchant_account.is_a_gumroad_managed_stripe_account?
+
+    active_account = payment.user.stripe_account
+    return if active_account.present? && active_account.id == merchant_account.id
+
+    message = "Returned/failed payout #{payment.id} (#{payment.stripe_transfer_id}) re-credited " \
+      "retired Stripe account #{payment.stripe_connect_account_id}, which is no longer the user's " \
+      "active merchant account#{active_account ? " (now #{active_account.charge_processor_merchant_id})" : ""}. " \
+      "The funds are stranded there and future payouts will fail the destination balance check " \
+      "until they are moved to the active account."
+    payment.user.add_payout_note(content: "[PAYOUT][DRIFT] #{message}")
+    ErrorNotifier.notify(message, payment_id: payment.id, user_id: payment.user_id)
   end
 
   def self.reverse_internal_transfer!(payment)

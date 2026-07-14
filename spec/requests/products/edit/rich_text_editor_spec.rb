@@ -1104,6 +1104,17 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       )
     end
 
+    it "always shows the license key settings, including the product ID for API verification" do
+      visit edit_link_path(@product) + "/content"
+
+      # The settings drawer (with the product ID) must be visible without any interaction —
+      # creators need the product ID for the license verification API (issue #5838).
+      within find_embed(name: "6F0E4C97-B72A4E69-A11BF6C4-AF6517E7") do
+        expect(page).to have_field("Use your product ID to verify licenses through the API.", with: @product.external_id, readonly: true)
+        expect(page).to_not have_button("Edit")
+      end
+    end
+
     describe "moving file embeds to folders" do
       it "does not show 'Move to folder' action for embeds other than file embeds" do
         visit edit_link_path(@product) + "/content"

@@ -31,6 +31,20 @@ describe Ai::StoreAgentApiCatalog do
     it "rejects a percent-encoded path param (could decode to a separator)" do
       expect { endpoint.expand_path("id" => "%2e%2e%2fadmin") }.to raise_error(ArgumentError, /invalid path parameter/i)
     end
+
+    # Regression: gumroad-private#1054. LLM-proposed ids sometimes carry non-ASCII characters;
+    # unencoded, URI.parse raises URI::InvalidURIError inside the internal rack-test dispatch and
+    # the seller sees a 500 "Something went wrong" instead of the API's clean "not found".
+    it "percent-encodes a non-ASCII path param so the internal URI stays ascii-only" do
+      expanded = endpoint.expand_path("id" => "GJs2આ")
+      expect(expanded).to eq("/products/GJs2%E0%AA%86")
+      expect { URI.parse("http://api.gumroad.com#{expanded}") }.not_to raise_error
+    end
+
+    it "percent-encodes other URI-hostile characters (spaces) without altering safe ids" do
+      expect(endpoint.expand_path("id" => "a b")).to eq("/products/a%20b")
+      expect(endpoint.expand_path("id" => "abc-DEF_123")).to eq("/products/abc-DEF_123")
+    end
   end
 
   describe ".find" do

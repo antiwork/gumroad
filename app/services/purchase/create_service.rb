@@ -146,7 +146,12 @@ class Purchase::CreateService < Purchase::BaseService
       purchase.build_purchase_wallet_type(wallet_type: params[:wallet_type]) if params[:wallet_type].present?
 
       payment_flow_attributes = PurchasePaymentFlow.attributes_for_checkout_params(params)
-      if payment_flow_attributes && !purchase.free_purchase?
+      # The purchase may still be unsaved here: `prepare_for_charge!` leaves it
+      # unpersisted when a validation fails (for example, an invalid email).
+      # Creating the dependent analytics row on an unsaved parent raises
+      # ActiveRecord::RecordNotSaved, and a purchase that never saved has no
+      # payment flow worth recording anyway.
+      if payment_flow_attributes && purchase.persisted? && !purchase.free_purchase?
         begin
           purchase.create_purchase_payment_flow(payment_flow_attributes)
         rescue => e

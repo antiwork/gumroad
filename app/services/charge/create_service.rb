@@ -192,11 +192,12 @@ class Charge::CreateService
   end
 
   def buyer_currency_presentment_processor_args
-    # The browser sends this token iff the checkout displayed buyer-currency totals
-    # (getCheckoutBuyerCurrencyQuoteToken), so its presence means the buyer confirmed a
-    # locked local-currency amount — and from that point on, charging anything else
-    # silently is not an acceptable fallback.
-    quote_token = params[:buyer_currency_quote].presence
+    # Buyer-currency quotes apply only to Stripe charges. A checkout running an older browser
+    # bundle can still submit its card quote after the buyer switches to PayPal, so discard that
+    # stale token once the resolved merchant account identifies a non-Stripe charge. Stripe keeps
+    # the strict rule below: a submitted token means the buyer confirmed a locked local-currency
+    # amount, and any eligibility or quote failure must stop the charge.
+    quote_token = params[:buyer_currency_quote].presence if merchant_account&.stripe_charge_processor?
 
     eligibility_decision = Checkout::BuyerCurrencyEligibility.new(
       order:,

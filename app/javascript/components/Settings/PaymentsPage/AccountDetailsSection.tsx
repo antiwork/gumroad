@@ -224,9 +224,12 @@ const AccountDetailsSection = ({
       },
       SG: {
         label: "NRIC number / FIN",
-        placeholder: "123456789",
+        placeholder: "S1234567A",
         minLength: 9,
-        maxLength: 9,
+        // No maxLength on purpose: the validation tolerates spaces/dashes inside a
+        // pasted NRIC ("S 1234567 - A"), so a browser length cap would silently
+        // truncate those pastes. The inline regex and the server-side check in
+        // UpdateUserComplianceInfo enforce the actual format.
         idSuffix: "singapore-id-number",
       },
       AE: {

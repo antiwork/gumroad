@@ -96,6 +96,7 @@ describe SettingsPresenter do
           announcement_notification_enabled: true,
           disable_comments_email: false,
           disable_reviews_email: false,
+          disable_review_reminders: false,
           show_nsfw_products: false,
           disable_affiliate_requests: false,
           product_level_support_emails: [],

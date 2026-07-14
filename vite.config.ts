@@ -7,6 +7,8 @@ import AutoImport from "unplugin-auto-import/vite";
 import { defineConfig } from "vite";
 import RubyPlugin from "vite-plugin-ruby";
 
+import { staleModuleGuard } from "./config/vite/stale-module-guard";
+
 const rootPath = path.dirname(fileURLToPath(import.meta.url));
 
 function stripCjsExportsPlugin() {
@@ -62,6 +64,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     RubyPlugin(),
     react(),
+    staleModuleGuard(),
     UnpluginTypia({ cache: true }),
     AutoImport({
       imports: [

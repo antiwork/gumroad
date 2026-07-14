@@ -19,20 +19,65 @@ describe TestPingsController do
   end
 
   describe "POST create" do
-    it "posts a test ping containing latest sale details to the specified endpoint" do
+    it "posts a test ping containing latest sale details to the specified endpoint and reports the endpoint's status" do
       create(:purchase, link: product, created_at: 2.days.ago)
       create(:purchase, link: product)
       last_purchase = create(:purchase, link: product, created_at: 2.hours.from_now)
       ping_url = last_purchase.seller.notification_endpoint
       ping_params = last_purchase.payload_for_ping_notification
-      http_double = double
+      http_double = double(success?: true, code: 200)
       expect(HTTParty).to receive(:post).with(ping_url,
                                               timeout: 5,
                                               body: ping_params.merge(test: true).deep_stringify_keys,
                                               headers: { "Content-Type" => last_purchase.seller.notification_content_type })
                                         .and_return(http_double)
       post :create, params: { url: ping_url }
-      expect(response.body).to include "Your last sale's data has been sent to your Ping URL."
+      parsed = response.parsed_body
+      expect(parsed["success"]).to eq(true)
+      expect(parsed["message"]).to eq "Your last sale's data has been sent to your Ping URL. Your endpoint responded with HTTP 200."
+    end
+
+    it "treats an empty-bodied 200 as success (HTTParty::Response#nil? returns true for empty bodies)" do
+      create(:purchase, link: product)
+      # HTTParty::Response overrides #nil? to be true when the body is empty, so this
+      # double mimics a real `head :ok` style endpoint. It must NOT be routed to the
+      # "no sales" branch.
+      http_double = double(success?: true, code: 200, nil?: true)
+      expect(HTTParty).to receive(:post).and_return(http_double)
+      post :create, params: { url: seller.notification_endpoint }
+      parsed = response.parsed_body
+      expect(parsed["success"]).to eq(true)
+      expect(parsed["message"]).to include "responded with HTTP 200"
+    end
+
+    it "surfaces a rejection even when the endpoint's error response has an empty body" do
+      create(:purchase, link: product)
+      http_double = double(success?: false, code: 403, nil?: true)
+      expect(HTTParty).to receive(:post).and_return(http_double)
+      post :create, params: { url: seller.notification_endpoint }
+      parsed = response.parsed_body
+      expect(parsed["success"]).to eq(false)
+      expect(parsed["error_message"]).to include "403"
+    end
+
+    it "reports failure with the HTTP status when the endpoint rejects the ping" do
+      create(:purchase, link: product)
+      ping_url = seller.notification_endpoint
+      http_double = double(success?: false, code: 403)
+      expect(HTTParty).to receive(:post).and_return(http_double)
+      post :create, params: { url: ping_url }
+      parsed = response.parsed_body
+      expect(parsed["success"]).to eq(false)
+      expect(parsed["error_message"]).to include "403"
+    end
+
+    it "reports failure when the endpoint is unreachable" do
+      create(:purchase, link: product)
+      expect(HTTParty).to receive(:post).and_raise(Errno::ECONNREFUSED)
+      post :create, params: { url: seller.notification_endpoint }
+      parsed = response.parsed_body
+      expect(parsed["success"]).to eq(false)
+      expect(parsed["error_message"]).to include "couldn't reach your Ping URL"
     end
 
     it "fails and displays error if no sale present for the user" do

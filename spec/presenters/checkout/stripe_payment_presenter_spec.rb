@@ -15,6 +15,10 @@ describe Checkout::StripePaymentPresenter do
         # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
         # which sets currency_code on every real add_products entry.
         currency_code: product.price_currency_type.to_s.downcase,
+        installment_plan: product.installment_plan.present? ? {
+          number_of_installments: product.installment_plan.number_of_installments,
+          recurrence: product.installment_plan.recurrence,
+        } : nil,
       },
       price:,
       recurrence:,
@@ -163,6 +167,37 @@ describe Checkout::StripePaymentPresenter do
     add_products = [
       checkout_product_for(product, buyer_currency_display:),
       checkout_product_for(other_product, buyer_currency_display:),
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason: "buyer_currency_presentment_unsupported",
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      elements_options: nil,
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "falls back to CardElement when a one-time purchase offers an installment plan" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    create(:product_installment_plan, link: product)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        pay_in_installments: false,
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
     ]
 
     expect(stripe_payment_props(add_products:)).to eq(

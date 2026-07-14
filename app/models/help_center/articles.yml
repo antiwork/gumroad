@@ -620,3 +620,8 @@
   title: "GDPR and data privacy requests"
   description: "Learn about your data privacy rights on Gumroad, including how to request data deletion, access your personal data, and understand what information we retain."
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 350
+  slug: "350-casting-videos-to-your-tv"
+  title: "Casting videos to your TV"
+  description: "Gumroad's video player does not support Chromecast or AirPlay casting. Here are the ways that do work to watch a video on your TV: casting a Chrome tab, AirPlay screen mirroring, a smart TV browser, or an HDMI cable."
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>

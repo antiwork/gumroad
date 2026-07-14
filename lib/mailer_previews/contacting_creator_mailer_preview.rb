@@ -172,6 +172,10 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.user_sales_data(User.last&.id, sample_csv_file)
   end
 
+  def tax_form_transaction_report
+    ContactingCreatorMailer.tax_form_transaction_report(User.last&.id, Time.current.year.pred, sample_csv_file)
+  end
+
   def affiliates_data
     ContactingCreatorMailer.affiliates_data(recipient: User.last, tempfile: sample_csv_file, filename: "file")
   end

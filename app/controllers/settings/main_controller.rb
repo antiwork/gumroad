@@ -60,6 +60,7 @@ class Settings::MainController < Settings::BaseController
         :announcement_notification_enabled,
         :disable_comments_email,
         :disable_reviews_email,
+        :disable_review_reminders,
         :support_email,
         :locale,
         :timezone,

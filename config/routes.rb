@@ -222,8 +222,6 @@ Rails.application.routes.draw do
       resources :setup_intents, only: :create
     end
 
-    post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address"
-
     # discover/autocomplete_search
     delete "/discover_search_autocomplete", to: "discover/search_autocomplete#delete_search_suggestion"
 
@@ -331,6 +329,7 @@ Rails.application.routes.draw do
         get "/agent/meta", to: "agent#meta"
         get "/agent/conversations/latest", to: "agent#latest_conversation"
         post "/agent/messages", to: "agent#create"
+        post "/agent/messages/stream", to: "agent_streams#create"
         post "/agent/actions", to: "agent#execute"
         resources :devices, only: :create
         resources :installments, only: :show
@@ -1036,7 +1035,6 @@ Rails.application.routes.draw do
     end
 
     # shipments
-    post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address
     post "/shipments/:purchase_id/mark_as_shipped", to: "shipments#mark_as_shipped", as: :mark_as_shipped
 
     # balances
@@ -1050,6 +1048,7 @@ Rails.application.routes.draw do
     # tax center
     get "/payouts/taxes", to: "tax_center#index", as: :tax_center
     get "/payouts/taxes/:year/:form_type/download", to: "tax_center#download", as: :download_tax_form
+    post "/payouts/taxes/:year/transaction_report", to: "tax_center#request_transaction_report", as: :tax_form_transaction_report
 
     # wishlists
     namespace :wishlists do

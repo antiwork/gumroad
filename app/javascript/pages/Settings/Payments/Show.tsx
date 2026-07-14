@@ -51,6 +51,10 @@ const HAS_KATAKANA = /[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F]/u;
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
 
 const PERU_DNI_DIGIT_COUNT = 9;
+// A Singapore NRIC/FIN is a leading letter (S/T/F/G/M), seven digits, and a trailing checksum
+// letter — e.g. S1234567A. Mirrors the authoritative server-side check in
+// UpdateUserComplianceInfo; this one just gives the seller fast inline feedback.
+const SINGAPORE_NRIC_FIN_REGEX = /^[STFGM]\d{7}[A-Z]$/iu;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
 
 type PaymentsPageProps = {
@@ -681,6 +685,20 @@ export default function PaymentsPage() {
       markFieldInvalid("individual_tax_id");
       setClientErrorMessage({
         message: "Your DNI must include the verification digit (for example, 12345678-9).",
+      });
+    }
+    const singaporeNricRequired = form.data.user.is_business
+      ? form.data.user.business_country === "SG"
+      : form.data.user.country === "SG";
+    if (
+      singaporeNricRequired &&
+      form.data.user.individual_tax_id &&
+      !SINGAPORE_NRIC_FIN_REGEX.test(form.data.user.individual_tax_id.replace(/[\s-]/gu, ""))
+    ) {
+      markFieldInvalid("individual_tax_id");
+      setClientErrorMessage({
+        message:
+          "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.",
       });
     }
     if (form.data.user.is_business) {

@@ -342,9 +342,19 @@ export const DashboardPage = ({
       <PageHeader
         title="Dashboard"
         actions={
-          tax_center_enabled
-            ? null
-            : Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />
+          <>
+            {tax_center_enabled
+              ? null
+              : Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
+            {/* "accent" is the design system's highlight color (Gumroad pink by default) — the
+                same style as the New product button on the Products page. Hidden for team
+                members whose role can't create products. */}
+            {loggedInUser?.policies.product.create ? (
+              <NavigationButton href={Routes.new_product_path()} color="accent">
+                New product
+              </NavigationButton>
+            ) : null}
+          </>
         }
         className="border-b-0 sm:border-b"
       />

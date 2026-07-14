@@ -50,6 +50,31 @@ class TaxCenterController < Sellers::BaseController
     end
   end
 
+  # Emails the creator a charge-level CSV reconciling their 1099-K. The report
+  # is built in the background because it pages through a full year of Stripe
+  # balance transactions.
+  def request_transaction_report
+    authorize :balance, :index?
+
+    year = params[:year].to_i
+
+    tax_form = current_seller.user_tax_forms.for_year(year).where(tax_form_type: "us_1099_k").first
+    if tax_form.blank?
+      render json: { success: false, error: "Transaction report not available." }, status: :not_found
+      return
+    end
+
+    stripe_account_id = tax_form.stripe_account_id || current_seller.stripe_account&.charge_processor_merchant_id
+    if stripe_account_id.blank? || !current_seller.merchant_accounts.alive.charge_processor_alive.stripe.exists?(charge_processor_merchant_id: stripe_account_id)
+      render json: { success: false, error: "Transaction report not available." }, status: :not_found
+      return
+    end
+
+    TaxFormTransactionReportJob.perform_async(current_seller.id, year)
+
+    render json: { success: true }
+  end
+
   private
     def ensure_tax_center_enabled
       return if current_seller.tax_center_enabled?

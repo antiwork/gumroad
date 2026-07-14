@@ -270,17 +270,19 @@ class Checkout::StripePaymentPresenter
     # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
     # a single one-time, USD-priced, non-commission item from a presentment-candidate seller
     # (candidate? already covers test mode, the seller's flags, and an active buyer-local
-    # display). Charge-time-only gates (merchant account model, wallet params, GeoIP re-check,
-    # quote verification) stay in the eligibility service — when any of them falls back, the
-    # charge simply runs canonical USD, which the currency-less card PaymentMethod the
-    # server-confirm element mints supports just as well.
+    # display). Products that offer installments stay on CardElement even when the buyer chooses
+    # a one-time purchase because quote creation cannot see that choice and rejects the product.
+    # Charge-time-only gates (merchant account model, wallet params, GeoIP re-check, quote
+    # verification) stay in the eligibility service — when any of them falls back, the charge
+    # simply runs canonical USD, which the currency-less card PaymentMethod the server-confirm
+    # element mints supports just as well.
     def buyer_currency_presentment_element_shape?(items)
       return false unless items.one?
 
       item = items.first
       return false unless buyer_currency_presentment_candidate?(item)
       return false if item[:recurrence].present?
-      return false if item[:pay_in_installments] || item[:is_preorder] || item[:has_free_trial]
+      return false if item[:pay_in_installments] || item[:offers_installment_plan] || item[:is_preorder] || item[:has_free_trial]
       return false if item[:native_type] == Link::NATIVE_TYPE_COMMISSION
 
       item[:product_currency] == Currency::USD
@@ -325,13 +327,14 @@ class Checkout::StripePaymentPresenter
     def cart_items
       return [] if cart.blank?
 
-      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(product: :user).map do |cart_product|
+      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(product: [:user, :installment_plan]).map do |cart_product|
         product = cart_product.product
         item(
           seller: product.user,
           price_cents: cart_product.price,
           recurrence: cart_product.recurrence,
           pay_in_installments: cart_product.pay_in_installments,
+          offers_installment_plan: product.installment_plan.present?,
           is_preorder: product.is_in_preorder_state,
           has_free_trial: product.free_trial_enabled,
           native_type: product.native_type,
@@ -353,6 +356,7 @@ class Checkout::StripePaymentPresenter
           price_cents: checkout_product[:price],
           recurrence: checkout_product[:recurrence],
           pay_in_installments: checkout_product[:pay_in_installments],
+          offers_installment_plan: product[:installment_plan].present?,
           is_preorder: product[:is_preorder],
           has_free_trial: product[:free_trial].present?,
           native_type: product[:native_type],
@@ -365,12 +369,13 @@ class Checkout::StripePaymentPresenter
       end
     end
 
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, product_currency: nil, ppp_discounted: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, product_currency: nil, ppp_discounted: false)
       {
         seller:,
         price_cents:,
         recurrence:,
         pay_in_installments:,
+        offers_installment_plan:,
         is_preorder:,
         has_free_trial:,
         native_type:,

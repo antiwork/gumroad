@@ -42,6 +42,8 @@ class Settings::PaymentsController < Settings::BaseController
         UpdateUserCountry.new(new_country_code: updated_country_code, user: current_seller).process
         flash[:notice] = "Your country has been updated!"
         return redirect_to settings_payments_path, status: :see_other
+      rescue UpdateUserCountry::PayoutInProcessingError
+        return redirect_with_error("You have a payout in progress. You can change your country once it has been processed.")
       rescue => e
         ErrorNotifier.notify("Update country failed for user #{current_seller.id} (from #{compliance_info.country_code} to #{updated_country_code}): #{e}")
         return redirect_with_error("Country update failed")
