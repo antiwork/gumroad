@@ -205,7 +205,11 @@ export default function PagesEdit() {
   const displayTitle = is_profile ? "Home" : is_new ? title || "New page" : page.title;
   const displayUrl = publicUrl.replace(/^https?:\/\//u, "");
   const previewChrome = (frame: React.ReactNode) => (
-    <div className="flex flex-col overflow-hidden rounded border border-border bg-white">
+    // `bg-background` (not a hardcoded white) so the chrome follows the
+    // dashboard's light/dark theme — the framed page paints its own
+    // background, but the chrome's rounded corners and the pre-load area
+    // would otherwise flash white in dark mode.
+    <div className="flex flex-col overflow-hidden rounded border border-border bg-background">
       <div className="relative border-b border-border bg-background px-12 py-2">
         <div className="min-w-0 text-center">
           <div className="truncate text-sm font-medium">{displayTitle}</div>
