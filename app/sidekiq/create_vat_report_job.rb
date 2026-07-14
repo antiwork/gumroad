@@ -54,10 +54,20 @@ class CreateVatReportJob
                                                                .where("flags & :bit = :bit", bit: Purchase.flag_mapping["flags"][:chargeback_reversed])
                                                                .where(created_at: date.beginning_of_day..date.end_of_day)
 
+          # Refunds are subtracted in the period the refund happened, not the period of the
+          # original purchase. A refund is an event of its own period (matching how OSS/MOSS
+          # corrections are reported in the current return), and a purchase from a past quarter
+          # refunded this quarter must still reduce this quarter's VAT due. The purchase-side
+          # filters mirror the two queries above so we only ever subtract VAT that was (or would
+          # have been) reported in the first place: settled purchases that are either not charged
+          # back or had their chargeback reversed. A purchase that was charged back outright never
+          # contributes VAT to the report, so its refunds must not be subtracted either.
           vat_refunds_on_date = zip_tax_rate.purchases
                                               .where("purchase_state != 'failed'")
+                                              .where("stripe_transaction_id IS NOT NULL")
+                                              .not_chargedback_or_chargedback_reversed
                                               .joins(:refunds)
-                                              .where(created_at: date.beginning_of_day..date.end_of_day)
+                                              .where(refunds: { created_at: date.beginning_of_day..date.end_of_day })
 
           total_purchase_excluding_vat_amount_cents = vat_purchases_on_date.sum(:price_cents)
           total_purchase_vat_cents = vat_purchases_on_date.sum(:gumroad_tax_cents)
