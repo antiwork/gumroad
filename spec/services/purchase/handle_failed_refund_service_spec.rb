@@ -121,6 +121,25 @@ describe Purchase::HandleFailedRefundService do
       expect(purchase.stripe_partially_refunded?).to eq(false)
     end
 
+    it "credits a live balance when the debited balance was already paid out, leaving the paid balance untouched" do
+      # A balance that was paid out is settled history: its rows must never change
+      # after the payout. The offset therefore lands in an unpaid balance instead —
+      # the seller is made whole either way, and payout records stay immutable.
+      # (Paid-out state does not affect auto-reversal eligibility at all.)
+      original = refund.balance_transactions.first
+      paid_balance = original.balance
+      paid_balance.update_column(:state, "paid")
+      paid_amount_before = paid_balance.reload.amount_cents
+
+      described_class.new(refund:).perform
+
+      offset = refund.reload.balance_transactions.where("issued_amount_gross_cents > 0").first
+      expect(offset.balance_id).not_to eq(paid_balance.id)
+      expect(offset.balance.state).to eq("unpaid")
+      expect(offset.balance.amount_cents).to be >= 1800
+      expect(paid_balance.reload.amount_cents).to eq(paid_amount_before)
+    end
+
     it "re-increments the co-purchase recommendation counts the refund decremented" do
       UpdateSalesRelatedProductsInfosJob.jobs.clear
 
@@ -208,7 +227,11 @@ describe Purchase::HandleFailedRefundService do
 
       described_class.new(refund:).perform
 
-      expect(giftee_purchase.reload.stripe_refunded?).to eq(false)
+      # Both flags, not just stripe_refunded: a full-failure reversal that left the
+      # giftee marked partially refunded would still revoke a gift the buyer paid for.
+      giftee_purchase.reload
+      expect(giftee_purchase.stripe_refunded?).to eq(false)
+      expect(giftee_purchase.stripe_partially_refunded?).to eq(false)
     end
 
     it "restores both refunded flags on the giftee purchase after a partial-failure sequence" do

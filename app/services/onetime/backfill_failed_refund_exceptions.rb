@@ -14,15 +14,39 @@ module Onetime
   class BackfillFailedRefundExceptions
     BATCH_SIZE = 500
 
-    def self.process(batch_size: BATCH_SIZE)
-      new.process(batch_size:)
+    # Every refund with a terminal-failure status is a candidate; refunds that
+    # already have their FailedRefundException are included on purpose, because the
+    # delegated service also repairs partially-handled rows (missing reversal or a
+    # notification that never went out) and is idempotent for fully-handled ones.
+    def self.candidates
+      Refund.where(status: Refund::TERMINAL_FAILURE_STATUSES)
     end
 
-    def process(batch_size: BATCH_SIZE)
-      Refund.where(status: Refund::TERMINAL_FAILURE_STATUSES).in_batches(of: batch_size) do |batch|
+    # Review this number (per environment) before running the backfill for real.
+    def self.candidate_count
+      candidates.count
+    end
+
+    def self.process(batch_size: BATCH_SIZE, dry_run: false)
+      new.process(batch_size:, dry_run:)
+    end
+
+    # With dry_run: true, only lists what would be processed — no rows are created
+    # or repaired. Returns the number of candidate refunds visited either way.
+    def process(batch_size: BATCH_SIZE, dry_run: false)
+      processed = 0
+      self.class.candidates.in_batches(of: batch_size) do |batch|
         ReplicaLagWatcher.watch
-        batch.each { |refund| backfill_exception(refund) }
+        batch.each do |refund|
+          if dry_run
+            puts "[dry run] Would create or repair the failed-refund exception for Refund #{refund.id}"
+          else
+            backfill_exception(refund)
+          end
+          processed += 1
+        end
       end
+      processed
     end
 
     private

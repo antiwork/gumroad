@@ -34,6 +34,84 @@ describe Charge::Refundable do
 
       purchase.handle_event_refund_failed!(build_failed_event(refund_id: refund.processor_refund_id, refund_status: "canceled"))
     end
+
+    describe "combined charges with multiple purchases" do
+      # One Stripe refund on a combined charge is recorded as one Refund row per
+      # purchase, all sharing the processor refund id. When that single Stripe
+      # refund bounces, every purchase's books must be unwound — a fan-out that
+      # only exists on this path, so it gets a real (unstubbed) reversal test.
+      let(:seller_one) { create(:user) }
+      let(:seller_two) { create(:user) }
+      let(:purchase_one) do
+        create(:purchase_with_balance,
+               link: create(:product, user: seller_one, price_cents: 10_00),
+               seller: seller_one,
+               price_cents: 10_00,
+               total_transaction_cents: 10_00,
+               is_part_of_combined_charge: true)
+      end
+      let(:purchase_two) do
+        create(:purchase_with_balance,
+               link: create(:product, user: seller_two, price_cents: 5_00),
+               seller: seller_two,
+               price_cents: 5_00,
+               total_transaction_cents: 5_00,
+               is_part_of_combined_charge: true)
+      end
+      let!(:charge) do
+        create(:charge,
+               processor_transaction_id: "ch_combined_failed_#{SecureRandom.hex(6)}",
+               amount_cents: 15_00,
+               purchases: [purchase_one, purchase_two])
+      end
+
+      def record_refund_debit!(purchase, refund)
+        amount = BalanceTransaction::Amount.new(
+          currency: Currency::USD,
+          gross_cents: -refund.amount_cents,
+          net_cents: -refund.amount_cents
+        )
+        BalanceTransaction.create!(
+          user: purchase.seller,
+          merchant_account: purchase.merchant_account,
+          refund:,
+          issued_amount: amount,
+          holding_amount: amount
+        )
+        purchase.update!(stripe_refunded: true, stripe_partially_refunded: false)
+      end
+
+      it "reverses every purchase's refund when the shared Stripe refund fails" do
+        processor_refund_id = "re_combined_#{SecureRandom.hex(6)}"
+        refund_one = create(:refund, purchase: purchase_one, amount_cents: 10_00,
+                                     total_transaction_cents: 10_00, gumroad_tax_cents: 0,
+                                     processor_refund_id:, status: "pending")
+        refund_two = create(:refund, purchase: purchase_two, amount_cents: 5_00,
+                                     total_transaction_cents: 5_00, gumroad_tax_cents: 0,
+                                     processor_refund_id:, status: "pending")
+        record_refund_debit!(purchase_one, refund_one)
+        record_refund_debit!(purchase_two, refund_two)
+
+        expect do
+          charge.handle_event_refund_failed!(build_failed_event(refund_id: processor_refund_id))
+        end.to change(FailedRefundException, :count).by(2)
+
+        [[refund_one, purchase_one, 10_00], [refund_two, purchase_two, 5_00]].each do |refund, purchase, price_cents|
+          refund.reload
+          expect(refund.status).to eq("failed")
+          expect(refund.balance_reversed_on_failure).to eq(true)
+          transactions = BalanceTransaction.where(refund_id: refund.id)
+          expect(transactions.count).to eq(2)
+          expect(transactions.sum(:issued_amount_net_cents)).to eq(0)
+
+          purchase.reload
+          expect(purchase.stripe_refunded?).to eq(false)
+          expect(purchase.stripe_partially_refunded?).to eq(false)
+          expect(purchase.purchase_refund_balance_id).to be_nil
+          expect(purchase.amount_refundable_cents).to eq(price_cents)
+        end
+      end
+    end
   end
 
   describe "#handle_event_refund_updated!" do

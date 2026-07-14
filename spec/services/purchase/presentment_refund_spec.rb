@@ -270,5 +270,38 @@ describe Purchase::PresentmentRefund do
 
       expect(described_class.from_presentment_amount(purchase: eur_purchase.reload, presentment_amount_cents: 90)).to be_nil
     end
+
+    it "frees the presentment amount when the reversal runs through the real failure service" do
+      # Same proof as above, but with balance_reversed_on_failure set by
+      # Purchase::HandleFailedRefundService itself instead of by hand, so this
+      # example breaks if the service stops reversing in a way the presentment
+      # math depends on (e.g. no longer marking the refund reversed).
+      refund = build(:refund, purchase: eur_purchase, total_transaction_cents: 100, amount_cents: 100,
+                              gumroad_tax_cents: 0, creator_tax_cents: 0,
+                              processor_refund_id: "pyr_eur_failed_service", status: "pending")
+      refund.presentment_currency = Currency::EUR
+      refund.presentment_amount_cents = 90
+      refund.presentment_price_cents = 90
+      eur_purchase.refunds << refund
+      debit_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -100, net_cents: -100)
+      BalanceTransaction.create!(
+        user: eur_purchase.seller,
+        merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+        refund:,
+        issued_amount: debit_amount,
+        holding_amount: debit_amount
+      )
+      eur_purchase.update!(stripe_refunded: true)
+
+      Purchase::HandleFailedRefundService.new(refund:).perform
+
+      expect(refund.reload.balance_reversed_on_failure).to eq(true)
+      derived = described_class.from_presentment_amount(purchase: eur_purchase.reload, presentment_amount_cents: 90)
+      expect(derived).to be_present
+      expect(derived.canonical_gross_refund_cents).to eq(100)
+      expect(derived.presentment_refund.currency).to eq(Currency::EUR)
+      expect(derived.presentment_refund.presentment_amount_cents).to eq(90)
+      expect(eur_purchase.stripe_refunded?).to eq(false)
+    end
   end
 end
