@@ -25,6 +25,31 @@ describe Charge::Refundable do
 
         expect(refund.reload.status).to eq("failed")
       end
+
+      it "re-checks the guard under the row lock so a failure landing mid-flight is not overwritten" do
+        # The failure handler can commit between this handler loading its refund rows
+        # and saving them. The pre-lock snapshot still says "pending", so without a
+        # locked re-check the save would resurrect the failed status (and write back
+        # stale json_data, erasing the balance-reversal marker). Simulate that race by
+        # handing the handler a snapshot taken before the failure landed.
+        refund = create(:refund, purchase:, processor_refund_id: "re_race_#{SecureRandom.hex(6)}", status: "pending")
+        stale_snapshot = Refund.find(refund.id)
+        allow(Refund).to receive(:where).with(processor_refund_id: refund.processor_refund_id).and_return([stale_snapshot])
+
+        # The failure lands after the snapshot was taken.
+        refund.update_column(:status, "failed")
+
+        event = ChargeEvent.new
+        event.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        event.charge_id = purchase.stripe_transaction_id
+        event.refund_id = refund.processor_refund_id
+        event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+        event.extras = { refund_status: "succeeded", refunded_amount_cents: 100, refund_reason: nil }
+
+        purchase.handle_event_refund_updated!(event)
+
+        expect(refund.reload.status).to eq("failed")
+      end
     end
 
     let(:purchase) do

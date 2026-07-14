@@ -33,14 +33,22 @@ module Charge::Refundable
     db_refunds = Refund.where(processor_refund_id: stripe_refund_id)
     if db_refunds.present?
       db_refunds.each do |db_refund|
-        # Never let a late or re-delivered refund.updated (e.g. a stale "pending"
-        # retried by Stripe after the failure landed) overwrite a failed status: the
-        # failure handling already reversed the balance debits, and resurrecting the
-        # status would make the bounced refund count as delivered money again.
-        next if db_refund.status == "failed" || db_refund.balance_reversed_on_failure
+        # Take the same row lock the failure handler takes before checking or writing
+        # the refund's status. Without it, a stale refund.updated racing the failure
+        # handler could pass the guard below on a pre-failure snapshot and then save,
+        # resurrecting the failed status — and because reading the reversal marker
+        # touches json_data, the save would also write back the stale (unset) marker,
+        # letting a redelivered refund.failed reverse the same money twice.
+        db_refund.with_lock do
+          # Never let a late or re-delivered refund.updated (e.g. a stale "pending"
+          # retried by Stripe after the failure landed) overwrite a failed status: the
+          # failure handling already reversed the balance debits, and resurrecting the
+          # status would make the bounced refund count as delivered money again.
+          next if db_refund.status == "failed" || db_refund.balance_reversed_on_failure
 
-        db_refund.status = event.extras[:refund_status]
-        db_refund.save!
+          db_refund.status = event.extras[:refund_status]
+          db_refund.save!
+        end
       end
     else
       return unless event.extras[:refund_status] == "succeeded"

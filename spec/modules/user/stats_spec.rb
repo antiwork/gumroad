@@ -194,6 +194,28 @@ describe User::Stats, :vcr do
         expect(refund.reload.balance_reversed_on_failure).to eq(true)
         expect(@user.refunds_cents_for_balances(balance_ids)).to eq 0
       end
+
+      it "drops only the reversed failed refund from the totals when a partial refund survives" do
+        # A partial refund keeps purchase_refund_balance_id pointing at the surviving
+        # refund's balance, so the purchase stays inside this sum's filter. Only the
+        # effective_refunds join can exclude the reversed row here — this pins that the
+        # sum filters per refund, not just per purchase.
+        purchase = Purchase.last
+        purchase.refund_and_save!(nil, amount_cents: purchase.price_cents - 10)
+        surviving_refund = purchase.refunds.last
+        purchase.refund_and_save!(nil)
+        failing_refund = (purchase.refunds.reload - [surviving_refund]).sole
+        balance_ids = @user.unpaid_balances.map(&:id)
+
+        expect(@user.refunds_cents_for_balances(balance_ids)).to eq purchase.price_cents
+
+        failing_refund.update!(status: "failed")
+        Purchase::HandleFailedRefundService.new(refund: failing_refund.reload).perform
+        expect(failing_refund.reload.balance_reversed_on_failure).to eq(true)
+
+        expect(purchase.reload.purchase_refund_balance_id).to be_present
+        expect(@user.refunds_cents_for_balances(balance_ids)).to eq(purchase.price_cents - 10)
+      end
     end
 
     describe "affiliate_credit_cents_for_balances" do

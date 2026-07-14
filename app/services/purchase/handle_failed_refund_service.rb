@@ -131,6 +131,10 @@ class Purchase::HandleFailedRefundService
       # counts. Run after the transaction commits so they read the final state.
       purchase.update_creator_analytics_cache(force: true)
       purchase.send(:send_to_elasticsearch, "index")
+      # The refund also decremented the "customers also bought" co-purchase counts;
+      # re-increment them so the sale keeps its weight in recommendations, mirroring
+      # what the dispute-won path does when it undoes a chargeback.
+      purchase.enqueue_update_sales_related_products_infos_job
     end
 
     handled || queue_created

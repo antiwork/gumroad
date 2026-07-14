@@ -73,6 +73,14 @@ describe Purchase::HandleFailedRefundService do
       expect(purchase.stripe_partially_refunded?).to eq(false)
     end
 
+    it "re-increments the co-purchase recommendation counts the refund decremented" do
+      UpdateSalesRelatedProductsInfosJob.jobs.clear
+
+      described_class.new(refund:).perform
+
+      expect(UpdateSalesRelatedProductsInfosJob).to have_enqueued_sidekiq_job(purchase.id, true)
+    end
+
     it "restores the refundable amount so the purchase can actually be re-refunded" do
       # Regression: preview QA (PR #5779) found that although the refunded flags were
       # reset, refunds.sum(:amount_cents) still counted the failed row, leaving
@@ -179,6 +187,38 @@ describe Purchase::HandleFailedRefundService do
 
         expect(described_class.new(refund: Refund.find(refund.id)).perform).to eq(false)
         expect(NotifyFailedRefundExceptionJob.jobs.size).to eq(0)
+      end
+
+      it "reverses nothing when Stripe holds the funds (Gumroad-managed custom account)" do
+        # A merchant account with a user but not a Connect account is a Gumroad-managed
+        # Stripe custom account: charged_using_gumroad_merchant_account? is true, but
+        # the refund also debited the connected account outside our ledger, so an
+        # automatic offset here would claim money the external account no longer has.
+        stripe_held_account = create(:merchant_account, user: seller)
+        expect(stripe_held_account.holder_of_funds).to eq(HolderOfFunds::STRIPE)
+        purchase.update!(merchant_account: stripe_held_account)
+
+        expect { described_class.new(refund:).perform }
+          .to change(FailedRefundException, :count).by(1)
+
+        expect(refund.reload.status).to eq("failed")
+        expect(refund.balance_reversed_on_failure).to be_falsey
+        expect(refund.balance_transactions.count).to eq(1) # only the original debit
+        expect(purchase.reload.stripe_refunded?).to eq(true)
+      end
+
+      it "reverses nothing when the purchase has an unreversed chargeback" do
+        # A live dispute means the money story is already contested; the reversal
+        # would stack on top of chargeback accounting, so it goes to a human instead.
+        purchase.update!(chargeback_date: Time.current)
+        expect(purchase.chargedback_not_reversed?).to eq(true)
+
+        expect { described_class.new(refund:).perform }
+          .to change(FailedRefundException, :count).by(1)
+
+        expect(refund.reload.status).to eq("failed")
+        expect(refund.balance_reversed_on_failure).to be_falsey
+        expect(refund.balance_transactions.count).to eq(1) # only the original debit
       end
     end
 
