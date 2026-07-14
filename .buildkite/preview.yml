@@ -46,11 +46,29 @@ steps:
           username: gumroad
           password-env: QUAY_PASSWORD
 
+  # Provisioning (spin up the EC2 instance, create the app's databases/redis,
+  # run first-deploy migrations) needs only the Ruby code in the web image, not
+  # compiled assets — so it depends on the web image alone and runs in parallel
+  # with the ~13-min Compile Assets step instead of serially after it. On a
+  # first deploy the instance boots and the environment is ready by the time
+  # the assets are compiled, leaving only the app boot to happen afterwards.
+  # See deploy.sh in the deployment repo for the provision/release split.
+  - label: ":package: Provision Preview Environment"
+    key: preview-provision
+    depends_on: preview-build-web-image
+    command: ".buildkite/scripts/provision_preview.sh"
+    timeout_in_minutes: 30
+    plugins:
+      - docker-login#v3.0.0:
+          username: "gumroadteam"
+          password-env: DOCKERHUB_PASSWORD
+
   - label: ":rocket: Deploy Preview App"
     key: build-and-deploy-preview
     depends_on:
       - preview-compile-assets
       - preview-build-nginx-image
+      - preview-provision
     command: ".buildkite/scripts/deploy_branch.sh"
     timeout_in_minutes: 45
     plugins:

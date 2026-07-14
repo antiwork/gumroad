@@ -46,11 +46,15 @@ sudo mkdir -p nomad/staging/certs
 sudo mkdir -p nomad/certs
 sudo chown -R buildkite-agent:buildkite-agent nomad/
 
-# Deploy preview app
+# Deploy preview app. The provision phase (instance scale-up, environment
+# setup, first-deploy migrations) already ran in parallel with the asset
+# compile via the "Provision Preview Environment" step, so here we run only the
+# "release" phase: nginx + Puma boot (Puma needs the compiled assets), plus
+# redeploy migrations. See deploy.sh for the phase split.
 cd nomad/staging/deploy_branch
 BRANCH=$BRANCH \
   DEPLOY_TAG=$DEPLOY_TAG \
-  ./deploy.sh
+  ./deploy.sh release
 
 set_github_deployment_status "$DEPLOYMENT_ID" "success" "$PREVIEW_URL" || true
 logger "Preview app available at ${PREVIEW_URL}"
