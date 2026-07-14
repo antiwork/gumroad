@@ -55,11 +55,15 @@ preview_asset_cache_logger() {
 #   1. `rails js:export` (lib/tasks/js_export.rake) boots Rails and serializes
 #      the routes via JsRoutes — the output depends on the routes files, the
 #      constants they reference (all defined in config/domain.rb), the
-#      JsRoutes initializer, and the boot plumbing that loads them.
+#      JsRoutes initializer, and the boot plumbing that loads them. "Boot
+#      plumbing" includes every file config/application.rb require_relatives
+#      directly (config/redis.rb, lib/catch_bad_request_errors.rb,
+#      lib/utilities/global_config.rb) — they run at boot before js:export, so
+#      they're keyed even though today's versions don't shape the output.
 #   2. Vite reads config/vite.json plus the plugins under config/vite/.
 #   3. app/javascript imports config/currencies.json directly.
 # Nothing else under config/ can reach the compiled artifacts: the other
-# initializers, locales, and service configs (database/redis/mongo/puma/
+# initializers, locales, and service configs (database/mongo/puma/
 # sidekiq/certs) only affect runtime behavior. If you add a new compile-time
 # read of config/ — a JS `import` from config/, a new file consumed by
 # js:export or the Vite configs, or a routes-file reference to a constant
@@ -75,6 +79,9 @@ preview_asset_cache_inputs() {
     config/boot.rb \
     config/environment.rb \
     config/environments \
+    config/redis.rb \
+    lib/catch_bad_request_errors.rb \
+    lib/utilities/global_config.rb \
     config/initializers/js-routes.rb \
     config/vite.json \
     config/vite \
