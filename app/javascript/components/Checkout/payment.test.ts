@@ -865,13 +865,35 @@ describe("reduceCheckoutState", () => {
   // guards pin that read to the totals the buyer confirmed when the pipeline started.
   describe("stale-total submit guards", () => {
     it("refuses to offer while a surcharges refetch is queued or in flight", () => {
-      for (const surcharges of [
-        { type: "pending" } as const,
-        { type: "loading", abort: vi.fn() } as const,
-        { type: "error" } as const,
-      ]) {
+      for (const surcharges of [{ type: "pending" } as const, { type: "loading", abort: vi.fn() } as const]) {
         const next = reduceCheckoutState(state({ surcharges }), { type: "offer" });
         expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("recovers from a failed surcharges fetch by queueing a refetch when the buyer submits", () => {
+      // "error" is otherwise terminal — the refetch effect only fires on "pending" — so a
+      // refusal that left it in place would permanently refuse every submit path (the native
+      // PayPal button stays clickable in this state). The refusal converts the buyer's retry
+      // click into an actual retry.
+      for (const type of ["offer", "validate", "start-payment"] as const) {
+        const next = reduceCheckoutState(state({ surcharges: { type: "error" } }), { type });
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("preserves visible field errors when refusing a submit during a refetch", () => {
+      // The refusal isn't a revalidation — wiping the highlighted errors would clear them
+      // without recomputing until the next real submit (Enter key / native PayPal can submit
+      // inside the refetch window while errors are on screen).
+      const errors = new Set(["email"]);
+      for (const type of ["offer", "validate", "start-payment"] as const) {
+        const next = reduceCheckoutState(
+          state({ surcharges: { type: "pending" }, status: { type: "input", errors } }),
+          { type },
+        );
+        expect(next.status).toEqual({ type: "input", errors });
       }
     });
 
@@ -939,9 +961,9 @@ describe("reduceCheckoutState", () => {
     });
 
     it("refuses start-payment for card payments while a surcharges refetch is queued", () => {
-      // The address-verification dialog dispatches corrected address values (invalidating the
-      // quote) and then start-payment unconditionally — the pipeline must not re-enter on the
-      // stale quote.
+      // "start-payment" is dispatched unconditionally from effects (CustomerDetails on
+      // "validating", the wallet payment-request watcher) — the pipeline must not re-enter on
+      // a stale quote when an invalidation lands between "validate" and this action.
       const next = reduceCheckoutState(state({ surcharges: { type: "pending" } }), { type: "start-payment" });
       expect(next.status).toEqual({ type: "input", errors: new Set() });
     });

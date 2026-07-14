@@ -611,7 +611,16 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // charge would use. The submit button is disabled in this window, but other dispatch
       // paths (wallets, offer pipeline, keyboard) must be refused here too.
       if (state.surcharges.type !== "loaded") {
-        state.status = { type: "input", errors: new Set() };
+        // A failed fetch would otherwise be terminal: the refetch effect only fires on
+        // "pending", so nothing retries an errored fetch and every submit path stays refused —
+        // the native PayPal button in particular remains clickable and would silently do
+        // nothing forever. Resetting to "pending" queues a refetch, turning the buyer's retry
+        // click into an actual retry.
+        if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
+        // Keep any validation errors already on screen — the refusal isn't a revalidation, so
+        // wiping the highlights here would clear them without recomputing until the next
+        // real submit.
+        state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
         return;
       }
       const errors = validatePaymentMethodIndependentFields(state);
@@ -623,7 +632,9 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // "offering" status, so the refusal must cancel back to "input" (not bail silently) —
       // otherwise the checkout would be stranded in a processing state with the button disabled.
       if (state.surcharges.type !== "loaded") {
-        state.status = { type: "input", errors: new Set() };
+        // Same error-recovery and error-preservation reasoning as the "offer" refusal above.
+        if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
+        state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
         return;
       }
       const errors = validatePaymentMethodIndependentFields(state);
@@ -631,14 +642,18 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       break;
     }
     case "start-payment":
-      // Same stale-total refusal as "offer"/"validate": paths like the address-verification
-      // dialog dispatch corrected address values (which invalidate the surcharge quote) and
-      // then "start-payment" unconditionally — without this check the pipeline would re-enter
-      // and build its payload on a quote that no longer matches the corrected totals. Card
-      // payments only, same reasoning as the invalidation cancel above: other methods never
-      // attach the quote token, and the wallet sheet manages its own mid-payment state.
+      // Same stale-total refusal as "offer"/"validate". "start-payment" has no status
+      // precondition and is dispatched unconditionally from effects — CustomerDetails fires it
+      // whenever status reaches "validating", and the wallet payment-request watcher does the
+      // same — so a total-affecting invalidation landing between "validate" and this action
+      // would otherwise let the pipeline re-enter and build its payload on a quote that no
+      // longer matches the totals the buyer confirmed. Card payments only, same reasoning as
+      // the invalidation cancel above: other methods never attach the quote token, and the
+      // wallet sheet manages its own mid-payment state.
       if (state.paymentMethod === "card" && state.surcharges.type !== "loaded") {
-        state.status = { type: "input", errors: new Set() };
+        // Same error-recovery and error-preservation reasoning as the "offer" refusal above.
+        if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
+        state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
         return;
       }
       state.status = { type: "starting" };
