@@ -74,6 +74,11 @@ class Refund < ApplicationRecord
   # the balance debits this refund created. Guards the reversal against re-delivered
   # refund.failed webhooks.
   attr_json_data_accessor :balance_reversed_on_failure
+  # UTC time (ISO 8601 string) at which the balance reversal above was recorded.
+  # The finance event ledger books the reversal as its own dated event on this day;
+  # the original refund event stays booked to its own day untouched, because ledger
+  # days must regenerate bit-identical.
+  attr_json_data_accessor :balance_reversed_on_failure_at
 
   # In-memory mirror of the .effective scope, for callers working with preloaded
   # refunds. Keep the two in sync.

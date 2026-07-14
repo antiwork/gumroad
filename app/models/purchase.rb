@@ -90,6 +90,11 @@ class Purchase < ApplicationRecord
   belongs_to :price, optional: true
   has_many :events
   has_many :refunds
+  # Only refunds whose money actually left our account (see Refund.effective). Every
+  # financial, tax, and reporting query that sums "how much of this purchase was
+  # refunded" must go through this association, so a refund that failed after
+  # acceptance and was reversed is treated the same way everywhere.
+  has_many :effective_refunds, -> { effective }, class_name: "Refund"
   has_many :disputes
   belongs_to :offer_code, optional: true
   belongs_to :preorder, optional: true

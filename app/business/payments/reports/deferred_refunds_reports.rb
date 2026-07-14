@@ -5,7 +5,9 @@ module DeferredRefundsReports
     json = { "Purchases" => [] }
     range = DateTime.new(year, month)...DateTime.new(year, month).end_of_month
 
-    refunded_purchase_ids = Refund.where(created_at: range).pluck(:purchase_id)
+    # .effective keeps failed-but-not-reversed refunds (the seller is still debited)
+    # and drops reversed ones, matching the refunded sums everywhere else.
+    refunded_purchase_ids = Refund.effective.where(created_at: range).pluck(:purchase_id)
     deferred_refund_purchases = Purchase.successful.where(id: refunded_purchase_ids).where("succeeded_at < ?", range.first)
 
     disputed_purchase_ids = Dispute.where(created_at: range).where.not(state: "won").pluck(:purchase_id)
@@ -25,10 +27,10 @@ module DeferredRefundsReports
         "Processor" => name,
         "Sales" => {
           total_transaction_count: refunded_purchases.count + disputed_purchases.count,
-          total_transaction_cents: refunded_purchases.joins(:refunds).sum("refunds.total_transaction_cents") + disputed_purchases.sum(:total_transaction_cents),
-          gumroad_tax_cents: refunded_purchases.joins(:refunds).sum("refunds.gumroad_tax_cents") + disputed_purchases.sum(:gumroad_tax_cents),
-          affiliate_credit_cents: refunded_purchases.joins(:refunds).sum("TRUNCATE(purchases.affiliate_credit_cents * (refunds.amount_cents / purchases.price_cents), 0)") + disputed_purchases.sum(:affiliate_credit_cents),
-          fee_cents: refunded_purchases.joins(:refunds).sum("refunds.fee_cents") + disputed_purchases.sum(:fee_cents)
+          total_transaction_cents: refunded_purchases.joins(:effective_refunds).sum("refunds.total_transaction_cents") + disputed_purchases.sum(:total_transaction_cents),
+          gumroad_tax_cents: refunded_purchases.joins(:effective_refunds).sum("refunds.gumroad_tax_cents") + disputed_purchases.sum(:gumroad_tax_cents),
+          affiliate_credit_cents: refunded_purchases.joins(:effective_refunds).sum("TRUNCATE(purchases.affiliate_credit_cents * (refunds.amount_cents / purchases.price_cents), 0)") + disputed_purchases.sum(:affiliate_credit_cents),
+          fee_cents: refunded_purchases.joins(:effective_refunds).sum("refunds.fee_cents") + disputed_purchases.sum(:fee_cents)
         }
       }
     end

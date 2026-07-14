@@ -72,6 +72,9 @@ class Purchase::HandleFailedRefundService
           restore_affiliate_refund_state!
           recompute_purchase_refunded_flags!
           refund.balance_reversed_on_failure = true
+          # The reversal's own date, so the finance event ledger can book it as a
+          # dated compensating event without touching the original refund's day.
+          refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
           refund.save!
           reversed = true
         end

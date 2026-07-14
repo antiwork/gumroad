@@ -56,7 +56,7 @@ class CreateVatReportJob
 
           vat_refunds_on_date = zip_tax_rate.purchases
                                               .where("purchase_state != 'failed'")
-                                              .joins(:refunds)
+                                              .joins(:effective_refunds)
                                               .where(created_at: date.beginning_of_day..date.end_of_day)
 
           total_purchase_excluding_vat_amount_cents = vat_purchases_on_date.sum(:price_cents)
