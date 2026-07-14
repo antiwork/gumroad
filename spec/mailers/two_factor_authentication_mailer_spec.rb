@@ -5,7 +5,11 @@ require "spec_helper"
 describe TwoFactorAuthenticationMailer do
   let(:user) { create :user }
 
-  describe "#authentication_token" do
+  # The OTP code is time-based (TOTP), so it changes every 30 seconds. Freezing
+  # time ensures the code baked into the email matches the one the assertions
+  # recompute — without this the spec fails whenever the mail is built in one
+  # 30-second window and the expectation runs in the next.
+  describe "#authentication_token", :freeze_time do
     before do
       @mail = TwoFactorAuthenticationMailer.authentication_token(user.id)
     end
