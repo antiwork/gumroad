@@ -480,9 +480,9 @@ const CustomerDetails = ({ className }: { className?: string }) => {
   const errors = getErrors(state);
 
   React.useEffect(() => {
-    // Shipping addresses used to be verified against EasyPost here (with a suggested-correction
-    // dialog); that step was removed when we dropped the address-verification integration, so
-    // validation now proceeds straight to payment with the address as the buyer entered it.
+    // Shipping addresses used to be checked against a third-party address-verification service
+    // here (with a suggested-correction dialog); that integration was removed, so validation now
+    // proceeds straight to payment with the address exactly as the buyer entered it.
     if (state.status.type !== "validating") return;
     dispatch({ type: "start-payment" });
   }, [state.status.type]);
