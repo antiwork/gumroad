@@ -1716,6 +1716,76 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [other_product.id], without_product.reload.shown_products
   end
 
+  # --- #ordered_by_ids -------------------------------------------------------
+
+  test "ordered_by_ids returns products in the given id order, or by id when nil" do
+    creator = create_user
+    product1 = create_product(user: creator)
+    product2 = create_product(user: creator, created_at: 1.minute.ago)
+    product3 = create_product(user: creator, created_at: 2.minutes.ago)
+    product4 = create_product(user: creator, created_at: 3.minutes.ago)
+
+    order = [product3.id, product1.id, product2.id, product4.id]
+    assert_equal [product3, product1, product2, product4], creator.links.ordered_by_ids(order)
+    assert_equal [product1, product2, product3, product4], creator.links.ordered_by_ids(nil)
+  end
+
+  # --- #tiers / #default_tier / #tier_category -------------------------------
+
+  test "tiers returns the tier variants for a tiered membership" do
+    product = create_membership_product
+    assert_equal 1, product.tiers.size
+    assert_equal product.variant_categories.alive.first.variants.first, product.tiers.first
+  end
+
+  test "tier_category is nil for a non-membership product" do
+    assert_nil create_product.tier_category
+  end
+
+  test "default_tier returns the first tier for a tiered membership" do
+    product = create_membership_product
+    second_tier = create_variant(variant_category: product.tier_category)
+    assert_equal product.tiers.first, product.default_tier
+    assert_not_equal second_tier, product.default_tier
+  end
+
+  test "default_tier is nil for a non-membership product" do
+    assert_nil create_product.default_tier
+  end
+
+  test "tier_category returns the Tier category for a tiered membership" do
+    product = create_membership_product
+    category = product.tier_category
+    assert_instance_of VariantCategory, category
+    assert_equal product, category.link
+    assert_equal "Tier", category.title
+  end
+
+  # --- #has_downloadable_content? --------------------------------------------
+
+  test "has_downloadable_content? is false without files" do
+    assert_equal false, create_product.has_downloadable_content?
+  end
+
+  test "has_downloadable_content? is false for a preorder product" do
+    product = create_product(is_in_preorder_state: true)
+    product.product_files << create_streamable_video(stream_only: true)
+    assert_equal false, product.has_downloadable_content?
+  end
+
+  test "has_downloadable_content? is false when all files are stream-only" do
+    product = create_product
+    product.product_files << create_streamable_video(stream_only: true)
+    assert_equal false, product.has_downloadable_content?
+  end
+
+  test "has_downloadable_content? is true with a non-stream-only file" do
+    product = create_product
+    product.product_files << create_readable_document
+    product.product_files << create_streamable_video(stream_only: true)
+    assert_equal true, product.has_downloadable_content?
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
