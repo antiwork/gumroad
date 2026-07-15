@@ -1874,6 +1874,111 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal true, destination.is_virtual_country
   end
 
+  # --- prices migration ------------------------------------------------------
+
+  test "a buy product has the proper buy price" do
+    price = create_product(price_cents: 200).prices.last
+    assert_equal [200, "usd", false, nil], [price.price_cents, price.currency, price.is_rental, price.recurrence]
+  end
+
+  test "the buy price updates when the price changes" do
+    product = create_product(price_cents: 200)
+    product.update!(price_cents: 300)
+    assert_equal 1, product.prices.alive.count
+    price = product.prices.alive.last
+    assert_equal [300, "usd", false, nil], [price.price_cents, price.currency, price.is_rental, price.recurrence]
+  end
+
+  test "adding a rental price keeps both buy and rental prices for buy_and_rent" do
+    product = create_product(price_cents: 200)
+    assert_difference -> { product.prices.alive.count }, 1 do
+      product.rental_price_cents = 100
+      product.purchase_type = :buy_and_rent
+      product.save!
+    end
+    assert_equal [200, false, nil], [product.prices.is_buy.last.price_cents, product.prices.is_buy.last.is_rental, product.prices.is_buy.last.recurrence]
+    assert_equal [100, true, nil], [product.prices.is_rental.last.price_cents, product.prices.is_rental.last.is_rental, product.prices.is_rental.last.recurrence]
+  end
+
+  test "switching to rent-only keeps only the rental price" do
+    product = create_product(price_cents: 200)
+    product.rental_price_cents = 100
+    product.purchase_type = :buy_and_rent
+    product.save!
+    assert_difference -> { product.prices.alive.count }, -1 do
+      product.purchase_type = :rent_only
+      product.save!
+    end
+    rental_price = product.prices.alive.is_rental.last
+    assert_equal [100, "usd", true, nil], [rental_price.price_cents, rental_price.currency, rental_price.is_rental, rental_price.recurrence]
+  end
+
+  test "a subscription product has a recurrence-tagged price" do
+    product = create_product(is_recurring_billing: true, subscription_duration: "monthly", price_cents: 200)
+    price = product.prices.alive.last
+    assert_equal [200, "usd", false, BasePrice::Recurrence::MONTHLY], [price.price_cents, price.currency, price.is_rental, price.recurrence]
+  end
+
+  test "a subscription product's price updates when the price changes" do
+    product = create_product(is_recurring_billing: true, subscription_duration: "monthly", price_cents: 200)
+    product.update!(price_cents: 500)
+    price = product.prices.alive.last
+    assert_equal [500, BasePrice::Recurrence::MONTHLY], [price.price_cents, price.recurrence]
+  end
+
+  test "the price carries the product's currency" do
+    price = create_product(price_cents: 200, price_currency_type: "jpy").prices.alive.last
+    assert_equal [200, "jpy", false, nil], [price.price_cents, price.currency, price.is_rental, price.recurrence]
+  end
+
+  # --- require_shipping_for_physical -----------------------------------------
+
+  test "a physical product with require_shipping false is invalid" do
+    assert_equal false, build_product(is_physical: true, require_shipping: false).valid?
+  end
+
+  test "clearing require_shipping on a physical product raises" do
+    product = create_physical_product
+    product.require_shipping = false
+    assert_raises(ActiveRecord::RecordInvalid) { product.save! }
+    assert_equal "Shipping form is required for physical products.", product.errors.full_messages.to_sentence
+  end
+
+  # --- twitter_share_url -----------------------------------------------------
+
+  test "twitter_share_url uri-escapes the product name" do
+    product = create_product(name: "you & i")
+    assert_equal "https://twitter.com/intent/tweet?text=I+got+you+%26+i+on+%40Gumroad:%20#{product.long_url}", product.twitter_share_url
+  end
+
+  # --- duration_multiple_of_price_options ------------------------------------
+
+  test "duration_in_months may be null" do
+    product = create_subscription_product(subscription_duration: "yearly", duration_in_months: 12)
+    product.duration_in_months = nil
+    assert_nothing_raised { product.save! }
+  end
+
+  test "duration_in_months may be a multiple of 12 for yearly" do
+    product = create_subscription_product(subscription_duration: "yearly", duration_in_months: 12)
+    product.duration_in_months = 24
+    assert_nothing_raised { product.save! }
+  end
+
+  test "duration_in_months of 0 is invalid" do
+    product = create_subscription_product(subscription_duration: "yearly", duration_in_months: 12)
+    product.duration_in_months = 0
+    assert_raises(ActiveRecord::RecordInvalid) { product.save! }
+    assert_equal "Your subscription length in months must be a number greater than zero.", product.errors.full_messages.to_sentence
+  end
+
+  test "duration_in_months not a multiple of 12 is invalid for yearly" do
+    product = create_subscription_product(subscription_duration: "yearly", duration_in_months: 12)
+    product.duration_in_months = 5
+    assert_raises(ActiveRecord::RecordInvalid) { product.save! }
+    assert_equal "Your subscription length in months must be a multiple of 12 because you have selected a payment option of yearly payments.", product.errors.full_messages.to_sentence
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
