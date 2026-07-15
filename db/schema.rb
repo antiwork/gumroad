@@ -766,8 +766,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000000) do
     t.bigint "backtax_agreement_id"
     t.text "json_data"
     t.text "reason"
+    t.bigint "failed_refund_id"
     t.index ["balance_id"], name: "index_credits_on_balance_id"
     t.index ["dispute_id"], name: "index_credits_on_dispute_id"
+    t.index ["failed_refund_id"], name: "index_credits_on_failed_refund_id"
     t.index ["user_id", "created_at", "id"], name: "index_credits_on_user_id_and_created_at_and_id"
   end
 
@@ -987,6 +989,24 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000000) do
     t.index ["service_charge_id"], name: "index_events_on_service_charge_id"
     t.index ["user_id"], name: "index_events_on_user_id"
     t.index ["visit_id"], name: "index_events_on_visit_id"
+  end
+
+  create_table "failed_refund_exceptions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "refund_id", null: false
+    t.string "owner", null: false
+    t.string "notification_room", null: false
+    t.string "state", default: "pending", null: false
+    t.datetime "due_at", null: false
+    t.boolean "balance_reversed", default: false, null: false
+    t.integer "notification_failures", default: 0, null: false
+    t.datetime "notification_sent_at"
+    t.datetime "resolved_at"
+    t.text "resolution"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["refund_id"], name: "index_failed_refund_exceptions_on_refund_id", unique: true
+    t.index ["state", "due_at"], name: "idx_failed_refund_exceptions_on_state_due_at"
+    t.index ["state", "notification_sent_at"], name: "idx_failed_refund_exceptions_pending_notification"
   end
 
   create_table "followers", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
