@@ -1399,6 +1399,102 @@ class LinkTest < ActiveSupport::TestCase
     assert_not_nil product.unique_permalink
   end
 
+  # --- #price_formatted ------------------------------------------------------
+
+  test "price_formatted for a standard USD price" do
+    product = create_product
+    product.price_range = "1.00"
+    assert_equal 100, product.price_cents
+    assert_equal "$1", product.price_formatted
+    assert_equal "1", product.price_formatted_without_dollar_sign
+  end
+
+  test "price_formatted for a non-standard USD price" do
+    product = create_product
+    product.update!(price_range: "1.01")
+    assert_equal 101, product.price_cents
+    assert_equal "$1.01", product.price_formatted
+    assert_equal "1.01", product.price_formatted_without_dollar_sign
+  end
+
+  test "price_formatted for a customizable USD price" do
+    product = create_product
+    product.update!(price_range: "2.5+")
+    assert_equal 250, product.price_cents
+    assert_equal "$2.50", product.price_formatted
+    assert_equal "2.50", product.price_formatted_without_dollar_sign
+  end
+
+  test "price_formatted for a standard JPY price" do
+    product = create_product
+    product.update!(price_currency_type: :jpy, price_range: "100")
+    assert_equal 100, product.price_cents
+    assert_equal "¥100", product.price_formatted
+    assert_equal "100", product.price_formatted_without_dollar_sign
+  end
+
+  test "price_formatted for a non-standard JPY price" do
+    product = create_product
+    product.update!(price_currency_type: :jpy, price_range: "104")
+    assert_equal "¥104", product.price_formatted
+  end
+
+  test "price_formatted for a customizable JPY price" do
+    product = create_product
+    product.update!(price_currency_type: :jpy, price_range: "177+")
+    assert_equal 177, product.price_cents
+    assert_equal "¥177", product.price_formatted
+  end
+
+  # --- compliance_blocked ----------------------------------------------------
+
+  test "compliance_blocked is false for a good IP" do
+    assert_equal false, build_product.compliance_blocked("199.21.86.138") # San Francisco WebPass
+  end
+
+  test "compliance_blocked is true for an IP in a blocked country" do
+    assert_equal true, build_product.compliance_blocked("2.144.0.1") # MCI Iran
+  end
+
+  test "compliance_blocked is false for a nil IP" do
+    assert_equal false, build_product.compliance_blocked(nil)
+  end
+
+  test "compliance_blocked is false for an unidentifiable IP" do
+    assert_equal false, build_product.compliance_blocked("10.0.1.1")
+  end
+
+  # --- #long_url -------------------------------------------------------------
+
+  test "long_url uses the seller's subdomain" do
+    product = create_product
+    assert_equal "#{product.user.subdomain_with_protocol}/l/#{product.general_permalink}", product.long_url
+  end
+
+  test "long_url appends recommended_by and code query params when present" do
+    product = create_product
+    base = "#{product.user.subdomain_with_protocol}/l/#{product.general_permalink}"
+    assert_equal "#{base}?recommended_by=abc", product.long_url(recommended_by: "abc")
+    assert_equal "#{base}?code=BLACKFRIDAY2025", product.long_url(code: "BLACKFRIDAY2025")
+  end
+
+  test "long_url omits a blank recommended_by" do
+    product = create_product
+    base = "#{product.user.subdomain_with_protocol}/l/#{product.general_permalink}"
+    ["", " ", nil].each { |value| assert_equal base, product.long_url(recommended_by: value) }
+  end
+
+  test "long_url omits the protocol when include_protocol is false" do
+    product = create_product
+    assert_equal "#{product.user.subdomain}/l/#{product.general_permalink}", product.long_url(include_protocol: false)
+  end
+
+  # --- .total_usd_cents_earned_by_user (documented skip) ---------------------
+
+  test "total_usd_cents_earned_by_user sums earnings across owned and affiliated products" do
+    skip "needs :sidekiq_inline + a live Elasticsearch index for affiliate-credit rollups; the Minitest harness stubs EsClient"
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
