@@ -8,6 +8,9 @@ require "test_helper"
 # create_variant, …). The RSpec file was tagged :vcr defensively, but the
 # product model paths here make no external HTTP calls.
 class LinkTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+  include ActionMailer::TestHelper
+
   setup do
     @product = create_product
   end
@@ -628,6 +631,78 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [small_variant, live_sku, default_sku].sort_by(&:id), product.current_base_variants.sort_by(&:id)
   end
 
+  # --- publish! (scope) ------------------------------------------------------
+
+  test "publish! publishes the product" do
+    _user, product = publish_context
+    product.publish!
+    assert_nil product.reload.purchase_disabled_at
+  end
+
+  test "publish! retries on ActiveRecord::Deadlocked and succeeds" do
+    _user, product = publish_context
+    call_count = 0
+    product.define_singleton_method(:save!) do |*args, **kwargs|
+      call_count += 1
+      raise ActiveRecord::Deadlocked if call_count <= 2
+      super(*args, **kwargs)
+    end
+    assert_nothing_raised { product.publish! }
+    assert_equal 3, call_count
+  end
+
+  test "publish! re-raises ActiveRecord::Deadlocked after exhausting retries" do
+    _user, product = publish_context
+    call_count = 0
+    product.define_singleton_method(:save!) { |*| call_count += 1; raise ActiveRecord::Deadlocked }
+    assert_raises(ActiveRecord::Deadlocked) { product.publish! }
+    assert_equal 3, call_count
+  end
+
+  test "publish! raises when the user has not confirmed their email address" do
+    user, product = publish_context
+    user.update!(confirmed_at: nil)
+    assert_raises(Link::LinkInvalid) { product.publish! }
+    assert_equal "You have to confirm your email address before you can do that.", product.errors.full_messages.to_sentence
+    refute_nil product.reload.purchase_disabled_at
+  end
+
+  test "publish! raises when a bundle has no alive products" do
+    user, product = publish_context
+    product.update!(is_bundle: true)
+    BundleProduct.create!(bundle: product, product: create_product(user:), deleted_at: Time.current)
+    assert_raises(ActiveRecord::RecordInvalid) { product.publish! }
+    assert_equal "Bundles must have at least one product.", product.errors.full_messages.to_sentence
+    refute_nil product.reload.purchase_disabled_at
+  end
+
+  test "publish! associates and notifies the seller's universal affiliates" do
+    user, product = publish_context
+    direct_affiliate = create_direct_affiliate(seller: user, apply_to_all_products: true)
+    assert_enqueued_email_with(AffiliateMailer, :notify_direct_affiliate_of_new_product, args: [direct_affiliate.id, product.id]) do
+      product.publish!
+    end
+    assert_equal [direct_affiliate], product.reload.direct_affiliates
+    assert_equal [product], direct_affiliate.reload.products
+  end
+
+  test "publish! does not re-notify affiliates already associated with the product" do
+    user, product = publish_context
+    direct_affiliate = create_direct_affiliate(seller: user, apply_to_all_products: true, products: [product])
+    assert_no_enqueued_emails { product.publish! }
+    assert_equal [direct_affiliate], product.reload.direct_affiliates
+    assert_equal [product], direct_affiliate.reload.products
+  end
+
+  test "publish! does not notify affiliates that have been removed" do
+    user, product = publish_context
+    direct_affiliate = create_direct_affiliate(seller: user, apply_to_all_products: true)
+    direct_affiliate.mark_deleted!
+    assert_no_enqueued_emails { product.publish! }
+    assert_empty product.reload.direct_affiliates
+    assert_empty direct_affiliate.reload.products
+  end
+
   # --- #public_files / #communities ------------------------------------------
 
   test "public_files returns all public files for the product, including deleted" do
@@ -748,6 +823,17 @@ class LinkTest < ActiveSupport::TestCase
   end
 
   private
+    # A confirmed seller with a merchant account and an unpublished product
+    # carrying a file — the real starting point for the publish! scope tests
+    # (substituting a plain merchant account for the VCR-backed Stripe one).
+    def publish_context
+      user = create_user
+      create_merchant_account(user:)
+      product = create_product(user:, purchase_disabled_at: Time.current)
+      create_product_file(link: product)
+      [user, product]
+    end
+
     # A published product whose non-moderation publish gates are stubbed and
     # whose initial publish passed moderation — the starting point for the
     # "edit a published product" moderation tests.
