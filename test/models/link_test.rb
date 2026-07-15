@@ -1786,6 +1786,94 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal true, product.has_downloadable_content?
   end
 
+  # --- #save_shipping_destinations! ------------------------------------------
+
+  test "save_shipping_destinations! clears all entries when input is empty for an unpublished product" do
+    product = create_product
+    product.deleted_at = Time.current
+    assert_equal false, product.alive?
+    product.shipping_destinations << ShippingDestination.new(country_code: Product::Shipping::ELSEWHERE, one_item_rate_cents: 20, multiple_items_rate_cents: 10)
+    product.shipping_destinations << ShippingDestination.new(country_code: Compliance::Countries::DEU.alpha2, one_item_rate_cents: 10, multiple_items_rate_cents: 5)
+    product.save!
+    assert_equal 2, product.shipping_destinations.alive.size
+
+    product.save_shipping_destinations!([])
+    product.reload
+    assert_equal 0, product.shipping_destinations.alive.size
+  end
+
+  test "save_shipping_destinations! raises when input is empty for a live product" do
+    product = create_product
+    product.shipping_destinations << ShippingDestination.new(country_code: Product::Shipping::ELSEWHERE, one_item_rate_cents: 20, multiple_items_rate_cents: 10)
+    product.save!
+    assert_raises(Link::LinkInvalid) { product.save_shipping_destinations!([]) }
+  end
+
+  test "save_shipping_destinations! saves entries with unique country values" do
+    product = create_product
+    product.save_shipping_destinations!([
+                                          { "country_code" => Compliance::Countries::USA.alpha2, "one_item_rate" => 20, "multiple_items_rate" => 10 },
+                                          { "country_code" => Compliance::Countries::DEU.alpha2, "one_item_rate" => 10, "multiple_items_rate" => 0 },
+                                        ])
+    product.reload
+    assert_equal 2, product.shipping_destinations.alive.size
+    assert_equal ["US", 2000, 1000], [product.shipping_destinations.first.country_code, product.shipping_destinations.first.one_item_rate_cents, product.shipping_destinations.first.multiple_items_rate_cents]
+    assert_equal ["DE", 1000, 0], [product.shipping_destinations.second.country_code, product.shipping_destinations.second.one_item_rate_cents, product.shipping_destinations.second.multiple_items_rate_cents]
+  end
+
+  test "save_shipping_destinations! accepts rates already in cents" do
+    product = create_product
+    product.save_shipping_destinations!([
+                                          { "country_code" => Compliance::Countries::USA.alpha2, "one_item_rate_cents" => 2000, "multiple_items_rate_cents" => 1000 },
+                                        ])
+    product.reload
+    assert_equal ["US", 2000, 1000], [product.shipping_destinations.first.country_code, product.shipping_destinations.first.one_item_rate_cents, product.shipping_destinations.first.multiple_items_rate_cents]
+  end
+
+  test "save_shipping_destinations! rejects duplicated countries" do
+    product = create_product
+    assert_raises(Link::LinkInvalid) do
+      product.save_shipping_destinations!([
+                                            { "country_code" => Compliance::Countries::USA.alpha2, "one_item_rate" => 20, "multiple_items_rate" => 10 },
+                                            { "country_code" => Compliance::Countries::USA.alpha2, "one_item_rate" => 10, "multiple_items_rate" => 0 },
+                                          ])
+    end
+  end
+
+  test "save_shipping_destinations! removes entries absent from the input" do
+    product = create_product
+    product.shipping_destinations << ShippingDestination.new(country_code: Product::Shipping::ELSEWHERE, one_item_rate_cents: 20, multiple_items_rate_cents: 10)
+    product.shipping_destinations << ShippingDestination.new(country_code: Compliance::Countries::DEU.alpha2, one_item_rate_cents: 10, multiple_items_rate_cents: 5)
+    product.save!
+
+    product.save_shipping_destinations!([{ "country_code" => Compliance::Countries::USA.alpha2, "one_item_rate" => 20, "multiple_items_rate" => 10 }])
+    assert_equal 1, product.shipping_destinations.alive.size
+  end
+
+  test "save_shipping_destinations! resurrects a deactivated entry when reconfigured" do
+    product = create_product
+    product.shipping_destinations << ShippingDestination.new(country_code: Product::Shipping::ELSEWHERE, one_item_rate_cents: 20, multiple_items_rate_cents: 10)
+    product.shipping_destinations << ShippingDestination.new(country_code: Compliance::Countries::DEU.alpha2, one_item_rate_cents: 10, multiple_items_rate_cents: 5)
+    product.save!
+
+    product.save_shipping_destinations!([{ "country_code" => Compliance::Countries::USA.alpha2, "one_item_rate" => 10, "multiple_items_rate" => 0 }])
+    product.reload
+    assert_equal 1, product.shipping_destinations.alive.size
+
+    product.save_shipping_destinations!([{ "country_code" => Product::Shipping::ELSEWHERE, "one_item_rate" => 20, "multiple_items_rate" => 10 }])
+    assert_equal 1, product.shipping_destinations.alive.size
+    assert_equal ["ELSEWHERE", 2000, 1000], [product.shipping_destinations.alive.first.country_code, product.shipping_destinations.alive.first.one_item_rate_cents, product.shipping_destinations.alive.first.multiple_items_rate_cents]
+  end
+
+  test "save_shipping_destinations! marks virtual countries" do
+    product = create_product
+    product.save_shipping_destinations!([{ "country_code" => ShippingDestination::Destinations::EUROPE, "one_item_rate" => 20, "multiple_items_rate" => 10 }])
+    product.reload
+    destination = product.shipping_destinations.first
+    assert_equal ["EUROPE", 2000, 1000], [destination.country_code, destination.one_item_rate_cents, destination.multiple_items_rate_cents]
+    assert_equal true, destination.is_virtual_country
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
