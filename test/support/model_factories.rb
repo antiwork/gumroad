@@ -108,6 +108,15 @@ module ModelFactories
     product
   end
 
+  # A product with two digital versions (mirrors :product_with_digital_versions).
+  def create_product_with_digital_versions(user: nil, **attrs)
+    product = create_product(user:, **attrs)
+    category = create_variant_category(link: product, title: "Category")
+    create_variant(variant_category: category, name: "Untitled 1")
+    create_variant(variant_category: category, name: "Untitled 2")
+    product
+  end
+
   def create_sku(link: nil, **attrs)
     Sku.create!({ link: link || create_product, price_difference_cents: 0, name: "Large" }.merge(attrs))
   end

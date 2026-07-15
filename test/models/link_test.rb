@@ -2270,6 +2270,73 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal "some text<script src=\"https://cdn.iframe.ly/embed.js\"></script>evil script", kept.html_safe_description
   end
 
+  # --- #options --------------------------------------------------------------
+
+  test "options returns SKUs when the product has SKUs enabled" do
+    product = create_physical_product
+    sku1 = product.skus.create(price_difference_cents: 1, name: "SKU 1")
+    sku2 = product.skus.create(price_difference_cents: 2, name: "SKU 2")
+    assert_equal [sku1.to_option, sku2.to_option].sort_by { |o| o[:id] }, product.options.sort_by { |o| o[:id] }
+  end
+
+  test "options returns variants when the product has no SKUs" do
+    product = create_product_with_digital_versions
+    assert_equal [product.alive_variants.first.to_option, product.alive_variants.second.to_option].sort_by { |o| o[:id] }, product.options.sort_by { |o| o[:id] }
+  end
+
+  test "options sorts a variant with a nil created_at first without raising" do
+    product = create_product
+    category = create_variant_category(link: product)
+    with_timestamp = create_variant(variant_category: category, name: "Has timestamp")
+    without_timestamp = create_variant(variant_category: category, name: "No timestamp")
+    [with_timestamp, without_timestamp].each { |variant| variant.update_column(:position_in_category, nil) }
+    without_timestamp.update_column(:created_at, nil)
+
+    product.reload
+    product.alive_variants.load
+    options = nil
+    assert_nothing_raised { options = product.options }
+    assert_equal ["No timestamp", "Has timestamp"], options.map { |option| option[:name] }
+  end
+
+  # --- #auto_transcode_videos? -----------------------------------------------
+
+  test "auto_transcode_videos? is true when the user allows it" do
+    product = create_product
+    product.user.stubs(:auto_transcode_videos?).returns(true)
+    assert_equal true, product.auto_transcode_videos?
+  end
+
+  test "auto_transcode_videos? is true when the product has successful sales" do
+    product = create_product
+    product.stubs(:has_successful_sales?).returns(true)
+    assert_equal true, product.auto_transcode_videos?
+  end
+
+  # --- #permalink_overlaps_with_other_sellers? -------------------------------
+
+  test "permalink_overlaps_with_other_sellers? detects custom and unique permalink overlaps" do
+    create_product(unique_permalink: "abc", custom_permalink: "xyz")
+    assert_equal true, create_product(custom_permalink: "abc").permalink_overlaps_with_other_sellers?
+    assert_equal true, create_product(unique_permalink: "xyz").permalink_overlaps_with_other_sellers?
+    assert_equal false, create_product(unique_permalink: "def", custom_permalink: "ghi").permalink_overlaps_with_other_sellers?
+  end
+
+  # --- #purchasing_power_parity_enabled? -------------------------------------
+
+  test "purchasing_power_parity_enabled? follows the user flag and the product override" do
+    product = create_product
+    assert_equal false, product.purchasing_power_parity_enabled?
+    product.update!(purchasing_power_parity_disabled: true)
+    assert_equal false, product.purchasing_power_parity_enabled?
+
+    product.update!(purchasing_power_parity_disabled: false)
+    product.user.update!(purchasing_power_parity_enabled: true)
+    assert_equal true, product.purchasing_power_parity_enabled?
+    product.update!(purchasing_power_parity_disabled: true)
+    assert_equal false, product.purchasing_power_parity_enabled?
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
