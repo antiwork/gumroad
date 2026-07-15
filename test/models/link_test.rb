@@ -881,6 +881,56 @@ class LinkTest < ActiveSupport::TestCase
     assert_not_includes Link.non_membership, membership
   end
 
+  test "collabs_as_collaborator returns products the user is a collaborator on" do
+    user = create_user
+
+    # collabs I created (not returned)
+    3.times do
+      product = create_product(user:)
+      create_product_affiliate(product:, affiliate: create_collaborator(seller: user))
+    end
+
+    # products I'm a collaborator on (returned)
+    seller = create_user
+    seller_collabs = Array.new(2) { create_product(user: seller) }
+    collaborator = create_collaborator(affiliate_user: user, seller:)
+    seller_collabs.each { |product| create_product_affiliate(product:, affiliate: collaborator) }
+
+    # products I'm no longer a collaborator on (not returned)
+    seller_old_collab = create_product(user: seller)
+    old_collaborator = create_collaborator(affiliate_user: user, seller:, deleted_at: 1.day.ago)
+    create_product_affiliate(product: seller_old_collab, affiliate: old_collaborator)
+
+    # products others are collaborators on (not returned)
+    2.times do
+      product = create_product(user: seller)
+      create_product_affiliate(product:, affiliate: create_collaborator(seller:))
+    end
+
+    # products I'm invited to collaborate on (not returned)
+    inviter = create_user
+    create_collaborator(affiliate_user: user, seller: inviter, pending_invitation: true,
+                        products: Array.new(2) { create_product(user: inviter) })
+
+    # non-collab products (not returned)
+    create_product(user:)
+    create_product(user: seller)
+
+    # collab products where I have a prior non-collaborator affiliate association (not returned)
+    other_collabs = Array.new(2) { create_collab_product(user: seller) }
+    create_direct_affiliate(affiliate_user: user, seller:, products: [other_collabs.first])
+    create_product_affiliate(affiliate: user.global_affiliate, product: other_collabs.last)
+
+    assert_equal seller_collabs.map(&:id).sort, Link.collabs_as_collaborator(user).pluck(:id).sort
+  end
+
+  test "not_call scope excludes call products" do
+    call_product = create_call_product
+    product = create_product
+    assert_includes Link.not_call, product
+    assert_not_includes Link.not_call, call_product
+  end
+
   private
     # A confirmed seller with a merchant account and an unpublished product
     # carrying a file — the real starting point for the publish! scope tests

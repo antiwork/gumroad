@@ -325,13 +325,29 @@ module ModelFactories
     create_user(**attrs)
   end
 
-  def create_direct_affiliate(seller:, affiliate_user: nil, **attrs)
-    DirectAffiliate.create!({
+  def create_direct_affiliate(seller: nil, affiliate_user: nil, products: nil, **attrs)
+    affiliate = DirectAffiliate.new({
       affiliate_user: affiliate_user || create_affiliate_user,
-      seller:,
+      seller: seller || create_user,
       affiliate_basis_points: 300,
       send_posts: true,
     }.merge(attrs))
+    affiliate.products = products if products
+    affiliate.save!
+    affiliate
+  end
+
+  def create_product_affiliate(product:, affiliate:, **attrs)
+    ProductAffiliate.create!({ product:, affiliate:, affiliate_basis_points: 30_00 }.merge(attrs))
+  end
+
+  # A product flagged as a collab, with a product_affiliate linking a
+  # collaborator (mirrors the :is_collab trait).
+  def create_collab_product(user: nil, collaborator: nil, collaborator_cut: 30_00, **attrs)
+    product = create_product(user:, is_collab: true, **attrs)
+    collaborator ||= create_collaborator(seller: product.user)
+    create_product_affiliate(product:, affiliate: collaborator, affiliate_basis_points: collaborator_cut)
+    product
   end
 
   def create_public_file(resource: nil, **attrs)
