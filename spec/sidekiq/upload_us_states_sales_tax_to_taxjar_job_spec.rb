@@ -163,7 +163,7 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
       expect(refund_ids).to be_empty
 
       described_class.new.perform(post_cutover_refund_day.iso8601)
-      expect(refund_ids).to eq([post_cutover_refund.external_id])
+      expect(refund_ids).to eq(["#{post_cutover_refund.external_id}-refund"])
 
       # A re-push of the purchase's own day must net ONLY the pre-cutover refund (100 - 20),
       # never the post-cutover one — that one is relieved by its refund transaction above.
@@ -174,22 +174,6 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
       end
       described_class.new.perform((cutover - 30).iso8601)
       expect(order_kwargs[:amount_dollars]).to eq(80.0)
-    end
-
-    it "does not push a refund created on the cutover day itself against a pre-cutover purchase" do
-      cutover = UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER
-      purchase = nil
-      travel_to((cutover - 5).to_time(:utc).change(hour: 12)) do
-        product = create(:product, price_cents: 100_00, native_type: "digital")
-        purchase = create(:purchase, link: product, country: "United States", zip_code: "98121")
-      end
-      travel_to(cutover.to_time(:utc).change(hour: 12)) do
-        create(:refund, purchase:, amount_cents: 100_00)
-      end
-
-      expect_any_instance_of(TaxjarApi).not_to receive(:create_refund_transaction)
-
-      described_class.new.perform(cutover.iso8601)
     end
 
     it "pushes a refund created on the day as a TaxJar refund transaction dated by the refund date" do
@@ -227,14 +211,15 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
     end
 
     it "pushes a cutover-day refund of an older pre-cutover purchase" do
-      # The purchase's netted order upload ran before the cutover (2026-07-15 morning), so
-      # this refund can't have been netted into it and must be reported as a refund
-      # transaction — dropping it would leave TaxJar overstating the period's tax.
-      travel_to(Time.find_zone("UTC").local(2026, 7, 10)) do
+      # The purchase's netted order upload ran before the cutover, so this refund can't have
+      # been netted into it and must be reported as a refund transaction — dropping it would
+      # leave TaxJar overstating the period's tax.
+      cutover = UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER
+      travel_to((cutover - 10).to_time(:utc).change(hour: 12)) do
         product = create(:product, price_cents: 100_00, native_type: "digital")
         @old_purchase = create(:purchase, link: product, country: "United States", zip_code: "98121")
       end
-      old_refund = travel_to(Time.find_zone("UTC").local(2026, 7, 16, 12)) do
+      old_refund = travel_to(cutover.to_time(:utc).change(hour: 12)) do
         create(:refund, purchase: @old_purchase, amount_cents: 50_00)
       end
 
@@ -244,7 +229,7 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
         {}
       end
 
-      described_class.new.perform("2026-07-16")
+      described_class.new.perform(cutover.iso8601)
 
       expect(refund_kwargs[:transaction_id]).to eq("#{old_refund.external_id}-refund")
       expect(refund_kwargs[:transaction_reference_id]).to eq(@old_purchase.external_id)
@@ -254,17 +239,18 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
       # A purchase created the day before the cutover has its (netted) order upload run early
       # on the cutover day itself, so a refund created that same day may already be netted
       # into the uploaded order — pushing a refund transaction could relieve the tax twice.
-      travel_to(Time.find_zone("UTC").local(2026, 7, 15, 20)) do
+      cutover = UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER
+      travel_to((cutover - 1).to_time(:utc).change(hour: 20)) do
         product = create(:product, price_cents: 100_00, native_type: "digital")
         @eve_purchase = create(:purchase, link: product, country: "United States", zip_code: "98121")
       end
-      travel_to(Time.find_zone("UTC").local(2026, 7, 16, 12)) do
+      travel_to(cutover.to_time(:utc).change(hour: 12)) do
         create(:refund, purchase: @eve_purchase, amount_cents: 50_00)
       end
 
       expect_any_instance_of(TaxjarApi).not_to receive(:create_refund_transaction)
 
-      described_class.new.perform("2026-07-16")
+      described_class.new.perform(cutover.iso8601)
     end
 
     it "uploads a fully refunded purchase's order at its gross amounts on the purchase day" do
