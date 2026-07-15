@@ -2749,6 +2749,121 @@ class LinkTest < ActiveSupport::TestCase
     assert commission.valid?
   end
 
+  # --- coffee validations ----------------------------------------------------
+
+  test "a seller can only have one coffee product" do
+    seller = create_eligible_seller
+    create_coffee_product(user: seller, purchase_disabled_at: Time.current)
+    coffee = build_product(user: seller, native_type: Link::NATIVE_TYPE_COFFEE)
+    assert_not coffee.valid?
+    assert_equal "You can only have one coffee product.", coffee.errors.full_messages.first
+  end
+
+  test "a second coffee product is allowed when the other is deleted" do
+    seller = create_eligible_seller
+    create_coffee_product(user: seller, deleted_at: Time.current)
+    assert build_product(user: seller, native_type: Link::NATIVE_TYPE_COFFEE).valid?
+  end
+
+  test "unarchiving a coffee product is blocked when another exists" do
+    seller = create_eligible_seller
+    coffee_a = create_coffee_product(user: seller, archived: true)
+    create_coffee_product(user: seller)
+    coffee_a.archived = false
+    assert_not coffee_a.valid?
+    assert_equal "You can only have one coffee product.", coffee_a.errors.full_messages.first
+  end
+
+  test "unarchiving a coffee product is allowed when no other exists" do
+    seller = create_eligible_seller
+    coffee_a = create_coffee_product(user: seller, archived: true)
+    coffee_a.archived = false
+    assert coffee_a.valid?
+  end
+
+  test "a coffee product's variants must cost at least the minimum price" do
+    coffee = create_coffee_product
+    category = create_variant_category(link: coffee)
+    variant = create_variant(variant_category: category, price_difference_cents: 100)
+    assert_not build_variant(variant_category: category, price_difference_cents: 0).valid?
+    variant.price_difference_cents = 0
+    assert_not variant.valid?
+  end
+
+  # --- calls validations ------------------------------------------------------
+
+  test "a call product with no durations is invalid unless deleted" do
+    call = create_call_product(durations: [])
+    assert call.invalid?
+    assert_equal "Calls must have at least one duration", call.errors.full_messages.first
+    call.deleted_at = Time.current
+    assert call.valid?
+  end
+
+  test "a call product with durations is valid" do
+    assert create_call_product(durations: [30]).valid?
+  end
+
+  # --- support email validations ---------------------------------------------
+
+  test "support_email may be nil but not blank, and must be a valid format" do
+    product = build_product
+    product.support_email = nil
+    assert product.valid?
+    product.support_email = ""
+    assert_not product.valid?
+    product.support_email = "support@example.com"
+    assert product.valid?
+    product.support_email = "invalidemail"
+    assert_not product.valid?
+    assert_includes product.errors[:support_email], "is invalid"
+    product.support_email = "user@"
+    assert_not product.valid?
+    assert_includes product.errors[:support_email], "is invalid"
+  end
+
+  # --- #can_gift? -------------------------------------------------------------
+
+  test "can_gift? is true for a regular or recurring product, false for a preorder" do
+    assert_equal true, build_product.can_gift?
+    assert_equal false, build_product(is_in_preorder_state: true).can_gift?
+    assert_equal true, build_product(is_recurring_billing: true).can_gift?
+  end
+
+  # --- #quantity_enabled / #can_enable_quantity? ------------------------------
+
+  test "quantity_enabled cannot be true for memberships or calls, but can for others" do
+    membership = create_membership_product
+    membership.quantity_enabled = true
+    assert membership.invalid?
+    assert_includes membership.errors.full_messages, "Customers cannot be allowed to choose a quantity for this product."
+    membership.quantity_enabled = false
+    assert membership.valid?
+
+    call = create_call_product
+    call.quantity_enabled = true
+    assert call.invalid?
+
+    product = build_product
+    product.quantity_enabled = true
+    assert product.valid?
+  end
+
+  test "can_enable_quantity? is true only for non-membership, non-call products" do
+    assert_equal false, create_call_product.can_enable_quantity?
+    assert_equal false, create_membership_product.can_enable_quantity?
+    assert_equal true, create_physical_product.can_enable_quantity?
+  end
+
+  # --- #require_captcha? ------------------------------------------------------
+
+  test "require_captcha? is false for sellers older than 6 months, true for younger" do
+    older = create_user(created_at: 6.months.ago - 1.day)
+    assert_equal false, create_product(user: older).require_captcha?
+    younger = create_user(created_at: 6.months.ago + 1.day)
+    assert_equal true, create_product(user: younger).require_captcha?
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do

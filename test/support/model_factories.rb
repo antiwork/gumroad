@@ -127,8 +127,11 @@ module ModelFactories
     create_user(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day, **attrs)
   end
 
-  def create_call_product(user: nil, **attrs)
-    Link.create!({ user: user || create_eligible_seller, name: "Call", price_cents: 100, native_type: Link::NATIVE_TYPE_CALL }.merge(attrs))
+  def create_call_product(user: nil, durations: [30], **attrs)
+    product = Link.create!({ user: user || create_eligible_seller, name: "Call", price_cents: 100, native_type: Link::NATIVE_TYPE_CALL }.merge(attrs))
+    category = product.variant_categories.first
+    durations.each { |duration| category.variants.create!(duration_in_minutes: duration, name: "#{duration} minutes") }
+    product
   end
 
   def create_coffee_product(user: nil, **attrs)
@@ -166,8 +169,12 @@ module ModelFactories
     VariantCategory.create!({ link: link || create_product, title: "Category" }.merge(attrs))
   end
 
+  def build_variant(variant_category: nil, **attrs)
+    Variant.new({ variant_category: variant_category || create_variant_category, name: "Untitled" }.merge(attrs))
+  end
+
   def create_variant(variant_category: nil, **attrs)
-    Variant.create!({ variant_category: variant_category || create_variant_category, name: "Untitled" }.merge(attrs))
+    build_variant(variant_category:, **attrs).tap(&:save!)
   end
 
   # Mirrors the :installment factories. Product/variant posts hang off a product;
