@@ -2573,6 +2573,82 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [product.id], section2.reload.shown_products
   end
 
+  # --- #variants_or_skus -----------------------------------------------------
+
+  test "variants_or_skus returns custom SKUs when SKUs are enabled" do
+    product = create_physical_product
+    assert_equal [], product.variants_or_skus # only the default SKU
+    sku = create_sku(link: product)
+    assert_equal [sku], product.reload.variants_or_skus
+  end
+
+  test "variants_or_skus returns variants when SKUs are disabled" do
+    product = create_product
+    variant = create_variant(variant_category: create_variant_category(link: product))
+    assert_equal [variant], product.variants_or_skus
+    variant.update!(deleted_at: Time.current)
+    assert_equal [], product.reload.variants_or_skus
+  end
+
+  # --- #has_embedded_license_key? --------------------------------------------
+
+  test "has_embedded_license_key? is false for product rich content without a license key" do
+    product = create_product
+    create_rich_content(entity: product)
+    assert_equal false, product.has_embedded_license_key?
+  end
+
+  test "has_embedded_license_key? is true for product rich content with a license key" do
+    product = create_product
+    create_rich_content(entity: product, description: [{ "type" => "licenseKey" }])
+    assert_equal true, product.has_embedded_license_key?
+  end
+
+  test "has_embedded_license_key? is false when no variant rich content has a license key" do
+    product = create_product
+    variant = create_variant(variant_category: create_variant_category(link: product))
+    create_rich_content(entity: variant)
+    assert_equal false, product.has_embedded_license_key?
+  end
+
+  test "has_embedded_license_key? is true when a variant's rich content has a license key" do
+    product = create_product
+    category = create_variant_category(link: product)
+    variant1 = create_variant(variant_category: category)
+    variant2 = create_variant(variant_category: category)
+    create_rich_content(entity: variant1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Some text" }] }])
+    create_rich_content(entity: variant2, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Variant 2 text" }] }, { "type" => "licenseKey" }])
+    assert_equal true, product.has_embedded_license_key?
+  end
+
+  # --- #has_another_collaborator? --------------------------------------------
+
+  test "has_another_collaborator? tracks live collaborators regardless of invitation status" do
+    product = create_product
+    collaborator_for_another_product = create_collaborator(products: [create_product])
+    # affiliates are ignored
+    create_direct_affiliate(products: [product])
+    create_product_affiliate(product:, affiliate: create_user.global_affiliate)
+
+    assert_equal false, product.has_another_collaborator?
+    assert_equal false, product.has_another_collaborator?(collaborator: collaborator_for_another_product)
+
+    collaborator = create_collaborator(pending_invitation: true, products: [product])
+    assert_equal true, product.has_another_collaborator?
+    assert_equal false, product.has_another_collaborator?(collaborator:)
+    assert_equal true, product.has_another_collaborator?(collaborator: collaborator_for_another_product)
+
+    collaborator.collaborator_invitation.destroy!
+    assert_equal true, product.has_another_collaborator?
+    assert_equal false, product.has_another_collaborator?(collaborator:)
+    assert_equal true, product.has_another_collaborator?(collaborator: collaborator_for_another_product)
+
+    collaborator.mark_deleted!
+    assert_equal false, product.has_another_collaborator?
+    assert_equal false, product.has_another_collaborator?(collaborator:)
+    assert_equal false, product.has_another_collaborator?(collaborator: collaborator_for_another_product)
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
