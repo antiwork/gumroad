@@ -27,8 +27,14 @@
 class Pages::DefaultProfileDocument
   def self.render(seller)
     profile = SellerProfile.find_by(seller_id: seller.id)
-    background = ERB::Util.h(profile&.background_color.presence || "#ffffff")
-    highlight = ERB::Util.h(profile&.highlight_color.presence || "#ff90e8")
+    # The colors land inside a <style> block, where HTML-escaping isn't the
+    # right defense (it leaves CSS metacharacters like ; { } intact). The model
+    # validates these as hex colors, but its regex uses line anchors (^ $),
+    # which a multiline value can slip past — so re-check the whole string here
+    # (\A \z) and fall back to the defaults for anything that isn't exactly a
+    # hex color. Nothing seller-controlled can then reach the <style> block.
+    background = css_hex_color(profile&.background_color, default: "#ffffff")
+    highlight = css_hex_color(profile&.highlight_color, default: "#ff90e8")
     name = ERB::Util.h(seller.name_or_username.to_s)
     bio = ERB::Util.h(seller.bio.to_s)
     avatar = ERB::Util.h(seller.avatar_url.to_s)
@@ -105,5 +111,11 @@ class Pages::DefaultProfileDocument
       %(<li><a href="#{ERB::Util.h(post[:url])}">#{ERB::Util.h(post[:name])}</a></li>)
     end
     %(<section><h2>Posts</h2><ul class="posts">#{items.join("\n")}</ul></section>)
+  end
+
+  # Strict whole-string hex color check (#rrggbb) for values interpolated into
+  # the <style> block. Anything else falls back to the given default.
+  def self.css_hex_color(value, default:)
+    value.to_s.match?(/\A#[0-9a-f]{6}\z/i) ? value : default
   end
 end

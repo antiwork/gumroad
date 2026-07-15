@@ -57,6 +57,19 @@ describe Pages::DefaultProfileDocument do
       expect(html).to include("&lt;script&gt;")
     end
 
+    it "falls back to the default colors when a saved color is not exactly a hex color" do
+      # The colors are interpolated into the <style> block, so anything that
+      # isn't a plain #rrggbb value must be dropped, not escaped.
+      profile = seller.seller_profile.tap(&:save!)
+      profile.update_columns(background_color: "#123456; } body { display: none } /*", highlight_color: "#abcdef\n}")
+
+      html = described_class.render(seller)
+
+      expect(html).to include("--background: #ffffff")
+      expect(html).to include("--accent: #ff90e8")
+      expect(html).not_to include("display: none")
+    end
+
     it "omits the products and posts sections when the seller has none" do
       html = described_class.render(seller)
 
