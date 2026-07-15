@@ -134,6 +134,64 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
       described_class.new.perform("2022-08-10")
     end
 
+    it "pushes a post-cutover refund against a pre-cutover purchase, and nets only pre-cutover refunds into the order" do
+      cutover = UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER
+      purchase = nil
+      travel_to((cutover - 30).to_time(:utc).change(hour: 12)) do
+        product = create(:product, price_cents: 100_00, native_type: "digital")
+        purchase = create(:purchase, link: product, country: "United States", zip_code: "98121")
+      end
+
+      # Netted era: this refund was (or would have been) netted into the order upload.
+      pre_cutover_refund_day = cutover - 10
+      travel_to(pre_cutover_refund_day.to_time(:utc).change(hour: 12)) do
+        create(:refund, purchase:, amount_cents: 20_00)
+      end
+
+      # Reported era: this refund must be pushed as its own refund transaction.
+      post_cutover_refund_day = cutover + 5
+      post_cutover_refund = travel_to(post_cutover_refund_day.to_time(:utc).change(hour: 12)) do
+        create(:refund, purchase:, amount_cents: 30_00)
+      end
+
+      refund_ids = []
+      allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction) do |_instance, **kwargs|
+        refund_ids << kwargs[:transaction_id]
+        {}
+      end
+      described_class.new.perform(pre_cutover_refund_day.iso8601)
+      expect(refund_ids).to be_empty
+
+      described_class.new.perform(post_cutover_refund_day.iso8601)
+      expect(refund_ids).to eq([post_cutover_refund.external_id])
+
+      # A re-push of the purchase's own day must net ONLY the pre-cutover refund (100 - 20),
+      # never the post-cutover one — that one is relieved by its refund transaction above.
+      order_kwargs = nil
+      allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction) do |_instance, **kwargs|
+        order_kwargs = kwargs
+        {}
+      end
+      described_class.new.perform((cutover - 30).iso8601)
+      expect(order_kwargs[:amount_dollars]).to eq(80.0)
+    end
+
+    it "does not push a refund created on the cutover day itself against a pre-cutover purchase" do
+      cutover = UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER
+      purchase = nil
+      travel_to((cutover - 5).to_time(:utc).change(hour: 12)) do
+        product = create(:product, price_cents: 100_00, native_type: "digital")
+        purchase = create(:purchase, link: product, country: "United States", zip_code: "98121")
+      end
+      travel_to(cutover.to_time(:utc).change(hour: 12)) do
+        create(:refund, purchase:, amount_cents: 100_00)
+      end
+
+      expect_any_instance_of(TaxjarApi).not_to receive(:create_refund_transaction)
+
+      described_class.new.perform(cutover.iso8601)
+    end
+
     it "pushes a refund created on the day as a TaxJar refund transaction dated by the refund date" do
       refund_kwargs = nil
       allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction) do |_instance, **kwargs|

@@ -7,10 +7,11 @@
 # whole-month push timed out / died mid-run on a transient TaxJar/DNS error and left TaxJar with a
 # partial (or zero) month right before its auto-filing window — see the Feb & June 2026 incidents.
 #
-# Orders: every taxable US purchase created on the day. From
-# UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER onward, orders are pushed at their gross
-# (as-of-purchase) amounts; before the cutover they were pushed with refunds netted in at
-# upload time (kept for re-pushes of pre-cutover days so a re-push matches what was filed).
+# Orders: every taxable US purchase created on the day. Purchases created on/after
+# UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER are pushed at their gross (as-of-purchase)
+# amounts; earlier purchases are pushed with only their pre-cutover refunds netted in, so a
+# re-push of a historical day reproduces the numbers that were originally filed (see the
+# uploader for the exact boundary).
 #
 # Refunds: every refund created on the day is pushed as its own TaxJar refund transaction,
 # dated by the refund date. This is what credits the refunded tax in the period the refund
@@ -57,16 +58,10 @@ class UploadUsStatesSalesTaxToTaxjarJob
     subdivisions_by_code = UsStateSalesTaxUploader.subdivisions_for(subdivision_codes)
       .index_by(&:code)
 
-    # Gross-vs-netted order amounts flip at the refund-reporting cutover: pre-cutover days keep
-    # the historical upload-time netting (so a re-push reproduces what TaxJar already has), and
-    # post-cutover days upload gross orders whose refunds arrive as separate refund transactions.
-    gross_orders = day >= UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER
-
     purchase_ids_by_state = UsStateSalesTaxUploader.grouped_purchase_ids_by_state(
       subdivision_codes:,
       starts_at: day.beginning_of_day,
-      ends_at: day.end_of_day,
-      include_fully_refunded: gross_orders
+      ends_at: day.end_of_day
     )
 
     uploaded_count = 0
@@ -75,7 +70,7 @@ class UploadUsStatesSalesTaxToTaxjarJob
 
       purchase_ids.each do |id|
         purchase = Purchase.find(id)
-        totals = uploader.upload(purchase:, subdivision:, gross: gross_orders)
+        totals = uploader.upload(purchase:, subdivision:)
         uploaded_count += 1 if totals
       end
     end

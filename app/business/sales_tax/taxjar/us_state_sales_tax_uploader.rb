@@ -7,23 +7,34 @@
 # which pushes each day's orders to TaxJar) share this class so the purchase selection,
 # state-assignment, ZIP resolution, dollar amounts, and retry/rescue behavior stay identical.
 class UsStateSalesTaxUploader
-  # The day we switched refund reporting on. From this day forward, order transactions are
-  # pushed with their gross (as-of-purchase) amounts and every refund is pushed to TaxJar as
-  # its own refund transaction dated by the refund's date. Before this day, orders were pushed
-  # with refunds netted in at upload time and refunds were never sent to TaxJar at all — so a
-  # refund transaction must never be pushed for a refund that could have been netted into an
-  # already-uploaded order, or the same tax would be relieved twice. The guards in the daily
-  # job and in grouped_refund_ids_by_state below enforce that boundary.
-  REFUND_REPORTING_CUTOVER = Date.new(2026, 7, 16)
-
-  # Groups the taxable US purchase ids created in [starts_at, ends_at] by subdivision code,
-  # exactly as the original monthly job did. Raises ArgumentError on an invalid subdivision code.
+  # The day we switched refund reporting on. Orders for purchases created on/after this day are
+  # pushed with their gross (as-of-purchase) amounts and every refund is pushed to TaxJar as its
+  # own refund transaction dated by the refund's date. Purchases created before this day were
+  # (or would have been) uploaded with refunds netted in, and refunds against them created
+  # before FIRST_REPORTED_REFUND_INSTANT are never pushed as refund transactions — instead they
+  # stay netted into the order on any re-push, so the same tax is never relieved twice and a
+  # re-push reproduces a deterministic number.
   #
-  # include_fully_refunded: the historical behavior excludes purchases that are fully refunded
-  # at query time. With refund transactions being pushed separately (post-cutover), a fully
-  # refunded purchase must still be uploaded as a gross order — its refund transaction is what
-  # zeroes it out — otherwise the refund would be subtracted from an order that was never added.
-  def self.grouped_purchase_ids_by_state(subdivision_codes:, starts_at:, ends_at:, include_fully_refunded: false)
+  # DEPLOY DEPENDENCY: this date must be on/after the day the change reaches production. If the
+  # old code runs a daily upload for a day on/after this date, that day's refunds are netted
+  # AND later re-pushes would add refund transactions for them — double relief. Bump the date
+  # forward if the deploy slips past it.
+  REFUND_REPORTING_CUTOVER = Date.new(2026, 7, 20)
+
+  # The first instant from which refunds are reported as refund transactions for ALL
+  # pre-cutover purchases, including those created the day before the cutover (whose netted
+  # upload runs on the cutover morning and absorbs cutover-day refunds — see
+  # grouped_refund_ids_by_state for the exact per-purchase rule).
+  FIRST_REPORTED_REFUND_INSTANT = (REFUND_REPORTING_CUTOVER + 1).beginning_of_day
+
+  # Groups the taxable US purchase ids created in [starts_at, ends_at] by subdivision code.
+  # Raises ArgumentError on an invalid subdivision code.
+  #
+  # Pre-cutover purchases keep the historical exclusion of fully refunded purchases (their
+  # netted amount would be zero). Post-cutover purchases are included even when fully refunded:
+  # they upload as gross orders, and their refund transactions are what zero them out —
+  # excluding them would leave refund transactions with no order to subtract from.
+  def self.grouped_purchase_ids_by_state(subdivision_codes:, starts_at:, ends_at:)
     subdivisions = subdivisions_for(subdivision_codes)
 
     scope = Purchase.successful
@@ -32,7 +43,8 @@ class UsStateSalesTaxUploader
       .where("purchases.created_at BETWEEN ? AND ?", starts_at, ends_at)
       .where("(country = 'United States') OR ((country IS NULL OR country = 'United States') AND ip_country = 'United States')")
       .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
-    scope = scope.not_fully_refunded unless include_fully_refunded
+      .where("purchases.created_at >= :cutover OR (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)",
+             cutover: REFUND_REPORTING_CUTOVER.beginning_of_day)
 
     group_ids_by_state(scope.pluck(:id, :zip_code, :ip_address), subdivisions)
   end
@@ -40,7 +52,9 @@ class UsStateSalesTaxUploader
   # Groups the refund ids created in [starts_at, ends_at] by subdivision code, mirroring the
   # purchase selection above so a refund is only ever reported for a purchase whose order was
   # (or would be) reported: settled purchases, US destination, not charged back. Refunds with a
-  # terminal-failure status never returned money to the buyer, so they are excluded.
+  # terminal-failure status never returned money to the buyer, so they are excluded. (A refund
+  # that flips to a terminal-failure status only after its push day is not reversed in TaxJar —
+  # the legacy netted path had the same exposure.)
   #
   # Refunds created before REFUND_REPORTING_CUTOVER are never included — before that day,
   # refunds were handled by netting them into the order upload, not by refund transactions.
@@ -52,9 +66,10 @@ class UsStateSalesTaxUploader
   # nets in every refund existing at that moment). Refunds created on the cutover day against
   # those purchases are therefore ambiguous — some were netted (created before that upload
   # ran), some weren't — and are conservatively excluded so the same tax is never relieved
-  # twice; from the next day onward they're safely past that upload and are included. Every
-  # older pre-cutover purchase had its netted upload run before the cutover, so a post-cutover
-  # refund against it can't have been netted and is always included.
+  # twice; from FIRST_REPORTED_REFUND_INSTANT onward they're safely past that upload and are
+  # included. Every older pre-cutover purchase had its netted upload run before the cutover,
+  # so a post-cutover refund against it can't have been netted and is always included.
+  # netted_refunds_upper_bound below is the exact per-purchase complement of this rule.
   def self.grouped_refund_ids_by_state(subdivision_codes:, starts_at:, ends_at:)
     subdivisions = subdivisions_for(subdivision_codes)
 
@@ -66,10 +81,10 @@ class UsStateSalesTaxUploader
       .where("(purchases.country = 'United States') OR ((purchases.country IS NULL OR purchases.country = 'United States') AND purchases.ip_country = 'United States')")
       .where(purchases: { charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids] })
       .where("refunds.created_at >= :cutover", cutover: REFUND_REPORTING_CUTOVER.beginning_of_day)
-      .where("purchases.created_at >= :cutover OR purchases.created_at < :last_netted_upload_day OR refunds.created_at >= :first_safe_refund_day",
+      .where("purchases.created_at >= :cutover OR purchases.created_at < :cutover_eve OR refunds.created_at >= :first_reported_refund_instant",
              cutover: REFUND_REPORTING_CUTOVER.beginning_of_day,
-             last_netted_upload_day: (REFUND_REPORTING_CUTOVER - 1).beginning_of_day,
-             first_safe_refund_day: (REFUND_REPORTING_CUTOVER + 1).beginning_of_day)
+             cutover_eve: (REFUND_REPORTING_CUTOVER - 1).beginning_of_day,
+             first_reported_refund_instant: FIRST_REPORTED_REFUND_INSTANT)
       .pluck("refunds.id", "purchases.zip_code", "purchases.ip_address")
 
     group_ids_by_state(rows, subdivisions)
@@ -110,21 +125,26 @@ class UsStateSalesTaxUploader
   # purchase's contribution to the summary totals. Returns nil when the purchase cannot be
   # assigned a ZIP for this subdivision (skipped, exactly as the monthly job skipped it).
   #
-  # gross: when true, the order is reported with its as-of-purchase amounts instead of netting
-  # refunds in at upload time. Used by the daily uploader from REFUND_REPORTING_CUTOVER onward,
-  # where refunds are reported to TaxJar as their own transactions dated by the refund date —
-  # netting them here as well would relieve the same tax twice, and upload-time netting makes
-  # a re-push produce different numbers than the original push did.
-  def upload(purchase:, subdivision:, gross: false)
+  # Gross vs netted is decided HERE, per purchase, so every caller (the daily job, the monthly
+  # job's manual re-push path) is automatically consistent with the refund-transaction guard:
+  #
+  # - A purchase created on/after REFUND_REPORTING_CUTOVER uploads at its gross (as-of-purchase)
+  #   amounts. Its refunds are reported as separate refund transactions, so netting them here
+  #   as well would relieve the same tax twice.
+  # - A pre-cutover purchase uploads with exactly the refunds created before
+  #   FIRST_REPORTED_REFUND_INSTANT netted in — the precise complement of the refunds the
+  #   refund leg pushes. Netting "all refunds as of re-push time" (the old behavior) would
+  #   double-relieve any post-cutover refund that was also pushed as a refund transaction.
+  def upload(purchase:, subdivision:)
     zip_code = resolve_zip_code(purchase:, subdivision:)
     return unless zip_code
 
-    if gross
+    if gross_purchase?(purchase)
       price_cents = purchase.price_cents
       gumroad_tax_cents = purchase.gumroad_tax_cents
+      gmv_cents = purchase.total_transaction_cents
     else
-      price_cents = purchase.price_cents_net_of_refunds
-      gumroad_tax_cents = purchase.gumroad_tax_cents_net_of_refunds
+      price_cents, gumroad_tax_cents, gmv_cents = netted_amounts_before_refund_reporting(purchase)
     end
     shipping_cents = purchase.shipping_cents
 
@@ -150,7 +170,7 @@ class UsStateSalesTaxUploader
     end
 
     {
-      gmv_cents: gross ? purchase.total_transaction_cents : purchase.total_cents_net_of_refunds,
+      gmv_cents:,
       tax_cents: gumroad_tax_cents
     }
   end
@@ -190,6 +210,43 @@ class UsStateSalesTaxUploader
   end
 
   private
+    def gross_purchase?(purchase)
+      purchase.created_at >= REFUND_REPORTING_CUTOVER.beginning_of_day
+    end
+
+    # Net-of-refunds amounts for a pre-cutover purchase, counting exactly the refunds that
+    # grouped_refund_ids_by_state will never push as refund transactions (see the rule there):
+    # refunds before the cutover for older purchases, plus the ambiguous cutover-day refunds
+    # for purchases created the day before the cutover. Being the exact complement means a
+    # re-push of a pre-cutover day/month is deterministic and never double-relieves a refund
+    # that was also pushed as a refund transaction. Amounts are clamped at zero like the legacy
+    # net_of_refunds_cents was.
+    def netted_amounts_before_refund_reporting(purchase)
+      netted_refunds = purchase.refunds.where("refunds.created_at < ?", netted_refunds_upper_bound(purchase))
+      refunded_amount_cents = netted_refunds.sum(:amount_cents)
+      refunded_tax_cents = netted_refunds.sum(:gumroad_tax_cents)
+      refunded_total_cents = netted_refunds.sum(:total_transaction_cents)
+
+      [
+        [purchase.price_cents - refunded_amount_cents, 0].max,
+        [purchase.gumroad_tax_cents - refunded_tax_cents, 0].max,
+        [purchase.total_transaction_cents - refunded_total_cents, 0].max
+      ]
+    end
+
+    # Upper bound (exclusive) on refund creation times that are netted into this pre-cutover
+    # purchase's order. Purchases created the day before the cutover had their netted upload
+    # run on the cutover morning, netting in cutover-day refunds too — those stay netted (and
+    # the refund leg excludes them). Older purchases uploaded before the cutover, so only
+    # pre-cutover refunds can have been netted.
+    def netted_refunds_upper_bound(purchase)
+      if purchase.created_at >= (REFUND_REPORTING_CUTOVER - 1).beginning_of_day
+        FIRST_REPORTED_REFUND_INSTANT
+      else
+        REFUND_REPORTING_CUTOVER.beginning_of_day
+      end
+    end
+
     def resolve_zip_code(purchase:, subdivision:)
       if purchase.zip_code.present? && subdivision.code == UsZipCodes.identify_state_code(purchase.zip_code)
         return purchase.zip_code
@@ -264,7 +321,16 @@ class UsStateSalesTaxUploader
           raise
         end
       rescue Taxjar::Error::UnprocessableEntity => e
-        Rails.logger.info("UsStateSalesTaxUploader: Transaction with ID #{transaction_id} was already created in TaxJar. #{e.class}: #{e.message}")
+        # TaxJar returns 422 both for a duplicate transaction id (safe to skip — that's the
+        # idempotency path on retries/re-pushes) and for genuinely rejected transactions, e.g.
+        # a refund whose transaction_reference_id doesn't exist as an order. Only the duplicate
+        # case may be silently skipped; anything else is a dropped transaction and must notify.
+        if e.message.to_s.include?(TaxjarApi::TRANSACTION_ALREADY_IMPORTED_ERROR_MESSAGE)
+          Rails.logger.info("UsStateSalesTaxUploader: Transaction with ID #{transaction_id} was already created in TaxJar. #{e.class}: #{e.message}")
+        else
+          ErrorNotifier.notify(e)
+          Rails.logger.error("UsStateSalesTaxUploader: TaxJar rejected transaction with ID #{transaction_id}. #{e.class}: #{e.message}")
+        end
       rescue Taxjar::Error::BadRequest => e
         ErrorNotifier.notify(e)
         Rails.logger.info("UsStateSalesTaxUploader: Failed to create TaxJar transaction with ID #{transaction_id}. #{e.class}: #{e.message}")
