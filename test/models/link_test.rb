@@ -699,6 +699,109 @@ class LinkTest < ActiveSupport::TestCase
     assert_empty direct_affiliate.reload.products
   end
 
+  # --- publish!: video transcoding -------------------------------------------
+
+  test "creating a video file on a draft product does not enqueue transcoding" do
+    product = create_product(draft: true)
+    product.user.stubs(:auto_transcode_videos?).returns(true)
+    create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter2.mp4", filetype: "mp4")
+
+    assert_equal 0, TranscodeVideoForStreamingWorker.jobs.size
+  end
+
+  test "publish! transcodes only the product files whose queue_for_transcoding? is true" do
+    _, product = publish_context
+    User.any_instance.stubs(:auto_transcode_videos?).returns(true)
+    file1 = create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter2.mp4", filetype: "mp4")
+    file2 = create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter3.mp4", filetype: "mp4")
+    file3 = create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter4.mp4", filetype: "mp4")
+    file3.delete!
+
+    # Freshly-created files aren't analyzed, so queue_for_transcoding? is false.
+    product.publish!
+    assert_equal 0, TranscodeVideoForStreamingWorker.jobs.size
+    product.unpublish!
+
+    ProductFile.any_instance.stubs(:queue_for_transcoding?).returns(true)
+    product.publish!
+    enqueued = TranscodeVideoForStreamingWorker.jobs.map { |job| job["args"].first }
+    assert_includes enqueued, file1.id
+    assert_includes enqueued, file2.id
+    assert_not_includes enqueued, file3.id
+  end
+
+  test "publish! transcodes videos when auto-transcode is enabled" do
+    _, product = publish_context
+    video_file = create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter2.mp4", filetype: "mp4")
+    product.stubs(:auto_transcode_videos?).returns(true)
+    ProductFile.any_instance.stubs(:queue_for_transcoding?).returns(true)
+
+    product.publish!
+    assert_includes TranscodeVideoForStreamingWorker.jobs.map { |job| job["args"].first }, video_file.id
+  end
+
+  test "publish! does not transcode videos when auto-transcode is disabled" do
+    _, product = publish_context
+    create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter2.mp4", filetype: "mp4")
+    product.stubs(:auto_transcode_videos?).returns(false)
+
+    assert_no_difference -> { TranscodeVideoForStreamingWorker.jobs.size } do
+      product.publish!
+    end
+  end
+
+  test "publish! enables transcode-on-purchase when auto-transcode is disabled" do
+    _, product = publish_context
+    product.update!(transcode_videos_on_purchase: false)
+    product.stubs(:auto_transcode_videos?).returns(false)
+
+    product.publish!
+    assert product.reload.transcode_videos_on_purchase?
+  end
+
+  test "adding and analyzing a video on a published product triggers transcoding" do
+    skip "exercises ProductFile#analyze's transcoding trigger, which needs FFMPEG::Movie + S3 doubles; belongs to product_file coverage"
+  end
+
+  # --- publish!: merchant account enforcement --------------------------------
+
+  test "publish! raises LinkInvalid when a new account has no valid merchant account" do
+    user = create_user
+    merchant = create_merchant_account(user:)
+    product = create_product(user:, purchase_disabled_at: Time.current)
+    create_product_file(link: product)
+    user.check_merchant_account_is_linked = true
+    user.update!(payment_address: nil)
+    merchant.mark_deleted!
+
+    assert_raises(Link::LinkInvalid) { product.publish! }
+    assert_not_nil product.reload.purchase_disabled_at
+  end
+
+  test "a failed publish! does not associate or notify the seller's universal affiliates" do
+    user = create_user
+    merchant = create_merchant_account(user:)
+    product = create_product(user:, purchase_disabled_at: Time.current)
+    create_product_file(link: product)
+    user.check_merchant_account_is_linked = true
+    user.update!(payment_address: nil)
+    merchant.mark_deleted!
+    affiliate = create_direct_affiliate(seller: user, apply_to_all_products: true)
+
+    assert_no_enqueued_emails { product.publish! rescue nil }
+    assert_empty product.reload.direct_affiliates
+    assert_empty affiliate.reload.products
+  end
+
+  test "publish! succeeds under merchant migration when a valid merchant account is connected" do
+    user, product = publish_context
+    Feature.activate_user(:merchant_migration, user)
+    product.publish!
+    assert_nil product.reload.purchase_disabled_at
+  ensure
+    Feature.deactivate_user(:merchant_migration, user)
+  end
+
   # --- #public_files / #communities ------------------------------------------
 
   test "public_files returns all public files for the product, including deleted" do
@@ -1004,6 +1107,43 @@ class LinkTest < ActiveSupport::TestCase
     assert_not_includes Link.not_call, call_product
   end
 
+  test "can_be_bundle scope returns only products eligible to be bundles" do
+    bundle = create_bundle
+    membership = create_membership_product
+    versioned = create_product_with_digital_versions
+    call = create_call_product
+    product = create_product
+
+    result = Link.can_be_bundle
+    assert_includes result, product
+    assert_includes result, bundle
+    bundle.bundle_products.each { |bp| assert_includes result, bp.product }
+    assert_not_includes result, membership
+    assert_not_includes result, versioned
+    assert_not_includes result, call
+  end
+
+  test "with_latest_product_cached_values joins the latest cached-value row per product" do
+    user = create_user
+    product_1 = create_product(user:)
+    create_product_cached_value(product: product_1)
+    product_1_latest = create_product_cached_value(product: product_1)
+    product_2 = create_product(user:)
+    product_2_cached_value = create_product_cached_value(product: product_2)
+    product_3 = create_product(user:) # no cached value → left-join nil
+
+    results = Link.where(user:)
+                  .with_latest_product_cached_values(user_id: user.id)
+                  .select("links.id, latest_product_cached_values.id as lpcvid")
+                  .order(:id)
+    assert_equal product_1.id, results[0].id
+    assert_equal product_1_latest.id, results[0].lpcvid
+    assert_equal product_2.id, results[1].id
+    assert_equal product_2_cached_value.id, results[1].lpcvid
+    assert_equal product_3.id, results[2].id
+    assert_nil results[2].lpcvid
+  end
+
   # --- custom_permalink validity ---------------------------------------------
 
   test "custom_permalink is valid with numbers, letters, underscores, and dashes" do
@@ -1017,6 +1157,24 @@ class LinkTest < ActiveSupport::TestCase
     assert_not build_product(custom_permalink: "asdf&asdf").valid?
     assert_not build_product(custom_permalink: "asdf*23sdf").valid?
     assert_not build_product(custom_permalink: "asdf!213").valid?
+  end
+
+  test "a licensed product created before force_product_id_timestamp is invalid when its custom permalink overlaps another seller's licensed product" do
+    timestamp = seed_licensed_permalink_conflict
+    product = create_product(is_licensed: true, created_at: timestamp - 1.day)
+    assert_equal false, product.update(custom_permalink: "abc")
+    assert_equal "Custom permalink has already been taken", product.errors.full_messages.to_sentence
+  ensure
+    $redis.del(RedisKey.force_product_id_timestamp)
+  end
+
+  test "switching a pre-timestamp product to licensed is invalid when its custom permalink overlaps another seller's licensed product" do
+    timestamp = seed_licensed_permalink_conflict
+    product = create_product(custom_permalink: "abc", created_at: timestamp - 1.day)
+    assert_equal false, product.update(is_licensed: true)
+    assert_equal "Custom permalink has already been taken", product.errors.full_messages.to_sentence
+  ensure
+    $redis.del(RedisKey.force_product_id_timestamp)
   end
 
   test "custom_permalink is invalid when it duplicates another product's custom permalink for the same user" do
@@ -1224,6 +1382,46 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal 100, membership.remaining_for_sale_count
     membership.tiers.first.update!(max_purchase_count: 200)
     assert_equal 200, membership.remaining_for_sale_count
+  end
+
+  test "remaining_for_sale_count equals max_purchase_count when no sales have been made" do
+    product = create_product(max_purchase_count: 50)
+    assert_equal 50, product.remaining_for_sale_count
+  end
+
+  test "remaining_for_sale_count decrements by successful sales only" do
+    product = create_product(max_purchase_count: 50)
+    create_purchase(link: product)
+    create_purchase(link: product)
+    create_purchase(link: product, purchase_state: "failed")
+    assert_equal 48, product.remaining_for_sale_count
+  end
+
+  test "remaining_for_sale_count returns the minimum across a bundle and its bundled products" do
+    bundle = create_bundle(max_purchase_count: 3)
+    assert_equal 3, bundle.remaining_for_sale_count
+    bundle.bundle_products.second.product.update!(max_purchase_count: 2)
+    assert_equal 2, bundle.remaining_for_sale_count
+    bundle_product = bundle.bundle_products.first
+    variant = create_variant(variant_category: create_variant_category(link: bundle_product.product), max_purchase_count: 1)
+    bundle_product.update!(variant:)
+    assert_equal 1, bundle.remaining_for_sale_count
+  end
+
+  test "remaining_for_sale_count excludes deleted bundle products" do
+    bundle = create_bundle(max_purchase_count: 3)
+    assert_equal 3, bundle.remaining_for_sale_count
+    bundle.bundle_products.second.product.update!(max_purchase_count: 2)
+    assert_equal 2, bundle.remaining_for_sale_count
+    bundle.bundle_products.second.mark_deleted!
+    assert_equal 3, bundle.remaining_for_sale_count
+  end
+
+  test "remaining_for_sale_count treats a nil sales_count_for_inventory as zero" do
+    product = create_product(max_purchase_count: 100)
+    product.stubs(:sales_count_for_inventory).returns(nil)
+    assert_nothing_raised { product.remaining_for_sale_count }
+    assert_equal 100, product.remaining_for_sale_count
   end
 
   # --- #remaining_call_availabilities ----------------------------------------
@@ -1725,6 +1923,32 @@ class LinkTest < ActiveSupport::TestCase
 
     assert_equal [other_product.id], with_product.reload.shown_products
     assert_equal [other_product.id], without_product.reload.shown_products
+  end
+
+  test "delete! schedules the product's public files for deletion" do
+    product = create_product
+    public_file1 = create_public_file(resource: product, with_audio: true)
+    public_file2 = create_public_file(resource: product, with_audio: true)
+    other_public_file = create_public_file(with_audio: true) # a different product's file
+
+    product.delete!
+
+    assert public_file1.reload.file.attached?
+    assert public_file1.alive?
+    assert_in_delta 10.minutes.from_now.to_i, public_file1.scheduled_for_deletion_at.to_i, 5
+    assert public_file2.reload.file.attached?
+    assert public_file2.alive?
+    assert_in_delta 10.minutes.from_now.to_i, public_file2.scheduled_for_deletion_at.to_i, 5
+    assert_nil other_public_file.reload.scheduled_for_deletion_at
+  end
+
+  test "delete! removes a tiered membership even when its tier categories are inconsistent" do
+    product = create_membership_product_with_preset_tiered_pricing
+    product.tier_category.mark_deleted!
+    product.reload
+
+    assert_nothing_raised { product.delete! }
+    assert product.reload.deleted?
   end
 
   # --- #ordered_by_ids -------------------------------------------------------
@@ -2279,6 +2503,59 @@ class LinkTest < ActiveSupport::TestCase
 
     kept = create_product(description: "some text<script src='https://cdn.iframe.ly/embed.js'></script>evil script")
     assert_equal "some text<script src=\"https://cdn.iframe.ly/embed.js\"></script>evil script", kept.html_safe_description
+  end
+
+  test "html_safe_description strips unsafe and unknown tags and attributes" do
+    description = "<h1><span>Heading in span</span></h1><b>Bold</b><p><style>color: red</style><strong class=\"something\">Strong</strong></p><p onclick=\"alert('hi')\"><em>Italic</em></p><p><u>Underline</u></p><p><s>Strkethrough</s></p><h1>Heading 1</h1><h2>Heading 2</h2><h3>Heading 3</h3><h4>Heading 4</h4><h5>Heading 5</h5><h6>Heading 6</h6><pre><code>Code</code></pre><ul><li>Bullet list</li></ul><ol><li>Numbered list</li></ol><p>Horizontal line</p><hr><blockquote><p>Quote</p></blockquote><p><a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://example.com/\">Link</a></p><figure><img src=\"https://example.com/test.jpg\"><p class=\"figcaption\">Image</p></figure><div class=\"tiptap__raw\"><div><div style=\"left: 0; width: 100%; height: 0; position: relative; padding-bottom: 56.25%;\"><iframe src=\"//cdn.iframe.ly/api/iframe?url=https%3A%2F%2Fyoutu.be%2Fu80Ey6lSRyE&amp;key=1234\" style=\"top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;\" allowfullscreen=\"\" scrolling=\"no\" allow=\"accelerometer *; clipboard-write *; encrypted-media *; gyroscope *; picture-in-picture *; web-share *;\"></iframe></div></div></div><div class=\"tiptap__raw\"><div class=\"iframely-embed\" style=\"max-width: 550px;\"><div class=\"iframely-responsive\" style=\"padding-bottom: 56.25%;\"><a href=\"https://twitter.com/shl/status/1678978982019223553\" data-iframely-url=\"//cdn.iframe.ly/api/iframe?url=https%3A%2F%2Ftwitter.com%2Fshl%2Fstatus%2F1678978982019223553&amp;key=1234\"></a></div></div><script async=\"\" src=\"//cdn.iframe.ly/embed.js\" charset=\"utf-8\"></script></div><p><br></p><a class=\"tiptap__button button primary\" target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://example.com/\">Button</a><a href=\"javascript:void(0)\">Click me</a><br><script>var a = 2;</script><iframe src=\"https://example.com\">Lorem ipsum</iframe><public-file-embed id=\"1234567890abcdef\"></public-file-embed>"
+    expected = %(<h1><span>Heading in span</span></h1><b>Bold</b><p><strong class="something">Strong</strong></p><p><em>Italic</em></p><p><u>Underline</u></p><p><s>Strkethrough</s></p><h1>Heading 1</h1><h2>Heading 2</h2><h3>Heading 3</h3><h4>Heading 4</h4><h5>Heading 5</h5><h6>Heading 6</h6><pre><code>Code</code></pre><ul><li>Bullet list</li></ul><ol><li>Numbered list</li></ol><p>Horizontal line</p><hr><blockquote><p>Quote</p></blockquote><p><a target="_blank" rel="noopener noreferrer nofollow" href="https://example.com/">Link</a></p><figure><img src="https://example.com/test.jpg"><p class="figcaption">Image</p></figure><div class="tiptap__raw"><div><div style="width:100%;height:0;position:relative;padding-bottom:56.25%;"><iframe src="http://cdn.iframe.ly/api/iframe?url=https%3A%2F%2Fyoutu.be%2Fu80Ey6lSRyE&amp;key=1234" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;" allowfullscreen="" scrolling="no" allow="accelerometer *; clipboard-write *; encrypted-media *; gyroscope *; picture-in-picture *; web-share *;"></iframe></div></div></div><div class="tiptap__raw">\n<div class="iframely-embed" style="max-width:550px;"><div class="iframely-responsive" style="padding-bottom:56.25%;"><a href="https://twitter.com/shl/status/1678978982019223553" data-iframely-url="//cdn.iframe.ly/api/iframe?url=https%3A%2F%2Ftwitter.com%2Fshl%2Fstatus%2F1678978982019223553&amp;key=1234"></a></div></div>\n<script src="http://cdn.iframe.ly/embed.js" charset="utf-8"></script>\n</div><p><br></p><a class="tiptap__button button primary" target="_blank" rel="noopener noreferrer nofollow" href="https://example.com/">Button</a><a>Click me</a><br><public-file-embed id="1234567890abcdef"></public-file-embed>)
+    product = create_product(description:)
+
+    assert_equal expected, product.html_safe_description
+    assert product.html_safe_description.html_safe?
+  end
+
+  # --- description formatting ------------------------------------------------
+
+  test "description strips leading xml processing-instruction comments on save" do
+    product = create_product
+
+    desc = "<!--?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?-->\r\n\r\nBy purchasing, you are granted a " \
+           "full, exclusive license to this track. This is one-of-a-kind and royalty-free. Visit our website for full licensing info.<br>"
+    product.update!(description: desc)
+    expected = "\r\n\r\nBy purchasing, you are granted a full, exclusive license to this track. This is " \
+               "one-of-a-kind and royalty-free. Visit our website for full licensing info.<br>"
+    assert_equal expected, product.description
+
+    desc = "We all have files, pictures or notes on our computer that we'd like to protect. This step-by-step guide " \
+           "will show you how to securely encrypt any file or files on your Mac for FREE. <div><br></div><div>You'll learn how to use all of your Mac's " \
+           "built in tools to secure ANY file with military-grade protection. </div><div><br></div><div><!--?xml version=\"1.0\" encoding=\"UTF-8\" " \
+           "standalone=\"no\"?-->\r\n\r\nNo technical expertise is required. File is delivered as a secure PDF.<br></div>"
+    product.update!(description: desc)
+    expected = "We all have files, pictures or notes on our computer that we'd like to protect. This step-by-step guide " \
+               "will show you how to securely encrypt any file or files on your Mac for FREE. <div><br></div>" \
+               "<div>You'll learn how to use all of your Mac's built in tools to secure ANY file with military-grade protection. " \
+               "</div><div><br></div><div>\r\n\r\nNo technical expertise is required. File is delivered " \
+               "as a secure PDF.<br></div>"
+    assert_equal expected, product.description
+
+    desc = "(<!--[if gte mso 9]><xml>\n <w:WordDocument>\n  <w:View>Normal</w:View>\n  <w:Zoom>0</w:Zoom>\n " \
+           "<w:DoNotOptimizeForBrowser></w:DoNotOptimizeForBrowser>\n </w:WordDocument>\n</xml><![endif]--><span style=\"font-size:14.0pt;" \
+           "mso-bidi-font-size:12.0pt;\nfont-family:\" times=\"\" new=\"\" roman\";mso-fareast-font-family:\"times=\"\" roman\";=\"\" " \
+           "mso-ansi-language:en-us;mso-fareast-language:en-us;mso-bidi-language:ar-sa\"=\"\">93.8\nmi - 2 hr 49 min)&nbsp;</span> test <br><br>"
+    product.update!(description: desc)
+    expected = "(<span style=\"font-size:14.0pt;mso-bidi-font-size:12.0pt;\nfont-family:\" times=\"\" new=\"\" " \
+               "roman\";mso-fareast-font-family:\"times=\"\" roman\";=\"\" mso-ansi-language:en-us;mso-fareast-language:en-us;mso-bidi-language:ar-sa\"=\"\">" \
+               "93.8\nmi - 2 hr 49 min)&nbsp;</span> test <br><br>"
+    assert_equal expected, product.description
+  end
+
+  test "description rewrites S3 URLs to their CDN proxy URLs" do
+    # In the test env CDN_URL_MAP maps the gumroad S3 origin to the test CDN host.
+    product = create_product
+    original = %(<img src="#{AWS_S3_ENDPOINT}/gumroad/files/sample/sample/original/sample.jpg" alt="">)
+    product.update!(description: original)
+    assert_includes product.description, "#{CDN_S3_PROXY_HOST}/res/gumroad/files/sample/sample/original/sample.jpg"
+    assert_not_includes product.description, "#{AWS_S3_ENDPOINT}/gumroad/files"
   end
 
   # --- #options --------------------------------------------------------------
@@ -3291,6 +3568,18 @@ class LinkTest < ActiveSupport::TestCase
         product_5: create_product(user: user_2, unique_permalink: "eee", custom_permalink: "awesome"),
         product_6: create_product(user: user_2, unique_permalink: "fff", custom_permalink: "custom"),
       }
+    end
+
+    # Sets up another seller's licensed product carrying the "abc"/"xyz"
+    # permalinks and created before the force_product_id_timestamp, then seeds
+    # that timestamp in Redis. Returns the timestamp. The other product must
+    # exist *before* the timestamp is set, otherwise its own creation would trip
+    # the same custom_permalink_of_licensed_product validation.
+    def seed_licensed_permalink_conflict
+      timestamp = Time.current
+      create_product(is_licensed: true, custom_permalink: "abc", unique_permalink: "xyz", created_at: timestamp - 1.day)
+      $redis.set(RedisKey.force_product_id_timestamp, timestamp)
+      timestamp
     end
 
     # A product whose seller has PPP enabled, with the LV/US conversion factors

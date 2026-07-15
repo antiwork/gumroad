@@ -441,21 +441,47 @@ module ModelFactories
   end
 
   def create_product_cached_value(product: nil, **attrs)
-    ProductCachedValue.create!({ product: product || create_product }.merge(attrs))
+    product ||= create_product
+    # before_create :assign_cached_values reads Elasticsearch-backed stats
+    # (monthly_recurring_revenue et al.) that the stubbed-ES Minitest harness
+    # can't compute. Feed deterministic zeros so the record can be created; the
+    # cached-value tests care about the join/association, not the ES rollups.
+    product.stubs(monthly_recurring_revenue: 0, revenue_pending: 0, total_usd_cents: 0)
+    ProductCachedValue.create!({ product: }.merge(attrs))
   end
 
   def create_rich_content(entity: nil, description: [], **attrs)
     RichContent.create!({ entity: entity || create_product, description: }.merge(attrs))
   end
 
-  def create_public_file(resource: nil, **attrs)
+  def create_public_file(resource: nil, with_audio: false, **attrs)
     resource ||= create_product
-    PublicFile.create!({
+    public_file = PublicFile.new({
       original_file_name: "test-#{unique_suffix}.mp3",
       display_name: "Test audio",
       public_id: PublicFile.generate_public_id,
       resource:,
     }.merge(attrs))
+    if with_audio
+      public_file.file.attach(
+        io: File.open(Rails.root.join("spec/support/fixtures/test.mp3")),
+        filename: "test.mp3",
+        content_type: "audio/mpeg"
+      )
+    end
+    public_file.save!
+    public_file
+  end
+
+  # A product flagged as a bundle with two bundled products (mirrors the
+  # :bundle trait / :bundle_product factory).
+  def create_bundle(user: nil, **attrs)
+    bundle = create_product(user:, name: "Bundle", description: "This is a bundle of products", is_bundle: true, **attrs)
+    2.times do |i|
+      product = create_product(user: bundle.user, name: "Bundle Product #{i + 1}")
+      BundleProduct.create!(bundle:, product:)
+    end
+    bundle
   end
 
   def create_community(resource: nil, seller: nil, **attrs)

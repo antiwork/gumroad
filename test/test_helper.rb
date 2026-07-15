@@ -121,6 +121,12 @@ module ActiveSupport
       # each example in Link.bypass_product_creation_limit). Tests routinely
       # create many products for one user and shouldn't hit the 10/day cap.
       ActiveSupport::IsolatedExecutionState[:gumroad_bypass_product_creation_limit] = true
+
+      # Sidekiq's fake mode accumulates enqueued jobs in a process-global array.
+      # The rspec-sidekiq gem clears it before each example; Minitest has no such
+      # hook, so jobs would leak across tests and break absolute job-count
+      # assertions (e.g. `assert_equal 0, Worker.jobs.size`). Clear it here.
+      Sidekiq::Worker.clear_all
     end
   end
 end
