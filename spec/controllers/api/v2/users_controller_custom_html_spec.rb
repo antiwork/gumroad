@@ -23,6 +23,27 @@ describe Api::V2::UsersController do
       expect(body["profile_url"]).to eq(@user.profile_url)
     end
 
+    it "returns the published custom HTML verbatim as the pull render" do
+      @user.update!(custom_html: "<section>Published HTML</section>")
+
+      get :custom_html, params: { format: :json, access_token: @token.token }
+
+      expect(response.parsed_body["rendered_html"]).to eq("<section>Published HTML</section>")
+    end
+
+    it "returns a default storefront render as the pull starting point when no custom HTML is published" do
+      product = create(:product, user: @user, name: "Design Course")
+
+      get :custom_html, params: { format: :json, access_token: @token.token }
+
+      body = response.parsed_body
+      expect(body["custom_html"]).to be_nil
+      expect(body["rendered_html"]).to include("<!doctype html>")
+      expect(body["rendered_html"]).to include("<h1>Jane Doe</h1>")
+      expect(body["rendered_html"]).to include("Design Course")
+      expect(body["rendered_html"]).to include(product.long_url)
+    end
+
     it "reports no landing page when none is published" do
       get :custom_html, params: { format: :json, access_token: @token.token }
 

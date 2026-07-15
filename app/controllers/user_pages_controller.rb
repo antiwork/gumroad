@@ -91,7 +91,7 @@ class UserPagesController < ApplicationController
 
     # Sanitized rich text renders directly — it can't carry scripts, so it
     # doesn't need the sandboxed-iframe pipeline. The document itself comes
-    # from Pages::RichTextDocument, shared with the API's eject render.
+    # from Pages::RichTextDocument, shared with the API's pull render.
     def rich_text_page_document
       profile_href = @is_user_custom_domain ? "/" : @user.profile_url
       Pages::RichTextDocument.render(page: @page, seller_name: @user.name_or_username, profile_href:, head_extra: page_meta_head)
