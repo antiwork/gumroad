@@ -235,22 +235,41 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
       expect(refund_kwargs[:transaction_reference_id]).to eq(@old_purchase.external_id)
     end
 
-    it "does not push a cutover-day refund of a purchase whose netted upload ran on the cutover morning" do
-      # A purchase created the day before the cutover has its (netted) order upload run early
-      # on the cutover day itself, so a refund created that same day may already be netted
-      # into the uploaded order — pushing a refund transaction could relieve the tax twice.
+    it "pushes a cutover-day refund of a purchase created the day before the cutover" do
+      # The purchase's netted order upload runs early on the cutover morning, but by then the
+      # new code is live (deploy dependency on REFUND_REPORTING_CUTOVER) and nets only
+      # pre-cutover refunds — so this cutover-day refund was never netted in and must be
+      # reported as its own refund transaction.
       cutover = UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER
       travel_to((cutover - 1).to_time(:utc).change(hour: 20)) do
         product = create(:product, price_cents: 100_00, native_type: "digital")
         @eve_purchase = create(:purchase, link: product, country: "United States", zip_code: "98121")
       end
-      travel_to(cutover.to_time(:utc).change(hour: 12)) do
+      eve_refund = travel_to(cutover.to_time(:utc).change(hour: 12)) do
         create(:refund, purchase: @eve_purchase, amount_cents: 50_00)
       end
 
-      expect_any_instance_of(TaxjarApi).not_to receive(:create_refund_transaction)
+      refund_kwargs = nil
+      allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction) do |_instance, **kwargs|
+        refund_kwargs = kwargs
+        {}
+      end
 
       described_class.new.perform(cutover.iso8601)
+
+      expect(refund_kwargs[:transaction_id]).to eq("#{eve_refund.external_id}-refund")
+      expect(refund_kwargs[:transaction_reference_id]).to eq(@eve_purchase.external_id)
+
+      # And the purchase's own (netted) order upload — which runs on the cutover morning —
+      # must net only pre-cutover refunds, i.e. report the full gross here, so the refund
+      # transaction above is the only thing relieving that tax.
+      order_kwargs = nil
+      allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction) do |_instance, **kwargs|
+        order_kwargs = kwargs
+        {}
+      end
+      described_class.new.perform((cutover - 1).iso8601)
+      expect(order_kwargs[:amount_dollars]).to eq(100.0)
     end
 
     it "uploads a fully refunded purchase's order at its gross amounts on the purchase day" do
