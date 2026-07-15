@@ -240,7 +240,10 @@ export default function PagesEdit() {
   );
 
   const previewSidebar = (
-    <PreviewSidebar>
+    // The chrome bar already says "this is a preview", so the sidebar's own "Preview"
+    // heading is redundant — hiding it also lines the chrome up with the top of the
+    // edit form on the left.
+    <PreviewSidebar hideHeader>
       {is_profile && !page.custom_html
         ? previewChrome(
             // The default-template home page frames the live storefront.

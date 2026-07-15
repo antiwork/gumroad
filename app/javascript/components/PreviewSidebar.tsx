@@ -49,6 +49,7 @@ export const PreviewSidebar = ({
   children,
   className,
   previewLink,
+  hideHeader,
   ...props
 }: {
   children: React.ReactNode;
@@ -58,6 +59,10 @@ export const PreviewSidebar = ({
   previewLink?: (
     props: React.AriaAttributes & { children: React.ReactNode; size?: "default" | "icon" },
   ) => React.ReactNode;
+  // Skips the "Preview" heading row. Used when the preview content announces itself (the
+  // Pages editor's browser-style chrome already reads as a preview), so the pane's content
+  // lines up vertically with the top of the edit form instead of sitting below a heading.
+  hideHeader?: boolean;
 } & React.ComponentProps<"aside">) => {
   const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -71,17 +76,21 @@ export const PreviewSidebar = ({
           "sticky top-0 hidden h-screen flex-col gap-4 self-start overflow-y-auto bg-background p-6 lg:flex lg:border-l lg:border-border",
           className,
         )}
-        aria-labelledby={`${uid}-title`}
+        // The visible heading labels the region when present; without it the region still
+        // needs an accessible name for screen readers.
+        {...(hideHeader ? { "aria-label": "Preview" } : { "aria-labelledby": `${uid}-title` })}
         {...props}
       >
-        <div className="flex items-start justify-between gap-4">
-          <h2 id={`${uid}-title`}>Preview</h2>
-          {previewLink ? (
-            <WithTooltip tip="Preview">
-              {previewLink({ "aria-label": "Preview", children: <ArrowUpRight className="size-5" /> })}
-            </WithTooltip>
-          ) : null}
-        </div>
+        {!hideHeader ? (
+          <div className="flex items-start justify-between gap-4">
+            <h2 id={`${uid}-title`}>Preview</h2>
+            {previewLink ? (
+              <WithTooltip tip="Preview">
+                {previewLink({ "aria-label": "Preview", children: <ArrowUpRight className="size-5" /> })}
+              </WithTooltip>
+            ) : null}
+          </div>
+        ) : null}
         {children}
       </aside>
       {/* The desktop sidebar above is display:none below lg, which used to mean mobile sellers
