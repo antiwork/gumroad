@@ -363,6 +363,10 @@ module ModelFactories
     field
   end
 
+  def create_rich_content(entity: nil, description: [], **attrs)
+    RichContent.create!({ entity: entity || create_product, description: }.merge(attrs))
+  end
+
   def create_public_file(resource: nil, **attrs)
     resource ||= create_product
     PublicFile.create!({

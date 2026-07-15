@@ -1979,6 +1979,84 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal "Your subscription length in months must be a multiple of 12 because you have selected a payment option of yearly payments.", product.errors.full_messages.to_sentence
   end
 
+  # --- #rated_as_adult? / #has_adult_keywords? -------------------------------
+
+  test "rated_as_adult? is true when the product is flagged adult" do
+    assert_equal true, create_product(is_adult: true).rated_as_adult?
+  end
+
+  test "rated_as_adult? is true when the seller marks all products adult" do
+    assert_equal true, create_product(user: create_user(all_adult_products: true)).rated_as_adult?
+  end
+
+  test "rated_as_adult? is true when the product has adult keywords" do
+    product = create_product
+    product.stubs(:has_adult_keywords?).returns(true)
+    assert_equal true, product.rated_as_adult?
+  end
+
+  test "has_adult_keywords? checks product and seller fields" do
+    assert build_product(name: "abs punch product").has_adult_keywords?
+    assert build_product(description: "NSFW product").has_adult_keywords?
+    assert build_product(user: create_user(bio: "NSFW stuff")).has_adult_keywords?
+    assert build_product(user: create_user(name: "NsfwUser")).has_adult_keywords?
+    assert build_product(user: create_user(username: "futa123")).has_adult_keywords?
+  end
+
+  test "has_adult_keywords? classifies descriptions, avoiding false positives" do
+    {
+      "squirtle is a Pokémon" => false,
+      "small fuéta" => false,
+      "ns fw" => false,
+      "Yuri Gagarin was a great astronaut" => false,
+      "Tentacle Monster Hat" => false,
+      "nude2screen" => true,
+      "Click here for #HotHentaiComics!" => true,
+    }.each do |description, adult|
+      assert_equal adult, build_product(description:).has_adult_keywords?, "#{description.inspect} should be #{adult ? '' : 'non-'}adult"
+    end
+  end
+
+  # --- #has_content? ---------------------------------------------------------
+
+  test "has_content? is false without rich content or with empty rich content" do
+    product = create_product
+    assert_equal false, product.has_content?
+    create_rich_content(entity: product, description: [])
+    assert_equal false, product.reload.has_content?
+  end
+
+  test "has_content? is true with non-empty rich content" do
+    product = create_product
+    create_rich_content(entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }])
+    assert_equal true, product.reload.has_content?
+  end
+
+  # --- #statement_description ------------------------------------------------
+
+  test "statement_description prefers the creator's name, falling back to username" do
+    creator = create_user(name: "name", username: "username")
+    product = create_product(user: creator)
+    assert_equal "name", product.statement_description
+    creator.update!(name: nil)
+    assert_equal "username", product.statement_description
+  end
+
+  # --- #free_trial_duration --------------------------------------------------
+
+  test "free_trial_duration is nil when free trial is disabled" do
+    assert_nil build_product.free_trial_duration
+  end
+
+  test "free_trial_duration reflects the configured amount and unit" do
+    product = build_product(free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week)
+    assert_equal 1.week, product.free_trial_duration
+    product.free_trial_duration_amount = 3
+    assert_equal 3.weeks, product.free_trial_duration
+    product.free_trial_duration_unit = :month
+    assert_equal 3.months, product.free_trial_duration
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
