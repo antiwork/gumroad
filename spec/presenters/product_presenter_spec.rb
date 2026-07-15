@@ -981,6 +981,7 @@ describe ProductPresenter do
               fine_print: nil,
             },
             cancellation_discounts_enabled: false,
+            receipt_email_from: "#{new_product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
             ai_generated: false,
