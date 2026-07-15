@@ -2197,6 +2197,79 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [alive_variant], product.alive_variants
   end
 
+  # --- #has_active_paid_variants? --------------------------------------------
+
+  test "has_active_paid_variants? is false with only free variants, true with a paid one" do
+    product = create_product
+    category = create_variant_category(link: product)
+    create_variant(variant_category: category, price_difference_cents: 0)
+    assert_equal false, product.has_active_paid_variants?
+
+    create_variant(variant_category: category, price_difference_cents: 100)
+    assert_equal true, product.has_active_paid_variants?
+  end
+
+  # --- #sku_title ------------------------------------------------------------
+
+  test "sku_title is 'Version' without categories, else the category titles joined" do
+    assert_equal "Version", create_product.sku_title
+
+    product = create_product
+    create_variant_category(title: "Color", link: product)
+    create_variant_category(title: "Size", link: product)
+    assert_equal "Color - Size", product.sku_title
+  end
+
+  # --- #enable_transcode_videos_on_purchase! ---------------------------------
+
+  test "enable_transcode_videos_on_purchase! sets the flag" do
+    product = create_product
+    assert_equal false, product.transcode_videos_on_purchase
+    product.enable_transcode_videos_on_purchase!
+    assert_equal true, product.transcode_videos_on_purchase
+  end
+
+  # --- #html_safe_description ------------------------------------------------
+
+  test "html_safe_description turns bare URLs into anchor tags" do
+    product = create_product(description: "Check it out at https://gumroad.com")
+    result = product.html_safe_description
+    assert_equal "Check it out at <a href=\"https://gumroad.com\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">https://gumroad.com</a>", result
+    assert result.html_safe?
+  end
+
+  test "html_safe_description is nil for an empty description" do
+    assert_nil create_product(description: "").html_safe_description
+  end
+
+  test "html_safe_description adds a protocol to protocol-relative URLs" do
+    product = create_product(description: "<iframe src='//cdn.iframe.ly'></iframe><img src='//example.com/image.jpg'>")
+    assert_equal "<iframe src=\"http://cdn.iframe.ly\"></iframe><img src=\"http://example.com/image.jpg\">", product.html_safe_description
+  end
+
+  test "html_safe_description keeps an iframely.net iframe" do
+    product = create_product(description: "<iframe src=\"https://iframely.net/api/iframe?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DzumvXpa7kGY&key=31708e31\" allowfullscreen></iframe>")
+    assert_includes product.html_safe_description, "iframely.net/api/iframe"
+  end
+
+  test "html_safe_description removes an iframe from an untrusted host" do
+    product = create_product(description: "before<iframe src=\"https://evil.example.com/embed\"></iframe>after")
+    assert_equal "beforeafter", product.html_safe_description
+  end
+
+  test "html_safe_description removes a script from an untrusted source" do
+    product = create_product(description: "some text<script src='https://untrusted.example.com/script.js'></script>evil script")
+    assert_equal "some textevil script", product.html_safe_description
+  end
+
+  test "html_safe_description removes a non-embed.js iframe.ly script but keeps embed.js" do
+    removed = create_product(description: "some text<script src='https://cdn.iframe.ly/script.js'></script>evil script")
+    assert_equal "some textevil script", removed.html_safe_description
+
+    kept = create_product(description: "some text<script src='https://cdn.iframe.ly/embed.js'></script>evil script")
+    assert_equal "some text<script src=\"https://cdn.iframe.ly/embed.js\"></script>evil script", kept.html_safe_description
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
