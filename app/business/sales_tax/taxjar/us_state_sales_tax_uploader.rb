@@ -189,6 +189,9 @@ class UsStateSalesTaxUploader
 
     {
       refunded_cents: refund.amount_cents.to_i,
+      # The full transaction amount refunded (price + tax + shipping), matching the
+      # total_transaction_cents basis of the order leg's gmv_cents.
+      total_refunded_cents: refund.total_transaction_cents.to_i,
       tax_refunded_cents: refund.gumroad_tax_cents.to_i
     }
   end
