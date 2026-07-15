@@ -366,7 +366,142 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal false, product.publishing?
   end
 
+  # --- content moderation on edits to a published product --------------------
+
+  test "editing a published product re-checks moderation when the name changes" do
+    product = published_moderated_product
+    ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: false, reasons: ["blocked term in name"])) do
+      product.name = "New bad name"
+      assert_equal false, product.save
+      assert_includes product.errors.full_messages.to_sentence, "looks like it contains something that may violate our content guidelines"
+    end
+  end
+
+  test "editing a published product re-checks moderation when the description changes" do
+    product = published_moderated_product
+    ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: false, reasons: ["blocked term in description"])) do
+      product.description = "<p>New bad body</p>"
+      assert_equal false, product.save
+      assert_includes product.errors.full_messages.to_sentence, "looks like it contains something that may violate our content guidelines"
+    end
+  end
+
+  test "editing a published product does not re-check moderation for unrelated attributes" do
+    product = published_moderated_product
+    ContentModeration::ModerateRecordService.stub(:check, ->(*) { flunk "moderation should not re-run on unrelated changes" }) do
+      product.price_cents = product.price_cents + 100
+      product.save!
+    end
+  end
+
+  test "editing a draft product does not run moderation on name/description edits" do
+    product = create_product(draft: true)
+    ContentModeration::ModerateRecordService.stub(:check, ->(*) { flunk "moderation should not run on draft edits" }) do
+      product.update!(name: "Still a draft", description: "<p>Still drafting</p>")
+    end
+  end
+
+  # --- #purchase_type= -------------------------------------------------------
+
+  test "purchase_type= accepts valid values" do
+    @product.purchase_type = :buy_only
+    assert_equal "buy_only", @product.purchase_type
+    @product.purchase_type = :rent_only
+    assert_equal "rent_only", @product.purchase_type
+    @product.purchase_type = :buy_and_rent
+    assert_equal "buy_and_rent", @product.purchase_type
+  end
+
+  test "purchase_type= defaults to buy_only for an invalid value" do
+    @product.purchase_type = "buy"
+    assert_equal "buy_only", @product.purchase_type
+  end
+
+  test "purchase_type= does not raise for an invalid value" do
+    assert_nothing_raised { @product.purchase_type = "invalid" }
+    assert_equal "buy_only", @product.purchase_type
+  end
+
+  # --- delete_unused_prices --------------------------------------------------
+
+  test "switching to buy_only deletes rental prices" do
+    product = create_product(purchase_type: :buy_and_rent, price_cents: 500, rental_price_cents: 100)
+    rental_price = product.prices.is_rental.first
+    assert_equal 2, product.prices.alive.count
+    product.update!(purchase_type: :buy_only)
+    assert_equal 1, product.prices.alive.count
+    assert_equal 0, product.prices.alive.is_rental.count
+    assert rental_price.reload.deleted?
+  end
+
+  test "switching to rent_only deletes buy prices" do
+    product = create_product(purchase_type: :buy_and_rent, price_cents: 500, rental_price_cents: 100)
+    buy_price = product.prices.is_buy.first
+    product.update!(purchase_type: :rent_only)
+    assert_equal 1, product.prices.alive.count
+    assert_equal 0, product.prices.alive.is_buy.count
+    assert buy_price.reload.deleted?
+  end
+
+  test "switching to buy_and_rent does not delete prices" do
+    buy_product = create_product(purchase_type: :buy_only)
+    assert_no_difference -> { buy_product.prices.alive.count } do
+      buy_product.update!(purchase_type: :buy_and_rent)
+    end
+
+    rental_product = create_product(purchase_type: :rent_only, rental_price_cents: 100)
+    assert_no_difference -> { rental_product.prices.alive.count } do
+      rental_product.update!(purchase_type: :buy_and_rent)
+    end
+  end
+
+  test "leaving purchase_type unchanged does not run delete_unused_prices" do
+    product = create_product(purchase_type: :buy_and_rent, price_cents: 500, rental_price_cents: 100)
+    called = false
+    product.define_singleton_method(:delete_unused_prices) { |*| called = true }
+    product.update!(purchase_type: :buy_and_rent)
+    assert_equal false, called
+  end
+
+  # --- #rental ---------------------------------------------------------------
+
+  test "rental returns nil for a buy-only product" do
+    assert_nil create_product(purchase_type: :buy_only).rental
+  end
+
+  test "rental returns price and rent_only flag for a rent-only product" do
+    product = create_product(purchase_type: :rent_only, rental_price_cents: 300)
+    assert_equal({ price_cents: 300, rent_only: true }, product.rental)
+  end
+
+  test "rental returns price and rent_only flag for a buy-and-rent product" do
+    product = create_product(purchase_type: :buy_and_rent, rental_price_cents: 200)
+    assert_equal({ price_cents: 200, rent_only: false }, product.rental)
+  end
+
+  test "rental returns nil for a buy-and-rent product with no rental price" do
+    product = create_product(purchase_type: :buy_and_rent, rental_price_cents: 200)
+    product.prices.alive.is_rental.each(&:mark_deleted!)
+    assert_nil product.reload.rental
+  end
+
+  test "rental returns nil for a rent-only product with no rental price" do
+    product = create_product(purchase_type: :rent_only, rental_price_cents: 300)
+    product.prices.alive.is_rental.each(&:mark_deleted!)
+    assert_nil product.reload.rental
+  end
+
   private
+    # A published product whose non-moderation publish gates are stubbed and
+    # whose initial publish passed moderation — the starting point for the
+    # "edit a published product" moderation tests.
+    def published_moderated_product
+      product = create_product(purchase_disabled_at: Time.current)
+      stub_publish_enforcements(product)
+      ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: true)) { product.publish! }
+      product
+    end
+
     # publish! runs several enforcement gates unrelated to content moderation;
     # the RSpec block stubs them out so the moderation behavior can be tested in
     # isolation. Singleton methods on the instance mirror `allow(product).to receive`.
