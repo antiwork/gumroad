@@ -1660,6 +1660,62 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal "The price after discount for all of your products must be either €0 or at least €0.79.", error.record.errors.full_messages.to_sentence
   end
 
+  # --- #delete! --------------------------------------------------------------
+
+  test "delete! marks the custom domain as deleted" do
+    product = create_product
+    custom_domain = CustomDomain.create!(domain: "www.example1.com", user: nil, product:)
+    product.delete!
+    assert_equal false, custom_domain.reload.alive?
+  end
+
+  test "delete! enqueues subscription cancellations" do
+    product = create_product(is_recurring_billing: true, subscription_duration: "monthly")
+    subscription = create_subscription
+    product.subscriptions << subscription
+    create_purchase(link: product, subscription:, is_original_subscription_purchase: true)
+    product.delete!
+    assert CancelSubscriptionsForProductWorker.jobs.any? { |job| job["args"] == [product.id] }
+  end
+
+  test "delete! enqueues rich content deletion" do
+    product = create_product
+    product.delete!
+    assert DeleteProductRichContentWorker.jobs.any? { |job| job["args"] == [product.id] }
+  end
+
+  test "delete! enqueues product file and archive deletion" do
+    product = create_product
+    product.product_files << create_readable_document
+    product.product_files << create_readable_document(is_linked_to_existing_file: true)
+    create_purchase(link: product, purchase_state: "successful")
+    assert_equal 2, product.reload.product_files.alive.size
+
+    product.delete!
+    assert DeleteProductFilesWorker.jobs.any? { |job| job["args"] == [product.id] }
+    assert DeleteProductFilesArchivesWorker.jobs.any? { |job| job["args"] == [product.id, nil] }
+    assert_not_nil product.reload.deleted_at
+  end
+
+  test "delete! enqueues wishlist product deletion" do
+    product = create_product
+    product.delete!
+    assert DeleteWishlistProductsJob.jobs.any? { |job| job["args"] == [product.id] }
+  end
+
+  test "delete! removes the product id from every profile section's shown_products" do
+    seller = create_user
+    product = create_product(user: seller)
+    other_product = create_product(user: seller)
+    with_product = create_seller_profile_products_section(seller:, shown_products: [product.id, other_product.id])
+    without_product = create_seller_profile_products_section(seller:, shown_products: [other_product.id])
+
+    product.delete!
+
+    assert_equal [other_product.id], with_product.reload.shown_products
+    assert_equal [other_product.id], without_product.reload.shown_products
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
