@@ -1162,6 +1162,66 @@ class LinkTest < ActiveSupport::TestCase
     assert_not build_product(name: "hi there" * 255).valid?
   end
 
+  # --- #checkout_custom_fields / #custom_field_descriptors -------------------
+
+  test "checkout_custom_fields returns non-post-purchase fields (global first)" do
+    product = create_product
+    custom_field = create_custom_field(name: "Custom field", products: [product])
+    create_custom_field(name: "Post-purchase custom field", products: [product], is_post_purchase: true)
+    global_custom_field = create_custom_field(name: "Global custom field", global: true, seller: product.user)
+    create_custom_field(name: "Post-purchase global custom field", seller: product.user, is_post_purchase: true, global: true)
+
+    assert_equal [global_custom_field, custom_field], product.checkout_custom_fields
+  end
+
+  test "custom_field_descriptors returns formatted custom fields" do
+    product = create_product
+    product.custom_fields << create_custom_field(name: "I'm custom!")
+    assert_equal [
+      { id: product.custom_fields.last.external_id, type: "text", name: "I'm custom!", required: false, collect_per_product: false },
+    ], product.custom_field_descriptors
+  end
+
+  # --- #custom_view_content_button_text --------------------------------------
+
+  test "custom_view_content_button_text saves when within the limit" do
+    product.custom_view_content_button_text = "Custom Name"
+    product.save!
+    assert_equal "Custom Name", product.custom_view_content_button_text
+  end
+
+  test "custom_view_content_button_text errors when longer than 26 characters" do
+    product = create_product
+    text = "This text is over 26 characters and it can't be saved."
+    product.custom_view_content_button_text = text
+    assert_raises(ActiveRecord::RecordInvalid) { product.save! }
+    assert_equal "Button: #{text.length - 26} characters over limit (max: 26)", product.errors.full_messages.to_sentence
+  end
+
+  # --- #content_cannot_contain_adult_keywords --------------------------------
+
+  test "content with no adult keywords adds no errors" do
+    product = create_product
+    product.name = "Safe name"
+    product.description = "This is a safe description."
+    product.save
+    assert_empty product.errors
+  end
+
+  test "adult keyword in the description adds an error" do
+    product = create_product
+    product.description = "fetish"
+    product.save
+    assert_includes product.errors.full_messages, "Adult keywords are not allowed"
+  end
+
+  test "adult keyword in the name adds an error" do
+    product = create_product
+    product.name = "fetish"
+    product.save
+    assert_includes product.errors.full_messages, "Adult keywords are not allowed"
+  end
+
   private
     # Six products across two users for the permalink-fetching tests.
     def fetch_leniently_context

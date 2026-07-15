@@ -350,6 +350,14 @@ module ModelFactories
     product
   end
 
+  def create_custom_field(name: "Custom field", seller: nil, field_type: "text", products: nil, **attrs)
+    seller ||= products&.first&.user || create_user
+    field = CustomField.new({ name:, seller:, field_type: }.merge(attrs))
+    field.products = products if products
+    field.save!
+    field
+  end
+
   def create_public_file(resource: nil, **attrs)
     resource ||= create_product
     PublicFile.create!({
