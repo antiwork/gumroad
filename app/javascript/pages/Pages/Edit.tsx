@@ -210,7 +210,7 @@ export default function PagesEdit() {
     // background, but the chrome's rounded corners and the pre-load area
     // would otherwise flash white in dark mode.
     <div className="flex flex-col overflow-hidden rounded border border-border bg-background">
-      <div className="relative border-b border-border bg-background px-12 py-2">
+      <div className="relative border-b border-border bg-background px-10 py-2">
         <div className="min-w-0 text-center">
           <div className="truncate text-sm font-medium">{displayTitle}</div>
           <div className="truncate text-xs text-muted">{displayUrl}</div>
@@ -221,12 +221,15 @@ export default function PagesEdit() {
             <WithTooltip tip="Open in new tab">
               <NavigationButton
                 size="icon"
+                // The default icon size (size-12) dwarfs the slim chrome bar —
+                // shrink to a compact 32px hit target that fits inside it.
+                className="size-8"
                 aria-label="Open in new tab"
                 href={publicUrl}
                 target="_blank"
                 rel="noreferrer"
               >
-                <ArrowUpRight className="size-5" />
+                <ArrowUpRight className="size-4" />
               </NavigationButton>
             </WithTooltip>
           </div>
