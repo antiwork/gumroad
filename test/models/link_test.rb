@@ -2494,6 +2494,85 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal purchase.external_id, product.purchase_info_for_product_page(user, nil)[:id]
   end
 
+  # --- #purchase_info_for_product_page (by browser guid) ---------------------
+
+  test "purchase_info_for_product_page matches by browser guid when there is no user" do
+    product = create_product(is_in_preorder_state: false)
+    purchase = create_purchase(link: product)
+    assert_equal purchase.external_id, product.purchase_info_for_product_page(nil, purchase.browser_guid)[:id]
+  end
+
+  test "purchase_info_for_product_page returns nil for a gift-sender purchase matched by browser guid" do
+    product = create_product(is_in_preorder_state: false)
+    purchase = create_purchase(link: product, is_gift_sender_purchase: true)
+    assert_nil product.purchase_info_for_product_page(nil, purchase.browser_guid)
+  end
+
+  test "purchase_info_for_product_page returns nil for a gift-receiver purchase matched by browser guid" do
+    product = create_product(is_in_preorder_state: false)
+    purchase = create_purchase(link: product, is_gift_receiver_purchase: true, purchase_state: "gift_receiver_purchase_successful")
+    assert_nil product.purchase_info_for_product_page(nil, purchase.browser_guid)
+  end
+
+  test "purchase_info_for_product_page matches a preorder purchase by browser guid" do
+    product = create_product(is_in_preorder_state: true)
+    purchase = create_preorder_authorization_purchase(link: product)
+    assert_equal purchase.external_id, product.purchase_info_for_product_page(nil, purchase.browser_guid)[:id]
+  end
+
+  test "purchase_info_for_product_page returns nil for a preorder gift-sender purchase by browser guid" do
+    product = create_product(is_in_preorder_state: true)
+    purchase = create_preorder_authorization_purchase(link: product, is_gift_sender_purchase: true)
+    assert_nil product.purchase_info_for_product_page(nil, purchase.browser_guid)
+  end
+
+  test "purchase_info_for_product_page matches by browser guid even for a non-matching user" do
+    product = create_product(is_in_preorder_state: false)
+    purchase = create_purchase(link: product)
+    assert_equal purchase.external_id, product.purchase_info_for_product_page(create_user, purchase.browser_guid)[:id]
+  end
+
+  test "purchase_info_for_product_page returns nil for a non-matching user's gift-receiver browser-guid purchase" do
+    product = create_product(is_in_preorder_state: false)
+    purchase = create_purchase(link: product, is_gift_receiver_purchase: true, purchase_state: "gift_receiver_purchase_successful")
+    assert_nil product.purchase_info_for_product_page(create_user, purchase.browser_guid)
+  end
+
+  test "purchase_info_for_product_page returns nil without a user or browser guid" do
+    product = create_product(is_in_preorder_state: false)
+    create_purchase(link: product)
+    assert_nil product.purchase_info_for_product_page(nil, nil)
+  end
+
+  # --- service product validation --------------------------------------------
+
+  test "a service product is invalid for a seller not yet eligible" do
+    commission = build_product(native_type: "commission")
+    commission.save
+    assert_not commission.valid?
+    assert_equal "Service products are disabled until your account is 30 days old.", commission.errors.full_messages.first
+  end
+
+  test "a service product is valid for an eligible seller" do
+    commission = build_product(user: create_eligible_seller, native_type: "commission", price_cents: 200)
+    commission.save
+    assert commission.valid?
+  end
+
+  # --- #show_in_sections! ----------------------------------------------------
+
+  test "show_in_sections! moves the product into the given sections" do
+    seller = create_user
+    product = create_product(user: seller)
+    section1 = create_seller_profile_products_section(seller:, shown_products: [product.id])
+    section2 = create_seller_profile_products_section(seller:)
+    seller.reload
+
+    product.show_in_sections!([section2.external_id])
+    assert_equal [], section1.reload.shown_products
+    assert_equal [product.id], section2.reload.shown_products
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do

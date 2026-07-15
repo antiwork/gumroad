@@ -219,6 +219,7 @@ module ModelFactories
       gumroad_tax_cents: 0,
       shipping_cents: 0,
       ip_address: unique_ip,
+      browser_guid: "guid-#{unique_suffix}",
       email: "buyer-#{unique_suffix}@example.com",
       purchase_state: "successful",
       succeeded_at: Time.current,
