@@ -1,0 +1,43 @@
+# Purchases for the fixtures suite. Mirrors `create(:purchase)`: one successful
+# $1 sale of the standard product, charged on the platform Stripe account.
+#
+# Fixture-specific notes:
+# - `seller` is a renamed FK (`seller_id` -> users), so the short association
+#   form doesn't apply; use FixtureSet.identify.
+# - `purchaser` is a plain `belongs_to ... class_name: "User"` (NOT polymorphic,
+#   despite the `purchaser_type` column defaulting to "User"), over the renamed
+#   FK `purchaser_id`. So the polymorphic `buyer (User)` form writes the wrong
+#   id; use FixtureSet.identify and set purchaser_type explicitly.
+# - Money columns are copied from what the factory computes for a 100-cent
+#   Gumroad-merchant sale: fee_cents 93 = 13 variable (100 * 129/1000, i.e.
+#   100 flat + 29 processor per thousand) + 50 fixed + 30 fixed processor.
+#   `calculate_fees` is an `after(:build)` hook the fixture bypasses, so the
+#   result is inlined; `fee_cents` also has a presence validation.
+
+successful_purchase:
+  link: product
+  seller_id: <%= ActiveRecord::FixtureSet.identify(:named_seller) %>
+  purchaser_id: <%= ActiveRecord::FixtureSet.identify(:buyer) %>
+  purchaser_type: User
+  email: fixture-buyer@example.com
+  price_cents: 100
+  displayed_price_cents: 100
+  total_transaction_cents: 100
+  tax_cents: 0
+  gumroad_tax_cents: 0
+  shipping_cents: 0
+  fee_cents: 93
+  quantity: 1
+  card_type: visa
+  card_visual: "**** **** **** 4062"
+  card_country: US
+  charge_processor_id: stripe
+  merchant_account: gumroad_stripe
+  stripe_fingerprint: shfbeg5142fff
+  stripe_transaction_id: "2763276372637263"
+  purchase_state: successful
+  succeeded_at: <%= Time.current %>
+  browser_guid: fixture-browser-guid
+  ip_address: 127.0.0.1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
