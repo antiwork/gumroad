@@ -4591,7 +4591,14 @@ class Purchase < ApplicationRecord
       price = price_for_recurrence
       return formatted_price if price.nil?
 
-      formatted_price_with_recurrence(formatted_price, price.recurrence, subscription.try(:charge_occurence_count), format:)
+      # Only pass the charge count for subscriptions that charge exactly once so
+      # their price renders as "$99 once". Fixed-length subscriptions with several
+      # charges keep their plain recurring label here: the historical call site
+      # never passed a count (it called a misspelled method via `try`, which
+      # always returned nil), and suddenly appending "x N" would change price
+      # strings on the API and seller-notification surfaces built on this method.
+      charge_occurrence_count = subscription&.single_charge? ? 1 : nil
+      formatted_price_with_recurrence(formatted_price, price.recurrence, charge_occurrence_count, format:)
     end
 
     def update_product_search_index!
