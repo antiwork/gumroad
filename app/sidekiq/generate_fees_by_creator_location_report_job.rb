@@ -26,11 +26,12 @@ class GenerateFeesByCreatorLocationReportJob
         GC.start if purchase.id % 10000 == 0
 
         # Chargebacks keep their existing purchase-flag attribution (the chargeback
-        # event-date pass is tracked separately). The fully-refunded skip only applies to
-        # pre-cutover purchases: post-cutover purchases contribute their gross fee, and the
-        # refund leg below is what subtracts refunded fees in the refund's own month.
+        # event-date pass is tracked separately). There is deliberately NO per-row
+        # fully-refunded skip here: the not_fully_refunded_for_tax_reporting scope above is
+        # the single gate. Any refunded purchase that reaches this loop either contributes its
+        # gross fee (post-cutover) or has a post-cutover refund whose leg below subtracts the
+        # refunded fee — re-skipping it here would understate the period pair.
         next if purchase.chargedback_not_reversed?
-        next if purchase.refunded? && !purchase.gross_amounts_for_tax_reporting?
 
         fee_cents = purchase.fee_cents_for_tax_reporting
 

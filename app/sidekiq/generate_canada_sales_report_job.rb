@@ -25,11 +25,12 @@ class GenerateCanadaSalesReportJob
           .where("purchases.created_at BETWEEN ? AND ?", starts_at, ends_at)
           .find_each do |purchase|
             # Chargebacks keep their existing purchase-flag attribution (the chargeback
-            # event-date pass is tracked separately). The fully-refunded skip only applies to
-            # pre-cutover purchases: post-cutover purchases are reported at gross amounts even
-            # when fully refunded, and the refund rows below are what offset them.
+            # event-date pass is tracked separately). There is deliberately NO per-row
+            # fully-refunded skip here: the not_fully_refunded_for_tax_reporting scope above is
+            # the single gate. Any refunded purchase that reaches this loop either reports
+            # gross amounts (post-cutover) or has a post-cutover refund row that needs this
+            # sale row to offset — re-skipping it here would understate the period pair.
             next if purchase.chargedback_not_reversed?
-            next if purchase.refunded? && !purchase.gross_amounts_for_tax_reporting?
 
             country_name, province_name = determine_country_name_and_province_name(purchase)
             next unless country_name == Compliance::Countries::CAN.common_name
