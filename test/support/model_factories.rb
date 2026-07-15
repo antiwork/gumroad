@@ -149,6 +149,10 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  def create_price(link: nil, price_cents: 100, currency: "usd", recurrence: nil, **attrs)
+    Price.create!({ link: link || create_product, price_cents:, currency:, recurrence: }.merge(attrs))
+  end
+
   def create_variant_category(link: nil, **attrs)
     VariantCategory.create!({ link: link || create_product, title: "Category" }.merge(attrs))
   end

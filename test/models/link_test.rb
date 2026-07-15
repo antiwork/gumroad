@@ -1211,6 +1211,88 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal %i[Size Length], link.removed_file_info_attributes
   end
 
+  # --- #remaining_for_sale_count ---------------------------------------------
+
+  test "remaining_for_sale_count defaults to nil" do
+    assert_nil product.max_purchase_count
+    assert_nil product.remaining_for_sale_count
+  end
+
+  test "remaining_for_sale_count uses a tier's max_purchase_count when the product has none" do
+    membership = create_membership_product
+    membership.tiers.first.update!(max_purchase_count: 100)
+    assert_equal 100, membership.remaining_for_sale_count
+    membership.tiers.first.update!(max_purchase_count: 200)
+    assert_equal 200, membership.remaining_for_sale_count
+  end
+
+  # --- #plaintext_description ------------------------------------------------
+
+  test "plaintext_description keeps a normal description the same" do
+    assert_equal "I like pie.", create_product(description: "I like pie.").plaintext_description
+  end
+
+  test "plaintext_description strips html" do
+    assert_equal "I like pie. Do you?", create_product(description: "I like <strong><u>pie</u></strong>. Do you?").plaintext_description
+  end
+
+  test "plaintext_description encodes lone angle brackets" do
+    assert_equal "some &lt; text &gt;", create_product(description: "some < text >").plaintext_description
+  end
+
+  test "plaintext_description does not encode apostrophes" do
+    assert_equal "The world's foremost", create_product(description: "The world's foremost").plaintext_description
+  end
+
+  # --- suggested_price_cents -------------------------------------------------
+
+  test "suggested_price sets suggested_price_cents" do
+    link = create_product
+    link.suggested_price = 4
+    assert_equal 400, link.suggested_price_cents
+    link.suggested_price = nil
+    assert_nil link.suggested_price_cents
+  end
+
+  test "suggested_price_formatted is correct" do
+    assert_equal "4", create_product(suggested_price_cents: 400).suggested_price_formatted
+  end
+
+  test "suggested_price_cents cannot be less than price_cents" do
+    link = create_product
+    link.price_range = "2+"
+    link.suggested_price_cents = 100
+    assert_equal false, link.valid?
+  end
+
+  test "suggested_price_cents is not validated for non-customizable prices" do
+    link = create_product(price_cents: 200)
+    link.suggested_price_cents = 100
+    assert link.valid?
+  end
+
+  # --- #default_price / #default_price_recurrence ----------------------------
+
+  test "default_price returns the last price for a non-recurring product" do
+    product = create_product
+    create_price(link: product, price_cents: 100)
+    last_price = create_price(link: product, price_cents: 200)
+    assert_equal last_price, product.reload.default_price
+  end
+
+  test "default_price returns the recurrence-matched price for a non-tiered recurring product" do
+    product = create_subscription_product(subscription_duration: BasePrice::Recurrence::MONTHLY)
+    monthly_price = create_price(link: product, recurrence: BasePrice::Recurrence::MONTHLY)
+    create_price(link: product, recurrence: BasePrice::Recurrence::YEARLY)
+    assert_equal monthly_price, product.reload.default_price
+  end
+
+  test "default_price_recurrence returns nil for a non-recurring product" do
+    product = create_product
+    create_price(link: product)
+    assert_nil product.default_price_recurrence
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
