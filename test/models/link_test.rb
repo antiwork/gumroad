@@ -2396,6 +2396,43 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [], other_product.product_and_universal_offer_codes
   end
 
+  # --- #available_cross_sells ------------------------------------------------
+
+  test "available_cross_sells returns cross-sells for the product or universal ones" do
+    seller = create_user
+    product = create_product(user: seller)
+    for_product = create_upsell(seller:, selected_products: [product], cross_sell: true)
+    universal = create_upsell(seller:, universal: true, cross_sell: true)
+    create_upsell(seller:, cross_sell: true) # for another product
+    assert_equal [for_product, universal].sort_by(&:id), product.available_cross_sells.sort_by(&:id)
+  end
+
+  test "available_cross_sells excludes paused or deleted cross-sells" do
+    seller = create_user
+    product = create_product(user: seller)
+    for_product = create_upsell(seller:, selected_products: [product], cross_sell: true)
+    universal = create_upsell(seller:, universal: true, cross_sell: true)
+    for_product.update!(paused: true)
+    universal.mark_deleted!
+    assert_empty product.available_cross_sells.reload
+  end
+
+  # --- #find_or_initialize_product_refund_policy -----------------------------
+
+  test "find_or_initialize_product_refund_policy returns the existing policy" do
+    policy = create_product_refund_policy
+    assert_equal policy, policy.product.find_or_initialize_product_refund_policy
+  end
+
+  test "find_or_initialize_product_refund_policy builds a new policy when none exists" do
+    product = create_product
+    policy = product.find_or_initialize_product_refund_policy
+    assert_instance_of ProductRefundPolicy, policy
+    assert_equal false, policy.persisted?
+    assert_equal product, policy.product
+    assert_equal product.user, policy.seller
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do

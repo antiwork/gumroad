@@ -328,8 +328,9 @@ module ModelFactories
     OfferCode.create!({ user:, universal: true, products: [], excluded_products:, code: "uni#{unique_suffix[0, 6]}", amount_cents:, currency_type: user.currency_type }.merge(attrs))
   end
 
-  def create_upsell(seller:, product:, offer_code: nil, **attrs)
-    Upsell.create!({
+  def create_upsell(seller:, product: nil, offer_code: nil, selected_products: nil, **attrs)
+    product ||= create_product(user: seller)
+    upsell = Upsell.new({
       name: "Upsell",
       seller:,
       product:,
@@ -338,6 +339,14 @@ module ModelFactories
       cross_sell: false,
       offer_code:,
     }.merge(attrs))
+    upsell.selected_products = selected_products if selected_products
+    upsell.save!
+    upsell
+  end
+
+  def create_product_refund_policy(product: nil, **attrs)
+    product ||= create_product
+    ProductRefundPolicy.create!({ product:, seller: product.user, max_refund_period_in_days: RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS, fine_print: "This is a product-level refund policy" }.merge(attrs))
   end
 
   def create_affiliate_user(**attrs)
