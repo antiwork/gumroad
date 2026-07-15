@@ -215,6 +215,9 @@ module ModelFactories
       price_cents:,
       total_transaction_cents: price_cents,
       displayed_price_cents: price_cents,
+      tax_cents: 0,
+      gumroad_tax_cents: 0,
+      shipping_cents: 0,
       ip_address: unique_ip,
       email: "buyer-#{unique_suffix}@example.com",
       purchase_state: "successful",
@@ -243,6 +246,10 @@ module ModelFactories
       stripe_fingerprint: nil, stripe_transaction_id: nil,
       **attrs
     )
+  end
+
+  def create_preorder_authorization_purchase(link:, **attrs)
+    create_purchase(link:, purchase_state: "preorder_authorization_successful", **attrs)
   end
 
   # An original subscription sale on a plain (non-tiered) recurring product —

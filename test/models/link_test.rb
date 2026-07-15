@@ -2433,6 +2433,67 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal product.user, policy.seller
   end
 
+  # --- #purchase_info_for_product_page ---------------------------------------
+
+  test "purchase_info_for_product_page returns a matching user's previous purchase" do
+    product = create_product(is_in_preorder_state: false)
+    user = create_user
+    purchase = create_purchase(link: product, purchaser: user)
+    assert_equal purchase.external_id, product.purchase_info_for_product_page(user, nil)[:id]
+    assert_equal purchase.purchase_info, product.purchase_info_for_product_page(user, nil)
+    assert_equal true, product.purchase_info_for_product_page(user, nil)[:was_paid]
+  end
+
+  test "purchase_info_for_product_page marks a free purchase as not paid" do
+    product = create_product(is_in_preorder_state: false)
+    user = create_user
+    create_free_purchase(link: product, purchaser: user)
+    assert_equal false, product.purchase_info_for_product_page(user, nil)[:was_paid]
+  end
+
+  test "purchase_info_for_product_page marks a paid product discounted to $0 as paid" do
+    product = create_product(is_in_preorder_state: false)
+    user = create_user
+    offer_code = create_offer_code(products: [product], amount_cents: nil, amount_percentage: 100)
+    create_free_purchase(link: product, purchaser: user, offer_code:)
+    assert_equal true, product.purchase_info_for_product_page(user, nil)[:was_paid]
+  end
+
+  test "purchase_info_for_product_page returns nil for a gift sender purchase" do
+    product = create_product(is_in_preorder_state: false)
+    user = create_user
+    create_purchase(link: product, purchaser: user, is_gift_sender_purchase: true)
+    assert_nil product.purchase_info_for_product_page(user, nil)
+  end
+
+  test "purchase_info_for_product_page returns a gift receiver purchase" do
+    product = create_product(is_in_preorder_state: false)
+    user = create_user
+    purchase = create_purchase(link: product, purchaser: user, is_gift_receiver_purchase: true, purchase_state: "gift_receiver_purchase_successful")
+    assert_equal purchase.external_id, product.purchase_info_for_product_page(user, nil)[:id]
+  end
+
+  test "purchase_info_for_product_page returns a preorder authorization purchase" do
+    product = create_product(is_in_preorder_state: true)
+    user = create_user
+    purchase = create_preorder_authorization_purchase(link: product, purchaser: user)
+    assert_equal purchase.external_id, product.purchase_info_for_product_page(user, nil)[:id]
+  end
+
+  test "purchase_info_for_product_page returns nil for a preorder gift sender purchase" do
+    product = create_product(is_in_preorder_state: true)
+    user = create_user
+    create_preorder_authorization_purchase(link: product, purchaser: user, is_gift_sender_purchase: true)
+    assert_nil product.purchase_info_for_product_page(user, nil)
+  end
+
+  test "purchase_info_for_product_page returns a preorder gift receiver purchase" do
+    product = create_product(is_in_preorder_state: true)
+    user = create_user
+    purchase = create_preorder_authorization_purchase(link: product, purchaser: user, is_gift_receiver_purchase: true, purchase_state: "gift_receiver_purchase_successful")
+    assert_equal purchase.external_id, product.purchase_info_for_product_page(user, nil)[:id]
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
