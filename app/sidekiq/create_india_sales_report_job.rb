@@ -46,34 +46,40 @@ class CreateIndiaSalesReportJob
                 .where("purchase_sales_tax_infos.business_vat_id IS NULL OR purchase_sales_tax_infos.business_vat_id = ''")
                 .find_each do |purchase|
           next if purchase.chargeback_date.present? && !purchase.chargeback_reversed?
-          # A refund used to drop the purchase's row entirely, no matter when the refund
-          # happened — restating a filed month if it was ever re-generated, and never reporting
-          # the refund in its own period. Pre-cutover refunded purchases keep that treatment so
-          # historical months regenerate as filed; post-cutover purchases stay in the report at
-          # gross amounts, and the refund rows below are what offset them.
-          next if purchase.stripe_refunded == true && !purchase.gross_amounts_for_tax_reporting?
+          next if purchase.stripe_refunded == true
 
-          temp_file.write(purchase_row(purchase, india_tax_rate, india_tax_rate_percentage).to_csv)
-          temp_file.flush
-        end
+          price_cents = purchase.price_cents
+          tax_amount_cents = purchase.gumroad_tax_cents || 0
 
-        # Refund leg: refunds issued during the reported month appear as their own negative
-        # rows, dated by the refund's date, regardless of when the original purchase happened.
-        # The purchase-side filters mirror the sales leg above (minus its date window) so a
-        # refund is only reported when its purchase's sale was — or would have been — reported.
-        Refund.for_tax_period_reporting(start_date, end_date)
-          .joins(:purchase)
-          .joins("LEFT JOIN purchase_sales_tax_infos ON purchases.id = purchase_sales_tax_infos.purchase_id")
-          .where.not(purchases: { purchase_state: "failed" })
-          .where.not(purchases: { stripe_transaction_id: nil })
-          .where("(purchases.country = 'India') OR (purchases.country IS NULL AND purchases.ip_country = 'India') OR (purchases.card_country = 'IN')")
-          .where("purchases.price_cents > 0")
-          .where("purchase_sales_tax_infos.business_vat_id IS NULL OR purchase_sales_tax_infos.business_vat_id = ''")
-          .find_each do |refund|
-          purchase = refund.purchase
-          next if purchase.chargeback_date.present? && !purchase.chargeback_reversed?
+          raw_state = (purchase.ip_state || "").strip.upcase
+          display_state = Compliance::Countries.valid_indian_state?(raw_state) ? raw_state : ""
 
-          temp_file.write(refund_row(refund, purchase, india_tax_rate, india_tax_rate_percentage).to_csv)
+          expected_tax_rounded = (price_cents * india_tax_rate).round
+          expected_tax_floored = (price_cents * india_tax_rate).floor
+          diff_rounded = expected_tax_rounded - tax_amount_cents
+          diff_floored = expected_tax_floored - tax_amount_cents
+
+          calc_tax_rate = if price_cents > 0 && tax_amount_cents > 0
+            (BigDecimal(tax_amount_cents.to_s) / BigDecimal(price_cents.to_s) * 100).round(4).to_f
+          else
+            0
+          end
+
+          row = [
+            purchase.external_id,
+            purchase.created_at.strftime("%Y-%m-%d"),
+            display_state,
+            india_tax_rate_percentage,
+            price_cents,
+            tax_amount_cents,
+            calc_tax_rate,
+            expected_tax_rounded,
+            expected_tax_floored,
+            diff_rounded,
+            diff_floored
+          ]
+
+          temp_file.write(row.to_csv)
           temp_file.flush
         end
       end
@@ -90,61 +96,6 @@ class CreateIndiaSalesReportJob
   end
 
   private
-    def purchase_row(purchase, india_tax_rate, india_tax_rate_percentage)
-      india_report_row(
-        purchase:,
-        row_date: purchase.created_at,
-        price_cents: purchase.price_cents,
-        tax_amount_cents: purchase.gumroad_tax_cents || 0,
-        india_tax_rate:,
-        india_tax_rate_percentage:
-      )
-    end
-
-    # Same columns as a sale row, with the refund's own date and negated refund amounts, so
-    # the refund lands in the month it happened.
-    def refund_row(refund, purchase, india_tax_rate, india_tax_rate_percentage)
-      india_report_row(
-        purchase:,
-        row_date: refund.created_at,
-        price_cents: -refund.amount_cents.to_i,
-        tax_amount_cents: -refund.gumroad_tax_cents.to_i,
-        india_tax_rate:,
-        india_tax_rate_percentage:
-      )
-    end
-
-    def india_report_row(purchase:, row_date:, price_cents:, tax_amount_cents:, india_tax_rate:, india_tax_rate_percentage:)
-      raw_state = (purchase.ip_state || "").strip.upcase
-      display_state = Compliance::Countries.valid_indian_state?(raw_state) ? raw_state : ""
-
-      expected_tax_rounded = (price_cents * india_tax_rate).round
-      expected_tax_floored = (price_cents * india_tax_rate).floor
-      diff_rounded = expected_tax_rounded - tax_amount_cents
-      diff_floored = expected_tax_floored - tax_amount_cents
-
-      # The rate check compares magnitudes, so it works the same for negative refund rows.
-      calc_tax_rate = if price_cents != 0 && tax_amount_cents != 0
-        (BigDecimal(tax_amount_cents.to_s) / BigDecimal(price_cents.to_s) * 100).round(4).to_f
-      else
-        0
-      end
-
-      [
-        purchase.external_id,
-        row_date.strftime("%Y-%m-%d"),
-        display_state,
-        india_tax_rate_percentage,
-        price_cents,
-        tax_amount_cents,
-        calc_tax_rate,
-        expected_tax_rounded,
-        expected_tax_floored,
-        diff_rounded,
-        diff_floored
-      ]
-    end
-
     def row_headers
       [
         "ID",
