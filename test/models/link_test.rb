@@ -2135,6 +2135,68 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal true, product.has_multiple_variants?
   end
 
+  # --- associations: integrations / cached values / affiliates / variants ----
+
+  test "product_integrations returns alive and deleted integrations" do
+    integration_1 = create_circle_integration
+    integration_2 = create_circle_integration
+    product = create_product
+    product.active_integrations << integration_1 << integration_2
+    assert_no_difference -> { product.product_integrations.count } do
+      product.product_integrations.find_by(integration: integration_1).mark_deleted!
+    end
+    assert_equal [integration_1, integration_2].map(&:id).sort, product.product_integrations.pluck(:integration_id).sort
+  end
+
+  test "live_product_integrations excludes deleted integrations" do
+    integration_1 = create_circle_integration
+    integration_2 = create_circle_integration
+    product = create_product
+    product.active_integrations << integration_1 << integration_2
+    assert_difference -> { product.live_product_integrations.count }, -1 do
+      product.product_integrations.find_by(integration: integration_1).mark_deleted!
+    end
+    assert_equal [integration_2.id], product.live_product_integrations.pluck(:integration_id)
+  end
+
+  test "active_integrations excludes deleted integrations" do
+    integration_1 = create_circle_integration
+    integration_2 = create_circle_integration
+    product = create_product
+    product.active_integrations << integration_1 << integration_2
+    assert_difference -> { product.active_integrations.count }, -1 do
+      product.product_integrations.find_by(integration: integration_1).mark_deleted!
+    end
+    assert_equal [integration_2.id], product.active_integrations.pluck(:integration_id)
+  end
+
+  test "product_cached_values returns all cached values, expired or not" do
+    skip "ProductCachedValue#assign_cached_values computes monthly_recurring_revenue from Elasticsearch on create, which the stubbed-ES Minitest harness can't satisfy"
+  end
+
+  test "affiliate associations split direct and global affiliates" do
+    product = create_product
+    direct_affiliate = create_direct_affiliate
+    global_affiliate = create_user.global_affiliate
+    product_affiliates = [
+      create_product_affiliate(product:, affiliate: direct_affiliate),
+      create_product_affiliate(product:, affiliate: global_affiliate),
+    ]
+    assert_equal product_affiliates.sort_by(&:id), product.product_affiliates.sort_by(&:id)
+    assert_equal [direct_affiliate, global_affiliate].sort_by(&:id), product.affiliates.sort_by(&:id)
+    assert_equal [direct_affiliate], product.direct_affiliates
+    assert_equal [global_affiliate], product.global_affiliates
+  end
+
+  test "variant associations split alive and deleted variants" do
+    product = create_product
+    category = create_variant_category(link: product)
+    alive_variant = create_variant(variant_category: category)
+    deleted_variant = create_variant(variant_category: category, deleted_at: 1.hour.ago)
+    assert_equal [alive_variant, deleted_variant].sort_by(&:id), product.variants.sort_by(&:id)
+    assert_equal [alive_variant], product.alive_variants
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do

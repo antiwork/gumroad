@@ -363,6 +363,14 @@ module ModelFactories
     field
   end
 
+  def create_circle_integration(**attrs)
+    CircleIntegration.create!({ api_key: GlobalConfig.get("CIRCLE_API_KEY"), community_id: "3512", space_group_id: "43576" }.merge(attrs))
+  end
+
+  def create_product_cached_value(product: nil, **attrs)
+    ProductCachedValue.create!({ product: product || create_product }.merge(attrs))
+  end
+
   def create_rich_content(entity: nil, description: [], **attrs)
     RichContent.create!({ entity: entity || create_product, description: }.merge(attrs))
   end
