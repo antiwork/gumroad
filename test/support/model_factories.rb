@@ -334,6 +334,21 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  def create_public_file(resource: nil, **attrs)
+    resource ||= create_product
+    PublicFile.create!({
+      original_file_name: "test-#{unique_suffix}.mp3",
+      display_name: "Test audio",
+      public_id: PublicFile.generate_public_id,
+      resource:,
+    }.merge(attrs))
+  end
+
+  def create_community(resource: nil, seller: nil, **attrs)
+    resource ||= create_product
+    Community.create!({ seller: seller || resource.user, resource: }.merge(attrs))
+  end
+
   def create_merchant_account(user: nil, **attrs)
     MerchantAccount.create!({
       user: user || create_user,

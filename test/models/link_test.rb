@@ -619,6 +619,42 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [small_variant, live_sku, default_sku].sort_by(&:id), product.current_base_variants.sort_by(&:id)
   end
 
+  # --- #public_files / #communities ------------------------------------------
+
+  test "public_files returns all public files for the product, including deleted" do
+    product = create_product
+    public_file = create_public_file(resource: product)
+    deleted_public_file = create_public_file(resource: product, deleted_at: Time.current)
+    create_public_file # a different product's file
+
+    assert_equal [public_file, deleted_public_file], product.public_files
+  end
+
+  test "alive_public_files returns only live public files for the product" do
+    product = create_product
+    public_file = create_public_file(resource: product)
+    create_public_file(resource: product, deleted_at: Time.current)
+    create_public_file
+
+    assert_equal [public_file], product.alive_public_files
+  end
+
+  test "communities returns all communities for the product, including deleted" do
+    product = create_product
+    communities = [
+      create_community(resource: product, deleted_at: 1.minute.ago),
+      create_community(resource: product),
+    ]
+    assert_equal communities.sort_by(&:id), product.communities.sort_by(&:id)
+  end
+
+  test "active_community returns the live community" do
+    product = create_product
+    create_community(resource: product, deleted_at: 1.minute.ago)
+    community = create_community(resource: product)
+    assert_equal community, product.active_community
+  end
+
   # --- scopes ----------------------------------------------------------------
 
   test "alive scope returns only live products" do
