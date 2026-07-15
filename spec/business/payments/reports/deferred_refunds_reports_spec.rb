@@ -35,6 +35,27 @@ describe DeferredRefundsReports do
       expect(july_stripe[:fee_cents]).to eq(4_00)
     end
 
+    it "includes a refund created in the month's final second" do
+      # Guards the range's upper bound: refunds.created_at has second precision, so an
+      # end_of_month exclusive bound (`...23:59:59`) would drop the final second and the
+      # refund would appear in no month's report at all.
+      purchase = nil
+      travel_to(Time.utc(2026, 5, 10)) do
+        purchase = create(:purchase, price_cents: 100_00, total_transaction_cents: 100_00)
+      end
+
+      travel_to(Time.utc(2026, 6, 30, 23, 59, 59)) do
+        create(:refund, purchase:, amount_cents: 25_00, total_transaction_cents: 25_00)
+      end
+
+      june = described_class.deferred_refunds_report(6, 2026)["Purchases"].find { |entry| entry["Processor"] == "Stripe" }["Sales"]
+      expect(june[:total_transaction_count]).to eq(1)
+      expect(june[:total_transaction_cents]).to eq(25_00)
+
+      july = described_class.deferred_refunds_report(7, 2026)["Purchases"].find { |entry| entry["Processor"] == "Stripe" }["Sales"]
+      expect(july[:total_transaction_count]).to eq(0)
+    end
+
     it "does not include a purchase refunded in the same month it succeeded" do
       travel_to(Time.utc(2026, 6, 10)) do
         purchase = create(:purchase, price_cents: 100_00, total_transaction_cents: 100_00)

@@ -6,7 +6,11 @@ module DeferredRefundsReports
   # already closed when the money went back out).
   def self.deferred_refunds_report(month, year)
     json = { "Purchases" => [] }
-    range = DateTime.new(year, month)...DateTime.new(year, month).end_of_month
+    # Exclusive upper bound at the FIRST INSTANT of the next month. Using end_of_month here
+    # would drop the month's final second entirely (refunds.created_at has second precision,
+    # and `...23:59:59` excludes 23:59:59 itself), so a refund created in that second would
+    # appear in no month's report, ever.
+    range = DateTime.new(year, month)...DateTime.new(year, month).next_month
 
     refunded_purchase_ids = Refund.where(created_at: range).pluck(:purchase_id)
     deferred_refund_purchases = Purchase.successful.where(id: refunded_purchase_ids).where("succeeded_at < ?", range.first)
@@ -35,6 +39,9 @@ module DeferredRefundsReports
       json["Purchases"] << {
         "Processor" => name,
         "Sales" => {
+          # Counts are purchase-grain (purchases affected this month), while the cents sums
+          # below are refund-grain (only this month's refund rows) — a purchase partially
+          # refunded twice in one month counts once but sums both refunds.
           total_transaction_count: refunded_purchases.count + disputed_purchases.count,
           total_transaction_cents: month_refunds.sum("refunds.total_transaction_cents") + disputed_purchases.sum(:total_transaction_cents),
           gumroad_tax_cents: month_refunds.sum("refunds.gumroad_tax_cents") + disputed_purchases.sum(:gumroad_tax_cents),
