@@ -42,10 +42,19 @@ class UsStateSalesTaxUploader
   # (or would be) reported: settled purchases, US destination, not charged back. Refunds with a
   # terminal-failure status never returned money to the buyer, so they are excluded.
   #
-  # Refunds against purchases created before REFUND_REPORTING_CUTOVER are only included from
-  # the day after the cutover: those orders were uploaded with upload-time netting, and a
-  # refund created before the netted upload ran (uploads run early the following morning)
-  # would already be netted into the order amount.
+  # Refunds created before REFUND_REPORTING_CUTOVER are never included — before that day,
+  # refunds were handled by netting them into the order upload, not by refund transactions.
+  #
+  # From the cutover onward, a refund is included unless it could have been netted into an
+  # order upload that ran on or after the cutover. Uploads for a purchase day run early the
+  # following morning, so the only netted upload that runs on/after the cutover is the one
+  # for purchases created the day BEFORE the cutover (it runs on the cutover morning and
+  # nets in every refund existing at that moment). Refunds created on the cutover day against
+  # those purchases are therefore ambiguous — some were netted (created before that upload
+  # ran), some weren't — and are conservatively excluded so the same tax is never relieved
+  # twice; from the next day onward they're safely past that upload and are included. Every
+  # older pre-cutover purchase had its netted upload run before the cutover, so a post-cutover
+  # refund against it can't have been netted and is always included.
   def self.grouped_refund_ids_by_state(subdivision_codes:, starts_at:, ends_at:)
     subdivisions = subdivisions_for(subdivision_codes)
 
@@ -56,8 +65,10 @@ class UsStateSalesTaxUploader
       .where("refunds.status IS NULL OR refunds.status NOT IN ('failed', 'canceled')")
       .where("(purchases.country = 'United States') OR ((purchases.country IS NULL OR purchases.country = 'United States') AND purchases.ip_country = 'United States')")
       .where(purchases: { charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids] })
-      .where("purchases.created_at >= :cutover OR refunds.created_at >= :first_safe_refund_day",
+      .where("refunds.created_at >= :cutover", cutover: REFUND_REPORTING_CUTOVER.beginning_of_day)
+      .where("purchases.created_at >= :cutover OR purchases.created_at < :last_netted_upload_day OR refunds.created_at >= :first_safe_refund_day",
              cutover: REFUND_REPORTING_CUTOVER.beginning_of_day,
+             last_netted_upload_day: (REFUND_REPORTING_CUTOVER - 1).beginning_of_day,
              first_safe_refund_day: (REFUND_REPORTING_CUTOVER + 1).beginning_of_day)
       .pluck("refunds.id", "purchases.zip_code", "purchases.ip_address")
 
@@ -212,10 +223,20 @@ class UsStateSalesTaxUploader
       end
     end
 
+    # TaxJar keeps order and refund transaction ids in one namespace, and our obfuscated ids
+    # are derived only from the numeric row id — so a refund row and a purchase row that happen
+    # to share the same numeric id would produce the same id. Since "already created" errors
+    # from TaxJar are treated as a safe skip, such a collision would silently drop the refund.
+    # Suffixing the refund's id keeps it stable while guaranteeing it can never equal an order's.
+    def refund_transaction_id(refund)
+      "#{refund.external_id}-refund"
+    end
+
     def push_refund_transaction(refund:, purchase:, destination:, quantity:, product_tax_code:, amount_dollars:, sales_tax_dollars:, unit_price_dollars:)
-      with_taxjar_error_handling(transaction_id: refund.external_id) do
+      transaction_id = refund_transaction_id(refund)
+      with_taxjar_error_handling(transaction_id:) do
         @taxjar_api.create_refund_transaction(
-          transaction_id: refund.external_id,
+          transaction_id:,
           transaction_reference_id: purchase.external_id,
           transaction_date: refund.created_at.iso8601,
           destination:,
