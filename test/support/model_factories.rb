@@ -334,6 +334,15 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  def create_merchant_account(user: nil, **attrs)
+    MerchantAccount.create!({
+      user: user || create_user,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: "acct_#{unique_suffix}",
+      charge_processor_alive_at: Time.current,
+    }.merge(attrs))
+  end
+
   def create_blast(post:, **attrs)
     PostEmailBlast.create!({
       post:,

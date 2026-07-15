@@ -619,6 +619,89 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [small_variant, live_sku, default_sku].sort_by(&:id), product.current_base_variants.sort_by(&:id)
   end
 
+  # --- scopes ----------------------------------------------------------------
+
+  test "alive scope returns only live products" do
+    user = create_user
+    create_product(user:, name: "alive")
+    create_product(user:, purchase_disabled_at: Time.current)
+    create_product(user:, deleted_at: Time.current)
+    create_product(user:, banned_at: Time.current)
+
+    assert_equal 1, user.links.alive.count
+    assert_equal "alive", user.links.alive.first.name
+  end
+
+  test "visible scope excludes deleted products but includes archived ones" do
+    user = create_user
+    create_product(user:, deleted_at: Time.current)
+    product = create_product(user:)
+    archived_product = create_product(user:, archived: true)
+
+    assert_equal 2, user.links.visible.count
+    assert_equal [product, archived_product], user.links.visible
+  end
+
+  test "visible_and_not_archived scope excludes deleted and archived products" do
+    user = create_user
+    create_product(user:, deleted_at: Time.current)
+    product = create_product(user:)
+    create_product(user:, archived: true)
+
+    assert_equal 1, user.links.visible_and_not_archived.count
+    assert_equal [product], user.links.visible_and_not_archived
+  end
+
+  test "by_general_permalink matches by unique permalink" do
+    product = create_product(unique_permalink: "xxx")
+    create_product(unique_permalink: "yyy", custom_permalink: "custom")
+    assert_equal [product], Link.by_general_permalink("xxx")
+  end
+
+  test "by_general_permalink matches by custom permalink" do
+    create_product(unique_permalink: "xxx")
+    product = create_product(unique_permalink: "yyy", custom_permalink: "custom")
+    assert_equal [product], Link.by_general_permalink("custom")
+  end
+
+  test "by_general_permalink does not match a blank permalink" do
+    create_product(unique_permalink: "yyy", custom_permalink: "custom")
+    assert_empty Link.by_general_permalink(nil)
+    assert_empty Link.by_general_permalink("")
+  end
+
+  test "by_unique_permalinks matches by unique permalink only" do
+    product_1 = create_product(unique_permalink: "xxx")
+    product_2 = create_product(unique_permalink: "yyy", custom_permalink: "custom")
+    assert_equal [product_1, product_2].sort_by(&:id), Link.by_unique_permalinks(%w[xxx yyy]).sort_by(&:id)
+  end
+
+  test "by_unique_permalinks does not match custom permalinks" do
+    create_product(unique_permalink: "yyy", custom_permalink: "custom")
+    create_product(unique_permalink: "zzz", custom_permalink: "awesome")
+    assert_empty Link.by_unique_permalinks(%w[awesome custom])
+  end
+
+  test "by_unique_permalinks ignores permalinks that do not match" do
+    product_1 = create_product(unique_permalink: "xxx")
+    create_product(unique_permalink: "yyy", custom_permalink: "custom")
+    assert_equal [product_1], Link.by_unique_permalinks(%w[xxx custom])
+  end
+
+  test "by_unique_permalinks returns nothing when given no permalinks" do
+    assert_empty Link.by_unique_permalinks([])
+  end
+
+  test "unpublished products are those with a purchase_disabled_at" do
+    user = create_user
+    create_product(user:)
+    create_product(user:, purchase_disabled_at: Time.current, name: "unpublished")
+
+    unpublished = user.links.where.not(purchase_disabled_at: nil)
+    assert_equal 1, unpublished.count
+    assert_equal "unpublished", unpublished.first.name
+  end
+
   private
     # A published product whose non-moderation publish gates are stubbed and
     # whose initial publish passed moderation — the starting point for the
