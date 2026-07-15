@@ -86,6 +86,108 @@ describe UtmLinkTracking, type: :controller do
     end
   end
 
+  context "when a matching UTM link exists but the seller has disabled it" do
+    let(:product) { create(:product, user: seller) }
+    let!(:utm_link) do
+      create(:utm_link, seller:, target_resource_type: "product_page", target_resource_id: product.id, disabled_at: 1.day.ago)
+    end
+    let(:utm_params) do
+      {
+        utm_source: utm_link.utm_source,
+        utm_medium: utm_link.utm_medium,
+        utm_campaign: utm_link.utm_campaign,
+        utm_content: utm_link.utm_content,
+        utm_term: utm_link.utm_term
+      }
+    end
+
+    before do
+      allow(controller).to receive(:short_link_path).and_return("/l/#{product.unique_permalink}")
+      request.host = "#{seller.subdomain}"
+      request.path = "/l/#{product.unique_permalink}"
+    end
+
+    it "renders the page successfully without creating a duplicate link or tracking a visit" do
+      expect do
+        expect do
+          get :action, params: utm_params.merge(id: product.unique_permalink)
+        end.not_to change(UtmLink, :count)
+      end.not_to change(UtmLinkVisit, :count)
+
+      expect(response).to be_successful
+      expect(UpdateUtmLinkStatsJob).not_to have_enqueued_sidekiq_job(utm_link.id)
+    end
+  end
+
+  context "when a matching UTM link exists but is soft-deleted" do
+    let(:product) { create(:product, user: seller) }
+    let!(:utm_link) do
+      create(:utm_link, seller:, target_resource_type: "product_page", target_resource_id: product.id, deleted_at: 1.day.ago)
+    end
+    let(:utm_params) do
+      {
+        utm_source: utm_link.utm_source,
+        utm_medium: utm_link.utm_medium,
+        utm_campaign: utm_link.utm_campaign,
+        utm_content: utm_link.utm_content,
+        utm_term: utm_link.utm_term
+      }
+    end
+
+    before do
+      allow(controller).to receive(:short_link_path).and_return("/l/#{product.unique_permalink}")
+      request.host = "#{seller.subdomain}"
+      request.path = "/l/#{product.unique_permalink}"
+    end
+
+    it "auto-creates a fresh UTM link and records the visit" do
+      expect do
+        expect do
+          get :action, params: utm_params.merge(id: product.unique_permalink)
+        end.to change(UtmLink.alive, :count).by(1)
+      end.to change(UtmLinkVisit, :count).by(1)
+
+      expect(response).to be_successful
+      expect(UtmLink.alive.last.id).not_to eq(utm_link.id)
+    end
+  end
+
+  context "when tracking raises unexpectedly" do
+    let!(:utm_link) { create(:utm_link, seller:) }
+    let(:utm_params) do
+      {
+        utm_source: utm_link.utm_source,
+        utm_medium: utm_link.utm_medium,
+        utm_campaign: utm_link.utm_campaign,
+        utm_content: utm_link.utm_content,
+        utm_term: utm_link.utm_term
+      }
+    end
+
+    before do
+      request.host = "#{seller.subdomain}"
+      request.path = "/"
+    end
+
+    it "reports the error and still renders the page when a record is invalid" do
+      allow_any_instance_of(UtmLink).to receive(:save!).and_raise(ActiveRecord::RecordInvalid)
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordInvalid), anything)
+
+      get :action, params: utm_params
+
+      expect(response).to be_successful
+    end
+
+    it "reports the error and still renders the page when the database uniqueness index is hit" do
+      allow_any_instance_of(UtmLink).to receive(:save!).and_raise(ActiveRecord::RecordNotUnique)
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordNotUnique), anything)
+
+      get :action, params: utm_params
+
+      expect(response).to be_successful
+    end
+  end
+
   context "when a matching UTM link is not found" do
     let(:product) { create(:product, user: seller) }
     let(:post) { create(:published_installment, seller:, shown_on_profile: true) }
