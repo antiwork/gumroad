@@ -92,6 +92,57 @@ describe AssetPreview, :vcr do
     end
   end
 
+  # Canary for the fast factory. `create(:asset_preview*)` injects hardcoded
+  # metadata instead of shelling out to the image/video analyzer on every call
+  # (see AssetPreviewAnalysisStub) — a big speedup, but on its own it would mean
+  # nothing in the suite still proves the analyzer actually extracts those
+  # dimensions from the real files. These few tests attach the same fixtures and
+  # run the real analyzer, so we keep that coverage and catch drift: if a fixture
+  # file or the analyzer changes, the values here stop matching KNOWN_METADATA
+  # and this block fails, flagging that the stub needs regenerating.
+  describe "real analyzer (fast-factory canary)" do
+    def analyze_fixture(filename, content_type)
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", filename)),
+        filename:, content_type:)
+      blob.analyze # real analyzer, bypassing the factory stub
+      asset_preview = AssetPreview.new(link: create(:product))
+      asset_preview.file.attach(blob)
+      asset_preview.save!
+      asset_preview
+    end
+
+    it "extracts PNG dimensions matching the stubbed metadata" do
+      asset_preview = analyze_fixture("kFDzu.png", "image/png")
+      expected = AssetPreviewAnalysisStub::KNOWN_METADATA["kFDzu.png"]
+      expect(asset_preview.width).to eq(expected["width"])
+      expect(asset_preview.height).to eq(expected["height"])
+    end
+
+    it "extracts JPG dimensions matching the stubbed metadata" do
+      asset_preview = analyze_fixture("test-small.jpg", "image/jpeg")
+      expected = AssetPreviewAnalysisStub::KNOWN_METADATA["test-small.jpg"]
+      expect(asset_preview.width).to eq(expected["width"])
+      expect(asset_preview.height).to eq(expected["height"])
+    end
+
+    it "extracts GIF dimensions matching the stubbed metadata" do
+      asset_preview = analyze_fixture("sample.gif", "image/gif")
+      expected = AssetPreviewAnalysisStub::KNOWN_METADATA["sample.gif"]
+      expect(asset_preview.width).to eq(expected["width"])
+      expect(asset_preview.height).to eq(expected["height"])
+    end
+
+    it "extracts MOV dimensions and duration matching the stubbed metadata" do
+      asset_preview = analyze_fixture("thing.mov", "video/quicktime")
+      expected = AssetPreviewAnalysisStub::KNOWN_METADATA["thing.mov"]
+      metadata = asset_preview.file.blob.metadata
+      expect(metadata[:width]).to eq(expected["width"])
+      expect(metadata[:height]).to eq(expected["height"])
+      expect(metadata[:duration]).to be_within(0.01).of(expected["duration"])
+    end
+  end
+
   describe "Embeddable link" do
     it "succeeds with a video URL" do
       asset_preview = create(:asset_preview, url: "https://www.youtube.com/watch?v=huKYieB4evw")
