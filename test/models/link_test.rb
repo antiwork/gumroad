@@ -1560,6 +1560,106 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal true, product.allow_parallel_purchases?
   end
 
+  # --- #is_downloadable? -----------------------------------------------------
+
+  test "is_downloadable? is false without product files" do
+    assert_equal false, create_product.is_downloadable?
+  end
+
+  test "is_downloadable? is false when files are stampable pdfs" do
+    product = create_product
+    product.product_files << create_non_readable_document
+    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    assert_equal false, product.is_downloadable?
+  end
+
+  test "is_downloadable? is false for a rent-only product" do
+    product = create_product
+    product.update!(purchase_type: "rent_only", rental_price_cents: 1_00)
+    product.product_files << create_non_readable_document
+    product.product_files << create_readable_document(pdf_stamp_enabled: false)
+    assert_equal false, product.is_downloadable?
+  end
+
+  test "is_downloadable? is false when all files are stream-only" do
+    product = create_product
+    product.product_files << create_streamable_video(stream_only: true)
+    product.product_files << create_streamable_video(stream_only: true)
+    assert_equal false, product.is_downloadable?
+  end
+
+  test "is_downloadable? is true with unstampable, non-stream-only files" do
+    product = create_product
+    product.product_files << create_non_readable_document
+    product.product_files << create_streamable_video(stream_only: true)
+    product.product_files << create_readable_document(pdf_stamp_enabled: false)
+    assert_equal true, product.is_downloadable?
+  end
+
+  # --- #create_licenses_for_existing_customers -------------------------------
+
+  test "enabling licensing queues CreateLicensesForExistingCustomersWorker" do
+    product = create_product
+    create_readable_document(link: product)
+    product.is_licensed = true
+    product.save!
+    assert CreateLicensesForExistingCustomersWorker.jobs.any? { |job| job["args"] == [product.id] }
+  end
+
+  test "disabling licensing does not queue CreateLicensesForExistingCustomersWorker" do
+    product = create_product(is_licensed: true)
+    create_readable_document(link: product)
+    CreateLicensesForExistingCustomersWorker.jobs.clear
+    product.is_licensed = false
+    product.save!
+    assert_empty CreateLicensesForExistingCustomersWorker.jobs
+  end
+
+  test "updating a non-licensing attribute does not queue CreateLicensesForExistingCustomersWorker" do
+    product = create_product
+    create_readable_document(link: product)
+    CreateLicensesForExistingCustomersWorker.jobs.clear
+    product.update!(description: "This is a new description.")
+    assert_equal 0, CreateLicensesForExistingCustomersWorker.jobs.size
+  end
+
+  # --- subscription_duration / preorders -------------------------------------
+
+  test "subscription_duration persists the integer enum correctly" do
+    link = create_product(subscription_duration: :monthly)
+    link.update!(subscription_duration: :yearly)
+    assert_equal "yearly", link.reload.subscription_duration
+    assert_equal 1, link.subscription_duration_before_type_cast
+  end
+
+  test "a product can be created for a preorder" do
+    assert create_product(is_in_preorder_state: true).valid?
+  end
+
+  # --- offer_code creation ---------------------------------------------------
+
+  test "an offer code can lower the price to 0" do
+    product = create_product(price_currency_type: "eur", price_cents: 240)
+    assert_difference -> { OfferCode.count }, 1 do
+      create_offer_code(products: [product], currency_type: "eur", amount_cents: 240)
+    end
+  end
+
+  test "an offer code can keep the price above the minimum" do
+    product = create_product(price_currency_type: "eur", price_cents: 240)
+    assert_difference -> { OfferCode.count }, 1 do
+      create_offer_code(products: [product], currency_type: "eur", amount_cents: 100)
+    end
+  end
+
+  test "an offer code cannot bring the price below the minimum" do
+    product = create_product(price_currency_type: "eur", price_cents: 240)
+    error = assert_raises(ActiveRecord::RecordInvalid) do
+      create_offer_code(products: [product], currency_type: "eur", amount_cents: 239)
+    end
+    assert_equal "The price after discount for all of your products must be either €0 or at least €0.79.", error.record.errors.full_messages.to_sentence
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do

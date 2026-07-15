@@ -306,7 +306,8 @@ module ModelFactories
     workflow
   end
 
-  def create_offer_code(user:, products:, amount_cents: 100, **attrs)
+  def create_offer_code(products:, user: nil, amount_cents: 100, **attrs)
+    user ||= products.first&.user || create_user
     offer_code = OfferCode.new({ user:, products:, code: "off#{unique_suffix[0, 8]}", amount_cents:, currency_type: user.currency_type }.merge(attrs))
     offer_code.user_id = products.first.user_id if products.present? # mirrors the factory's before(:create)
     offer_code.save!
