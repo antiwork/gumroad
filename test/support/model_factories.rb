@@ -63,7 +63,15 @@ module ModelFactories
   end
 
   def build_product(user: nil, **attrs)
-    Link.new({ user: user || create_user, name: "The Works of Edgar Gumstein", price_cents: 100 }.merge(attrs))
+    Link.new({
+      user: user || create_user,
+      name: "The Works of Edgar Gumstein",
+      description: "This is a collection of works spanning 1984 — 1994, while I spent time in a shack in the Andes.",
+      price_cents: 100,
+      # The :product factory turns review display on by default; several
+      # behaviors (recommendable?, review widgets) depend on it.
+      display_product_reviews: true,
+    }.merge(attrs))
   end
 
   def create_product(user: nil, **attrs)
@@ -492,6 +500,43 @@ module ModelFactories
     ProductFile.create!(PRODUCT_FILE_SHAPES.fetch(shape).merge(attrs))
   end
 
+  # A product thumbnail with the smilie.png fixture attached and analyzed
+  # (mirrors the :thumbnail factory).
+  def create_thumbnail(product: nil, **attrs)
+    thumbnail = Thumbnail.new({ product: product || create_product }.merge(attrs))
+    blob = ActiveStorage::Blob.create_and_upload!(
+      io: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "smilie.png"), "image/png"),
+      filename: "smilie.png"
+    )
+    blob.analyze
+    thumbnail.file.attach(blob)
+    thumbnail.save!
+    thumbnail.file.analyze if thumbnail.file.attached?
+    thumbnail
+  end
+
+  # An asset preview (cover) with a fixture image attached. Metadata is injected
+  # by AssetPreviewAnalysisStub instead of shelling out to the analyzer, matching
+  # the :asset_preview factory.
+  def create_asset_preview(link: nil, **attrs)
+    build_asset_preview(link:, fixture: "kFDzu.png", content_type: "image/png", **attrs)
+  end
+
+  def create_asset_preview_mov(link: nil, **attrs)
+    build_asset_preview(link:, fixture: "thing.mov", content_type: "video/quicktime", **attrs)
+  end
+
+  # A recommendable product: a compliant seller with a payout address, the films
+  # taxonomy, and a completed sale — the DB-only conditions Product#recommendable?
+  # checks (mirrors the :recommendable trait, minus the ES reindex).
+  def create_recommendable_product(**attrs)
+    seller = create_user(user_risk_state: "compliant", name: "gumbo", payment_address: "gumbo-#{unique_suffix}@example.com")
+    product = create_product(user: seller, taxonomy: Taxonomy.find_or_create_by(slug: "films"), **attrs)
+    create_purchase(link: product)
+    product.reload
+    product
+  end
+
   # CreatorContactingCustomersEmailInfo rows, mirroring the nested
   # creator_contacting_customers_email_info_{sent,delivered,opened} factories:
   # each state carries the timestamps of the states it descends from.
@@ -502,6 +547,15 @@ module ModelFactories
     attrs[:opened_at] = Time.current if state == "opened"
     CreatorContactingCustomersEmailInfo.create!(attrs)
   end
+
+  private
+    def build_asset_preview(link:, fixture:, content_type:, **attrs)
+      preview = AssetPreview.new({ link: link || create_product }.merge(attrs))
+      preview.file.attach(Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", fixture), content_type))
+      preview.save!
+      AssetPreviewAnalysisStub.analyze(preview.file)
+      preview
+    end
 end
 
 ActiveSupport::TestCase.include(ModelFactories)

@@ -2967,6 +2967,15 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal 100, product.gumroad_amount_for_paypal_order(amount_cents: 10_00, affiliate_id: affiliate.id, was_recommended: true)
   end
 
+  test "gumroad_amount_for_paypal_order adds a global affiliate's fee, even for Discover sales" do
+    product = create_recommendable_product
+    affiliate = create_user.global_affiliate
+    # Global affiliates earn a flat 10% (100c) and — unlike direct affiliates —
+    # keep it on Discover sales too.
+    assert_equal 100 + 100, product.gumroad_amount_for_paypal_order(amount_cents: 10_00, affiliate_id: affiliate.id)
+    assert_equal 100 + 100, product.gumroad_amount_for_paypal_order(amount_cents: 10_00, affiliate_id: affiliate.id, was_recommended: true)
+  end
+
   test "gumroad_amount_for_paypal_order adds VAT" do
     creator = create_user
     product = create_product(user: creator)
@@ -2994,6 +3003,126 @@ class LinkTest < ActiveSupport::TestCase
 
   test "ppp_details returns the details when the factor exists and isn't 1" do
     assert_equal({ country: "Latvia", factor: 0.5, minimum_price: 99 }, ppp_product.ppp_details("109.110.31.255"))
+  end
+
+  # --- #thumbnail_or_cover_url -----------------------------------------------
+
+  test "thumbnail_or_cover_url returns nil when the product has no thumbnail or covers" do
+    assert_nil create_product.thumbnail_or_cover_url
+  end
+
+  test "thumbnail_or_cover_url returns the thumbnail, falling back to the first cover image" do
+    product = create_product
+    thumbnail = create_thumbnail(product:)
+    assert_equal thumbnail.url, product.thumbnail_or_cover_url
+
+    create_asset_preview_mov(link: product)
+    cover = create_asset_preview(link: product)
+    assert_equal thumbnail.url, product.reload.thumbnail_or_cover_url
+
+    thumbnail.mark_deleted!
+    assert_equal cover.url, product.reload.thumbnail_or_cover_url
+  end
+
+  # --- #for_email_thumbnail_url ----------------------------------------------
+
+  test "for_email_thumbnail_url returns the native-type thumbnail when there's no thumbnail" do
+    assert_equal ActionController::Base.helpers.image_url("native_types/thumbnails/digital.png"),
+                 create_product.for_email_thumbnail_url
+  end
+
+  test "for_email_thumbnail_url returns the thumbnail url when there's an active thumbnail" do
+    product = create_product
+    create_thumbnail(product:)
+    assert_equal product.thumbnail.alive.url, product.reload.for_email_thumbnail_url
+  end
+
+  test "for_email_thumbnail_url falls back to the native-type thumbnail when the thumbnail is deleted" do
+    product = create_product
+    create_thumbnail(product:)
+    product.reload.thumbnail.mark_deleted!
+    assert_equal ActionController::Base.helpers.image_url("native_types/thumbnails/digital.png"),
+                 product.reload.for_email_thumbnail_url
+  end
+
+  # --- #reorder_previews -----------------------------------------------------
+
+  test "reorder_previews updates the positions of previews" do
+    product = create_product
+    previews = Array.new(8) { create_asset_preview(link: product) }
+    # Move preview[3] to the front; the rest keep their relative order.
+    product.reorder_previews(
+      previews[0].guid => 1,
+      previews[1].guid => 2,
+      previews[2].guid => 3,
+      previews[3].guid => 0,
+      previews[4].guid => 4,
+      previews[5].guid => 5,
+      previews[6].guid => 6,
+      previews[7].guid => 7,
+    )
+
+    expected = [previews[3], previews[0], previews[1], previews[2], previews[4], previews[5], previews[6], previews[7]].map(&:id)
+    assert_equal expected, product.display_asset_previews.pluck(:id)
+  end
+
+  # --- #generate_product_files_archives! -------------------------------------
+
+  test "generate_product_files_archives! generates folder archives for product-level rich content" do
+    product = create_product
+    file1 = create_product_file(link: product)
+    file2 = create_product_file(link: product)
+    create_rich_content(entity: product, description: [file_embed_group("folder 1", [file1, file2])])
+
+    assert_difference -> { product.product_files_archives.folder_archives.alive.size }, 1 do
+      product.generate_product_files_archives!
+    end
+  end
+
+  test "generate_product_files_archives! generates folder archives for variant-level rich content" do
+    product = create_product
+    category = create_variant_category(link: product)
+    version1 = create_variant(variant_category: category, name: "V1")
+    version2 = create_variant(variant_category: category, name: "V2")
+
+    file1 = create_product_file(display_name: "File 1")
+    file2 = create_product_file(display_name: "File 2")
+    file3 = create_product_file(display_name: "File 3")
+    file4 = create_product_file(display_name: "File 4")
+    product.product_files = [file1, file2, file3, file4]
+    version1.product_files = [file1, file2]
+    version2.product_files = [file3, file4]
+    create_rich_content(entity: version1, description: [file_embed_group("folder 1", [file1, file2])])
+    create_rich_content(entity: version2, description: [file_embed_group("folder 1", [file3, file4])])
+
+    assert_no_difference -> { product.product_files_archives.folder_archives.size } do
+      assert_difference -> { version1.product_files_archives.folder_archives.alive.size }, 1 do
+        assert_difference -> { version2.product_files_archives.folder_archives.alive.size }, 1 do
+          product.generate_product_files_archives!
+        end
+      end
+    end
+  end
+
+  test "generate_product_files_archives! regenerates archives containing the provided files" do
+    product = create_product
+    file1 = create_product_file(link: product)
+    file2 = create_product_file(link: product)
+    folder_id = SecureRandom.uuid
+    create_rich_content(entity: product, description: [file_embed_group("folder 1", [file1, file2], folder_id:)])
+
+    archive = product.product_files_archives.create!(folder_id:, product_files: product.product_files)
+    archive.mark_in_progress!
+    archive.mark_ready!
+
+    assert_no_difference -> { archive.reload.deleted? ? 1 : 0 } do
+      product.generate_product_files_archives!
+    end
+    assert_difference -> { archive.reload.deleted? ? 1 : 0 }, 1 do
+      product.generate_product_files_archives!(for_files: [file1])
+    end
+    assert_equal 1, product.product_files_archives.folder_archives.alive.size
+    assert_equal folder_id, product.product_files_archives.folder_archives.alive.first.folder_id
   end
 
   # --- installment plan ------------------------------------------------------
@@ -3106,6 +3235,18 @@ class LinkTest < ActiveSupport::TestCase
   end
 
   private
+    # A rich-content fileEmbedGroup node wrapping the given product files —
+    # the shape generate_product_files_archives! walks to build folder archives.
+    def file_embed_group(name, files, folder_id: SecureRandom.uuid)
+      {
+        "type" => "fileEmbedGroup",
+        "attrs" => { "name" => name, "uid" => folder_id },
+        "content" => files.map do |file|
+          { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+        end,
+      }
+    end
+
     # Six products across two users for the permalink-fetching tests.
     def fetch_leniently_context
       user_1 = create_user

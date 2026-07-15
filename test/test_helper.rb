@@ -125,6 +125,12 @@ module ActiveSupport
   end
 end
 
+# AssetPreviewAnalysisStub injects known metadata for fixture files instead of
+# shelling out to the image/video analyzer. It lives under spec/support (shared
+# with the RSpec suite) and has no RSpec dependency, so require it directly for
+# the asset_preview/thumbnail helpers.
+require Rails.root.join("spec", "support", "asset_preview_analysis_stub")
+
 # Load shared test-support modules.
 Dir[Rails.root.join("test", "support", "**", "*.rb")].sort.each { |f| require f }
 
