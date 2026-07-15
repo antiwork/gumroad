@@ -1086,7 +1086,98 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal 2, product.unique_permalink.length
   end
 
+  # --- .fetch_leniently ------------------------------------------------------
+
+  test "fetch_leniently by unique permalink fetches, scopes to user, and skips deleted" do
+    ctx = fetch_leniently_context
+    assert_equal ctx[:product_1], Link.fetch_leniently("aaa")
+    assert_equal ctx[:product_1], Link.fetch_leniently("aaa", user: ctx[:user_1])
+    assert_nil Link.fetch_leniently("aaa", user: ctx[:user_2])
+    assert_nil Link.fetch_leniently("ccc") # deleted
+  end
+
+  test "fetch_leniently by custom permalink fetches oldest, per-user, and skips deleted" do
+    ctx = fetch_leniently_context
+    assert_equal ctx[:product_2], Link.fetch_leniently("custom") # oldest
+    assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])
+    assert_equal ctx[:product_5], Link.fetch_leniently("awesome", user: ctx[:user_2])
+    assert_nil Link.fetch_leniently("awesome", user: ctx[:user_1])
+    assert_nil Link.fetch_leniently("no-longer-alive") # deleted
+  end
+
+  test "fetch_leniently uses a legacy permalink mapping when present" do
+    ctx = fetch_leniently_context
+    # no mapping yet
+    assert_equal ctx[:product_2], Link.fetch_leniently("custom")
+    assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])
+
+    LegacyPermalink.create!(permalink: "custom", product: ctx[:product_6])
+    assert_equal ctx[:product_6], Link.fetch_leniently("custom")
+
+    ctx[:product_6].mark_deleted!
+    assert_equal ctx[:product_2], Link.fetch_leniently("custom") # falls back past the deleted mapped product
+
+    assert_equal ctx[:product_2], Link.fetch_leniently("custom", user: ctx[:user_1])
+  end
+
+  # --- .fetch ----------------------------------------------------------------
+
+  test "fetch matches by unique permalink only, scopes to user, and skips deleted" do
+    user_1 = create_user
+    product_1 = create_product(user: user_1, unique_permalink: "aaa")
+    create_product(user: user_1, unique_permalink: "bbb", custom_permalink: "custom")
+    create_product(user: user_1, unique_permalink: "ccc", custom_permalink: "no-longer-alive", deleted_at: Time.current)
+    user_2 = create_user
+    create_product(user: user_2, unique_permalink: "ddd", custom_permalink: "custom")
+
+    assert_equal product_1, Link.fetch("aaa")
+    assert_nil Link.fetch("custom") # custom permalinks aren't matched by fetch
+    assert_equal product_1, Link.fetch("aaa", user: user_1)
+    assert_nil Link.fetch("aaa", user: user_2)
+    assert_nil Link.fetch("ccc") # deleted
+  end
+
+  # --- #matches_permalink? ---------------------------------------------------
+
+  test "matches_permalink? matches unique and custom permalinks case-insensitively" do
+    product = build_product(unique_permalink: "aB1", custom_permalink: "custom")
+    assert_equal false, product.matches_permalink?("invalid")
+    assert_equal true, product.matches_permalink?("aB1")
+    assert_equal true, product.matches_permalink?("ab1")
+    assert_equal false, product.matches_permalink?("aB") # partial
+    assert_equal true, product.matches_permalink?("custom")
+    assert_equal true, product.matches_permalink?("CUSTOM")
+    assert_equal false, product.matches_permalink?("custo") # partial
+  end
+
+  test "matches_permalink? returns false for a blank permalink when custom is blank" do
+    product = build_product
+    assert_equal false, product.matches_permalink?(nil)
+    assert_equal false, product.matches_permalink?("")
+  end
+
+  # --- name ------------------------------------------------------------------
+
+  test "name is invalid when too long" do
+    assert_not build_product(name: "hi there" * 255).valid?
+  end
+
   private
+    # Six products across two users for the permalink-fetching tests.
+    def fetch_leniently_context
+      user_1 = create_user
+      user_2 = create_user
+      {
+        user_1:, user_2:,
+        product_1: create_product(user: user_1, unique_permalink: "aaa"),
+        product_2: create_product(user: user_1, unique_permalink: "bbb", custom_permalink: "custom"),
+        product_3: create_product(user: user_1, unique_permalink: "ccc", custom_permalink: "no-longer-alive", deleted_at: Time.current),
+        product_4: create_product(user: user_2, unique_permalink: "ddd"),
+        product_5: create_product(user: user_2, unique_permalink: "eee", custom_permalink: "awesome"),
+        product_6: create_product(user: user_2, unique_permalink: "fff", custom_permalink: "custom"),
+      }
+    end
+
     # Lazily-created base product (like the RSpec `let(:link)`). Kept lazy so the
     # permalink-generation tests, which fill up short permalinks, don't collide
     # with an eagerly-created product's auto-assigned short permalink.
