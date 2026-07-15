@@ -105,6 +105,12 @@ module ActiveSupport
         paypal_payout_fee
         disable_braintree_sales
       ].each { |feature| Feature.activate(feature) }
+
+      # Creating/saving a User runs Devise's Have I Been Pwned check, which
+      # makes a real HTTP request that WebMock blocks. Stub it the way
+      # spec_helper's stub_pwned_password_check does.
+      WebMock.stub_request(:get, %r{api\.pwnedpasswords\.com/range/.+})
+             .to_return(status: 200, body: "", headers: {})
     end
   end
 end

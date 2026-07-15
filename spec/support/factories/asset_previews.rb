@@ -47,7 +47,9 @@ FactoryBot.define do
     end
 
     after(:create) do |preview|
-      preview.file.analyze if preview.file.attached?
+      # Inject known metadata for the fixture files instead of shelling out to
+      # the image/video analyzer on every create; see AssetPreviewAnalysisStub.
+      AssetPreviewAnalysisStub.analyze(preview.file)
     end
   end
 end
