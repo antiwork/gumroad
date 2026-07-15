@@ -139,6 +139,7 @@ export const GetUserCustomHtml = () => (
       {`{
   "success": true,
   "custom_html": "<main><h1>Moonwalk Records</h1></main>",
+  "rendered_html": "<main><h1>Moonwalk Records</h1></main>",
   "has_landing_page": true,
   "profile_url": "https://sailorjohn.gumroad.com"
 }`}
