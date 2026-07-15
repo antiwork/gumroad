@@ -1293,6 +1293,112 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil product.default_price_recurrence
   end
 
+  # --- #price_range ----------------------------------------------------------
+
+  test "price_range can be assigned a number" do
+    product.price_range = 1
+    assert_equal 100, product.price_cents
+    product.price_range = 1.01
+    assert_equal 101, product.price_cents
+    product.price_range = 10.01
+    assert_equal 1001, product.price_cents
+  end
+
+  test "price_range absorbs random data" do
+    product.price_range = "1sdlkjglsjdhgfsjhdgf"
+    assert_equal 100, product.price_cents
+    product.price_range = "1.sdlkjglsjdhgfsjhdgf01"
+    assert_equal 101, product.price_cents
+    product.price_range = "1sdlkjglsjdhgfsjhdgf0.01"
+    assert_equal 1001, product.price_cents
+  end
+
+  test "price_range treats a trailing plus sign as customizable" do
+    product.price_range = "0.99+"
+    assert_equal true, product.customizable_price
+    product.price_range = "0.99"
+    assert_equal false, product.customizable_price
+  end
+
+  test "price_range sets price cents for USD" do
+    product.price_currency_type = :usd
+    product.price_range = "1"
+    assert_equal 100, product.price_cents
+    product.price_range = "10.01"
+    assert_equal 1001, product.price_cents
+  end
+
+  test "price_range sets and saves price cents for GBP" do
+    product.price_currency_type = :gbp
+    product.price_range = "10.01"
+    assert_equal 1001, product.price_cents
+    product.save!
+    assert_equal 1001, product.price_cents
+  end
+
+  test "price_range handles JPY (single-unit currency)" do
+    product.price_currency_type = "jpy"
+    product.price_range = "100"
+    assert_equal 100, product.price_cents
+    product.price_range = "¥100.01"
+    assert_equal 100, product.price_cents
+    product.price_range = "100"
+    product.save!
+    assert_equal 100, product.price_cents
+  end
+
+  test "price_range accepts 0+ and 1+ but not 0.50+" do
+    product.price_range = "0+"
+    assert_equal true, product.save
+    product.price_range = "0.50+"
+    assert_equal false, product.save
+    product.price_range = "1+"
+    assert_equal true, product.save
+  end
+
+  test "price_range handles euro-style entries" do
+    product.user.update!(verified: true)
+    { "999,99" => 99_999, "999.99" => 99_999, "1.999,99" => 199_999, "1,999.99" => 199_999, "1,999" => 199_900 }.each do |input, cents|
+      product.price_range = input
+      product.save!
+      assert_equal cents, product.price_cents, "expected #{input.inspect} to parse to #{cents}"
+    end
+  end
+
+  # --- #rental_price_range ---------------------------------------------------
+
+  test "rental_price_range trailing plus is customizable only for rent-only products" do
+    product.purchase_type = :rent_only
+    product.rental_price_cents = 100
+    product.save!
+    product.rental_price_range = "1.99+"
+    assert_equal true, product.customizable_price
+    assert_equal 199, product.price_cents
+
+    product.rental_price_range = "0.99"
+    assert_equal false, product.customizable_price
+    assert_equal 99, product.price_cents
+
+    product.purchase_type = :buy_only
+    product.price_cents = 100
+    product.save!
+    product.rental_price_range = "1.99+"
+    assert_equal false, product.customizable_price
+    assert_equal 100, product.price_cents
+
+    product.purchase_type = :buy_and_rent
+    product.save!
+    product.rental_price_range = "1.99+"
+    assert_equal false, product.customizable_price
+    assert_equal 100, product.price_cents
+    assert_equal 199, product.rental_price_cents
+  end
+
+  test "saving a product creates a permalink" do
+    product.save!
+    assert_not_nil product.unique_permalink
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
