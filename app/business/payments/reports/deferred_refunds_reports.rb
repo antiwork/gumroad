@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 module DeferredRefundsReports
+  # Monthly accounting email listing the refunds and disputes from the given month that were
+  # issued against purchases from an EARLIER month ("deferred" — the sale's revenue period
+  # already closed when the money went back out).
   def self.deferred_refunds_report(month, year)
     json = { "Purchases" => [] }
     range = DateTime.new(year, month)...DateTime.new(year, month).end_of_month
@@ -21,14 +24,22 @@ module DeferredRefundsReports
       refunded_purchases = charges.first
       disputed_purchases = charges.second
 
+      # Sum only the refunds created inside the reported month. The purchases were selected
+      # because they have at least one refund in the month, but a purchase refunded across
+      # several months (e.g. two partial refunds in different months) has refund rows outside
+      # the range too — an unscoped join would count those in this month's totals as well,
+      # so each refund of a multi-month purchase would be reported in every month that
+      # purchase appears in.
+      month_refunds = refunded_purchases.joins(:refunds).where(refunds: { created_at: range })
+
       json["Purchases"] << {
         "Processor" => name,
         "Sales" => {
           total_transaction_count: refunded_purchases.count + disputed_purchases.count,
-          total_transaction_cents: refunded_purchases.joins(:refunds).sum("refunds.total_transaction_cents") + disputed_purchases.sum(:total_transaction_cents),
-          gumroad_tax_cents: refunded_purchases.joins(:refunds).sum("refunds.gumroad_tax_cents") + disputed_purchases.sum(:gumroad_tax_cents),
-          affiliate_credit_cents: refunded_purchases.joins(:refunds).sum("TRUNCATE(purchases.affiliate_credit_cents * (refunds.amount_cents / purchases.price_cents), 0)") + disputed_purchases.sum(:affiliate_credit_cents),
-          fee_cents: refunded_purchases.joins(:refunds).sum("refunds.fee_cents") + disputed_purchases.sum(:fee_cents)
+          total_transaction_cents: month_refunds.sum("refunds.total_transaction_cents") + disputed_purchases.sum(:total_transaction_cents),
+          gumroad_tax_cents: month_refunds.sum("refunds.gumroad_tax_cents") + disputed_purchases.sum(:gumroad_tax_cents),
+          affiliate_credit_cents: month_refunds.sum("TRUNCATE(purchases.affiliate_credit_cents * (refunds.amount_cents / purchases.price_cents), 0)") + disputed_purchases.sum(:affiliate_credit_cents),
+          fee_cents: month_refunds.sum("refunds.fee_cents") + disputed_purchases.sum(:fee_cents)
         }
       }
     end
