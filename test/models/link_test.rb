@@ -2864,6 +2864,93 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal true, create_product(user: younger).require_captcha?
   end
 
+  # --- #toggle_community_chat! -----------------------------------------------
+
+  test "toggle_community_chat! enables chat and creates a community when none exists" do
+    product = create_product
+    assert_difference -> { product.reload.communities.count }, 1 do
+      product.toggle_community_chat!(true)
+    end
+    assert_equal true, product.reload.community_chat_enabled
+    assert_equal product.communities.last, product.active_community
+  end
+
+  test "toggle_community_chat! restores a deleted community when enabling" do
+    product = create_product
+    community = create_community(resource: product, deleted_at: 1.day.ago)
+    assert_nil product.active_community
+    product.toggle_community_chat!(true)
+    assert_equal true, product.reload.community_chat_enabled
+    assert_nil community.reload.deleted_at
+    assert_equal community, product.active_community
+  end
+
+  test "toggle_community_chat! does nothing when already enabled" do
+    product = create_product
+    product.update!(community_chat_enabled: true)
+    create_community(resource: product)
+    assert_no_difference -> { product.communities.count } do
+      product.toggle_community_chat!(true)
+      assert_equal true, product.reload.community_chat_enabled
+    end
+  end
+
+  test "toggle_community_chat! disables chat and deletes the active community" do
+    product = create_product
+    product.update!(community_chat_enabled: true)
+    create_community(resource: product)
+    assert_difference -> { product.reload.communities.alive.count }, -1 do
+      product.toggle_community_chat!(false)
+    end
+    assert_equal false, product.reload.community_chat_enabled
+    assert_nil product.active_community
+  end
+
+  test "toggle_community_chat! does nothing when already disabled" do
+    product = create_product
+    assert_no_difference -> { product.communities.count } do
+      product.toggle_community_chat!(false)
+      assert_equal false, product.reload.community_chat_enabled
+    end
+  end
+
+  # --- #cart_item ------------------------------------------------------------
+
+  test "cart_item falls back to product prices when a tier's variant is missing" do
+    product = create_membership_product
+    product.tier_category.variants.each { |variant| variant.update!(deleted_at: Time.current) }
+    result = product.cart_item({})
+    assert_kind_of Hash, result
+    assert result.key?(:option)
+    assert result.key?(:price)
+  end
+
+  # --- installment plan ------------------------------------------------------
+
+  test "updating the product re-validates its installment plan" do
+    product = create_product(price_cents: 1000)
+    create_product_installment_plan(link: product, number_of_installments: 2)
+    product.price_cents = 99
+    assert_not product.valid?
+    assert_includes product.errors.full_messages, "Installment plan The minimum price for each installment must be at least 0.99 USD."
+  end
+
+  # --- .eligible_for_content_upsells -----------------------------------------
+
+  test "eligible_for_content_upsells returns visible non-membership products (incl. with variants)" do
+    regular = create_product
+    create_readable_document(link: regular)
+    with_variants = create_product_with_digital_versions
+    membership = create_membership_product
+    archived = create_product(archived: true)
+
+    result = Link.eligible_for_content_upsells
+    assert_includes result, regular
+    assert_includes result, with_variants
+    assert_not_includes result, membership
+    assert_not_includes result, archived
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do

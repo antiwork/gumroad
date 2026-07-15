@@ -117,6 +117,11 @@ module ModelFactories
     product
   end
 
+  def create_product_installment_plan(link: nil, number_of_installments: 3, recurrence: "monthly", **attrs)
+    link ||= create_product(price_cents: 1000)
+    ProductInstallmentPlan.create!({ link:, number_of_installments:, recurrence: }.merge(attrs))
+  end
+
   def create_sku(link: nil, **attrs)
     Sku.create!({ link: link || create_product, price_difference_cents: 0, name: "Large" }.merge(attrs))
   end
