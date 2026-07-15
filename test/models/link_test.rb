@@ -2057,6 +2057,84 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal 3.months, product.free_trial_duration
   end
 
+  # --- #has_customizable_price_option? ---------------------------------------
+
+  test "has_customizable_price_option? reflects customizable_price for a non-tiered product" do
+    assert_equal true, build_product(customizable_price: true).has_customizable_price_option?
+    assert_equal false, build_product(customizable_price: false).has_customizable_price_option?
+  end
+
+  test "has_customizable_price_option? is false for a tiered membership without customizable tiers" do
+    assert_equal false, create_membership_product.has_customizable_price_option?
+  end
+
+  test "has_customizable_price_option? is true when a tier is customizable" do
+    product = create_membership_product
+    product.default_tier.update!(customizable_price: true)
+    assert_equal true, product.has_customizable_price_option?
+  end
+
+  test "has_customizable_price_option? ignores deleted customizable tiers" do
+    product = create_membership_product
+    create_variant(variant_category: product.tier_category, customizable_price: true, deleted_at: Time.current)
+    assert_equal false, product.has_customizable_price_option?
+  end
+
+  # --- #recurrence_price_enabled? --------------------------------------------
+
+  test "recurrence_price_enabled? is true with a live price for the recurrence" do
+    product = create_product
+    create_price(link: product, recurrence: "monthly")
+    assert_equal true, product.recurrence_price_enabled?("monthly")
+  end
+
+  test "recurrence_price_enabled? is false without a live price for the recurrence" do
+    product = create_product
+    assert_equal false, product.recurrence_price_enabled?("monthly")
+    create_price(link: product, recurrence: "monthly", deleted_at: 1.day.ago)
+    assert_equal false, product.recurrence_price_enabled?("monthly")
+  end
+
+  # --- #has_multiple_variants? -----------------------------------------------
+
+  test "has_multiple_variants? for physical products depends on live custom SKUs" do
+    product = create_physical_product
+    assert_equal false, product.has_multiple_variants? # default SKU only
+
+    create_sku(link: product, deleted_at: Time.current)
+    assert_equal false, product.has_multiple_variants?
+
+    sku = create_sku(link: product)
+    assert_equal false, product.has_multiple_variants? # a single custom SKU is not "multiple"
+
+    create_sku(link: product)
+    assert_equal true, product.has_multiple_variants?
+    assert sku # (silence unused warning; the first custom SKU is part of the setup)
+  end
+
+  test "has_multiple_variants? for non-physical products depends on live variants" do
+    product = create_product
+    category = create_variant_category(link: product)
+
+    create_variant(variant_category: category, deleted_at: Time.current)
+    assert_equal false, product.has_multiple_variants?
+
+    create_variant(variant_category: category)
+    assert_equal false, product.has_multiple_variants?
+
+    create_variant(variant_category: category)
+    assert_equal true, product.has_multiple_variants?
+  end
+
+  test "has_multiple_variants? is true across multiple variant categories" do
+    product = create_product
+    category = create_variant_category(link: product)
+    other_category = create_variant_category(link: product)
+    create_variant(variant_category: category)
+    create_variant(variant_category: other_category)
+    assert_equal true, product.has_multiple_variants?
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
