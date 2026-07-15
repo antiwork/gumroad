@@ -75,7 +75,12 @@ export const PreviewChrome = ({
   // `bg-background` (not a hardcoded white) so the chrome follows the dashboard's light/dark
   // theme — the framed content paints its own background, but the chrome's rounded corners
   // and the pre-load area would otherwise flash white in dark mode.
-  <div className="flex flex-col overflow-hidden rounded border border-border bg-background">
+  //
+  // `shrink-0` matters: the chrome renders as a flex item inside the sidebar's fixed-height
+  // flex column, and `overflow-hidden` (needed to clip children to the rounded corners)
+  // zeroes a flex item's automatic minimum size — without shrink-0 the chrome would compress
+  // to the viewport and silently clip tall previews instead of letting the sidebar scroll.
+  <div className="flex shrink-0 flex-col overflow-hidden rounded border border-border bg-background">
     <div className="relative border-b border-border bg-background px-10 py-2">
       <div className="min-w-0 text-center">
         <div className="truncate text-sm font-medium">{title}</div>
