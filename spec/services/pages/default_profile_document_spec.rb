@@ -26,13 +26,17 @@ describe Pages::DefaultProfileDocument do
       expect(html).not_to include(draft.name)
     end
 
-    it "links the seller's slugged pages so the pulled home page stays navigable" do
+    it "does not link slugged pages, since the default storefront never shows those links" do
+      # A pulled document must only contain what the current storefront renders:
+      # a seller may rely on a slugged page being unlinked (a hidden discount
+      # page, a draft shared privately), and pushing the pull back must not
+      # publish navigation the storefront never had.
       create(:user_page, pageable: seller, slug: "about", title: "About me")
 
       html = described_class.render(seller)
 
-      expect(html).to include(%(href="#{seller.subdomain_with_protocol}/about"))
-      expect(html).to include("About me")
+      expect(html).not_to include("/about")
+      expect(html).not_to include("About me")
     end
 
     it "uses the seller's saved profile colors" do
@@ -53,12 +57,11 @@ describe Pages::DefaultProfileDocument do
       expect(html).to include("&lt;script&gt;")
     end
 
-    it "omits the products, posts, and pages sections when the seller has none" do
+    it "omits the products and posts sections when the seller has none" do
       html = described_class.render(seller)
 
       expect(html).not_to include("<h2>Products</h2>")
       expect(html).not_to include("<h2>Posts</h2>")
-      expect(html).not_to include(%(<nav class="pages">))
     end
   end
 end

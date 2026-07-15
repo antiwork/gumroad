@@ -6,10 +6,17 @@
 # This is the "pull" starting point for going custom on the profile: instead of
 # starting an agent from a blank file, `GET /v2/user/custom_html` returns this
 # render (as `rendered_html`) so the agent begins from a faithful snapshot of
-# what the profile already shows — creator header, product grid, recent posts,
-# links to the seller's other pages — then edits and pushes the result back.
+# what the profile already shows — creator header, product grid, recent posts —
+# then edits and pushes the result back.
 # Slugged pages get the same treatment from Pages::RichTextDocument; this
 # service is the profile-root counterpart.
+#
+# Deliberately NOT included: links to the seller's slugged pages. The default
+# storefront doesn't render those links anywhere, and a seller may rely on a
+# page being unlinked (a hidden discount page, a draft shared privately). Adding
+# them here would mean a pull-then-push publishes navigation the current
+# storefront never showed. Agents that want a pages nav can list pages via the
+# API and add links intentionally.
 #
 # It deliberately reuses Pages::ProfileData (the same cached snapshot injected
 # into published custom pages as `gumroad-data`), so the pulled document and
@@ -43,8 +50,6 @@ class Pages::DefaultProfileDocument
             header.creator img { width: 4rem; height: 4rem; border-radius: 50%; border: 1px solid #000; }
             header.creator h1 { margin: 0; font-size: 2rem; line-height: 1.2; }
             p.bio { margin: 0 0 2rem; max-width: 42rem; }
-            nav.pages { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 2.5rem; }
-            nav.pages a { color: inherit; font-size: 0.875rem; }
             section h2 { font-size: 1.25rem; margin: 2.5rem 0 1rem; }
             .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 1rem; padding: 0; margin: 0; list-style: none; }
             .products a { display: block; height: 100%; color: inherit; text-decoration: none; border: 1px solid #000; border-radius: 8px; overflow: hidden; background: #fff; }
@@ -65,25 +70,12 @@ class Pages::DefaultProfileDocument
               <h1>#{name}</h1>
             </header>
             #{bio.present? ? %(<p class="bio">#{bio}</p>) : ""}
-            #{pages_nav(seller)}
             #{products_section(data[:products])}
             #{posts_section(data[:posts])}
           </main>
         </body>
       </html>
     HTML
-  end
-
-  # Links to the seller's other (slugged) pages, so the pulled home page keeps
-  # the store navigable the way the seller's pages list is today.
-  def self.pages_nav(seller)
-    links = seller.pages.filter_map do |page|
-      next if page.slug.blank?
-      %(<a href="#{ERB::Util.h("#{seller.subdomain_with_protocol}/#{page.slug}")}">#{ERB::Util.h(page.title.to_s)}</a>)
-    end
-    return "" if links.empty?
-
-    %(<nav class="pages">#{links.join("\n")}</nav>)
   end
 
   def self.products_section(products)
