@@ -1008,6 +1008,43 @@ class LinkTest < ActiveSupport::TestCase
     assert_not_includes Link.not_call, call_product
   end
 
+  # --- custom_permalink validity ---------------------------------------------
+
+  test "custom_permalink is valid with numbers, letters, underscores, and dashes" do
+    assert build_product(custom_permalink: "a23f").valid?
+    assert build_product(custom_permalink: "asdfsdf").valid?
+    assert build_product(custom_permalink: "asdf_asdf").valid?
+    assert build_product(custom_permalink: "asdf-asdf").valid?
+  end
+
+  test "custom_permalink is invalid with special characters" do
+    assert_not build_product(custom_permalink: "asdf&asdf").valid?
+    assert_not build_product(custom_permalink: "asdf*23sdf").valid?
+    assert_not build_product(custom_permalink: "asdf!213").valid?
+  end
+
+  test "custom_permalink is invalid when it duplicates another product's custom permalink for the same user" do
+    user = create_user
+    create_product(user:, custom_permalink: "custom")
+    assert_not build_product(user:, custom_permalink: "custom").valid?
+  end
+
+  test "custom_permalink is invalid when it duplicates another product's unique permalink for the same user" do
+    user = create_user
+    create_product(user:, unique_permalink: "abc")
+    assert_not build_product(user:, custom_permalink: "abc").valid?
+  end
+
+  test "custom_permalink is valid when it duplicates another user's unique permalink" do
+    create_product(user: create_user, unique_permalink: "abc")
+    assert build_product(user: create_user, custom_permalink: "abc").valid?
+  end
+
+  test "custom_permalink is valid when it duplicates another user's custom permalink" do
+    create_product(user: create_user, custom_permalink: "custom")
+    assert build_product(user: create_user, custom_permalink: "custom").valid?
+  end
+
   private
     # A confirmed seller with a merchant account and an unpublished product
     # carrying a file — the real starting point for the publish! scope tests
