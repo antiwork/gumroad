@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 type LayoutProps = {
@@ -19,7 +19,13 @@ export const Layout = ({ title, actions, navigation, children, preview }: Layout
     {preview ? (
       <WithPreviewSidebar className="flex-1">
         <div>{children}</div>
-        <PreviewSidebar>{preview}</PreviewSidebar>
+        <PreviewSidebar>
+          {/* Workflow emails land in inboxes, not on a page — there's no public URL to show
+              or open, so the chrome carries the workflow's name alone. */}
+          <PreviewChrome title={title}>
+            <div className="flex flex-col gap-4 p-4">{preview}</div>
+          </PreviewChrome>
+        </PreviewSidebar>
       </WithPreviewSidebar>
     ) : (
       <div>{children}</div>

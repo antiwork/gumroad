@@ -1,4 +1,4 @@
-import { ArrowUpRight, MagicWand } from "@boxicons/react";
+import { MagicWand } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -6,7 +6,7 @@ import typia from "typia";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -15,7 +15,6 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 type PageProps = {
   page: {
@@ -197,53 +196,30 @@ export default function PagesEdit() {
     if (frame && height) frame.style.height = `${Math.min(height, window.innerHeight)}px`;
   };
 
-  // The preview renders inside a browser-style chrome: a top bar with the
-  // page's title and URL centered (like a browser tab + address bar) and an
-  // arrow on the right that opens the live page in a new tab. The chrome IS
-  // the preview's identity strip, so the sidebar's own preview link and the
-  // separate URL caption are gone — everything lives in one place.
+  // The preview renders inside the shared browser-style chrome (see PreviewChrome): a top
+  // bar with the page's title and URL centered and an arrow that opens the live page in a
+  // new tab. The chrome IS the preview's identity strip, so the sidebar's old preview link
+  // and the separate URL caption are gone — everything lives in one place.
   const displayTitle = is_profile ? "Home" : is_new ? title || "New page" : page.title;
-  const displayUrl = publicUrl.replace(/^https?:\/\//u, "");
   const previewChrome = (frame: React.ReactNode) => (
-    // `bg-background` (not a hardcoded white) so the chrome follows the
-    // dashboard's light/dark theme — the framed page paints its own
-    // background, but the chrome's rounded corners and the pre-load area
-    // would otherwise flash white in dark mode.
-    <div className="flex flex-col overflow-hidden rounded border border-border bg-background">
-      <div className="relative border-b border-border bg-background px-10 py-2">
-        <div className="min-w-0 text-center">
-          <div className="truncate text-sm font-medium">{displayTitle}</div>
-          <div className="truncate text-xs text-muted">{displayUrl}</div>
-        </div>
-        {/* A new page has nothing to open yet — the link would 404. */}
-        {!is_new ? (
-          <div className="absolute inset-y-0 right-2 flex items-center">
-            <WithTooltip tip="Open in new tab">
-              <NavigationButton
-                size="icon"
-                // The default icon size (size-12) dwarfs the slim chrome bar —
-                // shrink to a compact 32px hit target that fits inside it.
-                className="size-8"
-                aria-label="Open in new tab"
-                href={publicUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <ArrowUpRight className="size-4" />
-              </NavigationButton>
-            </WithTooltip>
-          </div>
-        ) : null}
-      </div>
+    <PreviewChrome
+      title={displayTitle}
+      url={publicUrl}
+      // A new page has nothing to open yet — the link would 404.
+      link={
+        is_new
+          ? undefined
+          : (props) => <NavigationButton {...props} href={publicUrl} target="_blank" rel="noreferrer" />
+      }
+    >
       {frame}
-    </div>
+    </PreviewChrome>
   );
 
   const previewSidebar = (
-    // The chrome bar already says "this is a preview", so the sidebar's own "Preview"
-    // heading is redundant — hiding it also lines the chrome up with the top of the
-    // edit form on the left.
-    <PreviewSidebar hideHeader>
+    // The chrome bar already says "this is a preview", so the sidebar carries no heading —
+    // the chrome lines up vertically with the top of the edit form on the left.
+    <PreviewSidebar>
       {is_profile && !page.custom_html
         ? previewChrome(
             // The default-template home page frames the live storefront.

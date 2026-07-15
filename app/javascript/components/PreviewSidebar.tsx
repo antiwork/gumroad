@@ -45,26 +45,68 @@ export const WithPreviewSidebar = ({ children, className, ...props }: React.Comp
   );
 };
 
+// The browser-style frame every preview pane renders inside: a top bar with the previewed
+// page's title and URL centered (like a browser tab + address bar) and, when the surface has
+// a live page to open, an arrow on the right that opens it in a new tab. The chrome IS the
+// preview's identity strip — it replaces the old "Preview" heading and the separate
+// open-in-new-tab button that used to sit next to it.
+export const PreviewChrome = ({
+  title,
+  url,
+  link,
+  children,
+}: {
+  title: string;
+  // The public URL of the previewed page, shown under the title (scheme stripped, like a
+  // browser address bar). Omit it for previews with no meaningful public URL (e.g. the
+  // receipt preview or workflow emails) — never fabricate one.
+  url?: string | undefined;
+  // Render prop for the open-in-new-tab button so each surface keeps its own navigation
+  // behavior (plain link, or save-then-open). The chrome passes the compact sizing and the
+  // arrow icon so the button looks identical everywhere; spread `props` onto a Button or
+  // NavigationButton. Omit when there is nothing to open.
+  link?:
+    | ((
+        props: React.AriaAttributes & { size: "icon"; className: string; children: React.ReactNode },
+      ) => React.ReactNode)
+    | undefined;
+  children: React.ReactNode;
+}) => (
+  // `bg-background` (not a hardcoded white) so the chrome follows the dashboard's light/dark
+  // theme — the framed content paints its own background, but the chrome's rounded corners
+  // and the pre-load area would otherwise flash white in dark mode.
+  <div className="flex flex-col overflow-hidden rounded border border-border bg-background">
+    <div className="relative border-b border-border bg-background px-10 py-2">
+      <div className="min-w-0 text-center">
+        <div className="truncate text-sm font-medium">{title}</div>
+        {url ? <div className="truncate text-xs text-muted">{url.replace(/^https?:\/\//u, "")}</div> : null}
+      </div>
+      {link ? (
+        <div className="absolute inset-y-0 right-2 flex items-center">
+          <WithTooltip tip="Open in new tab">
+            {link({
+              "aria-label": "Open in new tab",
+              size: "icon",
+              // The default icon size (size-12) dwarfs the slim chrome bar — shrink to a
+              // compact 32px hit target that fits inside it.
+              className: "size-8",
+              children: <ArrowUpRight className="size-4" />,
+            })}
+          </WithTooltip>
+        </div>
+      ) : null}
+    </div>
+    {children}
+  </div>
+);
+
 export const PreviewSidebar = ({
   children,
   className,
-  previewLink,
-  hideHeader,
   ...props
 }: {
   children: React.ReactNode;
-  // `size` lets each rendering context pick the button shape: the desktop sidebar keeps its
-  // compact icon button, while the mobile preview pane asks for a regular button with a
-  // visible text label (icon-only buttons aren't intuitive enough on their own).
-  previewLink?: (
-    props: React.AriaAttributes & { children: React.ReactNode; size?: "default" | "icon" },
-  ) => React.ReactNode;
-  // Skips the "Preview" heading row. Used when the preview content announces itself (the
-  // Pages editor's browser-style chrome already reads as a preview), so the pane's content
-  // lines up vertically with the top of the edit form instead of sitting below a heading.
-  hideHeader?: boolean;
 } & React.ComponentProps<"aside">) => {
-  const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");
   const modeContext = React.useContext(MobilePreviewModeContext);
   const mode = modeContext?.mode ?? "edit";
@@ -76,21 +118,11 @@ export const PreviewSidebar = ({
           "sticky top-0 hidden h-screen flex-col gap-4 self-start overflow-y-auto bg-background p-6 lg:flex lg:border-l lg:border-border",
           className,
         )}
-        // The visible heading labels the region when present; without it the region still
-        // needs an accessible name for screen readers.
-        {...(hideHeader ? { "aria-label": "Preview" } : { "aria-labelledby": `${uid}-title` })}
+        // The old visible "Preview" heading is gone (the PreviewChrome bar announces the
+        // preview now), so the region needs an accessible name for screen readers.
+        aria-label="Preview"
         {...props}
       >
-        {!hideHeader ? (
-          <div className="flex items-start justify-between gap-4">
-            <h2 id={`${uid}-title`}>Preview</h2>
-            {previewLink ? (
-              <WithTooltip tip="Preview">
-                {previewLink({ "aria-label": "Preview", children: <ArrowUpRight className="size-5" /> })}
-              </WithTooltip>
-            ) : null}
-          </div>
-        ) : null}
         {children}
       </aside>
       {/* The desktop sidebar above is display:none below lg, which used to mean mobile sellers
@@ -101,19 +133,8 @@ export const PreviewSidebar = ({
         <>
           {mode === "preview" ? (
             <section data-mobile-preview aria-label="Preview" className="flex flex-col gap-4 p-4 pb-24 lg:hidden">
-              {previewLink ? (
-                <div className="flex justify-end">
-                  {previewLink({
-                    size: "default",
-                    children: (
-                      <>
-                        <ArrowUpRight className="size-5" />
-                        Open in new tab
-                      </>
-                    ),
-                  })}
-                </div>
-              ) : null}
+              {/* The children render their own PreviewChrome, whose arrow button covers the
+                  open-in-new-tab affordance on mobile too — no separate button row needed. */}
               {children}
             </section>
           ) : null}

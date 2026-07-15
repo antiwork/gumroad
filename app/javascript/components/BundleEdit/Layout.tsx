@@ -9,7 +9,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Preview } from "$app/components/Preview";
-import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -206,41 +206,45 @@ export const BundleEditLayout = ({
       {preview ? (
         <WithPreviewSidebar className="flex-1">
           {children}
-          <PreviewSidebar previewLink={(props) => <Button {...props} onClick={onPreview} disabled={isBusy} />}>
-            <Preview
-              scaleFactor={0.4}
-              style={{
-                border: "var(--border)",
-                borderRadius: "var(--border-radius-2)",
-                fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
-                ...profileColors,
-                "--primary": "var(--color)",
-                "--body-bg": "rgb(var(--filled))",
-                "--contrast-primary": "var(--filled)",
-                "--contrast-filled": "var(--color)",
-                "--color-body": "var(--body-bg)",
-                "--color-background": "rgb(var(--filled))",
-                "--color-foreground": "rgb(var(--color))",
-                "--color-border": "rgb(var(--color) / var(--border-alpha))",
-                "--color-accent": "rgb(var(--accent))",
-                "--color-accent-foreground": "rgb(var(--contrast-accent))",
-                "--color-primary": "rgb(var(--primary))",
-                "--color-primary-foreground": "rgb(var(--contrast-primary))",
-                "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
-                "--color-muted": "rgb(var(--color) / var(--gray-3))",
-                backgroundColor: "rgb(var(--filled))",
-                color: "rgb(var(--color))",
-              }}
+          <PreviewSidebar>
+            <PreviewChrome
+              title={name}
+              url={url}
+              link={(props) => <Button {...props} onClick={onPreview} disabled={isBusy} />}
             >
-              {fontUrl ? (
-                <>
-                  <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
-                  <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-                  <link rel="stylesheet" href={fontUrl} />
-                </>
-              ) : null}
-              {preview}
-            </Preview>
+              <Preview
+                scaleFactor={0.4}
+                style={{
+                  fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+                  ...profileColors,
+                  "--primary": "var(--color)",
+                  "--body-bg": "rgb(var(--filled))",
+                  "--contrast-primary": "var(--filled)",
+                  "--contrast-filled": "var(--color)",
+                  "--color-body": "var(--body-bg)",
+                  "--color-background": "rgb(var(--filled))",
+                  "--color-foreground": "rgb(var(--color))",
+                  "--color-border": "rgb(var(--color) / var(--border-alpha))",
+                  "--color-accent": "rgb(var(--accent))",
+                  "--color-accent-foreground": "rgb(var(--contrast-accent))",
+                  "--color-primary": "rgb(var(--primary))",
+                  "--color-primary-foreground": "rgb(var(--contrast-primary))",
+                  "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
+                  "--color-muted": "rgb(var(--color) / var(--gray-3))",
+                  backgroundColor: "rgb(var(--filled))",
+                  color: "rgb(var(--color))",
+                }}
+              >
+                {fontUrl ? (
+                  <>
+                    <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+                    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                    <link rel="stylesheet" href={fontUrl} />
+                  </>
+                ) : null}
+                {preview}
+              </Preview>
+            </PreviewChrome>
           </PreviewSidebar>
         </WithPreviewSidebar>
       ) : (
