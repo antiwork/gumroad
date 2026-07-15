@@ -3,7 +3,7 @@
 class Refund < ApplicationRecord
   FRAUD = "fraud"
 
-  include JsonData, FlagShihTzu
+  include JsonData, FlagShihTzu, ExternalId
 
   belongs_to :user, foreign_key: :refunding_user_id, optional: true
   belongs_to :purchase

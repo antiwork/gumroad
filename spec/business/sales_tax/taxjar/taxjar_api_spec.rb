@@ -377,4 +377,43 @@ describe TaxjarApi, :vcr do
                                                           unit_price_dollars: 10.0)).to eq(expected_create_order_transaction_response)
     end
   end
+
+  describe "#create_refund_transaction" do
+    it "creates a refund transaction in TaxJar with negated amounts and a reference to the original order" do
+      # No cassette exists for the refunds endpoint, so stub the client and verify the
+      # request shape instead: amounts must be sent as negative numbers (TaxJar's refund
+      # convention) and the refund must reference the original order transaction.
+      client = instance_double(Taxjar::Client)
+      allow(Taxjar::Client).to receive(:new).and_return(client)
+
+      expect(client).to receive(:create_refund).with(
+        hash_including(
+          transaction_id: "refund-external-id",
+          transaction_reference_id: "purchase-external-id",
+          transaction_date: "2026-08-15T00:00:00Z",
+          provider: "api",
+          to_country: "US",
+          to_state: "PA",
+          to_zip: "19106",
+          amount: -15.0,
+          shipping: 0,
+          sales_tax: -1.0,
+          line_items: [
+            hash_including(quantity: 1, unit_price: -15.0, sales_tax: -1.0, product_tax_code: "31000")
+          ]
+        )
+      ).and_return(double(to_json: { "transaction_id" => "refund-external-id" }.to_json))
+
+      response = described_class.new.create_refund_transaction(transaction_id: "refund-external-id",
+                                                               transaction_reference_id: "purchase-external-id",
+                                                               transaction_date: "2026-08-15T00:00:00Z",
+                                                               destination: { country: "US", state: "PA", zip: "19106" },
+                                                               quantity: 1,
+                                                               product_tax_code: "31000",
+                                                               amount_dollars: 15.0,
+                                                               sales_tax_dollars: 1.0,
+                                                               unit_price_dollars: 15.0)
+      expect(response).to eq({ "transaction_id" => "refund-external-id" })
+    end
+  end
 end

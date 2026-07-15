@@ -1,16 +1,27 @@
 # frozen_string_literal: true
 
-# Uploads a single day's taxable US-state order transactions to TaxJar.
+# Uploads a single day's taxable US-state order and refund transactions to TaxJar.
 #
 # Runs DAILY (see config/sidekiq_schedule.yml) so the volume pushed per run is ~1/30th of the
 # old month-end bulk push. This is what prevents the recurring month-end failure mode where the
 # whole-month push timed out / died mid-run on a transient TaxJar/DNS error and left TaxJar with a
 # partial (or zero) month right before its auto-filing window — see the Feb & June 2026 incidents.
 #
+# Orders: every taxable US purchase created on the day. From
+# UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER onward, orders are pushed at their gross
+# (as-of-purchase) amounts; before the cutover they were pushed with refunds netted in at
+# upload time (kept for re-pushes of pre-cutover days so a re-push matches what was filed).
+#
+# Refunds: every refund created on the day is pushed as its own TaxJar refund transaction,
+# dated by the refund date. This is what credits the refunded tax in the period the refund
+# happened — previously a refund issued after its purchase's upload day was never communicated
+# to TaxJar at all, so state returns (which TaxJar auto-files from this data) overstated tax
+# on every late refund.
+#
 # The per-purchase selection, ZIP resolution, dollar amounts, and retry/rescue behavior are shared
 # with the monthly summary job via UsStateSalesTaxUploader, so daily and monthly stay identical.
-# TaxJar order creation is idempotent (an already-imported order is caught and skipped), so a retry
-# or an overlap with a manual month re-push is safe.
+# TaxJar order/refund creation is idempotent (an already-imported transaction is caught and
+# skipped), so a retry or an overlap with a manual re-push is safe.
 class UploadUsStatesSalesTaxToTaxjarJob
   include Sidekiq::Job
   include FinanceReportCompletionTracking
@@ -34,7 +45,8 @@ class UploadUsStatesSalesTaxToTaxjarJob
   end
 
   # date: an ISO8601 date string (defaults to yesterday). Uploads every taxable US order created
-  # on that calendar day (UTC) to TaxJar.
+  # on that calendar day (UTC) to TaxJar, plus every refund created on that day as a refund
+  # transaction (post-cutover only — see UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER).
   def perform(date = Date.yesterday.iso8601)
     return unless Rails.env.production?
 
@@ -45,10 +57,16 @@ class UploadUsStatesSalesTaxToTaxjarJob
     subdivisions_by_code = UsStateSalesTaxUploader.subdivisions_for(subdivision_codes)
       .index_by(&:code)
 
+    # Gross-vs-netted order amounts flip at the refund-reporting cutover: pre-cutover days keep
+    # the historical upload-time netting (so a re-push reproduces what TaxJar already has), and
+    # post-cutover days upload gross orders whose refunds arrive as separate refund transactions.
+    gross_orders = day >= UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER
+
     purchase_ids_by_state = UsStateSalesTaxUploader.grouped_purchase_ids_by_state(
       subdivision_codes:,
       starts_at: day.beginning_of_day,
-      ends_at: day.end_of_day
+      ends_at: day.end_of_day,
+      include_fully_refunded: gross_orders
     )
 
     uploaded_count = 0
@@ -57,11 +75,28 @@ class UploadUsStatesSalesTaxToTaxjarJob
 
       purchase_ids.each do |id|
         purchase = Purchase.find(id)
-        totals = uploader.upload(purchase:, subdivision:)
+        totals = uploader.upload(purchase:, subdivision:, gross: gross_orders)
         uploaded_count += 1 if totals
       end
     end
 
-    Rails.logger.info("UploadUsStatesSalesTaxToTaxjarJob: uploaded #{uploaded_count} order transactions to TaxJar for #{day.iso8601}")
+    refund_ids_by_state = UsStateSalesTaxUploader.grouped_refund_ids_by_state(
+      subdivision_codes:,
+      starts_at: day.beginning_of_day,
+      ends_at: day.end_of_day
+    )
+
+    uploaded_refund_count = 0
+    refund_ids_by_state.each do |subdivision_code, refund_ids|
+      subdivision = subdivisions_by_code[subdivision_code]
+
+      refund_ids.each do |id|
+        refund = Refund.find(id)
+        totals = uploader.upload_refund(refund:, subdivision:)
+        uploaded_refund_count += 1 if totals
+      end
+    end
+
+    Rails.logger.info("UploadUsStatesSalesTaxToTaxjarJob: uploaded #{uploaded_count} order and #{uploaded_refund_count} refund transactions to TaxJar for #{day.iso8601}")
   end
 end
