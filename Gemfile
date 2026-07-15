@@ -42,6 +42,12 @@ group :test do
   # bundler happily resolves to for any `>= 5.x` constraint from transitive
   # deps, which breaks `require "minitest/mock"` and friends.
   gem "minitest", "~> 5.25"
+  # Mocha powers the Minitest + fixtures suite's mocking (test/). It's loaded
+  # only from test/test_helper.rb (require: false here) so it can't interfere
+  # with the RSpec suite's rspec-mocks. RSpec's `allow_any_instance_of` has no
+  # equivalent in minitest/mock; Mocha's `.any_instance.stubs` maps to it 1:1,
+  # which the model-spec ports (#5801) rely on heavily.
+  gem "mocha", "~> 2.1", require: false
   gem "rspec", "~> 3.12"
   gem "rspec-github", "~> 2.4.0", require: false
   gem "rspec-rails", "~> 6.0"

@@ -598,7 +598,16 @@ class LinkTest < ActiveSupport::TestCase
   end
 
   test "collaborator_for_display returns the collaborating user when shown as co-creator" do
-    skip "needs any_instance stubbing of Collaborator#show_as_co_creator_for_product? with alternating return values; Mocha/any_instance is not available in the Minitest harness (only minitest/mock)"
+    product = create_product
+    collaborator = create_collaborator
+    assert_nil product.collaborator_for_display
+
+    collaborator.products = [product]
+    Collaborator.any_instance.stubs(:show_as_co_creator_for_product?).returns(true)
+    assert_equal collaborator.affiliate_user, product.collaborator_for_display
+
+    Collaborator.any_instance.stubs(:show_as_co_creator_for_product?).returns(false)
+    assert_nil product.collaborator_for_display
   end
 
   test "current_base_variants returns live variants and SKUs whose category is live" do

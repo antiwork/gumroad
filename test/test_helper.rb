@@ -4,6 +4,11 @@ ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
 require "minitest/mock"
+# Mocha adds `.stubs`/`.expects` and, crucially, `any_instance` stubbing — the
+# equivalent of RSpec's `allow_any_instance_of`, which `minitest/mock` can't
+# express. Required here (not in the RSpec suite) so it never clashes with
+# rspec-mocks. Coexists with the block-form `minitest/mock` stubs already in use.
+require "mocha/minitest"
 require "webmock/minitest"
 require "sidekiq/testing"
 Sidekiq::Testing.fake!
