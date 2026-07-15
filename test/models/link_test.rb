@@ -491,6 +491,134 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil product.reload.rental
   end
 
+  # --- initialize_suggested_amount_if_needed! --------------------------------
+
+  test "non-coffee product does not initialize a suggested amount" do
+    product = build_product(user: create_eligible_seller, price_cents: 200)
+    product.save
+    assert_equal 200, product.price_cents
+    assert_empty product.variant_categories_alive
+    assert_empty product.alive_variants
+    assert_nil product.customizable_price
+  end
+
+  test "coffee product initializes a suggested amount category and resets the base price" do
+    product = build_product(user: create_eligible_seller, price_cents: 200)
+    product.native_type = Link::NATIVE_TYPE_COFFEE
+    product.save!
+    product.reload
+    assert_equal 0, product.price_cents
+    assert_equal "Suggested Amounts", product.variant_categories_alive.first.title
+    assert_equal "", product.alive_variants.first.name
+    assert_equal 200, product.alive_variants.first.price_difference_cents
+    assert_equal true, product.customizable_price
+  end
+
+  # --- initialize_call_limitation_info_if_needed! ----------------------------
+
+  test "non-call product does not create call limitation info" do
+    product = build_product(user: create_eligible_seller, price_cents: 200)
+    product.save
+    assert_nil product.call_limitation_info
+  end
+
+  test "call product creates call limitation info with defaults" do
+    product = build_product(user: create_eligible_seller, price_cents: 200)
+    product.native_type = Link::NATIVE_TYPE_CALL
+    product.save!
+    info = product.call_limitation_info
+    assert_equal CallLimitationInfo::DEFAULT_MINIMUM_NOTICE_IN_MINUTES, info.minimum_notice_in_minutes
+    assert_nil info.maximum_calls_per_day
+  end
+
+  # --- initialize_duration_variant_category_for_calls! -----------------------
+
+  test "call product creates a Duration variant category" do
+    call = create_call_product
+    assert_equal 1, call.variant_categories.count
+    assert_equal "Duration", call.variant_categories.first.title
+  end
+
+  test "non-call product does not create a Duration variant category" do
+    assert_equal 0, create_physical_product.variant_categories.count
+  end
+
+  # --- adding to profile sections --------------------------------------------
+
+  test "new products are added to sections with add_new_products set" do
+    seller = create_user
+    default_sections = Array.new(2) { create_seller_profile_products_section(seller:) }
+    other_sections = Array.new(2) { create_seller_profile_products_section(seller:, add_new_products: false) }
+    product = create_product(user: seller)
+
+    default_sections.each { |section| assert_includes section.reload.shown_products, product.id }
+    other_sections.each { |section| refute_includes section.reload.shown_products, product.id }
+  end
+
+  test "adding to profile sections re-reads under the lock to avoid clobbering a concurrent change" do
+    seller = create_user
+    section = create_seller_profile_products_section(seller:, shown_products: [1, 2])
+    # Prime a stale cached association, then commit a change it doesn't reflect,
+    # as a concurrent writer would. add_to_profile_sections must re-read under the
+    # lock and preserve that change rather than overwrite it with the stale list.
+    seller.seller_profile_products_sections.load
+    SellerProfileSection.find(section.id).update!(json_data: section.json_data.merge("shown_products" => [1, 2, 3]))
+
+    product = create_product(user: seller)
+
+    assert_equal [1, 2, 3, product.id].sort, section.reload.shown_products.sort
+  end
+
+  # --- associations ----------------------------------------------------------
+
+  test "has_many self_service_affiliate_products with product_id foreign key" do
+    reflection = Link.reflect_on_association(:self_service_affiliate_products)
+    assert_equal :has_many, reflection.macro
+    assert_equal "product_id", reflection.foreign_key.to_s
+  end
+
+  test "confirmed_collaborators returns only those who accepted the invitation" do
+    product = create_product
+    create_collaborator(pending_invitation: true, products: [product], deleted_at: 1.minute.ago)
+    collaborator = create_collaborator(pending_invitation: true, products: [product])
+    assert_empty product.confirmed_collaborators
+
+    collaborator.collaborator_invitation.destroy!
+    assert_equal [collaborator], product.confirmed_collaborators
+
+    collaborator.mark_deleted!
+    assert_equal [collaborator], product.reload.confirmed_collaborators
+  end
+
+  test "collaborator returns the live collaborator" do
+    product = create_product
+    create_collaborator(products: [product], deleted_at: 1.minute.ago)
+    collaborator = create_collaborator(products: [product])
+    assert_equal collaborator, product.collaborator
+  end
+
+  test "collaborator_for_display returns the collaborating user when shown as co-creator" do
+    skip "needs any_instance stubbing of Collaborator#show_as_co_creator_for_product? with alternating return values; Mocha/any_instance is not available in the Minitest harness (only minitest/mock)"
+  end
+
+  test "current_base_variants returns live variants and SKUs whose category is live" do
+    product = create_physical_product
+
+    size_category = create_variant_category(link: product, title: "Size")
+    small_variant = create_variant(variant_category: size_category, name: "Small")
+    create_variant(variant_category: size_category, name: "Large", deleted_at: Time.current)
+
+    color_category = create_variant_category(link: product, title: "Color", deleted_at: Time.current)
+    create_variant(variant_category: color_category, name: "Red")
+    create_variant(variant_category: color_category, name: "Blue", deleted_at: Time.current)
+
+    default_sku = product.skus.is_default_sku.first
+    live_sku = create_sku(link: product, name: "Small-Red")
+    create_sku(link: product, name: "Large-Blue", deleted_at: Time.current)
+
+    assert_equal [small_variant, live_sku, default_sku].sort_by(&:id), product.current_base_variants.sort_by(&:id)
+  end
+
   private
     # A published product whose non-moderation publish gates are stubbed and
     # whose initial publish passed moderation — the starting point for the

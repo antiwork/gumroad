@@ -112,6 +112,43 @@ module ModelFactories
     Sku.create!({ link: link || create_product, price_difference_cents: 0, name: "Large" }.merge(attrs))
   end
 
+  # A seller old enough to sell service products (call/coffee/commission),
+  # mirroring the :eligible_for_service_products user trait.
+  def create_eligible_seller(**attrs)
+    create_user(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day, **attrs)
+  end
+
+  def create_call_product(user: nil, **attrs)
+    Link.create!({ user: user || create_eligible_seller, name: "Call", price_cents: 100, native_type: Link::NATIVE_TYPE_CALL }.merge(attrs))
+  end
+
+  def create_coffee_product(user: nil, **attrs)
+    Link.create!({ user: user || create_eligible_seller, name: "Coffee", price_cents: 100, native_type: Link::NATIVE_TYPE_COFFEE }.merge(attrs))
+  end
+
+  def create_collaborator(seller: nil, affiliate_user: nil, products: nil, pending_invitation: false, **attrs)
+    collaborator = Collaborator.new({
+      seller: seller || create_user,
+      affiliate_user: affiliate_user || create_affiliate_user,
+      apply_to_all_products: true,
+      affiliate_basis_points: 30_00,
+    }.merge(attrs))
+    collaborator.products = products if products
+    collaborator.save!
+    CollaboratorInvitation.create!(collaborator:) if pending_invitation
+    collaborator
+  end
+
+  def create_seller_profile_products_section(seller: nil, **attrs)
+    SellerProfileProductsSection.create!({
+      seller: seller || create_user,
+      default_product_sort: "page_layout",
+      shown_products: [],
+      show_filters: false,
+      add_new_products: true,
+    }.merge(attrs))
+  end
+
   def create_variant_category(link: nil, **attrs)
     VariantCategory.create!({ link: link || create_product, title: "Category" }.merge(attrs))
   end
