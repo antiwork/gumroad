@@ -180,8 +180,14 @@ class CreateGlobalSalesTaxSummaryReportJob
     def prefetch_partial_refund_adjustments(purchases_scope)
       key_sqls = BINARY_SAFE_KEY_COLUMNS.values
 
+      # Includes fully refunded purchases too, not just partially refunded ones: a pre-cutover
+      # purchase whose refunds straddle the cutover ends up with stripe_refunded true (and
+      # stripe_partially_refunded flipped back to false), yet its PRE-cutover refunds must
+      # still be netted from its sale row here — only the post-cutover refund is offset by a
+      # refund row in the refund's own period. refund_totals_by_purchase only sums pre-cutover
+      # refunds, and a post-cutover purchase can't have any, so this stays exact.
       partial_purchases = purchases_scope
-        .where(stripe_partially_refunded: true)
+        .where("purchases.stripe_partially_refunded = TRUE OR purchases.stripe_refunded = TRUE")
         .pluck(
           :id,
           Arel.sql("purchases.total_transaction_cents"),
@@ -239,17 +245,19 @@ class CreateGlobalSalesTaxSummaryReportJob
 
       fallback_scope = purchases_scope.where(Arel.sql(combined_condition_sql))
 
+      # Same widening as prefetch_partial_refund_adjustments: fully refunded purchases can
+      # still carry pre-cutover refunds that must be netted from their sale amounts.
       fallback_refunds = refund_totals_by_purchase(
-        fallback_scope.where(stripe_partially_refunded: true).pluck(:id)
+        fallback_scope.where("purchases.stripe_partially_refunded = TRUE OR purchases.stripe_refunded = TRUE").pluck(:id)
       )
 
       fallback_purchases = 0
       fallback_partial_refund_purchases = 0
 
-      fallback_scope.select(:id, :ip_address, :total_transaction_cents, :gumroad_tax_cents, :stripe_partially_refunded)
+      fallback_scope.select(:id, :ip_address, :total_transaction_cents, :gumroad_tax_cents, :stripe_partially_refunded, :stripe_refunded)
         .find_each do |purchase|
           state_code = GeoIp.lookup(purchase.ip_address)&.region_name || ""
-          refund = fallback_refunds[purchase.id] if purchase.stripe_partially_refunded?
+          refund = fallback_refunds[purchase.id]
           bucket = aggregation[["United States", state_code]]
           bucket[:gmv_cents] += net_cents(purchase.total_transaction_cents, refund&.dig(:total))
           bucket[:order_count] += 1
