@@ -162,7 +162,13 @@ export type State = {
   customFieldValues: Record<string, string>;
   surcharges:
     | { type: "error" | "pending" }
-    | { type: "loading"; abort: () => void }
+    // requestId identifies which fetch this loading state belongs to. A response may only
+    // publish its result through the reducer when the state is still "loading" with the same
+    // requestId — see the "surcharges-fetch-succeeded"/"surcharges-fetch-failed" cases. That
+    // makes the stale-response fence part of the reducer's dispatch ordering instead of a
+    // mutable ref read, which could race the response between an invalidating dispatch and
+    // the passive effect that reacted to it.
+    | { type: "loading"; requestId: number; abort: () => void }
     | { type: "loaded"; result: SurchargesResponse };
   availablePaymentMethods: PaymentMethod[];
   paymentMethod: PaymentMethodType;
@@ -234,7 +240,14 @@ type PublicAction =
     }
   | { type: "cancel" };
 
-type Action = PublicAction | ({ type: "set-value" } & Partial<State>);
+type Action =
+  | PublicAction
+  | ({ type: "set-value" } & Partial<State>)
+  // Internal actions dispatched by the surcharge refetch machinery in createReducer. They
+  // carry the requestId of the fetch that produced them so the reducer can drop responses
+  // from a request that is no longer the current one (see the reducer cases).
+  | { type: "surcharges-fetch-succeeded"; requestId: number; result: SurchargesResponse }
+  | { type: "surcharges-fetch-failed"; requestId: number };
 
 export function usePayLabel() {
   const [state] = useState();
@@ -710,6 +723,26 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       if (state.surcharges.type !== "loaded" && state.status.type !== "input" && state.status.type !== "finished")
         state.status = { type: "input", errors: new Set() };
       break;
+    case "surcharges-fetch-succeeded":
+      // A response may only publish while its own loading state is still current. Reducer
+      // dispatches are processed strictly in order, so by the time this action runs, every
+      // invalidation that happened before the response (a total-affecting edit resetting to
+      // "pending", or a newer fetch replacing the loading state with a new requestId) is
+      // already reflected in the state — a stale response can never restore an old quote,
+      // re-enable Pay on old totals, or clobber a newer request's loading state. This is why
+      // the fence lives here rather than in a mutable ref in the fetch callback: a ref bumped
+      // from a passive effect only updates after React flushes effects, leaving a window
+      // where a stale response still saw the old value.
+      if (state.surcharges.type !== "loading" || state.surcharges.requestId !== action.requestId) return;
+      state.surcharges = { type: "loaded", result: action.result };
+      break;
+    case "surcharges-fetch-failed":
+      // Same fence as the success case: only the current request may flip the state to
+      // "error". A stale failure must not surface a bogus alert or strand the checkout while
+      // a fresher request is still loading.
+      if (state.surcharges.type !== "loading" || state.surcharges.requestId !== action.requestId) return;
+      state.surcharges = { type: "error" };
+      break;
   }
 });
 
@@ -790,42 +823,41 @@ export function createReducer(initial: {
     window.history.replaceState(window.history.state, "", url.toString());
   });
 
-  // Identifies the latest surcharge request. Aborting the fetch is best-effort (the response
-  // may already be in the microtask queue when a newer request starts), so each request also
-  // records its generation and only the latest one may publish its result — a stale response
-  // must never overwrite a newer quote, re-enable Pay on old totals, or clobber a fresher
-  // request's loading state with an error.
-  const surchargesRequestGeneration = React.useRef(0);
+  // Numbers each surcharge fetch so the reducer can tell whether a response is still the
+  // current one. Aborting the fetch is best-effort (the response may already be in the
+  // microtask queue when a newer request starts or a total-affecting edit invalidates), so
+  // each response is dispatched with its requestId and the reducer only publishes it while
+  // the matching "loading" state is still in place. Keeping the fence inside the reducer —
+  // instead of comparing against a ref here — means it participates in dispatch ordering: an
+  // invalidating edit that dispatched before the response resolves is guaranteed to have
+  // reset the state first, with no window where the stale response can still pass the check.
+  const surchargesRequestId = React.useRef(0);
   const updateSurcharges = useDebouncedCallback(
     asyncVoid(async () => {
       if (!state.products.length) return;
-      const generation = ++surchargesRequestGeneration.current;
+      const requestId = ++surchargesRequestId.current;
+      const abort = new AbortController();
+      dispatch({
+        type: "set-value",
+        surcharges: { type: "loading", requestId, abort: () => abort.abort() },
+      });
       try {
-        const abort = new AbortController();
-        dispatch({ type: "set-value", surcharges: { type: "loading", abort: () => abort.abort() } });
         const result = await loadSurcharges(state, abort.signal);
-        if (generation !== surchargesRequestGeneration.current) return;
-        dispatch({ type: "set-value", surcharges: { type: "loaded", result } });
+        dispatch({ type: "surcharges-fetch-succeeded", requestId, result });
       } catch (e) {
         if (e instanceof AbortError) return;
         assertResponseError(e);
-        if (generation !== surchargesRequestGeneration.current) return;
-        dispatch({ type: "set-value", surcharges: { type: "error" } });
-        showAlert("Sorry, something went wrong. Please try again.", "error");
+        dispatch({ type: "surcharges-fetch-failed", requestId });
       }
     }),
     300,
   );
   React.useEffect(() => {
-    if (state.surcharges.type === "pending") {
-      // Invalidate any in-flight request immediately, not just when the debounced refetch
-      // starts. A total-affecting edit marks surcharges "pending", but the previous request's
-      // response can still resolve during the 300ms debounce window — without this bump it
-      // would carry the current generation, publish a stale "loaded" quote over the pending
-      // state, and re-enable Pay on totals that no longer match what will be charged.
-      surchargesRequestGeneration.current++;
-      updateSurcharges();
-    }
+    if (state.surcharges.type === "pending") updateSurcharges();
+    // The reducer flips surcharges to "error" only when the current fetch fails (stale
+    // failures are dropped there), so surfacing the alert on that transition can't fire for
+    // a request that was already superseded.
+    if (state.surcharges.type === "error") showAlert("Sorry, something went wrong. Please try again.", "error");
   }, [state.surcharges]);
 
   return reducer;

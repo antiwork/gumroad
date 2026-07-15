@@ -723,7 +723,10 @@ describe("buyer-currency presentment lane", () => {
       // Tip/address/VAT/cart edits move surcharges through pending and loading before the
       // refreshed quote lands. Reporting canonical USD in that window would remount the
       // element twice (CAD → USD → CAD), wiping the buyer's entered card details.
-      for (const surcharges of [{ type: "pending" as const }, { type: "loading" as const, abort: () => {} }]) {
+      for (const surcharges of [
+        { type: "pending" as const },
+        { type: "loading" as const, requestId: 1, abort: () => {} },
+      ]) {
         const s = state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges });
         expect(getStripePaymentElementMountCurrency(s)).toBeNull();
       }
@@ -826,12 +829,68 @@ describe("reduceCheckoutState", () => {
 
     it("aborts an in-flight surcharges request before invalidating", () => {
       const abort = vi.fn();
-      const next = reduceCheckoutState(state({ surcharges: { type: "loading", abort } }), {
+      const next = reduceCheckoutState(state({ surcharges: { type: "loading", requestId: 1, abort } }), {
         type: "set-value",
         tip: { type: "fixed", amount: 1_00 },
       });
       expect(abort).toHaveBeenCalledOnce();
       expect(next.surcharges).toEqual({ type: "pending" });
+    });
+
+    // These fences live in the reducer (rather than a ref compared in the fetch callback) so
+    // they participate in dispatch ordering: any invalidation dispatched before the response
+    // is already reflected in the state by the time the response's action runs.
+    describe("stale surcharge response fencing", () => {
+      // loadedSurcharges is declared later in the file; it blocks run after module evaluation,
+      // so referencing it inside each test avoids the temporal dead zone.
+      const result = () => loadedSurcharges().result;
+
+      it("publishes a response only while its own loading state is current", () => {
+        const next = reduceCheckoutState(state({ surcharges: { type: "loading", requestId: 7, abort: vi.fn() } }), {
+          type: "surcharges-fetch-succeeded",
+          requestId: 7,
+          result: result(),
+        });
+        expect(next.surcharges).toEqual({ type: "loaded", result: result() });
+      });
+
+      it("drops a response whose request has been superseded by a newer one", () => {
+        const initial = state({ surcharges: { type: "loading", requestId: 8, abort: vi.fn() } });
+        const next = reduceCheckoutState(initial, {
+          type: "surcharges-fetch-succeeded",
+          requestId: 7,
+          result: result(),
+        });
+        expect(next.surcharges).toBe(initial.surcharges);
+      });
+
+      it("drops a response after a total-affecting edit reset surcharges to pending", () => {
+        // The debounce-window shape of the race: the edit's invalidation dispatched before the
+        // stale response, so by the time the response's action runs the state is "pending" —
+        // no ref bump (or effect flush) required for the fence to hold.
+        const initial = state({ surcharges: { type: "pending" } });
+        const next = reduceCheckoutState(initial, {
+          type: "surcharges-fetch-succeeded",
+          requestId: 7,
+          result: result(),
+        });
+        expect(next.surcharges).toEqual({ type: "pending" });
+      });
+
+      it("lets only the current request flip the state to error", () => {
+        const current = reduceCheckoutState(state({ surcharges: { type: "loading", requestId: 7, abort: vi.fn() } }), {
+          type: "surcharges-fetch-failed",
+          requestId: 7,
+        });
+        expect(current.surcharges).toEqual({ type: "error" });
+
+        const freshLoading = { type: "loading", requestId: 8, abort: vi.fn() } as const;
+        const stale = reduceCheckoutState(state({ surcharges: freshLoading }), {
+          type: "surcharges-fetch-failed",
+          requestId: 7,
+        });
+        expect(stale.surcharges).toBe(freshLoading);
+      });
     });
 
     // The server derives the US taxable state and the TaxJar destination zip from the postal
@@ -865,7 +924,10 @@ describe("reduceCheckoutState", () => {
   // guards pin that read to the totals the buyer confirmed when the pipeline started.
   describe("stale-total submit guards", () => {
     it("refuses to offer while a surcharges refetch is queued or in flight", () => {
-      for (const surcharges of [{ type: "pending" } as const, { type: "loading", abort: vi.fn() } as const]) {
+      for (const surcharges of [
+        { type: "pending" } as const,
+        { type: "loading", requestId: 1, abort: vi.fn() } as const,
+      ]) {
         const next = reduceCheckoutState(state({ surcharges }), { type: "offer" });
         expect(next.status).toEqual({ type: "input", errors: new Set() });
       }
