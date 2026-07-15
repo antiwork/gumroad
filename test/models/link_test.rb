@@ -924,6 +924,83 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal seller_collabs.map(&:id).sort, Link.collabs_as_collaborator(user).pluck(:id).sort
   end
 
+  test "collabs_as_seller_or_collaborator returns collabs the user created and collaborates on" do
+    user = create_user
+
+    own_collabs = Array.new(3) do
+      product = create_product(user:)
+      create_product_affiliate(product:, affiliate: create_collaborator(seller: user))
+      product
+    end
+
+    seller1 = create_user
+    seller1_collabs = Array.new(2) { create_product(user: seller1) }
+    collaborator = create_collaborator(affiliate_user: user, seller: seller1)
+    seller1_collabs.each { |product| create_product_affiliate(product:, affiliate: collaborator) }
+
+    seller2 = create_user
+    seller2_collab = create_product(user: seller2)
+    create_product_affiliate(product: seller2_collab, affiliate: create_collaborator(affiliate_user: user, seller: seller2))
+
+    # no longer a collaborator
+    seller1_old_collab = create_product(user: seller1)
+    create_product_affiliate(product: seller1_old_collab, affiliate: create_collaborator(affiliate_user: user, seller: seller1, deleted_at: 1.day.ago))
+
+    # others' collabs
+    Array.new(2) { create_product(user: seller1) }.each { |product| create_product_affiliate(product:, affiliate: create_collaborator(seller: seller1)) }
+    create_product_affiliate(product: create_product(user: seller2), affiliate: create_collaborator(seller: seller2))
+
+    # invited (pending)
+    inviter = create_user
+    create_collaborator(affiliate_user: user, seller: inviter, pending_invitation: true, products: Array.new(2) { create_product(user: inviter) })
+
+    # non-collab
+    create_product(user:)
+    create_product(user: seller1)
+    create_product(user: seller2)
+    create_direct_affiliate(affiliate_user: user, products: [create_product])
+
+    # collab products with prior affiliate associations
+    other_collabs = Array.new(2) { create_collab_product(user: seller1) }
+    create_direct_affiliate(affiliate_user: user, seller: seller1, products: [other_collabs.first])
+    create_product_affiliate(affiliate: user.global_affiliate, product: other_collabs.last)
+
+    expected = own_collabs.map(&:id) + seller1_collabs.map(&:id) + [seller2_collab.id]
+    assert_equal expected.sort, Link.collabs_as_seller_or_collaborator(user).pluck(:id).sort
+  end
+
+  test "for_balance_page returns the user's own products and collab products" do
+    user = create_user
+
+    own_collabs = Array.new(3) do
+      product = create_product(user:)
+      create_product_affiliate(product:, affiliate: create_collaborator(seller: user))
+      product
+    end
+
+    seller = create_user
+    seller_collabs = Array.new(2) { create_product(user: seller) }
+    collaborator = create_collaborator(affiliate_user: user, seller:)
+    seller_collabs.each { |product| create_product_affiliate(product:, affiliate: collaborator) }
+
+    # no longer a collaborator
+    seller_old_collab = create_product(user: seller)
+    create_product_affiliate(product: seller_old_collab, affiliate: create_collaborator(affiliate_user: user, seller:, deleted_at: 1.day.ago))
+
+    # others' collabs
+    Array.new(2) { create_product(user: seller) }.each { |product| create_product_affiliate(product:, affiliate: create_collaborator(seller:)) }
+
+    non_collabs = Array.new(2) { create_product(user:) }
+    create_product(user: seller)
+
+    other_collabs = Array.new(2) { create_collab_product(user: seller) }
+    create_direct_affiliate(affiliate_user: user, seller:, products: [other_collabs.first])
+    create_product_affiliate(affiliate: user.global_affiliate, product: other_collabs.last)
+
+    expected = (own_collabs + seller_collabs + non_collabs).map(&:id)
+    assert_equal expected.sort, Link.for_balance_page(user).pluck(:id).sort
+  end
+
   test "not_call scope excludes call products" do
     call_product = create_call_product
     product = create_product
