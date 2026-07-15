@@ -1495,6 +1495,71 @@ class LinkTest < ActiveSupport::TestCase
     skip "needs :sidekiq_inline + a live Elasticsearch index for affiliate-credit rollups; the Minitest harness stubs EsClient"
   end
 
+  # --- #release_custom_permalink_if_possible ---------------------------------
+
+  test "release_custom_permalink_if_possible frees a deleted product's custom permalink" do
+    user = create_user
+    deleted_product = create_product(user:, deleted_at: Time.current, custom_permalink: "twitter")
+    new_product = build_product(user:, custom_permalink: "twitter")
+    assert_equal true, new_product.save
+    assert_nil deleted_product.reload.custom_permalink
+  end
+
+  test "release_custom_permalink_if_possible does not free a live product's custom permalink" do
+    user = create_user
+    active_product = create_product(user:, custom_permalink: "seo")
+    new_product = build_product(user:, custom_permalink: "seo")
+    assert_equal false, new_product.save
+    assert_equal "seo", active_product.reload.custom_permalink
+  end
+
+  test "release_custom_permalink_if_possible does not free another user's deleted product's permalink" do
+    other_users_deleted = create_product(user: create_user, deleted_at: Time.current, custom_permalink: "wealth")
+    new_product = build_product(user: create_user, custom_permalink: "wealth")
+    assert_equal true, new_product.save
+    assert_equal "wealth", other_users_deleted.reload.custom_permalink
+  end
+
+  # --- #has_stampable_pdfs? / #customize_file_per_purchase? ------------------
+
+  test "has_stampable_pdfs? is false without files or stampable pdfs, true with one" do
+    product = create_product
+    assert_equal false, product.has_stampable_pdfs?
+
+    product.product_files << create_non_readable_document
+    product.product_files << create_readable_document(pdf_stamp_enabled: false)
+    # a fresh instance avoids the memoized alive_product_files cache poisoned by the earlier check
+    assert_equal false, Link.find(product.id).has_stampable_pdfs?
+
+    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    assert_equal true, Link.find(product.id).has_stampable_pdfs?
+  end
+
+  test "customize_file_per_purchase? is false without stampable pdfs, true with one" do
+    product = create_product
+    assert_equal false, product.customize_file_per_purchase?
+
+    product.product_files << create_non_readable_document
+    product.product_files << create_readable_document(pdf_stamp_enabled: false)
+    assert_equal false, Link.find(product.id).customize_file_per_purchase?
+
+    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    assert_equal true, Link.find(product.id).customize_file_per_purchase?
+  end
+
+  # --- #allow_parallel_purchases? --------------------------------------------
+
+  test "allow_parallel_purchases? is false for a call product" do
+    assert_equal false, create_call_product.allow_parallel_purchases?
+  end
+
+  test "allow_parallel_purchases? is false when the product has a max purchase count" do
+    product = create_product(max_purchase_count: 1)
+    assert_equal false, product.allow_parallel_purchases?
+    product.update!(max_purchase_count: nil)
+    assert_equal true, product.allow_parallel_purchases?
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do

@@ -408,6 +408,18 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  def create_readable_document(link: nil, **attrs)
+    create_product_file(link:, url: "#{S3_BASE_URL}specs/doc-#{unique_suffix}.pdf", filetype: "pdf", filegroup: "document", **attrs)
+  end
+
+  def create_non_readable_document(link: nil, **attrs)
+    create_product_file(link:, url: "#{S3_BASE_URL}specs/doc-#{unique_suffix}.epub", filetype: "epub", filegroup: "epub_document", **attrs)
+  end
+
+  def create_streamable_video(link: nil, **attrs)
+    create_product_file(link:, url: "#{S3_BASE_URL}specs/vid-#{unique_suffix}.mov", filetype: "mov", filegroup: "video", **attrs)
+  end
+
   PRODUCT_FILE_SHAPES = {
     streamable_video: { url: "#{S3_BASE_URL}specs/ScreenRecording.mov", filetype: "mov", filegroup: "video" },
     readable_document: { url: "#{S3_BASE_URL}specs/billion-dollar-company-chapter-0.pdf", filetype: "pdf", filegroup: "document" },
