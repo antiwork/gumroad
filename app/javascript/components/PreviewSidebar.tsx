@@ -45,33 +45,43 @@ export const WithPreviewSidebar = ({ children, className, ...props }: React.Comp
   );
 };
 
-// The browser-style frame every preview pane renders inside: a top bar with the previewed
-// page's title and URL centered (like a browser tab + address bar) and, when the surface has
-// a live page to open, an arrow on the right that opens it in a new tab. The chrome IS the
-// preview's identity strip — it replaces the old "Preview" heading and the separate
-// open-in-new-tab button that used to sit next to it.
-export const PreviewChrome = ({
-  title,
-  url,
-  link,
-  children,
-}: {
-  title: string;
-  // The public URL of the previewed page, shown under the title (scheme stripped, like a
-  // browser address bar). Omit it for previews with no meaningful public URL (e.g. the
-  // receipt preview or workflow emails) — never fabricate one.
-  url?: string | undefined;
-  // Render prop for the open-in-new-tab button so each surface keeps its own navigation
-  // behavior (plain link, or save-then-open). The chrome passes the compact sizing and the
-  // arrow icon so the button looks identical everywhere; spread `props` onto a Button or
-  // NavigationButton. Omit when there is nothing to open.
-  link?:
-    | ((
-        props: React.AriaAttributes & { size: "icon"; className: string; children: React.ReactNode },
-      ) => React.ReactNode)
-    | undefined;
-  children: React.ReactNode;
-}) => (
+// The frame every preview pane renders inside. The chrome matches the MEDIUM being
+// previewed: web pages get a browser-style bar (centered title + URL like a tab and address
+// bar, plus an open-in-new-tab arrow when the surface has a live page), while emails get an
+// email-client-style header (From and Subject lines — emails land in inboxes, so a URL bar
+// would be dishonest). Both variants share the same flat frame so they sit identically in
+// the sidebar layout. The chrome IS the preview's identity strip — it replaces the old
+// "Preview" heading and the separate open-in-new-tab button that used to sit next to it.
+type PreviewChromeProps = { children: React.ReactNode } & (
+  | {
+      variant?: "web" | undefined;
+      title: string;
+      // The public URL of the previewed page, shown under the title (scheme stripped, like a
+      // browser address bar). Omit it for previews with no meaningful public URL — never
+      // fabricate one.
+      url?: string | undefined;
+      // Render prop for the open-in-new-tab button so each surface keeps its own navigation
+      // behavior (plain link, or save-then-open). The chrome passes the compact sizing and the
+      // arrow icon so the button looks identical everywhere; spread `props` onto a Button or
+      // NavigationButton. Omit when there is nothing to open.
+      link?:
+        | ((
+            props: React.AriaAttributes & { size: "icon"; className: string; children: React.ReactNode },
+          ) => React.ReactNode)
+        | undefined;
+    }
+  | {
+      variant: "email";
+      // The real sender the email goes out with, e.g. `Seller Name <noreply@customers.gumroad.com>`
+      // — callers must derive this from the actual mailer configuration, not invent one.
+      from: string;
+      // The email's subject when the surface knows it client-side. Omit rather than guess —
+      // the chrome then shows the From line alone.
+      subject?: string | undefined;
+    }
+);
+
+export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
   // `bg-background` (not a hardcoded white) so the chrome follows the dashboard's light/dark
   // theme — the framed content paints its own background, but the chrome's rounded corners
   // and the pre-load area would otherwise flash white in dark mode.
@@ -81,26 +91,45 @@ export const PreviewChrome = ({
   // zeroes a flex item's automatic minimum size — without shrink-0 the chrome would compress
   // to the viewport and silently clip tall previews instead of letting the sidebar scroll.
   <div className="flex shrink-0 flex-col overflow-hidden rounded border border-border bg-background">
-    <div className="relative border-b border-border bg-background px-10 py-2">
-      <div className="min-w-0 text-center">
-        <div className="truncate text-sm font-medium">{title}</div>
-        {url ? <div className="truncate text-xs text-muted">{url.replace(/^https?:\/\//u, "")}</div> : null}
-      </div>
-      {link ? (
-        <div className="absolute inset-y-0 right-2 flex items-center">
-          <WithTooltip tip="Open in new tab">
-            {link({
-              "aria-label": "Open in new tab",
-              size: "icon",
-              // The default icon size (size-12) dwarfs the slim chrome bar — shrink to a
-              // compact 32px hit target that fits inside it.
-              className: "size-8",
-              children: <ArrowUpRight className="size-4" />,
-            })}
-          </WithTooltip>
+    {props.variant === "email" ? (
+      // Email headers read left-to-right like an email client, not centered like a browser
+      // tab, and there is no open-in-new-tab arrow — an email has no URL to open.
+      <div className="flex flex-col gap-0.5 border-b border-border bg-background px-4 py-2 text-sm">
+        <div className="flex min-w-0 gap-2">
+          <span className="shrink-0 text-muted">From</span>
+          <span className="truncate">{props.from}</span>
         </div>
-      ) : null}
-    </div>
+        {props.subject ? (
+          <div className="flex min-w-0 gap-2">
+            <span className="shrink-0 text-muted">Subject</span>
+            <span className="truncate font-medium">{props.subject}</span>
+          </div>
+        ) : null}
+      </div>
+    ) : (
+      <div className="relative border-b border-border bg-background px-10 py-2">
+        <div className="min-w-0 text-center">
+          <div className="truncate text-sm font-medium">{props.title}</div>
+          {props.url ? (
+            <div className="truncate text-xs text-muted">{props.url.replace(/^https?:\/\//u, "")}</div>
+          ) : null}
+        </div>
+        {props.link ? (
+          <div className="absolute inset-y-0 right-2 flex items-center">
+            <WithTooltip tip="Open in new tab">
+              {props.link({
+                "aria-label": "Open in new tab",
+                size: "icon",
+                // The default icon size (size-12) dwarfs the slim chrome bar — shrink to a
+                // compact 32px hit target that fits inside it.
+                className: "size-8",
+                children: <ArrowUpRight className="size-4" />,
+              })}
+            </WithTooltip>
+          </div>
+        ) : null}
+      </div>
+    )}
     {children}
   </div>
 );

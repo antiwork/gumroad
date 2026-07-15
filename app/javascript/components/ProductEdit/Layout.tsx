@@ -136,7 +136,8 @@ export const Layout = ({
   showBorder?: boolean;
   showNavigationButton?: boolean;
 }) => {
-  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
+  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType, receiptEmailFrom } =
+    useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
@@ -325,34 +326,50 @@ export const Layout = ({
           {children}
           <PreviewSidebar>
             <PreviewChrome
-              title={product.name || "Untitled"}
-              // The receipt preview (showNavigationButton=false) has no public URL of its
-              // own — the chrome shows the title alone, with no address line or arrow.
-              url={showNavigationButton ? url : undefined}
-              link={
-                showNavigationButton
-                  ? (props) => (
-                      <NavigationButton
-                        {...props}
-                        disabled={isBusy}
-                        href={url}
-                        onClick={(evt) => {
-                          evt.preventDefault();
-                          // Open the tab NOW, while we still have the user's click activation, then
-                          // point it at the product page once the save finishes. Calling window.open
-                          // after the await instead gets popup-blocked on iOS Safari (the async gap
-                          // consumes the transient activation), which matters because the mobile
-                          // preview pane is this button's main audience.
-                          const previewWindow = window.open("about:blank", "_blank");
-                          void save().then(() => {
-                            if (previewWindow) previewWindow.location.href = url;
-                            else window.open(url, "_blank");
-                          });
-                        }}
-                      />
-                    )
-                  : undefined
-              }
+              {...(tab === "receipt"
+                ? {
+                    // The Receipt tab previews an EMAIL, so the chrome shows email-client
+                    // headers instead of browser chrome. Both values are honest: the From
+                    // line comes from the server's mailer config (CustomerMailer#receipt),
+                    // and the subject mirrors ReceiptPresenter::MailSubject for the
+                    // single-purchase preview the receipt endpoint renders.
+                    variant: "email" as const,
+                    from: receiptEmailFrom,
+                    subject:
+                      product.native_type === "membership"
+                        ? `You've subscribed to ${product.name || "Untitled"}!`
+                        : product.price_cents === 0
+                          ? `You got ${product.name || "Untitled"}!`
+                          : `You bought ${product.name || "Untitled"}!`,
+                  }
+                : {
+                    title: product.name || "Untitled",
+                    // Tabs without a live page to open (showNavigationButton=false) show the
+                    // title alone, with no address line or arrow.
+                    url: showNavigationButton ? url : undefined,
+                    link: showNavigationButton
+                      ? (props) => (
+                          <NavigationButton
+                            {...props}
+                            disabled={isBusy}
+                            href={url}
+                            onClick={(evt) => {
+                              evt.preventDefault();
+                              // Open the tab NOW, while we still have the user's click activation, then
+                              // point it at the product page once the save finishes. Calling window.open
+                              // after the await instead gets popup-blocked on iOS Safari (the async gap
+                              // consumes the transient activation), which matters because the mobile
+                              // preview pane is this button's main audience.
+                              const previewWindow = window.open("about:blank", "_blank");
+                              void save().then(() => {
+                                if (previewWindow) previewWindow.location.href = url;
+                                else window.open(url, "_blank");
+                              });
+                            }}
+                          />
+                        )
+                      : undefined,
+                  })}
             >
               <Preview
                 scaleFactor={previewScaleFactor}
