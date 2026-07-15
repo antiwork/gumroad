@@ -3440,6 +3440,21 @@ describe Subscription, :vcr do
         expect(subscription.charges_completed?).to eq(true)
         expect(subscription.expected_completion_time).to eq(subscription.end_time_of_last_paid_period)
       end
+
+      it "returns nil when there is no paid period to anchor on" do
+        travel_to(t0)
+
+        purchase = create(:membership_purchase, succeeded_at: t0)
+        subscription = purchase.subscription
+        subscription.update!(charge_occurrence_count: 3)
+
+        # Fully refunding the only successful charge leaves the subscription
+        # with no end_time_of_last_paid_period and no free trial.
+        purchase.update!(stripe_refunded: true)
+
+        expect(subscription.end_time_of_last_paid_period).to be_nil
+        expect(subscription.expected_completion_time).to be_nil
+      end
     end
   end
 
