@@ -634,6 +634,16 @@ class Purchase < ApplicationRecord
   }
   scope :paid, -> { successful.where("purchases.price_cents > 0").where("stripe_refunded is null OR stripe_refunded = 0") }
   scope :not_fully_refunded, -> { where("purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0") }
+  # Purchase selection for the tax report jobs' sales leg. Pre-cutover purchases keep the
+  # historical exclusion of fully refunded purchases (their netted amount would be zero, and
+  # dropping the row is how historical periods were filed). Post-cutover purchases are included
+  # even when fully refunded: they are reported at gross amounts, and the refund rows in the
+  # refund's own period are what offset them — dropping the sale row would leave refund rows
+  # with nothing to subtract from. See Purchase::Reportable::REFUND_REPORTING_CUTOVER.
+  scope :not_fully_refunded_for_tax_reporting, lambda {
+    where("purchases.created_at >= :cutover OR (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)",
+          cutover: Purchase::Reportable::REFUND_REPORTING_CUTOVER.beginning_of_day)
+  }
   scope :not_partially_refunded_bundle_product_purchase, -> {
     where("purchases.stripe_partially_refunded IS NULL OR purchases.stripe_partially_refunded = false").or(not_is_bundle_product_purchase)
   }

@@ -16,6 +16,18 @@ class Refund < ApplicationRecord
   before_validation :assign_seller, on: :create
   validates_uniqueness_of :processor_refund_id, scope: :link_id, allow_blank: true
 
+  # Refund selection for the tax report jobs' refund leg: refunds that get reported as their
+  # own negative rows in the period the refund happened. Only refunds created on/after the
+  # refund reporting cutover qualify — earlier refunds were (and stay) netted into their
+  # purchase's period, so including them here would relieve the same tax twice. Terminal-failure
+  # refunds never returned money to the buyer, so they are excluded. See
+  # Purchase::Reportable::REFUND_REPORTING_CUTOVER for the full cutover contract.
+  scope :for_tax_period_reporting, lambda { |starts_at, ends_at|
+    where(created_at: starts_at..ends_at)
+      .where("refunds.created_at >= ?", Purchase::Reportable::REFUND_REPORTING_CUTOVER.beginning_of_day)
+      .where("refunds.status IS NULL OR refunds.status NOT IN ('failed', 'canceled')")
+  }
+
   has_flags 1 => :is_for_fraud,
             :column => "flags",
             :flag_query_mode => :bit_operator,

@@ -224,5 +224,73 @@ describe CreateIndiaSalesReportJob do
 
       temp_file.close(true)
     end
+
+    describe "refund period attribution" do
+      let(:cutover) { Purchase::Reportable::REFUND_REPORTING_CUTOVER }
+      let(:report_month_start) { (cutover + 1.month).beginning_of_month }
+
+      before do
+        product = create(:product, price_cents: 1000)
+
+        # Sold (post-cutover) in the month before the reported one, refunded during the
+        # reported month: the refund must appear in the reported month as a negative row.
+        travel_to(report_month_start - 5.days) do
+          @cross_month_purchase = create(:purchase,
+                                         link: product,
+                                         purchaser: product.user,
+                                         purchase_state: "in_progress",
+                                         quantity: 1,
+                                         perceived_price_cents: 1000,
+                                         country: "India",
+                                         ip_country: "India",
+                                         ip_state: "MH",
+                                         stripe_transaction_id: "txn_cross_month"
+          )
+          @cross_month_purchase.mark_test_successful!
+          @cross_month_purchase.update!(gumroad_tax_cents: 180)
+        end
+
+        travel_to(report_month_start + 5.days) do
+          @refund = create(:refund, purchase: @cross_month_purchase, amount_cents: 1000, gumroad_tax_cents: 180)
+          @cross_month_purchase.update!(stripe_refunded: true)
+        end
+      end
+
+      it "reports the refund as a negative row in the month it happened, and keeps the sale in its own month" do
+        refund_month_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-refund-month-#{SecureRandom.hex(18)}.csv")
+        sale_month_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sale-month-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(refund_month_object, sale_month_object)
+
+        described_class.new.perform(report_month_start.month, report_month_start.year)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        refund_month_object.get(response_target: temp_file)
+        temp_file.rewind
+        refund_month_payload = CSV.read(temp_file)
+        temp_file.close(true)
+
+        refund_row = refund_month_payload.find { |row| row[0] == @cross_month_purchase.external_id }
+        expect(refund_row).to be_present
+        expect(refund_row[1]).to eq(@refund.created_at.strftime("%Y-%m-%d"))
+        expect(refund_row[4]).to eq("-1000") # Taxable Value
+        expect(refund_row[5]).to eq("-180")  # Integrated Tax Amount
+
+        # The sale's own month still reports the purchase at gross — the refund happened the
+        # following month and must not drop the row retroactively.
+        sale_month = report_month_start - 1.month
+        described_class.new.perform(sale_month.month, sale_month.year)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        sale_month_object.get(response_target: temp_file)
+        temp_file.rewind
+        sale_month_payload = CSV.read(temp_file)
+        temp_file.close(true)
+
+        sale_row = sale_month_payload.find { |row| row[0] == @cross_month_purchase.external_id }
+        expect(sale_row).to be_present
+        expect(sale_row[4]).to eq("1000")
+        expect(sale_row[5]).to eq("180")
+      end
+    end
   end
 end
