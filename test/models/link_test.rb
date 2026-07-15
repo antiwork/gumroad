@@ -2649,6 +2649,106 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal false, product.has_another_collaborator?(collaborator: collaborator_for_another_product)
   end
 
+  # --- #has_product_level_rich_content? --------------------------------------
+
+  test "has_product_level_rich_content? is true unless variants have their own content" do
+    product = create_product
+    physical_product = create_physical_product
+    shared = create_product(has_same_rich_content_for_all_variants: true)
+    create_variant(variant_category: create_variant_category(link: shared), name: "V1")
+    not_shared = create_product
+    create_variant(variant_category: create_variant_category(link: not_shared), name: "V1")
+
+    assert [product, physical_product, shared].all?(&:has_product_level_rich_content?)
+    assert_equal false, not_shared.has_product_level_rich_content?
+  end
+
+  # --- #percentage_revenue_cut_for_user --------------------------------------
+
+  test "percentage_revenue_cut_for_user is 100 for the creator of a non-collab, 0 for others" do
+    product = create_product(is_collab: false)
+    assert_equal 100, product.percentage_revenue_cut_for_user(product.user)
+    assert_equal 0, product.percentage_revenue_cut_for_user(create_user)
+  end
+
+  test "percentage_revenue_cut_for_user splits between collaborator and creator once accepted" do
+    product = create_collab_product(collaborator_cut: 45_00)
+    seller = product.user
+    affiliate_user = product.collaborator.affiliate_user
+
+    assert_equal 55, product.percentage_revenue_cut_for_user(seller)
+    assert_equal 45, product.percentage_revenue_cut_for_user(affiliate_user)
+
+    product.collaborator.create_collaborator_invitation!
+    assert_equal 100, product.percentage_revenue_cut_for_user(seller)
+    assert_equal 0, product.percentage_revenue_cut_for_user(affiliate_user)
+  end
+
+  test "percentage_revenue_cut_for_user is 0 for unrelated users on a collab" do
+    product = create_collab_product(collaborator_cut: 45_00)
+    assert_equal 0, product.percentage_revenue_cut_for_user(create_user)
+  end
+
+  # --- #unpublish! -----------------------------------------------------------
+
+  test "unpublish! disables purchases and records admin unpublishing" do
+    product = create_product
+    freeze_time do
+      product.unpublish!(is_unpublished_by_admin: true)
+      product.reload
+      assert_equal Time.current, product.purchase_disabled_at
+      assert_equal true, product.is_unpublished_by_admin
+    end
+  end
+
+  test "unpublish! is allowed even when a membership's tier structure is invalid" do
+    membership = create_product(is_tiered_membership: true)
+    membership.variant_categories.alive.each { |vc| vc.update!(deleted_at: Time.current) }
+    assert_nothing_raised { membership.unpublish! }
+    assert membership.reload.purchase_disabled_at.present?
+  end
+
+  test "an invalid membership tier structure still fails on non-unpublish updates" do
+    membership = create_product(is_tiered_membership: true)
+    membership.variant_categories.alive.each { |vc| vc.update!(deleted_at: Time.current) }
+    error = assert_raises(Link::LinkInvalid) { membership.update!(name: "New Name") }
+    assert_equal "Memberships should only have one Tier version category.", error.message
+  end
+
+  # --- #alive? / #published? -------------------------------------------------
+
+  test "alive? reflects purchasable state" do
+    assert_equal true, build_product.alive?
+    assert_equal false, build_product(banned_at: Time.current).alive?
+    assert_equal false, build_product(deleted_at: Time.current).alive?
+    assert_equal false, build_product(purchase_disabled_at: Time.current).alive?
+  end
+
+  test "published? requires the product be purchasable and not a draft" do
+    assert_equal true, build_product.published?
+    assert_equal false, build_product(purchase_disabled_at: Time.current).published?
+    assert_equal false, build_product(draft: true).published?
+  end
+
+  # --- commission validations ------------------------------------------------
+
+  test "a commission priced at 0 is valid" do
+    assert create_product(user: create_eligible_seller, native_type: Link::NATIVE_TYPE_COMMISSION, price_cents: 0).valid?
+  end
+
+  test "a commission priced below double the currency minimum is invalid" do
+    commission = create_product(user: create_eligible_seller, native_type: Link::NATIVE_TYPE_COMMISSION, price_cents: 0)
+    commission.price_cents = 100
+    assert_not commission.valid?
+    assert_equal "The commission price must be at least 1.98 USD.", commission.errors.full_messages.first
+  end
+
+  test "a commission priced at least double the currency minimum is valid" do
+    commission = create_product(user: create_eligible_seller, native_type: Link::NATIVE_TYPE_COMMISSION, price_cents: 0)
+    commission.price_cents = 198
+    assert commission.valid?
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
