@@ -650,7 +650,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(page).to have_alert(text: "You can only upload up to 5 audio previews in the description")
 
       # Ensure that embedded files are visible in the preview pane
-      within_section("Preview", section_element: :aside) do
+      within find("aside[aria-label='Preview']") do
         expect(page).to have_embed(name: "My awesome track")
         expect(page).to have_embed(name: "test")
         expect(page).to have_embed(name: "magic")

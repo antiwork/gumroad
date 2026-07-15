@@ -97,7 +97,7 @@ describe("Bundle edit page", type: :system, js: true) do
     click_on "Save changes"
     expect(page).to have_alert(text: "Changes saved!")
 
-    product_page = window_opened_by { click_on "Preview" }
+    product_page = window_opened_by { click_on "Open in new tab" }
     bundle.reload
     within_window(product_page) { expect(page.current_url).to eq(bundle.long_url) }
 
@@ -174,7 +174,7 @@ describe("Bundle edit page", type: :system, js: true) do
         expect(page).to have_text("I hate being small")
       end
 
-      product_page = window_opened_by { click_on "Preview" }
+      product_page = window_opened_by { click_on "Open in new tab" }
       expect(page).to have_alert(text: "Changes saved!")
       bundle.reload
       within_window(product_page) { expect(page.current_url).to eq(bundle.long_url) }

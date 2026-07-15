@@ -2,11 +2,13 @@ import * as React from "react";
 
 import { CardProduct } from "$app/parsers/product";
 
+import { NavigationButton } from "$app/components/Button";
 import { Checkout } from "$app/components/Checkout";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { StateContext as PaymentStateContext, createReducer } from "$app/components/Checkout/payment";
+import { useAppDomain } from "$app/components/DomainSettings";
 import { Preview } from "$app/components/Preview";
-import { PreviewSidebar } from "$app/components/PreviewSidebar";
+import { PreviewChrome, PreviewSidebar } from "$app/components/PreviewSidebar";
 
 export const CheckoutPreview = ({
   children,
@@ -84,22 +86,34 @@ export const CheckoutPreview = ({
     [cartItem],
   );
 
+  const appDomain = useAppDomain();
+  const checkoutUrl = Routes.checkout_url({ host: appDomain });
+
   return (
     <PreviewSidebar>
-      <Preview scaleFactor={0.4} style={{ border: "var(--border)" }}>
-        <PaymentStateContext.Provider value={paymentState}>
-          <Checkout
-            discoverUrl=""
-            cart={{
-              items: [cartItem],
-              discountCodes: [],
-            }}
-            updateCart={() => {}}
-            recommendedProducts={recommendedProduct ? [recommendedProduct] : []}
-          />
-          {children}
-        </PaymentStateContext.Provider>
-      </Preview>
+      {/* The dashboard's sample cart only exists here, so there's no live page that would
+          show this exact preview — the chrome links to the real checkout page, which renders
+          the buyer's actual cart. */}
+      <PreviewChrome
+        title="Checkout"
+        url={checkoutUrl}
+        link={(props) => <NavigationButton {...props} href={checkoutUrl} target="_blank" rel="noreferrer" />}
+      >
+        <Preview scaleFactor={0.4}>
+          <PaymentStateContext.Provider value={paymentState}>
+            <Checkout
+              discoverUrl=""
+              cart={{
+                items: [cartItem],
+                discountCodes: [],
+              }}
+              updateCart={() => {}}
+              recommendedProducts={recommendedProduct ? [recommendedProduct] : []}
+            />
+            {children}
+          </PaymentStateContext.Provider>
+        </Preview>
+      </PreviewChrome>
     </PreviewSidebar>
   );
 };
