@@ -323,6 +323,11 @@ module ModelFactories
     offer_code
   end
 
+  def create_universal_offer_code(user: nil, amount_cents: 100, excluded_products: [], **attrs)
+    user ||= create_user
+    OfferCode.create!({ user:, universal: true, products: [], excluded_products:, code: "uni#{unique_suffix[0, 6]}", amount_cents:, currency_type: user.currency_type }.merge(attrs))
+  end
+
   def create_upsell(seller:, product:, offer_code: nil, **attrs)
     Upsell.create!({
       name: "Upsell",

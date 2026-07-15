@@ -2337,6 +2337,65 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal false, product.purchasing_power_parity_enabled?
   end
 
+  # --- #has_offer_codes? -----------------------------------------------------
+
+  test "has_offer_codes? is true only with codes and the display flag enabled" do
+    product = create_product
+    create_offer_code(user: product.user, products: [product])
+    assert_equal false, product.has_offer_codes? # flag off
+    product.user.update!(display_offer_code_field: true)
+    assert_equal true, product.reload.has_offer_codes?
+  end
+
+  test "has_offer_codes? is false without codes regardless of the display flag" do
+    product = create_product
+    assert_equal false, product.has_offer_codes?
+    product.user.update!(display_offer_code_field: true)
+    assert_equal false, product.reload.has_offer_codes?
+  end
+
+  test "has_offer_codes? is false when the only universal code excludes the product" do
+    product = create_product
+    create_universal_offer_code(user: product.user, excluded_products: [product])
+    product.user.update!(display_offer_code_field: true)
+    assert_equal false, product.has_offer_codes?
+  end
+
+  # --- default offer code validation -----------------------------------------
+
+  test "a universal offer code that excludes the product cannot be the default" do
+    product = create_product
+    offer_code = create_universal_offer_code(user: product.user, excluded_products: [product])
+    product.default_offer_code = offer_code
+    assert_not product.valid?
+    assert_includes product.errors.full_messages, "Default offer code must apply to this product"
+  end
+
+  # --- #find_offer_code ------------------------------------------------------
+
+  test "find_offer_code returns the universal code unless it excludes the product" do
+    product = create_product
+    other_product = create_product(user: product.user)
+    universal = create_universal_offer_code(user: product.user, code: "uni")
+    assert_equal universal, product.find_offer_code(code: "uni")
+    assert_equal universal, other_product.find_offer_code(code: "uni")
+
+    universal.update!(excluded_products: [product])
+    assert_nil product.find_offer_code(code: "uni")
+    assert_equal universal, other_product.find_offer_code(code: "uni")
+  end
+
+  # --- #product_and_universal_offer_codes ------------------------------------
+
+  test "product_and_universal_offer_codes omits universal codes that exclude the product" do
+    product = create_product
+    other_product = create_product(user: product.user)
+    product_offer_code = create_offer_code(user: product.user, products: [product], code: "prod")
+    universal = create_universal_offer_code(user: product.user, code: "uni", excluded_products: [other_product])
+    assert_equal [product_offer_code, universal].sort_by(&:id), product.product_and_universal_offer_codes.sort_by(&:id)
+    assert_equal [], other_product.product_and_universal_offer_codes
+  end
+
   # --- currency --------------------------------------------------------------
 
   test "yen is a single-unit currency" do
