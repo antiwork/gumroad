@@ -893,8 +893,12 @@ class StripeChargeProcessor
         # account the refund belongs to ("user_id" is the same field on older API versions).
         # Connected accounts send refund events for all of the seller's Stripe activity,
         # including non-Gumroad sales, so the event handler uses this to silently ignore —
-        # rather than alert on — refunds that match no Gumroad charge.
-        stripe_connect_account_id: stripe_event["user_id"].presence || stripe_event["account"],
+        # rather than alert on — refunds that match no Gumroad charge. Gumroad's own platform
+        # account id must not be stored here: StripeEventHandler routes events whose account
+        # IS the platform through the Gumroad path, where every refund belongs to a Gumroad
+        # charge and a miss must alert. Storing the platform id would make the handler treat
+        # such a miss as seller-owned activity and suppress the alert.
+        stripe_connect_account_id: connected_account_id_for_refund_event(stripe_event),
       }
       # A refund that fails after Stripe accepted it (asynchronous bank-transfer refunds —
       # iDEAL, Bancontact, ACH — can be returned by the buyer's bank days later) needs its
@@ -1005,6 +1009,20 @@ class StripeChargeProcessor
     decline_code = last_payment_error["decline_code"]
     error_code += "_#{decline_code}" if decline_code.present? && decline_code != error_code
     error_code
+  end
+
+  # Returns the connected Stripe account id a refund event was delivered for, or nil when the
+  # event actually belongs to Gumroad's own platform account. StripeEventHandler treats an
+  # account id equal to STRIPE_PLATFORM_ACCOUNT_ID the same as no account id at all (both are
+  # routed through the Gumroad path), so the refund event's extras must mirror that: only a
+  # genuinely connected account id means "this refund could be the seller's own non-Gumroad
+  # Stripe activity". Storing the platform id here would make the missing-chargeable alert in
+  # Purchase::ChargeEventsHandler wrongly suppress platform refund failures.
+  def self.connected_account_id_for_refund_event(stripe_event)
+    account_id = stripe_event["user_id"].presence || stripe_event["account"].presence
+    return if account_id.blank? || account_id == STRIPE_PLATFORM_ACCOUNT_ID
+
+    account_id
   end
 
   def self.handle_stripe_event_charge_dispute_for_charge_with_destination_funds_widthdrawn(stripe_dispute, stripe_charge, event)

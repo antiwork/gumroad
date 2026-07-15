@@ -2306,6 +2306,31 @@ describe StripeChargeProcessor, :vcr do
           expect(refund.reload.status).to eq("failed")
         end
 
+        it "stores the connected account id on the event's extras for connect-endpoint refunds" do
+          refund_event["account"] = "acct_1MExampleConnect"
+
+          expect(ChargeProcessor).to receive(:handle_event) do |event|
+            expect(event.extras[:stripe_connect_account_id]).to eq("acct_1MExampleConnect")
+          end
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+        end
+
+        it "does not store the platform account id on the event's extras" do
+          # Some platform-endpoint refund events carry Gumroad's own account id in the
+          # "account" field. It must not be stored as a connected account id, because the
+          # missing-chargeable alert in Purchase::ChargeEventsHandler treats a stored account
+          # id as "the seller's own Connect refund" and stays quiet — which would silently
+          # drop a failed platform refund that matched no chargeable.
+          refund_event["account"] = STRIPE_PLATFORM_ACCOUNT_ID
+
+          expect(ChargeProcessor).to receive(:handle_event) do |event|
+            expect(event.extras[:stripe_connect_account_id]).to be_nil
+          end
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+        end
+
         it "ignores refund.created so it cannot race the app's own refund transaction" do
           refund_event["type"] = "refund.created"
           refund_event["data"]["object"]["status"] = "succeeded"
