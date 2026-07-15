@@ -119,6 +119,51 @@ describe Purchase::Reportable do
   end
 end
 
+describe "Purchase.not_fully_refunded_for_tax_reporting" do
+  let(:cutover) { Purchase::Reportable::REFUND_REPORTING_CUTOVER }
+
+  def purchase_created_at(time)
+    create(:purchase).tap { |p| p.update_column(:created_at, time) }
+  end
+
+  it "keeps a pre-cutover sale that was fully refunded on/after the cutover" do
+    # The Greptile P1 scenario: a June sale fully refunded in August. The refund gets its own
+    # negative row in August, so the June sale row must stay — dropping it would understate
+    # the combined periods by the sale amount.
+    purchase = purchase_created_at(cutover.beginning_of_day - 30.days)
+    create(:refund, purchase:, amount_cents: 100).update_column(:created_at, cutover.beginning_of_day + 10.days)
+    purchase.update!(stripe_refunded: true)
+
+    expect(Purchase.not_fully_refunded_for_tax_reporting).to include(purchase)
+  end
+
+  it "still drops a pre-cutover sale fully refunded before the cutover" do
+    purchase = purchase_created_at(cutover.beginning_of_day - 30.days)
+    create(:refund, purchase:, amount_cents: 100).update_column(:created_at, cutover.beginning_of_day - 10.days)
+    purchase.update!(stripe_refunded: true)
+
+    expect(Purchase.not_fully_refunded_for_tax_reporting).not_to include(purchase)
+  end
+
+  it "drops a pre-cutover fully-refunded sale whose only post-cutover refund terminally failed" do
+    # Failed/canceled refunds never returned money and get no refund row
+    # (Refund.for_tax_period_reporting excludes them), so they can't rescue the sale row.
+    purchase = purchase_created_at(cutover.beginning_of_day - 30.days)
+    create(:refund, purchase:, amount_cents: 100, status: "failed").update_column(:created_at, cutover.beginning_of_day + 10.days)
+    purchase.update!(stripe_refunded: true)
+
+    expect(Purchase.not_fully_refunded_for_tax_reporting).not_to include(purchase)
+  end
+
+  it "keeps post-cutover sales even when fully refunded" do
+    purchase = purchase_created_at(cutover.beginning_of_day + 1.day)
+    create(:refund, purchase:, amount_cents: 100).update_column(:created_at, cutover.beginning_of_day + 5.days)
+    purchase.update!(stripe_refunded: true)
+
+    expect(Purchase.not_fully_refunded_for_tax_reporting).to include(purchase)
+  end
+end
+
 describe "Refund.for_tax_period_reporting" do
   let(:cutover) { Purchase::Reportable::REFUND_REPORTING_CUTOVER }
   let(:purchase) do
