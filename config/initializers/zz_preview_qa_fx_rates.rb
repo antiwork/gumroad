@@ -20,6 +20,9 @@ Rails.application.config.after_initialize do
       "EUR" => "0.92",
       "GBP" => "0.79",
       "AUD" => "1.51",
+      # INR added for PR #5959 QA: India is a lookup-table GST country (18%), the exact
+      # rate/price shape behind the buyer_currency_quote_invalid "total mismatch" incident.
+      "INR" => "86.20",
     }.each do |currency, rate|
       namespace.set(currency, rate) if namespace.get(currency).blank?
     end
