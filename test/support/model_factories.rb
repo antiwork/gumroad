@@ -64,8 +64,8 @@ module ModelFactories
   end
 
   # A recurring (non-tiered) membership product, mirroring :subscription_product.
-  def create_subscription_product(user: nil, **attrs)
-    Link.create!({
+  def build_subscription_product(user: nil, **attrs)
+    Link.new({
       user: user || create_user,
       name: "Membership",
       price_cents: 100,
@@ -73,6 +73,43 @@ module ModelFactories
       subscription_duration: "monthly",
       is_tiered_membership: false,
     }.merge(attrs))
+  end
+
+  def create_subscription_product(user: nil, **attrs)
+    build_subscription_product(user:, **attrs).tap(&:save!)
+  end
+
+  # A tiered membership product (mirrors :membership_product). The
+  # initialize_tier_if_needed callback builds the Tier category + default tier.
+  def create_membership_product(user: nil, **attrs)
+    Link.create!({
+      user: user || create_user,
+      name: "Membership",
+      price_cents: 100,
+      is_recurring_billing: true,
+      subscription_duration: "monthly",
+      is_tiered_membership: true,
+      native_type: Link::NATIVE_TYPE_MEMBERSHIP,
+    }.merge(attrs))
+  end
+
+  # A physical product (mirrors the :is_physical trait): shipping + a default SKU.
+  def create_physical_product(user: nil, **attrs)
+    product = create_product(user:, **attrs)
+    product.require_shipping = true
+    product.native_type = "physical"
+    product.skus_enabled = true
+    product.shipping_destinations << ShippingDestination.new(country_code: Product::Shipping::ELSEWHERE, one_item_rate_cents: 0, multiple_items_rate_cents: 0)
+    product.skus << Sku.new(price_difference_cents: 0, name: "DEFAULT_SKU", is_default_sku: true)
+    product.is_physical = true
+    product.quantity_enabled = true
+    product.should_show_sales_count = true
+    product.save!
+    product
+  end
+
+  def create_sku(link: nil, **attrs)
+    Sku.create!({ link: link || create_product, price_difference_cents: 0, name: "Large" }.merge(attrs))
   end
 
   def create_variant_category(link: nil, **attrs)

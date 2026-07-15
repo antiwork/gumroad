@@ -153,4 +153,230 @@ class LinkTest < ActiveSupport::TestCase
       assert_includes product.errors.full_messages, message
     end
   end
+
+  # --- alive_category_variants_presence validation ---------------------------
+
+  test "physical product with no versions is valid" do
+    product = create_physical_product
+    assert_nothing_raised { product.save! }
+    assert product.valid?
+    refute product.errors.any?
+  end
+
+  test "physical product with non-empty versions is valid" do
+    product = create_physical_product
+    category_one = create_variant_category(link: product)
+    category_two = create_variant_category(link: product)
+    create_sku(link: product)
+    create_variant(variant_category: category_one)
+    create_variant(variant_category: category_two)
+    assert_nothing_raised { product.save! }
+    assert product.valid?
+  end
+
+  test "physical product with an empty version fails" do
+    product = create_physical_product
+    category_one = create_variant_category(link: product)
+    create_variant_category(link: product)
+    create_sku(link: product)
+    create_variant(variant_category: category_one)
+    assert_raises(ActiveRecord::RecordInvalid) { product.save! }
+    refute product.valid?
+    assert_equal "Sorry, the product versions must have at least one option.", product.errors.full_messages.to_sentence
+  end
+
+  test "non-physical product with no versions is valid" do
+    assert_nothing_raised { @product.save! }
+    assert @product.valid?
+  end
+
+  test "non-physical product with non-empty versions is valid" do
+    category_one = create_variant_category(link: @product)
+    category_two = create_variant_category(link: @product)
+    create_variant(variant_category: category_one)
+    create_variant(variant_category: category_two)
+    assert_nothing_raised { @product.save! }
+    assert @product.valid?
+  end
+
+  test "non-physical product with an empty version fails" do
+    create_variant_category(link: @product)
+    category_two = create_variant_category(link: @product)
+    create_variant(variant_category: category_two)
+    assert_raises(ActiveRecord::RecordInvalid) { @product.save! }
+    refute @product.valid?
+    assert_equal "Sorry, the product versions must have at least one option.", @product.errors.full_messages.to_sentence
+  end
+
+  # --- free trial validation -------------------------------------------------
+
+  test "free trial can be enabled on a recurring product with valid duration" do
+    product = build_subscription_product(free_trial_enabled: true, free_trial_duration_unit: :week, free_trial_duration_amount: 1)
+    assert product.valid?
+  end
+
+  test "free trial requires duration properties when enabled" do
+    product = build_subscription_product(free_trial_enabled: true)
+    refute product.valid?
+    assert_equal ["Free trial duration unit can't be blank", "Free trial duration amount can't be blank"].sort,
+                 product.errors.full_messages.sort
+
+    product.free_trial_duration_unit = :week
+    product.free_trial_duration_amount = 1
+    assert product.valid?
+  end
+
+  test "free trial skips validating duration amount unless changed" do
+    product = create_subscription_product(free_trial_enabled: true, free_trial_duration_unit: :week, free_trial_duration_amount: 1)
+    product.update_attribute(:free_trial_duration_amount, 2) # skip validations
+    assert product.valid?
+
+    product.free_trial_duration_amount = 3
+    refute product.valid?
+  end
+
+  test "free trial properties are not required when disabled" do
+    assert build_subscription_product(free_trial_enabled: false).valid?
+  end
+
+  test "free trial only allows permitted durations" do
+    product = build_subscription_product(free_trial_enabled: true, free_trial_duration_unit: :week, free_trial_duration_amount: 1)
+    assert product.valid?
+
+    product.free_trial_duration_amount = 2
+    refute product.valid?
+
+    product.free_trial_duration_amount = 0.5
+    refute product.valid?
+  end
+
+  test "free trial cannot be enabled on a non-recurring product" do
+    product = build_product(free_trial_enabled: true)
+    refute product.valid?
+    assert_includes product.errors.full_messages, "Free trials are only allowed for subscription products."
+  end
+
+  test "free trial properties cannot be set on a non-recurring product" do
+    product = build_product(free_trial_duration_unit: :week, free_trial_duration_amount: 1)
+    refute product.valid?
+    assert_includes product.errors.full_messages, "Free trials are only allowed for subscription products."
+  end
+
+  # --- callbacks: set_default_discover_fee_per_thousand ----------------------
+
+  test "sets the boosted discover fee when the user has discover_boost_enabled" do
+    user = create_user(discover_boost_enabled: true)
+    product = build_product(user:)
+    product.save
+    assert_equal Link::DEFAULT_BOOSTED_DISCOVER_FEE_PER_THOUSAND, product.discover_fee_per_thousand
+  end
+
+  test "does not set the boosted discover fee without discover_boost_enabled" do
+    user = create_user
+    user.update!(discover_boost_enabled: false)
+    product = build_product(user:)
+    product.save
+    assert_equal 100, product.discover_fee_per_thousand
+  end
+
+  # --- callbacks: initialize_tier_if_needed ----------------------------------
+
+  test "membership product initializes a Tier category and default tier" do
+    product = create_membership_product
+    assert_equal "Tier", product.tier_category.title
+    assert_equal "Untitled", product.tiers.first.name
+  end
+
+  test "membership product creates a default price for the default tier" do
+    product = create_membership_product(price_cents: 600)
+    prices = product.default_tier.prices
+    assert_equal 1, prices.count
+    assert_equal 600, prices.first.price_cents
+    assert_equal "monthly", prices.first.recurrence
+  end
+
+  test "membership product creates a 0-cent price for the product itself" do
+    product = create_membership_product(price_cents: 600)
+    prices = product.prices
+    assert_equal 1, prices.count
+    assert_equal 0, prices.first.price_cents
+    assert_equal "monthly", prices.first.recurrence
+  end
+
+  test "membership product defaults subscription_duration when not set" do
+    product = create_membership_product(subscription_duration: nil)
+    product.save(validate: false) # skip default price validation, which fails
+    assert_equal BasePrice::Recurrence::DEFAULT_TIERED_MEMBERSHIP_RECURRENCE, product.subscription_duration
+  end
+
+  test "membership product sets tier prices correctly for single-unit currencies" do
+    product = create_membership_product(price_currency_type: "jpy", price_cents: 5000)
+    tier_price = product.default_tier.prices.first
+    assert_equal "jpy", tier_price.currency
+    assert_equal 5000, tier_price.price_cents
+  end
+
+  # --- content moderation on publish -----------------------------------------
+
+  test "publish is blocked when the content moderation check fails" do
+    product = create_product(purchase_disabled_at: Time.current)
+    stub_publish_enforcements(product)
+    ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: false, reasons: ["policy violation"])) do
+      error = assert_raises(ActiveRecord::RecordInvalid) { product.publish! }
+      assert_includes error.message, "looks like it contains something that may violate our content guidelines"
+    end
+    refute_nil product.reload.purchase_disabled_at
+  end
+
+  test "publish skips the content moderation check for VIP creators" do
+    product = create_product(purchase_disabled_at: Time.current)
+    stub_publish_enforcements(product)
+    product.user.stub(:vip_creator?, true) do
+      ContentModeration::ModerateRecordService.stub(:check, ->(*) { flunk "moderation check should be skipped for VIP creators" }) do
+        product.publish!
+      end
+    end
+    assert_nil product.reload.purchase_disabled_at
+  end
+
+  test "publish succeeds when the content moderation check passes" do
+    product = create_product(purchase_disabled_at: Time.current)
+    stub_publish_enforcements(product)
+    ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: true)) do
+      product.publish!
+    end
+    assert_nil product.reload.purchase_disabled_at
+  end
+
+  test "publish clears the publishing flag after it completes" do
+    product = create_product(purchase_disabled_at: Time.current)
+    stub_publish_enforcements(product)
+    ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: true)) do
+      product.publish!
+    end
+    assert_equal false, product.publishing?
+  end
+
+  test "publish clears the publishing flag even when it raises" do
+    product = create_product(purchase_disabled_at: Time.current)
+    stub_publish_enforcements(product)
+    ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: false, reasons: ["bad"])) do
+      assert_raises(ActiveRecord::RecordInvalid) { product.publish! }
+    end
+    assert_equal false, product.publishing?
+  end
+
+  private
+    # publish! runs several enforcement gates unrelated to content moderation;
+    # the RSpec block stubs them out so the moderation behavior can be tested in
+    # isolation. Singleton methods on the instance mirror `allow(product).to receive`.
+    def stub_publish_enforcements(product)
+      %i[
+        enforce_shipping_destinations_presence!
+        enforce_user_email_confirmation!
+        enforce_merchant_account_exits_for_new_users!
+        enable_transcode_videos_on_purchase!
+      ].each { |m| product.define_singleton_method(m) { |*| true } }
+      product.define_singleton_method(:auto_transcode_videos?) { false }
+    end
 end
