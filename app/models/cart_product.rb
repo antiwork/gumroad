@@ -5,6 +5,10 @@ class CartProduct < ApplicationRecord
   include Deletable
 
   MAX_QUANTITY = 2_147_483_647
+  # `price` is a signed 8-byte (bigint) column. Values beyond this raise
+  # ActiveModel::RangeError at serialization time — after validations — so we must
+  # reject them here to turn a hard crash into a normal validation failure.
+  MAX_PRICE = 9_223_372_036_854_775_807
 
   URL_PARAMETERS_JSON_SCHEMA = { type: "object", additionalProperties: { type: "string" } }.freeze
   ACCEPTED_OFFER_DETAILS_JSON_SCHEMA = {
@@ -26,6 +30,7 @@ class CartProduct < ApplicationRecord
 
   validates :price, :quantity, :referrer, presence: true
   validates :quantity, numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: MAX_QUANTITY }, allow_nil: true
+  validates :price, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: MAX_PRICE }, allow_nil: true
 
   validate :ensure_url_parameters_conform_to_schema
   validate :ensure_accepted_offer_details_conform_to_schema
