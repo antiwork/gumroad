@@ -1162,6 +1162,78 @@ class LinkTest < ActiveSupport::TestCase
     assert_not build_product(name: "hi there" * 255).valid?
   end
 
+  # --- #bundle_is_not_in_bundle ----------------------------------------------
+
+  test "a product not in any bundle can become a bundle" do
+    product = create_product(draft: true, purchase_disabled_at: Time.current)
+    product.is_bundle = true
+    product.save
+    assert_empty product.errors
+  end
+
+  test "a product already in a bundle cannot become a bundle" do
+    product = create_product(draft: true, purchase_disabled_at: Time.current)
+    bundle = create_product(user: product.user, is_bundle: true)
+    BundleProduct.create!(product:, bundle:)
+    product.is_bundle = true
+    product.save
+    assert_equal ["This product cannot be converted to a bundle because it is already part of a bundle."], product.errors.full_messages
+  end
+
+  test "a product formerly in a bundle can become a bundle" do
+    product = create_product(draft: true, purchase_disabled_at: Time.current)
+    bundle = create_product(user: product.user, is_bundle: true)
+    BundleProduct.create!(product:, bundle:, deleted_at: Time.current)
+    product.is_bundle = true
+    product.save
+    assert_empty product.errors
+  end
+
+  # --- multifile_aware_product_file_info / removed_file_info_attributes ------
+
+  test "multifile_aware_product_file_info returns file info for a single-file product only" do
+    one_file = create_product(size: 200)
+    create_product_file(link: one_file, size: 300, pagelength: 7)
+    two_files = create_product(size: 400)
+    create_product_file(link: two_files, size: 500, pagelength: 1)
+    create_product_file(link: two_files, size: 600, pagelength: 2)
+
+    assert_equal({ Size: "300 Bytes", Length: "7 pages" }, one_file.multifile_aware_product_file_info)
+    assert_equal({}, two_files.multifile_aware_product_file_info)
+  end
+
+  test "removed_file_info_attributes accumulates removed attributes" do
+    link = build_product
+    assert_equal [], link.removed_file_info_attributes
+    link.add_removed_file_info_attributes([:Size])
+    assert_equal [:Size], link.removed_file_info_attributes
+    link.add_removed_file_info_attributes([:Length])
+    assert_equal %i[Size Length], link.removed_file_info_attributes
+  end
+
+  # --- currency --------------------------------------------------------------
+
+  test "yen is a single-unit currency" do
+    product.price_currency_type = :jpy
+    assert_equal true, product.send(:single_unit_currency?)
+  end
+
+  test "price_currency_type= downcases the currency type" do
+    product.price_currency_type = "USD"
+    assert_equal "usd", product.price_currency_type
+  end
+
+  test "price_currency_type= handles symbol input" do
+    product.price_currency_type = :GBP
+    assert_equal "gbp", product.price_currency_type
+  end
+
+  test "price_currency_type= lets clean_price work with uppercase currency input" do
+    product = create_product(price_currency_type: "USD", price_cents: 100)
+    product.price_range = "12"
+    assert_equal 1200, product.price_cents
+  end
+
   # --- #checkout_custom_fields / #custom_field_descriptors -------------------
 
   test "checkout_custom_fields returns non-post-purchase fields (global first)" do
