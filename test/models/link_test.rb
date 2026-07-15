@@ -1226,6 +1226,17 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal 200, membership.remaining_for_sale_count
   end
 
+  # --- #remaining_call_availabilities ----------------------------------------
+
+  test "remaining_call_availabilities delegates to ComputeCallAvailabilitiesService" do
+    call_product = create_call_product
+    service = mock
+    Product::ComputeCallAvailabilitiesService.expects(:new).with(call_product).returns(service)
+    service.expects(:perform)
+
+    call_product.remaining_call_availabilities
+  end
+
   # --- #plaintext_description ------------------------------------------------
 
   test "plaintext_description keeps a normal description the same" do
@@ -2369,6 +2380,26 @@ class LinkTest < ActiveSupport::TestCase
     product.default_offer_code = offer_code
     assert_not product.valid?
     assert_includes product.errors.full_messages, "Default offer code must apply to this product"
+  end
+
+  # --- #validate_product_price_against_all_offer_codes? ----------------------
+
+  test "validate_product_price_against_all_offer_codes? uses tiered discounts across membership tier prices" do
+    product = create_membership_product_with_preset_tiered_pricing
+    # A tiered (ownership-duration) offer code: 50% off after 12 months.
+    create_offer_code(
+      products: [product], user: product.user, amount_cents: nil, amount_percentage: 0,
+      ownership_duration_tiers: [
+        { "months" => 0, "amount_percentage" => 0 },
+        { "months" => 12, "amount_percentage" => 50 },
+      ]
+    )
+    # Drop the first tier's buy price to $1.50; 50% off lands below the $0.99 floor.
+    product.tiers.first.prices.alive.is_buy.first.update!(price_cents: 1_50)
+
+    assert_equal false, product.validate_product_price_against_all_offer_codes?
+    assert_includes product.errors.full_messages,
+                    "An existing discount code puts the price of this product below the $0.99 minimum after discount."
   end
 
   # --- #find_offer_code ------------------------------------------------------

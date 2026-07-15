@@ -108,6 +108,21 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  # A tiered membership with two priced tiers (mirrors
+  # :membership_product_with_preset_tiered_pricing): First Tier $3/mo, Second
+  # Tier $5/mo.
+  def create_membership_product_with_preset_tiered_pricing(user: nil, **attrs)
+    product = create_membership_product(user:, **attrs)
+    tier_category = product.tier_category
+    first_tier = tier_category.variants.first
+    first_tier.update!(name: "First Tier")
+    second_tier = create_variant(variant_category: tier_category, name: "Second Tier")
+    first_tier.save_recurring_prices!("monthly": { enabled: true, price: 3 })
+    second_tier.save_recurring_prices!("monthly": { enabled: true, price: 5 })
+    product.tiers.reload
+    product
+  end
+
   # A physical product (mirrors the :is_physical trait): shipping + a default SKU.
   def create_physical_product(user: nil, **attrs)
     product = create_product(user:, **attrs)
