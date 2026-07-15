@@ -11,29 +11,25 @@ class LinkTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
   include ActionMailer::TestHelper
 
-  setup do
-    @product = create_product
-  end
-
   # --- #custom_html= ---------------------------------------------------------
 
   test "custom_html= clears the page HTML without marking the associated page for destruction" do
-    @product.update!(custom_html: "<section>Live landing page</section>")
-    page = @product.reload.page
+    product.update!(custom_html: "<section>Live landing page</section>")
+    page = product.reload.page
 
-    @product.custom_html = nil
+    product.custom_html = nil
 
-    assert_equal page, @product.page
-    assert_not @product.page.marked_for_destruction?
+    assert_equal page, product.page
+    assert_not product.page.marked_for_destruction?
 
-    @product.save!
+    product.save!
 
-    assert_equal page, @product.reload.page
-    assert_nil @product.custom_html
+    assert_equal page, product.reload.page
+    assert_nil product.custom_html
   end
 
   test "is not a single-unit currency" do
-    assert_equal false, @product.send(:single_unit_currency?)
+    assert_equal false, product.send(:single_unit_currency?)
   end
 
   # --- max_purchase_count validation -----------------------------------------
@@ -189,26 +185,26 @@ class LinkTest < ActiveSupport::TestCase
   end
 
   test "non-physical product with no versions is valid" do
-    assert_nothing_raised { @product.save! }
-    assert @product.valid?
+    assert_nothing_raised { product.save! }
+    assert product.valid?
   end
 
   test "non-physical product with non-empty versions is valid" do
-    category_one = create_variant_category(link: @product)
-    category_two = create_variant_category(link: @product)
+    category_one = create_variant_category(link: product)
+    category_two = create_variant_category(link: product)
     create_variant(variant_category: category_one)
     create_variant(variant_category: category_two)
-    assert_nothing_raised { @product.save! }
-    assert @product.valid?
+    assert_nothing_raised { product.save! }
+    assert product.valid?
   end
 
   test "non-physical product with an empty version fails" do
-    create_variant_category(link: @product)
-    category_two = create_variant_category(link: @product)
+    create_variant_category(link: product)
+    category_two = create_variant_category(link: product)
     create_variant(variant_category: category_two)
-    assert_raises(ActiveRecord::RecordInvalid) { @product.save! }
-    assert_not @product.valid?
-    assert_equal "Sorry, the product versions must have at least one option.", @product.errors.full_messages.to_sentence
+    assert_raises(ActiveRecord::RecordInvalid) { product.save! }
+    assert_not product.valid?
+    assert_equal "Sorry, the product versions must have at least one option.", product.errors.full_messages.to_sentence
   end
 
   # --- free trial validation -------------------------------------------------
@@ -407,22 +403,22 @@ class LinkTest < ActiveSupport::TestCase
   # --- #purchase_type= -------------------------------------------------------
 
   test "purchase_type= accepts valid values" do
-    @product.purchase_type = :buy_only
-    assert_equal "buy_only", @product.purchase_type
-    @product.purchase_type = :rent_only
-    assert_equal "rent_only", @product.purchase_type
-    @product.purchase_type = :buy_and_rent
-    assert_equal "buy_and_rent", @product.purchase_type
+    product.purchase_type = :buy_only
+    assert_equal "buy_only", product.purchase_type
+    product.purchase_type = :rent_only
+    assert_equal "rent_only", product.purchase_type
+    product.purchase_type = :buy_and_rent
+    assert_equal "buy_and_rent", product.purchase_type
   end
 
   test "purchase_type= defaults to buy_only for an invalid value" do
-    @product.purchase_type = "buy"
-    assert_equal "buy_only", @product.purchase_type
+    product.purchase_type = "buy"
+    assert_equal "buy_only", product.purchase_type
   end
 
   test "purchase_type= does not raise for an invalid value" do
-    assert_nothing_raised { @product.purchase_type = "invalid" }
-    assert_equal "buy_only", @product.purchase_type
+    assert_nothing_raised { product.purchase_type = "invalid" }
+    assert_equal "buy_only", product.purchase_type
   end
 
   # --- delete_unused_prices --------------------------------------------------
@@ -1045,7 +1041,59 @@ class LinkTest < ActiveSupport::TestCase
     assert build_product(user: create_user, custom_permalink: "custom").valid?
   end
 
+  test "custom_permalink lookup is case-insensitive" do
+    product = create_product(custom_permalink: "custom")
+    assert_equal product, Link.find_by(custom_permalink: "custom")
+    assert_equal product, Link.find_by(custom_permalink: "CUSTOM")
+  end
+
+  # --- unique_permalink ------------------------------------------------------
+
+  test "unique_permalink is invalid with numbers" do
+    assert_not build_product(unique_permalink: "a23f").valid?
+  end
+
+  test "unique_permalink is valid with underscores" do
+    assert build_product(unique_permalink: "a_b_c_d").valid?
+  end
+
+  test "unique_permalink lookup is case-insensitive" do
+    product = create_product(unique_permalink: "abc")
+    assert_equal product, Link.find_by(unique_permalink: "abc")
+    assert_equal product, Link.find_by(unique_permalink: "ABC")
+  end
+
+  test "unique_permalink generation picks the shortest non-conflicting value" do
+    ("a".."z").each { |ch| create_product(unique_permalink: ch) }
+    assert_equal 2, create_product.unique_permalink.length
+  end
+
+  test "unique_permalink generation may reuse a letter taken only by a custom permalink of another user" do
+    ("a".."z").each { |ch| create_product(unique_permalink: ch * 2, custom_permalink: ch) }
+    assert_equal 1, create_product.unique_permalink.length
+  end
+
+  test "unique_permalink generation avoids conflicts with the same user's custom permalinks" do
+    user = create_user
+    ("a".."z").each { |ch| create_product(user:, unique_permalink: ch * 2, custom_permalink: ch) }
+    assert_not_equal 1, create_product(user:).unique_permalink.length
+  end
+
+  test "unique_permalink generation is lowercase and avoids uppercase duplicates" do
+    ("A".."Z").each { |ch| create_product(unique_permalink: ch) }
+    product = create_product
+    assert_match(/\A[a-z]+\z/, product.unique_permalink)
+    assert_equal 2, product.unique_permalink.length
+  end
+
   private
+    # Lazily-created base product (like the RSpec `let(:link)`). Kept lazy so the
+    # permalink-generation tests, which fill up short permalinks, don't collide
+    # with an eagerly-created product's auto-assigned short permalink.
+    def product
+      @product ||= create_product
+    end
+
     # A confirmed seller with a merchant account and an unpublished product
     # carrying a file — the real starting point for the publish! scope tests
     # (substituting a plain merchant account for the VCR-backed Stripe one).

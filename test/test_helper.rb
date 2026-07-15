@@ -116,6 +116,11 @@ module ActiveSupport
       # spec_helper's stub_pwned_password_check does.
       WebMock.stub_request(:get, %r{api\.pwnedpasswords\.com/range/.+})
              .to_return(status: 200, body: "", headers: {})
+
+      # Bypass the daily product-creation limit, as spec_helper does (it wraps
+      # each example in Link.bypass_product_creation_limit). Tests routinely
+      # create many products for one user and shouldn't hit the 10/day cap.
+      ActiveSupport::IsolatedExecutionState[:gumroad_bypass_product_creation_limit] = true
     end
   end
 end
