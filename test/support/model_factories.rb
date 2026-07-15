@@ -55,8 +55,12 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  def build_product(user: nil, **attrs)
+    Link.new({ user: user || create_user, name: "The Works of Edgar Gumstein", price_cents: 100 }.merge(attrs))
+  end
+
   def create_product(user: nil, **attrs)
-    Link.create!({ user: user || create_user, name: "The Works of Edgar Gumstein", price_cents: 100 }.merge(attrs))
+    build_product(user:, **attrs).tap(&:save!)
   end
 
   # A recurring (non-tiered) membership product, mirroring :subscription_product.
