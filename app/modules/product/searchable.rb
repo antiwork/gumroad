@@ -65,10 +65,15 @@ module Product::Searchable
 
     index_name "products"
 
-    # One replica so product search can be served by a second node when the node
-    # holding the primary shard is unavailable or paused in garbage collection.
-    # With zero replicas, a single node's GC pause fails every product search.
-    settings number_of_shards: 1, number_of_replicas: 1, analysis: {
+    # These settings only apply outside production: local dev, CI, branch apps,
+    # and staging, which create the index from this block (see
+    # DevTools.delete_all_indices_and_reindex_all and the branch-app initializer).
+    # In production the app is blocked from recreating indices, so the live
+    # `products` index (`products_v3`) is created operationally with 5 shards and
+    # 1 replica; this block never touches it. On the single-node clusters the
+    # non-production environments use, 1 shard / 0 replicas is correct — a replica
+    # has no second node to land on and would just leave the index yellow.
+    settings number_of_shards: 1, number_of_replicas: 0, analysis: {
       filter: {
         edge_ngram_filter: {
           type: "edge_ngram",

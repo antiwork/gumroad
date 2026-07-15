@@ -541,10 +541,13 @@ describe Purchase, :vcr do
       let(:product) { create(:product, price_cents: 10_00) }
       let(:purchase) { build(:purchase, link: product, perceived_price_cents: 5_00) }
 
-      it "returns false if the perceived price is different from the link price" do
+      it "adds a buyer-facing error without an attribute-name prefix if the perceived price is different from the product price" do
         purchase.save
 
-        expect(purchase.errors.full_messages).to include "Price cents The price just changed! Refresh the page for the updated price."
+        # Checkout shows errors.full_messages to buyers verbatim, so the message must not
+        # carry a humanized attribute prefix like "Price cents".
+        expect(purchase.errors.full_messages).to include "The price just changed! Refresh the page for the updated price."
+        expect(purchase.error_code).to eq PurchaseErrorCode::PERCEIVED_PRICE_CENTS_NOT_MATCHING
       end
 
       it "returns true if the purchase is_upgrade_purchase" do

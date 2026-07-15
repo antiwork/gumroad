@@ -36,6 +36,7 @@ class VerifyFinanceReportsDeliveryJob
     "SendDeferredRefundsReportWorker" => ->(fire_time) { SendDeferredRefundsReportWorker.default_alert_args(fire_time) },
     "SendDailyFinanceLedgerReportJob" => ->(fire_time) { SendDailyFinanceLedgerReportJob.default_alert_args(fire_time) },
     "SendStripeCurrencyBalancesReportJob" => ->(_fire_time) { [] },
+    "SendStripeBalanceSummariesReportJob" => ->(fire_time) { SendStripeBalanceSummariesReportJob.default_alert_args(fire_time) },
     "EmailOutstandingBalancesCsvWorker" => ->(_fire_time) { [] },
     "CreateIndiaSalesReportJob" => ->(fire_time) { CreateIndiaSalesReportJob.default_alert_args(fire_time) },
     "GenerateFinancialReportsForPreviousMonthJob" => ->(fire_time) { GenerateFinancialReportsForPreviousMonthJob.default_alert_args(fire_time) },

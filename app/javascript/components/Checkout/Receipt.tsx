@@ -31,12 +31,13 @@ export const LineItem = ({
   card?: boolean;
 }) => (
   <>
-    <h4 className={classNames("product-details", card ? "grow font-bold" : "")}>
+    {/* h3 keeps the document outline monotonic: the card's section heading is an h2. */}
+    <h3 className={classNames("product-details", card ? "grow font-bold" : "")}>
       <div className="product-name">
         {name}
         {quantity ? <span className="quantity">× {quantity}</span> : null}
       </div>
-    </h4>
+    </h3>
     {price ? <div className="receipt-price">{price}</div> : null}
   </>
 );
@@ -51,26 +52,20 @@ export const LineItemResultEntry = ({ name, result }: { name: string; result: Li
 const FailedLineItemResultEntry = ({ name, result }: { name: string; result: ErrorLineItemResult }) => {
   const message = result.error_message ?? "Sorry, something went wrong.";
   return (
-    <>
-      <CardContent>
-        <Card borderless asChild>
-          <section>
-            <CardContent>
-              <LineItem
-                name={name}
-                price={"formatted_price" in result ? (result.formatted_price ?? undefined) : undefined}
-                card
-              />
-            </CardContent>
-          </section>
-        </Card>
-      </CardContent>
-      <CardContent>
+    <CardContent asChild details>
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <LineItem
+            name={name}
+            price={"formatted_price" in result ? (result.formatted_price ?? undefined) : undefined}
+            card
+          />
+        </div>
         <Alert variant="warning">
           <div dangerouslySetInnerHTML={{ __html: message }} />
         </Alert>
-      </CardContent>
-    </>
+      </section>
+    </CardContent>
   );
 };
 
@@ -86,7 +81,9 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
   return (
     <>
       <CardContent>
-        <Card borderless asChild>
+        {/* grow makes this row span the full card width so the price lands at the card
+            edge, matching the failed line item's layout. */}
+        <Card borderless asChild className="grow">
           <section>
             <CardContent>
               <LineItem
@@ -125,7 +122,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
             {result.is_gift_sender_purchase ? (
               <CardContent>
                 <div className="grow text-muted">
-                  {result.gift_sender_text}
+                  {result.gift_sender_text}{" "}
                   {result.has_files
                     ? "They'll get an email with your note and a download link."
                     : "They'll get an email with your note."}
@@ -164,7 +161,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
 
       {result.has_shipping_to_show ? (
         <CardContent>
-          <Card borderless asChild>
+          <Card borderless asChild className="grow">
             <section>
               <CardContent>
                 <LineItem name="Shipping" price={result.shipping_amount} card />
@@ -176,7 +173,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
 
       {result.has_sales_tax_to_show ? (
         <CardContent>
-          <Card borderless asChild>
+          <Card borderless asChild className="grow">
             <section>
               <CardContent>
                 <LineItem name={result.sales_tax_label ?? ""} price={result.sales_tax_amount} card />
@@ -225,14 +222,15 @@ export const CreateAccountForm = ({
         evt.preventDefault();
         void startAccountCreation();
       }}
-      className={`flex flex-col gap-4 ${className}`}
+      className={classNames("flex flex-col gap-4", className)}
     >
       {status === "success" ? (
         <Alert variant="success">Done! Your account has been created. You'll get a confirmation email shortly.</Alert>
       ) : (
         <>
-          <div>
-            <h3>Create an account to access all of your purchases in one place</h3>
+          <div className="space-y-1">
+            <h3>Keep everything in one place</h3>
+            <p className="text-muted">Create an account to access all of your purchases anytime.</p>
           </div>
           <Fieldset>
             <FieldsetTitle>
@@ -251,14 +249,22 @@ export const CreateAccountForm = ({
               onChange={(evt) => setPassword(evt.target.value)}
               id={`${uid}password`}
             />
-            <FieldsetDescription>
-              You agree to our <a href="https://gumroad.com/terms">Terms Of Use</a>.
-            </FieldsetDescription>
           </Fieldset>
 
-          <Button type="submit" color="primary" disabled={status === "processing"}>
-            {status === "processing" ? "..." : "Sign up"}
-          </Button>
+          <div className="space-y-2">
+            <Button type="submit" color="primary" disabled={status === "processing"} className="w-full">
+              {status === "processing" ? "Signing up..." : "Sign up"}
+            </Button>
+            <FieldsetDescription className="text-center">
+              By signing up, you agree to our{" "}
+              {/* Opens in a new tab: the receipt is in-memory checkout state, so navigating
+                  away would destroy it with no way back. */}
+              <a href="https://gumroad.com/terms" target="_blank" rel="noreferrer">
+                Terms of Use
+              </a>
+              .
+            </FieldsetDescription>
+          </div>
         </>
       )}
     </form>
@@ -283,22 +289,20 @@ export const Receipt = ({
     <Card className="mx-auto my-8 max-w-2xl">
       <CardContent asChild>
         <header>
-          <h4 className="relative grow font-bold">
-            Checkout
-            <a href={discoverUrl} style={{ position: "absolute", right: 0 }} aria-label="Close">
-              <XCircle className="size-5" />
-            </a>
-          </h4>
+          {/* Intentionally not a heading: this is card chrome (a title bar), not document
+              structure — keeping it out of the outline avoids an h4 before the h2 below. */}
+          <div className="font-bold">Checkout</div>
+          <a href={discoverUrl} aria-label="Close" className="text-muted transition-colors hover:text-foreground">
+            <XCircle className="size-5" />
+          </a>
         </header>
       </CardContent>
-      <CardContent asChild>
-        <header>
-          <h2 className="grow">
-            {results.some(({ result }) => !result.success) ? "Summary" : "Your purchase was successful!"}
-          </h2>
+      <CardContent asChild details>
+        <header className="space-y-1">
+          <h2>{results.some(({ result }) => !result.success) ? "Summary" : "Your purchase was successful!"}</h2>
 
           {results.some(({ result }) => result.success) ? (
-            <div>
+            <p className="text-muted">
               {results.some(
                 ({ result, item }) =>
                   result.success &&
@@ -308,7 +312,7 @@ export const Receipt = ({
               )
                 ? `We charged your card and sent a receipt to ${state.email}`
                 : `We sent a receipt to ${state.email}`}
-            </div>
+            </p>
           ) : null}
         </header>
       </CardContent>
@@ -316,8 +320,9 @@ export const Receipt = ({
         <LineItemResultEntry key={key} result={result} name={item.product.name} />
       ))}
       {!user && canBuyerSignUp ? (
-        <CardContent asChild>
+        <CardContent details>
           <CreateAccountForm
+            className="mx-auto w-full max-w-md"
             createAccountData={{
               email: state.email,
               cardParams:

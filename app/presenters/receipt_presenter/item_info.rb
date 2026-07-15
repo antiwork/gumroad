@@ -277,11 +277,21 @@ class ReceiptPresenter::ItemInfo
     def manage_installment_plan_note
       timezone = subscription.user&.timezone
       started_at = subscription.created_at.in_time_zone(timezone)
-      expected_ends_at = subscription.expected_completion_time.in_time_zone(timezone)
+      expected_completion_time = subscription.expected_completion_time
+
+      # The expected completion time is nil when the subscription has no
+      # successful, non-refunded charge to anchor the projection on (for
+      # example, when the only installment charge was refunded). Skip the
+      # final-charge sentence rather than crashing the receipt.
+      final_charge_sentence =
+        if expected_completion_time.present?
+          expected_ends_at = expected_completion_time.in_time_zone(timezone)
+          "Your final charge will be on #{expected_ends_at.to_fs(:formatted_date_abbrev_month)}."
+        end
 
       <<~HTML.squish.html_safe
         Installment plan initiated on #{started_at.to_fs(:formatted_date_abbrev_month)}.
-        Your final charge will be on #{expected_ends_at.to_fs(:formatted_date_abbrev_month)}.
+        #{final_charge_sentence}
         You can manage your payment settings #{link_to("here", manage_subscription_href, target: "_blank")}.
       HTML
     end

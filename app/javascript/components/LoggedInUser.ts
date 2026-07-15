@@ -70,6 +70,10 @@ type Policies = {
   churn: {
     show: boolean;
   };
+  page: {
+    index: boolean;
+    create: boolean;
+  };
   user: {
     use_store_agent: boolean;
   };

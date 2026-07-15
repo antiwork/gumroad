@@ -131,6 +131,10 @@ module RenderingExtension
         churn: {
           show: Pundit.policy!(pundit_user, :churn).show?,
         },
+        page: {
+          index: Pundit.policy!(pundit_user, :page).index?,
+          create: Pundit.policy!(pundit_user, :page).create?,
+        },
         user: {
           use_store_agent: Pundit.policy!(pundit_user, pundit_user.seller).use_store_agent?,
         }

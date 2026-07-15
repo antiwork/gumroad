@@ -21,6 +21,13 @@ describe "Product page CTA button for a returning buyer", :js, type: :system do
       expect(page).to have_no_link("Purchase again")
       expect(page).to have_text("You already own this")
     end
+
+    it "shows the ownership copy in the purchase-info banner instead of 'You've purchased this product'" do
+      visit short_link_path(product)
+
+      expect(page).to have_text("You already own this product")
+      expect(page).to have_no_text("You've purchased this product")
+    end
   end
 
   context "when the buyer previously paid for the product" do
@@ -35,6 +42,7 @@ describe "Product page CTA button for a returning buyer", :js, type: :system do
       visit short_link_path(product)
 
       expect(page).to have_link("Purchase again")
+      expect(page).to have_text("You've purchased this product")
     end
   end
 end

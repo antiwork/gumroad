@@ -469,7 +469,7 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
       ) : (
         <>
           <CardContent asChild>
-            <span>Create an account to access all of your purchases in one place</span>
+            <span>Create an account to access all of your purchases anytime.</span>
           </CardContent>
           <CardContent>
             <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid grow gap-4">

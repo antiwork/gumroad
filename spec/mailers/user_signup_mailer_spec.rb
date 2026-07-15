@@ -44,6 +44,22 @@ describe UserSignupMailer do
       expect(@mail.body).to include("If you did not make this change, please contact support immediately by replying to this email.")
       expect(@mail.body).to include("User ID: #{@user.external_id}")
     end
+
+    context "when the change was applied and auto-confirmed before the mail renders (e.g. Google OAuth email sync)" do
+      before do
+        # In this flow the record already holds the new address and
+        # unconfirmed_email is nil at render time. Devise passes the old
+        # address as the `to:` option, so the mailer must use that instead of
+        # reading mutable state off the record.
+        @user = create(:user, email: "new@example.com", unconfirmed_email: nil)
+        @mail = described_class.email_changed(@user, to: "original@example.com")
+      end
+
+      it "renders the old and new addresses correctly" do
+        expect(@mail.to).to eq ["original@example.com"]
+        expect(@mail.body).to include("changed from original@example.com to new@example.com.")
+      end
+    end
   end
 
   describe "#reset_password_instructions" do
