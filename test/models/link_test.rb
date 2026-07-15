@@ -24,7 +24,7 @@ class LinkTest < ActiveSupport::TestCase
     @product.custom_html = nil
 
     assert_equal page, @product.page
-    refute @product.page.marked_for_destruction?
+    assert_not @product.page.marked_for_destruction?
 
     @product.save!
 
@@ -81,7 +81,7 @@ class LinkTest < ActiveSupport::TestCase
 
   test "price fails when too high" do
     product = build_product(price_cents: 5000_01)
-    refute product.valid?
+    assert_not product.valid?
     assert_includes product.errors.full_messages, "Sorry, we don't support pricing products above $5,000."
   end
 
@@ -94,7 +94,7 @@ class LinkTest < ActiveSupport::TestCase
 
   test "price fails when too low" do
     product = build_product(price_cents: 98)
-    refute product.valid?
+    assert_not product.valid?
     assert_includes product.errors.full_messages, "Sorry, a product must be at least $0.99."
   end
 
@@ -115,7 +115,7 @@ class LinkTest < ActiveSupport::TestCase
 
   test "price adds an error for an unsupported currency type" do
     product = build_product(price_currency_type: "xyz", price_cents: 100)
-    refute product.valid?
+    assert_not product.valid?
     assert_includes product.errors.full_messages, "'xyz' is not a supported currency."
   end
 
@@ -133,7 +133,7 @@ class LinkTest < ActiveSupport::TestCase
 
   test "native_type fails when not in the allowed list" do
     product = build_product(native_type: "invalid")
-    refute product.valid?
+    assert_not product.valid?
     assert_includes product.errors.full_messages, "Product type is not included in the list"
   end
 
@@ -152,7 +152,7 @@ class LinkTest < ActiveSupport::TestCase
     message = "Gumroad fee must be between 30% and 100%"
     [0, nil, -1, 10, 1001].each do |fee|
       product.discover_fee_per_thousand = fee
-      refute product.valid?, "expected #{fee.inspect} to be invalid"
+      assert_not product.valid?, "expected #{fee.inspect} to be invalid"
       assert_includes product.errors.full_messages, message
     end
   end
@@ -163,7 +163,7 @@ class LinkTest < ActiveSupport::TestCase
     product = create_physical_product
     assert_nothing_raised { product.save! }
     assert product.valid?
-    refute product.errors.any?
+    assert_not product.errors.any?
   end
 
   test "physical product with non-empty versions is valid" do
@@ -184,7 +184,7 @@ class LinkTest < ActiveSupport::TestCase
     create_sku(link: product)
     create_variant(variant_category: category_one)
     assert_raises(ActiveRecord::RecordInvalid) { product.save! }
-    refute product.valid?
+    assert_not product.valid?
     assert_equal "Sorry, the product versions must have at least one option.", product.errors.full_messages.to_sentence
   end
 
@@ -207,7 +207,7 @@ class LinkTest < ActiveSupport::TestCase
     category_two = create_variant_category(link: @product)
     create_variant(variant_category: category_two)
     assert_raises(ActiveRecord::RecordInvalid) { @product.save! }
-    refute @product.valid?
+    assert_not @product.valid?
     assert_equal "Sorry, the product versions must have at least one option.", @product.errors.full_messages.to_sentence
   end
 
@@ -220,7 +220,7 @@ class LinkTest < ActiveSupport::TestCase
 
   test "free trial requires duration properties when enabled" do
     product = build_subscription_product(free_trial_enabled: true)
-    refute product.valid?
+    assert_not product.valid?
     assert_equal ["Free trial duration unit can't be blank", "Free trial duration amount can't be blank"].sort,
                  product.errors.full_messages.sort
 
@@ -235,7 +235,7 @@ class LinkTest < ActiveSupport::TestCase
     assert product.valid?
 
     product.free_trial_duration_amount = 3
-    refute product.valid?
+    assert_not product.valid?
   end
 
   test "free trial properties are not required when disabled" do
@@ -247,21 +247,21 @@ class LinkTest < ActiveSupport::TestCase
     assert product.valid?
 
     product.free_trial_duration_amount = 2
-    refute product.valid?
+    assert_not product.valid?
 
     product.free_trial_duration_amount = 0.5
-    refute product.valid?
+    assert_not product.valid?
   end
 
   test "free trial cannot be enabled on a non-recurring product" do
     product = build_product(free_trial_enabled: true)
-    refute product.valid?
+    assert_not product.valid?
     assert_includes product.errors.full_messages, "Free trials are only allowed for subscription products."
   end
 
   test "free trial properties cannot be set on a non-recurring product" do
     product = build_product(free_trial_duration_unit: :week, free_trial_duration_amount: 1)
-    refute product.valid?
+    assert_not product.valid?
     assert_includes product.errors.full_messages, "Free trials are only allowed for subscription products."
   end
 
@@ -328,7 +328,7 @@ class LinkTest < ActiveSupport::TestCase
       error = assert_raises(ActiveRecord::RecordInvalid) { product.publish! }
       assert_includes error.message, "looks like it contains something that may violate our content guidelines"
     end
-    refute_nil product.reload.purchase_disabled_at
+    assert_not_nil product.reload.purchase_disabled_at
   end
 
   test "publish skips the content moderation check for VIP creators" do
@@ -555,7 +555,7 @@ class LinkTest < ActiveSupport::TestCase
     product = create_product(user: seller)
 
     default_sections.each { |section| assert_includes section.reload.shown_products, product.id }
-    other_sections.each { |section| refute_includes section.reload.shown_products, product.id }
+    other_sections.each { |section| assert_not_includes section.reload.shown_products, product.id }
   end
 
   test "adding to profile sections re-reads under the lock to avoid clobbering a concurrent change" do
@@ -664,7 +664,7 @@ class LinkTest < ActiveSupport::TestCase
     user.update!(confirmed_at: nil)
     assert_raises(Link::LinkInvalid) { product.publish! }
     assert_equal "You have to confirm your email address before you can do that.", product.errors.full_messages.to_sentence
-    refute_nil product.reload.purchase_disabled_at
+    assert_not_nil product.reload.purchase_disabled_at
   end
 
   test "publish! raises when a bundle has no alive products" do
@@ -673,7 +673,7 @@ class LinkTest < ActiveSupport::TestCase
     BundleProduct.create!(bundle: product, product: create_product(user:), deleted_at: Time.current)
     assert_raises(ActiveRecord::RecordInvalid) { product.publish! }
     assert_equal "Bundles must have at least one product.", product.errors.full_messages.to_sentence
-    refute_nil product.reload.purchase_disabled_at
+    assert_not_nil product.reload.purchase_disabled_at
   end
 
   test "publish! associates and notifies the seller's universal affiliates" do
@@ -820,6 +820,65 @@ class LinkTest < ActiveSupport::TestCase
     unpublished = user.links.where.not(purchase_disabled_at: nil)
     assert_equal 1, unpublished.count
     assert_equal "unpublished", unpublished.first.name
+  end
+
+  test "deleted scope returns only deleted products" do
+    user = create_user
+    create_product(user:)
+    create_product(user:, deleted_at: Time.current, name: "deleted")
+    assert_equal 1, user.links.deleted.count
+    assert_equal "deleted", user.links.deleted.first.name
+  end
+
+  test "has_paid_sales scope returns products with successful sales" do
+    user = create_user
+    product = create_product(user:, name: "paid_download")
+    3.times { create_purchase(link: product, purchase_state: "successful") }
+    create_product(user:)
+    assert_equal 1, user.links.has_paid_sales.count
+    assert_equal product.id, user.links.has_paid_sales.first.id
+  end
+
+  test "not_draft scope excludes drafts" do
+    user = create_user
+    product = create_product(user:, draft: false)
+    create_product(user:, draft: true)
+    assert_equal 1, user.links.not_draft.count
+    assert_equal product.id, user.links.not_draft.first.id
+  end
+
+  test "created_between scope returns products created within the range" do
+    user = create_user
+    product = create_product(user:, created_at: 2.days.ago)
+    create_product(user:, created_at: 6.days.ago)
+    scoped = user.links.created_between(3.days.ago..Time.current)
+    assert_equal 1, scoped.count
+    assert_equal product.id, scoped.first.id
+  end
+
+  test "has_paid_sales_between returns products with sales in the window" do
+    recent = create_product
+    old = create_product
+    create_purchase(link: recent, created_at: 1.minute.ago)
+    create_purchase(link: old, created_at: 2.weeks.ago)
+    result = Link.has_paid_sales_between(1.week.ago, Time.current)
+    assert_includes result, recent
+    assert_not_includes result, old
+  end
+
+  test "membership scope returns membership products" do
+    membership = create_subscription_product
+    create_product
+    assert_equal [membership], Link.membership
+  end
+
+  test "non_membership scope returns non-membership products" do
+    # Link.non_membership is a global scope, so (unlike the clean-DB RSpec run)
+    # it also returns the shared fixture product; assert inclusion/exclusion.
+    product = create_product
+    membership = create_subscription_product
+    assert_includes Link.non_membership, product
+    assert_not_includes Link.non_membership, membership
   end
 
   private
