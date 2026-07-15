@@ -2925,6 +2925,77 @@ class LinkTest < ActiveSupport::TestCase
     assert result.key?(:price)
   end
 
+  # --- currencies ------------------------------------------------------------
+
+  test "prices round-trip through price_range for every supported currency" do
+    CURRENCY_CHOICES.each_key do |currency_type|
+      product = create_product(price_currency_type: currency_type, price_cents: CURRENCY_CHOICES[currency_type][:min_price] * 10)
+      original_cents = product.price_cents
+      # Reassigning the current unit price should be a no-op; if it changes the
+      # price, our subunit treatment has diverged from Money's.
+      product.price_range = product.price_formatted_without_dollar_sign
+      assert_equal original_cents, product.price_cents, "#{currency_type} did not round-trip"
+    end
+  end
+
+  # --- #gumroad_amount_for_paypal_order --------------------------------------
+
+  test "gumroad_amount_for_paypal_order returns 10% of the amount" do
+    product = create_product
+    assert_equal 100, product.gumroad_amount_for_paypal_order(amount_cents: 10_00)
+    assert_equal 100, product.gumroad_amount_for_paypal_order(amount_cents: 10_00, was_recommended: true)
+  end
+
+  test "gumroad_amount_for_paypal_order adds the discover fee minus 10% for recommended sales" do
+    product = create_product
+    product.update!(discover_fee_per_thousand: 500)
+    assert_equal 100, product.gumroad_amount_for_paypal_order(amount_cents: 10_00)
+    assert_equal 500, product.gumroad_amount_for_paypal_order(amount_cents: 10_00, was_recommended: true)
+  end
+
+  test "gumroad_amount_for_paypal_order adds a direct affiliate's fee" do
+    creator = create_user
+    product = create_product(user: creator)
+    affiliate = create_direct_affiliate(seller: creator, affiliate_basis_points: 2500, products: [product])
+    assert_equal 100 + 250, product.gumroad_amount_for_paypal_order(amount_cents: 10_00, affiliate_id: affiliate.id)
+  end
+
+  test "gumroad_amount_for_paypal_order omits the affiliate fee for direct-affiliate Discover sales" do
+    creator = create_user
+    product = create_product(user: creator)
+    affiliate = create_direct_affiliate(seller: creator, affiliate_basis_points: 2500, products: [product])
+    assert_equal 100, product.gumroad_amount_for_paypal_order(amount_cents: 10_00, affiliate_id: affiliate.id, was_recommended: true)
+  end
+
+  test "gumroad_amount_for_paypal_order adds VAT" do
+    creator = create_user
+    product = create_product(user: creator)
+    affiliate = create_direct_affiliate(affiliate_user: create_affiliate_user, seller: creator, affiliate_basis_points: 2500, products: [product])
+    assert_equal 380, product.gumroad_amount_for_paypal_order(amount_cents: 10_00, affiliate_id: affiliate.id, vat_cents: 30)
+  end
+
+  # --- #ppp_details ----------------------------------------------------------
+
+  test "ppp_details returns nil when the country's PPP factor doesn't exist" do
+    product = ppp_product
+    GeoIp::Result.any_instance.stubs(:country_code).returns("FAKE")
+    assert_nil product.ppp_details("109.110.31.255")
+  end
+
+  test "ppp_details returns nil when PPP is disabled for the product" do
+    product = ppp_product
+    product.update!(purchasing_power_parity_disabled: true)
+    assert_nil product.ppp_details("109.110.31.255")
+  end
+
+  test "ppp_details returns nil when the PPP factor is 1" do
+    assert_nil ppp_product.ppp_details("101.198.198.0") # US, factor 1
+  end
+
+  test "ppp_details returns the details when the factor exists and isn't 1" do
+    assert_equal({ country: "Latvia", factor: 0.5, minimum_price: 99 }, ppp_product.ppp_details("109.110.31.255"))
+  end
+
   # --- installment plan ------------------------------------------------------
 
   test "updating the product re-validates its installment plan" do
@@ -3048,6 +3119,18 @@ class LinkTest < ActiveSupport::TestCase
         product_5: create_product(user: user_2, unique_permalink: "eee", custom_permalink: "awesome"),
         product_6: create_product(user: user_2, unique_permalink: "fff", custom_permalink: "custom"),
       }
+    end
+
+    # A product whose seller has PPP enabled, with the LV/US conversion factors
+    # seeded in Redis. LV=0.5 (half price) and US=1 (no discount) drive the
+    # ppp_details cases. The test IPs (109.110.31.255 → Latvia, 101.198.198.0 →
+    # US) are resolved by the real MaxMind GeoIP database.
+    def ppp_product
+      product = create_product(user: create_user(purchasing_power_parity_enabled: true))
+      ppp_service = PurchasingPowerParityService.new
+      ppp_service.set_factor("LV", 0.5)
+      ppp_service.set_factor("US", 1)
+      product
     end
 
     # Lazily-created base product (like the RSpec `let(:link)`). Kept lazy so the
