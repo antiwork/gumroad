@@ -17,7 +17,9 @@
 #   * Deleted products are included: buyers can still request receipt resends for purchases of
 #     deleted products, and those receipts render from the product record.
 #   * Products where the new field is already set are skipped — the seller (or an earlier manual
-#     restore) has already chosen the new-format text, and this task must never overwrite it.
+#     restore) has already chosen the new-format text, and this task must never overwrite it. The
+#     check is re-done under a row lock right before the write, so a seller saving receipt text
+#     while the task is running can't be overwritten by a stale copy of the row.
 #   * Legacy text longer than the new field's validation limit
 #     (Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH) is skipped and counted rather than
 #     truncated or written as-is. Writing an over-limit value would make every subsequent save of
@@ -73,12 +75,24 @@ module Onetime
 
         return tick(:would_backfill) if @dry_run
 
-        # Copy into json_data without callbacks/validations (see class comment). The json_data
-        # reader instantiates and mutates the in-memory hash, so write the merged hash back
-        # through update_column, which serializes it via the model's JSON coder.
-        link.set_json_data_for_attr("custom_receipt_text", legacy_text)
-        link.update_column(:json_data, link.json_data)
-        tick(:backfilled)
+        # Re-check the no-overwrite guard under a row lock before writing. The write below replaces
+        # the whole json_data hash, so if a seller saved new receipt text between this row being
+        # loaded and this write, an unguarded write would restore the stale hash and erase their
+        # text. with_lock reloads the row with FOR UPDATE, so the seller's concurrent save either
+        # lands before the re-check (and we skip) or waits until this transaction commits.
+        outcome = link.with_lock do
+          if link.custom_receipt_text.present?
+            :skipped_already_set
+          else
+            # Copy into json_data without callbacks/validations (see class comment). The json_data
+            # reader instantiates and mutates the in-memory hash, so write the merged hash back
+            # through update_column, which serializes it via the model's JSON coder.
+            link.set_json_data_for_attr("custom_receipt_text", legacy_text)
+            link.update_column(:json_data, link.json_data)
+            :backfilled
+          end
+        end
+        tick(outcome)
       end
 
       def tick(key)

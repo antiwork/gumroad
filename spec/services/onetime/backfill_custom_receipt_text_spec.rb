@@ -30,6 +30,18 @@ describe Onetime::BackfillCustomReceiptText do
       expect(stats[:backfilled]).to be_nil.or eq(0)
     end
 
+    it "re-checks under the row lock and does not overwrite text saved after the row was loaded" do
+      product = product_with_legacy_receipt("Old legacy text")
+      stale_copy = Link.find(product.id)
+      # Simulate a seller saving new receipt text between the batch load and the write.
+      Link.find(product.id).update!(custom_receipt_text: "Saved concurrently by the seller")
+
+      service = described_class.new(dry_run: false)
+      service.send(:backfill, stale_copy)
+
+      expect(product.reload.custom_receipt_text).to eq("Saved concurrently by the seller")
+    end
+
     it "backfills deleted products so receipt resends still render the text" do
       product = product_with_legacy_receipt("Text on a deleted product", deleted_at: 1.month.ago)
 
