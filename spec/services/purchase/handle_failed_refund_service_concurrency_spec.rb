@@ -202,7 +202,9 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
     end
     allow_any_instance_of(Purchase).to receive(:lock!).and_wrap_original do |method, *args|
       result = method.call(*args)
-      reversal_has_purchase_lock << true if Thread.current[:refund_concurrency_role] == :reversal
+      # Guard on the purchase id so the latch cannot fire for a mirror purchase if the
+      # reversal service ever locks additional rows.
+      reversal_has_purchase_lock << true if Thread.current[:refund_concurrency_role] == :reversal && method.receiver.id == @purchase.id
       result
     end
 
