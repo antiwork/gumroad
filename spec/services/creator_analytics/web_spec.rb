@@ -47,6 +47,33 @@ describe CreatorAnalytics::Web do
     end
   end
 
+  describe "hourly interval" do
+    let(:hourly_service) do
+      described_class.new(user: @user, dates: [Date.new(2021, 1, 1)], interval: "hour")
+    end
+
+    it "returns hourly buckets for #by_date" do
+      result = hourly_service.by_date
+
+      expect(result[:dates_and_months].size).to eq(24)
+      expect(result[:dates_and_months].first).to eq(date: "Friday, January 1st, 12 AM", month: "January 2021", month_index: 0)
+      expect(result[:dates_and_months].second).to eq(date: "Friday, January 1st, 1 AM", month: "January 2021", month_index: 0)
+      expect(result[:by_date][:views][@products[0].unique_permalink]).to eq([1] + [0] * 23)
+      expect(result[:by_date][:sales][@products[0].unique_permalink]).to eq([1] + [0] * 23)
+      expect(result[:by_date][:totals][@products[0].unique_permalink]).to eq([100] + [0] * 23)
+      expect(result[:by_date][:views][@products[1].unique_permalink]).to eq([0] * 24)
+    end
+
+    it "returns hourly buckets for #by_referral" do
+      result = hourly_service.by_referral
+
+      expect(result[:dates_and_months].size).to eq(24)
+      expect(result[:by_referral][:views][@products[0].unique_permalink]["direct"]).to eq([1] + [0] * 23)
+      expect(result[:by_referral][:sales][@products[0].unique_permalink]["direct"]).to eq([1] + [0] * 23)
+      expect(result[:by_referral][:totals][@products[0].unique_permalink]["direct"]).to eq([100] + [0] * 23)
+    end
+  end
+
   describe "#by_state" do
     it "returns expected data" do
       expected_result = {

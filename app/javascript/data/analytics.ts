@@ -17,12 +17,20 @@ export type AnalyticsDataByReferral = {
   };
 };
 
-export const fetchAnalyticsDataByReferral = ({ startTime, endTime }: { startTime: string; endTime: string }) => {
+export const fetchAnalyticsDataByReferral = ({
+  startTime,
+  endTime,
+  interval,
+}: {
+  startTime: string;
+  endTime: string;
+  interval?: "hour" | undefined;
+}) => {
   const abort = new AbortController();
   const response = request({
     method: "GET",
     accept: "json",
-    url: Routes.analytics_data_by_referral_path({ start_time: startTime, end_time: endTime }),
+    url: Routes.analytics_data_by_referral_path({ start_time: startTime, end_time: endTime, interval }),
     abortSignal: abort.signal,
   })
     .then((response) => response.json())

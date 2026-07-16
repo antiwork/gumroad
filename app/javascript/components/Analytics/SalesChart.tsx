@@ -47,7 +47,7 @@ export const SalesChart = ({
   data: AnalyticsDailyTotal[];
   startDate: string;
   endDate: string;
-  aggregateBy: "monthly" | "daily";
+  aggregateBy: "monthly" | "daily" | "hourly";
 }) => {
   const dataPoints = React.useMemo(() => {
     const dataPoints: DataPoint[] = [];
