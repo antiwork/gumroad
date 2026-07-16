@@ -21,8 +21,12 @@ const sseResponse = (chunks: string[], { fail = false } = {}) => {
   const body = new ReadableStream({
     start(controller) {
       for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      if (!fail) controller.close();
+    },
+    // Erroring from pull (not start) lets the queued chunks reach the reader first, matching a
+    // connection that delivered some frames and then dropped.
+    pull(controller) {
       if (fail) controller.error(new TypeError("network error"));
-      else controller.close();
     },
   });
   return new Response(body, { headers: { "content-type": "text/event-stream" } });
@@ -70,6 +74,21 @@ describe("streamAgentMessage", () => {
     request.mockResolvedValue(sseResponse([frame("token", { text: "Want me to " })], { fail: true }));
 
     await expect(streamAgentMessage(MESSAGES)).rejects.toBeInstanceOf(AgentStreamInterruptedError);
+  });
+
+  it("returns the assembled turn when the connection drops only after the done frame", async () => {
+    request.mockResolvedValue(
+      sseResponse(
+        [
+          frame("token", { text: "Want me to " }),
+          frame("done", { reply: "Want me to pull up?", proposed_action: null }),
+        ],
+        { fail: true },
+      ),
+    );
+
+    const result = await streamAgentMessage(MESSAGES);
+    expect(result.reply).toBe("Want me to pull up?");
   });
 
   it("throws AgentStreamInterruptedError when a frame arrives mangled", async () => {

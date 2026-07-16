@@ -34,16 +34,21 @@ describe Api::Internal::AgentMessageStreamsController do
       let(:request_format) { :json }
     end
 
+    # Stands in for the service: invokes on_reply_complete with the finished turn (the way
+    # respond_streaming does the moment the reply is final) and returns the full result.
+    def stub_streaming_service(turn)
+      service_double = instance_double(Ai::StoreAgentService)
+      allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+      allow(service_double).to receive(:respond_streaming) do |messages:, on_reply_complete: nil, &_blk|
+        on_reply_complete&.call(turn)
+        turn.merge(suggestions: [])
+      end
+      service_double
+    end
+
     context "when authenticated and authorized" do
       it "persists the turn to a new conversation and emits its id on the done event" do
-        service_double = instance_double(Ai::StoreAgentService)
-        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-        allow(service_double).to receive(:respond_streaming).and_return(
-          reply: "You have 3 products.",
-          proposed_action: nil,
-          objects: [],
-          suggestions: [],
-        )
+        stub_streaming_service(reply: "You have 3 products.", proposed_action: nil, objects: [])
 
         post :create, params: valid_params, format: :json
 
@@ -66,8 +71,13 @@ describe Api::Internal::AgentMessageStreamsController do
           messages: [
             { role: "user", content: "Earlier question" },
             { role: "user", content: "How are my sales?" },
-          ]
-        ).and_return(reply: "Up.", proposed_action: nil, objects: [], suggestions: [])
+          ],
+          on_reply_complete: kind_of(Proc),
+        ) do |on_reply_complete:, **|
+          turn = { reply: "Up.", proposed_action: nil, objects: [] }
+          on_reply_complete.call(turn)
+          turn.merge(suggestions: [])
+        end
 
         expect do
           post :create, params: valid_params.merge(conversation_id: conversation.external_id), format: :json
@@ -80,14 +90,7 @@ describe Api::Internal::AgentMessageStreamsController do
         # The seller has already watched the reply stream in by the time persistence runs, so a DB
         # failure here must not turn the turn into an error — the done event (and the reply it
         # carries) still has to arrive. The conversation id is simply omitted.
-        service_double = instance_double(Ai::StoreAgentService)
-        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-        allow(service_double).to receive(:respond_streaming).and_return(
-          reply: "You have 3 products.",
-          proposed_action: nil,
-          objects: [],
-          suggestions: [],
-        )
+        stub_streaming_service(reply: "You have 3 products.", proposed_action: nil, objects: [])
         allow(controller).to receive(:create_agent_conversation!).and_raise(ActiveRecord::StatementInvalid)
         expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
 
@@ -96,6 +99,26 @@ describe Api::Internal::AgentMessageStreamsController do
         expect(response.body).to include("event: done")
         expect(response.body).to include("You have 3 products.")
         expect(response.body).not_to include("event: error")
+      end
+
+      it "persists the turn before any trailing write, so a client disconnect can't drop it" do
+        # The reply is final when on_reply_complete fires; every socket write after it can raise
+        # ClientDisconnected (the seller's connection died mid-stream while the server kept
+        # generating). The fully generated reply must already be stored by then — losing it would
+        # mean the seller watched a reply stream in that no record of survives.
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming) do |messages:, on_reply_complete: nil, &_blk|
+          on_reply_complete&.call(reply: "You have 3 products.", proposed_action: nil, objects: [])
+          raise ActionController::Live::ClientDisconnected
+        end
+
+        post :create, params: valid_params, format: :json
+
+        conversation = seller.ai_conversations.sole
+        expect(conversation.ai_messages.map { |m| [m.role, m.content] }).to eq(
+          [["user", "How are my sales?"], ["assistant", "You have 3 products."]]
+        )
       end
 
       it "emits an error event (not a new conversation) for another seller's conversation id" do
