@@ -46,6 +46,11 @@ export type NewPaymentElementSelectedPaymentMethod = {
   // Whether the buyer paid with a wallet (Apple Pay / Google Pay) inside the Payment Element.
   // Wallet submissions keep the wallet's own billing details instead of the checkout form's.
   walletSelected: boolean;
+  // Wallet submissions only: the in-flight elements.submit() promise created synchronously in
+  // the buyer's click. Safari only opens the Apple Pay sheet inside a user-activation window,
+  // so tokenization must await this promise instead of calling elements.submit() again (see
+  // PaymentElementCardData.pendingSubmit in card_payment_method_data.ts for the full story).
+  pendingSubmit?: ReturnType<StripeElements["submit"]> | null;
 };
 export type NewPayPalBraintreeSelectedPaymentMethod = {
   type: "paypal-braintree";
@@ -212,6 +217,7 @@ export async function getPaymentMethodResult(
         city: selected.city,
         address: selected.address,
         walletSelected: selected.walletSelected,
+        pendingSubmit: selected.pendingSubmit ?? null,
       });
       if (paymentMethodData.status === "success") {
         return {
