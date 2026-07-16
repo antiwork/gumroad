@@ -145,10 +145,11 @@ export const SalesChart = ({
     }));
   }, [data, aggregateBy]);
 
-  // When the range ends today (the backend formats today's date as "Today"), overlay a
-  // projected end-of-day total above today's point: current total extrapolated by the
-  // fraction of the seller's day elapsed. Rendered as a dashed, semi-transparent
-  // extension so it clearly reads as an estimate, not booked revenue.
+  // When the range ends today (the backend labels the seller's current day — evaluated
+  // in the seller's time zone — as "Today"), overlay a projected end-of-day total above
+  // today's point: current total extrapolated by the fraction of the seller's day
+  // elapsed. Rendered as a dashed, semi-transparent extension so it clearly reads as an
+  // estimate, not booked revenue.
   const lastDataPoint = dataPoints[dataPoints.length - 1];
   const projection = React.useMemo(() => {
     if (aggregateBy !== "daily" || endDate !== "Today" || !sellerTimeZone || !lastDataPoint) return null;
