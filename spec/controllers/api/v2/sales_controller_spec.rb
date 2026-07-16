@@ -619,13 +619,13 @@ describe Api::V2::SalesController do
         expect(Api::V2::SalesSummary).not_to have_received(:new)
       end
 
-      it "returns a sales summary grouped by hour for a short date range" do
-        get :summary, params: @params.merge(from: "2026-05-15", to: "2026-05-21", group_by: "hour")
+      it "returns a sales summary grouped by hour for a date range at the allowed maximum" do
+        get :summary, params: @params.merge(from: "2026-05-14", to: "2026-05-21", group_by: "hour")
 
         expect(response.parsed_body).to eq({ success: true }.merge(@summary).as_json)
         expect(Api::V2::SalesSummary).to have_received(:new).with(
           seller: @seller,
-          from: Date.new(2026, 5, 15),
+          from: Date.new(2026, 5, 14),
           to: Date.new(2026, 5, 21),
           group_by: "hour"
         )

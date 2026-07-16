@@ -229,6 +229,31 @@ describe CreatorAnalytics::Sales do
   end
 end
 
+describe CreatorAnalytics::Sales, "hourly interval across a DST fall-back" do
+  it "merges the two Elasticsearch buckets for the repeated local hour" do
+    user = create(:user, timezone: "Pacific Time (US & Canada)")
+    product = create(:product, user: user)
+    # On Nov 1, 2026 Pacific clocks fall back at 2:00 AM, so the 1:00 AM local hour
+    # occurs twice: 08:00-09:00 UTC (PDT) and 09:00-10:00 UTC (PST). Both buckets
+    # format to the same "2026-11-01T01:00" key and must combine, not overwrite.
+    create(:purchase, link: product, created_at: Time.utc(2026, 11, 1, 7, 30), referrer: "https://google.com")
+    create(:purchase, link: product, created_at: Time.utc(2026, 11, 1, 8, 30), referrer: "https://google.com")
+    create(:purchase, link: product, created_at: Time.utc(2026, 11, 1, 9, 30), referrer: "https://google.com")
+    index_model_records(Purchase)
+
+    service = described_class.new(user:, products: [product], dates: [Date.new(2026, 11, 1)], interval: "hour")
+
+    expect(service.by_product_and_date).to eq(
+      [product.id, "2026-11-01T00:00"] => { count: 1, total: 100 },
+      [product.id, "2026-11-01T01:00"] => { count: 2, total: 200 },
+    )
+    expect(service.by_product_and_referrer_and_date).to eq(
+      [product.id, "google.com", "2026-11-01T00:00"] => { count: 1, total: 100 },
+      [product.id, "google.com", "2026-11-01T01:00"] => { count: 2, total: 200 },
+    )
+  end
+end
+
 describe CreatorAnalytics::Sales, "timezone with DST gap at midnight" do
   context "when user timezone has a DST transition at midnight (e.g. Tehran)" do
     it "filters and buckets sales consistently on March 22, 2026" do
