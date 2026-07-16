@@ -42,21 +42,38 @@ class AddEditProfileScopeToGumroadCliOauthApplication < ActiveRecord::Migration[
   # every access token, access grant, and device authorization issued for this
   # application (same approach as
   # RevokeBackfilledEditEmailsScopeFromDefaultOauthApplications).
+  #
+  # Concurrency: MySQL does not wrap migrations in a transaction, so we open
+  # one explicitly and take the same oauth_applications row lock that device
+  # polling (OauthDeviceAuthorization#poll!) holds while it mints a token from
+  # an approved authorization's stored scopes. Holding that lock for the whole
+  # cleanup means no device-code token can be issued mid-sweep. Ordering also
+  # matters: issuance sources (device authorizations, then access grants) are
+  # cleaned BEFORE access tokens, and tokens are swept LAST — so any token
+  # minted just before we acquired the lock (device poll or authorization-code
+  # exchange) is still caught by the final token sweep instead of slipping in
+  # after it.
   def down
-    app = oauth_applications.find_by(uid: CLI_CLIENT_ID)
-    return if app.nil?
+    oauth_applications.transaction do
+      app = oauth_applications.lock.find_by(uid: CLI_CLIENT_ID)
+      next if app.nil?
 
-    scopes = app.scopes.to_s.split - [SCOPE]
-    app.update!(scopes: scopes.join(" "), updated_at: Time.current)
+      scopes = app.scopes.to_s.split - [SCOPE]
+      app.update!(scopes: scopes.join(" "), updated_at: Time.current)
 
-    revoke_scope(oauth_access_tokens, app.id, application_id_column: :application_id)
-    revoke_scope(oauth_access_grants, app.id, application_id_column: :application_id)
-    revoke_scope_from_device_authorizations(app.id)
+      revoke_scope_from_device_authorizations(app.id)
+      revoke_scope(oauth_access_grants, app.id, application_id_column: :application_id)
+      revoke_scope(oauth_access_tokens, app.id, application_id_column: :application_id)
+    end
   end
 
   private
+    # Locking reads (FOR UPDATE) so each batch sees the latest committed rows
+    # rather than this transaction's REPEATABLE READ snapshot — a token or
+    # grant committed by a concurrent request just before we took the
+    # application lock must still be visible to the sweep.
     def revoke_scope(records, application_id, application_id_column:)
-      records.where(application_id_column => application_id).where("scopes LIKE ?", "%#{SCOPE}%").find_each do |record|
+      records.where(application_id_column => application_id).where("scopes LIKE ?", "%#{SCOPE}%").lock.find_each do |record|
         scopes = record.scopes.to_s.split
         next unless scopes.include?(SCOPE)
 
@@ -67,7 +84,7 @@ class AddEditProfileScopeToGumroadCliOauthApplication < ActiveRecord::Migration[
     # A device authorization whose only scope was edit_profile has nothing
     # left to grant, so it is deleted rather than left as an empty-scope row.
     def revoke_scope_from_device_authorizations(application_id)
-      oauth_device_authorizations.where(oauth_application_id: application_id).where("scopes LIKE ?", "%#{SCOPE}%").find_each do |authorization|
+      oauth_device_authorizations.where(oauth_application_id: application_id).where("scopes LIKE ?", "%#{SCOPE}%").lock.find_each do |authorization|
         scopes = authorization.scopes.to_s.split
         next unless scopes.include?(SCOPE)
 

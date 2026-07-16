@@ -102,4 +102,43 @@ describe AddEditProfileScopeToGumroadCliOauthApplication do
 
     expect(other_token.reload.scopes.to_s).to eq("account edit_profile")
   end
+
+  # Regression: a device poll can mint a token from an approved authorization's
+  # stored scopes while the rollback is running. The old cleanup order swept
+  # access tokens FIRST, so a token minted after that sweep (but before the
+  # device authorization was cleaned) kept edit_profile forever. Tokens are now
+  # swept LAST (under the application row lock), so this simulated mid-rollback
+  # mint must still be caught.
+  it "sweeps an edit_profile token minted from an approved device authorization during rollback" do
+    application = create_cli_application(scopes: "view_profile edit_profile account")
+    device_authorization = create(
+      :oauth_device_authorization,
+      oauth_application: application,
+      scopes: "view_profile edit_profile",
+      status: OauthDeviceAuthorization::STATUS_APPROVED,
+      resource_owner: seller,
+      approved_at: Time.current
+    )
+
+    minted_token = nil
+    # Simulate the race: the poll wins just before the device-authorization
+    # sweep runs, minting a token that still carries edit_profile.
+    allow(migration).to receive(:revoke_scope_from_device_authorizations).and_wrap_original do |original, *args|
+      _, minted_token = device_authorization.poll!(
+        oauth_application: application,
+        ip_address: "203.0.113.9",
+        user_agent: "RSpec"
+      )
+      original.call(*args)
+    end
+
+    migration.down
+
+    expect(minted_token).to be_present
+    expect(minted_token.reload.scopes.to_s).to eq("view_profile")
+    edit_profile_tokens = Doorkeeper::AccessToken
+      .where(application_id: application.id)
+      .where("scopes LIKE ?", "%edit_profile%")
+    expect(edit_profile_tokens).to be_empty
+  end
 end
