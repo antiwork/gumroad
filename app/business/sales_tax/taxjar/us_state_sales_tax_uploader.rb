@@ -26,9 +26,15 @@ class UsStateSalesTaxUploader
   # Raises ArgumentError on an invalid subdivision code.
   #
   # Pre-cutover purchases keep the historical exclusion of fully refunded purchases (their
-  # netted amount would be zero). Post-cutover purchases are included even when fully refunded:
-  # they upload as gross orders, and their refund transactions are what zero them out —
-  # excluding them would leave refund transactions with no order to subtract from.
+  # netted amount would be zero) — but only when every refund happened before the cutover.
+  # A pre-cutover purchase whose (full) refund landed on/after the cutover must stay included:
+  # its netted amount counts only pre-cutover refunds (see
+  # netted_amounts_before_refund_reporting), so it is non-zero, and its post-cutover refund is
+  # reported separately by grouped_refund_ids_by_state. Dropping the purchase while still
+  # reporting its refund would subtract the refund twice (once by omission of the sale, once
+  # by the refund leg). Post-cutover purchases are included even when fully refunded: they
+  # upload as gross orders, and their refund transactions are what zero them out — excluding
+  # them would leave refund transactions with no order to subtract from.
   def self.grouped_purchase_ids_by_state(subdivision_codes:, starts_at:, ends_at:)
     subdivisions = subdivisions_for(subdivision_codes)
 
@@ -38,7 +44,14 @@ class UsStateSalesTaxUploader
       .where("purchases.created_at BETWEEN ? AND ?", starts_at, ends_at)
       .where("(country = 'United States') OR ((country IS NULL OR country = 'United States') AND ip_country = 'United States')")
       .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
-      .where("purchases.created_at >= :cutover OR (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)",
+      .where("purchases.created_at >= :cutover
+              OR (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)
+              OR EXISTS (
+                SELECT 1 FROM refunds
+                WHERE refunds.purchase_id = purchases.id
+                  AND refunds.created_at >= :cutover
+                  AND (refunds.status IS NULL OR refunds.status NOT IN ('failed', 'canceled'))
+              )",
              cutover: REFUND_REPORTING_CUTOVER.beginning_of_day)
 
     group_ids_by_state(scope.pluck(:id, :zip_code, :ip_address), subdivisions)

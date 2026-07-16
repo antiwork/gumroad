@@ -221,4 +221,82 @@ describe CreateUsStatesSalesSummaryReportJob do
                                    ])
     end
   end
+
+  describe "pre-cutover purchase fully refunded after the cutover" do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/us-states-summary-precutover-refund-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    let(:cutover) { UsStateSalesTaxUploader::REFUND_REPORTING_CUTOVER }
+    let(:refund_month_start) { (cutover + 1.month).beginning_of_month }
+
+    before do
+      product = create(:product, price_cents: 100_00, native_type: "digital")
+
+      # Sold before the cutover, fully refunded after it. The sale month must keep the order
+      # at gross (its refund is reported in the refund's own month), and the refund month must
+      # subtract the refund — never both dropping the sale AND subtracting the refund.
+      travel_to(cutover.beginning_of_day - 5.days) do
+        @pre_cutover_purchase = create(:purchase, link: product, price_cents: 100_00, total_transaction_cents: 110_10,
+                                                  gumroad_tax_cents: 10_10, country: "United States", zip_code: "98121") # Washington
+      end
+
+      travel_to(refund_month_start + 5.days) do
+        create(:refund, purchase: @pre_cutover_purchase, amount_cents: 100_00,
+                        gumroad_tax_cents: 10_10, total_transaction_cents: 110_10)
+        @pre_cutover_purchase.update!(stripe_refunded: true)
+      end
+
+      # A same-month sale so the refund month has a positive base to subtract from.
+      travel_to(refund_month_start + 3.days) do
+        create(:purchase, link: product, price_cents: 100_00, total_transaction_cents: 110_10,
+                          gumroad_tax_cents: 10_10, country: "United States", zip_code: "98184") # Washington
+      end
+    end
+
+    it "keeps the fully refunded order at gross in its sale month" do
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+
+      sale_month = cutover - 5.days
+      described_class.new.perform(["WA"], sale_month.month, sale_month.year)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      actual_payload = CSV.read(temp_file)
+      temp_file.close(true)
+
+      # No pre-cutover refunds to net, so the sale month reports the order at gross even
+      # though it is now fully refunded — the refund lands in the refund's own month.
+      expect(actual_payload).to eq([
+                                     ["State", "GMV", "Number of orders", "Sales tax collected"],
+                                     ["Washington", "110.10", "1", "10.10"]
+                                   ])
+    end
+
+    it "subtracts the refund from the refund's month" do
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+
+      described_class.new.perform(["WA"], refund_month_start.month, refund_month_start.year)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      actual_payload = CSV.read(temp_file)
+      temp_file.close(true)
+
+      # One order this month (110.10 GMV, 10.10 tax) minus the pre-cutover purchase's refund
+      # (110.10, 10.10). Order count stays 1 — the refunded order belongs to its sale month.
+      expect(actual_payload).to eq([
+                                     ["State", "GMV", "Number of orders", "Sales tax collected"],
+                                     ["Washington", "0.00", "1", "0.00"]
+                                   ])
+    end
+  end
 end
