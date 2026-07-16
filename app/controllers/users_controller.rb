@@ -237,26 +237,6 @@ class UsersController < ApplicationController
       hostnames.compact.uniq
     end
 
-    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "")
-      <<~HTML
-        <!doctype html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            #{SANDBOX_COMPAT_SCRIPT}
-            #{self.class.pages_tailwind_inline}
-          </head>
-          <body>
-            <script id="gumroad-data" type="application/json">#{data_json}</script>
-            #{custom_html}
-            #{navigation_bridge}
-            #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
-          </body>
-        </html>
-      HTML
-    end
-
     # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin —
     # no access to gumroad.com cookies or the parent DOM. We also omit
     # `allow-top-navigation` so the seller's HTML can never navigate the

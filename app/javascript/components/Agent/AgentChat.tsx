@@ -9,7 +9,9 @@ import {
   type DisplayObject,
   type ProposedAction,
   executeAgentAction,
+  fetchCustomHtmlProposalPreview,
   fetchLatestAgentConversation,
+  isCustomHtmlProposal,
   streamAgentMessage,
 } from "$app/data/agent";
 import { classNames } from "$app/utils/classNames";
@@ -19,6 +21,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { DefinitionList } from "$app/components/ui/DefinitionList";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Textarea } from "$app/components/ui/Textarea";
 
 // While the seller is within this many px of the bottom we keep auto-scrolling as new content
@@ -106,6 +109,58 @@ const ObjectList = ({ objects }: { objects: DisplayObject[] }) =>
     </div>
   ) : null;
 
+// The rendered "what your page will look like" preview on a custom-HTML proposal card. The server
+// computes the resulting page exactly the way confirming would apply it and returns the same
+// sandboxed document /landing/embed serves; it renders here on an opaque origin (no
+// allow-same-origin), just like the live page embed, so the proposed HTML can't reach cookies or
+// the dashboard DOM.
+const CustomHtmlProposalPreview = ({ action }: { action: ProposedAction }) => {
+  const [state, setState] = React.useState<
+    { status: "loading" } | { status: "loaded"; html: string } | { status: "error"; message: string }
+  >({ status: "loading" });
+
+  // Refetch only when the proposed change itself differs — the surrounding card re-renders with
+  // fresh (but identical) action objects as the stream's events land, and each shouldn't re-POST.
+  const actionRef = React.useRef(action);
+  actionRef.current = action;
+  const paramsKey = JSON.stringify(action.params);
+  React.useEffect(() => {
+    let cancelled = false;
+    setState({ status: "loading" });
+    fetchCustomHtmlProposalPreview(actionRef.current)
+      .then((html) => {
+        if (!cancelled) setState({ status: "loaded", html });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setState({
+            status: "error",
+            message: e instanceof Error && e.message ? e.message : "The preview couldn't be loaded.",
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paramsKey]);
+
+  if (state.status === "loading")
+    return (
+      <span className="text-sm text-muted" role="status">
+        Loading preview…
+      </span>
+    );
+  if (state.status === "error") return <span className="text-sm text-muted">Preview unavailable: {state.message}</span>;
+  return (
+    <iframe
+      title="Preview of your page after this change"
+      srcDoc={state.html}
+      sandbox="allow-scripts allow-forms allow-popups"
+      referrerPolicy="no-referrer"
+      className="h-96 w-full rounded border border-border bg-white"
+    />
+  );
+};
+
 const ProposedActionCard = ({
   action,
   status,
@@ -120,47 +175,67 @@ const ProposedActionCard = ({
   isApplying: boolean;
   onConfirm: () => void;
   onDismiss: () => void;
-}) => (
-  // Same solid card treatment as the object cards (Card = rounded border-border + a divider), with the
-  // actions in a divided footer — secondary on the left, primary (Confirm) on the right.
-  <Card>
-    <CardContent className="flex-col items-stretch gap-2">
-      <strong>{action.title ?? "Proposed change"}</strong>
-      {action.fields && action.fields.length > 0 ? (
-        <DefinitionList className="text-sm">
-          {action.fields.map((field) => (
-            <React.Fragment key={field.label}>
-              <dt className="text-muted">{field.label}</dt>
-              <dd className="break-words">{field.value}</dd>
-            </React.Fragment>
-          ))}
-        </DefinitionList>
-      ) : (
-        <span className="break-words">{action.summary}</span>
-      )}
-    </CardContent>
-    <CardContent className="justify-end gap-2">
-      {status === "applied" ? (
-        <span role="status" className="mr-auto text-green">
-          Applied
-        </span>
-      ) : status === "dismissed" ? (
-        <span role="status" className="mr-auto text-muted">
-          Dismissed
-        </span>
-      ) : (
-        <>
-          <Button disabled={isPending} onClick={onDismiss}>
-            Dismiss
-          </Button>
-          <Button color="accent" disabled={isPending} onClick={onConfirm}>
-            {isApplying ? "Applying…" : "Confirm"}
-          </Button>
-        </>
-      )}
-    </CardContent>
-  </Card>
-);
+}) => {
+  const fieldRows =
+    action.fields && action.fields.length > 0 ? (
+      <DefinitionList className="text-sm">
+        {action.fields.map((field) => (
+          <React.Fragment key={field.label}>
+            <dt className="text-muted">{field.label}</dt>
+            <dd className="break-words">{field.value}</dd>
+          </React.Fragment>
+        ))}
+      </DefinitionList>
+    ) : (
+      <span className="break-words">{action.summary}</span>
+    );
+
+  return (
+    // Same solid card treatment as the object cards (Card = rounded border-border + a divider), with the
+    // actions in a divided footer — secondary on the left, primary (Confirm) on the right.
+    <Card>
+      <CardContent className="flex-col items-stretch gap-2">
+        <strong>{action.title ?? "Proposed change"}</strong>
+        {isCustomHtmlProposal(action) ? (
+          // A page edit's fields are literal find/replace HTML — a wall of markup that reads as a
+          // glitch, not a preview. Lead with the rendered result instead, and keep the exact HTML
+          // (the safety boundary: precisely what confirming will apply) available but collapsed.
+          // Once acted on, the preview no longer reflects anything actionable (and an applied
+          // edit's find-snippet no longer matches), so only pending cards render it.
+          <>
+            {status ? null : <CustomHtmlProposalPreview action={action} />}
+            <Details>
+              <DetailsToggle className="text-sm text-muted">View raw HTML</DetailsToggle>
+              {fieldRows}
+            </Details>
+          </>
+        ) : (
+          fieldRows
+        )}
+      </CardContent>
+      <CardContent className="justify-end gap-2">
+        {status === "applied" ? (
+          <span role="status" className="mr-auto text-green">
+            Applied
+          </span>
+        ) : status === "dismissed" ? (
+          <span role="status" className="mr-auto text-muted">
+            Dismissed
+          </span>
+        ) : (
+          <>
+            <Button disabled={isPending} onClick={onDismiss}>
+              Dismiss
+            </Button>
+            <Button color="accent" disabled={isPending} onClick={onConfirm}>
+              {isApplying ? "Applying…" : "Confirm"}
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 export const AgentChat = ({ greeting, suggestions }: Props) => {
   const [messages, setMessages] = React.useState<DisplayMessage[]>([{ role: "assistant", content: greeting }]);

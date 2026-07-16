@@ -9,16 +9,19 @@ vi.mock("$app/data/agent", async (importOriginal) => {
     ...actual,
     streamAgentMessage: vi.fn(),
     fetchLatestAgentConversation: vi.fn(),
+    fetchCustomHtmlProposalPreview: vi.fn(),
     executeAgentAction: vi.fn(),
   };
 });
 
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 
-const { AgentStreamInterruptedError, fetchLatestAgentConversation, streamAgentMessage } = vi.mocked(
-  await import("$app/data/agent"),
-  { partial: true },
-);
+const {
+  AgentStreamInterruptedError,
+  fetchCustomHtmlProposalPreview,
+  fetchLatestAgentConversation,
+  streamAgentMessage,
+} = vi.mocked(await import("$app/data/agent"), { partial: true });
 const { showAlert } = vi.mocked(await import("$app/components/server-components/Alert"));
 const { AgentChat } = await import("$app/components/Agent/AgentChat");
 
@@ -130,5 +133,92 @@ describe("AgentChat streamed reply reconciliation", () => {
     await waitFor(() => expect(showAlert).toHaveBeenCalledWith("Too many requests.", "error"));
     // Only the mount-time resume fetch — no reconciliation fetches for a server-reported failure.
     expect(fetchLatestAgentConversation).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AgentChat custom-html proposal cards", () => {
+  const customHtmlAction = {
+    type: "api_write" as const,
+    params: {
+      endpoint: "edit_user_custom_html",
+      path_params: {},
+      params: { find: "<h1>Old headline</h1>", replace: "<h1>New headline</h1>" },
+    },
+    summary: "Edit the custom page.",
+    title: "Edit your page",
+    fields: [
+      { label: "Find", value: "<h1>Old headline</h1>" },
+      { label: "Replace", value: "<h1>New headline</h1>" },
+    ],
+  };
+
+  const streamTurnWithAction = (proposedAction: typeof customHtmlAction) => {
+    streamAgentMessage.mockResolvedValue({
+      reply: "I've prepared the page edit.",
+      proposedAction,
+      objects: [],
+      suggestions: [],
+      conversationId: "conv1",
+    });
+  };
+
+  beforeEach(() => {
+    fetchLatestAgentConversation.mockResolvedValueOnce(null);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("renders a page preview instead of top-level raw HTML fields", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    const iframe = await screen.findByTitle<HTMLIFrameElement>("Preview of your page after this change");
+    expect(iframe.getAttribute("srcdoc")).toContain("<h1>New headline</h1>");
+    // The document renders on an opaque origin, exactly like the live page embed.
+    expect(iframe.getAttribute("sandbox")).toBe("allow-scripts allow-forms allow-popups");
+    // The exact HTML that confirming will apply stays available, but collapsed.
+    expect(screen.getByText("View raw HTML")).toBeTruthy();
+    expect(fetchCustomHtmlProposalPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ params: customHtmlAction.params }),
+    );
+  });
+
+  it("shows why a preview is unavailable instead of failing the card", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockRejectedValue(
+      new Error("The snippet to replace no longer appears in the current page."),
+    );
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Preview unavailable: The snippet to replace no longer appears in the current page."),
+      ).toBeTruthy(),
+    );
+    // The card is still confirmable — the preview is an aid, not a gate.
+    expect(screen.getByText("Confirm")).toBeTruthy();
+  });
+
+  it("leaves non-page proposals on the plain field rows without fetching a preview", async () => {
+    streamTurnWithAction({
+      ...customHtmlAction,
+      params: { endpoint: "update_product", path_params: { id: "abc" }, params: { name: "New name" } },
+      fields: [{ label: "Name", value: "New name" }],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("rename my product");
+
+    await waitFor(() => expect(screen.getByText("New name")).toBeTruthy());
+    expect(screen.queryByTitle("Preview of your page after this change")).toBeNull();
+    expect(fetchCustomHtmlProposalPreview).not.toHaveBeenCalled();
   });
 });

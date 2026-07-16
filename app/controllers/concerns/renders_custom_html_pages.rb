@@ -31,6 +31,14 @@ module RendersCustomHtmlPages
     "form-action 'self'",
   ].join("; ") + ";"
 
+  # CUSTOM_HTML_CSP for documents delivered without response headers — e.g. the agent's
+  # proposed-change preview, which reaches the browser as an iframe srcdoc. A meta CSP tag can't
+  # carry the `sandbox` directive (browsers ignore it there), so it's stripped; the embedding
+  # iframe's sandbox attribute supplies the sandboxing instead. Everything else applies unchanged,
+  # so a previewed page blocks exactly the resources (external images, fetches, ...) the live page
+  # would block.
+  CUSTOM_HTML_META_CSP = CUSTOM_HTML_CSP.split("; ").reject { |directive| directive.start_with?("sandbox ") }.join("; ")
+
   # Loaded in <head> so it runs before any seller script (without becoming the
   # body's first child). On the opaque origin (allow-scripts, no
   # allow-same-origin) localStorage/sessionStorage/document.cookie throw, so a
@@ -157,6 +165,32 @@ module RendersCustomHtmlPages
 
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
+    end
+
+    # The full sandboxed document for a profile custom-HTML page. Shared by the live
+    # /landing/embed endpoint (UsersController) and the agent's proposed-change preview
+    # (Api::Internal::AgentCustomHtmlPreviewsController) so a preview can never drift from what
+    # actually ships. `meta_csp` embeds CUSTOM_HTML_META_CSP for delivery paths that have no
+    # response headers to carry the real CSP (iframe srcdoc).
+    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "", meta_csp: false)
+      <<~HTML
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            #{meta_csp ? %(<meta http-equiv="Content-Security-Policy" content="#{ERB::Util.h(CUSTOM_HTML_META_CSP)}">) : ""}
+            #{SANDBOX_COMPAT_SCRIPT}
+            #{self.class.pages_tailwind_inline}
+          </head>
+          <body>
+            <script id="gumroad-data" type="application/json">#{data_json}</script>
+            #{custom_html}
+            #{navigation_bridge}
+            #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
+          </body>
+        </html>
+      HTML
     end
 
     def custom_html_live_reload_script(version_src:, nonce:)
