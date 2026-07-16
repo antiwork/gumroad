@@ -104,6 +104,22 @@ class CustomerMailer < ApplicationMailer
   def refund(email, link_id, purchase_id)
     @product = Link.find(link_id)
     @purchase = purchase_id ? Purchase.find(purchase_id) : nil
+    # For purchases charged in the buyer's own currency, lead with the purchase total in
+    # that currency — the number that matches their card statement — with the canonical
+    # USD total alongside. This reads the purchase's charge-time presentment row (written
+    # and committed when the purchase was made) instead of the just-created Refund row:
+    # this email is enqueued inside the refund transaction, so a fast worker (or a lagging
+    # read replica) could otherwise look the refund up before it is visible and silently
+    # fall back to the legacy USD-only rendering. Using the purchase total also keeps the
+    # copy right when earlier partial/tax-only refunds preceded this final refund — the
+    # email describes the original purchase, not the last refund's remainder.
+    if @purchase&.buyer_presentment?
+      @formatted_presentment_total = @purchase.formatted_buyer_presentment_total
+      # The "(… USD)" figure shown alongside must actually be in USD.
+      # formatted_total_transaction_amount is in the product's display currency, which is
+      # not necessarily USD, so format the USD cents explicitly here instead.
+      @formatted_usd_total = formatted_price("usd", @purchase.total_transaction_cents)
+    end
     mail(
       to: email,
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
@@ -113,11 +129,28 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
-  def partial_refund(email, link_id, purchase_id, refund_amount_cents_usd, refund_type)
+  # presentment_refund_amount_cents / presentment_refund_currency are the buyer-currency
+  # amount of this specific refund, passed as plain values rather than a Refund id: the
+  # job is enqueued inside the refund's database transaction, so a fast worker (or a
+  # lagging read replica) could look the Refund row up before it is visible and silently
+  # render the legacy USD-only email. Plain values survive that race. Both are nil for
+  # non-presentment purchases and for jobs queued before these parameters existed.
+  def partial_refund(email, link_id, purchase_id, refund_amount_cents_usd, refund_type, presentment_refund_amount_cents = nil, presentment_refund_currency = nil)
     @product = Link.find(link_id)
     @purchase = purchase_id ? Purchase.find(purchase_id) : nil
     amount_cents = usd_cents_to_currency(@product.price_currency_type, refund_amount_cents_usd, @purchase.rate_converted_to_usd)
     @formatted_refund_amount = formatted_price(@product.price_currency_type, amount_cents)
+    if presentment_refund_currency.present? && presentment_refund_amount_cents.to_i > 0
+      # Buyer-currency amount of this refund — the number that matches the buyer's card
+      # statement — shown first, with the canonical USD amounts alongside.
+      @formatted_presentment_refund_amount = formatted_price(presentment_refund_currency, presentment_refund_amount_cents)
+      # Amounts shown next to a "USD" label must actually be formatted in USD.
+      # @formatted_refund_amount above is in the product's price currency and
+      # formatted_total_transaction_amount is in the display currency — neither is
+      # guaranteed to be USD, so format the USD cents explicitly for those labels.
+      @formatted_usd_refund_amount = formatted_price("usd", refund_amount_cents_usd)
+      @formatted_usd_total = formatted_price("usd", @purchase.total_transaction_cents) if @purchase
+    end
     @refund_type = refund_type
     mail(
       to: email,

@@ -12,7 +12,7 @@ class Refund < ApplicationRecord
   # for the persisted status itself, which keeps Stripe's actual value.
   TERMINAL_FAILURE_STATUSES = %w(failed canceled).freeze
 
-  include JsonData, FlagShihTzu
+  include JsonData, FlagShihTzu, ExternalId
 
   belongs_to :user, foreign_key: :refunding_user_id, optional: true
   belongs_to :purchase
@@ -98,6 +98,22 @@ class Refund < ApplicationRecord
 
   def terminally_failed?
     TERMINAL_FAILURE_STATUSES.include?(status)
+  end
+
+  # True when this refund carries a buyer-currency (presentment) snapshot. Presentment
+  # refunds record the amount actually returned to the buyer in the currency they paid
+  # with; refunds created before that feature (or for non-presentment purchases) have
+  # neither field and should keep rendering canonical USD amounts only.
+  def presentment_snapshot?
+    presentment_currency.present? && presentment_amount_cents.to_i > 0
+  end
+
+  # The refunded amount in the buyer's own currency, formatted for display
+  # (e.g. "CA$28.83"). Nil when there is no presentment snapshot.
+  def formatted_presentment_amount
+    return nil unless presentment_snapshot?
+
+    MoneyFormatter.format(presentment_amount_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true)
   end
 
   private
