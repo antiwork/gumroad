@@ -39,9 +39,9 @@ const STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50;
 export type PaymentElementConfig = {
   stripe_elements_mode: StripeElementsModeForCheckout;
   currency: "usd";
-  // True when the server chose the buyer-currency presentment lane (a single USD-priced
-  // one-time item from a seller in the buyer-currency rollout, for a buyer seeing local-currency
-  // prices). The element then mounts in the currency of the FX quote from the surcharge
+  // True when the server chose the buyer-currency presentment lane (a cart of USD-priced
+  // one-time items from a single seller in the buyer-currency rollout, for a buyer seeing
+  // local-currency prices). The element then mounts in the currency of the FX quote from the surcharge
   // response — the same quote whose signed token prices the charge — so the payment sheet and
   // the charged amount always come from one source. Without a usable quote (expired, errored,
   // or the buyer opted to save the card, which forces the canonical USD charge path) the
