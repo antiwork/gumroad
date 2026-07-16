@@ -280,6 +280,30 @@ describe User, :vcr do
       it "returns CDN URL" do
         expect(@user.avatar_url).to match("https://public-files.gumroad.com/#{@user.avatar_variant.key}")
       end
+
+      it "caches the variant URL under a versioned key so previously cached 128px URLs are not reused" do
+        # The old, unversioned cache key holds URLs for the smaller 128x128
+        # variants we used to serve. A stale value there must not leak into
+        # what we serve now — only the "_v2" key should be read.
+        Rails.cache.write("attachment_#{@user.avatar.id}_variant_url", "https://example.com/stale-128px-url")
+
+        expect(@user.avatar_url).not_to include("stale-128px-url")
+        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v2")).to eq(@user.avatar_variant.url)
+      end
+    end
+
+    describe "#avatar_variant" do
+      it "resizes the avatar to at most 400x400 so it stays sharp on Retina screens" do
+        user = create(:user, :with_avatar)
+
+        expect(user.avatar).to receive(:variant).with(resize_to_limit: [400, 400]).and_call_original
+        variant = user.avatar_variant
+        expect(variant.variation.transformations[:resize_to_limit]).to eq([400, 400])
+      end
+
+      it "returns nil when no avatar is attached" do
+        expect(create(:user).avatar_variant).to be_nil
+      end
     end
 
     describe "#financial_annual_report_url_for" do

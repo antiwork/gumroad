@@ -33,6 +33,18 @@ describe Purchase::ChargeEventsHandler, :vcr do
         expect(ErrorNotifier).to receive(:notify).with(/Could not find a Chargeable/)
         Purchase.handle_charge_event(build(:charge_event_settlement_declined, charge_id: "py_nonexistent", charge_reference: nil))
       end
+
+      it "notifies for a refund failed event on the platform endpoint" do
+        expect(ErrorNotifier).to receive(:notify).with(/Could not find a Chargeable/)
+        Purchase.handle_charge_event(build(:charge_event_refund_failed, charge_id: "py_nonexistent", charge_reference: nil))
+      end
+
+      it "notifies for a refund updated event on the platform endpoint" do
+        expect(ErrorNotifier).to receive(:notify).with(/Could not find a Chargeable/)
+        event = build(:charge_event, type: ChargeEvent::TYPE_CHARGE_REFUND_UPDATED, comment: "refund.updated",
+                                     charge_id: "py_nonexistent", charge_reference: nil, extras: { refund_status: "pending" })
+        Purchase.handle_charge_event(event)
+      end
     end
 
     context "when the event does not require action" do
@@ -49,6 +61,21 @@ describe Purchase::ChargeEventsHandler, :vcr do
       it "ignores a payment failed event from an unrelated connected account charge" do
         expect(ErrorNotifier).not_to receive(:notify)
         Purchase.handle_charge_event(build(:charge_event_payment_failed, charge_id: "py_nonexistent", charge_reference: nil))
+      end
+
+      it "ignores a refund failed event for a connected account's own refund" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        event = build(:charge_event_refund_failed, charge_id: "py_nonexistent", charge_reference: nil,
+                                                   extras: { refund_status: "failed", stripe_connect_account_id: "acct_1MExampleConnect" })
+        Purchase.handle_charge_event(event)
+      end
+
+      it "ignores a refund updated event for a connected account's own refund" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        event = build(:charge_event, type: ChargeEvent::TYPE_CHARGE_REFUND_UPDATED, comment: "refund.updated",
+                                     charge_id: "py_nonexistent", charge_reference: nil,
+                                     extras: { refund_status: "pending", stripe_connect_account_id: "acct_1MExampleConnect" })
+        Purchase.handle_charge_event(event)
       end
     end
   end

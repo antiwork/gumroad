@@ -162,7 +162,13 @@ export type State = {
   customFieldValues: Record<string, string>;
   surcharges:
     | { type: "error" | "pending" }
-    | { type: "loading"; abort: () => void }
+    // requestId identifies which fetch this loading state belongs to. A response may only
+    // publish its result through the reducer when the state is still "loading" with the same
+    // requestId — see the "surcharges-fetch-succeeded"/"surcharges-fetch-failed" cases. That
+    // makes the stale-response fence part of the reducer's dispatch ordering instead of a
+    // mutable ref read, which could race the response between an invalidating dispatch and
+    // the passive effect that reacted to it.
+    | { type: "loading"; requestId: number; abort: () => void }
     | { type: "loaded"; result: SurchargesResponse };
   availablePaymentMethods: PaymentMethod[];
   paymentMethod: PaymentMethodType;
@@ -234,7 +240,14 @@ type PublicAction =
     }
   | { type: "cancel" };
 
-type Action = PublicAction | ({ type: "set-value" } & Partial<State>);
+type Action =
+  | PublicAction
+  | ({ type: "set-value" } & Partial<State>)
+  // Internal actions dispatched by the surcharge refetch machinery in createReducer. They
+  // carry the requestId of the fetch that produced them so the reducer can drop responses
+  // from a request that is no longer the current one (see the reducer cases).
+  | { type: "surcharges-fetch-succeeded"; requestId: number; result: SurchargesResponse }
+  | { type: "surcharges-fetch-failed"; requestId: number };
 
 export function usePayLabel() {
   const [state] = useState();
@@ -506,25 +519,28 @@ export const hasShipping = (state: State) => state.products.some((item) => item.
 
 export const getErrors = (state: State) => (state.status.type === "input" ? state.status.errors : new Set());
 
-export const loadSurcharges = (state: State) => {
+export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
   const isGift = state.gift !== null;
 
-  return getSurcharges({
-    products: state.products.map((item) => ({
-      permalink: item.permalink,
-      quantity: item.quantity,
-      price:
-        item.hasFreeTrial && !isGift
-          ? 0
-          : Math.round(item.price + (computeTipForPrice(state, item.price, item.permalink) ?? 0)),
-      subscription_id: item.subscription_id,
-      recommended_by: item.recommended_by,
-    })),
-    country: state.country,
-    state: state.state,
-    vat_id: state.vatId,
-    postal_code: state.zipCode,
-  });
+  return getSurcharges(
+    {
+      products: state.products.map((item) => ({
+        permalink: item.permalink,
+        quantity: item.quantity,
+        price:
+          item.hasFreeTrial && !isGift
+            ? 0
+            : Math.round(item.price + (computeTipForPrice(state, item.price, item.permalink) ?? 0)),
+        subscription_id: item.subscription_id,
+        recommended_by: item.recommended_by,
+      })),
+      country: state.country,
+      state: state.state,
+      vat_id: state.vatId,
+      postal_code: state.zipCode,
+    },
+    abortSignal,
+  );
 };
 
 function validatePaymentMethodIndependentFields(state: State) {
@@ -561,10 +577,12 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
     case "set-value":
       if (
         ("country" in action && action.country !== state.country) ||
-        ("zipCode" in action &&
-          action.zipCode !== state.zipCode &&
-          state.country === "US" &&
-          action.zipCode?.length === 5) ||
+        // Any US zip edit invalidates: the server derives the taxable state and the TaxJar
+        // destination from the postal code whenever the country is US, and the purchase payload
+        // submits the current zip — so even a partial edit (or clearing the field) leaves the
+        // loaded quote stale relative to what will be charged. The 300ms refetch debounce
+        // already absorbs individual keystrokes.
+        ("zipCode" in action && action.zipCode !== state.zipCode && state.country === "US") ||
         ("state" in action && action.state !== state.state && state.country === "CA") ||
         ("vatId" in action && action.vatId !== state.vatId) ||
         ("gift" in action && action.gift?.type !== state.gift?.type) ||
@@ -573,6 +591,26 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       ) {
         if (state.surcharges.type === "loading") state.surcharges.abort();
         state.surcharges = { type: "pending" };
+        // The totals (and the buyer-currency quote token) the in-progress payment was built on
+        // are no longer the totals that will be charged, so a payment already past "input" must
+        // be cancelled — otherwise the payload built at the end of the pipeline reads a
+        // different (or missing) quote than the one the buyer confirmed.
+        //
+        // Card payments only: the quote token is never attached to wallet or PayPal payments
+        // (those charge canonical USD and display USD totals), so a stale quote cannot diverge
+        // there. The wallet (Apple Pay / Google Pay) sheet in particular dispatches its own
+        // address updates mid-payment — cancelling on those would break the sheet's
+        // completion handshake.
+        //
+        // "finished" is the point of no return: reaching it fires the purchase request
+        // (pay()/updateSubscription() run off a status effect), and that request cannot be
+        // cancelled from here. Resetting "finished" back to "input" would not stop the charge —
+        // it would only re-enable the Pay button while the first charge is still in flight,
+        // inviting a second submission and a duplicate charge. So a total-affecting change
+        // landing at "finished" leaves the status alone; the payment proceeds on the totals it
+        // was built with (the running request captured its state when it started).
+        if (state.status.type !== "input" && state.status.type !== "finished" && state.paymentMethod === "card")
+          state.status = { type: "input", errors: new Set() };
       }
       if (state.status.type === "input") {
         for (const key in action) state.status.errors.delete(key);
@@ -592,16 +630,56 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         state.availablePaymentMethods.push(action.paymentMethod);
       break;
     case "offer": {
+      // Never start a payment on a stale total: while surcharges are pending/loading (or
+      // errored), the on-screen totals and the buyer-currency quote token aren't the ones the
+      // charge would use. The submit button is disabled in this window, but other dispatch
+      // paths (wallets, offer pipeline, keyboard) must be refused here too.
+      if (state.surcharges.type !== "loaded") {
+        // A failed fetch would otherwise be terminal: the refetch effect only fires on
+        // "pending", so nothing retries an errored fetch and every submit path stays refused —
+        // the native PayPal button in particular remains clickable and would silently do
+        // nothing forever. Resetting to "pending" queues a refetch, turning the buyer's retry
+        // click into an actual retry.
+        if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
+        // Keep any validation errors already on screen — the refusal isn't a revalidation, so
+        // wiping the highlights here would clear them without recomputing until the next
+        // real submit.
+        state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
+        return;
+      }
       const errors = validatePaymentMethodIndependentFields(state);
       state.status = errors.size ? { type: "input", errors } : { type: "offering" };
       break;
     }
     case "validate": {
+      // Same stale-total refusal as "offer". The offer pipeline dispatches "validate" from the
+      // "offering" status, so the refusal must cancel back to "input" (not bail silently) —
+      // otherwise the checkout would be stranded in a processing state with the button disabled.
+      if (state.surcharges.type !== "loaded") {
+        // Same error-recovery and error-preservation reasoning as the "offer" refusal above.
+        if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
+        state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
+        return;
+      }
       const errors = validatePaymentMethodIndependentFields(state);
       state.status = errors.size ? { type: "input", errors } : { type: "validating" };
       break;
     }
     case "start-payment":
+      // Same stale-total refusal as "offer"/"validate". "start-payment" has no status
+      // precondition and is dispatched unconditionally from effects — CustomerDetails fires it
+      // whenever status reaches "validating", and the wallet payment-request watcher does the
+      // same — so a total-affecting invalidation landing between "validate" and this action
+      // would otherwise let the pipeline re-enter and build its payload on a quote that no
+      // longer matches the totals the buyer confirmed. Card payments only, same reasoning as
+      // the invalidation cancel above: other methods never attach the quote token, and the
+      // wallet sheet manages its own mid-payment state.
+      if (state.paymentMethod === "card" && state.surcharges.type !== "loaded") {
+        // Same error-recovery and error-preservation reasoning as the "offer" refusal above.
+        if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
+        state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
+        return;
+      }
       state.status = { type: "starting" };
       break;
     case "acknowledge-email-typo":
@@ -634,6 +712,36 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.products = action.products;
       if (state.surcharges.type === "loading") state.surcharges.abort();
       state.surcharges = action.surcharges ? { type: "loaded", result: action.surcharges } : { type: "pending" };
+      // Accepting a cross-sell updates the products mid-pipeline on purpose, and it always
+      // arrives with a freshly loaded quote precomputed for the accepted cart (so the Apple Pay
+      // sheet can show the new total synchronously) — that flow may continue. Any other product
+      // update that lands after the payment pipeline has started leaves the quote pending, which
+      // means the payload at the end of the pipeline would be built on totals the buyer never
+      // confirmed — cancel back to "input", same as the total-affecting "set-value" path above.
+      // "finished" is excluded for the same reason as there: the purchase request is already in
+      // flight and un-cancellable, so resetting would only invite a duplicate submission.
+      if (state.surcharges.type !== "loaded" && state.status.type !== "input" && state.status.type !== "finished")
+        state.status = { type: "input", errors: new Set() };
+      break;
+    case "surcharges-fetch-succeeded":
+      // A response may only publish while its own loading state is still current. Reducer
+      // dispatches are processed strictly in order, so by the time this action runs, every
+      // invalidation that happened before the response (a total-affecting edit resetting to
+      // "pending", or a newer fetch replacing the loading state with a new requestId) is
+      // already reflected in the state — a stale response can never restore an old quote,
+      // re-enable Pay on old totals, or clobber a newer request's loading state. This is why
+      // the fence lives here rather than in a mutable ref in the fetch callback: a ref bumped
+      // from a passive effect only updates after React flushes effects, leaving a window
+      // where a stale response still saw the old value.
+      if (state.surcharges.type !== "loading" || state.surcharges.requestId !== action.requestId) return;
+      state.surcharges = { type: "loaded", result: action.result };
+      break;
+    case "surcharges-fetch-failed":
+      // Same fence as the success case: only the current request may flip the state to
+      // "error". A stale failure must not surface a bogus alert or strand the checkout while
+      // a fresher request is still loading.
+      if (state.surcharges.type !== "loading" || state.surcharges.requestId !== action.requestId) return;
+      state.surcharges = { type: "error" };
       break;
   }
 });
@@ -715,25 +823,41 @@ export function createReducer(initial: {
     window.history.replaceState(window.history.state, "", url.toString());
   });
 
+  // Numbers each surcharge fetch so the reducer can tell whether a response is still the
+  // current one. Aborting the fetch is best-effort (the response may already be in the
+  // microtask queue when a newer request starts or a total-affecting edit invalidates), so
+  // each response is dispatched with its requestId and the reducer only publishes it while
+  // the matching "loading" state is still in place. Keeping the fence inside the reducer —
+  // instead of comparing against a ref here — means it participates in dispatch ordering: an
+  // invalidating edit that dispatched before the response resolves is guaranteed to have
+  // reset the state first, with no window where the stale response can still pass the check.
+  const surchargesRequestId = React.useRef(0);
   const updateSurcharges = useDebouncedCallback(
     asyncVoid(async () => {
       if (!state.products.length) return;
+      const requestId = ++surchargesRequestId.current;
+      const abort = new AbortController();
+      dispatch({
+        type: "set-value",
+        surcharges: { type: "loading", requestId, abort: () => abort.abort() },
+      });
       try {
-        const abort = new AbortController();
-        dispatch({ type: "set-value", surcharges: { type: "loading", abort: () => abort.abort() } });
-        const result = await loadSurcharges(state);
-        dispatch({ type: "set-value", surcharges: { type: "loaded", result } });
+        const result = await loadSurcharges(state, abort.signal);
+        dispatch({ type: "surcharges-fetch-succeeded", requestId, result });
       } catch (e) {
         if (e instanceof AbortError) return;
         assertResponseError(e);
-        dispatch({ type: "set-value", surcharges: { type: "error" } });
-        showAlert("Sorry, something went wrong. Please try again.", "error");
+        dispatch({ type: "surcharges-fetch-failed", requestId });
       }
     }),
     300,
   );
   React.useEffect(() => {
     if (state.surcharges.type === "pending") updateSurcharges();
+    // The reducer flips surcharges to "error" only when the current fetch fails (stale
+    // failures are dropped there), so surfacing the alert on that transition can't fire for
+    // a request that was already superseded.
+    if (state.surcharges.type === "error") showAlert("Sorry, something went wrong. Please try again.", "error");
   }, [state.surcharges]);
 
   return reducer;

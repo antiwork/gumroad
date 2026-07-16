@@ -32,7 +32,17 @@ module UtmLinkTracking
       utm_params = required_params.merge(optional_params).transform_values { _1.to_s.strip.downcase.gsub(/[^a-z0-9\-_]/u, "-").first(UtmLink::MAX_UTM_PARAM_LENGTH).presence }
 
       ActiveRecord::Base.transaction do
-        utm_link = UtmLink.active.find_or_initialize_by(utm_params.merge(target_resource_type:, target_resource_id:))
+        # Look up existing links with the "alive" scope (not "active") so we see links the
+        # seller has disabled. The model's uniqueness validation also checks against "alive"
+        # links, so if we only searched "active" links here we could miss a disabled duplicate,
+        # try to create a new link, and have the save fail — which used to surface as a 422
+        # error on the buyer-facing page.
+        utm_link = UtmLink.alive.find_or_initialize_by(utm_params.merge(target_resource_type:, target_resource_id:))
+
+        # A disabled link means the seller intentionally paused tracking for these UTM
+        # parameters — respect that and don't record the visit.
+        return if utm_link.persisted? && !utm_link.enabled?
+
         auto_create_utm_link(utm_link, seller) if utm_link.new_record?
         return unless utm_link.persisted?
         return unless Feature.active?(:utm_links, utm_link.seller)
@@ -52,6 +62,11 @@ module UtmLinkTracking
 
         UpdateUtmLinkStatsJob.perform_async(utm_link.id)
       end
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+      # Analytics tracking must never break the buyer-facing page. A validation failure or a
+      # race between two simultaneous first visits (both trying to auto-create the same link,
+      # colliding on the database's unique index) should be reported and swallowed, not raised.
+      ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
     end
 
     def auto_create_utm_link(utm_link, seller)

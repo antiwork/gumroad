@@ -46,7 +46,11 @@ class Purchase::PresentmentRefund
     # balance unknowable (its canonical cents already reduced gross_amount_refundable_cents
     # but consumed zero presentment cents here), so fail closed rather than allocate the
     # new refund against a skewed balance.
-    prior_refunds = purchase.refunds.to_a
+    # Failed refunds never delivered money, so they consume no presentment balance —
+    # exclude them everywhere prior refunds are summed here (mirrors
+    # Purchase#amount_refunded_cents), or a bounced full refund would leave the
+    # remaining presentment balance at zero and block the re-refund.
+    prior_refunds = purchase.refunds.effective.to_a
     return nil if prior_refunds.any? { _1.presentment_amount_cents.to_i <= 0 }
 
     refunded_presentment_cents = prior_refunds.sum { _1.presentment_amount_cents.to_i }
@@ -120,7 +124,7 @@ class Purchase::PresentmentRefund
     # snapshot already consumed canonical tax cents but counts as zero presentment tax
     # here, so the remaining buyer-currency tax is unknowable — fail closed rather than
     # send Stripe more tax than the purchase has left.
-    return nil if purchase.refunds.any? { _1.presentment_amount_cents.to_i <= 0 }
+    return nil if purchase.refunds.effective.any? { _1.presentment_amount_cents.to_i <= 0 }
 
     remaining_tax_cents = purchase_presentment.presentment_gumroad_tax_cents.to_i -
       refunded_presentment_cents_for(:presentment_gumroad_tax_cents)
@@ -171,7 +175,9 @@ class Purchase::PresentmentRefund
     end
 
     def refunded_presentment_cents_for(key)
-      purchase.refunds.sum { _1.public_send(key).to_i }
+      # Effective only: a failed refund's presentment cents came back to us, so they
+      # are still available to refund again.
+      purchase.refunds.effective.sum { _1.public_send(key).to_i }
     end
 
     def build_result(amount_cents:, component_cents:)

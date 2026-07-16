@@ -322,6 +322,30 @@ describe Api::Internal::Admin::PurchasesController do
       )
     end
 
+    it "excludes reversed failed refunds from refund_amount on the preloaded path" do
+      # The preloaded branch of refund_amount_cents filters with Refund#effective?
+      # in memory; it must agree with the SQL scope used by amount_refunded_cents,
+      # or a reversed (bounced) refund would inflate the refunded amount only on
+      # admin pages that preload the refunds association.
+      purchase = create(:free_purchase, stripe_partially_refunded: true, email: "bounced-refund@example.com")
+      purchase.update_columns(price_cents: 1000, charge_processor_id: "stripe", stripe_transaction_id: "ch_test")
+      create(:refund, purchase:, amount_cents: 250, status: "succeeded")
+      reversed_failed_refund = create(:refund, purchase:, amount_cents: 500, status: "failed")
+      reversed_failed_refund.balance_reversed_on_failure = true
+      reversed_failed_refund.save!
+
+      expect_any_instance_of(Purchase).not_to receive(:amount_refunded_cents)
+      allow(Radar::ChargeRiskLevelService).to receive(:fetch_bulk).and_return({})
+
+      get :search, params: { query: purchase.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].first).to include(
+        "id" => purchase.external_id_numeric.to_s,
+        "refund_amount" => 250
+      )
+    end
+
     it "computes amount_refundable_cents_in_currency from preloaded refunds without an extra SUM query" do
       purchase = create(:free_purchase, email: "paid-buyer@example.com")
       purchase.update_columns(price_cents: 1000, charge_processor_id: "stripe", stripe_transaction_id: "ch_test")

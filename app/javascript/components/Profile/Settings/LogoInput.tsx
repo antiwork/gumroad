@@ -28,7 +28,7 @@ export const LogoInput = ({
       </FieldsetTitle>
       <ImageUploader
         id={id}
-        helpText="Your avatar will be visible next to your name in your Gumroad profile and product pages. Your image must be at least 200x200px and must be in JPG or PNG format."
+        helpText="Your avatar will be visible next to your name in your Gumroad profile and product pages. Your image must be at least 200x200px (400x400px or larger is recommended so it stays sharp on high-resolution screens) and must be in JPG or PNG format."
         allowedExtensions={ALLOWED_EXTENSIONS}
         imageUrl={changing || !logoUrl ? null : logoUrl}
         onRemove={() => {

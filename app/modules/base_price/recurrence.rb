@@ -50,6 +50,14 @@ module BasePrice::Recurrence
     RECURRENCE_TO_NUMBER_OF_MONTHS[recurrence]
   end
 
+  # A membership whose fixed duration equals a single recurrence period (for
+  # example, a 12-month membership billed yearly) only ever charges the buyer
+  # once, so recurring wording like "a year" reads as an auto-renewing charge.
+  # Keep in sync with isSingleChargeDuration in recurringPricing.ts.
+  def self.single_charge_duration?(recurrence, duration_in_months)
+    duration_in_months.present? && duration_in_months == number_of_months_in_recurrence(recurrence)
+  end
+
   def self.renewal_reminder_email_days(recurrence)
     RECURRENCE_TO_RENEWAL_REMINDER_EMAIL_DAYS[recurrence]
   end

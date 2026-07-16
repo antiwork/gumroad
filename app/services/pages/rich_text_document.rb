@@ -4,7 +4,7 @@
 # the public page serves. Shared by:
 #
 # - UserPagesController#show — the actual public render at /<slug>
-# - Api::V2::PagesController#show (`rendered_html`) — the eject path: when an
+# - Api::V2::PagesController#show (`rendered_html`) — the pull path: when an
 #   agent takes over a rich text page with custom HTML, it starts from this
 #   faithful render of the current page instead of reverse-engineering the
 #   layout from raw rich text.
