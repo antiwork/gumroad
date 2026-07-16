@@ -3,6 +3,7 @@ import * as React from "react";
 
 import {
   type AgentStreamHandlers,
+  AgentStreamInterruptedError,
   type ChatMessage,
   type ConversationMessage,
   type DisplayObject,
@@ -24,6 +25,13 @@ import { Textarea } from "$app/components/ui/Textarea";
 // arrives; if they scroll further up to read earlier messages we leave them there. (Mirrors the
 // near-bottom threshold the Communities chat uses.)
 const STICK_TO_BOTTOM_THRESHOLD_PX = 200;
+
+// After a stream breaks, how long to wait before the second look at the stored conversation. The
+// server keeps working after the client's connection dies — it still runs the follow-up
+// suggestions call and persists the turn before it would have sent `done` — so the first fetch
+// can arrive before the turn has been recorded.
+const STREAM_RECOVERY_RETRY_DELAY_MS = 3000;
+const STREAM_RECOVERY_ATTEMPTS = 2;
 
 type DisplayMessage = ChatMessage & {
   // A proposed change attached to an assistant turn. Once the seller acts on it, we record the
@@ -240,6 +248,52 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     };
   }, []);
 
+  // A streamed turn died before its terminal `done` frame. Check whether the turn completed
+  // server-side anyway, and if so replace the partially-rendered assistant message with the
+  // persisted one (including its proposed-action card and object cards). Returns whether the turn
+  // was recovered; when it wasn't (the failure was real and nothing was stored), the caller falls
+  // back to the normal error handling.
+  const recoverInterruptedTurn = async (sentText: string, assistantIndex: number): Promise<boolean> => {
+    for (let attempt = 0; attempt < STREAM_RECOVERY_ATTEMPTS; attempt++) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, STREAM_RECOVERY_RETRY_DELAY_MS));
+      try {
+        const conversation = await fetchLatestAgentConversation();
+        if (!conversation) continue;
+        // Only reconcile against the conversation this chat is appending to — the seller's latest
+        // conversation could be a different one (e.g. another tab started a new chat meanwhile).
+        if (conversationIdRef.current && conversation.id !== conversationIdRef.current) continue;
+        const persisted = conversation.messages;
+        const reply = persisted[persisted.length - 1];
+        const userTurn = persisted[persisted.length - 2];
+        // Recover only when the stored tail is exactly this turn: the message we just sent followed
+        // by an assistant reply. Anything else means this turn was never persisted (the server saw
+        // the disconnect first, or the request never got through) — give it a beat and look again.
+        if (!reply || reply.role !== "assistant" || userTurn?.role !== "user" || userTurn.content !== sentText)
+          continue;
+        setMessages((prev) => {
+          const next = [...prev];
+          next[assistantIndex] = {
+            role: "assistant",
+            content: reply.content,
+            ...(reply.proposed_action ? { proposedAction: reply.proposed_action } : {}),
+            ...(reply.objects?.length ? { objects: reply.objects } : {}),
+            // Unlike the mount-time hydration (where a status-less proposal is stale and rendered
+            // dismissed), this proposal was made moments ago in the live session — keep it
+            // confirmable, exactly as it would have been had the stream survived.
+            ...(reply.action_status ? { actionStatus: reply.action_status } : {}),
+          };
+          return next;
+        });
+        setConversationId(conversation.id);
+        return true;
+      } catch {
+        // Recovery is best-effort: a failed fetch just moves on to the next attempt (or gives up
+        // and lets the caller's error handling take over).
+      }
+    }
+    return false;
+  };
+
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (trimmed.length === 0 || isSending) return;
@@ -326,15 +380,23 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       });
       setFollowUps(result.suggestions);
     } catch (e) {
-      showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
-      setMessages((prev) => {
-        const next = [...prev];
-        // If nothing streamed, drop in a friendly fallback; otherwise keep what arrived.
-        if (!next[assistantIndex] || next[assistantIndex]?.role !== "assistant") {
-          next[assistantIndex] = { role: "assistant", content: "Sorry, I ran into a problem. Please try again." };
-        }
-        return next;
-      });
+      // A broken stream usually means the server finished and persisted the turn without noticing
+      // the client stopped receiving — so the truncated text on screen misrepresents a reply that
+      // exists in full server-side. Reconcile with the stored conversation before treating this as
+      // a failure. Server-reported errors (`error` events) skip this: those turns were never saved.
+      const recovered =
+        e instanceof AgentStreamInterruptedError && (await recoverInterruptedTurn(trimmed, assistantIndex));
+      if (!recovered) {
+        showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
+        setMessages((prev) => {
+          const next = [...prev];
+          // If nothing streamed, drop in a friendly fallback; otherwise keep what arrived.
+          if (!next[assistantIndex] || next[assistantIndex]?.role !== "assistant") {
+            next[assistantIndex] = { role: "assistant", content: "Sorry, I ran into a problem. Please try again." };
+          }
+          return next;
+        });
+      }
     } finally {
       setIsSending(false);
       setIsStreaming(false);
