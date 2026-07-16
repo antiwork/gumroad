@@ -132,5 +132,30 @@ describe Product::Preview do
         expect(product.preview_url).to eq(asset_preview.unsplash_url)
       end
     end
+
+    describe "#social_share_preview_url" do
+      it "returns nil when the product has no previews" do
+        product = create(:product)
+        expect(product.social_share_preview_url).to be(nil)
+      end
+
+      it "returns the cover URL when the cover is an image" do
+        product = create(:product, preview: @png_file)
+        expect(product.social_share_preview_url).to eq(product.preview_url)
+      end
+
+      it "falls back to the escaped oembed thumbnail URL for embeddable covers" do
+        asset_preview = create(:asset_preview_youtube)
+        product = asset_preview.link
+        allow(asset_preview).to receive(:oembed_thumbnail_url).and_return("https://i.ytimg.com/vi/qKebcV1jv3A/hq default.jpg")
+        allow(product).to receive(:main_preview).and_return(asset_preview)
+        expect(product.social_share_preview_url).to eq("https://i.ytimg.com/vi/qKebcV1jv3A/hq%20default.jpg")
+      end
+
+      it "returns nil for a video cover with no oembed thumbnail" do
+        product = create(:product, preview: @mov_file)
+        expect(product.social_share_preview_url).to be(nil)
+      end
+    end
   end
 end
