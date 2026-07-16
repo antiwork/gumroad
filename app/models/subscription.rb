@@ -832,6 +832,13 @@ class Subscription < ApplicationRecord
     charge_occurrence_count.present?
   end
 
+  # True for fixed-length subscriptions that only ever charge the buyer once,
+  # e.g. a 12-month membership billed yearly. These are effectively one-time
+  # payments, so buyer-facing copy avoids recurring wording for them.
+  def single_charge?
+    charge_occurrence_count == 1
+  end
+
   def charges_completed?
     has_fixed_length? && successful_purchases.count == charge_occurrence_count
   end

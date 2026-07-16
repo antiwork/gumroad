@@ -225,6 +225,10 @@ module CurrencyHelper
   end
 
   def formatted_price_with_recurrence(formatted_price, recurrence, charge_occurrence_count, format:)
+    # A subscription that only ever charges once is a one-time payment; a
+    # recurring label like "$99 a year x 1" would wrongly suggest renewals.
+    return "#{formatted_price} once" if recurrence && charge_occurrence_count == 1
+
     if recurrence
       formatted_price = \
         if format == :short
@@ -273,6 +277,10 @@ module CurrencyHelper
   # Should match formatRecurrenceWithDuration
   def recurrence_label(recurrence, duration_in_months)
     return if recurrence.blank?
+    # A membership lasting exactly one recurrence period charges once, so a
+    # recurring label like "a year x 1" would wrongly suggest renewals.
+    return "once" if BasePrice::Recurrence.single_charge_duration?(recurrence, duration_in_months)
+
     number_of_months = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
     base_formatted_label = recurrence_long_indicator(recurrence)
     return base_formatted_label if duration_in_months.blank?

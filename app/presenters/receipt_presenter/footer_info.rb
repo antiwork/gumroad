@@ -17,8 +17,17 @@ class ReceiptPresenter::FooterInfo
     true
   end
 
+  # Only called when can_manage_subscription? is true, so chargeable is a
+  # Purchase on a membership product here.
   def manage_subscription_note
-    "You'll be charged once #{recurrence_long_indicator(chargeable.subscription.recurrence)}."
+    # A membership that only ever charges once shouldn't promise a recurring
+    # charge. Free-trial receipts keep the recurring wording because their one
+    # charge hasn't happened yet.
+    if chargeable.subscription.single_charge? && !chargeable.is_free_trial_purchase?
+      "You won't be charged again for this membership."
+    else
+      "You'll be charged once #{recurrence_long_indicator(chargeable.subscription.recurrence)}."
+    end
   end
 
   def manage_subscription_link

@@ -57,6 +57,32 @@ describe CartProduct do
       end
     end
 
+    describe "price" do
+      context "when price is within the bigint column range" do
+        it "marks the cart product as valid" do
+          cart_product = build(:cart_product, price: CartProduct::MAX_PRICE)
+          expect(cart_product).to be_valid
+        end
+      end
+
+      context "when price is negative" do
+        it "marks the cart product as invalid" do
+          cart_product = build(:cart_product, price: -1)
+          expect(cart_product).to be_invalid
+          expect(cart_product.errors.full_messages.join).to include("Price must be greater than or equal to 0")
+        end
+      end
+
+      context "when price exceeds the 8-byte integer column limit" do
+        it "marks the cart product as invalid instead of raising a range error on save" do
+          cart_product = build(:cart_product, price: 10_000_000_000_000_000_000_000)
+          expect(cart_product).to be_invalid
+          expect(cart_product.errors.full_messages.join).to include("Price must be less than or equal to #{CartProduct::MAX_PRICE}")
+          expect { cart_product.save! }.to raise_error(ActiveRecord::RecordInvalid)
+        end
+      end
+    end
+
     describe "url parameters" do
       context "when url parameters are empty" do
         it "marks the cart product as valid" do
