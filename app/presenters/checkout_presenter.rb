@@ -353,7 +353,7 @@ class CheckoutPresenter
           number_of_installments: product.installment_plan.number_of_installments,
           recurrence: product.installment_plan.recurrence,
         } : nil,
-        is_multiseat_license: product.is_tiered_membership && product.is_multiseat_license,
+        is_multiseat_license: product.is_multiseat_license,
         shippable_country_codes: product.is_physical ? product.shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys } : [],
       }
     end

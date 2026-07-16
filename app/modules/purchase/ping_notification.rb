@@ -53,7 +53,7 @@ module Purchase::PingNotification
     end
     payload[:custom_fields] = custom_fields_payload if custom_fields_payload.present?
     payload[:license_key] = license_key if license_key.present?
-    payload[:is_multiseat_license] = is_multiseat_license? if license_key.present? && subscription.present?
+    payload[:is_multiseat_license] = is_multiseat_license? if license_key.present?
     payload[:ip_country] = ip_country if ip_country.present?
     payload[:shipping_rate] = shipping_cents if link.is_physical
     payload[:recurrence] = subscription.recurrence if subscription.present?

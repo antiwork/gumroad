@@ -686,5 +686,15 @@ describe ProductPresenter::ProductProps do
         expect(props[:audio_previews_enabled]).to be(true)
       end
     end
+
+    context "multi-seat license on a non-membership product" do
+      let(:product) { create(:product, native_type: Link::NATIVE_TYPE_COURSE, is_licensed: true, is_multiseat_license: true) }
+
+      it "exposes is_multiseat_license" do
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product]
+
+        expect(props[:is_multiseat_license]).to be(true)
+      end
+    end
   end
 end
