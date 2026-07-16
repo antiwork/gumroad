@@ -14,6 +14,20 @@ describe("fractionOfDayElapsed", () => {
     expect(fractionOfDayElapsed("UTC", new Date("2026-07-16T00:00:00Z"))).toBe(0);
   });
 
+  it("uses the real day length on a spring-forward DST day (23 hours)", () => {
+    // US DST starts 2026-03-08 in Los Angeles: local midnight is 08:00 UTC (PST),
+    // the next local midnight is 07:00 UTC on Mar 9 (PDT) — a 23-hour day.
+    // Local noon (19:00 UTC) is therefore 11 elapsed hours of 23, not 12 of 24.
+    expect(fractionOfDayElapsed("America/Los_Angeles", new Date("2026-03-08T19:00:00Z"))).toBeCloseTo(11 / 23);
+  });
+
+  it("uses the real day length on a fall-back DST day (25 hours)", () => {
+    // US DST ends 2026-11-01 in Los Angeles: local midnight is 07:00 UTC (PDT),
+    // the next local midnight is 08:00 UTC on Nov 2 (PST) — a 25-hour day.
+    // Local noon (20:00 UTC) is therefore 13 elapsed hours of 25.
+    expect(fractionOfDayElapsed("America/Los_Angeles", new Date("2026-11-01T20:00:00Z"))).toBeCloseTo(13 / 25);
+  });
+
   it("returns null for an unknown time zone", () => {
     expect(fractionOfDayElapsed("Not/AZone", new Date())).toBeNull();
   });
