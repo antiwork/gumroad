@@ -2045,4 +2045,33 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor.formatted_amount_for_paypal(1644, "jpy").class).to eq(Integer)
     end
   end
+
+  describe "#determine_refund_order_error" do
+    # Refund error classification drives the user-facing insufficient-funds
+    # message: only ChargeProcessorInsufficientFundsError is translated into
+    # "your PayPal account lacks funds" upstream, so PayPal's specific issue code
+    # must map to exactly that class and not the generic invalid-request error.
+    def refund_error_response(name:, issue: "SOMETHING_ELSE")
+      double(result: double(name:, details: [double(issue:)]))
+    end
+
+    it "classifies REFUND_FAILED_INSUFFICIENT_FUNDS as an insufficient-funds error" do
+      response = refund_error_response(name: "UNPROCESSABLE_ENTITY", issue: "REFUND_FAILED_INSUFFICIENT_FUNDS")
+
+      expect(subject.send(:determine_refund_order_error, response)).to eq(ChargeProcessorInsufficientFundsError)
+    end
+
+    it "classifies CAPTURE_FULLY_REFUNDED as already refunded" do
+      response = refund_error_response(name: "UNPROCESSABLE_ENTITY", issue: "CAPTURE_FULLY_REFUNDED")
+
+      expect(subject.send(:determine_refund_order_error, response)).to eq(ChargeProcessorAlreadyRefundedError)
+    end
+
+    it "classifies INTERNAL_ERROR as processor unavailability and everything else as invalid request" do
+      expect(subject.send(:determine_refund_order_error, refund_error_response(name: "INTERNAL_ERROR")))
+        .to eq(ChargeProcessorUnavailableError)
+      expect(subject.send(:determine_refund_order_error, refund_error_response(name: "UNPROCESSABLE_ENTITY")))
+        .to eq(ChargeProcessorInvalidRequestError)
+    end
+  end
 end

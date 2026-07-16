@@ -12,7 +12,9 @@ module DeferredRefundsReports
     # appear in no month's report, ever.
     range = DateTime.new(year, month)...DateTime.new(year, month).next_month
 
-    refunded_purchase_ids = Refund.where(created_at: range).pluck(:purchase_id)
+    # .effective keeps failed-but-not-reversed refunds (the seller is still debited)
+    # and drops reversed ones, matching the refunded sums everywhere else.
+    refunded_purchase_ids = Refund.effective.where(created_at: range).pluck(:purchase_id)
     deferred_refund_purchases = Purchase.successful.where(id: refunded_purchase_ids).where("succeeded_at < ?", range.first)
 
     disputed_purchase_ids = Dispute.where(created_at: range).where.not(state: "won").pluck(:purchase_id)
@@ -33,8 +35,10 @@ module DeferredRefundsReports
       # several months (e.g. two partial refunds in different months) has refund rows outside
       # the range too — an unscoped join would count those in this month's totals as well,
       # so each refund of a multi-month purchase would be reported in every month that
-      # purchase appears in.
-      month_refunds = refunded_purchases.joins(:refunds).where(refunds: { created_at: range })
+      # purchase appears in. Joining :effective_refunds (not :refunds) also drops refunds
+      # that were reversed after failing — the seller kept that money, matching the
+      # Refund.effective selection above.
+      month_refunds = refunded_purchases.joins(:effective_refunds).where(refunds: { created_at: range })
 
       json["Purchases"] << {
         "Processor" => name,

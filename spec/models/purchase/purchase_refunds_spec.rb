@@ -5,6 +5,7 @@ require "spec_helper"
 describe "PurchaseRefunds", :vcr do
   include CurrencyHelper
   include ProductsHelper
+  include ActiveJob::TestHelper
 
   def verify_balance(user, expected_balance)
     expect(user.unpaid_balance_cents).to eq expected_balance
@@ -34,6 +35,35 @@ describe "PurchaseRefunds", :vcr do
       expect(ChargeProcessor).to_not receive(:refund!)
       @purchase.stripe_transaction_id = nil
       @purchase.refund_and_save!(@user.id)
+    end
+
+    it "surfaces a Gumroad-held Stripe balance shortfall without blaming the creator" do
+      expect(ChargeProcessor).to receive(:refund!)
+        .and_raise(ChargeProcessorInsufficientFundsError.new("balance_insufficient"))
+
+      expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors[:base]).to include(Purchase::Refundable::INSUFFICIENT_FUNDS_GUMROAD_BALANCE_ERROR_MESSAGE)
+    end
+
+    it "surfaces a creator-held Stripe balance shortfall as a connected-account issue" do
+      allow(@purchase.merchant_account).to receive(:holder_of_funds).and_return(HolderOfFunds::CREATOR)
+      expect(ChargeProcessor).to receive(:refund!)
+        .and_raise(ChargeProcessorInsufficientFundsError.new("balance_insufficient"))
+
+      expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors[:base]).to include(Purchase::Refundable::INSUFFICIENT_FUNDS_CREATOR_STRIPE_BALANCE_ERROR_MESSAGE)
+    end
+
+    it "surfaces a Stripe-held balance shortfall as the Stripe account's problem, not the creator's" do
+      # Gumroad-managed custom accounts hold their funds at Stripe: the shortfall
+      # is in that Stripe account's balance, so the message must point there —
+      # neither at Gumroad's platform balance nor at a creator-connected account.
+      allow(@purchase.merchant_account).to receive(:holder_of_funds).and_return(HolderOfFunds::STRIPE)
+      expect(ChargeProcessor).to receive(:refund!)
+        .and_raise(ChargeProcessorInsufficientFundsError.new("balance_insufficient"))
+
+      expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors[:base]).to include(Purchase::Refundable::INSUFFICIENT_FUNDS_STRIPE_BALANCE_ERROR_MESSAGE)
     end
 
     describe "buyer-presentment purchases" do
@@ -78,6 +108,39 @@ describe "PurchaseRefunds", :vcr do
         balance_transaction = refund.balance_transactions.where(user: @user).last
         expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
         expect(balance_transaction.issued_amount_gross_cents).to eq(-1 * @purchase.total_transaction_cents)
+      end
+
+      it "emails the buyer the presentment purchase total on a full refund" do
+        presentment_total = @purchase.purchase_presentment.presentment_total_cents
+
+        expect(ChargeProcessor).to receive(:refund!)
+          .and_return(build_presentment_charge_refund(presentment_cents: presentment_total))
+
+        # Perform the enqueued mailer job and assert on the delivered body: this is the
+        # full-flow guarantee that the buyer-currency amount actually reaches the email,
+        # not just that some CustomerMailer.refund job was enqueued.
+        mail = nil
+        perform_enqueued_jobs do
+          expect(@purchase.refund_and_save!(@user.id)).to be(true)
+          mail = ActionMailer::Base.deliveries.reverse.find { _1.subject == "You have been refunded." }
+        end
+        expect(mail).to be_present
+        formatted_presentment_total = @purchase.reload.formatted_buyer_presentment_total
+        expect(mail.body.encoded).to include(formatted_presentment_total)
+      end
+
+      it "passes the refund's presentment amount to the partial refund email" do
+        presentment_total = @purchase.purchase_presentment.presentment_total_cents
+        canonical_partial = @purchase.total_transaction_cents / 2
+        presentment_partial = presentment_total / 2
+
+        expect(ChargeProcessor).to receive(:refund!)
+          .and_return(build_presentment_charge_refund(presentment_cents: presentment_partial))
+        expect(CustomerMailer).to receive(:partial_refund)
+          .with(@purchase.email, @purchase.link.id, @purchase.id, canonical_partial, "partially", presentment_partial, Currency::CAD)
+          .and_call_original
+
+        expect(@purchase.refund_and_save!(@user.id, amount_cents: canonical_partial)).to be(true)
       end
 
       it "sends a partial presentment amount for a partial refund and clamps the final remainder" do
@@ -382,7 +445,7 @@ describe "PurchaseRefunds", :vcr do
 
       it "notifies customer about the refund" do
         expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, anything).and_call_original
-        expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 50, "partially").and_call_original
+        expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 50, "partially", nil, nil).and_call_original
         @purchase.refund_and_save!(@user.id, amount_cents: 50)
       end
 
@@ -813,6 +876,32 @@ describe "PurchaseRefunds", :vcr do
           expect(Refund.last.note).to eq "VAT_ID_1234_Dummy"
           expect(Refund.last.processor_refund_id).to be_present
           expect(@purchase.reload.stripe_refunded).to be(false)
+        end
+
+        it "returns an insufficient-funds error for Gumroad tax refunds instead of raising" do
+          expect(ChargeProcessor).to receive(:refund!)
+            .with(@purchase.charge_processor_id, @purchase.stripe_transaction_id,
+                  amount_cents: 20,
+                  reverse_transfer: false,
+                  merchant_account: @purchase.merchant_account,
+                  paypal_order_purchase_unit_refund: false,
+                  purchase: @purchase)
+            .and_raise(ChargeProcessorInsufficientFundsError.new("balance_insufficient"))
+
+          expect(@purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "VAT_ID_1234_Dummy")).to be(false)
+          expect(@purchase.errors[:base]).to include(Purchase::Refundable::INSUFFICIENT_FUNDS_GUMROAD_BALANCE_ERROR_MESSAGE)
+        end
+
+        it "attributes a tax-refund shortfall to the connected account when the creator holds the funds" do
+          # The VAT-refund rescue must run through the same holder-of-funds message
+          # selection as normal refunds — a connected-account shortfall on a tax
+          # refund must not blame Gumroad's platform balance.
+          allow(@purchase.merchant_account).to receive(:holder_of_funds).and_return(HolderOfFunds::CREATOR)
+          expect(ChargeProcessor).to receive(:refund!)
+            .and_raise(ChargeProcessorInsufficientFundsError.new("balance_insufficient"))
+
+          expect(@purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "VAT_ID_1234_Dummy")).to be(false)
+          expect(@purchase.errors[:base]).to include(Purchase::Refundable::INSUFFICIENT_FUNDS_CREATOR_STRIPE_BALANCE_ERROR_MESSAGE)
         end
 
         describe "buyer-presentment purchases" do
@@ -1747,7 +1836,7 @@ describe "PurchaseRefunds", :vcr do
 
     it "notifies customer about the refund" do
       expect(@purchase.stripe_partially_refunded).to_not be(true)
-      expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 10, "partially").and_call_original
+      expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 10, "partially", nil, nil).and_call_original
       @purchase.refund_partial_purchase!(10, @user.id)
       @purchase.reload
       expect(@purchase.stripe_partially_refunded).to be(true)
@@ -2244,6 +2333,50 @@ describe "PurchaseRefunds", :vcr do
       expect(Stripe::Transfer).to receive(:list).and_call_original
 
       purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+    end
+  end
+
+  describe "refunded amount sums with terminal-failure refunds" do
+    # All four refunded sums must use the same effective-refund semantics: a failed
+    # refund whose balance debits were reversed never delivered money, so it must
+    # drop out of every sum at once — otherwise the fee/tax sums would disagree with
+    # amount_refunded_cents and misreport what is still refundable.
+    let(:purchase) { create(:purchase, price_cents: 20_00) }
+
+    def create_partial_refund(status:, reversed: false)
+      refund = create(:refund,
+                      purchase:,
+                      amount_cents: 5_00,
+                      fee_cents: 50,
+                      creator_tax_cents: 30,
+                      gumroad_tax_cents: 80,
+                      total_transaction_cents: 5_00,
+                      status:)
+      if reversed
+        refund.balance_reversed_on_failure = true
+        refund.save!
+      end
+      refund
+    end
+
+    it "counts a failed refund in every sum until its balance debits are reversed" do
+      # Not yet reversed: the seller is still debited, so the money still counts.
+      create_partial_refund(status: "failed")
+
+      expect(purchase.amount_refunded_cents).to eq(5_00)
+      expect(purchase.fee_refunded_cents).to eq(50)
+      expect(purchase.tax_refunded_cents).to eq(30)
+      expect(purchase.gumroad_tax_refunded_cents).to eq(80)
+    end
+
+    it "drops a reversed failed refund from every sum while keeping surviving refunds" do
+      create_partial_refund(status: "succeeded")
+      create_partial_refund(status: "failed", reversed: true)
+
+      expect(purchase.amount_refunded_cents).to eq(5_00)
+      expect(purchase.fee_refunded_cents).to eq(50)
+      expect(purchase.tax_refunded_cents).to eq(30)
+      expect(purchase.gumroad_tax_refunded_cents).to eq(80)
     end
   end
 end

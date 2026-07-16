@@ -35,7 +35,7 @@ module Payment::Stats
 
     def refunded_sales_grouped_by_product
       user.sales
-          .joins(:refunds)
+          .joins(:effective_refunds)
           .joins("INNER JOIN balance_transactions on balance_transactions.refund_id = refunds.id")
           .where("balance_transactions.balance_id IN (?)", balances.map(&:id))
           .group("link_id")

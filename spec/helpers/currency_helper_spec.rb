@@ -132,6 +132,19 @@ describe CurrencyHelper do
         ).to eq("$19.99 / month")
       end
     end
+
+    context "when the subscription only ever charges once" do
+      let(:charge_occurrence_count) { 1 }
+
+      it "renders one-time wording instead of a recurring label" do
+        expect(
+          formatted_price_with_recurrence(formatted_price, recurrence, charge_occurrence_count, format: :long)
+        ).to eq("$19.99 once")
+        expect(
+          formatted_price_with_recurrence(formatted_price, recurrence, charge_occurrence_count, format: :short)
+        ).to eq("$19.99 once")
+      end
+    end
   end
 
   describe "#product_card_formatted_price" do
@@ -145,6 +158,17 @@ describe CurrencyHelper do
       expect(
         product_card_formatted_price(price:, currency_code:, is_pay_what_you_want:, recurrence:, duration_in_months:)
       ).to eq("$19.99")
+    end
+
+    context "when the membership's duration equals a single recurrence period" do
+      let(:recurrence) { BasePrice::Recurrence::YEARLY }
+      let(:duration_in_months) { 12 }
+
+      it "renders one-time wording instead of a recurring label" do
+        expect(
+          product_card_formatted_price(price:, currency_code:, is_pay_what_you_want:, recurrence:, duration_in_months:)
+        ).to eq("$19.99 once")
+      end
     end
 
     context "when is_pay_what_you_want is true" do

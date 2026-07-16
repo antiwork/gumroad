@@ -36,6 +36,46 @@ describe RefundUnpaidPurchasesWorker, :vcr do
       }
       expect(described_class.unpaid_balance_summary_for(user)).to eq(expected_summary)
     end
+
+    it "subtracts a failed refund that was not reversed and ignores one whose balance debits were reversed" do
+      create(:merchant_account, user: nil)
+      user = create(:tos_user)
+      product = create(:product, user:)
+      balance = create(:balance, user:)
+
+      # A refund can fail after Stripe accepted it (e.g. the buyer's bank returns an
+      # async bank-transfer refund). Until the balance debits it created are reversed,
+      # the seller is still out the money, so this purchase's refundable amount must
+      # stay reduced by the failed refund.
+      debited_purchase = create(:purchase,
+                                seller: user,
+                                link: product,
+                                purchase_success_balance: balance,
+                                price_cents: 10_00,
+                                total_transaction_cents: 10_00)
+      create(:refund, purchase: debited_purchase, amount_cents: 4_00, gumroad_tax_cents: 0, status: "failed")
+
+      # This refund also failed, but its balance debits were reversed, so no money
+      # ever left the seller's balance — the full purchase amount is refundable again.
+      reversed_purchase = create(:purchase,
+                                 seller: user,
+                                 link: product,
+                                 purchase_success_balance: balance,
+                                 price_cents: 10_00,
+                                 total_transaction_cents: 10_00)
+      reversed_refund = create(:refund, purchase: reversed_purchase, amount_cents: 4_00, gumroad_tax_cents: 0, status: "failed")
+      reversed_refund.balance_reversed_on_failure = true
+      reversed_refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+      reversed_refund.save!
+
+      # 6_00 (10_00 - 4_00 still-debited failed refund) + 10_00 (reversed refund does
+      # not reduce the refundable amount).
+      expect(described_class.unpaid_balance_summary_for(user)).to eq(
+        count: 2,
+        total_amount_cents: 16_00,
+        currency: "usd"
+      )
+    end
   end
 
   describe "#perform" do

@@ -21,6 +21,11 @@ class ChargeEvent
   # A charge has been refunded or refund has been further updated
   TYPE_CHARGE_REFUND_UPDATED = :charge_refund_updated
 
+  # A refund Stripe had accepted was later returned by the buyer's bank (possible for
+  # asynchronous bank-transfer refunds: iDEAL, Bancontact, ACH). The refunded money is
+  # back in our Stripe balance and the buyer did not receive it.
+  TYPE_REFUND_FAILED = :refund_failed
+
   attr_accessor :charge_processor_id, :charge_event_id, :charge_id, :charge_reference, :created_at, :type, :comment,
                 :flow_of_funds, :extras, :processor_payment_intent_id, :refund_id
 

@@ -144,8 +144,8 @@ module User::Stats
     price += affiliate_credits
     fee = paid_sales.sum(:fee_cents)
     fee += paid_sales.sum(:affiliate_credit_cents)
-    price -= paid_sales.joins(:refunds).sum("refunds.amount_cents")
-    fee -= paid_sales.joins(:refunds).sum("refunds.fee_cents")
+    price -= paid_sales.joins(:effective_refunds).sum("refunds.amount_cents")
+    fee -= paid_sales.joins(:effective_refunds).sum("refunds.fee_cents")
     fee -= paid_sales.joins(:affiliate_partial_refunds).sum("affiliate_partial_refunds.amount_cents")
     price - fee
   end
@@ -229,12 +229,12 @@ module User::Stats
 
   def refunds_cents_for_balances(balance_ids)
     sales.where(purchase_refund_balance_id: balance_ids)
-        .joins(:refunds).sum("refunds.amount_cents")
+        .joins(:effective_refunds).sum("refunds.amount_cents")
   end
 
   def chargebacks_cents_for_balances(balance_ids)
     chargebacked_sales = sales.where(purchase_chargeback_balance_id: balance_ids)
-    chargebacked_sales.sum("price_cents") - chargebacked_sales.joins(:refunds).sum("refunds.amount_cents")
+    chargebacked_sales.sum("price_cents") - chargebacked_sales.joins(:effective_refunds).sum("refunds.amount_cents")
   end
 
   def credits_cents_for_balances(balance_ids)
@@ -260,11 +260,11 @@ module User::Stats
 
   def returned_fees_due_to_refunds_and_chargebacks(balance_ids)
     refunded_sales = sales.is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee = refunded_sales.joins(:refunds).sum("refunds.fee_cents")
+    refunded_fee = refunded_sales.joins(:effective_refunds).sum("refunds.fee_cents")
     refunded_sales_fee_not_waived = sales.not_is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+    refunded_fee += refunded_sales_fee_not_waived.joins(:effective_refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
     disputed_sales = sales.where("purchase_chargeback_balance_id IN (?)", balance_ids)
-    disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:refunds).sum("refunds.fee_cents")
+    disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:effective_refunds).sum("refunds.fee_cents")
     refunded_fee + disputed_fee
   end
 
@@ -340,7 +340,9 @@ module User::Stats
   end
 
   def paypal_refunds_in_duration(start_date:, end_date:)
-    paypal_refunds = Refund.joins(:purchase).where(
+    # .effective keeps failed-but-not-reversed refunds (the seller is still debited)
+    # and drops reversed ones, matching the refunded sums everywhere else.
+    paypal_refunds = Refund.effective.joins(:purchase).where(
       seller_id: id,
       purchases: { charge_processor_id: PaypalChargeProcessor.charge_processor_id }
     )
@@ -492,7 +494,8 @@ module User::Stats
   end
 
   def stripe_connect_refunds_in_duration(start_date:, end_date:)
-    stripe_connect_refunds = Refund.joins(:purchase).where(
+    # Same .effective semantics as the refunded sums everywhere else.
+    stripe_connect_refunds = Refund.effective.joins(:purchase).where(
       seller_id: id,
       purchases: {
         charge_processor_id: StripeChargeProcessor.charge_processor_id,
@@ -726,11 +729,11 @@ module User::Stats
 
   def returned_discover_fees_due_to_refunds_and_chargebacks(balance_ids)
     refunded_sales = sales.was_discover_fee_charged.is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee = refunded_sales.joins(:refunds).sum("refunds.fee_cents")
+    refunded_fee = refunded_sales.joins(:effective_refunds).sum("refunds.fee_cents")
     refunded_sales_fee_not_waived = sales.was_discover_fee_charged.not_is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+    refunded_fee += refunded_sales_fee_not_waived.joins(:effective_refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
     disputed_sales = sales.was_discover_fee_charged.where("purchase_chargeback_balance_id IN (?)", balance_ids)
-    disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:refunds).sum("refunds.fee_cents")
+    disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:effective_refunds).sum("refunds.fee_cents")
     refunded_fee + disputed_fee
   end
 
@@ -741,11 +744,11 @@ module User::Stats
 
   def returned_direct_fees_due_to_refunds_and_chargebacks(balance_ids)
     refunded_sales = sales.not_was_discover_fee_charged.is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee = refunded_sales.joins(:refunds).sum("refunds.fee_cents")
+    refunded_fee = refunded_sales.joins(:effective_refunds).sum("refunds.fee_cents")
     refunded_sales_fee_not_waived = sales.not_was_discover_fee_charged.not_is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+    refunded_fee += refunded_sales_fee_not_waived.joins(:effective_refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
     disputed_sales = sales.not_was_discover_fee_charged.where("purchase_chargeback_balance_id IN (?)", balance_ids)
-    disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:refunds).sum("refunds.fee_cents")
+    disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:effective_refunds).sum("refunds.fee_cents")
     refunded_fee + disputed_fee
   end
 

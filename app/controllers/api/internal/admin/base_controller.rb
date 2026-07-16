@@ -419,7 +419,10 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     end
 
     def refund_amount_cents(purchase)
-      return purchase.refunds.sum(&:amount_cents) if purchase.association(:refunds).loaded?
+      # Match Purchase#amount_refunded_cents (which uses the Refund.effective scope)
+      # when the association is preloaded, so reversed failed refunds don't inflate
+      # the refunded amount only on preloaded code paths.
+      return purchase.refunds.select(&:effective?).sum(&:amount_cents) if purchase.association(:refunds).loaded?
 
       purchase.amount_refunded_cents
     end

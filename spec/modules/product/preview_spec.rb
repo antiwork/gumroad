@@ -132,5 +132,37 @@ describe Product::Preview do
         expect(product.preview_url).to eq(asset_preview.unsplash_url)
       end
     end
+
+    describe "#social_share_image" do
+      it "returns nil when the product has no previews" do
+        product = create(:product)
+        expect(product.social_share_image).to be(nil)
+      end
+
+      it "returns the cover URL when the cover is an image" do
+        product = create(:product, preview: @png_file)
+        expect(product.social_share_image).to eq(product.preview_url)
+      end
+
+      it "falls back to the escaped oembed thumbnail URL for embeddable covers" do
+        asset_preview = create(:asset_preview_youtube)
+        product = asset_preview.link
+        allow(asset_preview).to receive(:oembed_thumbnail_url).and_return("https://i.ytimg.com/vi/qKebcV1jv3A/hq default.jpg")
+        allow(product).to receive(:main_preview).and_return(asset_preview)
+        expect(product.social_share_image).to eq("https://i.ytimg.com/vi/qKebcV1jv3A/hq%20default.jpg")
+      end
+
+      it "falls back to the generated poster for an uploaded video cover" do
+        product = create(:product, preview: @mov_file)
+        allow_any_instance_of(AssetPreview).to receive(:video_poster_url).and_return("https://files.example.com/poster.jpg")
+        expect(product.social_share_image).to eq("https://files.example.com/poster.jpg")
+      end
+
+      it "returns nil for an uploaded video cover whose poster has not been generated yet" do
+        product = create(:product, preview: @mov_file)
+        allow_any_instance_of(AssetPreview).to receive(:video_poster_url).and_return(nil)
+        expect(product.social_share_image).to be(nil)
+      end
+    end
   end
 end

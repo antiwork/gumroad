@@ -66,6 +66,8 @@ export type Purchase = PurchaseStatesInfo & {
   email: string;
   purchase_state: string;
   formatted_total_transaction_amount: string;
+  formatted_presentment_total: string | null;
+  formatted_usd_transaction_total: string | null;
   charge_processor_id: string | null;
   stripe_transaction: { id: string; search_url: string | null } | null;
   external_id_numeric: number;
@@ -74,6 +76,8 @@ export type Purchase = PurchaseStatesInfo & {
     user: { external_id: string; name: string | null } | null;
     status: string;
     created_at: string;
+    formatted_presentment_amount: string | null;
+    formatted_usd_amount: string | null;
   }[];
   card: {
     type: string;
@@ -240,7 +244,15 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       ) : null}
 
       <dt>Transaction Total</dt>
-      <dd>{purchase.formatted_total_transaction_amount}</dd>
+      <dd>
+        {/* Purchases charged in the buyer's own currency show an explicitly-USD canonical
+            total paired with the buyer-currency amount, so support can match the number on
+            the buyer's card statement. formatted_total_transaction_amount is in the product's
+            display currency (not necessarily USD), so it can't be the USD side of the pair. */}
+        {purchase.formatted_usd_transaction_total && purchase.formatted_presentment_total
+          ? `${purchase.formatted_usd_transaction_total} (${purchase.formatted_presentment_total})`
+          : purchase.formatted_total_transaction_amount}
+      </dd>
 
       <dt>{purchase.charge_processor_id} transaction ID</dt>
       <dd>
@@ -293,6 +305,15 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
                     Refund Status:
                     {refund.status}
                   </li>
+                  {/* Refunds issued in the buyer's own currency carry a snapshot of that
+                      amount; show it beside the canonical USD amount. Older refunds have no
+                      snapshot and skip this line entirely. */}
+                  {refund.formatted_presentment_amount ? (
+                    <li>
+                      Amount:
+                      {refund.formatted_usd_amount} ({refund.formatted_presentment_amount})
+                    </li>
+                  ) : null}
                   <li>
                     Date of refund:
                     <DateTimeWithRelativeTooltip date={refund.created_at} />

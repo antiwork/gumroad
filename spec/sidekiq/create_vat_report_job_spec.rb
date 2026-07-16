@@ -248,4 +248,57 @@ describe CreateVatReportJob do
       temp_file.close(true)
     end
   end
+  describe "failed refund semantics" do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/vat-reporting-failed-refunds-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    before do
+      zip_tax_rate = create(:zip_tax_rate, country: "AT", state: nil, zip_code: nil, combined_rate: 0.20, flags: 0)
+
+      travel_to(Time.zone.local(2024, 1, 15)) do
+        # A refund can fail after Stripe accepted it (async bank-transfer refunds can
+        # be returned by the buyer's bank). Until its balance debits are reversed, the
+        # seller is still out the money, so the report must keep subtracting it.
+        debited_purchase = create(:purchase, zip_tax_rate:, price_cents: 100_00, gumroad_tax_cents: 20_00,
+                                             country: "Austria", ip_country: "Austria")
+        create(:refund, purchase: debited_purchase, amount_cents: 100_00, gumroad_tax_cents: 20_00, status: "failed")
+
+        # This refund also failed, but its balance debits were reversed — no money
+        # actually left, so the report must not subtract it from VAT totals.
+        reversed_purchase = create(:purchase, zip_tax_rate:, price_cents: 100_00, gumroad_tax_cents: 20_00,
+                                              country: "Austria", ip_country: "Austria")
+        reversed_refund = create(:refund, purchase: reversed_purchase, amount_cents: 100_00, gumroad_tax_cents: 20_00, status: "failed")
+        reversed_refund.balance_reversed_on_failure = true
+        reversed_refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+        reversed_refund.save!
+      end
+    end
+
+    it "subtracts a failed refund that was not reversed and ignores one whose balance debits were reversed" do
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+      allow_any_instance_of(described_class).to receive(:gbp_to_usd_rate_for_date).and_return(2.0)
+
+      described_class.new.perform(1, 2024)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      actual_payload = CSV.read(temp_file)
+
+      # Two purchases of 100.00 + 20.00 VAT each. Only the still-debited failed refund
+      # (100.00 + 20.00 VAT) is subtracted: supplies 200.00 - 100.00 = 100.00, VAT due
+      # 40.00 - 20.00 = 20.00. GBP columns are the USD amounts at the stubbed rate of 2.0.
+      # If the reversed refund were also subtracted, every column would read 0.00.
+      expect(actual_payload[1]).to eq(["Austria", "Standard", "20.0", "100.00", "100.00", "20.00", "50.00", "50.00", "10.00"])
+    ensure
+      temp_file.close(true)
+    end
+  end
 end

@@ -1005,8 +1005,19 @@ class LinksController < ApplicationController
       checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
       title = ERB::Util.h(product.name.to_s)
       canonical = ERB::Util.h(product.long_url.to_s)
-      og_image = product.thumbnail&.alive&.url
-      og_image_tag = og_image ? %(<meta property="og:image" content="#{ERB::Util.h(og_image)}">) : ""
+      # Thumbnail first (the wrapper's original image source, kept as the
+      # winner), then the standard product page's fallback chain — cover image,
+      # then the thumbnail of a video/oembed cover — via
+      # Link#social_share_image. Without the fallbacks, products with a
+      # cover but no thumbnail (the common case) lost their link-preview image
+      # the moment they went custom (gumroad-private#1122).
+      share_image = product.thumbnail&.alive&.url || product.social_share_image
+      share_image_tags = if share_image
+        escaped_share_image = ERB::Util.h(share_image)
+        %(<meta property="og:image" content="#{escaped_share_image}">\n    <meta property="twitter:card" content="summary_large_image">\n    <meta property="twitter:image" content="#{escaped_share_image}">)
+      else
+        ""
+      end
       <<~HTML
         <!doctype html>
         <html lang="en">
@@ -1018,7 +1029,7 @@ class LinksController < ApplicationController
             <meta property="og:title" content="#{title}">
             <meta property="og:type" content="product">
             <meta property="og:url" content="#{canonical}">
-            #{og_image_tag}
+            #{share_image_tags}
             <meta name="csrf-token" content="#{ERB::Util.h(form_authenticity_token)}">
             #{custom_html_analytics_head(product)}
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { useState, getErrors } from "$app/components/Checkout/payment";
+import { useState, getErrors, isProcessing } from "$app/components/Checkout/payment";
 import { Modal } from "$app/components/Modal";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -18,12 +18,17 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
   const [state, dispatch] = useState();
   const { gift } = state;
   const hasError = getErrors(state).has("gift");
+  // Toggling the gift option changes what gets charged (free trials are charged immediately
+  // when gifted), which invalidates the locked FX quote — so like the tip and address fields,
+  // these controls lock while a payment is in flight to keep the confirmed totals stable.
+  const processing = isProcessing(state);
 
   return (
     <div className={`flex flex-col gap-4 ${className}`}>
       <Label className="flex w-full grow items-center gap-4">
         <Switch
           checked={!!gift}
+          disabled={processing}
           onChange={(e) => {
             if (gift?.type === "anonymous") {
               e.preventDefault();
@@ -53,6 +58,7 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
                 id={giftEmailUID}
                 type="email"
                 value={gift.email}
+                disabled={processing}
                 onChange={(evt) => dispatch({ type: "set-value", gift: { ...gift, email: evt.target.value } })}
                 placeholder="Recipient email address"
                 aria-invalid={hasError}
@@ -72,6 +78,7 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
                     <Button onClick={() => setCancellingPresetGift(false)}>No, cancel</Button>
                     <Button
                       color="primary"
+                      disabled={processing}
                       onClick={() => {
                         dispatch({ type: "set-value", gift: null });
                         setCancellingPresetGift(false);
@@ -95,6 +102,7 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
             <Textarea
               id={giftNoteUID}
               value={gift.note}
+              disabled={processing}
               onChange={(evt) => dispatch({ type: "set-value", gift: { ...gift, note: evt.target.value } })}
               placeholder="A personalized message (optional)"
               className="w-full"

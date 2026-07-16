@@ -11,6 +11,14 @@ module Charge::Chargeable
         chargeable ||= Charge.where(stripe_payment_intent_id: event.processor_payment_intent_id).last if event.processor_payment_intent_id.present?
       else
         chargeable = Purchase.find_by_external_id(event.charge_reference) if event.charge_reference
+        # Refund events (refund.updated / refund.failed) carry no charge_reference — Stripe's
+        # Refund object has no metadata and we don't retrieve the underlying charge for them —
+        # so a refund on a combined charge lands in this branch instead of the CH- branch above.
+        # Check Charge before Purchase: every purchase in a combined charge stores the shared
+        # ch_ id in stripe_transaction_id (see Purchase#save_charge_data), so a purchase lookup
+        # would match one arbitrary purchase and the event would miss the canonical Charge.
+        # Same precedence as find_by_processor_transaction_id! below.
+        chargeable ||= Charge.where(processor_transaction_id: event.charge_id).last if event.charge_id
         chargeable ||= Purchase.where(stripe_transaction_id: event.charge_id).last if event.charge_id
         chargeable ||= ProcessorPaymentIntent.where(intent_id: event.processor_payment_intent_id).last&.purchase if event.processor_payment_intent_id.present?
       end

@@ -276,5 +276,41 @@ describe Payment::Stats, :vcr do
         expect(revenue_by_link[@product_3.id]).to eq(1255) # $30 (purchase price) - $12 (refunded amount) - $2.14 (fees) - $2.7 (affiliate commission on remaining $18)
       end
     end
+
+    describe "terminally failed refunds" do
+      it "stops deducting a failed refund from the product's revenue once its balance debits are reversed" do
+        purchase = create(:purchase, link: @product_1)
+        refund = create(:refund, purchase:, amount_cents: 10_00, fee_cents: 1_00)
+
+        payment = create(:payment, user: @user)
+        balance = create(:balance, user: @user)
+        payment.balances << balance
+
+        # revenue_by_link finds refunds for this payout through the seller-debit
+        # balance transaction each refund records, so wire one up to this payment's
+        # balance the same way refund_purchase! would.
+        debit_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -10_00, net_cents: -9_00)
+        debit = BalanceTransaction.create!(
+          user: @user,
+          merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+          refund:,
+          issued_amount: debit_amount,
+          holding_amount: debit_amount,
+          update_user_balance: false
+        )
+        debit.update!(balance:)
+
+        # Failed but not reversed: the refund money is still gone from the seller's
+        # balance, so the payout math must keep deducting it.
+        refund.update!(status: "failed")
+        expect(payment.revenue_by_link[@product_1.id]).to eq(-(10_00 - 1_00))
+
+        # Reversed: the seller got the debit back, so the refund no longer reduces
+        # the product's revenue for this payout.
+        refund.balance_reversed_on_failure = true
+        refund.save!
+        expect(payment.revenue_by_link[@product_1.id]).to eq 0
+      end
+    end
   end
 end

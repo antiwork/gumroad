@@ -66,6 +66,14 @@ class Admin::PurchasePresenter
                        formatted_shipping_amount: purchase.shipping_cents > 0 ? purchase.formatted_shipping_amount : nil,
                        formatted_affiliate_credit_amount: purchase.affiliate.present? ? purchase.formatted_affiliate_credit_amount : nil,
                        formatted_total_transaction_amount: purchase.formatted_total_transaction_amount,
+                       # Buyer-currency (presentment) total for purchases charged in the buyer's
+                       # own currency. Shown next to an explicitly-USD canonical total so support
+                       # can match what the buyer actually saw on their card statement. Both nil
+                       # for regular (USD-only) purchases — formatted_total_transaction_amount is
+                       # in the product's DISPLAY currency (not necessarily USD), so it can't be
+                       # the "USD" side of that pairing.
+                       formatted_presentment_total: purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_total : nil,
+                       formatted_usd_transaction_total: purchase.buyer_presentment? ? MoneyFormatter.format(purchase.total_transaction_cents, :usd, no_cents_if_whole: true, symbol: true) : nil,
                        charge_processor_id: purchase.charge_processor_id&.capitalize,
                        stripe_transaction: purchase.stripe_transaction_id ? {
                          id: purchase.stripe_transaction_id,
@@ -78,6 +86,12 @@ class Admin::PurchasePresenter
                            user: refund.user ? { external_id: refund.user.external_id, name: refund.user.display_name } : nil,
                            status: refund.status.capitalize,
                            created_at: refund.created_at,
+                           # Buyer-currency amount from the refund's presentment snapshot, with the
+                           # canonical USD amount alongside for reconciliation. Both are nil for
+                           # refunds without a snapshot (old refunds and USD-only purchases), and
+                           # the admin page renders those rows exactly as before.
+                           formatted_presentment_amount: refund.formatted_presentment_amount,
+                           formatted_usd_amount: refund.presentment_snapshot? ? MoneyFormatter.format(refund.total_transaction_cents, :usd, no_cents_if_whole: true, symbol: true) : nil,
                          }
                        end,
                        card: purchase.card_type.present? && purchase.card_visual.present? ? {
