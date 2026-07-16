@@ -24,7 +24,7 @@ class AddEditProfileScopeToGumroadCliOauthApplication < ActiveRecord::Migration[
     scopes = app.scopes.to_s.split
     return if scopes.include?(SCOPE)
 
-    app.update!(scopes: scopes.push(SCOPE).join(" "), updated_at: Time.current)
+    app.update!(scopes: scopes.push(SCOPE).join(" "))
   end
 
   def down
