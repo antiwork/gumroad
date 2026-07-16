@@ -584,8 +584,11 @@ class Purchase < ApplicationRecord
             30 => :is_commission_completion_purchase,
             31 => :is_installment_payment,
             # Temporary, per-purchase lock set by Trust & Safety during fraud review;
-            # blocks Purchase::ReassignByEmailService from moving the purchase between
-            # accounts. Not a buyer-level block (see is_buyer_blocked_by_admin).
+            # blocks every flow that moves the purchase between accounts:
+            # Purchase::ReassignByEmailService, the download-page claim flows
+            # (UrlRedirectsController#change_purchaser,
+            # UsersController#add_purchase_to_library), and #attach_to_user_and_card.
+            # Not a buyer-level block (see is_buyer_blocked_by_admin).
             32 => :is_reassignment_locked,
             :column => "flags",
             :flag_query_mode => :bit_operator,
@@ -2711,6 +2714,15 @@ class Purchase < ApplicationRecord
   end
 
   def attach_to_user_and_card(user, chargeable, card_data_handling_mode)
+    # A reassignment-locked purchase is frozen while its ownership is under
+    # review, so refuse to move it into another account no matter which flow
+    # (signup, claiming from a receipt, admin receipt resend) asked for the
+    # attach. The lock has to be lifted before the purchase can move again.
+    if is_reassignment_locked?
+      logger.info("Attaching user to purchase #{id}: skipped because the purchase is reassignment-locked")
+      return false
+    end
+
     self.purchaser = user
 
     if chargeable.present? && successful? && chargeable.fingerprint == stripe_fingerprint
