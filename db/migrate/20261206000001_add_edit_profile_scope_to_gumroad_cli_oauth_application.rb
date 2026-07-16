@@ -27,6 +27,12 @@ class AddEditProfileScopeToGumroadCliOauthApplication < ActiveRecord::Migration[
     app.update!(scopes: scopes.push(SCOPE).join(" "))
   end
 
+  # Rolling back removes edit_profile unconditionally, even if the scope was
+  # already present before this migration ran (in which case `up` was a no-op).
+  # That's deliberate: `down` restores the declared pre-migration state ("CLI
+  # app does not carry edit_profile") rather than tracking whether `up` made a
+  # change. The production app verifiably lacks the scope today, so in practice
+  # the two are equivalent.
   def down
     app = oauth_applications.find_by(uid: CLI_CLIENT_ID)
     return if app.nil?

@@ -49,4 +49,13 @@ describe AddEditProfileScopeToGumroadCliOauthApplication do
 
     expect(application.reload.scopes.to_s).to eq("view_profile account")
   end
+
+  it "removes the scope on rollback even when up was a no-op because the scope pre-existed" do
+    application = create_cli_application(scopes: "view_profile edit_profile account")
+
+    migration.up
+    migration.down
+
+    expect(application.reload.scopes.to_s).to eq("view_profile account")
+  end
 end
