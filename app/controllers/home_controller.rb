@@ -55,6 +55,16 @@ class HomeController < ApplicationController
     set_meta_tag(property: "og:url", content: privacy_url)
   end
 
+  def dpa
+    set_meta_tag(title: "Gumroad data processing addendum")
+    set_meta_tag(name: "description", content: "Gumroad's Data Processing Addendum for sellers, covering GDPR Article 28 processor terms, subprocessors, and international transfers.")
+    set_meta_tag(tag_name: "link", rel: "canonical", href: dpa_url, head_key: "canonical")
+    set_meta_tag(property: "og:title", content: "Gumroad data processing addendum")
+    set_meta_tag(property: "og:description", content: "Gumroad's Data Processing Addendum for sellers, covering GDPR Article 28 processor terms, subprocessors, and international transfers.")
+    set_meta_tag(property: "og:type", content: "website")
+    set_meta_tag(property: "og:url", content: dpa_url)
+  end
+
   def prohibited
     set_meta_tag(title: "Prohibited products on Gumroad")
     set_meta_tag(name: "description", content: "Understand what products and activities are not allowed on Gumroad to comply with our policies.")

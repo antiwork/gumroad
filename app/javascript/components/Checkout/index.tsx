@@ -7,7 +7,12 @@ import { isOpenTuple } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
-import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } from "$app/utils/recurringPricing";
+import {
+  formatAmountPerRecurrence,
+  isSingleChargeDuration,
+  recurrenceNames,
+  recurrenceDurationLabels,
+} from "$app/utils/recurringPricing";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import {
@@ -721,6 +726,10 @@ const CartItemComponent = ({
         ) : item.recurrence ? (
           isGift ? (
             <span className="text-sm">{recurrenceDurationLabels[item.recurrence]}</span>
+          ) : isSingleChargeDuration(item.recurrence, item.product.duration_in_months) ? (
+            // A fixed-length membership whose duration is one recurrence period
+            // charges exactly once, so "Yearly" would wrongly suggest renewals.
+            <span className="text-sm">One-time payment</span>
           ) : (
             <span className="text-sm">{recurrenceNames[item.recurrence]}</span>
           )

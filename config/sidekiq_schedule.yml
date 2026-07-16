@@ -2,6 +2,10 @@
 find_expired_subscriptions_to_set_as_deactivated_worker:
   cron: "* * * * *" # Every minute
   class: FindExpiredSubscriptionsToSetAsDeactivatedWorker
+dispatch_pending_failed_refund_exceptions:
+  cron: "* * * * *" # Every minute
+  class: DispatchPendingFailedRefundExceptionsJob
+  description: Re-enqueues notifications for durable failed-refund exception records
 
 # Hourly
 cache_unreviewed_users_data:

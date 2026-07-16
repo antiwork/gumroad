@@ -11,6 +11,14 @@ class StripeChargeProcessor
 
   PAYMENT_INTENT_LIFECYCLE_EVENTS = %w(payment_intent.processing payment_intent.succeeded).freeze
 
+  # The two events consumed from Stripe's refund.* family (the replacement for the
+  # deprecated charge.refund.updated). Matched exactly rather than by "refund." prefix:
+  # refund.created fires the moment a refund is requested — while the app's own refund
+  # transaction may still be uncommitted — and letting it through would race that
+  # transaction via the processor-initiated-refund fallback in
+  # Charge::Refundable#handle_event_refund_updated!.
+  HANDLED_REFUND_EVENTS = %w(refund.updated refund.failed).freeze
+
   # https://stripe.com/docs/api/refunds/create#create_refund-reason
   REFUND_REASON_FRAUDULENT = "fraudulent"
 
@@ -479,6 +487,12 @@ class StripeChargeProcessor
   rescue Stripe::InvalidRequestError => e
     raise ChargeProcessorAlreadyRefundedError.new("Stripe charge was already refunded. Stripe response: #{e.message}", original_error: e) unless e.message[/already been refunded/].nil?
 
+    # Refunds of bank-transfer payment methods (iDEAL, Bancontact, ACH) are rejected
+    # immediately when the Stripe balance can't cover them — unlike card refunds, which
+    # Stripe queues until the balance recovers. Surface that as its own error so the
+    # person refunding sees an actionable message instead of a silent failure.
+    raise ChargeProcessorInsufficientFundsError.new("Stripe balance has insufficient funds to refund this charge. Stripe response: #{e.message}", original_error: e) if e.code == "balance_insufficient" || e.message[/insufficient.*(funds|balance)/i]
+
     raise ChargeProcessorInvalidRequestError.new(original_error: e)
   rescue Stripe::APIConnectionError, Stripe::APIError => e
     raise ChargeProcessorUnavailableError.new("Stripe error while refunding a charge: #{e.message}", original_error: e)
@@ -735,7 +749,7 @@ class StripeChargeProcessor
   end
 
   def self.handle_stripe_event(stripe_event)
-    if stripe_event["type"].start_with?("charge.", "payment_intent.payment_failed", "payment_intent.processing", "payment_intent.succeeded")
+    if stripe_event["type"].start_with?("charge.", "payment_intent.payment_failed", "payment_intent.processing", "payment_intent.succeeded") || HANDLED_REFUND_EVENTS.include?(stripe_event["type"])
       handle_stripe_charge_event(stripe_event)
     elsif stripe_event["type"].start_with?("capital.")
       handle_stripe_capital_loan_event(stripe_event)
@@ -856,7 +870,12 @@ class StripeChargeProcessor
           event.type = ChargeEvent::TYPE_INFORMATIONAL
         end
       end
-    elsif stripe_event["type"] == "charge.refund.updated"
+    elsif stripe_event["type"] == "charge.refund.updated" || HANDLED_REFUND_EVENTS.include?(stripe_event["type"])
+      # Stripe deprecated charge.refund.updated in favor of the refund.* family. Both event
+      # shapes carry a Refund object as data.object, so one builder covers old and new
+      # subscriptions. The webhook endpoint should subscribe to refund.updated +
+      # refund.failed only (see HANDLED_REFUND_EVENTS for why refund.created must stay out);
+      # charge.refund.updated is kept for endpoints that still deliver it.
       event = ChargeEvent.new
       event.charge_processor_id = charge_processor_id
       event.charge_event_id = stripe_event["id"]
@@ -869,8 +888,33 @@ class StripeChargeProcessor
         refund_status: stripe_event["data"]["object"]["status"],
         refunded_amount_cents: stripe_event["data"]["object"]["amount"],
         refund_reason: stripe_event["data"]["object"]["reason"],
+        refund_failure_reason: stripe_event["data"]["object"]["failure_reason"],
+        # Present only on events delivered via the Connect webhook endpoint: the connected
+        # account the refund belongs to ("user_id" is the same field on older API versions).
+        # Connected accounts send refund events for all of the seller's Stripe activity,
+        # including non-Gumroad sales, so the event handler uses this to silently ignore —
+        # rather than alert on — refunds that match no Gumroad charge. Gumroad's own platform
+        # account id must not be stored here: StripeEventHandler routes events whose account
+        # IS the platform through the Gumroad path, where every refund belongs to a Gumroad
+        # charge and a miss must alert. Storing the platform id would make the handler treat
+        # such a miss as seller-owned activity and suppress the alert.
+        stripe_connect_account_id: connected_account_id_for_refund_event(stripe_event),
       }
-      event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+      # A refund that fails after Stripe accepted it (asynchronous bank-transfer refunds —
+      # iDEAL, Bancontact, ACH — can be returned by the buyer's bank days later) needs its
+      # own handling: the money came back to our Stripe balance and the buyer was NOT made
+      # whole, so the canonical refund/balance records must be unwound. The same applies
+      # to a "canceled" refund — Stripe documents canceling a pending refund as a terminal
+      # outcome that returns the money to the platform balance, and it arrives only as a
+      # refund.updated carrying that status (there is no refund.canceled event type).
+      # refund.updated can also carry the failed status (e.g. when the failure and a
+      # metadata update coalesce), so route on the status, not only on the event name.
+      event.type = if stripe_event["type"] == "refund.failed" ||
+                      Refund::TERMINAL_FAILURE_STATUSES.include?(stripe_event["data"]["object"]["status"])
+        ChargeEvent::TYPE_REFUND_FAILED
+      else
+        ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+      end
     elsif stripe_event["type"].start_with?("charge.")
       raise "Stripe Event #{stripe_event['id']} does not contain a 'charge' object." if stripe_event["data"]["object"]["object"] != "charge"
 
@@ -965,6 +1009,20 @@ class StripeChargeProcessor
     decline_code = last_payment_error["decline_code"]
     error_code += "_#{decline_code}" if decline_code.present? && decline_code != error_code
     error_code
+  end
+
+  # Returns the connected Stripe account id a refund event was delivered for, or nil when the
+  # event actually belongs to Gumroad's own platform account. StripeEventHandler treats an
+  # account id equal to STRIPE_PLATFORM_ACCOUNT_ID the same as no account id at all (both are
+  # routed through the Gumroad path), so the refund event's extras must mirror that: only a
+  # genuinely connected account id means "this refund could be the seller's own non-Gumroad
+  # Stripe activity". Storing the platform id here would make the missing-chargeable alert in
+  # Purchase::ChargeEventsHandler wrongly suppress platform refund failures.
+  def self.connected_account_id_for_refund_event(stripe_event)
+    account_id = stripe_event["user_id"].presence || stripe_event["account"].presence
+    return if account_id.blank? || account_id == STRIPE_PLATFORM_ACCOUNT_ID
+
+    account_id
   end
 
   def self.handle_stripe_event_charge_dispute_for_charge_with_destination_funds_widthdrawn(stripe_dispute, stripe_charge, event)

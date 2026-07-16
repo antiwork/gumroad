@@ -1494,6 +1494,34 @@ describe StripeChargeProcessor, :vcr do
         end
       end
 
+      describe "insufficient Stripe balance" do
+        # Bank-transfer refunds (iDEAL, Bancontact, ACH) are rejected immediately by
+        # Stripe when the platform balance can't cover them, unlike card refunds which
+        # queue until the balance recovers. Fully stubbed: no live charge needed to
+        # exercise the error-mapping path.
+        let(:stubbed_charge_id) { "ch_balance_insufficient_test" }
+
+        before do
+          allow(Stripe::Charge).to receive(:retrieve).with(stubbed_charge_id).and_return(
+            Stripe::Charge.construct_from(id: stubbed_charge_id, destination: nil)
+          )
+        end
+
+        it "raises an insufficient funds error when Stripe rejects for balance_insufficient" do
+          expect(Stripe::Refund).to receive(:create).and_raise(
+            Stripe::InvalidRequestError.new("You have insufficient funds in your Stripe account.", "amount", code: "balance_insufficient")
+          )
+          expect { subject.refund!(stubbed_charge_id) }.to raise_error(ChargeProcessorInsufficientFundsError)
+        end
+
+        it "raises an insufficient funds error when only the message indicates the balance shortfall" do
+          expect(Stripe::Refund).to receive(:create).and_raise(
+            Stripe::InvalidRequestError.new("Insufficient funds in Stripe balance to process refund.", "amount")
+          )
+          expect { subject.refund!(stubbed_charge_id) }.to raise_error(ChargeProcessorInsufficientFundsError)
+        end
+      end
+
       describe "error accessing stripe due to connection error" do
         before do
           expect(Stripe::Refund).to receive(:create).and_raise(Stripe::APIConnectionError)
@@ -2100,7 +2128,9 @@ describe StripeChargeProcessor, :vcr do
           charge = create(:charge, amount_cents: 1700, processor_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
           charge.purchases << purchase
           charge.purchases << purchase_2
-          expect_any_instance_of(Purchase).to receive(:handle_event_refund_updated!).and_call_original
+          # Refund events on a combined charge resolve to the canonical Charge, not an
+          # arbitrary member purchase (see Charge::Chargeable.find_by_stripe_event).
+          expect_any_instance_of(Charge).to receive(:handle_event_refund_updated!).and_call_original
 
           expect do
             StripeChargeProcessor.handle_stripe_event(stripe_event)
@@ -2163,6 +2193,182 @@ describe StripeChargeProcessor, :vcr do
 
           expect(purchase.reload.refunds.count).to eq 0
           expect(purchase.stripe_refunded?).to be false
+        end
+      end
+
+      describe "refund failure events" do
+        let(:refund_event) do
+          {
+            "id" => "evt_2Q7bRK9e1RjUNIyY1R1OIZDn",
+            "object" => "event",
+            "api_version" => "2023-10-16",
+            "created" => 1728386835,
+            "data" => {
+              "object" => {
+                "id" => "re_2Q7bRK9e1RjUNIyY1icyswlr",
+                "object" => "refund",
+                "amount" => 1700,
+                "balance_transaction" => "txn_2Q7bRK9e1RjUNIyY1hpvIOPN",
+                "charge" => "ch_2Q7bRK9e1RjUNIyY1SMUhNqu",
+                "created" => 1728386832,
+                "currency" => "usd",
+                "failure_reason" => "declined",
+                "metadata" => {},
+                "payment_intent" => "pi_2Q7bRK9e1RjUNIyY1J2BBTCh",
+                "reason" => "requested_by_customer",
+                "status" => "failed"
+              }
+            },
+            "livemode" => false,
+            "pending_webhooks" => 2,
+            "request" => {
+              "id" => nil,
+              "idempotency_key" => nil
+            },
+            "type" => "refund.failed"
+          }
+        end
+
+        let!(:purchase) do
+          create(:purchase,
+                 price_cents: 1700,
+                 total_transaction_cents: 1700,
+                 stripe_transaction_id: "ch_2Q7bRK9e1RjUNIyY1SMUhNqu")
+        end
+
+        let!(:refund) do
+          create(:refund,
+                 purchase:,
+                 amount_cents: 1700,
+                 total_transaction_cents: 1700,
+                 processor_refund_id: "re_2Q7bRK9e1RjUNIyY1icyswlr",
+                 status: "pending")
+        end
+
+        it "marks the refund failed for a refund.failed event" do
+          expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_failed!).and_call_original
+
+          expect do
+            StripeChargeProcessor.handle_stripe_event(refund_event)
+          end.to not_have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded_for_fraud)
+             .and not_have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded)
+
+          expect(refund.reload.status).to eq("failed")
+          expect(purchase.reload.refunds.count).to eq 1
+        end
+
+        it "marks the refund failed when refund.updated carries a failed status" do
+          refund_event["type"] = "refund.updated"
+
+          expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_failed!).and_call_original
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(refund.reload.status).to eq("failed")
+        end
+
+        it "routes refund.updated with a canceled status through the failure handler" do
+          # Regression: canceled is a terminal Stripe refund status (canceling a
+          # pending refund returns the money to the platform balance) and arrives
+          # only as refund.updated — there is no refund.canceled event. Taking the
+          # ordinary update path would leave the seller debited and the refund
+          # counting as effective money the buyer never received.
+          refund_event["type"] = "refund.updated"
+          refund_event["data"]["object"]["status"] = "canceled"
+
+          expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_failed!).and_call_original
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(refund.reload.status).to eq("canceled")
+          expect(refund.effective?).to eq(false)
+        end
+
+        it "marks the refund failed when charge.refund.updated carries a failed status" do
+          refund_event["type"] = "charge.refund.updated"
+
+          expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
+          expect_any_instance_of(Purchase).to receive(:handle_event_refund_failed!).and_call_original
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(refund.reload.status).to eq("failed")
+        end
+
+        it "marks the refund failed when the event arrives via the connect endpoint for a Gumroad charge" do
+          refund_event["account"] = "acct_1MExampleConnect"
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(refund.reload.status).to eq("failed")
+        end
+
+        it "stores the connected account id on the event's extras for connect-endpoint refunds" do
+          refund_event["account"] = "acct_1MExampleConnect"
+
+          expect(ChargeProcessor).to receive(:handle_event) do |event|
+            expect(event.extras[:stripe_connect_account_id]).to eq("acct_1MExampleConnect")
+          end
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+        end
+
+        it "does not store the platform account id on the event's extras" do
+          # Some platform-endpoint refund events carry Gumroad's own account id in the
+          # "account" field. It must not be stored as a connected account id, because the
+          # missing-chargeable alert in Purchase::ChargeEventsHandler treats a stored account
+          # id as "the seller's own Connect refund" and stays quiet — which would silently
+          # drop a failed platform refund that matched no chargeable.
+          refund_event["account"] = STRIPE_PLATFORM_ACCOUNT_ID
+
+          expect(ChargeProcessor).to receive(:handle_event) do |event|
+            expect(event.extras[:stripe_connect_account_id]).to be_nil
+          end
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+        end
+
+        it "ignores refund.created so it cannot race the app's own refund transaction" do
+          refund_event["type"] = "refund.created"
+          refund_event["data"]["object"]["status"] = "succeeded"
+          # Simulate the race this guard exists for: the webhook arrives before the app's
+          # own refund transaction has committed its Refund row.
+          refund.destroy!
+
+          expect(ChargeProcessor).not_to receive(:handle_event)
+
+          StripeChargeProcessor.handle_stripe_event(refund_event)
+
+          expect(purchase.reload.stripe_refunded?).to be false
+          expect(purchase.refunds.count).to eq 0
+        end
+
+        context "when the refund matches no Gumroad charge" do
+          before do
+            refund_event["data"]["object"]["id"] = "re_unmatched0000000000000"
+            refund_event["data"]["object"]["charge"] = "ch_unmatched0000000000000"
+            refund_event["data"]["object"]["payment_intent"] = "pi_unmatched0000000000000"
+          end
+
+          it "notifies when the failure arrives on the platform endpoint" do
+            expect(ErrorNotifier).to receive(:notify).with(/Could not find a Chargeable/)
+
+            StripeChargeProcessor.handle_stripe_event(refund_event)
+
+            expect(refund.reload.status).to eq("pending")
+          end
+
+          it "stays quiet when the failure is a connected account's own refund" do
+            refund_event["account"] = "acct_1MExampleConnect"
+            expect(ErrorNotifier).not_to receive(:notify)
+
+            StripeChargeProcessor.handle_stripe_event(refund_event)
+
+            expect(refund.reload.status).to eq("pending")
+          end
         end
       end
 

@@ -199,6 +199,50 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
     end
 
+    describe "failed refund handling" do
+      before do
+        travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do
+          product = create(:product, price_cents: 100_00, native_type: "digital")
+
+          # A refund can fail after Stripe accepted it (async bank-transfer refunds
+          # can be returned by the buyer's bank). Until its balance debits are
+          # reversed, the seller is still out the money, so the report must keep
+          # treating the purchase as partially refunded.
+          debited_purchase = create_taxed_purchase(product, country: "Germany", gumroad_tax_cents: 1900)
+          debited_purchase.update!(stripe_partially_refunded: true)
+          create(:refund, purchase: debited_purchase, amount_cents: 30_00, total_transaction_cents: 30_00,
+                          gumroad_tax_cents: 0, status: "failed")
+
+          # This refund also failed, but its balance debits were reversed — no money
+          # actually left, so the purchase's full amount still counts as GMV.
+          reversed_purchase = create_taxed_purchase(product, country: "Australia", gumroad_tax_cents: 1000)
+          reversed_purchase.update!(stripe_partially_refunded: true)
+          reversed_refund = create(:refund, purchase: reversed_purchase, amount_cents: 30_00, total_transaction_cents: 30_00,
+                                            gumroad_tax_cents: 0, status: "failed")
+          reversed_refund.balance_reversed_on_failure = true
+          reversed_refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+          reversed_refund.save!
+        end
+      end
+
+      it "subtracts a failed refund that was not reversed and ignores one whose balance debits were reversed" do
+        described_class.new.perform(month, year)
+
+        actual_payload = read_csv_from_s3
+
+        # Germany: 119.00 gross minus the still-debited 30.00 failed refund.
+        de_row = actual_payload.find { |row| row[0] == "Germany" }
+        expect(de_row).to be_present
+        expect(de_row[2]).to eq("89.00")
+
+        # Australia: the reversed failed refund never took money out, so the full
+        # 110.00 gross remains. Subtracting it would report 80.00.
+        au_row = actual_payload.find { |row| row[0] == "Australia" }
+        expect(au_row).to be_present
+        expect(au_row[2]).to eq("110.00")
+      end
+    end
+
     describe "excluded purchases" do
       before do
         travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do

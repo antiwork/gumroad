@@ -61,6 +61,28 @@ describe ReceiptPresenter::FooterInfo, :vcr do
     it "returns expected text" do
       expect(presenter.manage_subscription_note).to eq("You'll be charged once a month.")
     end
+
+    context "when the membership only ever charges once" do
+      before do
+        purchase.subscription.update!(charge_occurrence_count: 1)
+      end
+
+      it "returns one-time wording instead of a recurring charge promise" do
+        expect(presenter.manage_subscription_note).to eq("You won't be charged again for this membership.")
+      end
+    end
+
+    context "when a free trial membership only ever charges once" do
+      let(:purchase) { create(:free_trial_membership_purchase, email: "customer@example.com") }
+
+      before do
+        purchase.subscription.update!(charge_occurrence_count: 1)
+      end
+
+      it "keeps the recurring wording because the single charge hasn't happened yet" do
+        expect(presenter.manage_subscription_note).to eq("You'll be charged once a month.")
+      end
+    end
   end
 
   describe "#manage_subscription_link" do

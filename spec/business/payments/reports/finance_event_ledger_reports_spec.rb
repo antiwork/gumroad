@@ -141,6 +141,51 @@ describe FinanceEventLedgerReports do
       end
     end
 
+    it "books the reversal of a failed refund as its own compensating event, leaving the refund's day untouched" do
+      travel_to(Time.utc(2026, 7, 15, 12)) do
+        purchase = create(:purchase, created_at: Time.utc(2026, 7, 1, 10), succeeded_at: Time.utc(2026, 7, 1, 10))
+        refund = create(:refund, purchase:, created_at: Time.utc(2026, 7, 3, 9), fee_cents: purchase.fee_cents)
+        refund_day = described_class.daily_report(Date.new(2026, 7, 3))
+        expect(line(refund_day, "Stripe", "refunds_issued")["count"]).to eq(1)
+        expect(line(refund_day, "Stripe", "refund_reversals")["count"]).to eq(0)
+
+        # The refund fails at the buyer's bank a week later and the service reverses
+        # its balance debits, stamping the reversal time.
+        refund.update!(status: "failed")
+        refund.balance_reversed_on_failure = true
+        refund.balance_reversed_on_failure_at = Time.utc(2026, 7, 10, 14).iso8601
+        refund.save!
+
+        # The refund's own day replays bit-identical — its issued event is immutable.
+        expect(described_class.daily_report(Date.new(2026, 7, 3))).to eq(refund_day)
+
+        # The reversal is a new dated event on the day the money came back.
+        reversal_line = line(described_class.daily_report(Date.new(2026, 7, 10)), "Stripe", "refund_reversals")
+        expect(reversal_line["count"]).to eq(1)
+        expect(reversal_line["total_transaction_cents"]).to eq(purchase.total_transaction_cents)
+        expect(reversal_line["fee_cents"]).to eq(purchase.fee_cents)
+        # The purchase succeeded in the reversal's own month, so this compensates
+        # revenue for the month in progress rather than a closed period.
+        expect(reversal_line["deferred"]["count"]).to eq(0)
+        expect(reversal_line["current_month"]["count"]).to eq(1)
+
+        # Neighboring days carry no reversal.
+        expect(line(described_class.daily_report(Date.new(2026, 7, 9)), "Stripe", "refund_reversals")["count"]).to eq(0)
+        expect(line(described_class.daily_report(Date.new(2026, 7, 11)), "Stripe", "refund_reversals")["count"]).to eq(0)
+      end
+    end
+
+    it "does not book a reversal event for a failed refund that was never reversed" do
+      travel_to(Time.utc(2026, 7, 15, 12)) do
+        purchase = create(:purchase, created_at: Time.utc(2026, 7, 1, 10), succeeded_at: Time.utc(2026, 7, 1, 10))
+        create(:refund, purchase:, created_at: Time.utc(2026, 7, 3, 9), status: "failed")
+
+        (Date.new(2026, 7, 2)..Date.new(2026, 7, 14)).each do |day|
+          expect(line(described_class.daily_report(day), "Stripe", "refund_reversals")["count"]).to eq(0)
+        end
+      end
+    end
+
     it "splits PayPal wallet money from everything else, matching the monthly report's buckets" do
       travel_to(Time.utc(2026, 7, 15, 12)) do
         succeeded_at = Time.utc(2026, 7, 4, 10)

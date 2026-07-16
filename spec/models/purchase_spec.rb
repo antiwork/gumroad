@@ -7109,6 +7109,22 @@ describe Purchase, :vcr do
         expect(purchase.formatted_total_display_price_per_unit).to eq("$5")
       end
     end
+
+    context "membership purchase" do
+      let(:purchase) { create(:membership_purchase, price_cents: 300) }
+
+      it "returns the price with the recurring label" do
+        expect(purchase.formatted_total_display_price_per_unit).to eq("$3 a month")
+      end
+
+      context "when the membership only ever charges once" do
+        before { purchase.subscription.update!(charge_occurrence_count: 1) }
+
+        it "renders one-time wording instead of a recurring label" do
+          expect(purchase.formatted_total_display_price_per_unit).to eq("$3 once")
+        end
+      end
+    end
   end
 
   describe "#call" do

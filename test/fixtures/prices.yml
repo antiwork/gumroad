@@ -1,0 +1,18 @@
+# Prices for the fixtures suite.
+#
+# Once a product is persisted, `Link#price_cents` (see Product::Prices) reads
+# from the associated Price rows, not the `links.price_cents` column. So every
+# product fixture that tests read a price off needs a matching Price row here,
+# or `product.price_cents` returns nil and any `save!` fails the
+# `default_price_cents` presence validation.
+#
+# A plain buy price is `recurrence: nil` with `flags: 0` (not a rental); that's
+# what `default_price` selects for a non-recurring product.
+
+product_price:
+  link: product
+  price_cents: 100
+  currency: usd
+  flags: 0
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>

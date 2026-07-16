@@ -7,6 +7,10 @@ class Purchase
                                           "No additional refund is needed."
     # TODO(#5419): Remove this temporary error once buyer-presentment refunds are supported.
     BUYER_PRESENTMENT_REFUND_ERROR_MESSAGE = "Refunds are temporarily unavailable for buyer-local-currency purchases."
+    INSUFFICIENT_FUNDS_GUMROAD_BALANCE_ERROR_MESSAGE = "The refund cannot be processed right now due to a temporary balance issue. Try again later or contact support."
+    INSUFFICIENT_FUNDS_STRIPE_BALANCE_ERROR_MESSAGE = "The Stripe account holding the funds does not have sufficient funds to process this refund. Try again later or contact support."
+    INSUFFICIENT_FUNDS_CREATOR_STRIPE_BALANCE_ERROR_MESSAGE = "Your connected Stripe account does not have sufficient funds to process this refund."
+    INSUFFICIENT_FUNDS_PAYPAL_BALANCE_ERROR_MESSAGE = "Your PayPal account does not have sufficient funds to make this refund."
 
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
     # * reason - free-text explanation of why the sale is being refunded. It is stored on
@@ -165,8 +169,8 @@ class Purchase
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
         false
       rescue ChargeProcessorInsufficientFundsError => e
-        logger.error "Creator's PayPal account does not have sufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
-        errors.add :base, "Your PayPal account does not have sufficient funds to make this refund."
+        logger.error "Insufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
+        errors.add :base, insufficient_funds_refund_error_message
         false
       rescue ChargeProcessorInvalidRequestError => e
         logger.error "Charge refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}. #{e.backtrace_locations}"
@@ -423,6 +427,10 @@ class Purchase
     rescue ChargeProcessorAlreadyRefundedError => e
       logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
       false
+    rescue ChargeProcessorInsufficientFundsError => e
+      logger.error "Insufficient funds to refund Gumroad taxes for purchase: #{external_id}. Response: #{e.message}"
+      errors.add :base, insufficient_funds_refund_error_message
+      false
     rescue ChargeProcessorInvalidRequestError
       false
     rescue ChargeProcessorUnavailableError => e
@@ -517,7 +525,10 @@ class Purchase
       amounts_query = "COALESCE(SUM(total_transaction_cents), 0) AS tt_cents, COALESCE(SUM(amount_cents), 0) AS p_cents, " \
                         "COALESCE(SUM(creator_tax_cents), 0) AS ct_cents, COALESCE(SUM(gumroad_tax_cents), 0) as gt_cents," \
                         "COALESCE(SUM(fee_cents), 0) AS ft_cents"
-      existing_refunds = refunds.select(amounts_query).first
+      # Effective refunds only: a failed refund's money came back to us, so its
+      # amounts are still refundable — counting the failed row here would record a
+      # zero-amount Refund row after Stripe already moved real money on a re-refund.
+      existing_refunds = refunds.effective.select(amounts_query).first
       return unless existing_refunds
       { total_transaction_cents: (total_transaction_cents - existing_refunds.tt_cents),
         amount_cents: (price_cents - existing_refunds.p_cents),
@@ -537,6 +548,19 @@ class Purchase
 
     def debit_processor_fee_from_merchant_account!(refund)
       Credit.create_for_refund_fee_retention!(refund:)
+    end
+
+    def insufficient_funds_refund_error_message
+      return INSUFFICIENT_FUNDS_PAYPAL_BALANCE_ERROR_MESSAGE unless charge_processor_id == StripeChargeProcessor.charge_processor_id
+
+      case merchant_account&.holder_of_funds
+      when HolderOfFunds::CREATOR
+        INSUFFICIENT_FUNDS_CREATOR_STRIPE_BALANCE_ERROR_MESSAGE
+      when HolderOfFunds::STRIPE
+        INSUFFICIENT_FUNDS_STRIPE_BALANCE_ERROR_MESSAGE
+      else
+        INSUFFICIENT_FUNDS_GUMROAD_BALANCE_ERROR_MESSAGE
+      end
     end
 
     def reverse_excess_amount_from_stripe_transfer(refund:)
