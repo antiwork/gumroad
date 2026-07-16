@@ -109,8 +109,16 @@ class CreateIndiaSalesReportJob
     # Refunds issued inside the window (keyed on refunds.created_at), restricted to
     # purchases that qualify for the sales leg — same filters as india_purchases, just
     # written against the joined purchases table.
+    #
+    # Refund.effective drops terminally-failed refunds (an async bank-transfer refund the
+    # buyer's bank returned, or a canceled pending refund) whose balance debits were reversed:
+    # the money came back to us and the buyer never received it, so it must not back tax out of
+    # the report. This is the same "only real refunds count" guard the VAT report applies via
+    # joins(:effective_refunds); the old drop-refunded-rows code never saw these because it
+    # keyed off stripe_refunded, which a failed refund never sets.
     def india_refunds(start_date, end_date)
-      Refund.joins(:purchase)
+      Refund.effective
+            .joins(:purchase)
             .joins("LEFT JOIN purchase_sales_tax_infos ON purchases.id = purchase_sales_tax_infos.purchase_id")
             .where(refunds: { created_at: start_date..end_date })
             .where("purchases.purchase_state != 'failed'")

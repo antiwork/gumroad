@@ -45,7 +45,7 @@ describe CreateIndiaSalesReportJob do
         allow(purchase_double).to receive(:find_each).and_return([])
 
         refund_double = double
-        allow(Refund).to receive(:joins).and_return(refund_double)
+        allow(Refund).to receive(:effective).and_return(refund_double)
         allow(refund_double).to receive(:joins).and_return(refund_double)
         allow(refund_double).to receive(:where).and_return(refund_double)
         allow(refund_double).to receive_message_chain(:where, :not).and_return(refund_double)
@@ -340,6 +340,74 @@ describe CreateIndiaSalesReportJob do
         expect(refund_row[4]).to eq("-2000")
         expect(refund_row[5]).to eq("-360")
         expect(refund_row[11]).to eq("refund")
+
+        temp_file.close(true)
+      end
+    end
+
+    describe "terminally-failed refunds" do
+      before do
+        failed_refund_product = create(:product, price_cents: 5000)
+
+        travel_to(Time.zone.local(2023, 9, 10)) do
+          # A refund that failed after acceptance but whose balance debits were NOT reversed:
+          # the seller is still out the money, so it must still back out of the report.
+          @still_debited_purchase = create(:purchase,
+                                           link: failed_refund_product,
+                                           purchaser: failed_refund_product.user,
+                                           purchase_state: "in_progress",
+                                           quantity: 1,
+                                           perceived_price_cents: 5000,
+                                           country: "India",
+                                           ip_country: "India",
+                                           ip_state: "KA",
+                                           stripe_transaction_id: "txn_still_debited"
+          )
+          @still_debited_purchase.mark_test_successful!
+          @still_debited_purchase.update!(gumroad_tax_cents: 900)
+          create(:refund, purchase: @still_debited_purchase, amount_cents: 5000, gumroad_tax_cents: 900, status: "failed")
+
+          # A refund that failed AND had its balance debits reversed: the money came back to
+          # us and the buyer never received it, so it must NOT back out of the report.
+          @reversed_purchase = create(:purchase,
+                                      link: failed_refund_product,
+                                      purchaser: failed_refund_product.user,
+                                      purchase_state: "in_progress",
+                                      quantity: 1,
+                                      perceived_price_cents: 5000,
+                                      country: "India",
+                                      ip_country: "India",
+                                      ip_state: "KA",
+                                      stripe_transaction_id: "txn_reversed"
+          )
+          @reversed_purchase.mark_test_successful!
+          @reversed_purchase.update!(gumroad_tax_cents: 900)
+          reversed_refund = create(:refund, purchase: @reversed_purchase, amount_cents: 5000, gumroad_tax_cents: 900, status: "failed")
+          reversed_refund.balance_reversed_on_failure = true
+          reversed_refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+          reversed_refund.save!
+        end
+      end
+
+      it "backs out a failed refund still on our books but ignores one whose balance debits were reversed" do
+        s3_object_sept = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-sept-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(s3_object_sept)
+
+        described_class.new.perform(9, 2023)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        s3_object_sept.get(response_target: temp_file)
+        temp_file.rewind
+        actual_payload = CSV.read(temp_file)
+
+        # Both sales are real (neither buyer was actually refunded) and stay as sale rows.
+        expect(actual_payload.count { |row| row[11] == "sale" }).to eq(2)
+
+        # Only the still-debited failed refund backs out; the reversed one is excluded by
+        # Refund.effective. A blanket status filter would drop BOTH; the old unfiltered leg
+        # would keep BOTH — so this pins the effective semantics specifically.
+        refund_rows = actual_payload.select { |row| row[11] == "refund" }
+        expect(refund_rows.map { |row| row[0] }).to contain_exactly(@still_debited_purchase.external_id)
 
         temp_file.close(true)
       end
