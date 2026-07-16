@@ -179,6 +179,15 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   // "latest conversation" response must not overwrite the chat or its conversation id — otherwise
   // subsequent turns would be appended to the wrong stored conversation.
   const hasSentMessageRef = React.useRef(false);
+  // The id of the seller's most recent stored conversation as seen by the mount-time fetch below,
+  // recorded even when hydration is skipped (the seller sent a message before it resolved). Used by
+  // stream recovery on a fresh chat: a first turn that persisted creates a brand-NEW conversation,
+  // so if the "latest" fetch still returns this pre-existing one, this turn was never stored.
+  const preexistingConversationIdRef = React.useRef<string | null>(null);
+  // Whether the mount-time fetch actually resolved. `preexistingConversationIdRef` being null is
+  // ambiguous on its own (no stored conversations vs. the fetch failed / hasn't landed yet);
+  // fresh-chat stream recovery only trusts the null when this flag confirms the fetch completed.
+  const preexistingConversationKnownRef = React.useRef(false);
   // Whether the assistant reply has started arriving this turn — drives the "Thinking..." bubble,
   // which we show only until the first token lands, then let the streaming text take over.
   const [isStreaming, setIsStreaming] = React.useState(false);
@@ -218,7 +227,13 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     let cancelled = false;
     void fetchLatestAgentConversation()
       .then((conversation) => {
-        if (cancelled || !conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
+        if (cancelled) return;
+        // Remember which conversation was already the seller's latest before this chat wrote
+        // anything, whether or not we hydrate it — stream recovery uses it to tell "our first turn
+        // was persisted as a new conversation" apart from "the latest is still someone else's".
+        preexistingConversationIdRef.current = conversation?.id ?? null;
+        preexistingConversationKnownRef.current = true;
+        if (!conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
         setMessages([
           { role: "assistant", content: greeting },
           ...conversation.messages.map(
@@ -259,10 +274,29 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       try {
         const conversation = await fetchLatestAgentConversation();
         if (!conversation) continue;
-        // Only reconcile against the conversation this chat is appending to — the seller's latest
-        // conversation could be a different one (e.g. another tab started a new chat meanwhile).
-        if (conversationIdRef.current && conversation.id !== conversationIdRef.current) continue;
+        if (conversationIdRef.current) {
+          // Only reconcile against the conversation this chat is appending to — the seller's latest
+          // conversation could be a different one (e.g. another tab started a new chat meanwhile).
+          if (conversation.id !== conversationIdRef.current) continue;
+        } else {
+          // Fresh chat: this turn has no conversation id yet, so a persisted first turn lives in a
+          // brand-new conversation the server just created. Accept the fetched conversation only
+          // when we know it is NOT one that already existed before this chat sent anything —
+          // otherwise another tab appending the same prompt text to an older conversation would be
+          // mistaken for our turn, and this chat would adopt that conversation's id and append all
+          // future turns to the wrong transcript. When the mount-time fetch never resolved we can't
+          // make that call, so skip recovery rather than risk hijacking another conversation.
+          if (!preexistingConversationKnownRef.current) continue;
+          if (preexistingConversationIdRef.current !== null && conversation.id === preexistingConversationIdRef.current)
+            continue;
+        }
         const persisted = conversation.messages;
+        // In a fresh chat there is no conversation id to match yet, so correlate by shape instead:
+        // the interrupted turn would have been persisted as a brand-new conversation holding exactly
+        // this one turn (the message we sent plus the reply). A longer conversation is some existing
+        // chat — possibly one another tab just appended the same prompt text to — and adopting its id
+        // here would splice this chat's future turns into that other transcript.
+        if (!conversationIdRef.current && persisted.length !== 2) continue;
         const reply = persisted[persisted.length - 1];
         const userTurn = persisted[persisted.length - 2];
         // Recover only when the stored tail is exactly this turn: the message we just sent followed

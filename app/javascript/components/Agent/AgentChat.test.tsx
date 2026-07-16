@@ -98,6 +98,46 @@ describe("AgentChat streamed reply reconciliation", () => {
     expect(screen.getByText("Dismiss")).toBeTruthy();
   });
 
+  it("does not adopt another tab's ongoing conversation when recovering a fresh chat", async () => {
+    streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
+      handlers.onToken?.("Your bio currently has thr");
+      await Promise.resolve();
+      throw new AgentStreamInterruptedError();
+    });
+    // The seller's latest conversation is another tab's longer chat that happens to end with the
+    // same prompt text. A fresh chat's interrupted turn would have been stored as a brand-new
+    // two-message conversation, so this must not be adopted.
+    fetchLatestAgentConversation.mockResolvedValue({
+      id: "other-tab-conv",
+      title: null,
+      messages: [
+        { role: "user" as const, content: "an earlier question" },
+        { role: "assistant" as const, content: "An earlier answer." },
+        { role: "user" as const, content: "what does my bio say" },
+        { role: "assistant" as const, content: PERSISTED_REPLY },
+      ],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("what does my bio say");
+
+    // Recovery declines the other tab's conversation and falls through to the error handling.
+    await waitFor(() => expect(showAlert).toHaveBeenCalled(), { timeout: 5000 });
+    expect(screen.queryByText(PERSISTED_REPLY)).toBeNull();
+    // The next turn must not carry the other tab's conversation id.
+    streamAgentMessage.mockResolvedValue({
+      reply: "ok",
+      proposedAction: null,
+      objects: [],
+      suggestions: [],
+      conversationId: null,
+    });
+    await sendMessage("another question");
+    await waitFor(() =>
+      expect(streamAgentMessage).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), null),
+    );
+  }, 10_000);
+
   it("falls back to the error alert when the interrupted turn was never persisted", async () => {
     streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
       handlers.onToken?.("Your bio currently has thr");
@@ -131,4 +171,68 @@ describe("AgentChat streamed reply reconciliation", () => {
     // Only the mount-time resume fetch — no reconciliation fetches for a server-reported failure.
     expect(fetchLatestAgentConversation).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("AgentChat fresh-chat recovery guards", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("does not adopt the pre-existing latest conversation even when its tail matches the sent text", async () => {
+    // The seller sends before the mount-time fetch resolves, so hydration is skipped and the chat
+    // stays fresh (no conversation id) — but the fetch still tells us which conversation already
+    // existed. When recovery later sees that same conversation (another tab appended the identical
+    // prompt to it), it must not be mistaken for our just-persisted first turn.
+    let resolveMountFetch: (value: ReturnType<typeof persistedConversation>) => void = () => {};
+    const olderConversation = {
+      id: "conv-old",
+      title: null,
+      messages: [
+        { role: "user" as const, content: "what does my bio say" },
+        { role: "assistant" as const, content: "The other tab's reply." },
+      ],
+    };
+    fetchLatestAgentConversation.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveMountFetch = resolve;
+      }),
+    );
+    streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
+      handlers.onToken?.("Your bio currently has thr");
+      resolveMountFetch(olderConversation);
+      await Promise.resolve();
+      throw new AgentStreamInterruptedError();
+    });
+    fetchLatestAgentConversation.mockResolvedValue(olderConversation);
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("what does my bio say");
+
+    await waitFor(() => expect(showAlert).toHaveBeenCalled(), { timeout: 10_000 });
+    expect(screen.queryByText("The other tab's reply.")).toBeNull();
+  }, 15_000);
+
+  it("skips fresh-chat recovery entirely while the pre-existing latest conversation is unknown", async () => {
+    // The mount-time fetch never resolves, so we can't tell a just-persisted first turn apart from
+    // a conversation that existed all along — recovery must decline rather than guess.
+    fetchLatestAgentConversation.mockReturnValueOnce(new Promise(() => {}));
+    streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
+      handlers.onToken?.("Your bio currently has thr");
+      await Promise.resolve();
+      throw new AgentStreamInterruptedError();
+    });
+    fetchLatestAgentConversation.mockResolvedValue(
+      persistedConversation([
+        { role: "user", content: "what does my bio say" },
+        { role: "assistant", content: PERSISTED_REPLY },
+      ]),
+    );
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("what does my bio say");
+
+    await waitFor(() => expect(showAlert).toHaveBeenCalled(), { timeout: 10_000 });
+    expect(screen.queryByText(PERSISTED_REPLY)).toBeNull();
+  }, 15_000);
 });
