@@ -272,26 +272,26 @@ class Purchase::HandleFailedRefundService
       return if failed_affiliate_debits.empty?
 
       failed_affiliate_balance_ids = failed_affiliate_debits.filter_map(&:balance_id)
+      failed_affiliate_fee_cents = failed_affiliate_partial_refund_fee_cents(affiliate_credit)
 
       # Partial-refund rows carry no refund reference, only the balance the
       # affiliate debit landed in — and several refunds of the same purchase
       # commonly land their affiliate debits in the affiliate's one unpaid
       # balance, so deleting every row on the failed refund's balance would also
       # delete rows recorded by other, still-effective refunds. Instead, remove
-      # at most ONE row per failed affiliate debit, matched on both the balance
-      # and the debit's amount: the row's amount_cents is written as the same
-      # refund_cents whose negation became the debit's issued gross (see
-      # Purchase#process_refund_or_chargeback_for_affiliate_credit_balance), so
-      # this pairs each failed debit with exactly the row it created. Locking
-      # reads for the same snapshot-staleness reason as the pointer repointing
-      # below.
+      # at most ONE row per failed affiliate debit, matched on the balance, debit
+      # amount, and refunded fee. The fee is needed because rounding can make two
+      # refunds produce the same affiliate debit while refunding different fee
+      # amounts. Locking reads for the same snapshot-staleness reason as the
+      # pointer repointing below.
       failed_affiliate_debits.each do |debit|
         next if debit.balance_id.nil?
 
         purchase.affiliate_partial_refunds
                 .where(affiliate_credit:,
                        balance_id: debit.balance_id,
-                       amount_cents: -debit.issued_amount_gross_cents)
+                       amount_cents: -debit.issued_amount_gross_cents,
+                       fee_cents: failed_affiliate_fee_cents)
                 .order(:id).lock.last&.destroy!
       end
 
@@ -312,6 +312,17 @@ class Purchase::HandleFailedRefundService
                                                     .where("balance_transactions.issued_amount_gross_cents < 0")
                                                     .order(:id).lock.last
       affiliate_credit.update!(affiliate_credit_refund_balance_id: remaining_affiliate_debit&.balance_id)
+    end
+
+    # Partial-refund rows store the affiliate's share of the refunded Gumroad fee,
+    # but the affiliate balance transaction stores only the net affiliate debit.
+    # Rebuild the fee with the same calculation used when Purchase creates the row
+    # so refunds with equal debits can still be told apart.
+    def failed_affiliate_partial_refund_fee_cents(affiliate_credit)
+      return 0 if affiliate_credit.fee_cents.to_i.zero?
+
+      affiliate_cut = affiliate_credit.basis_points / 10_000.0
+      (affiliate_cut * refund.fee_cents.to_i).floor
     end
 
     # Recompute the purchase's refunded flags as if the failed refund never counted.

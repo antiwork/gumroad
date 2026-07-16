@@ -469,7 +469,7 @@ describe Purchase::HandleFailedRefundService do
       # pointer on the AffiliateCredit, and (for partial refunds) an AffiliatePartialRefund.
       # In production the partial-refund row's amount_cents and the debit's issued gross
       # come from the same refund_cents, so they always match — keep that invariant here.
-      def record_affiliate_refund_side_effects!(partial: false, amount_cents: partial ? 150 : 300)
+      def record_affiliate_refund_side_effects!(partial: false, amount_cents: partial ? 150 : 300, fee_cents: 0)
         issued_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -amount_cents, net_cents: -amount_cents)
         holding_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -amount_cents, net_cents: -amount_cents)
         affiliate_transaction = BalanceTransaction.create!(
@@ -484,6 +484,7 @@ describe Purchase::HandleFailedRefundService do
           purchase.affiliate_partial_refunds.create!(
             total_credit_cents: 300,
             amount_cents:,
+            fee_cents:,
             balance: affiliate_transaction.balance,
             seller:,
             affiliate:,
@@ -573,6 +574,41 @@ describe Purchase::HandleFailedRefundService do
 
         expect { described_class.new(refund:).perform }
           .to change { purchase.affiliate_partial_refunds.count }.from(2).to(1)
+      end
+
+      it "keeps the surviving row when equal debit amounts refunded different affiliate fees" do
+        # With a 3% affiliate cut, both refunds debit the affiliate 5 cents, but
+        # their refunded fee shares differ: 134/26 becomes 5/0, while 170/34
+        # becomes 5/1. The older refund can fail after the newer one succeeds.
+        refund.update!(amount_cents: 134, total_transaction_cents: 134, fee_cents: 26)
+        affiliate_credit.update!(basis_points: 300, fee_cents: 10)
+        failed_transaction = record_affiliate_refund_side_effects!(partial: true, amount_cents: 5, fee_cents: 0)
+
+        surviving_refund = create(:refund, purchase:, amount_cents: 170, fee_cents: 34, status: "succeeded")
+        surviving_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -5, net_cents: -5)
+        surviving_transaction = BalanceTransaction.create!(
+          user: affiliate_user,
+          merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+          refund: surviving_refund,
+          issued_amount: surviving_amount,
+          holding_amount: surviving_amount
+        )
+        surviving_row = purchase.affiliate_partial_refunds.create!(
+          total_credit_cents: 300,
+          amount_cents: 5,
+          fee_cents: 1,
+          balance: surviving_transaction.balance,
+          seller:,
+          affiliate:,
+          affiliate_user:,
+          affiliate_credit:
+        )
+        expect(surviving_transaction.balance_id).to eq(failed_transaction.balance_id)
+
+        described_class.new(refund:).perform
+
+        expect(purchase.affiliate_partial_refunds.reload).to contain_exactly(surviving_row)
+        expect(affiliate_credit.reload.fee_partially_refunded_cents).to eq(1)
       end
 
       it "re-points the pointer at an earlier effective refund's affiliate debit" do
