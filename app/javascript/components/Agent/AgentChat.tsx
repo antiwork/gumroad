@@ -5,6 +5,7 @@ import {
   type AgentStreamHandlers,
   AgentStreamInterruptedError,
   type ChatMessage,
+  type Conversation,
   type ConversationMessage,
   type DisplayObject,
   type ProposedAction,
@@ -29,12 +30,12 @@ import { Textarea } from "$app/components/ui/Textarea";
 // near-bottom threshold the Communities chat uses.)
 const STICK_TO_BOTTOM_THRESHOLD_PX = 200;
 
-// After a stream breaks, how long to wait before the second look at the stored conversation. The
-// server keeps working after the client's connection dies — it still runs the follow-up
-// suggestions call and persists the turn before it would have sent `done` — so the first fetch
-// can arrive before the turn has been recorded.
-const STREAM_RECOVERY_RETRY_DELAY_MS = 3000;
-const STREAM_RECOVERY_ATTEMPTS = 2;
+// After a stream breaks, when to look again for the persisted turn (the first look happens
+// immediately). The server persists the turn the moment the reply completes, so the immediate
+// look usually wins — but a connection that broke mid-generation leaves the server unaware,
+// still generating, until its next socket write. The retries stretch out to cover that window
+// rather than polling quickly and giving up.
+const STREAM_RECOVERY_RETRY_DELAYS_MS = [3000, 10000];
 
 type DisplayMessage = ChatMessage & {
   // A proposed change attached to an assistant turn. Once the seller acts on it, we record the
@@ -44,6 +45,27 @@ type DisplayMessage = ChatMessage & {
   // Objects the agent looked up or changed this turn, rendered inline as cards beneath the message.
   objects?: DisplayObject[];
 };
+
+// Build the renderable chat message for one persisted conversation message. Shared by the
+// mount-time hydration and the broken-stream recovery below, so the two paths can't drift on how
+// persisted extras (proposed-action card, object cards, applied status) come back to life.
+// `staleProposalsDismissed` is their one deliberate difference: a status-less proposal from a
+// previous session is stale — its context is gone, so hydration collapses it to dismissed — while
+// the same shape recovered moments after a broken stream is this session's live, confirmable card.
+const toDisplayMessage = (
+  message: ConversationMessage,
+  { staleProposalsDismissed }: { staleProposalsDismissed: boolean },
+): DisplayMessage => ({
+  role: message.role,
+  content: message.content,
+  ...(message.proposed_action ? { proposedAction: message.proposed_action } : {}),
+  ...(message.objects?.length ? { objects: message.objects } : {}),
+  ...(message.action_status
+    ? { actionStatus: message.action_status }
+    : staleProposalsDismissed && message.proposed_action
+      ? { actionStatus: "dismissed" as const }
+      : {}),
+});
 
 type Props = {
   greeting: string;
@@ -254,6 +276,15 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   // "latest conversation" response must not overwrite the chat or its conversation id — otherwise
   // subsequent turns would be appended to the wrong stored conversation.
   const hasSentMessageRef = React.useRef(false);
+  // The id of the seller's most recent stored conversation as seen by the mount-time fetch below,
+  // recorded even when hydration is skipped (the seller sent a message before it resolved). Used by
+  // stream recovery on a fresh chat: a first turn that persisted creates a brand-NEW conversation,
+  // so if the "latest" fetch still returns this pre-existing one, this turn was never stored.
+  const preexistingConversationIdRef = React.useRef<string | null>(null);
+  // Whether the mount-time fetch actually resolved. `preexistingConversationIdRef` being null is
+  // ambiguous on its own (no stored conversations vs. the fetch failed / hasn't landed yet);
+  // fresh-chat stream recovery only trusts the null when this flag confirms the fetch completed.
+  const preexistingConversationKnownRef = React.useRef(false);
   // Whether the assistant reply has started arriving this turn — drives the "Thinking..." bubble,
   // which we show only until the first token lands, then let the streaming text take over.
   const [isStreaming, setIsStreaming] = React.useState(false);
@@ -293,25 +324,19 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     let cancelled = false;
     void fetchLatestAgentConversation()
       .then((conversation) => {
-        if (cancelled || !conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
+        if (cancelled) return;
+        // Remember which conversation was already the seller's latest before this chat wrote
+        // anything, whether or not we hydrate it — stream recovery uses it to tell "our first turn
+        // was persisted as a new conversation" apart from "the latest is still someone else's".
+        preexistingConversationIdRef.current = conversation?.id ?? null;
+        preexistingConversationKnownRef.current = true;
+        if (!conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
         setMessages([
           { role: "assistant", content: greeting },
-          ...conversation.messages.map(
-            (message: ConversationMessage): DisplayMessage => ({
-              role: message.role,
-              content: message.content,
-              ...(message.proposed_action ? { proposedAction: message.proposed_action } : {}),
-              ...(message.objects?.length ? { objects: message.objects } : {}),
-              ...(message.action_status
-                ? { actionStatus: message.action_status }
-                : // A proposal persisted without a status was never confirmed in the session it was
-                  // made. Its context (and the throttle window) is gone, so render it as dismissed
-                  // rather than offering a stale, re-confirmable change after reload.
-                  message.proposed_action
-                  ? { actionStatus: "dismissed" as const }
-                  : {}),
-            }),
-          ),
+          // A proposal persisted without a status was never confirmed in the session it was made.
+          // Its context (and the throttle window) is gone, so render it as dismissed rather than
+          // offering a stale, re-confirmable change after reload.
+          ...conversation.messages.map((message) => toDisplayMessage(message, { staleProposalsDismissed: true })),
         ]);
         setConversationId(conversation.id);
       })
@@ -325,48 +350,77 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
 
   // A streamed turn died before its terminal `done` frame. Check whether the turn completed
   // server-side anyway, and if so replace the partially-rendered assistant message with the
-  // persisted one (including its proposed-action card and object cards). Returns whether the turn
-  // was recovered; when it wasn't (the failure was real and nothing was stored), the caller falls
-  // back to the normal error handling.
-  const recoverInterruptedTurn = async (sentText: string, assistantIndex: number): Promise<boolean> => {
-    for (let attempt = 0; attempt < STREAM_RECOVERY_ATTEMPTS; attempt++) {
-      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, STREAM_RECOVERY_RETRY_DELAY_MS));
+  // persisted one (including its proposed-action card and object cards). `streamedContent` is the
+  // reply text that reached the screen before the break. Returns whether the turn was recovered;
+  // when it wasn't (the failure was real and nothing was stored), the caller falls back to the
+  // normal error handling.
+  const recoverInterruptedTurn = async (
+    sentText: string,
+    assistantIndex: number,
+    streamedContent: string,
+  ): Promise<boolean> => {
+    // One look at the stored conversation. `false` means the turn may still be persisting (worth
+    // another look); "abort" means no amount of waiting can make recovery correct.
+    const attempt = async (): Promise<boolean | "abort"> => {
+      let conversation: Conversation | null;
       try {
-        const conversation = await fetchLatestAgentConversation();
-        if (!conversation) continue;
-        // Only reconcile against the conversation this chat is appending to — the seller's latest
-        // conversation could be a different one (e.g. another tab started a new chat meanwhile).
-        if (conversationIdRef.current && conversation.id !== conversationIdRef.current) continue;
-        const persisted = conversation.messages;
-        const reply = persisted[persisted.length - 1];
-        const userTurn = persisted[persisted.length - 2];
-        // Recover only when the stored tail is exactly this turn: the message we just sent followed
-        // by an assistant reply. Anything else means this turn was never persisted (the server saw
-        // the disconnect first, or the request never got through) — give it a beat and look again.
-        if (!reply || reply.role !== "assistant" || userTurn?.role !== "user" || userTurn.content !== sentText)
-          continue;
-        setMessages((prev) => {
-          const next = [...prev];
-          next[assistantIndex] = {
-            role: "assistant",
-            content: reply.content,
-            ...(reply.proposed_action ? { proposedAction: reply.proposed_action } : {}),
-            ...(reply.objects?.length ? { objects: reply.objects } : {}),
-            // Unlike the mount-time hydration (where a status-less proposal is stale and rendered
-            // dismissed), this proposal was made moments ago in the live session — keep it
-            // confirmable, exactly as it would have been had the stream survived.
-            ...(reply.action_status ? { actionStatus: reply.action_status } : {}),
-          };
-          return next;
-        });
-        setConversationId(conversation.id);
-        return true;
+        conversation = await fetchLatestAgentConversation();
       } catch {
-        // Recovery is best-effort: a failed fetch just moves on to the next attempt (or gives up
-        // and lets the caller's error handling take over).
+        // Best-effort: the same flaky network that broke the stream may fail this fetch too.
+        return false;
       }
+      if (!conversation) return false;
+      if (conversationIdRef.current) {
+        // Only reconcile against the conversation this chat is appending to. A different latest
+        // conversation (another tab or device took over) can't become ours by waiting — stop.
+        if (conversation.id !== conversationIdRef.current) return "abort";
+      } else {
+        // Fresh chat: this turn has no conversation id yet, so a persisted first turn lives in a
+        // brand-new conversation the server just created. Accept the fetched conversation only
+        // when we know it is NOT one that already existed before this chat sent anything —
+        // otherwise another tab appending the same prompt text to an older conversation would be
+        // mistaken for our turn, and this chat would adopt that conversation's id and append all
+        // future turns to the wrong transcript. When the mount-time fetch hasn't resolved we
+        // can't make that call yet, so decline this look rather than risk hijacking.
+        if (!preexistingConversationKnownRef.current) return false;
+        if (preexistingConversationIdRef.current !== null && conversation.id === preexistingConversationIdRef.current)
+          return false;
+        // Correlate by shape too: the interrupted first turn would have been persisted as a
+        // brand-new conversation holding exactly this one turn (the message we sent + the reply).
+        // A longer conversation is some existing chat, not this turn.
+        if (conversation.messages.length !== 2) return false;
+      }
+      const persisted = conversation.messages;
+      const reply = persisted[persisted.length - 1];
+      const userTurn = persisted[persisted.length - 2];
+      // Recover only when the stored tail is exactly this turn: the message we just sent followed
+      // by an assistant reply. Anything else means this turn hasn't been persisted (yet).
+      if (!reply || reply.role !== "assistant" || userTurn?.role !== "user" || userTurn.content !== sentText)
+        return false;
+      // ...and only when the stored reply extends the text the seller actually watched stream in.
+      // An earlier turn in this conversation could have used identical text (a repeated "yes"),
+      // and adopting its reply would silently rewrite this failed turn as that old one. Preamble
+      // that a reset event cleared never lingers in streamedContent (the tracker resets with it).
+      if (streamedContent.trim().length > 0 && !reply.content.startsWith(streamedContent.trim())) return false;
+      setMessages((prev) => {
+        const next = [...prev];
+        // Unlike the mount-time hydration (where a status-less proposal is stale and rendered
+        // dismissed), this proposal was made moments ago in the live session — keep it
+        // confirmable, exactly as it would have been had the stream survived.
+        next[assistantIndex] = toDisplayMessage(reply, { staleProposalsDismissed: false });
+        return next;
+      });
+      setConversationId(conversation.id);
+      return true;
+    };
+
+    let result = await attempt();
+    for (const delayMs of STREAM_RECOVERY_RETRY_DELAYS_MS) {
+      if (result !== false) break;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      result = await attempt();
     }
-    return false;
+    return result === true;
   };
 
   const send = async (text: string) => {
@@ -419,17 +473,24 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         return next;
       });
 
+    // The reply text that has reached the screen this turn, mirrored outside React state so the
+    // recovery path can compare it against a persisted reply without reading component state.
+    let streamedContent = "";
+
     const handlers: AgentStreamHandlers = {
       onToken: (chunk) => {
+        streamedContent += chunk;
         setIsStreaming(true);
         appendToken(chunk);
       },
-      onReset: () =>
+      onReset: () => {
         // An intermediate tool-use turn streamed preamble text; clear it so the real reply replaces
         // it instead of appending to it.
+        streamedContent = "";
         setMessages((prev) =>
           prev.map((msg, i) => (i === assistantIndex && msg.role === "assistant" ? { ...msg, content: "" } : msg)),
-        ),
+        );
+      },
       onObjects: (objects) => upsertAssistant({ objects }),
       onProposedAction: (proposedAction) => upsertAssistant({ proposedAction }),
       onSuggestions: (next) => setFollowUps(next),
@@ -460,7 +521,8 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       // exists in full server-side. Reconcile with the stored conversation before treating this as
       // a failure. Server-reported errors (`error` events) skip this: those turns were never saved.
       const recovered =
-        e instanceof AgentStreamInterruptedError && (await recoverInterruptedTurn(trimmed, assistantIndex));
+        e instanceof AgentStreamInterruptedError &&
+        (await recoverInterruptedTurn(trimmed, assistantIndex, streamedContent));
       if (!recovered) {
         showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
         setMessages((prev) => {

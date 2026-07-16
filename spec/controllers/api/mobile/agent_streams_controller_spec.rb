@@ -38,10 +38,12 @@ describe Api::Mobile::AgentStreamsController do
     it "streams the turn's events and ends with a done event carrying the conversation id" do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond_streaming) do |**_kwargs, &emit|
+      allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
         emit.call(:token, { text: "You have " })
         emit.call(:token, { text: "3 products." })
-        { reply: "You have 3 products.", proposed_action: nil, objects: [], suggestions: ["What sold this week?"] }
+        turn = { reply: "You have 3 products.", proposed_action: nil, objects: [] }
+        on_reply_complete&.call(turn)
+        turn.merge(suggestions: ["What sold this week?"])
       end
 
       post :create, params: valid_params
@@ -67,8 +69,13 @@ describe Api::Mobile::AgentStreamsController do
         messages: [
           { role: "user", content: "Earlier question" },
           { role: "user", content: "How are my sales?" },
-        ]
-      ).and_return(reply: "Up.", proposed_action: nil, objects: [], suggestions: [])
+        ],
+        on_reply_complete: kind_of(Proc),
+      ) do |on_reply_complete:, **|
+        turn = { reply: "Up.", proposed_action: nil, objects: [] }
+        on_reply_complete.call(turn)
+        turn.merge(suggestions: [])
+      end
 
       expect do
         post :create, params: valid_params.merge(conversation_id: conversation.external_id)
@@ -83,12 +90,11 @@ describe Api::Mobile::AgentStreamsController do
       # carries) still has to arrive. The conversation id is simply omitted.
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond_streaming).and_return(
-        reply: "You have 3 products.",
-        proposed_action: nil,
-        objects: [],
-        suggestions: [],
-      )
+      allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &_emit|
+        turn = { reply: "You have 3 products.", proposed_action: nil, objects: [] }
+        on_reply_complete&.call(turn)
+        turn.merge(suggestions: [])
+      end
       allow(controller).to receive(:create_agent_conversation!).and_raise(ActiveRecord::StatementInvalid)
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
 

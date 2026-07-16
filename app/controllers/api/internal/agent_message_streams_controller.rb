@@ -69,20 +69,27 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
           messages
         end
 
-      result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond_streaming(messages: history) do |event, payload|
-        sse.write(payload, event:)
-      end
-
-      # Persistence must not mask a reply the seller has already watched stream in. If recording
-      # the turn fails (e.g. a DB hiccup after a long LLM call), log + report it but still send the
-      # terminal `done` event — dropping `done` would leave the client without a conversation id,
-      # so the next turn would silently start a brand-new conversation. The only cost of a
+      # The turn is persisted from on_reply_complete — the moment the reply is final, BEFORE the
+      # trailing SSE writes and the extra follow-up-suggestions LLM call. Two reasons: if the
+      # client's connection died mid-stream, the next socket write raises ClientDisconnected and
+      # would abandon a fully generated reply unpersisted; and persisting early means a client
+      # that reconciles a broken stream against the stored conversation finds the turn right away
+      # instead of racing the suggestions call.
+      #
+      # Persistence itself must not mask a reply the seller has already watched stream in. If
+      # recording the turn fails (e.g. a DB hiccup after a long LLM call), log + report it but let
+      # the stream finish — dropping `done` would leave the client without a conversation id, so
+      # the next turn would silently start a brand-new conversation. The only cost of a
       # persistence failure is that this turn isn't stored.
-      begin
-        conversation = persist_agent_turn!(conversation, new_user_message, result, fallback_first_message: messages.last[:content])
+      on_reply_complete = lambda do |turn|
+        conversation = persist_agent_turn!(conversation, new_user_message, turn, fallback_first_message: messages.last[:content])
       rescue => e
         Rails.logger.error("Store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
+      end
+      result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:)
+        .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
+        sse.write(payload, event:)
       end
       sse.write(
         {

@@ -74,20 +74,20 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
           messages
         end
 
-      result = ::Ai::StoreAgentService.new(seller:, pundit_user:).respond_streaming(messages: history) do |event, payload|
-        sse.write(payload, event:)
-      end
-
-      # Persistence must not mask a reply the seller has already watched stream in. If recording
-      # the turn fails (e.g. a DB hiccup after a long LLM call), log + report it but still send the
-      # terminal `done` event — dropping `done` would leave the app without a conversation id, so
-      # the next turn would silently start a brand-new conversation. The only cost of a
-      # persistence failure is that this turn isn't stored.
-      begin
-        conversation = persist_agent_turn!(conversation, new_user_message, result, fallback_first_message: messages.last[:content])
+      # The turn is persisted from on_reply_complete — as soon as the reply is final, before the
+      # trailing SSE writes and the follow-up-suggestions call — so a client connection that died
+      # mid-stream (the next write raises ClientDisconnected) can't cause a fully generated reply
+      # to be dropped unpersisted. Persistence failures are logged but must not break the stream:
+      # the only cost is that this turn isn't stored.
+      on_reply_complete = lambda do |turn|
+        conversation = persist_agent_turn!(conversation, new_user_message, turn, fallback_first_message: messages.last[:content])
       rescue => e
         Rails.logger.error("Mobile store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
+      end
+      result = ::Ai::StoreAgentService.new(seller:, pundit_user:)
+        .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
+        sse.write(payload, event:)
       end
       sse.write(
         {

@@ -316,6 +316,10 @@ export const streamAgentMessage = async (
     }
     if (buffer.trim().length > 0) done = handleFrame(buffer) ?? done;
   } catch (e) {
+    // An unclean close AFTER the terminal `done` frame (a reset while draining trailing bytes, a
+    // mangled keepalive fragment) doesn't invalidate the turn — the assembled result is already in
+    // hand, so return it rather than discarding a successful turn as an interruption.
+    if (done) return done;
     // An `error` event thrown by handleFrame is the server's own verdict on the turn — pass it
     // through untouched. Anything else (the read rejecting on a dropped connection, unparseable
     // JSON, a frame failing validation) means the transport broke mid-turn, which the caller must
