@@ -84,12 +84,17 @@ module Product::Preview
   # any product that had a cover but no thumbnail (gumroad-private#1122).
   # Oembed thumbnail URLs come from third-party hosts and can contain characters
   # that are invalid in a URL, so that branch is URI-escaped here; cover URLs
-  # are our own storage/CDN URLs and are returned as-is.
-  def social_share_preview_url
+  # and video poster URLs are our own storage/CDN URLs and are returned as-is.
+  # For a video file uploaded directly to Gumroad the poster is the ffmpeg
+  # frame generated in the background by GenerateVideoPosterWorker — nil until
+  # that has run, in which case the share image is simply omitted.
+  # (Named without a _url suffix because CONTRIBUTING.md forbids new methods
+  # ending in _url/_path — they can collide with Rails route helpers.)
+  def social_share_image
     return preview_url if preview_image_path?
-    return if preview_oembed_thumbnail_url.blank?
+    return Addressable::URI.escape(preview_oembed_thumbnail_url) if preview_oembed_thumbnail_url.present?
 
-    Addressable::URI.escape(preview_oembed_thumbnail_url)
+    main_preview&.video_poster_url
   end
 
   def preview_width_for_mobile

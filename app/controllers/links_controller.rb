@@ -1008,10 +1008,10 @@ class LinksController < ApplicationController
       # Thumbnail first (the wrapper's original image source, kept as the
       # winner), then the standard product page's fallback chain — cover image,
       # then the thumbnail of a video/oembed cover — via
-      # Link#social_share_preview_url. Without the fallbacks, products with a
+      # Link#social_share_image. Without the fallbacks, products with a
       # cover but no thumbnail (the common case) lost their link-preview image
       # the moment they went custom (gumroad-private#1122).
-      share_image = product.thumbnail&.alive&.url || product.social_share_preview_url
+      share_image = product.thumbnail&.alive&.url || product.social_share_image
       share_image_tags = if share_image
         escaped_share_image = ERB::Util.h(share_image)
         %(<meta property="og:image" content="#{escaped_share_image}">\n    <meta property="twitter:card" content="summary_large_image">\n    <meta property="twitter:image" content="#{escaped_share_image}">)

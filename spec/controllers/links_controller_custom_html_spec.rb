@@ -97,6 +97,16 @@ describe LinksController, :vcr, type: :controller do
         expect(response.body).to include(%(<meta property="twitter:image" content="https://images.unsplash.com/example.jpeg">))
       end
 
+      it "falls back to the generated poster for an uploaded video cover" do
+        product.preview = Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "thing.mov"), "video/quicktime")
+        allow_any_instance_of(AssetPreview).to receive(:video_poster_url).and_return("https://files.example.com/poster.jpg")
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta property="og:image" content="https://files.example.com/poster.jpg">))
+        expect(response.body).to include(%(<meta property="twitter:image" content="https://files.example.com/poster.jpg">))
+      end
+
       it "prefers the thumbnail over the cover when both exist" do
         thumbnail = create(:thumbnail, product:)
         create(:asset_preview, link: product, unsplash_url: "https://images.unsplash.com/example.jpeg", attach: false)
