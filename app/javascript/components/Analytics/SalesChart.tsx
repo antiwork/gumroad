@@ -1,9 +1,10 @@
 import * as React from "react";
-import { XAxis, YAxis, Bar, Line, Cell } from "recharts";
+import { XAxis, YAxis, Bar, Line, Cell, ReferenceDot, ReferenceLine } from "recharts";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { type AnalyticsDailyTotal } from "$app/components/Analytics";
+import { fractionOfDayElapsed, projectedEndOfDayTotal } from "$app/components/Analytics/projectedEndOfDayTotal";
 import useChartTooltip from "$app/components/Analytics/useChartTooltip";
 import { Chart, xAxisProps, yAxisProps, lineProps } from "$app/components/Chart";
 
@@ -14,9 +15,10 @@ type DataPoint = {
   totals: number;
   title: string;
   label: string;
+  projectedTotals?: number;
 };
 
-const ChartTooltip = ({ data: { views, sales, totals, title } }: { data: DataPoint }) => (
+const ChartTooltip = ({ data: { views, sales, totals, title, projectedTotals } }: { data: DataPoint }) => (
   <>
     <div>
       <strong>{views}</strong> {views === 1 ? "view" : "views"}
@@ -34,6 +36,12 @@ const ChartTooltip = ({ data: { views, sales, totals, title } }: { data: DataPoi
         </strong>
       </div>
     ) : null}
+    {projectedTotals != null ? (
+      <div>
+        {formatPriceCentsWithCurrencySymbol("usd", projectedTotals, { symbolFormat: "short", noCentsIfWhole: true })}{" "}
+        projected today
+      </div>
+    ) : null}
     <time className="block font-bold">{title}</time>
   </>
 );
@@ -43,11 +51,13 @@ export const SalesChart = ({
   startDate,
   endDate,
   aggregateBy,
+  sellerTimeZone,
 }: {
   data: AnalyticsDailyTotal[];
   startDate: string;
   endDate: string;
   aggregateBy: "monthly" | "daily";
+  sellerTimeZone?: string;
 }) => {
   const dataPoints = React.useMemo(() => {
     const dataPoints: DataPoint[] = [];
@@ -75,15 +85,37 @@ export const SalesChart = ({
     }));
   }, [data, aggregateBy]);
 
+  // When the range ends today (the backend formats today's date as "Today"), overlay a
+  // projected end-of-day total above today's point: current total extrapolated by the
+  // fraction of the seller's day elapsed. Rendered as a dashed, semi-transparent
+  // extension so it clearly reads as an estimate, not booked revenue.
+  const lastDataPoint = dataPoints[dataPoints.length - 1];
+  const projection = React.useMemo(() => {
+    if (aggregateBy !== "daily" || endDate !== "Today" || !sellerTimeZone || !lastDataPoint) return null;
+    const projectedTotals = projectedEndOfDayTotal(lastDataPoint.totals, fractionOfDayElapsed(sellerTimeZone));
+    if (projectedTotals === null || projectedTotals <= lastDataPoint.totals) return null;
+    return { label: lastDataPoint.label, actualTotals: lastDataPoint.totals, projectedTotals };
+  }, [aggregateBy, endDate, sellerTimeZone, lastDataPoint]);
+
+  const dataPointsWithProjection = React.useMemo(
+    () =>
+      projection
+        ? dataPoints.map((dataPoint, index) =>
+            index === dataPoints.length - 1 ? { ...dataPoint, projectedTotals: projection.projectedTotals } : dataPoint,
+          )
+        : dataPoints,
+    [dataPoints, projection],
+  );
+
   const { tooltip, containerRef, dotRef, events } = useChartTooltip();
-  const tooltipData = tooltip ? dataPoints[tooltip.index] : null;
+  const tooltipData = tooltip ? dataPointsWithProjection[tooltip.index] : null;
 
   return (
     <Chart
       containerRef={containerRef}
       tooltip={tooltipData ? <ChartTooltip data={tooltipData} /> : null}
       tooltipPosition={tooltip?.position ?? null}
-      data={dataPoints}
+      data={dataPointsWithProjection}
       maxBarSize={40}
       margin={{ top: 32, right: 0, bottom: 16, left: 16 }}
       {...events}
@@ -108,6 +140,33 @@ export const SalesChart = ({
         ))}
       </Bar>
       <Line {...lineProps(dotRef, dataPoints.length)} dataKey="totals" yAxisId="totals" />
+      {projection ? (
+        <>
+          <ReferenceLine
+            yAxisId="totals"
+            segment={[
+              { x: projection.label, y: projection.actualTotals },
+              { x: projection.label, y: projection.projectedTotals },
+            ]}
+            stroke="rgb(var(--accent))"
+            strokeOpacity={0.5}
+            strokeWidth={2}
+            strokeDasharray="4 4"
+            ifOverflow="extendDomain"
+          />
+          <ReferenceDot
+            yAxisId="totals"
+            x={projection.label}
+            y={projection.projectedTotals}
+            r={4}
+            fill="rgb(var(--accent))"
+            fillOpacity={0.5}
+            stroke="none"
+            ifOverflow="extendDomain"
+            data-testid="chart-projected-dot"
+          />
+        </>
+      ) : null}
     </Chart>
   );
 };
