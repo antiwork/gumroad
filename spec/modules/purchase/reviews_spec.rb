@@ -148,8 +148,11 @@ describe Purchase::Reviews do
       expect(product.average_rating).to eq(3)
 
       purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents), purchase.seller.id)
-      expect(product.average_rating).to eq(0)
-      expect(purchase.product_review).to be_deleted
+      # refund_purchase! locks (and therefore reloads) the purchase row, which resets its
+      # association cache — the stat update lands on a freshly loaded product instance.
+      # Reload our local references so the assertions read the persisted state.
+      expect(product.reload.average_rating).to eq(0)
+      expect(purchase.reload.product_review).to be_deleted
     end
 
     it "removes reviews from all products in a bundle when bundle is refunded" do
