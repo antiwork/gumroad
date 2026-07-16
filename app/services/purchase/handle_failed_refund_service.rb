@@ -265,19 +265,35 @@ class Purchase::HandleFailedRefundService
       # comparison below must see the value that worker actually persisted.
       affiliate_credit.lock!
 
-      failed_affiliate_balance_ids = refund.balance_transactions
-                                           .where(user: affiliate_credit.affiliate_user)
-                                           .where("issued_amount_gross_cents < 0")
-                                           .pluck(:balance_id)
-                                           .compact
-      return if failed_affiliate_balance_ids.empty?
+      failed_affiliate_debits = refund.balance_transactions
+                                      .where(user: affiliate_credit.affiliate_user)
+                                      .where("issued_amount_gross_cents < 0")
+                                      .to_a
+      return if failed_affiliate_debits.empty?
+
+      failed_affiliate_balance_ids = failed_affiliate_debits.filter_map(&:balance_id)
 
       # Partial-refund rows carry no refund reference, only the balance the
-      # affiliate debit landed in — match them through this refund's own affiliate
-      # balance transactions so rows from other (still effective) refunds survive.
-      purchase.affiliate_partial_refunds
-              .where(affiliate_credit:, balance_id: failed_affiliate_balance_ids)
-              .find_each(&:destroy!)
+      # affiliate debit landed in — and several refunds of the same purchase
+      # commonly land their affiliate debits in the affiliate's one unpaid
+      # balance, so deleting every row on the failed refund's balance would also
+      # delete rows recorded by other, still-effective refunds. Instead, remove
+      # at most ONE row per failed affiliate debit, matched on both the balance
+      # and the debit's amount: the row's amount_cents is written as the same
+      # refund_cents whose negation became the debit's issued gross (see
+      # Purchase#process_refund_or_chargeback_for_affiliate_credit_balance), so
+      # this pairs each failed debit with exactly the row it created. Locking
+      # reads for the same snapshot-staleness reason as the pointer repointing
+      # below.
+      failed_affiliate_debits.each do |debit|
+        next if debit.balance_id.nil?
+
+        purchase.affiliate_partial_refunds
+                .where(affiliate_credit:,
+                       balance_id: debit.balance_id,
+                       amount_cents: -debit.issued_amount_gross_cents)
+                .order(:id).lock.last&.destroy!
+      end
 
       return unless failed_affiliate_balance_ids.include?(affiliate_credit.affiliate_credit_refund_balance_id)
 

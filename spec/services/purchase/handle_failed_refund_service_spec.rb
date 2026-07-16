@@ -467,9 +467,11 @@ describe Purchase::HandleFailedRefundService do
       # Mirror what process_refund_or_chargeback_for_affiliate_credit_balance records:
       # a negative affiliate balance transaction linked to the refund, the refund-balance
       # pointer on the AffiliateCredit, and (for partial refunds) an AffiliatePartialRefund.
-      def record_affiliate_refund_side_effects!(partial: false)
-        issued_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -300, net_cents: -300)
-        holding_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -300, net_cents: -300)
+      # In production the partial-refund row's amount_cents and the debit's issued gross
+      # come from the same refund_cents, so they always match — keep that invariant here.
+      def record_affiliate_refund_side_effects!(partial: false, amount_cents: partial ? 150 : 300)
+        issued_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -amount_cents, net_cents: -amount_cents)
+        holding_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -amount_cents, net_cents: -amount_cents)
         affiliate_transaction = BalanceTransaction.create!(
           user: affiliate_user,
           merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
@@ -481,7 +483,7 @@ describe Purchase::HandleFailedRefundService do
         if partial
           purchase.affiliate_partial_refunds.create!(
             total_credit_cents: 300,
-            amount_cents: 150,
+            amount_cents:,
             balance: affiliate_transaction.balance,
             seller:,
             affiliate:,
@@ -519,6 +521,58 @@ describe Purchase::HandleFailedRefundService do
         remaining = purchase.affiliate_partial_refunds.reload
         expect(remaining).to contain_exactly(surviving_row)
         expect(remaining.where(balance_id: affiliate_transaction.balance_id)).to be_empty
+      end
+
+      it "removes only the failed refund's row when both refunds' debits share the same balance" do
+        # The common production shape: the affiliate has ONE unpaid balance, so an
+        # earlier (still effective) partial refund and the refund that later fails
+        # both land their affiliate debits — and partial-refund rows — in it.
+        # Balance-only matching would delete both rows here; the cleanup must key
+        # on the failed debit itself and remove only its own row.
+        affiliate_transaction = record_affiliate_refund_side_effects!(partial: true)
+        shared_balance = affiliate_transaction.balance
+        earlier_refund = create(:refund, purchase:, amount_cents: 500, total_transaction_cents: 500, status: "succeeded")
+        earlier_amount = BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -100, net_cents: -100)
+        earlier_transaction = BalanceTransaction.create!(
+          user: affiliate_user,
+          merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+          refund: earlier_refund,
+          issued_amount: earlier_amount,
+          holding_amount: earlier_amount
+        )
+        earlier_transaction.update_column(:balance_id, shared_balance.id)
+        surviving_row = purchase.affiliate_partial_refunds.create!(
+          total_credit_cents: 300,
+          amount_cents: 100,
+          balance: shared_balance,
+          seller:,
+          affiliate:,
+          affiliate_user:,
+          affiliate_credit:
+        )
+
+        described_class.new(refund:).perform
+
+        expect(purchase.affiliate_partial_refunds.reload).to contain_exactly(surviving_row)
+      end
+
+      it "removes exactly one row when the shared-balance rows have identical amounts" do
+        # Two partial refunds of the same amount on the same balance produce
+        # indistinguishable rows; the failed refund must take out exactly one,
+        # never both.
+        record_affiliate_refund_side_effects!(partial: true)
+        purchase.affiliate_partial_refunds.create!(
+          total_credit_cents: 300,
+          amount_cents: 150,
+          balance: purchase.affiliate_partial_refunds.sole.balance,
+          seller:,
+          affiliate:,
+          affiliate_user:,
+          affiliate_credit:
+        )
+
+        expect { described_class.new(refund:).perform }
+          .to change { purchase.affiliate_partial_refunds.count }.from(2).to(1)
       end
 
       it "re-points the pointer at an earlier effective refund's affiliate debit" do
