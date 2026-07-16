@@ -47,6 +47,7 @@ class AnalyticsController < Sellers::BaseController
     authorize :analytics, :index?
 
     if params[:interval] == "hour"
+      return render json: { error: "Invalid date range." }, status: :bad_request if @end_date < @start_date
       if (@end_date - @start_date).to_i > CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS
         return render json: { error: "Date range cannot exceed #{CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS} days for the hourly interval." }, status: :bad_request
       end

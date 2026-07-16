@@ -192,6 +192,17 @@ describe AnalyticsController do
       expect(response.parsed_body).to eq("some" => "data")
     end
 
+    it "rejects hourly requests with a reversed date range" do
+      start_time = "Mon Jun 09 2025 00:00:00 GMT-0000"
+      end_time = "Sun Jun 01 2025 00:00:00 GMT-0000"
+      expect(CreatorAnalytics::Web).not_to receive(:new)
+
+      get :data_by_referral, params: { start_time:, end_time:, interval: "hour" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("error" => "Invalid date range.")
+    end
+
     it "rejects hourly requests spanning more than 7 days" do
       start_time = "Sun Jun 01 2025 00:00:00 GMT-0000"
       end_time = "Mon Jun 09 2025 00:00:00 GMT-0000"

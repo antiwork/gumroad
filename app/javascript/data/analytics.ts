@@ -1,6 +1,6 @@
 import typia from "typia";
 
-import { request } from "$app/utils/request";
+import { request, ResponseError } from "$app/utils/request";
 
 export type AnalyticsDataByReferral = {
   dates_and_months: {
@@ -33,7 +33,10 @@ export const fetchAnalyticsDataByReferral = ({
     url: Routes.analytics_data_by_referral_path({ start_time: startTime, end_time: endTime, interval }),
     abortSignal: abort.signal,
   })
-    .then((response) => response.json())
+    .then((response) => {
+      if (!response.ok) throw new ResponseError();
+      return response.json();
+    })
     .then((json) => typia.assert<AnalyticsDataByReferral>(json));
   return { response, abort };
 };

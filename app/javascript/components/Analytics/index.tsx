@@ -1,4 +1,4 @@
-import { differenceInDays, lightFormat } from "date-fns";
+import { differenceInDays, lightFormat, startOfDay } from "date-fns";
 import { pickBy } from "lodash-es";
 import * as React from "react";
 
@@ -113,8 +113,11 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
   );
   const [aggregateBy, setAggregateBy] = React.useState<"hourly" | "daily" | "monthly">("daily");
   const dateRange = useAnalyticsDateRange({ maxRangeDays: MAX_DATE_RANGE_DAYS });
-  // Hourly buckets are only available for short ranges (the backend rejects wider ones).
-  const canAggregateHourly = differenceInDays(dateRange.to, dateRange.from) <= MAX_HOURLY_DATE_RANGE_DAYS;
+  // Hourly buckets are only available for short ranges (the backend rejects wider
+  // ones). Compare calendar days, not exact times: the picked dates carry a
+  // time-of-day, but only yyyy-MM-dd strings are sent to the backend.
+  const rangeDays = differenceInDays(startOfDay(dateRange.to), startOfDay(dateRange.from));
+  const canAggregateHourly = rangeDays >= 0 && rangeDays <= MAX_HOURLY_DATE_RANGE_DAYS;
   React.useEffect(() => {
     if (aggregateBy === "hourly" && !canAggregateHourly) setAggregateBy("daily");
   }, [aggregateBy, canAggregateHourly]);

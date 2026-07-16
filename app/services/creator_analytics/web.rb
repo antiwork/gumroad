@@ -144,7 +144,13 @@ class CreatorAnalytics::Web
       @_hourly_buckets ||= begin
         timezone = ActiveSupport::TimeZone[@user.timezone]
         time = timezone.local(@dates.first.year, @dates.first.month, @dates.first.day)
-        end_time = timezone.local(@dates.last.year, @dates.last.month, @dates.last.day) + 1.day
+        # Resolve the end boundary from the day after the last date rather than
+        # adding 1.day to the last date's midnight: in zones where DST starts at
+        # midnight (e.g. Santiago), timezone.local shifts a nonexistent midnight
+        # forward to 01:00, and "+ 1.day" from there would leak an extra next-day
+        # hour into the domain.
+        day_after_last = @dates.last + 1
+        end_time = timezone.local(day_after_last.year, day_after_last.month, day_after_last.day)
         buckets = {}
         while time < end_time
           buckets[time.strftime("%Y-%m-%dT%H:%M")] ||= time
