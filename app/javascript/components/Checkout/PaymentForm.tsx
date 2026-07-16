@@ -616,8 +616,16 @@ const PayButton = ({
 
 const CreditCardContent = ({
   onPaymentElementReadyChange,
+  walletClickSubmitRef,
 }: {
   onPaymentElementReadyChange?: ((ready: boolean) => void) | undefined;
+  // Set by this component to a function the card Pay button calls SYNCHRONOUSLY in its click
+  // handler. Safari only opens the Apple Pay sheet inside a user-activation window, and Stripe's
+  // deferred flow requires elements.submit() to run directly in the pay click for wallet
+  // payments (the sheet itself opens later, at createPaymentMethod/createConfirmationToken).
+  // Checkout reaches tokenization through async effects several ticks after the click, so the
+  // click handler triggers the submit here and tokenization reuses the in-flight promise.
+  walletClickSubmitRef?: React.MutableRefObject<(() => void) | null> | undefined;
 }) => {
   const [state, dispatch] = useState();
   const fail = useFail();
@@ -637,6 +645,11 @@ const CreditCardContent = ({
   }, [dispatch, willSaveCard]);
 
   const [cardError, setCardError] = React.useState(false);
+
+  // The in-flight elements.submit() started synchronously by the pay-button click for a wallet
+  // payment (see walletClickSubmitRef above). Consumed (and cleared) by the tokenization
+  // effects below so Stripe keeps Safari's user-activation window for the Apple Pay sheet.
+  const pendingWalletSubmitRef = React.useRef<ReturnType<StripeElements["submit"]> | null>(null);
   // The Payment Element's change event reports which payment-method row the buyer selected
   // (`value.type` — "card", "apple_pay", "google_pay", ...). We remember it in a ref so that at
   // submit time tokenization knows whether a wallet is paying — wallet submissions must keep the
@@ -711,6 +724,26 @@ const CreditCardContent = ({
     if (!usesPaymentElement) handlePaymentElementReady(null);
   }, [handlePaymentElementReady, usesPaymentElement]);
 
+  // Expose the synchronous click-time wallet submit to the pay button (see walletClickSubmitRef
+  // in the props above). Runs in the click handler itself: when a wallet row is selected on a
+  // mounted element, kick off elements.submit() immediately so Stripe captures the click's
+  // user-activation for opening the Apple Pay sheet later in the flow. Card submissions are
+  // unaffected (tokenization keeps calling elements.submit() itself).
+  React.useEffect(() => {
+    if (!walletClickSubmitRef) return;
+    walletClickSubmitRef.current = () => {
+      const controller = paymentElementRef.current;
+      if (!controller || !isWalletPaymentElementType(paymentElementTypeRef.current)) return;
+      pendingWalletSubmitRef.current = controller.elements.submit();
+      // Swallow here only to avoid an unhandled-rejection warning; tokenization awaits this same
+      // promise and handles the error for real.
+      pendingWalletSubmitRef.current.catch(() => {});
+    };
+    return () => {
+      walletClickSubmitRef.current = null;
+    };
+  }, [walletClickSubmitRef]);
+
   React.useEffect(() => {
     onPaymentElementReadyChange?.(
       isCardReadyToPay({ useSavedCard, useStripePaymentElement: usesPaymentElement, paymentElementReady }),
@@ -738,6 +771,8 @@ const CreditCardContent = ({
           paymentElementRef.current,
           "`paymentElementRef.current` should be defined when confirming via the Payment Element",
         );
+        const pendingSubmit = pendingWalletSubmitRef.current;
+        pendingWalletSubmitRef.current = null;
         const tokenResult = await createPaymentElementConfirmationToken({
           stripe: controller.stripe,
           elements: controller.elements,
@@ -749,6 +784,7 @@ const CreditCardContent = ({
           city: state.city,
           address: state.address,
           walletSelected: isWalletPaymentElementType(paymentElementTypeRef.current),
+          pendingSubmit,
         });
         if (tokenResult.status === "error") {
           setCardError(true);
@@ -791,6 +827,8 @@ const CreditCardContent = ({
         setCardError(true);
         return dispatch({ type: "cancel" });
       }
+      const serverConfirmPendingSubmit = pendingWalletSubmitRef.current;
+      pendingWalletSubmitRef.current = null;
       const selectedPaymentMethod: SelectedPaymentMethod = useSavedCard
         ? { type: "saved" }
         : useStripePaymentElement
@@ -809,6 +847,7 @@ const CreditCardContent = ({
               city: state.city,
               address: state.address,
               walletSelected: isWalletPaymentElementType(paymentElementTypeRef.current),
+              pendingSubmit: serverConfirmPendingSubmit,
             }
           : {
               type: "card",
@@ -950,9 +989,13 @@ const CreditCardContent = ({
 const CreditCardPayButtonContent = ({
   disabled = false,
   isTestPurchase,
+  onPayClick,
 }: {
   disabled?: boolean;
   isTestPurchase?: boolean;
+  // Called synchronously in the Pay click, before the submission pipeline starts — used to
+  // capture the click's user-activation for wallet payments (see walletClickSubmitRef).
+  onPayClick?: (() => void) | undefined;
 }) => {
   const [state, dispatch] = useState();
   const payLabel = usePayLabel();
@@ -961,7 +1004,10 @@ const CreditCardPayButtonContent = ({
     <div className="flex flex-col gap-4">
       <Button
         color="primary"
-        onClick={() => dispatch({ type: "offer" })}
+        onClick={() => {
+          onPayClick?.();
+          dispatch({ type: "offer" });
+        }}
         disabled={disabled || isSubmitDisabled(state)}
       >
         {payLabel}
@@ -1429,6 +1475,11 @@ const PaymentMethodsSection = ({
   );
   const [paymentElementReady, setPaymentElementReady] = React.useState(false);
   const handlePaymentElementReadyChange = React.useCallback((ready: boolean) => setPaymentElementReady(ready), []);
+  // Bridges the card Pay button's click to CreditCardContent's click-time wallet submit — see
+  // walletClickSubmitRef on CreditCardContent for why wallet payments must submit the element
+  // synchronously in the click.
+  const walletClickSubmitRef = React.useRef<(() => void) | null>(null);
+  const handleCardPayClick = React.useCallback(() => walletClickSubmitRef.current?.(), []);
 
   const hasMultiplePaymentMethods = isPayPalAvailable || canPay;
   const usesPaymentElement = canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state);
@@ -1437,9 +1488,16 @@ const PaymentMethodsSection = ({
   if (usesPaymentElement && !hasMultiplePaymentMethods) {
     return (
       <>
-        <CreditCardContent onPaymentElementReadyChange={handlePaymentElementReadyChange} />
+        <CreditCardContent
+          onPaymentElementReadyChange={handlePaymentElementReadyChange}
+          walletClickSubmitRef={walletClickSubmitRef}
+        />
         {state.paymentMethod === "card" ? (
-          <CreditCardPayButtonContent disabled={cardPayDisabled} isTestPurchase={isTestPurchase} />
+          <CreditCardPayButtonContent
+            disabled={cardPayDisabled}
+            isTestPurchase={isTestPurchase}
+            onPayClick={handleCardPayClick}
+          />
         ) : null}
       </>
     );
@@ -1458,7 +1516,10 @@ const PaymentMethodsSection = ({
         )}
         {state.paymentMethod === "card" ? (
           <div className={hasMultiplePaymentMethods ? "bg-body p-4 pt-0" : "bg-body px-4 pb-4"}>
-            <CreditCardContent onPaymentElementReadyChange={handlePaymentElementReadyChange} />
+            <CreditCardContent
+              onPaymentElementReadyChange={handlePaymentElementReadyChange}
+              walletClickSubmitRef={walletClickSubmitRef}
+            />
           </div>
         ) : null}
         {isPayPalAvailable ? (
@@ -1474,7 +1535,11 @@ const PaymentMethodsSection = ({
       </div>
       {state.paymentMethod === "paypal" ? <PayPalContent /> : null}
       {state.paymentMethod === "card" ? (
-        <CreditCardPayButtonContent disabled={cardPayDisabled} isTestPurchase={isTestPurchase} />
+        <CreditCardPayButtonContent
+          disabled={cardPayDisabled}
+          isTestPurchase={isTestPurchase}
+          onPayClick={handleCardPayClick}
+        />
       ) : null}
       <StripePaymentRequestPayButton canPay={canPay} />
     </>

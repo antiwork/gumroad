@@ -57,6 +57,13 @@ export type PaymentElementCardData = {
   // isWalletPaymentElementType). Wallet payments carry their own verified billing details from
   // the wallet sheet, so tokenization must NOT overwrite them with the checkout form's values.
   walletSelected: boolean;
+  // Wallet submissions only: the elements.submit() promise from the call made synchronously in
+  // the buyer's click (see the wallet submit chain in PaymentForm.tsx). Safari only lets the
+  // Apple Pay sheet open inside a user-activation window, and checkout's submission pipeline
+  // reaches tokenization in an async effect several ticks after the click — far too late — so
+  // the click handler submits the element itself and hands the in-flight promise here for
+  // tokenization to await instead of calling elements.submit() a second time.
+  pendingSubmit?: ReturnType<StripeElements["submit"]> | null;
 };
 
 // Payment-method types the Payment Element reports (via its change event's `value.type`) when
@@ -116,7 +123,9 @@ export const paymentElementBillingDetails = (cardData: PaymentElementBillingDeta
 export const preparePaymentElementPaymentMethodData = async (
   cardData: PaymentElementCardData,
 ): Promise<CardPaymentMethodParams | StripeErrorParams> => {
-  const submitResult = await cardData.elements.submit();
+  // Reuse the click-time submit for wallet payments (see pendingSubmit above); everything else
+  // submits here as before.
+  const submitResult = await (cardData.pendingSubmit ?? cardData.elements.submit());
   if (submitResult.error) {
     return { status: "error", stripe_error: submitResult.error };
   }
@@ -165,7 +174,9 @@ export type PaymentElementConfirmationTokenResult =
 export const createPaymentElementConfirmationToken = async (
   cardData: PaymentElementCardData,
 ): Promise<PaymentElementConfirmationTokenResult> => {
-  const submitResult = await cardData.elements.submit();
+  // Reuse the click-time submit for wallet payments (see pendingSubmit above); everything else
+  // submits here as before.
+  const submitResult = await (cardData.pendingSubmit ?? cardData.elements.submit());
   if (submitResult.error) {
     return { status: "error", stripe_error: submitResult.error };
   }
