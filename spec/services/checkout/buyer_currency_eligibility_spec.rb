@@ -140,11 +140,61 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(save_card_decision.fallback_reason).to eq(:future_charge_setup)
   end
 
-  it "falls back for multi-item checkouts" do
-    purchases << create(:purchase, link: product, seller:, merchant_account:, purchase_state: "in_progress")
+  it "allows multi-item checkouts when all purchases come from one seller" do
+    second_purchase = create(:purchase,
+                             link: create(:product, user: seller, price_currency_type: Currency::USD),
+                             seller:,
+                             merchant_account:,
+                             purchase_state: "in_progress",
+                             ip_address: "203.0.113.1")
+    purchases << second_purchase
+    order.purchases << purchase
+    order.purchases << second_purchase
+
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.fallback_reason).to be_nil
+  end
+
+  it "falls back for orders spanning multiple sellers" do
+    # ChargeService creates one charge per seller, so this service only ever sees one
+    # seller's purchases — the multi-seller signal lives on the order.
+    other_seller = create(:user)
+    other_seller_purchase = create(:purchase,
+                                   link: create(:product, user: other_seller),
+                                   seller: other_seller,
+                                   purchase_state: "in_progress")
+    order.purchases << purchase
+    order.purchases << other_seller_purchase
 
     expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:multi_item_checkout)
+    expect(decision.fallback_reason).to eq(:multi_seller_checkout)
+  end
+
+  it "falls back when any purchase on the charge fails a product gate" do
+    purchases << create(:purchase,
+                        link: create(:product, user: seller, price_currency_type: Currency::EUR),
+                        seller:,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        ip_address: "203.0.113.1")
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_currency)
+  end
+
+  it "falls back when any purchase on the charge is an installment payment" do
+    second_purchase = create(:purchase,
+                             link: create(:product, user: seller, price_currency_type: Currency::USD),
+                             seller:,
+                             merchant_account:,
+                             purchase_state: "in_progress",
+                             ip_address: "203.0.113.1")
+    second_purchase.update!(is_installment_payment: true)
+    purchases << second_purchase
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
   end
 
   it "falls back for seller-managed destination-charge models" do

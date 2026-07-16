@@ -90,14 +90,26 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:wallet_payment_request) if wallet_type.present?
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
-    return fallback(:multi_item_checkout) unless purchases.one?
+    return fallback(:no_purchases) if purchases.empty?
+    # This service sees the purchases of ONE charge (the order pipeline groups purchases
+    # into one charge per seller before charging), so an order spanning several sellers
+    # spans several charges — but the quote the buyer confirmed locked the whole cart
+    # total for a single PaymentIntent. Splitting one locked quote across several intents
+    # is Open Question 9 on issue #5419, so those orders fall back (and fail closed in
+    # Charge::CreateService when a quote token is present).
+    return fallback(:multi_seller_checkout) if multi_seller_order?
     return fallback(:missing_stripe_chargeable) if chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
-    purchase = purchases.first
-    return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
-    return fallback(:unsupported_product_currency) unless purchase.link.price_currency_type.to_s.downcase == Currency::USD
+    # The verified quote locked the cart total, so every purchase on the charge must
+    # individually support presentment — one unsupported item invalidates the whole cart.
+    purchases.each do |purchase|
+      return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
+      return fallback(:unsupported_product_currency) unless purchase.link.price_currency_type.to_s.downcase == Currency::USD
+    end
 
-    buyer_currency = buyer_currency_for_ip(purchase.ip_address)
+    # All purchases in an order come from the same checkout request, so any purchase's IP
+    # identifies the buyer's location.
+    buyer_currency = buyer_currency_for_ip(purchases.first.ip_address)
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
     return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
@@ -191,6 +203,13 @@ class Checkout::BuyerCurrencyEligibility
 
     def wallet_type
       params[:wallet_type]
+    end
+
+    # True when the order's purchases span more than one seller — i.e. the order produces
+    # more than one prospective charge. Checked against the whole order, not just this
+    # charge's purchases (which are single-seller by construction).
+    def multi_seller_order?
+      order.present? && order.purchases.map(&:seller_id).uniq.many?
     end
 
     # Commission deposits and installment payments charge less than the locked cart total
