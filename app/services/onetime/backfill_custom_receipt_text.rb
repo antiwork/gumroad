@@ -19,7 +19,11 @@
 #   * Products where the new field is already set are skipped — the seller (or an earlier manual
 #     restore) has already chosen the new-format text, and this task must never overwrite it. The
 #     check is re-done under a row lock right before the write, so a seller saving receipt text
-#     while the task is running can't be overwritten by a stale copy of the row.
+#     while the task is running can't be overwritten by a stale copy of the row. One known
+#     trade-off: a seller who set text in the new Receipt tab and later cleared it (leaving an
+#     empty string in json_data) is indistinguishable from never-migrated, so their legacy wording
+#     is restored. A key-presence check would be wrong the other way — the product editor
+#     round-trips the field on every save — so value-presence is the deliberate choice.
 #   * Legacy text longer than the new field's validation limit
 #     (Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH) is skipped and counted rather than
 #     truncated or written as-is. Writing an over-limit value would make every subsequent save of
@@ -29,6 +33,9 @@
 #   * Writes use update_column so the restore doesn't trigger the product's save callbacks
 #     (search reindexing, cache busting, etc.) for a receipt-text-only data fix, and doesn't
 #     require the rest of the (possibly old, otherwise-invalid) record to pass validation.
+#   * This restores existing data only. The public API v2 still accepts writes to the legacy
+#     `custom_receipt` param (which nothing reads anymore) — pointing that at the new field is
+#     tracked separately on the regression issue and deliberately out of scope here.
 #
 # Idempotent and dry-run by default:
 #

@@ -60,6 +60,25 @@ describe Onetime::BackfillCustomReceiptText do
       expect(stats[:skipped_too_long]).to eq(1)
     end
 
+    it "backfills text exactly at the validation limit" do
+      at_limit = "a" * Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH
+      product = product_with_legacy_receipt(at_limit)
+
+      stats = described_class.process(dry_run: false)
+
+      expect(product.reload.custom_receipt_text).to eq(at_limit)
+      expect(stats[:backfilled]).to eq(1)
+    end
+
+    it "skips whitespace-only legacy text" do
+      product = product_with_legacy_receipt("   \n  ")
+
+      stats = described_class.process(dry_run: false)
+
+      expect(product.reload.custom_receipt_text).to be_nil
+      expect(stats[:backfilled]).to be_nil.or eq(0)
+    end
+
     it "does not write anything in dry-run mode (the default)" do
       product = product_with_legacy_receipt("Dry run text")
 
@@ -114,6 +133,17 @@ describe Onetime::BackfillCustomReceiptText do
 
       expect(stats[:errors]).to eq(1)
       expect(good.reload.custom_receipt_text).to eq("Will succeed")
+    end
+
+    it "counts a row with corrupt non-Hash json_data as an error and continues" do
+      bad = product_with_legacy_receipt("Corrupt json_data row")
+      bad.update_column(:json_data, [].to_json)
+      good = product_with_legacy_receipt("Healthy row")
+
+      stats = described_class.process(dry_run: false)
+
+      expect(stats[:errors]).to eq(1)
+      expect(good.reload.custom_receipt_text).to eq("Healthy row")
     end
   end
 end
