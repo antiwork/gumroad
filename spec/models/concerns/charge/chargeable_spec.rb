@@ -44,6 +44,23 @@ describe Charge::Chargeable do
         event = build(:charge_event_dispute_formalized, charge_reference: "CH-12345", charge_id: nil, processor_payment_intent_id: "pi_123456")
         expect(Charge::Chargeable.find_by_stripe_event(event)).to eq(charge)
       end
+
+      # Refund events (refund.updated / refund.failed) carry no charge_reference, so a
+      # refund on a combined charge cannot take the CH- branch. The lookup must still
+      # resolve the canonical Charge — and prefer it over the member purchases, which
+      # share the same ch_ id in stripe_transaction_id.
+      it "finds the charge by processor transaction id when the event has no charge reference" do
+        charge = create(:charge, processor_transaction_id: "ch_refund_1")
+        event = build(:charge_event_refund_failed, charge_reference: nil, charge_id: "ch_refund_1")
+        expect(Charge::Chargeable.find_by_stripe_event(event)).to eq(charge)
+      end
+
+      it "prefers the charge over its purchases when both share the processor transaction id" do
+        purchase = create(:purchase, stripe_transaction_id: "ch_refund_2")
+        charge = create(:charge, processor_transaction_id: "ch_refund_2", purchases: [purchase])
+        event = build(:charge_event_refund_failed, charge_reference: nil, charge_id: "ch_refund_2")
+        expect(Charge::Chargeable.find_by_stripe_event(event)).to eq(charge)
+      end
     end
   end
 

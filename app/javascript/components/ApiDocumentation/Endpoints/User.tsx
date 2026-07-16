@@ -50,8 +50,9 @@ const ProfileCustomHtmlDocumentation = () => (
     </p>
     <ul>
       <li>
-        <code>GET /v2/user/custom_html</code> returns the current <code>custom_html</code>, a{" "}
-        <code>has_landing_page</code> flag, and your public <code>profile_url</code>.
+        <code>GET /v2/user/custom_html</code> returns the current <code>custom_html</code>, a <code>rendered_html</code>{" "}
+        starting point (the published HTML, or a render of the default storefront when none is set — pull it, edit,
+        preview, and push back), a <code>has_landing_page</code> flag, and your public <code>profile_url</code>.
       </li>
       <li>
         <code>PUT /v2/user/custom_html</code> sets it; send <code>null</code> or an empty string to clear it and fall
@@ -118,6 +119,12 @@ export const GetUserCustomHtml = () => (
       {renderFields([
         { name: "success", type: "boolean", description: "Whether the request succeeded" },
         { name: "custom_html", type: "string", description: "The published profile HTML, or null if none is set" },
+        {
+          name: "rendered_html",
+          type: "string",
+          description:
+            "A standalone HTML render of the profile as it serves today — the published custom HTML, or a faithful render of the default storefront when none is set. Pull this as the starting point for going custom.",
+        },
         { name: "has_landing_page", type: "boolean", description: "Whether a custom profile page is currently set" },
         { name: "profile_url", type: "string", description: "Your public profile URL" },
       ])}
@@ -132,6 +139,7 @@ export const GetUserCustomHtml = () => (
       {`{
   "success": true,
   "custom_html": "<main><h1>Moonwalk Records</h1></main>",
+  "rendered_html": "<main><h1>Moonwalk Records</h1></main>",
   "has_landing_page": true,
   "profile_url": "https://sailorjohn.gumroad.com"
 }`}

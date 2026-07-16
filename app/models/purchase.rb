@@ -90,6 +90,11 @@ class Purchase < ApplicationRecord
   belongs_to :price, optional: true
   has_many :events
   has_many :refunds
+  # Only refunds whose money actually left our account (see Refund.effective). Every
+  # financial, tax, and reporting query that sums "how much of this purchase was
+  # refunded" must go through this association, so a refund that failed after
+  # acceptance and was reversed is treated the same way everywhere.
+  has_many :effective_refunds, -> { effective }, class_name: "Refund"
   has_many :disputes
   belongs_to :offer_code, optional: true
   belongs_to :preorder, optional: true
@@ -1843,20 +1848,27 @@ class Purchase < ApplicationRecord
     amount_refunded_cents + gumroad_tax_refunded_cents
   end
 
+  # All four "refunded so far" sums exclude REVERSED failed refunds (see
+  # Refund.effective): a failed refund is one the buyer's bank returned after
+  # acceptance (async bank-transfer methods), meaning the buyer never received the
+  # money. Once the balance debits have been reversed, counting those rows would
+  # permanently understate amount_refundable_cents and block re-refunding the
+  # purchase. Failed refunds that were NOT auto-reversed still count — the seller
+  # is still debited for them until a human resolves the exception.
   def amount_refunded_cents
-    refunds.sum(:amount_cents)
+    refunds.effective.sum(:amount_cents)
   end
 
   def fee_refunded_cents
-    refunds.sum(:fee_cents)
+    refunds.effective.sum(:fee_cents)
   end
 
   def tax_refunded_cents
-    refunds.sum(:creator_tax_cents)
+    refunds.effective.sum(:creator_tax_cents)
   end
 
   def gumroad_tax_refunded_cents
-    refunds.sum(:gumroad_tax_cents)
+    refunds.effective.sum(:gumroad_tax_cents)
   end
 
   def gross_amount_refundable_cents
@@ -4611,7 +4623,14 @@ class Purchase < ApplicationRecord
       price = price_for_recurrence
       return formatted_price if price.nil?
 
-      formatted_price_with_recurrence(formatted_price, price.recurrence, subscription.try(:charge_occurence_count), format:)
+      # Only pass the charge count for subscriptions that charge exactly once so
+      # their price renders as "$99 once". Fixed-length subscriptions with several
+      # charges keep their plain recurring label here: the historical call site
+      # never passed a count (it called a misspelled method via `try`, which
+      # always returned nil), and suddenly appending "x N" would change price
+      # strings on the API and seller-notification surfaces built on this method.
+      charge_occurrence_count = subscription&.single_charge? ? 1 : nil
+      formatted_price_with_recurrence(formatted_price, price.recurrence, charge_occurrence_count, format:)
     end
 
     def update_product_search_index!

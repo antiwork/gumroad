@@ -445,7 +445,12 @@ class User < ApplicationRecord
   def avatar_url
     return ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png") unless avatar.attached?
 
-    cached_variant_url = Rails.cache.fetch("attachment_#{avatar.id}_variant_url") { avatar_variant.url }
+    # The "_v2" suffix versions the cache key: we previously served 128x128
+    # variants, and the old (unversioned) key still holds those URLs. Using a
+    # new key makes every user's avatar URL regenerate lazily on next read,
+    # so existing uploads get the sharper 400x400 variant without any manual
+    # backfill. Old keys are simply left behind and evicted by memcached.
+    cached_variant_url = Rails.cache.fetch("attachment_#{avatar.id}_variant_url_v2") { avatar_variant.url }
     cdn_url_for(cached_variant_url)
   rescue => e
     Rails.logger.warn("User#avatar_url error (#{id}): #{e.class} => #{e.message}")
@@ -455,7 +460,9 @@ class User < ApplicationRecord
   def avatar_variant
     return unless avatar.attached?
 
-    avatar.variant(resize_to_limit: [128, 128]).processed
+    # 400x400 so avatars stay sharp on Retina/high-DPI screens: the profile
+    # settings preview box is 200 CSS px, which is 400 device px at 2x.
+    avatar.variant(resize_to_limit: [400, 400]).processed
   end
 
   def username

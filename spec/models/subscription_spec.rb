@@ -3470,6 +3470,23 @@ describe Subscription, :vcr do
     end
   end
 
+  describe "#single_charge?" do
+    it "returns true when the subscription only ever charges once" do
+      subscription = build(:subscription, charge_occurrence_count: 1)
+      expect(subscription.single_charge?).to eq true
+    end
+
+    it "returns false when the subscription charges more than once" do
+      subscription = build(:subscription, charge_occurrence_count: 2)
+      expect(subscription.single_charge?).to eq false
+    end
+
+    it "returns false when the subscription has no fixed length" do
+      subscription = build(:subscription)
+      expect(subscription.single_charge?).to eq false
+    end
+  end
+
   describe "#charges_completed?" do
     before do
       product = create(:membership_product)

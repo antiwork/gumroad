@@ -248,6 +248,69 @@ describe Exports::Payouts::Csv, :vcr do
     end
   end
 
+  describe "failed refund reversals" do
+    let!(:payout_date) { 1.week.ago }
+    let(:payout_processor_type) { PayoutProcessorType::PAYPAL }
+
+    before do
+      @seller = create :named_user
+
+      travel_to(1.month.ago) do
+        @product = create :product, user: @seller, name: "Some Product", price_cents: 1000
+        @purchase = create(:purchase_in_progress, price_cents: 1000, seller: @seller, link: @product, chargeable: create(:chargeable))
+        @purchase.process!
+        @purchase.update_balance_and_mark_successful!
+      end
+
+      travel_to(1.month.ago + 1.day) do
+        # Refund through the real refund path (fee retention, balance debits), with
+        # only the processor call stubbed, then fail it: the buyer's bank returned
+        # the money after Stripe accepted the refund.
+        stripe_refund = double("stripe_refund", status: "pending", id: "re_export_failed_test")
+        charge_refund = ChargeRefund.new
+        charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        charge_refund.id = stripe_refund.id
+        charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -@purchase.total_transaction_cents)
+        charge_refund.instance_variable_set(:@refund, stripe_refund)
+        expect(ChargeProcessor).to receive(:refund!).and_return(charge_refund)
+        expect(@purchase.refund_and_save!(create(:admin_user).id, reason: "test refund")).to eq(true)
+        @failed_refund = @purchase.refunds.last
+
+        Purchase::HandleFailedRefundService.new(refund: @failed_refund).perform
+        @purchase.reload
+      end
+
+      travel_to(1.month.ago + 2.days) do
+        @payout = create_payout(payout_date, payout_processor_type, @seller)
+      end
+    end
+
+    it "renders the failed refund as an explicit debit + reversal pair that nets to zero" do
+      csv = Exports::Payouts::Csv.new(payment: @payout).perform
+      parsed_csv = CSV.parse(csv)
+      types = parsed_csv.map(&:first)
+
+      # The refund financially never happened, so it must not appear as a live refund.
+      expect(types).not_to include("Full Refund", "Partial Refund")
+
+      # Every movement is labeled, and each pair nets to zero.
+      expect(types).to include("Failed Refund", "Failed Refund Reversal")
+      net_total_index = Exports::Payouts::Csv::HEADERS.index("Net Total ($)")
+      failed_refund_net = parsed_csv.select { |row| row.first.in?(["Failed Refund", "Failed Refund Reversal"]) }
+                                    .sum { |row| row[net_total_index].to_f }
+      expect(failed_refund_net).to eq(0.0)
+
+      expect(types).to include("Failed Refund Fee Retained", "Failed Refund Fee Returned")
+      fee_net = parsed_csv.select { |row| row.first.in?(["Failed Refund Fee Retained", "Failed Refund Fee Returned"]) }
+                          .sum { |row| row[net_total_index].to_f }
+      expect(fee_net).to eq(0.0)
+
+      # The payout still balances: the seller keeps the full sale.
+      totals_row = parsed_csv.reverse.find { |row| row.first == Exports::Payouts::Csv::TOTALS_COLUMN_NAME }
+      expect(totals_row).to be_present
+    end
+  end
+
   def csv_safe(value)
     return value if value.nil?
     str = value.to_s

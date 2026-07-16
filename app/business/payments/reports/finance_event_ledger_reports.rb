@@ -17,6 +17,12 @@
 #   - disputes formalized — disputes that took financial effect that day
 #   + disputes reversed   — disputes won that day (the disputed money comes back to us)
 #
+#   + refund reversals    — refunds that failed after acceptance (the buyer's bank
+#                           returned the money) whose balance debits were reversed that
+#                           day. The original "refunds issued" event on its own day is
+#                           immutable, so the money coming back is booked as this
+#                           separate compensating event on the day the reversal ran.
+#
 # Days partition a month, and all four timestamps are set by our own code at processing
 # time (Purchase#succeeded_at, Refund#created_at, and the Dispute state machine's
 # formalized_at/won_at — never backdated from processor payloads). So the sum of the
@@ -28,7 +34,8 @@
 # second reversal is not booked as a new event. This has no supported processor flow
 # today; the parallel-run reconciliation against the monthly reports would surface it.
 module FinanceEventLedgerReports
-  REPORT_VERSION = 1
+  # Version 2 adds the refund_reversals compensating event.
+  REPORT_VERSION = 2
 
   # Bounds the funds-received scan via the indexed (purchase_state, created_at) columns:
   # `purchases` has no standalone succeeded_at index and the table is too large to add
@@ -59,6 +66,14 @@ module FinanceEventLedgerReports
       created_at: (window.first - MAX_CREATION_TO_SUCCESS_LAG)...window.last
     )
     refunds_issued = Refund.joins(:purchase).where(refunds: { created_at: window })
+    # ISO 8601 UTC strings compare correctly as strings, so a plain string range works
+    # on the JSON timestamp. Reversals recorded before this timestamp existed have no
+    # value and fall outside every window; the parallel-run reconciliation against the
+    # monthly reports surfaces any such row.
+    refund_reversals = Refund.reversed_failures.joins(:purchase).where(
+      "refunds.json_data->>'$.balance_reversed_on_failure_at' >= ? AND refunds.json_data->>'$.balance_reversed_on_failure_at' < ?",
+      window.first.utc.iso8601, window.last.utc.iso8601
+    )
     disputes_formalized = disputed_purchases(Dispute.where(formalized_at: window))
     disputes_reversed = disputed_purchases(Dispute.where(won_at: window))
 
@@ -72,6 +87,7 @@ module FinanceEventLedgerReports
           "processor" => name,
           "funds_received" => purchase_event_line(funds_received.merge(filter)),
           "refunds_issued" => with_deferred_split(refunds_issued.merge(filter), month_start) { |relation| refund_event_line(relation) },
+          "refund_reversals" => with_deferred_split(refund_reversals.merge(filter), month_start) { |relation| refund_event_line(relation) },
           "disputes_formalized" => with_deferred_split(disputes_formalized.merge(filter), month_start) { |relation| purchase_event_line(relation) },
           "disputes_reversed" => with_deferred_split(disputes_reversed.merge(filter), month_start) { |relation| purchase_event_line(relation) },
         }

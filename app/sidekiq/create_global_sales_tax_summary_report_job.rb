@@ -348,7 +348,9 @@ class CreateGlobalSalesTaxSummaryReportJob
     # Sums only PRE-CUTOVER refunds: these are the refunds still netted into their purchase's
     # period. Post-cutover refunds are handled by apply_refund_leg in the refund's own month.
     def refund_totals_by_purchase(purchase_ids)
-      Refund.where(purchase_id: purchase_ids)
+      # .effective keeps failed-but-not-reversed refunds (the seller is still debited)
+      # and drops reversed ones, matching the refunded sums everywhere else.
+      Refund.effective.where(purchase_id: purchase_ids)
         .where("refunds.created_at < ?", Purchase::Reportable::REFUND_REPORTING_CUTOVER.beginning_of_day)
         .group(:purchase_id)
         .pluck(:purchase_id, Arel.sql("SUM(refunds.total_transaction_cents)"), Arel.sql("SUM(refunds.gumroad_tax_cents)"))

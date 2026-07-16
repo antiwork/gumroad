@@ -30,7 +30,7 @@ import {
 import { formatCallDate } from "$app/utils/date";
 import { applyOfferCodeToCents } from "$app/utils/offer-code";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
-import { recurrenceNames, recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
+import { isSingleChargeDuration, recurrenceNames, recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
 
 import { Breaklines } from "$app/components/Breaklines";
 import { Button } from "$app/components/Button";
@@ -163,6 +163,7 @@ export type Product = {
   is_multiseat_license: boolean;
   quantity_remaining: number | null;
   recurrences: Recurrences | null;
+  duration_in_months?: number | null;
   pwyw: { suggested_price_cents: number | null } | null;
   ppp_details: PurchasingPowerParityDetails | null;
   native_type: ProductNativeType;
@@ -298,7 +299,11 @@ export const OptionRadioButton = ({
             ) : null}
             {formatBuyerLocalOrSetPrice(discountedPriceCents, buyerLocalContext)}
             {isPWYW ? "+" : null}
-            {recurrence ? ` ${recurrenceLabels[recurrence]}` : null}
+            {recurrence
+              ? // A fixed-length membership lasting one recurrence period charges
+                // once, so "a year" would wrongly suggest a recurring charge.
+                ` ${isSingleChargeDuration(recurrence, product.duration_in_months ?? null) ? "once" : recurrenceLabels[recurrence]}`
+              : null}
             <div itemProp="price" className="hidden">
               {formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, discountedPriceCents)}
             </div>

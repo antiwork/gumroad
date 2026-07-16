@@ -693,6 +693,28 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
       end
 
+      it "returns an error when an item price exceeds the bigint column limit" do
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: create(:product).external_id },
+                  price: CartProduct::MAX_PRICE + 1,
+                  quantity: 1,
+                  referrer: "direct"
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.not_to change(Cart, :count)
+
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+      end
+
       it "returns an error when cart contains more than allowed number of cart products" do
         items = (Cart::MAX_ALLOWED_CART_PRODUCTS + 1).times.map { { product: { id: _1 + 1 } }  }
         patch :update, params: { cart: { items: } }, as: :json

@@ -62,11 +62,14 @@ class CreateVatReportJob
           # have been) reported in the first place: settled purchases that are either not charged
           # back or had their chargeback reversed. A purchase that was charged back outright never
           # contributes VAT to the report, so its refunds must not be subtracted either.
+          # Only effective refunds count: a refund that terminally failed after acceptance and
+          # had its balance debits reversed never actually returned money to the buyer, so it
+          # must not reduce the VAT due (see Refund.effective for the full semantics).
           vat_refunds_on_date = zip_tax_rate.purchases
                                               .where("purchase_state != 'failed'")
                                               .where("stripe_transaction_id IS NOT NULL")
                                               .not_chargedback_or_chargedback_reversed
-                                              .joins(:refunds)
+                                              .joins(:effective_refunds)
                                               .where(refunds: { created_at: date.beginning_of_day..date.end_of_day })
 
           total_purchase_excluding_vat_amount_cents = vat_purchases_on_date.sum(:price_cents)

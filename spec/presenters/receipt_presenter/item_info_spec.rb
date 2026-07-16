@@ -719,6 +719,38 @@ describe ReceiptPresenter::ItemInfo do
           end
         end
 
+        context "when the membership only ever charges once" do
+          before do
+            purchase.subscription.update!(charge_occurrence_count: 1)
+          end
+
+          it "returns a one-time payment note with the membership end date" do
+            url = Rails.application.routes.url_helpers.manage_subscription_url(
+              purchase.subscription.external_id,
+              host: UrlService.domain_with_protocol,
+            )
+            end_date = purchase.subscription.end_time_of_subscription.to_fs(:formatted_date_abbrev_month)
+            expect(props[:manage_subscription_note]).to eq(
+              "You will not be charged again for this membership. " \
+              "Your membership ends on #{end_date}. " \
+              "If you would like to manage your membership you can visit " \
+              "<a target=\"_blank\" href=\"#{url}\">subscription settings</a>."
+            )
+          end
+        end
+
+        context "when a free trial membership only ever charges once" do
+          let(:purchase) { create(:free_trial_membership_purchase) }
+
+          before do
+            purchase.subscription.update!(charge_occurrence_count: 1)
+          end
+
+          it "keeps the recurring wording because the single charge hasn't happened yet" do
+            expect(props[:manage_subscription_note]).to start_with("You will be charged once a month.")
+          end
+        end
+
         context "when the subscription is a gift" do
           before do
             allow(purchase.subscription).to receive(:gift?).and_return(true)

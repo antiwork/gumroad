@@ -3,7 +3,7 @@
 class StripeEventHandler
   attr_accessor :params
   # See full list of events at https://stripe.com/docs/api/events/types
-  ALL_HANDLED_EVENTS = %w{account.application.deauthorized account.updated capability.updated payout. charge. capital. radar. payment_intent.payment_failed payment_intent.processing payment_intent.succeeded}.freeze
+  ALL_HANDLED_EVENTS = (%w{account.application.deauthorized account.updated capability.updated payout. charge. capital. radar. payment_intent.payment_failed payment_intent.processing payment_intent.succeeded} + StripeChargeProcessor::HANDLED_REFUND_EVENTS).freeze
 
   # Handle's a Stripe event. Calls out to the necessary modules
   # that handle different types of Stripe events.
@@ -51,6 +51,7 @@ class StripeEventHandler
       StripeChargeProcessor.handle_stripe_event(stripe_event) if stripe_event["type"].start_with?("charge.",
                                                                                                   "capital.",
                                                                                                   "radar.",
+                                                                                                  *StripeChargeProcessor::HANDLED_REFUND_EVENTS,
                                                                                                   "payment_intent.payment_failed",
                                                                                                   "payment_intent.processing",
                                                                                                   "payment_intent.succeeded")
@@ -61,7 +62,8 @@ class StripeEventHandler
       # account) client-confirm PaymentIntent delivers its lifecycle events on the connect endpoint.
       # StripeChargeProcessor scopes them to client-confirmed charges and ignores every other
       # connected-account intent (sellers' non-Gumroad sales) by resolving the charge reference first.
-      if stripe_event["type"].start_with?("charge.", "radar.", "payment_intent.payment_failed",
+      if stripe_event["type"].start_with?("charge.", "radar.", *StripeChargeProcessor::HANDLED_REFUND_EVENTS,
+                                          "payment_intent.payment_failed",
                                           "payment_intent.processing", "payment_intent.succeeded")
         StripeChargeProcessor.handle_stripe_event(stripe_event)
       elsif stripe_event["type"].start_with?("account.", "capability.")
