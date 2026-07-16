@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::SalesSummary
-  VALID_GROUPS = %w[product day week month].freeze
+  VALID_GROUPS = %w[product day week month hour].freeze
 
   def initialize(seller:, from:, to:, group_by: nil)
     @seller = seller
@@ -89,13 +89,18 @@ class Api::V2::SalesSummary
       case @group_by
       when "product"
         [{ product_id: { terms: { field: "product_id" } } }]
-      when "day", "week", "month"
+      when "day", "week", "month", "hour"
         [{ date: { date_histogram: { time_zone: @seller.timezone_id, field: "created_at", calendar_interval: @group_by, format: date_format } } }]
       end
     end
 
     def date_format
-      @group_by == "month" ? "yyyy-MM" : "yyyy-MM-dd"
+      case @group_by
+      when "month" then "yyyy-MM"
+      # Hourly keys carry the time of day in the seller's timezone, e.g. "2026-07-16T13:00".
+      when "hour" then "yyyy-MM-dd'T'HH:mm"
+      else "yyyy-MM-dd"
+      end
     end
 
     def breakdown_item(bucket)

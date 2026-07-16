@@ -6,10 +6,21 @@ class CreatorAnalytics::Sales
     exclude_unreversed_chargedback: false,
   )
 
-  def initialize(user:, products:, dates:)
+  VALID_INTERVALS = %w[day hour].freeze
+  # Hourly buckets multiply fast (24 per day per product), so hourly analytics are
+  # limited to short date ranges to keep Elasticsearch bucket counts sane.
+  MAX_HOURLY_DATE_RANGE_DAYS = 7
+
+  def initialize(user:, products:, dates:, interval: "day")
+    raise ArgumentError, "interval must be one of: #{VALID_INTERVALS.join(", ")}" unless VALID_INTERVALS.include?(interval)
+    if interval == "hour" && (dates.last - dates.first).to_i > MAX_HOURLY_DATE_RANGE_DAYS
+      raise ArgumentError, "date range cannot exceed #{MAX_HOURLY_DATE_RANGE_DAYS} days for the hour interval"
+    end
+
     @user = user
     @products = products
     @dates = dates
+    @interval = interval
     @query = PurchaseSearchService.new(SEARCH_OPTIONS).body[:query]
     @query[:bool][:filter] << { terms: { product_id: @products.map(&:id) } }
     @query[:bool][:must] << CreatorAnalytics::DateQuery.day_range(field: :created_at, start_date: @dates.first, end_date: @dates.last, timezone: @user.timezone)
@@ -18,7 +29,7 @@ class CreatorAnalytics::Sales
   def by_product_and_date
     sources = [
       { product_id: { terms: { field: "product_id" } } },
-      { date: { date_histogram: { time_zone: @user.timezone_id, field: "created_at", calendar_interval: "day", format: "yyyy-MM-dd" } } }
+      date_histogram_source
     ]
     paginate(sources:).each_with_object({}) do |bucket, result|
       key = [
@@ -49,7 +60,7 @@ class CreatorAnalytics::Sales
     sources = [
       { product_id: { terms: { field: "product_id" } } },
       { referrer_domain: { terms: { field: "referrer_domain" } } },
-      { date: { date_histogram: { time_zone: @user.timezone_id, field: "created_at", calendar_interval: "day", format: "yyyy-MM-dd" } } }
+      date_histogram_source
     ]
 
     paginate(sources:).each_with_object(Hash.new(0)) do |bucket, hash|
@@ -63,6 +74,16 @@ class CreatorAnalytics::Sales
   end
 
   private
+    def date_histogram_source
+      { date: { date_histogram: { time_zone: @user.timezone_id, field: "created_at", calendar_interval: @interval, format: date_key_format } } }
+    end
+
+    def date_key_format
+      # Hourly bucket keys carry the time of day in the seller's timezone
+      # ("2026-07-16T13:00"); daily keys keep the existing "2026-07-16" shape.
+      @interval == "hour" ? "yyyy-MM-dd'T'HH:mm" : "yyyy-MM-dd"
+    end
+
     def paginate(sources:)
       after_key = nil
       body = build_body(sources)

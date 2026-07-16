@@ -165,6 +165,68 @@ describe CreatorAnalytics::Sales do
       end
     end
   end
+
+  describe "hourly interval" do
+    let(:hourly_service) do
+      described_class.new(
+        user: @user,
+        products: @products,
+        dates: [Date.new(2021, 1, 1)],
+        interval: "hour"
+      )
+    end
+
+    it "buckets sales by hour in #by_product_and_date" do
+      expect(hourly_service.by_product_and_date).to eq(
+        [@products[0].id, "2021-01-01T00:00"] => { count: 1, total: 100 },
+        [@products[0].id, "2021-01-01T01:00"] => { count: 1, total: 100 },
+        [@products[1].id, "2021-01-01T02:00"] => { count: 1, total: 100 },
+      )
+    end
+
+    it "buckets sales by hour in #by_product_and_referrer_and_date" do
+      expect(hourly_service.by_product_and_referrer_and_date).to eq(
+        [@products[0].id, "google.com", "2021-01-01T00:00"] => { count: 1, total: 100 },
+        [@products[0].id, "google.com", "2021-01-01T01:00"] => { count: 1, total: 100 },
+        [@products[1].id, "direct", "2021-01-01T02:00"] => { count: 1, total: 100 },
+      )
+    end
+
+    context "when user time zone is Central European Time" do
+      let(:user_timezone) { "Paris" }
+
+      it "buckets hours in the seller's timezone" do
+        # The Jan 1 purchases at 00:00/01:00/02:00 UTC land at 01:00/02:00/03:00 in Paris.
+        expect(hourly_service.by_product_and_date).to eq(
+          [@products[0].id, "2021-01-01T01:00"] => { count: 1, total: 100 },
+          [@products[0].id, "2021-01-01T02:00"] => { count: 1, total: 100 },
+          [@products[1].id, "2021-01-01T03:00"] => { count: 1, total: 100 },
+        )
+      end
+    end
+
+    it "raises an error for an unsupported interval" do
+      expect do
+        described_class.new(user: @user, products: @products, dates: [Date.new(2021, 1, 1)], interval: "minute")
+      end.to raise_error(ArgumentError, "interval must be one of: day, hour")
+    end
+
+    it "raises an error when the hourly date range is longer than the allowed maximum" do
+      dates = (Date.new(2021, 1, 1) .. Date.new(2021, 1, 9)).to_a
+
+      expect do
+        described_class.new(user: @user, products: @products, dates:, interval: "hour")
+      end.to raise_error(ArgumentError, "date range cannot exceed 7 days for the hour interval")
+    end
+
+    it "allows an hourly range of exactly the allowed maximum" do
+      dates = (Date.new(2021, 1, 1) .. Date.new(2021, 1, 8)).to_a
+
+      expect do
+        described_class.new(user: @user, products: @products, dates:, interval: "hour")
+      end.not_to raise_error
+    end
+  end
 end
 
 describe CreatorAnalytics::Sales, "timezone with DST gap at midnight" do
