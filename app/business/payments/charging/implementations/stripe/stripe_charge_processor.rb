@@ -151,7 +151,11 @@ class StripeChargeProcessor
   end
 
   def get_charge_object(charge)
-    if charge[:transfer_data]
+    # A destination charge (transfer_data present) only carries a `transfer` id once Stripe has
+    # actually created the transfer — i.e. after the charge succeeds. Failed or still-pending
+    # charges (synced via SyncStatusWithChargeProcessorService) have transfer_data but no
+    # `transfer` attribute at all, and Stripe::StripeObject raises NoMethodError on access.
+    if charge[:transfer_data] && charge[:transfer].present?
       destination_transfer = Stripe::Transfer.retrieve(id: charge.transfer)
       stripe_destination_payment = Stripe::Charge.retrieve({ id: destination_transfer.destination_payment, expand: %w[balance_transaction] },
                                                            { stripe_account: destination_transfer.destination })
