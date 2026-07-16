@@ -268,8 +268,12 @@ class Purchase
       presentment_refund ||= derived.presentment_refund
     end
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
-    partially_refunded_previously = self.stripe_partially_refunded
     ActiveRecord::Base.transaction do
+      # Failed-refund reversals lock the purchase before their refund and balance rows.
+      # Use the same order here so a normal refund cannot hold a balance while waiting
+      # for a purchase row that a reversal already holds.
+      lock!
+      partially_refunded_previously = self.stripe_partially_refunded
       self.stripe_refunded = (gross_amount_refunded_cents + funds_refunded) >= total_transaction_cents
       self.stripe_partially_refunded = !self.stripe_refunded
 
