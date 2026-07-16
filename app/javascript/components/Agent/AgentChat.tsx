@@ -135,7 +135,11 @@ const ObjectList = ({ objects }: { objects: DisplayObject[] }) =>
 // computes the resulting page exactly the way confirming would apply it and returns the same
 // sandboxed document /landing/embed serves; it renders here on an opaque origin (no
 // allow-same-origin), just like the live page embed, so the proposed HTML can't reach cookies or
-// the dashboard DOM.
+// the dashboard DOM. Unlike the live page's iframe, the sandbox below deliberately omits
+// allow-popups-to-escape-sandbox (matching ProfileLandingPagePreview): this HTML is a
+// not-yet-confirmed agent proposal shown inside the seller's dashboard, so any popup it opens
+// stays sandboxed rather than getting a full unsandboxed window. Popup escape only changes
+// popup behavior, not how the page itself renders, so preview fidelity is unaffected.
 const CustomHtmlProposalPreview = ({ action }: { action: ProposedAction }) => {
   const [state, setState] = React.useState<
     { status: "loading" } | { status: "loaded"; html: string } | { status: "error"; message: string }
