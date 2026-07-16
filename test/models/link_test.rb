@@ -11,6 +11,11 @@ class LinkTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
   include ActionMailer::TestHelper
 
+  # The licensed-permalink tests seed force_product_id_timestamp in Redis, which
+  # (unlike the DB) isn't rolled back between tests. Clear it so it can't leak
+  # into other tests' permalink validation.
+  teardown { $redis.del(RedisKey.force_product_id_timestamp) }
+
   # --- #custom_html= ---------------------------------------------------------
 
   test "custom_html= clears the page HTML without marking the associated page for destruction" do
@@ -1164,8 +1169,6 @@ class LinkTest < ActiveSupport::TestCase
     product = create_product(is_licensed: true, created_at: timestamp - 1.day)
     assert_equal false, product.update(custom_permalink: "abc")
     assert_equal "Custom permalink has already been taken", product.errors.full_messages.to_sentence
-  ensure
-    $redis.del(RedisKey.force_product_id_timestamp)
   end
 
   test "switching a pre-timestamp product to licensed is invalid when its custom permalink overlaps another seller's licensed product" do
@@ -1173,8 +1176,53 @@ class LinkTest < ActiveSupport::TestCase
     product = create_product(custom_permalink: "abc", created_at: timestamp - 1.day)
     assert_equal false, product.update(is_licensed: true)
     assert_equal "Custom permalink has already been taken", product.errors.full_messages.to_sentence
-  ensure
-    $redis.del(RedisKey.force_product_id_timestamp)
+  end
+
+  # The overlap validation must be correctly scoped — it should NOT fire in these
+  # cases, mirroring the RSpec "product is valid" shared examples.
+
+  test "an unpersisted licensed product with a conflicting permalink is valid" do
+    seed_licensed_permalink_conflict
+    assert build_product(is_licensed: true, custom_permalink: "abc").valid?
+    assert build_product(is_licensed: true, custom_permalink: "xyz").valid?
+  end
+
+  test "a licensed product created after force_product_id_timestamp can take a conflicting permalink" do
+    timestamp = seed_licensed_permalink_conflict
+    %w[abc xyz].each do |permalink|
+      product = create_product(is_licensed: true, created_at: timestamp + 1.day)
+      assert product.update(custom_permalink: permalink), product.errors.full_messages.to_sentence
+    end
+  end
+
+  test "a non-licensed product created before the timestamp can take a conflicting permalink" do
+    timestamp = seed_licensed_permalink_conflict
+    %w[abc xyz].each do |permalink|
+      product = create_product(is_licensed: false, created_at: timestamp - 1.day)
+      assert product.update(custom_permalink: permalink), product.errors.full_messages.to_sentence
+    end
+  end
+
+  test "a licensed product is valid when the other seller's licensed product was created after the timestamp" do
+    timestamp = seed_licensed_permalink_conflict
+    @other_licensed_product.update!(created_at: timestamp + 1.day)
+    %w[abc xyz].each do |permalink|
+      product = create_product(is_licensed: true, created_at: timestamp - 1.day)
+      assert product.update(custom_permalink: permalink), product.errors.full_messages.to_sentence
+    end
+  end
+
+  test "a product created after the timestamp can become licensed despite a permalink overlap" do
+    timestamp = seed_licensed_permalink_conflict
+    product = create_product(custom_permalink: "abc", created_at: timestamp + 1.day)
+    assert product.update(is_licensed: true), product.errors.full_messages.to_sentence
+  end
+
+  test "a product can become licensed when the other seller's licensed product was created after the timestamp" do
+    timestamp = seed_licensed_permalink_conflict
+    @other_licensed_product.update!(created_at: timestamp + 1.day)
+    product = create_product(custom_permalink: "abc", created_at: timestamp - 1.day)
+    assert product.update(is_licensed: true), product.errors.full_messages.to_sentence
   end
 
   test "custom_permalink is invalid when it duplicates another product's custom permalink for the same user" do
@@ -1494,6 +1542,26 @@ class LinkTest < ActiveSupport::TestCase
     monthly_price = create_price(link: product, recurrence: BasePrice::Recurrence::MONTHLY)
     create_price(link: product, recurrence: BasePrice::Recurrence::YEARLY)
     assert_equal monthly_price, product.reload.default_price
+  end
+
+  test "default_price returns the recurrence-matched price for a tiered membership product" do
+    recurrence_price_values = Array.new(2) do
+      { BasePrice::Recurrence::MONTHLY => { enabled: true, price: 2 }, BasePrice::Recurrence::YEARLY => { enabled: true, price: 2 } }
+    end
+    product = create_membership_product_with_preset_tiered_pricing(subscription_duration: BasePrice::Recurrence::YEARLY, recurrence_price_values:)
+    yearly_price = product.prices.alive.find_by!(recurrence: BasePrice::Recurrence::YEARLY)
+    assert_equal yearly_price, product.default_price
+  end
+
+  test "default_price_recurrence returns the price matching the product's subscription duration" do
+    product = create_membership_product(subscription_duration: BasePrice::Recurrence::MONTHLY)
+    monthly_price = product.prices.find_by!(recurrence: BasePrice::Recurrence::MONTHLY)
+    yearly_price = create_price(link: product, recurrence: BasePrice::Recurrence::YEARLY)
+    create_price(link: product, recurrence: BasePrice::Recurrence::QUARTERLY)
+    assert_equal monthly_price, product.reload.default_price_recurrence
+
+    product.update!(subscription_duration: BasePrice::Recurrence::YEARLY)
+    assert_equal yearly_price, product.reload.default_price_recurrence
   end
 
   test "default_price_recurrence returns nil for a non-recurring product" do
@@ -1878,22 +1946,22 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal false, custom_domain.reload.alive?
   end
 
-  test "delete! enqueues subscription cancellations" do
+  test "delete! enqueues subscription cancellations after a 10-minute delay" do
     product = create_product(is_recurring_billing: true, subscription_duration: "monthly")
     subscription = create_subscription
     product.subscriptions << subscription
     create_purchase(link: product, subscription:, is_original_subscription_purchase: true)
     product.delete!
-    assert CancelSubscriptionsForProductWorker.jobs.any? { |job| job["args"] == [product.id] }
+    assert_enqueued_in CancelSubscriptionsForProductWorker, [product.id], delay: 10.minutes
   end
 
-  test "delete! enqueues rich content deletion" do
+  test "delete! enqueues rich content deletion after a 10-minute delay" do
     product = create_product
     product.delete!
-    assert DeleteProductRichContentWorker.jobs.any? { |job| job["args"] == [product.id] }
+    assert_enqueued_in DeleteProductRichContentWorker, [product.id], delay: 10.minutes
   end
 
-  test "delete! enqueues product file and archive deletion" do
+  test "delete! enqueues product file and archive deletion after a 10-minute delay" do
     product = create_product
     product.product_files << create_readable_document
     product.product_files << create_readable_document(is_linked_to_existing_file: true)
@@ -1901,15 +1969,15 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal 2, product.reload.product_files.alive.size
 
     product.delete!
-    assert DeleteProductFilesWorker.jobs.any? { |job| job["args"] == [product.id] }
-    assert DeleteProductFilesArchivesWorker.jobs.any? { |job| job["args"] == [product.id, nil] }
+    assert_enqueued_in DeleteProductFilesWorker, [product.id], delay: 10.minutes
+    assert_enqueued_in DeleteProductFilesArchivesWorker, [product.id, nil], delay: 10.minutes
     assert_not_nil product.reload.deleted_at
   end
 
-  test "delete! enqueues wishlist product deletion" do
+  test "delete! enqueues wishlist product deletion after a 10-minute delay" do
     product = create_product
     product.delete!
-    assert DeleteWishlistProductsJob.jobs.any? { |job| job["args"] == [product.id] }
+    assert_enqueued_in DeleteWishlistProductsJob, [product.id], delay: 10.minutes
   end
 
   test "delete! removes the product id from every profile section's shown_products" do
@@ -3577,9 +3645,18 @@ class LinkTest < ActiveSupport::TestCase
     # the same custom_permalink_of_licensed_product validation.
     def seed_licensed_permalink_conflict
       timestamp = Time.current
-      create_product(is_licensed: true, custom_permalink: "abc", unique_permalink: "xyz", created_at: timestamp - 1.day)
+      @other_licensed_product = create_product(is_licensed: true, custom_permalink: "abc", unique_permalink: "xyz", created_at: timestamp - 1.day)
       $redis.set(RedisKey.force_product_id_timestamp, timestamp)
       timestamp
+    end
+
+    # Asserts a Sidekiq worker was enqueued with the given args AND scheduled with
+    # the expected delay (fake mode records the scheduled time in job["at"]).
+    def assert_enqueued_in(worker, args, delay:)
+      job = worker.jobs.find { |enqueued| enqueued["args"] == args }
+      assert job, "expected #{worker} to be enqueued with args #{args.inspect}"
+      assert job["at"], "expected #{worker} to be scheduled with a delay"
+      assert_in_delta delay.from_now.to_f, job["at"], 30, "#{worker} was not scheduled ~#{delay.inspect} out"
     end
 
     # A product whose seller has PPP enabled, with the LV/US conversion factors

@@ -108,17 +108,26 @@ module ModelFactories
     }.merge(attrs))
   end
 
-  # A tiered membership with two priced tiers (mirrors
-  # :membership_product_with_preset_tiered_pricing): First Tier $3/mo, Second
-  # Tier $5/mo.
-  def create_membership_product_with_preset_tiered_pricing(user: nil, **attrs)
+  # A tiered membership with priced tiers (mirrors
+  # :membership_product_with_preset_tiered_pricing). Defaults to First Tier $3/mo
+  # and Second Tier $5/mo; pass recurrence_price_values (one hash per tier, keyed
+  # by recurrence) to set different prices/recurrences.
+  def create_membership_product_with_preset_tiered_pricing(user: nil, recurrence_price_values: nil, **attrs)
+    recurrence_price_values ||= [
+      { "monthly": { enabled: true, price: 3 } },
+      { "monthly": { enabled: true, price: 5 } },
+    ]
     product = create_membership_product(user:, **attrs)
     tier_category = product.tier_category
     first_tier = tier_category.variants.first
     first_tier.update!(name: "First Tier")
+    first_tier.save_recurring_prices!(recurrence_price_values[0])
     second_tier = create_variant(variant_category: tier_category, name: "Second Tier")
-    first_tier.save_recurring_prices!("monthly": { enabled: true, price: 3 })
-    second_tier.save_recurring_prices!("monthly": { enabled: true, price: 5 })
+    second_tier.save_recurring_prices!(recurrence_price_values[1])
+    recurrence_price_values[2..]&.each_with_index do |recurrences, index|
+      tier = create_variant(variant_category: tier_category, name: "Tier #{index + 3}")
+      tier.save_recurring_prices!(recurrences)
+    end
     product.tiers.reload
     product
   end
