@@ -50,10 +50,51 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
-    it "returns nil for multi-product checkouts" do
+    it "creates a signed quote locking the cart total for a multi-product single-seller checkout" do
+      second_product = create(:product, user: seller, price_cents: 5_00, price_currency_type: Currency::USD)
+
+      result = described_class.create(products: [product, second_product], canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD,
+                                        canonical_total_cents: 15_00,
+                                        presentment_total_cents: 18_75,
+                                        fx_rate: BigDecimal("0.8"),
+                                        stripe_fx_quote_id: "fxq_test")
+      expect(result.token).to be_present
+    end
+
+    it "returns nil for carts spanning multiple sellers even when both sellers are flagged in" do
+      # One quote locks one PaymentIntent total, but each seller gets their own charge
+      # (and intent) — splitting the locked total across intents is not supported.
+      other_seller = create(:user, disable_buyer_local_currency: false)
+      Feature.activate_user(:buyer_local_currency, other_seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
+      other_seller_product = create(:product, user: other_seller, price_cents: 5_00, price_currency_type: Currency::USD)
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [product, create(:product, user: seller)], canonical_total_cents: 20_00, ip: "24.48.0.1")
+      result = described_class.create(products: [product, other_seller_product], canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, other_seller) if other_seller
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller) if other_seller
+    end
+
+    it "returns nil when any item in the cart is priced in a non-USD currency" do
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(products: [product, eur_product], canonical_total_cents: 20_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
+    it "returns nil when any item in the cart offers an installment plan even if the rest are supported" do
+      second_product = create(:product, user: seller, price_cents: 5_00, price_currency_type: Currency::USD)
+      create(:product_installment_plan, link: second_product, number_of_installments: 3)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(products: [product, second_product.reload], canonical_total_cents: 15_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end

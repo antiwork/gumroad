@@ -66,20 +66,22 @@ class Checkout::BuyerCurrencyQuote
 
   def create
     return if canonical_total_cents <= 0
-    return unless products.one?
+    return if products.empty?
 
-    product = products.first
-    seller = product.user
+    sellers = products.map(&:user).uniq
+    # A quote locks one total for one PaymentIntent, but the order pipeline creates one
+    # charge (one PaymentIntent) per seller. A cart spanning several sellers would need
+    # the locked cart total split across several intents — how to do that atomically is
+    # Open Question 9 on issue #5419 — so those carts fall back to canonical USD.
+    return unless sellers.one?
+
+    seller = sellers.first
     return unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
     return unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
-    return unless product.price_currency_type.to_s.downcase == Currency::USD
-    return if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?
-    # Commissions charge only a deposit now and installment plans charge only the first
-    # payment, so a quote locked against the full cart total can never match the charged
-    # amount; issue #5419 excludes both from Phase 1. Installment intent is not visible at
-    # quote time, so any product offering an installment plan falls back.
-    return if product.native_type == Link::NATIVE_TYPE_COMMISSION
-    return if product.installment_plan.present?
+    # The quote locks the whole cart total, so every item must individually support
+    # presentment; one unsupported item (whose charge amount could differ from the total
+    # the quote locked) means the whole cart falls back to canonical USD.
+    return unless products.all? { |product| quotable_product?(product) }
 
     merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
                        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
@@ -124,6 +126,19 @@ class Checkout::BuyerCurrencyQuote
   end
 
   private
+    def quotable_product?(product)
+      return false unless product.price_currency_type.to_s.downcase == Currency::USD
+      return false if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?
+      # Commissions charge only a deposit now and installment plans charge only the first
+      # payment, so a quote locked against the full cart total can never match the charged
+      # amount; issue #5419 excludes both from Phase 1. Installment intent is not visible at
+      # quote time, so any product offering an installment plan falls back.
+      return false if product.native_type == Link::NATIVE_TYPE_COMMISSION
+      return false if product.installment_plan.present?
+
+      true
+    end
+
     def signed_token(seller:, merchant_account:, buyer_currency:, quote:, presentment_total_cents:)
       self.class.send(:verifier).generate(
         {
