@@ -492,11 +492,11 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     end
 
-    it "launches Cash App Pay and ACH Direct Debit alongside card for a US buyer" do
+    it "launches Cash App Pay alongside card for a US buyer — ACH Direct Debit stays withdrawn platform-wide" do
       stub_geoip_country("104.28.0.1", "United States")
 
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
-        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp us_bank_account]))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
     end
 
     it "offers card and Link only for a non-US buyer (Cash App/ACH are US-locked)" do
@@ -520,7 +520,7 @@ describe Checkout::StripePaymentPresenter do
         stub_geoip_country("104.28.0.1", "United States")
 
         expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(ppp_details:)], ip: "104.28.0.1"))
-          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp us_bank_account], stripe_link_enabled: false))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card cashapp], stripe_link_enabled: false))
       end
 
       it "gates Link out on a PPP checkout — its funding country is not verifiable pre-charge" do
@@ -528,7 +528,7 @@ describe Checkout::StripePaymentPresenter do
 
         props = stripe_payment_props(add_products: [confirm_flagged_seller_product(ppp_details:)], ip: "104.28.0.1")
 
-        expect(props[:elements_options][:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+        expect(props[:elements_options][:payment_method_types]).to eq(%w[card cashapp])
         expect(props[:elements_options][:stripe_link_enabled]).to eq(false)
       end
 
@@ -540,14 +540,14 @@ describe Checkout::StripePaymentPresenter do
 
         props = stripe_payment_props(add_products: [item], ip: "104.28.0.1")
 
-        expect(props[:elements_options][:payment_method_types]).to eq(%w[card link cashapp us_bank_account])
+        expect(props[:elements_options][:payment_method_types]).to eq(%w[card link cashapp])
       end
 
       it "leaves a non-PPP checkout's method set untouched" do
         stub_geoip_country("104.28.0.1", "United States")
 
         expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
-          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp us_bank_account]))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
       end
     end
 

@@ -30,9 +30,13 @@ describe Checkout::PaymentMethodResolver do
       it "enables the launched methods on Stripe for a US buyer, gating the rest behind later units" do
         resolution = resolve(buyer_country: "US")
 
-        expect(resolution.payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        expect(resolution.payment_method_types).to eq(%w[card link cashapp])
         # The launched set is always a subset of the eligible policy set.
         expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
+      end
+
+      it "keeps ACH Direct Debit launch-gated out even for a US buyer — withdrawn platform-wide because its ~4-business-day settlement delays content delivery (gumroad-private#1143)" do
+        expect(resolve(buyer_country: "US").payment_method_types).not_to include("us_bank_account")
       end
 
       it "drops US-locked methods (Cash App/ACH) for a non-US buyer, keeping card and Link" do
@@ -95,7 +99,7 @@ describe Checkout::PaymentMethodResolver do
 
       context "with a PPP-discounted checkout (U13 method matrix)" do
         it "keeps card and the US-locked methods for a US buyer — verifiable + region-matched" do
-          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
+          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp])
         end
 
         it "resolves card-only for a non-US PPP buyer (region-locked methods already dropped)" do
@@ -103,8 +107,8 @@ describe Checkout::PaymentMethodResolver do
         end
 
         it "gates Link out — no Stripe-owned funding country to verify pre-charge" do
-          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
-          expect(resolve(ppp_discounted: false).payment_method_types).to eq(%w[card link cashapp us_bank_account])
+          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp])
+          expect(resolve(ppp_discounted: false).payment_method_types).to eq(%w[card link cashapp])
         end
 
         it "logs the PPP gate input" do
@@ -192,7 +196,7 @@ describe Checkout::PaymentMethodResolver do
         it "still uses the stale snapshot (checkout never blocks) but enqueues a background re-fetch — the self-heal for webhooks dropped by the worker's until_executed lock" do
           expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
 
-          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
         end
       end
 
@@ -204,10 +208,10 @@ describe Checkout::PaymentMethodResolver do
                                   })
         end
 
-        it "offers them to a US buyer without enqueueing a refresh" do
+        it "offers Cash App Pay to a US buyer without enqueueing a refresh — an active ACH capability does not re-add the launch-gated method" do
           expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
 
-          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
         end
 
         it "still drops them for a non-US buyer — our region policy applies regardless of the account's capabilities" do
@@ -293,7 +297,7 @@ describe Checkout::PaymentMethodResolver do
 
         expect(resolution.client_confirm_eligible?).to be(true)
         expect(resolution.stripe_connect_account_id).to be_nil
-        expect(resolution.payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        expect(resolution.payment_method_types).to eq(%w[card link cashapp])
       end
     end
 
@@ -333,7 +337,7 @@ describe Checkout::PaymentMethodResolver do
       resolver.resolve
 
       expect(Rails.logger).to have_received(:info).with(
-        a_string_matching(/buyer_country="US".*enabled=\["card", "link", "cashapp", "us_bank_account"\]/)
+        a_string_matching(/buyer_country="US".*enabled=\["card", "link", "cashapp"\]/)
       )
     end
 
