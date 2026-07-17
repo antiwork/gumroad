@@ -18,8 +18,9 @@ module Purchase::Reportable
   # - purchase created before the cutover: reported net of only its pre-cutover refunds (the
   #   exact complement of the refunds that get refund rows).
   #
-  # This mirrors the same cutover in UsStateSalesTaxUploader (the TaxJar push path) and the
-  # refund-date attribution shipped for the VAT report in #5890.
+  # This is the single source of truth for the cutover instant: UsStateSalesTaxUploader (the
+  # TaxJar push path) aliases this constant, so the push path and the report jobs can never
+  # partition refunds at different instants. Same lineage as the VAT report fix in #5890.
   REFUND_REPORTING_CUTOVER = Date.new(2026, 7, 20)
 
   class_methods do
@@ -111,11 +112,12 @@ module Purchase::Reportable
       # Skip the refunds query when nothing was ever refunded.
       return gross_cents unless stripe_partially_refunded? || stripe_refunded?
 
-      # Pre-cutover netting deliberately has no status filter: the legacy netting it preserves
-      # summed all refund rows, and filtering now would restate how historical periods were
-      # filed. Post-cutover refund rows (Refund.for_tax_period_reporting) do exclude
-      # terminal-failure refunds.
-      refunded_cents = refunds.where("refunds.created_at < ?", self.class.refund_reporting_cutover_time).sum(refund_attribute)
+      # Net only effective pre-cutover refunds — Refund.effective is the canonical "money
+      # actually moved" scope (keeps failed-but-not-reversed, drops reversed failures), the
+      # same definition used by the post-cutover refund leg (Refund.for_tax_period_reporting)
+      # and the other tax reports (VAT, global summary). Using one scope everywhere keeps a
+      # single, auditable answer to "which refunds count" across the whole reporting family.
+      refunded_cents = refunds.effective.where("refunds.created_at < ?", self.class.refund_reporting_cutover_time).sum(refund_attribute)
       net_cents = gross_cents - refunded_cents
       net_cents.positive? ? net_cents : 0
     end

@@ -20,7 +20,11 @@ class UsStateSalesTaxUploader
   # only pre-cutover refunds. If the old code ran it, it would net in early-cutover-day
   # refunds that this code also reports as refund transactions — double relief. Bump the date
   # forward if the deploy slips.
-  REFUND_REPORTING_CUTOVER = Date.new(2026, 7, 20)
+  #
+  # Single source of truth: the TaxJar push path and the monthly/quarterly report jobs
+  # (Purchase::Reportable) partition refunds at the SAME instant, so they must never drift.
+  # The canonical value lives in Purchase::Reportable; this is an alias for that one date.
+  REFUND_REPORTING_CUTOVER = Purchase::Reportable::REFUND_REPORTING_CUTOVER
 
   # Groups the taxable US purchase ids created in [starts_at, ends_at] by subdivision code.
   # Raises ArgumentError on an invalid subdivision code.

@@ -651,15 +651,22 @@ class Purchase < ApplicationRecord
   # refunds, which is still positive — the post-cutover refund row is what offsets the rest).
   # Dropping such a sale row would leave its refund row with nothing to subtract from,
   # understating the period pair by the sale amount.
+  #
+  # The post-cutover refund test reuses Refund.effective (the same scope Refund.for_tax_period_reporting
+  # uses to build those refund rows), so a reversed-failure refund — which never gets a refund
+  # row — can't keep an otherwise fully-refunded sale in the report.
   # See Purchase::Reportable::REFUND_REPORTING_CUTOVER.
   scope :not_fully_refunded_for_tax_reporting, lambda {
+    cutover = Purchase::Reportable::REFUND_REPORTING_CUTOVER.beginning_of_day
+    effective_post_cutover_refund = Refund.effective
+      .where("refunds.purchase_id = purchases.id")
+      .where("refunds.created_at >= ?", cutover)
+      .select("1")
     where(
       "purchases.created_at >= :cutover " \
       "OR (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0) " \
-      "OR EXISTS (SELECT 1 FROM refunds WHERE refunds.purchase_id = purchases.id " \
-      "AND refunds.created_at >= :cutover " \
-      "AND (refunds.status IS NULL OR refunds.status NOT IN ('failed', 'canceled')))",
-      cutover: Purchase::Reportable::REFUND_REPORTING_CUTOVER.beginning_of_day
+      "OR EXISTS (#{effective_post_cutover_refund.to_sql})",
+      cutover:
     )
   }
   scope :not_partially_refunded_bundle_product_purchase, -> {

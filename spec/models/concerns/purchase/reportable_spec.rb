@@ -196,14 +196,28 @@ describe "Purchase.not_fully_refunded_for_tax_reporting" do
     expect(Purchase.not_fully_refunded_for_tax_reporting).not_to include(purchase)
   end
 
-  it "drops a pre-cutover fully-refunded sale whose only post-cutover refund terminally failed" do
-    # Failed/canceled refunds never returned money and get no refund row
-    # (Refund.for_tax_period_reporting excludes them), so they can't rescue the sale row.
+  it "still drops a pre-cutover fully-refunded sale whose only post-cutover refund was a reversed failure" do
+    # A reversed-failure refund returned no money and gets no refund row (Refund.effective
+    # excludes it), so it can't rescue the sale row.
+    purchase = purchase_created_at(cutover.beginning_of_day - 30.days)
+    refund = create(:refund, purchase:, amount_cents: 100, status: "failed")
+    refund.balance_reversed_on_failure = true
+    refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+    refund.save!
+    refund.update_column(:created_at, cutover.beginning_of_day + 10.days)
+    purchase.update!(stripe_refunded: true)
+
+    expect(Purchase.not_fully_refunded_for_tax_reporting).not_to include(purchase)
+  end
+
+  it "keeps a pre-cutover fully-refunded sale whose post-cutover refund failed but was not reversed" do
+    # A failed-but-not-reversed refund still counts (Refund.effective keeps it) and gets its own
+    # refund row, so the sale row must stay for that row to subtract from.
     purchase = purchase_created_at(cutover.beginning_of_day - 30.days)
     create(:refund, purchase:, amount_cents: 100, status: "failed").update_column(:created_at, cutover.beginning_of_day + 10.days)
     purchase.update!(stripe_refunded: true)
 
-    expect(Purchase.not_fully_refunded_for_tax_reporting).not_to include(purchase)
+    expect(Purchase.not_fully_refunded_for_tax_reporting).to include(purchase)
   end
 
   it "keeps post-cutover sales even when fully refunded" do
@@ -221,15 +235,22 @@ describe "Refund.for_tax_period_reporting" do
     create(:purchase).tap { |p| p.update_column(:created_at, cutover.beginning_of_day - 30.days) }
   end
 
-  it "includes only post-cutover refunds inside the window, excluding terminal-failure refunds" do
+  it "includes effective post-cutover refunds in the window and excludes reversed failures" do
     pre_cutover = create(:refund, purchase:, amount_cents: 10).tap { |r| r.update_column(:created_at, cutover.beginning_of_day - 1.day) }
     in_window = create(:refund, purchase:, amount_cents: 10).tap { |r| r.update_column(:created_at, cutover.beginning_of_day + 1.day) }
-    failed = create(:refund, purchase:, amount_cents: 10, status: "failed").tap { |r| r.update_column(:created_at, cutover.beginning_of_day + 2.days) }
+    # Failed but not reversed: the money still left us, so Refund.effective keeps it.
+    failed_not_reversed = create(:refund, purchase:, amount_cents: 10, status: "failed").tap { |r| r.update_column(:created_at, cutover.beginning_of_day + 2.days) }
+    # Failed and reversed: the money came back and the buyer never received it, so it is excluded.
+    reversed_failure = create(:refund, purchase:, amount_cents: 10, status: "failed")
+    reversed_failure.balance_reversed_on_failure = true
+    reversed_failure.balance_reversed_on_failure_at = Time.current.utc.iso8601
+    reversed_failure.save!
+    reversed_failure.update_column(:created_at, cutover.beginning_of_day + 3.days)
     after_window = create(:refund, purchase:, amount_cents: 10).tap { |r| r.update_column(:created_at, cutover.beginning_of_day + 40.days) }
 
     result = Refund.for_tax_period_reporting(cutover.beginning_of_day, cutover.beginning_of_day + 30.days)
 
-    expect(result).to include(in_window)
-    expect(result).not_to include(pre_cutover, failed, after_window)
+    expect(result).to include(in_window, failed_not_reversed)
+    expect(result).not_to include(pre_cutover, reversed_failure, after_window)
   end
 end
