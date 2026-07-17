@@ -333,9 +333,14 @@ module ModelFactories
   # Subscriptions must have a payment_option before they validate, so build it
   # (priced at the product's default price) before saving, like the :subscription
   # factory's before(:create) hook does.
-  def create_subscription(link: nil, user: nil, **attrs)
+  #
+  # `user:` uses a :default sentinel (like create_free_purchase's seller:) so an
+  # explicit `user: nil` builds a GUEST subscription (Subscription#user is
+  # optional), matching FactoryBot's `create(:subscription, user: nil)` override
+  # semantics — whereas omitting the argument creates a fresh user.
+  def create_subscription(link: nil, user: :default, **attrs)
     link ||= create_product
-    user ||= create_user
+    user = create_user if user == :default
     subscription = Subscription.new({ link:, user:, is_installment_plan: false }.merge(attrs))
     subscription.payment_options << PaymentOption.new(subscription:, price: link.default_price)
     subscription.save!
