@@ -200,12 +200,14 @@ class AssetPreviewTest < ActiveSupport::TestCase
 
   test "url= prevents non-http urls from being downloaded" do
     asset_preview = create_asset_preview
-    assert_raises(URI::InvalidURIError) { asset_preview.url = "/etc/sudoers" }
+    error = assert_raises(URI::InvalidURIError) { asset_preview.url = "/etc/sudoers" }
+    assert_match(/not a web url/, error.message)
   end
 
   test "url= rejects URLs without a host" do
     asset_preview = create_asset_preview
-    assert_raises(URI::InvalidURIError) { asset_preview.url = "https:///path" }
+    error = assert_raises(URI::InvalidURIError) { asset_preview.url = "https:///path" }
+    assert_match(/valid host/, error.message)
   end
 
   test "url= blocks SSRF attempts to localhost" do
