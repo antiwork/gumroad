@@ -362,7 +362,24 @@ module ModelFactories
     subscription = Subscription.new({ link:, user:, is_installment_plan: false }.merge(attrs))
     # `price` mirrors the :subscription factory's transient: the payment option
     # is priced at the given Price, defaulting to the product's default price.
-    subscription.payment_options << PaymentOption.new(subscription:, price: price || link.default_price)
+    option_price = price || link.default_price
+    if subscription.is_installment_plan
+      # Mirror the factory's before(:create): an installment-plan subscription's
+      # payment option carries the product's installment plan, and its charge
+      # count is the number of installments. When the product has no plan yet, a
+      # placeholder option is saved unvalidated so the subscription still saves.
+      installment_plan = link.installment_plan
+      if installment_plan.present?
+        subscription.payment_options << PaymentOption.new(subscription:, price: option_price, installment_plan:)
+        subscription.charge_occurrence_count = installment_plan.number_of_installments
+      else
+        placeholder = PaymentOption.new(subscription:, price: option_price, installment_plan: nil)
+        placeholder.save!(validate: false)
+        subscription.payment_options << placeholder
+      end
+    else
+      subscription.payment_options << PaymentOption.new(subscription:, price: option_price)
+    end
     subscription.save!
     subscription
   end
@@ -517,6 +534,71 @@ module ModelFactories
       link = nil
     end
     Workflow.create!({ seller:, link:, name: "my workflow", workflow_type:, workflow_trigger: nil }.merge(attrs))
+  end
+
+  # A seller-scoped workflow (mirrors :seller_workflow): no product link.
+  def create_seller_workflow(seller: nil, **attrs)
+    create_workflow(workflow_type: Workflow::SELLER_TYPE, seller:, link: nil, **attrs)
+  end
+
+  # An audience workflow (mirrors :audience_workflow): no product link.
+  def create_audience_workflow(seller: nil, **attrs)
+    create_workflow(workflow_type: Workflow::AUDIENCE_TYPE, seller:, link: nil, **attrs)
+  end
+
+  # A published post (mirrors :published_installment): an installment already
+  # published. Pass workflow:/workflow_trigger:/link: for workflow posts.
+  def create_published_installment(**attrs)
+    create_installment(published_at: Time.current, **attrs)
+  end
+
+  # A price snapshot for an installment-plan payment option (mirrors
+  # :installment_plan_snapshot).
+  def create_installment_plan_snapshot(payment_option:, number_of_installments: 3, recurrence: "monthly", total_price_cents: 14700, **attrs)
+    InstallmentPlanSnapshot.create!({ payment_option:, number_of_installments:, recurrence:, total_price_cents: }.merge(attrs))
+  end
+
+  # A product with an installment plan (mirrors the :with_installment_plan
+  # trait): a $30 product with a 3-installment plan.
+  def create_product_with_installment_plan(number_of_installments: 3, **attrs)
+    product = create_product(price_cents: 3000, **attrs)
+    create_product_installment_plan(link: product, number_of_installments:)
+    product.reload
+    product
+  end
+
+  # An original installment-plan purchase (mirrors :installment_plan_purchase):
+  # a paid, in-full-priced sale whose subscription is flagged is_installment_plan
+  # and carries a plan snapshot.
+  def create_installment_plan_purchase(link: nil, purchaser: nil, **attrs)
+    link ||= create_product_with_installment_plan
+    purchase = build_purchase(link:, purchaser:, is_original_subscription_purchase: true, is_installment_payment: true, **attrs)
+    purchase.installment_plan = link.installment_plan
+    purchase.set_price_and_rate
+    purchase.save!
+    purchase.subscription ||= create_subscription(link:, is_installment_plan: true, user: purchase.purchaser)
+    purchase.save!
+    payment_option = purchase.subscription.last_payment_option
+    if payment_option && !payment_option.installment_plan_snapshot
+      create_installment_plan_snapshot(
+        payment_option:,
+        number_of_installments: link.installment_plan.number_of_installments,
+        recurrence: link.installment_plan.recurrence,
+        total_price_cents: purchase.total_price_before_installments || purchase.price_cents
+      )
+    end
+    purchase
+  end
+
+  # A recurring (non-original) installment-plan charge (mirrors
+  # :recurring_installment_plan_purchase).
+  def create_recurring_installment_plan_purchase(link: nil, **attrs)
+    link ||= create_product_with_installment_plan
+    purchase = build_purchase(link:, is_original_subscription_purchase: false, is_installment_payment: true, **attrs)
+    purchase.installment_plan = link.installment_plan
+    purchase.set_price_and_rate
+    purchase.save!
+    purchase
   end
 
   # A published installment attached to a workflow, with an installment_rule

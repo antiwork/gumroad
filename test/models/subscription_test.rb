@@ -28,6 +28,25 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert worker.jobs.none? { |j| j["args"] == args }, "expected #{worker} not to be enqueued with #{args.inspect}"
   end
 
+  # Mailers are delivered with deliver_later, which enqueues an
+  # ActionMailer::MailDeliveryJob; assert on the enqueued job (mailer, method,
+  # and the method's args) rather than on ActionMailer::Base.deliveries.
+  def mail_enqueued?(mailer, method, args:)
+    enqueued_jobs.any? do |job|
+      job[:job].to_s == "ActionMailer::MailDeliveryJob" &&
+        job[:args][0] == mailer.name && job[:args][1] == method.to_s &&
+        job[:args][3].is_a?(Hash) && job[:args][3]["args"] == args
+    end
+  end
+
+  def assert_enqueued_email(mailer, method, args:)
+    assert mail_enqueued?(mailer, method, args:), "expected #{mailer}##{method} enqueued with #{args.inspect}"
+  end
+
+  def refute_enqueued_email(mailer, method, args:)
+    assert_not mail_enqueued?(mailer, method, args:), "expected #{mailer}##{method} not enqueued with #{args.inspect}"
+  end
+
   setup do
     @seller = create_user
     # The platform Stripe account (user_id nil) comes from the merchant_accounts
@@ -1865,5 +1884,366 @@ class SubscriptionTest < ActiveSupport::TestCase
 
       assert_equal false, purchase.reload.should_exclude_product_review?
     end
+  end
+
+  # --- #schedule_charge ------------------------------------------------------
+
+  test "#schedule_charge schedules RecurringCharge at the specified time" do
+    freeze_time do
+      scheduled_time = Time.current + 1.day
+      @subscription.schedule_charge(scheduled_time)
+      assert_sidekiq_enqueued(RecurringChargeWorker, args: [@subscription.id], at: scheduled_time)
+    end
+  end
+
+  test "#schedule_charge logs the scheduling operation" do
+    freeze_time do
+      scheduled_time = Time.current + 1.day
+      log_text = "Scheduled RecurringChargeWorker(#{@subscription.id}) to run at #{scheduled_time}"
+      Rails.logger.expects(:info).with(log_text)
+      @subscription.schedule_charge(scheduled_time)
+    end
+  end
+
+  # --- #unsubscribe_and_fail! ------------------------------------------------
+
+  test "#unsubscribe_and_fail! unsubscribes the user" do
+    assert_nil @subscription.failed_at
+    assert_nil @subscription.deactivated_at
+    @subscription.unsubscribe_and_fail!
+    assert_not_nil @subscription.failed_at
+    assert_not_nil @subscription.deactivated_at
+  end
+
+  test "#unsubscribe_and_fail! does not set cancelled_by_buyer" do
+    assert_equal false, @subscription.cancelled_by_buyer
+    @subscription.unsubscribe_and_fail!
+    assert_equal false, @subscription.cancelled_by_buyer
+  end
+
+  test "#unsubscribe_and_fail! emails the creator when payment notifications are ON" do
+    assert @subscription.seller.enable_payment_email
+    @subscription.unsubscribe_and_fail!
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! does not email the creator when payment notifications are OFF" do
+    @subscription.seller.update!(enable_payment_email: false)
+    @subscription.unsubscribe_and_fail!
+    refute_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! sends email to customer but not creator on repeated recent failure" do
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 2.hours.ago)
+    assert_equal true, @subscription.seller.enable_payment_email
+    @subscription.unsubscribe_and_fail!
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+    refute_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! sends email to customer and creator on new failure more than 7 days ago" do
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 30.days.ago)
+    assert_equal true, @subscription.seller.enable_payment_email
+    @subscription.unsubscribe_and_fail!
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! emails the customer" do
+    @subscription.unsubscribe_and_fail!
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! enqueues the ping job to notify seller of subscription cancellation" do
+    @subscription.unsubscribe_and_fail!
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, @subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! enqueues the ping job to notify seller of subscription ending" do
+    @subscription.unsubscribe_and_fail!
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME, @subscription.id])
+  end
+
+  # --- #end_subscription! ----------------------------------------------------
+
+  test "#end_subscription! ends the subscription" do
+    @subscription.end_subscription!
+    assert_not_nil @subscription.ended_at
+    assert_not_nil @subscription.deactivated_at
+  end
+
+  test "#end_subscription! emails the customer" do
+    @subscription.end_subscription!
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_ended, args: [@subscription.id])
+  end
+
+  test "#end_subscription! emails the creator when payment notifications are ON" do
+    assert @subscription.seller.enable_payment_email
+    @subscription.end_subscription!
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_ended, args: [@subscription.id])
+  end
+
+  test "#end_subscription! does not email the creator when payment notifications are OFF" do
+    @subscription.seller.update!(enable_payment_email: false)
+    @subscription.end_subscription!
+    refute_enqueued_email(ContactingCreatorMailer, :subscription_ended, args: [@subscription.id])
+  end
+
+  test "#end_subscription! enqueues the ping job to notify seller of subscription ending" do
+    @subscription.end_subscription!
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME, @subscription.id])
+  end
+
+  # --- #cancel! --------------------------------------------------------------
+
+  test "#cancel! by_seller=false sets cancelled_at and user_requested_cancellation" do
+    freeze_time do
+      assert_changes -> { @subscription.reload.user_requested_cancellation_at.try(:utc).try(:to_i) }, from: nil, to: Time.current.to_i do
+        @subscription.cancel!(by_seller: false)
+      end
+    end
+  end
+
+  test "#cancel! by_seller=false sets cancelled_by_buyer correctly" do
+    assert_equal false, @subscription.cancelled_by_buyer
+    @subscription.cancel!(by_seller: false)
+    assert_equal true, @subscription.cancelled_by_buyer
+  end
+
+  test "#cancel! by_seller=false emails the buyer" do
+    @subscription.cancel!(by_seller: false)
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_cancelled, args: [@subscription.id])
+  end
+
+  test "#cancel! by_seller=false emails the creator when payment notifications are ON" do
+    assert @subscription.seller.enable_payment_email
+    @subscription.cancel!(by_seller: false)
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_cancelled_by_customer, args: [@subscription.id])
+  end
+
+  test "#cancel! by_seller=false does not email the creator when payment notifications are OFF" do
+    @subscription.seller.update!(enable_payment_email: false)
+    @subscription.cancel!(by_seller: false)
+    refute_enqueued_email(ContactingCreatorMailer, :subscription_cancelled_by_customer, args: [@subscription.id])
+  end
+
+  test "#cancel! by_seller=false enqueues the ping job to notify seller of subscription cancellation" do
+    @subscription.cancel!(by_seller: false)
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, @subscription.id])
+  end
+
+  test "#cancel! by_seller=true sets cancelled_at and user_requested_cancellation" do
+    freeze_time do
+      assert_changes -> { @subscription.reload.user_requested_cancellation_at.try(:utc).try(:to_i) }, from: nil, to: Time.current.to_i do
+        @subscription.cancel!(by_seller: true)
+      end
+    end
+  end
+
+  test "#cancel! by_seller=true sets cancelled_by_buyer correctly" do
+    assert_equal false, @subscription.cancelled_by_buyer
+    @subscription.cancel!(by_seller: true)
+    assert_equal false, @subscription.cancelled_by_buyer
+  end
+
+  test "#cancel! by_seller=true emails the buyer" do
+    @subscription.cancel!(by_seller: true)
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_cancelled_by_seller, args: [@subscription.id])
+  end
+
+  test "#cancel! by_seller=true emails the creator when payment notifications are ON" do
+    assert @subscription.seller.enable_payment_email
+    @subscription.cancel!(by_seller: true)
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_cancelled, args: [@subscription.id])
+  end
+
+  test "#cancel! by_seller=true does not email the creator when payment notifications are OFF" do
+    @subscription.seller.update!(enable_payment_email: false)
+    @subscription.cancel!(by_seller: true)
+    refute_enqueued_email(ContactingCreatorMailer, :subscription_cancelled, args: [@subscription.id])
+  end
+
+  test "#cancel! by_seller=true enqueues the ping job to notify seller of subscription cancellation" do
+    @subscription.cancel!(by_seller: true)
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, @subscription.id])
+  end
+
+  test "#cancel! by_admin=true sets the cancelled_by_admin correctly" do
+    assert_equal false, @subscription.cancelled_by_admin
+    @subscription.cancel!(by_admin: true)
+    assert_equal true, @subscription.cancelled_by_admin
+  end
+
+  test "#cancel! by_admin=true emails the buyer" do
+    mail = mock
+    mail.stubs(:deliver_later)
+    CustomerLowPriorityMailer.expects(:subscription_cancelled_by_seller).with(@subscription.id).returns(mail)
+    @subscription.cancel!(by_admin: true)
+  end
+
+  test "#cancel! by_admin=true emails the creator when payment notifications are ON" do
+    assert @subscription.seller.enable_payment_email
+    @subscription.cancel!(by_admin: true)
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_cancelled, args: [@subscription.id])
+  end
+
+  test "#cancel! by_admin=true does not email the creator when payment notifications are OFF" do
+    @subscription.seller.update!(enable_payment_email: false)
+    @subscription.cancel!(by_admin: true)
+    refute_enqueued_email(ContactingCreatorMailer, :subscription_cancelled, args: [@subscription.id])
+  end
+
+  test "#cancel! installment plans cannot be cancelled by the buyer" do
+    purchase = create_installment_plan_purchase
+    subscription = purchase.subscription
+    error = assert_raises(ActiveRecord::RecordInvalid) { subscription.cancel!(by_seller: false) }
+    assert_equal "Validation failed: Installment plans cannot be cancelled by the customer", error.message
+  end
+
+  test "#cancel! installment plans can be cancelled by the seller" do
+    purchase = create_installment_plan_purchase
+    subscription = purchase.subscription
+    assert_changes -> { subscription.reload.cancelled_at }, from: nil do
+      subscription.cancel!(by_seller: true)
+    end
+  end
+
+  # --- #deactivate! ----------------------------------------------------------
+
+  def deactivate_context
+    @creator = create_user
+    @product = create_subscription_product(user: @creator)
+    @subscription = create_subscription(link: @product, cancelled_at: 2.days.ago)
+    @sale = create_purchase(is_original_subscription_purchase: true, link: @product, subscription: @subscription, email: "test@example.com", created_at: 1.week.ago, price_cents: 100)
+  end
+
+  test "#deactivate! sets deactivated_at" do
+    deactivate_context
+    @subscription.deactivate!
+    assert_predicate @subscription.reload.deactivated_at, :present?
+  end
+
+  test "#deactivate! enqueues deactivate integrations worker" do
+    deactivate_context
+    @subscription.deactivate!
+    assert_sidekiq_enqueued(DeactivateIntegrationsWorker, args: [@subscription.original_purchase.id])
+  end
+
+  test "#deactivate! creates a subscription_event of type deactivated" do
+    deactivate_context
+    @subscription.deactivate!
+    assert_equal "deactivated", @subscription.subscription_events.last.event_type
+  end
+
+  test "#deactivate! schedules a member cancellation installment for a creator's seller workflow" do
+    deactivate_context
+    workflow = create_seller_workflow(seller: @creator, workflow_trigger: "member_cancellation")
+    installment = create_published_installment(workflow:, workflow_trigger: "member_cancellation")
+    installment_rule = create_installment_rule(installment:, delayed_delivery_time: 1.day)
+
+    @subscription.deactivate!
+    @subscription.reload
+
+    assert_sidekiq_enqueued(SendWorkflowInstallmentWorker,
+                            args: [installment.id, installment_rule.version, nil, nil, nil, @subscription.id])
+    job = SendWorkflowInstallmentWorker.jobs.find { |j| j["args"] == [installment.id, installment_rule.version, nil, nil, nil, @subscription.id] }
+    assert_in_delta((@subscription.deactivated_at + installment_rule.delayed_delivery_time).to_f, job["at"], 1)
+  end
+
+  test "#deactivate! schedules a member cancellation installment for a creator's product workflow" do
+    deactivate_context
+    workflow = create_workflow(seller: @creator, link: @product, workflow_trigger: "member_cancellation")
+    installment = create_published_installment(link: @product, workflow:, workflow_trigger: "member_cancellation")
+    installment_rule = create_installment_rule(installment:, delayed_delivery_time: 1.day)
+
+    @subscription.deactivate!
+    @subscription.reload
+
+    job = SendWorkflowInstallmentWorker.jobs.find { |j| j["args"] == [installment.id, installment_rule.version, nil, nil, nil, @subscription.id] }
+    assert job
+    assert_in_delta((@subscription.deactivated_at + installment_rule.delayed_delivery_time).to_f, job["at"], 1)
+  end
+
+  test "#deactivate! does not schedule a member cancellation installment for non-product/seller workflows even if their trigger is member cancellation" do
+    deactivate_context
+    workflow = create_audience_workflow(seller: @creator, workflow_trigger: "member_cancellation")
+    installment = create_published_installment(workflow:, workflow_trigger: "member_cancellation")
+    create_installment_rule(installment:, delayed_delivery_time: 1.day)
+
+    @subscription.deactivate!
+
+    assert_equal 0, SendWorkflowInstallmentWorker.jobs.size
+  end
+
+  test "#deactivate! does not schedule a member cancellation installment if the seller workflow isn't for member cancellation" do
+    deactivate_context
+    workflow = create_seller_workflow(seller: @creator, workflow_trigger: nil)
+    installment = create_published_installment(workflow:, workflow_trigger: "member_cancellation")
+    create_installment_rule(installment:, delayed_delivery_time: 1.day)
+
+    @subscription.deactivate!
+
+    assert_equal 0, SendWorkflowInstallmentWorker.jobs.size
+  end
+
+  test "#deactivate! does not schedule a member cancellation installment if the product workflow isn't for member cancellation" do
+    deactivate_context
+    workflow = create_workflow(seller: @creator, link: @product, workflow_trigger: nil)
+    installment = create_published_installment(link: @product, workflow:, workflow_trigger: "member_cancellation")
+    create_installment_rule(installment:, delayed_delivery_time: 1.day)
+
+    @subscription.deactivate!
+
+    assert_equal 0, SendWorkflowInstallmentWorker.jobs.size
+  end
+
+  test "#deactivate! does not schedule a member cancellation installment if the workflow doesn't apply to the purchase" do
+    deactivate_context
+    workflow = create_workflow(seller: @creator, link: @product, workflow_trigger: "member_cancellation", created_after: 3.days.ago)
+    installment = create_published_installment(link: @product, workflow:, workflow_trigger: "member_cancellation")
+    create_installment_rule(installment:, delayed_delivery_time: 1.day)
+
+    # Matches the RSpec: it updates the outer-context @purchase (unrelated to this
+    # subscription). The subscription's own sale (@sale) predates the workflow's
+    # created_after cutoff, which is what actually keeps the workflow from firing.
+    @purchase.update!(created_at: 7.days.ago)
+
+    @subscription.deactivate!
+
+    assert_equal 0, SendWorkflowInstallmentWorker.jobs.size
+  end
+
+  test "#deactivate! does not schedule a member cancellation installment if the installment rule is nil" do
+    deactivate_context
+    workflow = create_workflow(seller: @creator, link: @product, workflow_trigger: "member_cancellation")
+    create_published_installment(link: @product, workflow:, workflow_trigger: "member_cancellation")
+
+    @subscription.deactivate!
+
+    assert_equal 0, SendWorkflowInstallmentWorker.jobs.size
+  end
+
+  test "#deactivate! does not schedule member cancellation workflow jobs when membership ended due to payment failures" do
+    deactivate_context
+    workflow = create_seller_workflow(seller: @creator, workflow_trigger: "member_cancellation")
+    installment = create_published_installment(workflow:, workflow_trigger: "member_cancellation")
+    create_installment_rule(installment:, delayed_delivery_time: 1.day)
+
+    @subscription.update!(cancelled_at: nil, failed_at: 1.hour.ago)
+    @subscription.deactivate!
+
+    assert_equal 0, SendWorkflowInstallmentWorker.jobs.size
+  end
+
+  test "#deactivate! does not schedule member cancellation workflow jobs when membership reached the end of its fixed-length duration" do
+    deactivate_context
+    workflow = create_seller_workflow(seller: @creator, workflow_trigger: "member_cancellation")
+    installment = create_published_installment(workflow:, workflow_trigger: "member_cancellation")
+    create_installment_rule(installment:, delayed_delivery_time: 1.day)
+
+    @subscription.update!(cancelled_at: nil, ended_at: 1.hour.ago)
+    @subscription.deactivate!
+
+    assert_equal 0, SendWorkflowInstallmentWorker.jobs.size
   end
 end
