@@ -17,6 +17,12 @@ class ContentModeration::Strategies::PromptStrategy
   # repeated CTAs) reproduces reliably; a noisy one-off flag does not, and is
   # downgraded to an audit record instead of blocking the seller.
   # Adult-content flags are not resampled — this gate is spam-only.
+  #
+  # Corroboration is opt-in (`corroborate_spam_flags: true`) so that only
+  # callers designed for the downgrade path get it. ModerateRecordService
+  # opts in and records downgraded flags as non-blocking admin notes; other
+  # callers (e.g. CreatePublicMediaService screening uploads) keep the
+  # original single-sample blocking behavior and its latency profile.
   SPAM_CORROBORATION_RESAMPLES = 2
 
   ADULT_CONTENT_RULES = <<~RULES
@@ -122,9 +128,10 @@ class ContentModeration::Strategies::PromptStrategy
   JUDGE_MODEL = "gpt-4o-mini"
   SUPPORTED_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg .gif .webp].freeze
 
-  def initialize(text:, image_urls: [])
+  def initialize(text:, image_urls: [], corroborate_spam_flags: false)
     @text = text
     @image_urls = image_urls
+    @corroborate_spam_flags = corroborate_spam_flags
   end
 
   def perform
@@ -146,15 +153,15 @@ class ContentModeration::Strategies::PromptStrategy
       next if result[:status] == "compliant"
       next unless passes_uncertainty_check?(result[:reasoning])
 
-      if preset[:name] == "spam"
-        flagged_resamples = count_flagged_resamples(preset)
+      if preset[:name] == "spam" && @corroborate_spam_flags
+        flagged_resamples, resamples_run = run_spam_resamples(preset)
         corroborated = flagged_resamples == SPAM_CORROBORATION_RESAMPLES
         Rails.logger.info(
-          "ContentModeration::PromptStrategy spam corroboration: #{flagged_resamples}/#{SPAM_CORROBORATION_RESAMPLES} resamples flagged; " \
+          "ContentModeration::PromptStrategy spam corroboration: #{flagged_resamples}/#{resamples_run} resamples flagged; " \
           "#{corroborated ? "blocking" : "downgrading to audit-only"}"
         )
         unless corroborated
-          audit_reasoning << "spam (uncorroborated, #{flagged_resamples + 1}/#{SPAM_CORROBORATION_RESAMPLES + 1} samples flagged): #{result[:reasoning]}"
+          audit_reasoning << "spam (uncorroborated, #{flagged_resamples + 1}/#{resamples_run + 1} samples flagged): #{result[:reasoning]}"
           next
         end
       end
@@ -176,16 +183,25 @@ class ContentModeration::Strategies::PromptStrategy
   end
 
   private
-    # Re-runs the spam preset to see whether the initial flag reproduces.
-    # Resamples skip the uncertainty check — the initial flag already passed
-    # it, and these calls only answer "does the model flag this again?".
-    # A resample that times out or is rejected by OpenAI counts as not
-    # flagging (evaluate_preset already maps those to compliant), so transient
-    # API trouble fails open — toward publishing — like the rest of this class.
-    def count_flagged_resamples(preset)
-      SPAM_CORROBORATION_RESAMPLES.times.count do
-        evaluate_preset(preset)[:status] == "flagged"
+    # Re-runs the spam preset to see whether the initial flag reproduces, and
+    # returns [how many resamples flagged, how many were run]. Blocking needs
+    # every resample to flag, so the first clean one decides the outcome and
+    # we stop there rather than spend another model call on the seller's
+    # publish request. Resamples skip the uncertainty check — the initial flag
+    # already passed it, and these calls only answer "does the model flag this
+    # again?". A resample that times out or is rejected by OpenAI counts as
+    # not flagging (evaluate_preset already maps those to compliant), so
+    # transient API trouble fails open — toward publishing — like the rest of
+    # this class.
+    def run_spam_resamples(preset)
+      flagged = 0
+      run = 0
+      SPAM_CORROBORATION_RESAMPLES.times do
+        run += 1
+        break unless evaluate_preset(preset)[:status] == "flagged"
+        flagged += 1
       end
+      [flagged, run]
     end
 
     def evaluate_preset(preset)

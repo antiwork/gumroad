@@ -140,6 +140,13 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       end
     end
 
+    it "opts the prompt strategy into spam corroboration" do
+      described_class.check(product, :product)
+
+      expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+        .with(hash_including(corroborate_spam_flags: true))
+    end
+
     context "when the prompt strategy downgrades an uncorroborated spam flag" do
       before do
         allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(

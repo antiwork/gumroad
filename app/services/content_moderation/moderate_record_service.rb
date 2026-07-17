@@ -125,7 +125,10 @@ class ContentModeration::ModerateRecordService
     def run_ai_strategies(content)
       strategies = [
         ContentModeration::Strategies::ClassifierStrategy.new(text: content.text, image_urls: content.image_urls),
-        ContentModeration::Strategies::PromptStrategy.new(text: content.text, image_urls: content.image_urls),
+        # `corroborate_spam_flags` makes a spam flag block only when it
+        # reproduces on resampling; a lone flag is returned as audit_reasoning
+        # and recorded as a non-blocking note instead (see `check` above).
+        ContentModeration::Strategies::PromptStrategy.new(text: content.text, image_urls: content.image_urls, corroborate_spam_flags: true),
       ]
 
       threads = strategies.map do |strategy|
