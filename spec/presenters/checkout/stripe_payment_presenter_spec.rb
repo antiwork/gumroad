@@ -246,7 +246,7 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
-  it "keeps the existing Payment Element and wallet path in live mode" do
+  it "selects the buyer-currency presentment Payment Element in live mode now that the gate is lifted" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
@@ -263,7 +263,9 @@ describe Checkout::StripePaymentPresenter do
       )
     ]
 
-    expect(stripe_payment_props(add_products:)).to eq(payment_element_props)
+    expect(stripe_payment_props(add_products:)).to eq(
+      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+    )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
