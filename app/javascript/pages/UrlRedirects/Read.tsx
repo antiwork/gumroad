@@ -38,11 +38,19 @@ type StoredMediaLocation = { timestamp?: string | null; location?: number | null
 const getMediaLocationFromCookies = (readId: string): StoredMediaLocation => {
   const cookieValue = document.cookie
     .split("; ")
-    .find((row) => row.startsWith(encodeURIComponent(readId)))
-    ?.split("=")[1];
+    .find((row) => row.startsWith(`${encodeURIComponent(readId)}=`))
+    ?.split("=")
+    .slice(1)
+    .join("=");
   if (cookieValue) {
-    const json: unknown = JSON.parse(cookieValue);
-    if (typia.is<StoredMediaLocation>(json)) return json;
+    try {
+      const json: unknown = JSON.parse(decodeURIComponent(cookieValue));
+      if (typia.is<StoredMediaLocation>(json)) return json;
+    } catch {
+      // Ignore cookies we can't parse — e.g. ones written before values were
+      // URI-encoded, or ones truncated by the browser. Resuming from the server
+      // location (or the start) is better than crashing the read page.
+    }
   }
   return {};
 };
@@ -91,10 +99,12 @@ const PdfReader = ({
           location: newPageNumber,
         });
       }
-      document.cookie = `${encodeURIComponent(read_id)}=${JSON.stringify({
-        location: newPageNumber,
-        timestamp: new Date(),
-      })}`;
+      document.cookie = `${encodeURIComponent(read_id)}=${encodeURIComponent(
+        JSON.stringify({
+          location: newPageNumber,
+          timestamp: new Date(),
+        }),
+      )}`;
     },
     [pageNumber, pageCount, purchase_id, url_redirect_id, product_file_id, read_id],
   );
@@ -318,11 +328,15 @@ const EpubReader = ({
           location: newSectionNumber,
         });
       }
-      document.cookie = `${encodeURIComponent(read_id)}=${JSON.stringify({
-        location: newSectionNumber,
-        cfi,
-        timestamp: new Date(),
-      })}`;
+      // CFIs can contain semicolons, which document.cookie treats as attribute
+      // separators — URI-encode the value so it round-trips intact.
+      document.cookie = `${encodeURIComponent(read_id)}=${encodeURIComponent(
+        JSON.stringify({
+          location: newSectionNumber,
+          cfi,
+          timestamp: new Date(),
+        }),
+      )}`;
     },
     [purchase_id, url_redirect_id, product_file_id, read_id],
   );
