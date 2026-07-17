@@ -269,6 +269,39 @@ describe StripeChargeProcessor, :vcr do
         expect(charge.fee).to be_nil
       end
     end
+    describe "when the charge has transfer_data but no transfer yet" do
+      # A failed (or still-pending) destination charge carries `transfer_data` but Stripe has not
+      # created the transfer, so the `transfer` attribute is absent from the payload entirely.
+      # Accessing `charge.transfer` on such an object raises NoMethodError (seen in production via
+      # SyncStatusWithChargeProcessorService syncing failed purchases — Sentry GUMROAD-YV).
+      it "returns a charge object without attempting to retrieve the destination transfer" do
+        mock_charge = Stripe::Charge.construct_from(
+          id: "ch_test_456",
+          status: "failed",
+          refunded: false,
+          dispute: nil,
+          amount: 100,
+          currency: "usd",
+          destination: nil,
+          transfer_data: { destination: "acct_test_123" },
+          transfer_group: nil,
+          balance_transaction: nil,
+          application_fee: nil,
+          payment_method: "pm_test_456",
+          payment_method_details: nil,
+          outcome: nil
+        )
+
+        allow(Stripe::Charge).to receive(:retrieve).and_return(mock_charge)
+        expect(Stripe::Transfer).not_to receive(:retrieve)
+
+        charge = subject.get_charge("ch_test_456")
+
+        expect(charge).to be_a(BaseProcessorCharge)
+        expect(charge.id).to eq("ch_test_456")
+        expect(charge.status).to eq("failed")
+      end
+    end
   end
 
   describe "#search_charge" do

@@ -268,8 +268,17 @@ class Purchase
       presentment_refund ||= derived.presentment_refund
     end
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
-    partially_refunded_previously = self.stripe_partially_refunded
     ActiveRecord::Base.transaction do
+      # Failed-refund reversals lock the purchase before their refund and balance rows.
+      # Use the same order here so a single-purchase refund cannot hold a balance while
+      # waiting for a purchase row that a reversal already holds. (Combined-charge
+      # refunds still acquire purchase and balance locks interleaved across purchases
+      # inside Charge#refund_and_save!'s transaction — tracked as a follow-up.)
+      # reload first: reading any json_data-backed attribute on a row whose json_data
+      # column is NULL dirties the record in memory, and lock! raises on dirty records.
+      # Reloading discards that phantom change; lock! reloads again under FOR UPDATE.
+      reload.lock!
+      partially_refunded_previously = self.stripe_partially_refunded
       self.stripe_refunded = (gross_amount_refunded_cents + funds_refunded) >= total_transaction_cents
       self.stripe_partially_refunded = !self.stripe_refunded
 
@@ -316,7 +325,10 @@ class Purchase
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
       send_refunded_notification_webhook
       if partially_refunded_previously || self.stripe_partially_refunded
-        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state).deliver_later(queue: "critical")
+        # Pass the refund's buyer-currency amount as plain values (not the Refund id):
+        # this enqueue happens inside the transaction, so the mailer job could run
+        # before the Refund row is committed/visible and would miss it.
+        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state, refund.presentment_amount_cents, refund.presentment_currency).deliver_later(queue: "critical")
       else
         CustomerMailer.refund(email, link.id, id).deliver_later(queue: "critical")
       end
@@ -363,7 +375,11 @@ class Purchase
       save!
       Credit.create_for_vat_exclusive_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
-      CustomerMailer.partial_refund(email, link.id, id, gross_refund_amount_cents, formatted_refund_state).deliver_later(queue: "critical")
+      # refund can be nil here (build_partial_full_refund may return nothing). Pass the
+      # refund's buyer-currency amount as plain values (not the Refund id): this enqueue
+      # happens inside the transaction, so the mailer job could run before the Refund row
+      # is committed/visible and would miss it.
+      CustomerMailer.partial_refund(email, link.id, id, gross_refund_amount_cents, formatted_refund_state, refund&.presentment_amount_cents, refund&.presentment_currency).deliver_later(queue: "critical")
       true
     end
   end

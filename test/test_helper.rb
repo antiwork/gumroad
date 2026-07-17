@@ -4,6 +4,11 @@ ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
 require "minitest/mock"
+# Mocha adds `.stubs`/`.expects` and, crucially, `any_instance` stubbing — the
+# equivalent of RSpec's `allow_any_instance_of`, which `minitest/mock` can't
+# express. Required here (not in the RSpec suite) so it never clashes with
+# rspec-mocks. Coexists with the block-form `minitest/mock` stubs already in use.
+require "mocha/minitest"
 require "webmock/minitest"
 require "sidekiq/testing"
 Sidekiq::Testing.fake!
@@ -111,9 +116,48 @@ module ActiveSupport
       # spec_helper's stub_pwned_password_check does.
       WebMock.stub_request(:get, %r{api\.pwnedpasswords\.com/range/.+})
              .to_return(status: 200, body: "", headers: {})
+
+      # Bypass the daily product-creation limit, as spec_helper does (it wraps
+      # each example in Link.bypass_product_creation_limit). Tests routinely
+      # create many products for one user and shouldn't hit the 10/day cap.
+      ActiveSupport::IsolatedExecutionState[:gumroad_bypass_product_creation_limit] = true
+
+      # Sidekiq's fake mode accumulates enqueued jobs in a process-global array.
+      # The rspec-sidekiq gem clears it before each example; Minitest has no such
+      # hook, so jobs would leak across tests and break absolute job-count
+      # assertions (e.g. `assert_equal 0, Worker.jobs.size`). Clear it here.
+      Sidekiq::Worker.clear_all
+
+      # The Disk ActiveStorage service (see below) needs url_options to build
+      # blob/variant URLs. ActiveStorage::Current is a per-request CurrentAttribute
+      # that resets between tests, so set it each time.
+      ActiveStorage::Current.url_options = { protocol: "https", host: "localhost", port: nil }
     end
   end
 end
+
+# AssetPreviewAnalysisStub injects known metadata for fixture files instead of
+# shelling out to the image/video analyzer. It lives under spec/support (shared
+# with the RSpec suite) and has no RSpec dependency, so require it directly for
+# the asset_preview/thumbnail helpers.
+require Rails.root.join("spec", "support", "asset_preview_analysis_stub")
+
+# The RSpec test jobs bring up MinIO (S3) via docker-compose; the lightweight
+# Minitest CI job does not. Point ActiveStorage at a local Disk service so
+# file-attaching tests (thumbnails, asset previews, public files) never make S3
+# network calls — otherwise the upload fails with a connection error that Makara
+# escalates to BlacklistedWhileInTransaction. GitHub-hosted runners ship with
+# ImageMagick/ffmpeg, so blob analysis and variants still work. A host must be
+# set for Disk-service URL generation.
+# Re-register the default :test service as a local Disk service (keeping the
+# :test name so blob service_name references still resolve), and make it the
+# default. Building it through the Registry sets the service name that blob
+# validation requires.
+ActiveStorage::Blob.services = ActiveStorage::Service::Registry.new(
+  test: { service: "Disk", root: Rails.root.join("tmp", "minitest_storage").to_s, public: true }
+)
+ActiveStorage::Blob.service = ActiveStorage::Blob.services.fetch(:test)
+Rails.application.routes.default_url_options[:host] ||= "localhost"
 
 # Load shared test-support modules.
 Dir[Rails.root.join("test", "support", "**", "*.rb")].sort.each { |f| require f }

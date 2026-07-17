@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   canUseStripePaymentElement,
@@ -723,7 +723,10 @@ describe("buyer-currency presentment lane", () => {
       // Tip/address/VAT/cart edits move surcharges through pending and loading before the
       // refreshed quote lands. Reporting canonical USD in that window would remount the
       // element twice (CAD → USD → CAD), wiping the buyer's entered card details.
-      for (const surcharges of [{ type: "pending" as const }, { type: "loading" as const, abort: () => {} }]) {
+      for (const surcharges of [
+        { type: "pending" as const },
+        { type: "loading" as const, requestId: 1, abort: () => {} },
+      ]) {
         const s = state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges });
         expect(getStripePaymentElementMountCurrency(s)).toBeNull();
       }
@@ -805,6 +808,285 @@ describe("reduceCheckoutState", () => {
     const next = reduceCheckoutState(state(), { type: "set-value", tip: { type: "fixed", amount: 1_00 } });
 
     expect(next.surcharges).toEqual({ type: "pending" });
+  });
+
+  // Every field the server tax/shipping quote depends on must invalidate the loaded surcharges
+  // (flipping them to "pending" is what triggers the debounced refetch) — a missing trigger
+  // means the buyer-currency quote token submitted with the purchase was minted for different
+  // totals than the ones charged.
+  describe("total-affecting changes invalidate surcharges and queue a refetch", () => {
+    it.each([
+      ["country", { country: "CA" }, state()],
+      ["tip", { tip: { type: "fixed", amount: 1_00 } } as const, state()],
+      ["vatId", { vatId: "IE6388047V" }, state({ country: "IE" })],
+      ["gift", { gift: { type: "normal", email: "friend@example.com", note: "" } } as const, state()],
+      ["CA province", { state: "QC" }, state({ country: "CA", state: "ON" })],
+      ["products", { products: [product({ permalink: "b" })] }, state()],
+    ])("%s change flips loaded surcharges to pending", (_field, action, initial) => {
+      const next = reduceCheckoutState(initial, { type: "set-value", ...action });
+      expect(next.surcharges).toEqual({ type: "pending" });
+    });
+
+    it("aborts an in-flight surcharges request before invalidating", () => {
+      const abort = vi.fn();
+      const next = reduceCheckoutState(state({ surcharges: { type: "loading", requestId: 1, abort } }), {
+        type: "set-value",
+        tip: { type: "fixed", amount: 1_00 },
+      });
+      expect(abort).toHaveBeenCalledOnce();
+      expect(next.surcharges).toEqual({ type: "pending" });
+    });
+
+    // These fences live in the reducer (rather than a ref compared in the fetch callback) so
+    // they participate in dispatch ordering: any invalidation dispatched before the response
+    // is already reflected in the state by the time the response's action runs.
+    describe("stale surcharge response fencing", () => {
+      // loadedSurcharges is declared later in the file; it blocks run after module evaluation,
+      // so referencing it inside each test avoids the temporal dead zone.
+      const result = () => loadedSurcharges().result;
+
+      it("publishes a response only while its own loading state is current", () => {
+        const next = reduceCheckoutState(state({ surcharges: { type: "loading", requestId: 7, abort: vi.fn() } }), {
+          type: "surcharges-fetch-succeeded",
+          requestId: 7,
+          result: result(),
+        });
+        expect(next.surcharges).toEqual({ type: "loaded", result: result() });
+      });
+
+      it("drops a response whose request has been superseded by a newer one", () => {
+        const initial = state({ surcharges: { type: "loading", requestId: 8, abort: vi.fn() } });
+        const next = reduceCheckoutState(initial, {
+          type: "surcharges-fetch-succeeded",
+          requestId: 7,
+          result: result(),
+        });
+        expect(next.surcharges).toBe(initial.surcharges);
+      });
+
+      it("drops a response after a total-affecting edit reset surcharges to pending", () => {
+        // The debounce-window shape of the race: the edit's invalidation dispatched before the
+        // stale response, so by the time the response's action runs the state is "pending" —
+        // no ref bump (or effect flush) required for the fence to hold.
+        const initial = state({ surcharges: { type: "pending" } });
+        const next = reduceCheckoutState(initial, {
+          type: "surcharges-fetch-succeeded",
+          requestId: 7,
+          result: result(),
+        });
+        expect(next.surcharges).toEqual({ type: "pending" });
+      });
+
+      it("lets only the current request flip the state to error", () => {
+        const current = reduceCheckoutState(state({ surcharges: { type: "loading", requestId: 7, abort: vi.fn() } }), {
+          type: "surcharges-fetch-failed",
+          requestId: 7,
+        });
+        expect(current.surcharges).toEqual({ type: "error" });
+
+        const freshLoading = { type: "loading", requestId: 8, abort: vi.fn() } as const;
+        const stale = reduceCheckoutState(state({ surcharges: freshLoading }), {
+          type: "surcharges-fetch-failed",
+          requestId: 7,
+        });
+        expect(stale.surcharges).toBe(freshLoading);
+      });
+    });
+
+    // The server derives the US taxable state and the TaxJar destination zip from the postal
+    // code, and the purchase submits the current zip — so ANY US zip edit (not only a completed
+    // 5-digit one) makes the loaded quote stale relative to what would be charged.
+    it("any US zip edit flips loaded surcharges to pending", () => {
+      const partial = reduceCheckoutState(state({ zipCode: "10001" }), { type: "set-value", zipCode: "1000" });
+      expect(partial.surcharges).toEqual({ type: "pending" });
+
+      const cleared = reduceCheckoutState(state({ zipCode: "10001" }), { type: "set-value", zipCode: "" });
+      expect(cleared.surcharges).toEqual({ type: "pending" });
+    });
+
+    it("leaves loaded surcharges alone for changes the quote does not depend on", () => {
+      const initial = state();
+      // Non-US zip and non-CA state edits don't feed the server tax calculation.
+      for (const action of [
+        { type: "set-value", email: "other@example.com" } as const,
+        { type: "set-value", fullName: "Other Buyer" } as const,
+        { type: "set-value", zipCode: "SW1A 1AA" } as const,
+        { type: "set-value", state: "NY" } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ ...initial, country: "GB" }), action);
+        expect(next.surcharges).toBe(initial.surcharges);
+      }
+    });
+  });
+
+  // The quote token is read from state.surcharges when the purchase payload is built, at the
+  // END of the input → offering → validating → starting → captcha → finished pipeline. These
+  // guards pin that read to the totals the buyer confirmed when the pipeline started.
+  describe("stale-total submit guards", () => {
+    it("refuses to offer while a surcharges refetch is queued or in flight", () => {
+      for (const surcharges of [
+        { type: "pending" } as const,
+        { type: "loading", requestId: 1, abort: vi.fn() } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ surcharges }), { type: "offer" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("recovers from a failed surcharges fetch by queueing a refetch when the buyer submits", () => {
+      // "error" is otherwise terminal — the refetch effect only fires on "pending" — so a
+      // refusal that left it in place would permanently refuse every submit path (the native
+      // PayPal button stays clickable in this state). The refusal converts the buyer's retry
+      // click into an actual retry.
+      for (const type of ["offer", "validate", "start-payment"] as const) {
+        const next = reduceCheckoutState(state({ surcharges: { type: "error" } }), { type });
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("preserves visible field errors when refusing a submit during a refetch", () => {
+      // The refusal isn't a revalidation — wiping the highlighted errors would clear them
+      // without recomputing until the next real submit (Enter key / native PayPal can submit
+      // inside the refetch window while errors are on screen).
+      const errors = new Set(["email"]);
+      for (const type of ["offer", "validate", "start-payment"] as const) {
+        const next = reduceCheckoutState(
+          state({ surcharges: { type: "pending" }, status: { type: "input", errors } }),
+          { type },
+        );
+        expect(next.status).toEqual({ type: "input", errors });
+      }
+    });
+
+    it("refuses to validate while a surcharges refetch is queued, cancelling back to input", () => {
+      // The cross-sell offer pipeline dispatches "validate" from the "offering" status; the
+      // refusal must return to "input" rather than strand the checkout mid-pipeline.
+      const next = reduceCheckoutState(state({ surcharges: { type: "pending" }, status: { type: "offering" } }), {
+        type: "validate",
+      });
+      expect(next.status).toEqual({ type: "input", errors: new Set() });
+    });
+
+    it("offers and validates normally once surcharges are loaded", () => {
+      const offered = reduceCheckoutState(state(), { type: "offer" });
+      expect(offered.status).toEqual({ type: "offering" });
+
+      const validated = reduceCheckoutState(state({ status: { type: "offering" } }), { type: "validate" });
+      expect(validated.status).toEqual({ type: "validating" });
+    });
+
+    it("cancels an in-progress payment when a total-affecting change lands mid-pipeline", () => {
+      // e.g. the buyer changes the tip and the pipeline is already past "input" (debounce
+      // window race): the quote the pipeline was confirming is no longer the one that would be
+      // charged, so the payment must fall back to input instead of finishing on stale totals.
+      for (const status of [
+        { type: "offering" } as const,
+        { type: "validating" } as const,
+        { type: "starting" } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ status }), {
+          type: "set-value",
+          tip: { type: "fixed", amount: 2_00 },
+        });
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("does not cancel an in-progress payment for changes that keep the totals intact", () => {
+      const next = reduceCheckoutState(state({ status: { type: "validating" } }), {
+        type: "set-value",
+        fullName: "Other Buyer",
+      });
+      expect(next.status).toEqual({ type: "validating" });
+    });
+
+    it("keeps a finished payment locked when a total-affecting change lands", () => {
+      // "finished" means the purchase request has already been dispatched (pay() runs off a
+      // status effect) and cannot be cancelled from the reducer. Resetting to "input" here would
+      // not stop that charge — it would only re-enable the Pay button while the request is in
+      // flight, allowing a second submission and a duplicate charge. The quote still invalidates
+      // (the UI should not display totals it can no longer honor), but the status must not move.
+      const finished = { type: "finished", paymentMethod: { type: "not-applicable" } } as const;
+      for (const action of [
+        { type: "set-value", tip: { type: "fixed", amount: 2_00 } } as const,
+        { type: "set-value", gift: { type: "normal", email: "friend@example.com", note: "" } } as const,
+        { type: "update-products", products: [product({ price: 2_000 })] } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ status: finished }), action);
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual(finished);
+      }
+    });
+
+    it("does not cancel an in-progress wallet payment when its own address updates land", () => {
+      // The Apple Pay / Google Pay sheet dispatches address set-values as part of its own
+      // payment flow (shipping address change, billing details from the chosen card). Wallet
+      // payments never attach the buyer-currency quote token, so there is no stale-quote risk —
+      // and cancelling here would break the sheet's completion handshake.
+      for (const action of [
+        { type: "set-value", country: "CA" } as const,
+        { type: "set-value", zipCode: "94103" } as const,
+        { type: "set-value", tip: { type: "fixed", amount: 2_00 } } as const,
+      ]) {
+        const next = reduceCheckoutState(
+          state({ status: { type: "starting" }, paymentMethod: "stripePaymentRequest" }),
+          action,
+        );
+        // The quote still invalidates (totals may change), but the payment continues.
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "starting" });
+      }
+    });
+
+    it("refuses start-payment for card payments while a surcharges refetch is queued", () => {
+      // "start-payment" is dispatched unconditionally from effects (CustomerDetails on
+      // "validating", the wallet payment-request watcher) — the pipeline must not re-enter on
+      // a stale quote when an invalidation lands between "validate" and this action.
+      const next = reduceCheckoutState(state({ surcharges: { type: "pending" } }), { type: "start-payment" });
+      expect(next.status).toEqual({ type: "input", errors: new Set() });
+    });
+
+    it("lets start-payment through for wallet payments regardless of surcharge state", () => {
+      // Wallets never carry the quote token; blocking them on surcharge readiness would only
+      // break the payment-sheet flow.
+      const next = reduceCheckoutState(
+        state({ surcharges: { type: "pending" }, paymentMethod: "stripePaymentRequest" }),
+        { type: "start-payment" },
+      );
+      expect(next.status).toEqual({ type: "starting" });
+    });
+
+    it("cancels an in-progress payment when a product update without a precomputed quote lands mid-pipeline", () => {
+      // A cart update arriving after "offer"/"validate" without a fresh quote leaves surcharges
+      // pending — the payload built at the end of the pipeline would carry totals the buyer
+      // never confirmed, so the payment must fall back to input.
+      for (const status of [
+        { type: "offering" } as const,
+        { type: "validating" } as const,
+        { type: "starting" } as const,
+      ]) {
+        const next = reduceCheckoutState(state({ status }), {
+          type: "update-products",
+          products: [product({ price: 2_000 })],
+        });
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      }
+    });
+
+    it("lets a cross-sell acceptance continue the pipeline when it carries a precomputed quote", () => {
+      // Accepting an offer replaces the products mid-pipeline on purpose, and the offer flow
+      // precomputes the surcharges for the accepted cart — the pipeline may continue on them.
+      const next = reduceCheckoutState(state({ status: { type: "offering" } }), {
+        type: "update-products",
+        products: [product({ price: 2_000 })],
+        surcharges: loadedSurcharges({ subtotal: 2_000 }).result,
+      });
+      expect(next.surcharges.type).toBe("loaded");
+      expect(next.status).toEqual({ type: "offering" });
+    });
   });
 });
 

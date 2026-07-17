@@ -26,6 +26,16 @@ describe CustomerSurchargeController, :vcr do
     @zip_tax_rate = create(:zip_tax_rate, combined_rate: 0.1, zip_code: nil, state: "CA")
   end
 
+  it "responds with 400 when products is a string instead of an array" do
+    post "calculate_all", params: { products: "not-an-array" }, as: :json
+    expect(response).to have_http_status(:bad_request)
+  end
+
+  it "responds with 400 when products is an array of strings instead of product hashes" do
+    post "calculate_all", params: { products: [@product.unique_permalink] }, as: :json
+    expect(response).to have_http_status(:bad_request)
+  end
+
   it "returns 0 if price input is invalid" do
     post "calculate_all", params: { products: [{ permalink: @physical_product.unique_permalink, price: "invalid", quantity: 1 }] }, as: :json
     expect(response.parsed_body).to eq(expected_surcharge_response)

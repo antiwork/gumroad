@@ -1,4 +1,10 @@
 <%= header_section("You have been #{@refund_type} refunded.") %>
 <div>
-  <p>You received a partial refund of <%= @formatted_refund_amount %> for your <%= @purchase.formatted_total_transaction_amount %> purchase of <%= @purchase.link_name %>. It may take up to 3-7 days to show up in your account.</p>
+  <% if @formatted_presentment_refund_amount.present? %>
+    <%# Presentment purchases were charged in the buyer's own currency, so lead with that
+        amount (it matches their card statement) and show the canonical USD amount alongside. %>
+    <p>You received a partial refund of <%= @formatted_presentment_refund_amount %> (<%= @formatted_usd_refund_amount %> USD) for your <%= @purchase.buyer_presentment? ? "#{@purchase.formatted_buyer_presentment_total} (#{@formatted_usd_total} USD)" : @purchase.formatted_total_transaction_amount %> purchase of <%= @purchase.link_name %>. It may take up to 3-7 days to show up in your account.</p>
+  <% else %>
+    <p>You received a partial refund of <%= @formatted_refund_amount %> for your <%= @purchase.formatted_total_transaction_amount %> purchase of <%= @purchase.link_name %>. It may take up to 3-7 days to show up in your account.</p>
+  <% end %>
 </div>

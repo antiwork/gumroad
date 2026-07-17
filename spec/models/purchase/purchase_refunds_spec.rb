@@ -5,6 +5,7 @@ require "spec_helper"
 describe "PurchaseRefunds", :vcr do
   include CurrencyHelper
   include ProductsHelper
+  include ActiveJob::TestHelper
 
   def verify_balance(user, expected_balance)
     expect(user.unpaid_balance_cents).to eq expected_balance
@@ -107,6 +108,39 @@ describe "PurchaseRefunds", :vcr do
         balance_transaction = refund.balance_transactions.where(user: @user).last
         expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
         expect(balance_transaction.issued_amount_gross_cents).to eq(-1 * @purchase.total_transaction_cents)
+      end
+
+      it "emails the buyer the presentment purchase total on a full refund" do
+        presentment_total = @purchase.purchase_presentment.presentment_total_cents
+
+        expect(ChargeProcessor).to receive(:refund!)
+          .and_return(build_presentment_charge_refund(presentment_cents: presentment_total))
+
+        # Perform the enqueued mailer job and assert on the delivered body: this is the
+        # full-flow guarantee that the buyer-currency amount actually reaches the email,
+        # not just that some CustomerMailer.refund job was enqueued.
+        mail = nil
+        perform_enqueued_jobs do
+          expect(@purchase.refund_and_save!(@user.id)).to be(true)
+          mail = ActionMailer::Base.deliveries.reverse.find { _1.subject == "You have been refunded." }
+        end
+        expect(mail).to be_present
+        formatted_presentment_total = @purchase.reload.formatted_buyer_presentment_total
+        expect(mail.body.encoded).to include(formatted_presentment_total)
+      end
+
+      it "passes the refund's presentment amount to the partial refund email" do
+        presentment_total = @purchase.purchase_presentment.presentment_total_cents
+        canonical_partial = @purchase.total_transaction_cents / 2
+        presentment_partial = presentment_total / 2
+
+        expect(ChargeProcessor).to receive(:refund!)
+          .and_return(build_presentment_charge_refund(presentment_cents: presentment_partial))
+        expect(CustomerMailer).to receive(:partial_refund)
+          .with(@purchase.email, @purchase.link.id, @purchase.id, canonical_partial, "partially", presentment_partial, Currency::CAD)
+          .and_call_original
+
+        expect(@purchase.refund_and_save!(@user.id, amount_cents: canonical_partial)).to be(true)
       end
 
       it "sends a partial presentment amount for a partial refund and clamps the final remainder" do
@@ -411,7 +445,7 @@ describe "PurchaseRefunds", :vcr do
 
       it "notifies customer about the refund" do
         expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, anything).and_call_original
-        expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 50, "partially").and_call_original
+        expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 50, "partially", nil, nil).and_call_original
         @purchase.refund_and_save!(@user.id, amount_cents: 50)
       end
 
@@ -600,6 +634,9 @@ describe "PurchaseRefunds", :vcr do
                                   stripe_transaction_id: "5HR31200C31692256",
                                   charge_processor_id: "paypal")
       purchase.charge = create(:charge, processor_transaction_id: purchase.stripe_transaction_id)
+      # refund_purchase! now locks the purchase row (reload.lock!), which requires a
+      # persisted record — as every real refund has. Save the built purchase first.
+      purchase.save!
       expect(purchase.merchant_account_id).to eq(merchant_account.id)
       expect(purchase.charge.purchases.many?).to be false
 
@@ -1802,7 +1839,7 @@ describe "PurchaseRefunds", :vcr do
 
     it "notifies customer about the refund" do
       expect(@purchase.stripe_partially_refunded).to_not be(true)
-      expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 10, "partially").and_call_original
+      expect(CustomerMailer).to receive(:partial_refund).with(@purchase.email, @purchase.link.id, @purchase.id, 10, "partially", nil, nil).and_call_original
       @purchase.refund_partial_purchase!(10, @user.id)
       @purchase.reload
       expect(@purchase.stripe_partially_refunded).to be(true)
