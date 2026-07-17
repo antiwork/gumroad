@@ -44,15 +44,15 @@ class AddEditProfileScopeToGumroadCliOauthApplication < ActiveRecord::Migration[
   # RevokeBackfilledEditEmailsScopeFromDefaultOauthApplications).
   #
   # Concurrency: MySQL does not wrap migrations in a transaction, so we open
-  # one explicitly and take the same oauth_applications row lock that device
-  # polling (OauthDeviceAuthorization#poll!) holds while it mints a token from
-  # an approved authorization's stored scopes. Holding that lock for the whole
-  # cleanup means no device-code token can be issued mid-sweep. Ordering also
-  # matters: issuance sources (device authorizations, then access grants) are
-  # cleaned BEFORE access tokens, and tokens are swept LAST — so any token
-  # minted just before we acquired the lock (device poll or authorization-code
-  # exchange) is still caught by the final token sweep instead of slipping in
-  # after it.
+  # one explicitly and take the same oauth_applications row lock used when
+  # device codes and authorization grants are created and when device codes are
+  # polled. Holding that lock for the whole cleanup prevents a request that saw
+  # the old application scopes from inserting a new issuance source after its
+  # sweep. Ordering also matters: issuance sources (device authorizations, then
+  # access grants) are cleaned BEFORE access tokens, and tokens are swept LAST
+  # — so any token minted just before we acquired the lock (device poll or
+  # authorization-code exchange) is still caught by the final token sweep
+  # instead of slipping in after it.
   def down
     oauth_applications.transaction do
       app = oauth_applications.lock.find_by(uid: CLI_CLIENT_ID)
