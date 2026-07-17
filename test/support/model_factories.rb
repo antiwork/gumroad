@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# StripePaymentMethodHelper lives under spec/support and has no RSpec
+# dependency; require it directly so credit-card builders can tokenize a card
+# the same way the RSpec :chargeable factory does. The actual Stripe calls it
+# makes are replayed from the shared VCR cassettes (see test/support/vcr.rb).
+require Rails.root.join("spec", "support", "stripe_payment_method_helper")
+
 # Factory-equivalent builders for the Minitest + fixtures suite (#5801).
 #
 # The suite has no FactoryBot, but complex hub models (Installment, Purchase,
@@ -253,6 +259,11 @@ module ModelFactories
     build_installment(**args).tap(&:save!)
   end
 
+  # Mirrors the :installment_rule / :post_rule factory.
+  def create_installment_rule(installment:, **attrs)
+    InstallmentRule.create!({ installment:, to_be_published_at: 1.week.from_now, time_period: "hour" }.merge(attrs))
+  end
+
   # Mirrors the base :purchase factory (see test/fixtures/purchases.yml for the
   # same money math): a successful sale on the platform Stripe account.
   # calculate_fees is an after(:build) hook in the factory, so invoke it
@@ -289,6 +300,13 @@ module ModelFactories
     purchase
   end
 
+  # A failed sale (mirrors :failed_purchase): the base purchase with its state
+  # flipped to "failed". Kept succeeded_at as-is, matching the factory (which
+  # only overrides purchase_state).
+  def create_failed_purchase(link:, **attrs)
+    create_purchase(link:, purchase_state: "failed", **attrs)
+  end
+
   # A $0 sale (mirrors :free_purchase): no charge processor, card, or stripe ids.
   def create_free_purchase(link:, seller: :default, **attrs)
     create_purchase(
@@ -322,6 +340,78 @@ module ModelFactories
     subscription.payment_options << PaymentOption.new(subscription:, price: link.default_price)
     subscription.save!
     subscription
+  end
+
+  # A pending/applied plan change on a subscription (mirrors
+  # :subscription_plan_change). The tier defaults to a standalone variant, just
+  # like the factory's `association :tier, factory: :variant`.
+  def create_subscription_plan_change(subscription:, tier: nil, recurrence: "monthly", perceived_price_cents: 500, **attrs)
+    SubscriptionPlanChange.create!({
+      subscription:,
+      tier: tier || create_variant,
+      recurrence:,
+      perceived_price_cents:,
+    }.merge(attrs))
+  end
+
+  # A license key tied to a purchase (mirrors :license).
+  def create_license(link: nil, purchase: nil, **attrs)
+    link ||= create_product
+    License.create!({ link:, purchase: purchase || create_purchase(link:), uses: 0 }.merge(attrs))
+  end
+
+  # A credit card built from a Stripe test payment method (mirrors :credit_card,
+  # which does `CreditCard.create(chargeable, nil, user)`).
+  def create_credit_card(user: nil, card: nil, **attrs)
+    card ||= StripePaymentMethodHelper.success
+    chargeable = Chargeable.new([
+                                  StripeChargeablePaymentMethod.new(card.to_stripejs_payment_method_id, zip_code: card[:cc_zipcode], product_permalink: "xx")
+                                ])
+    CreditCard.create(chargeable, nil, user)
+  end
+
+  # A free-trial membership sale (mirrors :free_trial_membership_purchase): a
+  # tiered membership with a free trial enabled, an original "not_charged"
+  # purchase flagged as a free trial, and a subscription whose free trial ends
+  # after the product's configured trial duration.
+  def create_free_trial_membership_purchase(link: nil, user: nil, **attrs)
+    link ||= create_membership_product(free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week)
+    subscription = create_subscription(link:, user:, free_trial_ends_at: Time.current + link.free_trial_duration)
+    create_purchase(
+      link:, subscription:, purchaser: user,
+      variant_attributes: [link.tiers.first],
+      is_original_subscription_purchase: true,
+      is_free_trial_purchase: true,
+      should_exclude_product_review: true,
+      purchase_state: "not_charged",
+      succeeded_at: nil,
+      **attrs
+    )
+  end
+
+  # An original subscription purchase on a membership (tiered) product (mirrors
+  # :membership_purchase): defaults the variant to the product's tiers unless a
+  # specific tier is passed.
+  def create_membership_product_purchase(link: nil, tier: nil, subscription: nil, **attrs)
+    link ||= create_membership_product
+    purchase = Purchase.new({
+      link:,
+      seller: link.user,
+      is_original_subscription_purchase: true,
+      price_cents: link.price_cents || 100,
+      displayed_price_cents: link.price_cents || 100,
+      ip_address: unique_ip,
+      browser_guid: "guid-#{unique_suffix}",
+      email: "buyer-#{unique_suffix}@example.com",
+      purchase_state: "successful",
+      succeeded_at: Time.current,
+    }.merge(attrs))
+    purchase.variant_attributes = tier.present? ? [tier] : purchase.tiers
+    purchase.subscription = subscription if subscription
+    purchase.save!
+    purchase.subscription ||= create_subscription(link:)
+    purchase.save!
+    purchase
   end
 
   # Mirrors the :workflow factories. Product/variant workflows hang off a
