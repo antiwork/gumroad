@@ -170,6 +170,96 @@ describe GenerateFeesByCreatorLocationReportJob do
     end
   end
 
+  describe "chargeback event-date attribution" do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/fees-by-creator-location-chargeback-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day }
+
+    before do
+      # Sold in the month before the cutover month; charged back post-cutover; dispute won
+      # two months after the event. Each event must land in its own month's report.
+      @seller_setup_time = (cutover - 1.month).beginning_of_month + 13.days
+      @sale_time = (cutover - 1.month).beginning_of_month + 14.days
+      @event_time = cutover + 5.days
+      @won_time = cutover + 2.months
+
+      seller = nil
+      product = nil
+      travel_to(@seller_setup_time) do
+        seller = create(:user).tap do |creator|
+          creator.fetch_or_build_user_compliance_info.dup_and_save! do |info|
+            info.country = "Australia"
+          end
+        end
+        product = create(:product, user: seller, price_cents: 100_00, native_type: "digital")
+      end
+
+      travel_to(@sale_time) do
+        @chargedback_purchase = create(:purchase, link: product, seller:, price_cents: 100_00, fee_cents: 30_00,
+                                                  total_transaction_cents: 100_00, country: "Australia")
+
+        # A legacy chargeback (event before the cutover): keeps the historical drop.
+        @legacy_chargedback_purchase = create(:purchase, link: product, seller:, price_cents: 100_00, fee_cents: 30_00,
+                                                         total_transaction_cents: 100_00, country: "Australia")
+      end
+
+      @legacy_chargedback_purchase.update!(chargeback_date: cutover - 10.days)
+      @chargedback_purchase.update!(chargeback_date: @event_time)
+
+      travel_to(@won_time) do
+        @chargedback_purchase.update!(chargeback_reversed: true)
+        create(:dispute, purchase: @chargedback_purchase, state: "won", won_at: Time.current)
+      end
+    end
+
+    def perform_and_read(month, year)
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+
+      described_class.new.perform(month, year)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      CSV.read(temp_file)
+    ensure
+      temp_file&.close(true)
+    end
+
+    it "keeps the event-dated chargeback's fee in the purchase month and drops only the legacy one" do
+      payload = perform_and_read(@sale_time.month, @sale_time.year)
+
+      au_row = payload.find { |row| row[1] == "Australia" }
+      expect(au_row).to be_present
+      # Only the event-dated purchase's fee counts (the purchase factory recalculates
+      # fee_cents on build, so read the persisted value rather than hardcoding it).
+      expect(au_row[3]).to eq(@chargedback_purchase.fee_cents_for_tax_reporting.to_s)
+    end
+
+    it "subtracts the clawed-back fee in the month the dispute was formalized" do
+      payload = perform_and_read(@event_time.month, @event_time.year)
+
+      au_row = payload.find { |row| row[1] == "Australia" }
+      expect(au_row).to be_present
+      expect(au_row[3]).to eq((-@chargedback_purchase.fee_cents_for_chargeback_reporting).to_s)
+    end
+
+    it "adds the won dispute's fee back in the month of won_at" do
+      payload = perform_and_read(@won_time.month, @won_time.year)
+
+      au_row = payload.find { |row| row[1] == "Australia" }
+      expect(au_row).to be_present
+      expect(au_row[3]).to eq(@chargedback_purchase.fee_cents_for_chargeback_reporting.to_s)
+    end
+  end
+
   describe "#determine_country_name_and_state_name" do
     let(:job) { described_class.new }
 
