@@ -284,7 +284,7 @@ class SettingsPresenter
     allowed_periods -= [0] if seller.refund_policy_enforced?
 
     {
-      enabled: seller.account_level_refund_policy_enabled?,
+      enabled: seller.refund_policy_settings_editable?,
       allowed_refund_periods_in_days: allowed_periods.map do
         {
           key: _1,

@@ -1103,6 +1103,17 @@ class User < ApplicationRecord
     refund_policy_enabled?
   end
 
+  # Whether the seller can see and edit the account-level refund policy section in
+  # Settings. Normally this follows account_level_refund_policy_enabled?, but when a
+  # refund policy has been enforced on the account because of a high dispute rate
+  # (see Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!),
+  # the enforcement email tells the seller they can pick a different refund period of
+  # at least 7 days in Settings. That has to work even while account-level refund
+  # policies are switched off globally, so enforcement alone unlocks the section.
+  def refund_policy_settings_editable?
+    refund_policy_enforced? || account_level_refund_policy_enabled?
+  end
+
   def has_all_eligible_refund_policies_as_no_refunds?
     return false if product_refund_policies.none?
 

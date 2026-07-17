@@ -140,6 +140,25 @@ describe SettingsPresenter do
 
         expect(allowed_periods.map { _1[:key] }).to eq([7, 14, 30, 183])
       end
+
+      context "when the seller_refund_policy_disabled_for_all feature flag is on" do
+        before do
+          Feature.activate(:seller_refund_policy_disabled_for_all)
+          seller.update!(refund_policy_enabled: false)
+        end
+
+        it "still shows the refund policy section so the seller can change the enforced period" do
+          expect(presenter.main_props[:user][:seller_refund_policy][:enabled]).to eq(true)
+        end
+      end
+    end
+
+    context "when the seller_refund_policy_disabled_for_all feature flag is on and no refund policy is enforced" do
+      before { Feature.activate(:seller_refund_policy_disabled_for_all) }
+
+      it "hides the refund policy section" do
+        expect(presenter.main_props[:user][:seller_refund_policy][:enabled]).to eq(false)
+      end
     end
 
     context "when support emails exist" do
