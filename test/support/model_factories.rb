@@ -404,6 +404,31 @@ module ModelFactories
     subscription
   end
 
+  # A subscription lifecycle event (mirrors :subscription_event).
+  def create_subscription_event(subscription:, event_type: :deactivated, occurred_at: Time.current, **attrs)
+    SubscriptionEvent.create!({ subscription:, event_type:, occurred_at: }.merge(attrs))
+  end
+
+  # A gift (mirrors :gift): links a gifter to a giftee by email.
+  def create_gift(link: nil, gifter_email: nil, giftee_email: nil, **attrs)
+    Gift.create!({
+      link: link || create_product,
+      gifter_email: gifter_email || "gifter-#{unique_suffix}@example.com",
+      giftee_email: giftee_email || "giftee-#{unique_suffix}@example.com",
+    }.merge(attrs))
+  end
+
+  # A custom-field value on a purchase (mirrors :purchase_custom_field). Built
+  # unsaved so callers can push it onto a purchase's association.
+  def build_purchase_custom_field(purchase: nil, **attrs)
+    PurchaseCustomField.new({
+      purchase:,
+      field_type: CustomField::TYPE_TEXT,
+      name: "Custom field",
+      value: "custom field value",
+    }.merge(attrs))
+  end
+
   # A subscription payment option (mirrors :payment_option): priced at the
   # product's default price unless overridden.
   def create_payment_option(subscription: nil, price: nil, **attrs)

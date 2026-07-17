@@ -3896,4 +3896,1006 @@ class SubscriptionTest < ActiveSupport::TestCase
     @cpd_purchase.update!(displayed_price_cents: 0)
     assert_equal 0, @cpd_subscription.current_plan_displayed_price_cents
   end
+
+  # --- #resubscribe! ---------------------------------------------------------
+
+  test "#resubscribe! restarts subscription if it is pending cancellation" do
+    @subscription.cancel!
+    assert_equal true, @subscription.pending_cancellation?
+    @subscription.resubscribe!
+    assert_equal true, @subscription.alive?(include_pending_cancellation: false)
+  end
+
+  test "#resubscribe! restarts subscription if it is cancelled" do
+    @subscription.cancel_effective_immediately!
+    @subscription.resubscribe!
+    assert_equal true, @subscription.alive?(include_pending_cancellation: false)
+  end
+
+  test "#resubscribe! creates a subscription restarted event when resubscribing" do
+    freeze_time do
+      @subscription.cancel_effective_immediately!
+      assert_changes -> { @subscription.reload.subscription_events.restarted.count }, from: 0, to: 1 do
+        @subscription.resubscribe!
+        assert_equal Time.current, @subscription.reload.subscription_events.restarted.last.occurred_at
+      end
+    end
+  end
+
+  test "#resubscribe! restarts subscription if it has failed" do
+    @subscription.unsubscribe_and_fail!
+    @subscription.resubscribe!
+    assert_equal true, @subscription.alive?(include_pending_cancellation: false)
+  end
+
+  test "#resubscribe! does not restart subscription if has ended" do
+    @subscription.end_subscription!
+    @subscription.resubscribe!
+    assert_equal false, @subscription.alive?(include_pending_cancellation: false)
+  end
+
+  test "#resubscribe! returns true if new charge is not needed" do
+    @subscription.cancel!
+    assert_equal true, @subscription.pending_cancellation?
+    assert_equal true, @subscription.resubscribe!
+    assert_equal true, @subscription.alive?(include_pending_cancellation: false)
+  end
+
+  test "#resubscribe! returns false if new charge is needed" do
+    @subscription.unsubscribe_and_fail!
+    assert_equal false, @subscription.resubscribe!
+    assert_equal true, @subscription.alive?(include_pending_cancellation: false)
+  end
+
+  test "#resubscribe! enqueues activate integrations worker if subscription had been deactivated" do
+    @subscription.cancel_effective_immediately!
+    @subscription.resubscribe!
+    assert_sidekiq_enqueued(ActivateIntegrationsWorker, args: [@subscription.original_purchase.id])
+  end
+
+  test "#resubscribe! does not enqueue activate integrations worker if subscription had not been deactivated" do
+    @subscription.cancel!
+    @subscription.resubscribe!
+    assert_equal 0, ActivateIntegrationsWorker.jobs.size
+  end
+
+  test "#resubscribe! creates a subscription_event of type restarted" do
+    @subscription.cancel_effective_immediately!
+    assert_changes -> { @subscription.reload.subscription_events.restarted.count }, from: 0, to: 1 do
+      @subscription.resubscribe!
+      assert_equal "restarted", @subscription.reload.subscription_events.last.event_type
+    end
+  end
+
+  test "#resubscribe! schedules any workflow installments missed during the lapsed period" do
+    freeze_time do
+      @subscription.cancel_effective_immediately!
+      travel(1.hour)
+      Purchase.any_instance.expects(:reschedule_workflow_installments).with(send_delay: 1.hour.to_i)
+      @subscription.resubscribe!
+    end
+  end
+
+  test "#resubscribe! does not schedule any workflow installments when pending cancellation" do
+    @subscription.cancel!
+    Purchase.any_instance.expects(:reschedule_workflow_installments).never
+    @subscription.resubscribe!
+  end
+
+  # --- #send_restart_notifications! ------------------------------------------
+
+  test "#send_restart_notifications! notifies the creator if the subscription had been terminated" do
+    @subscription.cancel!
+    mail = mock
+    mail.stubs(:deliver_later)
+    ContactingCreatorMailer.expects(:subscription_restarted).with(@subscription.id).returns(mail)
+
+    @subscription.resubscribe!
+    @subscription.send_restart_notifications!
+  end
+
+  test "#send_restart_notifications! notifies the customer if the subscription had been terminated" do
+    @subscription.cancel!
+    mail = mock
+    mail.stubs(:deliver_later)
+    CustomerMailer.expects(:subscription_restarted).with(@subscription.id, "payment issue resolved").returns(mail)
+
+    @subscription.resubscribe!
+    @subscription.send_restart_notifications!("payment issue resolved")
+  end
+
+  test "#send_restart_notifications! sends a subscription_restarted notification if the subscription had been terminated" do
+    @subscription.cancel!
+    mail = mock
+    mail.stubs(:deliver_later)
+    CustomerMailer.stubs(:subscription_restarted).returns(mail)
+
+    @subscription.resubscribe!
+    @subscription.send_restart_notifications!
+
+    assert PostToPingEndpointsWorker.jobs.any? { |job|
+      job["args"][0..3] == [nil, nil, ResourceSubscription::SUBSCRIPTION_RESTARTED_RESOURCE_NAME, @subscription.id] &&
+        job["args"][4].is_a?(Hash) && job["args"][4].key?("restarted_at")
+    }
+  end
+
+  # --- #last_resubscribed_at / #last_deactivated_at --------------------------
+
+  test "#last_resubscribed_at returns the last restart time if the subscription has been restarted" do
+    freeze_time do
+      @subscription.subscription_events.create!(event_type: :deactivated, occurred_at: 1.week.ago)
+      last_restart = 3.weeks.ago
+      @subscription.subscription_events.create!(event_type: :restarted, occurred_at: last_restart)
+      @subscription.subscription_events.create!(event_type: :restarted, occurred_at: 5.weeks.ago)
+      assert_equal last_restart, @subscription.last_resubscribed_at
+    end
+  end
+
+  test "#last_resubscribed_at returns nil if the subscription has not been restarted" do
+    freeze_time do
+      @subscription.subscription_events.create!(event_type: :deactivated, occurred_at: 1.week.ago)
+      assert_nil @subscription.last_resubscribed_at
+    end
+  end
+
+  test "#last_deactivated_at returns the last deactivation time if the subscription has been deactivated" do
+    freeze_time do
+      @subscription.subscription_events.create!(event_type: :restarted, occurred_at: 1.week.ago)
+      last_deactivation = 3.weeks.ago
+      @subscription.subscription_events.create!(event_type: :deactivated, occurred_at: last_deactivation)
+      @subscription.subscription_events.create!(event_type: :deactivated, occurred_at: 5.weeks.ago)
+      assert_equal last_deactivation, @subscription.last_deactivated_at
+    end
+  end
+
+  test "#last_deactivated_at returns nil if the subscription has not been deactivated" do
+    freeze_time do
+      @subscription.subscription_events.create!(event_type: :restarted, occurred_at: 1.week.ago)
+      assert_nil @subscription.last_deactivated_at
+    end
+  end
+
+  # --- #resubscribed? --------------------------------------------------------
+
+  test "#resubscribed? returns false when the subscription has not had an interruption" do
+    assert_equal false, @subscription.resubscribed?
+  end
+
+  test "#resubscribed? returns true when the subscription has had an interruption" do
+    @subscription.subscription_events.create!(event_type: :deactivated, occurred_at: 1.week.ago)
+    @subscription.subscription_events.create!(event_type: :restarted, occurred_at: Time.current)
+    assert_equal true, @subscription.resubscribed?
+  end
+
+  # --- #custom_fields --------------------------------------------------------
+
+  test "#custom_fields returns the custom fields on the original purchase" do
+    sub = create_subscription
+    archived_original_purchase = create_membership_purchase(subscription: sub)
+    archived_original_purchase.purchase_custom_fields << build_purchase_custom_field(name: "name", value: "Amy")
+    original_purchase = create_membership_purchase(subscription: sub)
+    original_purchase.purchase_custom_fields << build_purchase_custom_field(name: "name", value: "Barbara")
+    archived_original_purchase.update!(is_archived_original_subscription_purchase: true)
+    renewal_purchase = create_membership_purchase(subscription: sub, is_original_subscription_purchase: false)
+    renewal_purchase.purchase_custom_fields << build_purchase_custom_field(name: "name", value: "Carol")
+    sub.reload
+    assert_equal [{ name: "name", value: "Barbara", type: CustomField::TYPE_TEXT }], sub.custom_fields
+
+    original_purchase.purchase_custom_fields.destroy_all
+    assert_equal [], sub.reload.custom_fields
+  end
+
+  # --- #has_free_trial? ------------------------------------------------------
+
+  test "#has_free_trial? returns true if free_trial_ends_at is set" do
+    assert_equal true, build_subscription(free_trial_ends_at: 1.day.ago).has_free_trial?
+  end
+
+  test "#has_free_trial? returns false if free_trial_ends_at is not set" do
+    assert_equal false, build_subscription(free_trial_ends_at: nil).has_free_trial?
+  end
+
+  # --- #should_exclude_product_review_on_charge_reversal? --------------------
+
+  test "#should_exclude_product_review_on_charge_reversal? returns false if the subscription does not have a free trial" do
+    subscription = create_membership_purchase.subscription
+    assert_equal false, subscription.should_exclude_product_review_on_charge_reversal?
+  end
+
+  test "#should_exclude_product_review_on_charge_reversal? returns true if the initial successful charge does not allow a review" do
+    original_purchase = create_free_trial_membership_purchase(should_exclude_product_review: false)
+    subscription = original_purchase.subscription
+    create_purchase(link: subscription.link, subscription:, stripe_refunded: true)
+    assert_equal true, subscription.should_exclude_product_review_on_charge_reversal?
+  end
+
+  test "#should_exclude_product_review_on_charge_reversal? returns false if the initial charge disallows a review but the original purchase already excludes reviews" do
+    original_purchase = create_free_trial_membership_purchase(should_exclude_product_review: false)
+    subscription = original_purchase.subscription
+    original_purchase.update!(should_exclude_product_review: true)
+    create_purchase(link: subscription.link, subscription:, stripe_refunded: true)
+    assert_equal false, subscription.reload.should_exclude_product_review_on_charge_reversal?
+  end
+
+  test "#should_exclude_product_review_on_charge_reversal? returns false if the initial successful charge does allow a review" do
+    original_purchase = create_free_trial_membership_purchase(should_exclude_product_review: false)
+    subscription = original_purchase.subscription
+    create_purchase(link: subscription.link, subscription:)
+    assert_equal false, subscription.should_exclude_product_review_on_charge_reversal?
+  end
+
+  test "#should_exclude_product_review_on_charge_reversal? returns true if there is not yet a successful charge" do
+    original_purchase = create_free_trial_membership_purchase(should_exclude_product_review: false)
+    subscription = original_purchase.subscription
+    assert_equal true, subscription.should_exclude_product_review_on_charge_reversal?
+  end
+
+  # --- #alive_or_restartable? ------------------------------------------------
+
+  test "#alive_or_restartable? returns true if ended_at is not set and not cancelled by the seller" do
+    assert_equal true, create_subscription.alive_or_restartable?
+  end
+
+  test "#alive_or_restartable? returns true if ended_at is not set and the subscription is cancelled by the buyer" do
+    assert_equal true, create_subscription(cancelled_at: 1.day.ago, cancelled_by_buyer: true).alive_or_restartable?
+  end
+
+  test "#alive_or_restartable? returns false if ended_at is set" do
+    assert_equal false, create_subscription(ended_at: 1.day.ago).alive_or_restartable?
+  end
+
+  test "#alive_or_restartable? returns false if the subscription is cancelled by the seller" do
+    assert_equal false, create_subscription(cancelled_at: 1.day.ago, cancelled_by_buyer: false).alive_or_restartable?
+  end
+
+  # --- #alive_at? ------------------------------------------------------------
+
+  test "#alive_at? no events not deactivated returns true if the time is after created_at" do
+    subscription = create_membership_purchase(created_at: 2.days.ago).subscription
+    purchase_date = subscription.true_original_purchase.created_at
+    assert_equal true, subscription.alive_at?(purchase_date + 1.day)
+    assert_equal false, subscription.alive_at?(purchase_date - 1.day)
+  end
+
+  test "#alive_at? no events deactivated returns true if the time is between created_at and deactivated_at" do
+    subscription = create_membership_purchase(created_at: 2.days.ago).subscription
+    purchase_date = subscription.true_original_purchase.created_at
+    subscription.update!(deactivated_at: purchase_date + 1.month)
+    assert_equal true, subscription.alive_at?(purchase_date + 1.week)
+    assert_equal false, subscription.alive_at?(subscription.deactivated_at + 2.months)
+  end
+
+  test "#alive_at? deactivated and resubscribed returns true if the time is between subscribe and deactivate events" do
+    subscription = create_membership_purchase(created_at: 2.days.ago).subscription
+    purchase_date = subscription.true_original_purchase.created_at
+    create_subscription_event(subscription:, event_type: :deactivated, occurred_at: purchase_date + 2.months)
+    create_subscription_event(subscription:, event_type: :restarted, occurred_at: purchase_date + 6.months)
+    create_subscription_event(subscription:, event_type: :deactivated, occurred_at: purchase_date + 12.months)
+
+    assert_equal true, subscription.alive_at?(purchase_date + 1.month)
+    assert_equal false, subscription.alive_at?(purchase_date + 3.months)
+    assert_equal true, subscription.alive_at?(purchase_date + 9.months)
+    assert_equal false, subscription.alive_at?(purchase_date + 15.months)
+  end
+
+  # --- #discount_applies_to_next_charge? -------------------------------------
+
+  def discount_applies_context
+    user = create_user
+    product = create_membership_product_with_preset_tiered_pricing(user:)
+    offer_code = create_offer_code(products: [product])
+    subscription = create_membership_purchase(link: product, offer_code:, variant_attributes: [product.alive_variants.first], price_cents: 200).subscription
+    subscription.original_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
+    subscription
+  end
+
+  test "#discount_applies_to_next_charge? returns false when the offer code is expired" do
+    subscription = discount_applies_context
+    assert_equal false, subscription.discount_applies_to_next_charge?
+  end
+
+  test "#discount_applies_to_next_charge? recomputes after reload when the offer code is expired" do
+    subscription = discount_applies_context
+    assert_equal false, subscription.discount_applies_to_next_charge?
+    subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+    subscription.reload
+    assert_equal true, subscription.discount_applies_to_next_charge?
+  end
+
+  test "#discount_applies_to_next_charge? returns true when the offer code is not expired" do
+    subscription = discount_applies_context
+    subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+    assert_equal true, subscription.discount_applies_to_next_charge?
+  end
+
+  test "#discount_applies_to_next_charge? installment plans returns true even if the offer code is only for one membership cycle" do
+    product = create_product(name: "Awesome product", user: @seller, price_cents: 1000)
+    create_product_installment_plan(link: product, number_of_installments: 3)
+    subscription = create_subscription(link: product, is_installment_plan: true)
+    offer_code = create_offer_code(products: [product], amount_cents: 100, duration_in_billing_cycles: 1)
+    create_installment_plan_purchase(subscription:, link: product, offer_code:)
+    assert_equal true, subscription.discount_applies_to_next_charge?
+  end
+
+  # --- #auto_renewal_offer_code ----------------------------------------------
+  # A subscriber who bought 13 months ago (so the 12-month ownership tier
+  # applies), plus a tiered existing-customer renewal discount.
+
+  def auto_renewal_context
+    @arc_seller = create_user
+    @arc_product = create_membership_product_with_preset_tiered_pricing(user: @arc_seller)
+    @arc_buyer = create_user
+    purchase = create_membership_purchase(link: @arc_product, purchaser: @arc_buyer, variant_attributes: [@arc_product.alive_variants.first], price_cents: 200, created_at: 13.months.ago)
+    purchase.subscription.update!(user: @arc_buyer)
+    @arc_subscription = purchase.subscription
+    @arc_tiered_code = create_offer_code(
+      user: @arc_seller, products: [@arc_product], ownership_products: [@arc_product],
+      existing_customers_only: true, amount_cents: nil, amount_percentage: 0, currency_type: nil,
+      ownership_duration_tiers: [
+        { "months" => 0, "amount_percentage" => 0 },
+        { "months" => 12, "amount_percentage" => 50 },
+      ]
+    )
+  end
+
+  test "#auto_renewal_offer_code discovers the best tiered renewal discount for the subscriber" do
+    auto_renewal_context
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code ignores universal renewal discounts that exclude the product" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    universal_code = create_universal_offer_code(
+      user: @arc_seller, amount_cents: nil, amount_percentage: 0, currency_type: nil,
+      ownership_duration_tiers: [
+        { "months" => 0, "amount_percentage" => 0 },
+        { "months" => 12, "amount_percentage" => 100 },
+      ]
+    )
+    assert_equal universal_code, @arc_subscription.auto_renewal_offer_code.offer_code
+    universal_code.update!(excluded_products: [@arc_product])
+    assert_nil Subscription.find(@arc_subscription.id).auto_renewal_offer_code
+  end
+
+  test "#auto_renewal_offer_code discovers a standalone tiered renewal discount without existing_customers_only" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    standalone_code = create_offer_code(
+      user: @arc_seller, products: [@arc_product], amount_cents: nil, amount_percentage: 0, currency_type: nil,
+      ownership_duration_tiers: [
+        { "months" => 0, "amount_percentage" => 0 },
+        { "months" => 12, "amount_percentage" => 50 },
+      ]
+    )
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal standalone_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code applies a standalone tiered renewal discount to a guest subscription with no user" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    standalone_code = create_offer_code(
+      user: @arc_seller, products: [@arc_product], amount_cents: nil, amount_percentage: 0, currency_type: nil,
+      ownership_duration_tiers: [
+        { "months" => 0, "amount_percentage" => 0 },
+        { "months" => 12, "amount_percentage" => 50 },
+      ]
+    )
+    @arc_subscription.update!(user: nil)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal standalone_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code discovers universal existing-customer renewal discounts" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    universal_code = create_universal_offer_code(user: @arc_seller, code: "universalrenewal", ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 1, currency_type: nil)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal universal_code, auto.offer_code
+    assert_equal 1, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code discovers fixed-amount existing-customer renewal discounts" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    fixed_code = create_offer_code(user: @arc_seller, products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: 50, amount_percentage: nil, currency_type: @arc_product.price_currency_type)
+    auto = @arc_subscription.auto_renewal_offer_code
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal fixed_code, auto.offer_code
+    assert_equal 50, auto.offer_code_amount
+    assert_equal false, auto.offer_code_is_percent
+    assert_equal 150, @arc_subscription.current_subscription_price_cents
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
+    assert_equal false, renewal_purchase.purchase_offer_code_discount.offer_code_is_percent
+  end
+
+  test "#auto_renewal_offer_code ignores inactive renewal discounts" do
+    auto_renewal_context
+    create_offer_code(user: @arc_seller, code: "expiredrenewal", products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 60, currency_type: nil, valid_at: 2.days.ago, expires_at: 1.day.ago)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code ignores renewal discounts capped to billing cycles" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    create_offer_code(user: @arc_seller, products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 60, currency_type: nil, duration_in_billing_cycles: 1)
+    assert_nil @arc_subscription.auto_renewal_offer_code
+  end
+
+  test "#auto_renewal_offer_code ignores sold-out renewal discounts" do
+    auto_renewal_context
+    sold_out_code = create_offer_code(user: @arc_seller, code: "soldoutrenewal", products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 60, currency_type: nil, max_purchase_count: 1)
+    create_purchase(link: @arc_product, offer_code: sold_out_code)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code ignores renewal discounts with unmet minimum quantity" do
+    auto_renewal_context
+    create_offer_code(user: @arc_seller, code: "minimumquantityrenewal", products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 60, currency_type: nil, minimum_quantity: 2)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code ignores renewal discounts with unmet minimum amount" do
+    auto_renewal_context
+    create_offer_code(user: @arc_seller, code: "minimumamountrenewal", products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 60, currency_type: nil, minimum_amount_cents: 10_000)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code uses the selected PWYW renewal price for minimum amount checks" do
+    auto_renewal_context
+    @arc_tiered_code.update!(minimum_amount_cents: 1_200)
+    @arc_subscription.original_purchase.update!(price_cents: 1_500, displayed_price_cents: 1_500)
+    assert @arc_subscription.original_purchase.minimum_paid_price_cents_per_unit_before_discount < @arc_tiered_code.minimum_amount_cents
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+    assert_equal 750, @arc_subscription.current_subscription_price_cents
+  end
+
+  test "#auto_renewal_offer_code keeps the selected PWYW renewal price when the cached tier is zero percent" do
+    auto_renewal_context
+    original_purchase = @arc_subscription.original_purchase
+    original_purchase.update!(offer_code: @arc_tiered_code, price_cents: 1_500, displayed_price_cents: 1_500, created_at: 1.month.ago)
+    original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 0, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    auto = @arc_subscription.auto_renewal_offer_code
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 0, auto.resolved_percent
+    assert_equal 1_500, @arc_subscription.current_subscription_price_cents
+    assert_equal @arc_tiered_code, renewal_purchase.offer_code
+    assert_nil renewal_purchase.purchase_offer_code_discount
+  end
+
+  test "#auto_renewal_offer_code handles a cached 100 percent PWYW tier" do
+    auto_renewal_context
+    @arc_tiered_code.update!(amount_percentage: 100, ownership_duration_tiers: [
+                               { "months" => 0, "amount_percentage" => 100 },
+                               { "months" => 12, "amount_percentage" => 100 },
+                             ])
+    original_purchase = @arc_subscription.original_purchase
+    original_purchase.update_columns(offer_code_id: @arc_tiered_code.id, price_cents: 0, displayed_price_cents: 1_500, created_at: 1.month.ago)
+    original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 100, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    assert_equal 0, @arc_subscription.current_subscription_price_cents
+  end
+
+  test "#auto_renewal_offer_code keeps the selected PWYW renewal price when the cached tier is non-zero percent" do
+    auto_renewal_context
+    @arc_tiered_code.update!(amount_percentage: 25, ownership_duration_tiers: [
+                               { "months" => 0, "amount_percentage" => 25 },
+                               { "months" => 12, "amount_percentage" => 50 },
+                             ])
+    original_purchase = @arc_subscription.original_purchase
+    original_purchase.update!(offer_code: @arc_tiered_code, price_cents: 1_125, displayed_price_cents: 1_125, created_at: 1.month.ago)
+    original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 25, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 25, auto.resolved_percent
+    assert_equal 1_125, @arc_subscription.current_subscription_price_cents
+  end
+
+  test "#auto_renewal_offer_code applies advanced tiers to the selected PWYW renewal price after a non-zero cached tier" do
+    auto_renewal_context
+    @arc_tiered_code.update!(amount_percentage: 30, ownership_duration_tiers: [
+                               { "months" => 0, "amount_percentage" => 30 },
+                               { "months" => 12, "amount_percentage" => 60 },
+                             ])
+    original_purchase = @arc_subscription.original_purchase
+    original_purchase.update!(offer_code: @arc_tiered_code, price_cents: 420, displayed_price_cents: 420)
+    original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 30, offer_code_is_percent: true, pre_discount_minimum_price_cents: 500, duration_in_months: nil)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 60, auto.resolved_percent
+    assert_equal 240, @arc_subscription.current_subscription_price_cents
+  end
+
+  test "#auto_renewal_offer_code applies the advanced tier to the selected PWYW renewal price" do
+    auto_renewal_context
+    original_purchase = @arc_subscription.original_purchase
+    original_purchase.update!(offer_code: @arc_tiered_code, price_cents: 1_500, displayed_price_cents: 1_500)
+    original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 0, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+    assert_equal 750, @arc_subscription.current_subscription_price_cents
+  end
+
+  test "#auto_renewal_offer_code recomputes after reload" do
+    auto_renewal_context
+    assert_equal @arc_tiered_code, @arc_subscription.auto_renewal_offer_code.offer_code
+    @arc_tiered_code.mark_deleted!
+    replacement_code = create_offer_code(user: @arc_seller, code: "replacementrenewal", products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 25, currency_type: nil)
+    @arc_subscription.reload
+    assert_equal replacement_code, @arc_subscription.auto_renewal_offer_code.offer_code
+  end
+
+  test "#auto_renewal_offer_code memoizes missing renewal discounts until reload" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    @arc_subscription.expects(:compute_auto_renewal_offer_code).with(@arc_buyer).once.returns(nil)
+    assert_nil @arc_subscription.auto_renewal_offer_code
+    assert_nil @arc_subscription.auto_renewal_offer_code
+  end
+
+  test "#auto_renewal_offer_code does not reuse subscriber-memoized discounts for explicit guest checks" do
+    auto_renewal_context
+    assert_equal @arc_tiered_code, @arc_subscription.auto_renewal_offer_code.offer_code
+    assert_nil @arc_subscription.auto_renewal_offer_code(authenticated_offer_code_buyer: nil)
+  end
+
+  test "#auto_renewal_offer_code returns nil when the original purchase already carries a still-applicable discount" do
+    auto_renewal_context
+    offer_code = create_offer_code(user: @arc_seller, code: "stillapplies", products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 25, currency_type: nil)
+    @arc_subscription.original_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 25, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    assert_nil @arc_subscription.auto_renewal_offer_code
+  end
+
+  test "#auto_renewal_offer_code ignores deleted zeroed original discounts when discovering renewal discounts" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    deleted_code = create_offer_code(user: @arc_seller, code: "deletedoriginal", products: [@arc_product], amount_cents: 50, currency_type: @arc_product.price_currency_type)
+    @arc_subscription.original_purchase.update!(offer_code: deleted_code)
+    @arc_subscription.original_purchase.create_purchase_offer_code_discount!(offer_code: deleted_code, offer_code_amount: 0, offer_code_is_percent: false, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    deleted_code.mark_deleted!
+    replacement_code = create_offer_code(user: @arc_seller, code: "replacementafterdeleted", products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 25, currency_type: nil)
+    auto = @arc_subscription.auto_renewal_offer_code
+    assert_equal replacement_code, auto.offer_code
+    assert_equal 25, auto.resolved_percent
+    assert_equal 150, @arc_subscription.current_subscription_price_cents
+  end
+
+  # The "re-evaluates … tiered discounts attached to the original purchase"
+  # examples share the setup of a cached 0% tier on the original purchase.
+  def re_evaluate_tiered_context
+    auto_renewal_context
+    @arc_subscription.original_purchase.update!(offer_code: @arc_tiered_code)
+    @arc_subscription.original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 0, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+  end
+
+  test "#auto_renewal_offer_code re-evaluates tiered discounts attached to the original purchase" do
+    re_evaluate_tiered_context
+    auto = @arc_subscription.auto_renewal_offer_code
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+    assert_equal 100, @arc_subscription.current_subscription_price_cents
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "#auto_renewal_offer_code re-evaluates capped tiered discounts attached to the original purchase" do
+    auto_renewal_context
+    original_purchase = @arc_subscription.original_purchase
+    original_purchase.update!(offer_code: @arc_tiered_code, quantity: 1)
+    original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 0, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    @arc_tiered_code.update!(max_purchase_count: 1)
+    assert_not @arc_tiered_code.reload.is_valid_for_purchase?
+    auto = @arc_subscription.auto_renewal_offer_code
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+    assert_equal 100, @arc_subscription.current_subscription_price_cents
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "#auto_renewal_offer_code re-evaluates minimum-quantity tiered discounts attached to the original purchase" do
+    auto_renewal_context
+    original_purchase = @arc_subscription.original_purchase
+    original_purchase.update!(offer_code: @arc_tiered_code, quantity: 1)
+    original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 0, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    @arc_tiered_code.update!(minimum_quantity: 2)
+    auto = @arc_subscription.auto_renewal_offer_code
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+    assert_equal 100, @arc_subscription.current_subscription_price_cents
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "#auto_renewal_offer_code re-evaluates minimum-amount tiered discounts attached to the original purchase" do
+    auto_renewal_context
+    original_purchase = @arc_subscription.original_purchase
+    original_purchase.update!(offer_code: @arc_tiered_code, price_cents: 1_125, displayed_price_cents: 1_125)
+    original_purchase.create_purchase_offer_code_discount!(offer_code: @arc_tiered_code, offer_code_amount: 25, offer_code_is_percent: true, pre_discount_minimum_price_cents: 200, duration_in_months: nil)
+    @arc_tiered_code.update!(amount_percentage: 25, minimum_amount_cents: 2_000, ownership_duration_tiers: [
+                               { "months" => 0, "amount_percentage" => 25 },
+                               { "months" => 12, "amount_percentage" => 50 },
+                             ])
+    auto = @arc_subscription.auto_renewal_offer_code
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+    assert_equal 750, @arc_subscription.current_subscription_price_cents
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "#auto_renewal_offer_code re-evaluates inactive tiered discounts attached to the original purchase" do
+    re_evaluate_tiered_context
+    @arc_tiered_code.update!(valid_at: 2.days.ago, expires_at: 1.day.ago)
+    auto = @arc_subscription.auto_renewal_offer_code
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+    assert_equal 100, @arc_subscription.current_subscription_price_cents
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "#auto_renewal_offer_code re-evaluates soft-deleted tiered discounts attached to the original purchase" do
+    re_evaluate_tiered_context
+    @arc_tiered_code.mark_deleted!
+    auto = @arc_subscription.auto_renewal_offer_code
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+    assert_equal 100, @arc_subscription.current_subscription_price_cents
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "#auto_renewal_offer_code records the auto-discovered discount on the renewal purchase" do
+    auto_renewal_context
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal @arc_tiered_code, renewal_purchase.offer_code
+    assert_predicate renewal_purchase.purchase_offer_code_discount, :present?
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
+    assert_equal true, renewal_purchase.purchase_offer_code_discount.offer_code_is_percent
+  end
+
+  test "#auto_renewal_offer_code records the auto-discovered discount's pre-discount price per unit" do
+    auto_renewal_context
+    pre_discount_price = @arc_subscription.original_purchase.minimum_paid_price_cents_per_unit_before_discount
+    @arc_subscription.original_purchase.update!(quantity: 3, price_cents: pre_discount_price * 3)
+    renewal_purchase = @arc_subscription.build_purchase
+    assert_equal pre_discount_price, renewal_purchase.purchase_offer_code_discount.pre_discount_minimum_price_cents
+  end
+
+  # --- #cookie_key -----------------------------------------------------------
+
+  test "#cookie_key returns the cookie key" do
+    assert_equal "subscription_#{@subscription.external_id_numeric}", @subscription.cookie_key
+  end
+
+  # --- #emails ---------------------------------------------------------------
+
+  test "#emails returns a hash of relevant emails when the subscription has a user" do
+    user = create_user(email: "user@example.com")
+    subscription = create_subscription(user:)
+    create_membership_purchase(subscription:, email: "purchase@example.com")
+    assert_equal({ subscription: "user@example.com", purchase: "purchase@example.com", user: "user@example.com" }, subscription.emails)
+  end
+
+  test "#emails returns a hash of relevant emails when the subscription doesn't have a user" do
+    subscription = create_subscription(user: nil)
+    create_membership_purchase(subscription:, email: "purchase@example.com")
+    assert_equal({ subscription: "purchase@example.com", purchase: "purchase@example.com", user: nil }, subscription.emails)
+  end
+
+  test "#emails returns giftee email as purchase and subscription emails when the subscription is a gift" do
+    subscription = create_subscription(user: nil)
+    gift = create_gift(giftee_email: "giftee@example.com")
+    create_membership_purchase(subscription:, email: "purchase@example.com", gift_given: gift, is_gift_sender_purchase: true)
+    assert_equal({ subscription: "giftee@example.com", purchase: "giftee@example.com", user: nil }, subscription.emails)
+  end
+
+  # --- #email ----------------------------------------------------------------
+
+  test "#email returns user's form_email when user is present" do
+    subscription = create_subscription
+    purchase = create_membership_purchase(subscription:, email: "purchase@example.com")
+    subscription.stubs(:original_purchase).returns(purchase)
+    assert_equal subscription.user.form_email, subscription.email
+  end
+
+  test "#email returns purchase email when user is not present" do
+    subscription = create_subscription
+    purchase = create_membership_purchase(subscription:, email: "purchase@example.com")
+    subscription.stubs(:original_purchase).returns(purchase)
+    subscription.update!(user: nil)
+    assert_equal purchase.email, subscription.email
+  end
+
+  test "#email returns giftee email when user is not present and the subscription is a gift" do
+    subscription = create_subscription
+    purchase = create_membership_purchase(subscription:, email: "purchase@example.com")
+    subscription.stubs(:original_purchase).returns(purchase)
+    subscription.update!(user: nil)
+    gift = create_gift(giftee_email: "giftee@example.com")
+    subscription.true_original_purchase.update!(is_gift_sender_purchase: true, gift_given: gift)
+    assert_equal gift.giftee_email, subscription.email
+  end
+
+  # --- #refresh_token --------------------------------------------------------
+
+  test "#refresh_token sets a new token and expiration date" do
+    subscription = create_subscription(token: nil, token_expires_at: nil)
+    subscription.refresh_token
+    assert_not_nil subscription.token
+    assert_in_delta Subscription::TOKEN_VALIDITY.from_now.to_f, subscription.token_expires_at.to_f, 1
+  end
+
+  test "#refresh_token returns the newly set token" do
+    subscription = create_subscription(token: nil, token_expires_at: nil)
+    assert_not_nil subscription.refresh_token
+  end
+
+  # --- #gift? ----------------------------------------------------------------
+
+  test "#gift? returns true when the original purchase is a gift sender purchase" do
+    product = create_membership_product
+    subscription = build_subscription(link: product)
+    original_purchase = build_purchase(link: product, variant_attributes: [product.alive_variants.first], is_original_subscription_purchase: true)
+    original_purchase.is_gift_sender_purchase = true
+    original_purchase.gift_given = create_gift
+    subscription.stubs(:true_original_purchase).returns(original_purchase)
+    assert_equal true, subscription.gift?
+  end
+
+  test "#gift? returns false when the original purchase does not have a gift" do
+    product = create_membership_product
+    subscription = build_subscription(link: product)
+    original_purchase = build_purchase(link: product, variant_attributes: [product.alive_variants.first], is_original_subscription_purchase: true)
+    subscription.stubs(:true_original_purchase).returns(original_purchase)
+    assert_equal false, subscription.gift?
+  end
+
+  # --- #grant_access_to_product? ---------------------------------------------
+
+  test "#grant_access_to_product? installment plans returns false if the subscription has failed" do
+    subscription = create_installment_plan_purchase.subscription
+    subscription.unsubscribe_and_fail!
+    assert_equal false, subscription.grant_access_to_product?
+  end
+
+  test "#grant_access_to_product? installment plans returns false if the subscription is pending cancellation" do
+    freeze_time do
+      subscription = create_installment_plan_purchase.subscription
+      subscription.cancel!(by_seller: true)
+      assert subscription.cancelled_at.future?
+      assert_equal false, subscription.grant_access_to_product?
+    end
+  end
+
+  test "#grant_access_to_product? installment plans returns true even when the subscription has ended" do
+    subscription = create_installment_plan_purchase.subscription
+    assert_equal true, subscription.grant_access_to_product?
+    subscription.end_subscription!
+    assert_equal true, subscription.grant_access_to_product?
+  end
+
+  test "#grant_access_to_product? memberships blocks access when cancelled if configured" do
+    subscription = create_membership_purchase.subscription
+    subscription.link.update!(block_access_after_membership_cancellation: false)
+    subscription.cancel!
+    assert_equal true, subscription.grant_access_to_product?
+    subscription.link.update!(block_access_after_membership_cancellation: true)
+    assert_equal true, subscription.grant_access_to_product?
+    subscription.cancel_immediately_if_pending_cancellation!
+    assert_equal false, subscription.grant_access_to_product?
+  end
+
+  test "#grant_access_to_product? memberships blocks access when failed if configured" do
+    subscription = create_membership_purchase.subscription
+    subscription.link.update!(block_access_after_membership_cancellation: false)
+    subscription.unsubscribe_and_fail!
+    assert_equal true, subscription.grant_access_to_product?
+    subscription.link.update!(block_access_after_membership_cancellation: true)
+    assert_equal false, subscription.grant_access_to_product?
+  end
+
+  test "#grant_access_to_product? memberships blocks access when ended if configured" do
+    subscription = create_membership_purchase.subscription
+    subscription.link.update!(block_access_after_membership_cancellation: false)
+    subscription.end_subscription!
+    assert_equal true, subscription.grant_access_to_product?
+    subscription.link.update!(block_access_after_membership_cancellation: true)
+    assert_equal false, subscription.grant_access_to_product?
+  end
+
+  # --- offer code persistence for subsequent charges -------------------------
+
+  def offer_code_persistence_installment_context(offer_code_attrs = { amount_cents: 500 })
+    seller = create_user
+    product = create_product(user: seller, price_cents: 3000)
+    create_product_installment_plan(link: product, number_of_installments: 3)
+    offer_code = create_offer_code(products: [product], **offer_code_attrs)
+    buyer = create_user
+    [product, offer_code, buyer]
+  end
+
+  test "offer code persistence installment plans preserves the discount for subsequent installments when offer code is deleted" do
+    product, offer_code, buyer = offer_code_persistence_installment_context
+    purchase = create_installment_plan_purchase(link: product, offer_code:, purchaser: buyer)
+    subscription = purchase.subscription
+    offer_code.mark_deleted!
+    new_purchase = subscription.build_purchase
+    assert_predicate new_purchase.purchase_offer_code_discount, :present?
+    assert_equal 500, new_purchase.purchase_offer_code_discount.offer_code_amount
+    assert_equal false, new_purchase.purchase_offer_code_discount.offer_code_is_percent
+  end
+
+  test "offer code persistence installment plans preserves the discount for subsequent installments when offer code expires" do
+    product, offer_code, buyer = offer_code_persistence_installment_context
+    offer_code.update!(valid_at: 1.week.ago, expires_at: 1.day.from_now)
+    purchase = create_installment_plan_purchase(link: product, offer_code:, purchaser: buyer)
+    subscription = purchase.subscription
+    offer_code.update!(expires_at: 1.day.ago)
+    new_purchase = subscription.build_purchase
+    assert_predicate new_purchase.purchase_offer_code_discount, :present?
+    assert_equal 500, new_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "offer code persistence installment plans preserves the discount for subsequent installments when offer code reaches max usage" do
+    product, offer_code, buyer = offer_code_persistence_installment_context
+    offer_code.update!(max_purchase_count: 1)
+    purchase = create_installment_plan_purchase(link: product, offer_code:, purchaser: buyer)
+    subscription = purchase.subscription
+    assert offer_code.reload.quantity_left <= 0
+    new_purchase = subscription.build_purchase
+    assert_predicate new_purchase.purchase_offer_code_discount, :present?
+    assert_equal 500, new_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "offer code persistence installment plans uses the original snapshotted amount when offer code amount changes" do
+    product, offer_code, buyer = offer_code_persistence_installment_context
+    purchase = create_installment_plan_purchase(link: product, offer_code:, purchaser: buyer)
+    subscription = purchase.subscription
+    offer_code.update!(amount_cents: 100)
+    new_purchase = subscription.build_purchase
+    assert_equal 500, new_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "offer code persistence installment plans does not count subsequent installments towards max purchases" do
+    product, offer_code, buyer = offer_code_persistence_installment_context
+    offer_code.update!(max_purchase_count: 1)
+    purchase = create_installment_plan_purchase(link: product, offer_code:, purchaser: buyer)
+    subscription = purchase.subscription
+    new_purchase = subscription.build_purchase
+    assert_equal true, new_purchase.does_not_count_towards_max_purchases
+  end
+
+  test "offer code persistence installment plans passes offer code validation for subsequent installments" do
+    product, offer_code, buyer = offer_code_persistence_installment_context
+    offer_code.update!(max_purchase_count: 1)
+    purchase = create_installment_plan_purchase(link: product, offer_code:, purchaser: buyer)
+    subscription = purchase.subscription
+    offer_code.mark_deleted!
+    new_purchase = subscription.build_purchase
+    new_purchase.valid?
+    assert_empty new_purchase.errors[:base]
+  end
+
+  test "offer code persistence installment plans preserves percentage discount when offer code is deleted" do
+    product, _offer_code, buyer = offer_code_persistence_installment_context
+    percent_offer_code = create_offer_code(products: [product], amount_percentage: 25, code: "PERCENT25")
+    purchase = create_installment_plan_purchase(link: product, offer_code: percent_offer_code, purchaser: buyer)
+    subscription = purchase.subscription
+    percent_offer_code.mark_deleted!
+    new_purchase = subscription.build_purchase
+    assert_predicate new_purchase.purchase_offer_code_discount, :present?
+    assert_equal 25, new_purchase.purchase_offer_code_discount.offer_code_amount
+    assert_equal true, new_purchase.purchase_offer_code_discount.offer_code_is_percent
+  end
+
+  def offer_code_persistence_membership_context(duration_in_months: 3)
+    seller = create_user
+    product = create_membership_product_with_preset_tiered_pricing(user: seller)
+    offer_code = create_offer_code(products: [product], amount_cents: 100, duration_in_months:)
+    buyer = create_user
+    [product, offer_code, buyer]
+  end
+
+  test "offer code persistence memberships with duration preserves the discount for subsequent charges when offer code is deleted within duration" do
+    product, offer_code, buyer = offer_code_persistence_membership_context
+    purchase = create_membership_purchase(link: product, offer_code:, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+    subscription = purchase.subscription
+    subscription.original_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_months: 3)
+    offer_code.mark_deleted!
+    new_purchase = subscription.build_purchase
+    assert_predicate new_purchase.purchase_offer_code_discount, :present?
+    assert_equal 100, new_purchase.purchase_offer_code_discount.offer_code_amount
+    assert_equal 3, new_purchase.purchase_offer_code_discount.duration_in_months
+  end
+
+  test "offer code persistence memberships with duration preserves the discount for subsequent charges when offer code expires within duration" do
+    product, offer_code, buyer = offer_code_persistence_membership_context
+    offer_code.update!(valid_at: 1.week.ago, expires_at: 1.day.from_now)
+    purchase = create_membership_purchase(link: product, offer_code:, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+    subscription = purchase.subscription
+    subscription.original_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_months: 3)
+    offer_code.update!(expires_at: 1.day.ago)
+    new_purchase = subscription.build_purchase
+    assert_predicate new_purchase.purchase_offer_code_discount, :present?
+    assert_equal 100, new_purchase.purchase_offer_code_discount.offer_code_amount
+  end
+
+  test "offer code persistence memberships with duration does not apply the discount when duration has elapsed" do
+    product, offer_code, buyer = offer_code_persistence_membership_context(duration_in_months: 3)
+    purchase = create_membership_purchase(link: product, offer_code:, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+    subscription = purchase.subscription
+    subscription.original_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_months: 1)
+    create_membership_purchase(subscription:, link: product, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+    new_purchase = subscription.build_purchase
+    assert_nil new_purchase.purchase_offer_code_discount
+  end
+
+  test "offer code persistence backwards compatibility falls back to live offer code when original purchase has no cached discount" do
+    seller = create_user
+    product = create_membership_product_with_preset_tiered_pricing(user: seller)
+    offer_code = create_offer_code(products: [product], amount_cents: 100)
+    buyer = create_user
+    purchase = create_membership_purchase(link: product, offer_code:, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+    subscription = purchase.subscription
+    subscription.original_purchase.purchase_offer_code_discount&.destroy
+    new_purchase = subscription.build_purchase
+    assert_equal offer_code, new_purchase.offer_code
+    assert_nil new_purchase.purchase_offer_code_discount
+  end
+
+  test "offer code persistence backwards compatibility does not create a discount when purchase has no offer code" do
+    seller = create_user
+    product = create_membership_product_with_preset_tiered_pricing(user: seller)
+    buyer = create_user
+    purchase = create_membership_purchase(link: product, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+    subscription = purchase.subscription
+    new_purchase = subscription.build_purchase
+    assert_nil new_purchase.offer_code
+    assert_nil new_purchase.purchase_offer_code_discount
+  end
+
+  # --- #update_business_vat_id! ----------------------------------------------
+
+  test "#update_business_vat_id! updates subscription's business_vat_id when not already set" do
+    subscription = create_subscription(link: create_subscription_product, business_vat_id: nil)
+    subscription.update_business_vat_id!("IE6388047V")
+    assert_equal "IE6388047V", subscription.reload.business_vat_id
+  end
+
+  test "#update_business_vat_id! does not update subscription's business_vat_id when already set" do
+    subscription = create_subscription(link: create_subscription_product, business_vat_id: nil)
+    subscription.update!(business_vat_id: "DE123456789")
+    subscription.update_business_vat_id!("IE6388047V")
+    assert_equal "DE123456789", subscription.reload.business_vat_id
+  end
+
+  test "#update_business_vat_id! does not update subscription's business_vat_id when nil is provided" do
+    subscription = create_subscription(link: create_subscription_product, business_vat_id: nil)
+    subscription.update_business_vat_id!(nil)
+    assert_nil subscription.reload.business_vat_id
+  end
+
+  test "#update_business_vat_id! does not update subscription's business_vat_id when empty string is provided" do
+    subscription = create_subscription(link: create_subscription_product, business_vat_id: nil)
+    subscription.update_business_vat_id!("")
+    assert_nil subscription.reload.business_vat_id
+  end
 end
