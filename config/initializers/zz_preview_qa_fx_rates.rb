@@ -17,13 +17,6 @@
 Rails.application.config.after_initialize do
   next unless Stripe.api_key.to_s.start_with?("sk_test_")
   next unless Rails.env.development? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true")
-  # Scope: like the middleware below, this must only affect throwaway per-PR preview
-  # apps and local development. The shared staging site also boots with test Stripe
-  # keys and shares the :currencies Redis namespace, so seeding there would change
-  # buyer-local display for everyone on staging until UpdateCurrenciesWorker next
-  # refreshes the cache. Preview apps are the only staging boots that set
-  # BRANCH_DEPLOYMENT (see config/environments/staging.rb), so gate on it.
-  next unless Rails.env.development? || ENV["BRANCH_DEPLOYMENT"].present?
 
   begin
     namespace = Redis::Namespace.new(:currencies, redis: $redis)
