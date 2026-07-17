@@ -111,6 +111,9 @@ module ModelFactories
       subscription_duration: "monthly",
       is_tiered_membership: true,
       native_type: Link::NATIVE_TYPE_MEMBERSHIP,
+      # The :product parent factory turns review display on; membership products
+      # inherit it, and Product#recommendable? requires it.
+      display_product_reviews: true,
     }.merge(attrs))
   end
 
@@ -353,11 +356,13 @@ module ModelFactories
   # explicit `user: nil` builds a GUEST subscription (Subscription#user is
   # optional), matching FactoryBot's `create(:subscription, user: nil)` override
   # semantics — whereas omitting the argument creates a fresh user.
-  def create_subscription(link: nil, user: :default, **attrs)
+  def create_subscription(link: nil, user: :default, price: nil, **attrs)
     link ||= create_product
     user = create_user if user == :default
     subscription = Subscription.new({ link:, user:, is_installment_plan: false }.merge(attrs))
-    subscription.payment_options << PaymentOption.new(subscription:, price: link.default_price)
+    # `price` mirrors the :subscription factory's transient: the payment option
+    # is priced at the given Price, defaulting to the product's default price.
+    subscription.payment_options << PaymentOption.new(subscription:, price: price || link.default_price)
     subscription.save!
     subscription
   end
@@ -439,6 +444,35 @@ module ModelFactories
       charge_processor_alive_at: Time.current,
       json_data: { "meta" => { "stripe_connect" => "true" } },
     }.merge(attrs))
+  end
+
+  # A product review tied to a purchase (mirrors :product_review).
+  def create_product_review(purchase: nil, link: nil, rating: 1, **attrs)
+    purchase ||= create_purchase(link: link || create_product)
+    ProductReview.create!({ purchase:, link: link || purchase.link, rating:, message: "A fine review." }.merge(attrs))
+  end
+
+  # A Discover recommendation record for a purchase (mirrors
+  # :recommended_purchase_info_via_discover).
+  def create_recommended_purchase_info_via_discover(purchase:, **attrs)
+    RecommendedPurchaseInfo.create!({
+      purchase:,
+      recommended_link: purchase.link,
+      recommendation_type: "discover",
+    }.merge(attrs))
+  end
+
+  # A tiered membership that also satisfies Product#recommendable? (mirrors the
+  # :recommendable trait applied to a membership product): a compliant seller
+  # with a payout address, the films taxonomy, and a reviewed sale.
+  def create_recommendable_membership_product_with_preset_tiered_pricing(recurrence_price_values: nil, **attrs)
+    seller = create_user(user_risk_state: "compliant", name: "gumbo", payment_address: "gumbo-#{unique_suffix}@example.com")
+    product = create_membership_product_with_preset_tiered_pricing(user: seller, recurrence_price_values:,
+                                                                   taxonomy: Taxonomy.find_or_create_by(slug: "films"), **attrs)
+    reviewed = create_purchase(link: product, created_at: 1.week.ago)
+    create_product_review(purchase: reviewed, rating: 5)
+    product.reload
+    product
   end
 
   # An in-progress sale (mirrors :purchase_in_progress).

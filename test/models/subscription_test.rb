@@ -14,6 +14,19 @@ require "test_helper"
 # top of each test.
 class SubscriptionTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
+  include CurrencyHelper # get_usd_cents/get_rate, used by the currency-conversion charge cases
+
+  # Sidekiq runs in fake mode, so assert on the recorded jobs directly. `at:`
+  # checks a scheduled (perform_in/perform_at) job's run time to the second.
+  def assert_sidekiq_enqueued(worker, args:, at: nil)
+    job = worker.jobs.find { |j| j["args"] == args }
+    assert job, "expected #{worker} to be enqueued with #{args.inspect}"
+    assert_in_delta at.to_f, job["at"], 1 if at
+  end
+
+  def refute_sidekiq_enqueued(worker, args:)
+    assert worker.jobs.none? { |j| j["args"] == args }, "expected #{worker} not to be enqueued with #{args.inspect}"
+  end
 
   setup do
     @seller = create_user
@@ -30,6 +43,150 @@ class SubscriptionTest < ActiveSupport::TestCase
       subscription: @subscription,
       created_at: 2.days.ago
     )
+  end
+
+  # Ports ManageSubscriptionHelpers#shared_setup: a tiered membership with three
+  # priced tiers across four recurrences, plus a subscriber with a saved card.
+  # Reused by setup_subscription for the plan-change, price, and reminder cases.
+  def shared_setup(originally_subscribed_at: nil, recommendable: false)
+    @user = create_user
+    @credit_card = create_credit_card(user: @user)
+    @user.update!(credit_card: @credit_card)
+
+    recurrence_price_values = [
+      {
+        BasePrice::Recurrence::MONTHLY => { enabled: true, price: 3 },
+        BasePrice::Recurrence::QUARTERLY => { enabled: true, price: 5.99 },
+        BasePrice::Recurrence::YEARLY => { enabled: true, price: 10 },
+        BasePrice::Recurrence::EVERY_TWO_YEARS => { enabled: true, price: 18 },
+      },
+      {
+        BasePrice::Recurrence::MONTHLY => { enabled: true, price: 5 },
+        BasePrice::Recurrence::QUARTERLY => { enabled: true, price: 10.50 },
+        BasePrice::Recurrence::YEARLY => { enabled: true, price: 20 },
+        BasePrice::Recurrence::EVERY_TWO_YEARS => { enabled: true, price: 35 },
+      },
+      {
+        BasePrice::Recurrence::MONTHLY => { enabled: true, price: 2.50 },
+        BasePrice::Recurrence::QUARTERLY => { enabled: true, price: 4 },
+        BasePrice::Recurrence::YEARLY => { enabled: true, price: 7.75 },
+        BasePrice::Recurrence::EVERY_TWO_YEARS => { enabled: true, price: 15 },
+      },
+    ]
+    @product = if recommendable
+      create_recommendable_membership_product_with_preset_tiered_pricing(recurrence_price_values:)
+    else
+      create_membership_product_with_preset_tiered_pricing(recurrence_price_values:)
+    end
+    @monthly_product_price = @product.prices.alive.find_by!(recurrence: BasePrice::Recurrence::MONTHLY)
+    @quarterly_product_price = @product.prices.alive.find_by!(recurrence: BasePrice::Recurrence::QUARTERLY)
+    @yearly_product_price = @product.prices.alive.find_by!(recurrence: BasePrice::Recurrence::YEARLY)
+    @every_two_years_product_price = @product.prices.alive.find_by!(recurrence: BasePrice::Recurrence::EVERY_TWO_YEARS)
+
+    @original_tier = @product.default_tier
+    @original_tier_monthly_price = @original_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::MONTHLY)
+    @original_tier_quarterly_price = @original_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::QUARTERLY)
+    @original_tier_yearly_price = @original_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::YEARLY)
+    @original_tier_every_two_years_price = @original_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::EVERY_TWO_YEARS)
+
+    @new_tier = @product.tiers.where.not(id: @original_tier.id).take!
+    @new_tier_monthly_price = @new_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::MONTHLY)
+    @new_tier_quarterly_price = @new_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::QUARTERLY)
+    @new_tier_yearly_price = @new_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::YEARLY)
+    @new_tier_every_two_years_price = @new_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::EVERY_TWO_YEARS)
+
+    @lower_tier = @product.tiers.where.not(id: [@original_tier.id, @new_tier.id]).take!
+    @lower_tier_quarterly_price = @lower_tier.prices.alive.find_by(recurrence: BasePrice::Recurrence::QUARTERLY)
+
+    @originally_subscribed_at = originally_subscribed_at || Time.utc(2020, 0o4, 0o1)
+
+    @new_tier_yearly_upgrade_cost_after_one_month = 16_05
+    @new_tier_quarterly_upgrade_cost_after_one_month = 6_55
+    @original_tier_yearly_upgrade_cost_after_one_month = 6_05
+  end
+
+  # Ports ManageSubscriptionHelpers#setup_subscription: builds the shared tiered
+  # membership and an original, processed subscription purchase on @original_tier.
+  # The purchase is genuinely charged through Stripe, so callers wrap this in the
+  # relevant VCR cassette.
+  def setup_subscription(pwyw: false, with_product_files: false, originally_subscribed_at: nil, recurrence: BasePrice::Recurrence::QUARTERLY, free_trial: false, offer_code: nil, was_product_recommended: false, discover_fee_per_thousand: nil, is_multiseat_license: false, quantity: 1, gift: nil)
+    shared_setup(recommendable: was_product_recommended)
+    @product.update!(free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week) if free_trial
+    @product.update!(discover_fee_per_thousand:) if discover_fee_per_thousand
+    @product.update!(is_multiseat_license: quantity > 1 || is_multiseat_license)
+
+    create_product_file(link: @product) if with_product_files
+
+    @subscription = setup_original_subscription(
+      product_price: @product.prices.alive.find_by!(recurrence:),
+      tier: @original_tier,
+      tier_price: @original_tier.prices.alive.find_by(recurrence:),
+      pwyw:,
+      with_product_files:,
+      offer_code:,
+      was_product_recommended:,
+      quantity:,
+      gift:
+    )
+    @original_purchase = @subscription.original_purchase
+    @original_purchase.update!(gift_given: gift, is_gift_sender_purchase: true) if gift
+
+    if is_multiseat_license
+      create_license(purchase: @subscription.original_purchase)
+      @product.update(is_licensed: true)
+    end
+  end
+
+  # The subscription-building half of setup_subscription (the RSpec helper's inner
+  # create_subscription, renamed to avoid clashing with the factory builder).
+  def setup_original_subscription(product_price:, tier:, tier_price:, pwyw: false, with_product_files: false, offer_code: nil, was_product_recommended: false, quantity: 1, gift: nil)
+    subscription = create_subscription(
+      user: gift ? nil : @user,
+      link: @product,
+      price: product_price,
+      credit_card: gift ? nil : @credit_card,
+      free_trial_ends_at: @product.free_trial_enabled && !gift ? @originally_subscribed_at + @product.free_trial_duration : nil
+    )
+
+    travel_to(@originally_subscribed_at) do
+      price = tier_price.price_cents
+      price -= offer_code.amount_off(tier_price.price_cents) if offer_code.present?
+
+      original_purchase = create_purchase(
+        is_original_subscription_purchase: true,
+        link: @product,
+        subscription:,
+        variant_attributes: [tier],
+        price_cents: price * quantity,
+        quantity:,
+        credit_card: @credit_card,
+        purchaser: @user,
+        email: @user.email,
+        is_free_trial_purchase: gift ? false : @product.free_trial_enabled?,
+        offer_code:,
+        purchase_state: "in_progress",
+        was_product_recommended:
+      )
+      if pwyw
+        tier.update!(customizable_price: true)
+        original_purchase.perceived_price_cents = tier_price.price_cents + 1_00
+      end
+
+      create_recommended_purchase_info_via_discover(purchase: original_purchase, discover_fee_per_thousand: @product.discover_fee_per_thousand) if was_product_recommended
+
+      original_purchase.process!
+      original_purchase.update_balance_and_mark_successful!
+
+      subscription.reload
+      assert_equal(@product.free_trial_enabled? ? "not_charged" : "successful", original_purchase.purchase_state)
+      if pwyw
+        assert_equal price + 1_00, original_purchase.displayed_price_cents
+      else
+        assert_equal price * quantity, original_purchase.displayed_price_cents
+      end
+    end
+
+    subscription
   end
 
   # --- associations ----------------------------------------------------------
@@ -1192,6 +1349,521 @@ class SubscriptionTest < ActiveSupport::TestCase
                       offer_code:, discount_code: offer_code.code, variant_attributes: [variant], created_at: 1.day.ago)
       subscription.charge!
       assert_equal "successful", Purchase.last.purchase_state
+    end
+  end
+
+  # --- #charge! discount with duration ---------------------------------------
+
+  test "#charge! discount with duration tiered membership when the discount is no longer valid charges the full price" do
+    VCR.use_cassette("Subscription/_charge_/discount_with_duration/tiered_membership/when_the_discount_is_no_longer_valid/charges_the_full_price") do
+      user = create_user
+      product = create_membership_product_with_preset_tiered_pricing(user:)
+      offer_code = create_offer_code(products: [product])
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product)
+      purchase = create_purchase(link: product, email: subscription.user.email, full_name: "squiddy",
+                                 price_cents: 200, is_original_subscription_purchase: true,
+                                 subscription:, offer_code:,
+                                 variant_attributes: [product.alive_variants.first], created_at: 2.days.ago)
+      purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
+
+      subscription.charge!
+
+      last = Purchase.last
+      assert_nil last.offer_code
+      assert_equal 300, last.displayed_price_cents
+      assert_equal 300, last.price_cents
+      assert_nil last.purchase_offer_code_discount
+    end
+  end
+
+  test "#charge! discount with duration tiered membership when the discount is still valid charges the discounted price" do
+    VCR.use_cassette("Subscription/_charge_/discount_with_duration/tiered_membership/when_the_discount_is_still_valid/charges_the_discounted_price") do
+      user = create_user
+      product = create_membership_product_with_preset_tiered_pricing(user:)
+      offer_code = create_offer_code(products: [product])
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product)
+      purchase = create_purchase(link: product, email: subscription.user.email, full_name: "squiddy",
+                                 price_cents: 200, is_original_subscription_purchase: true,
+                                 subscription:, offer_code:,
+                                 variant_attributes: [product.alive_variants.first], created_at: 2.days.ago)
+      purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
+      subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+
+      subscription.charge!
+
+      last = Purchase.last
+      assert_equal 200, last.displayed_price_cents
+      assert_equal 200, last.price_cents
+      discount = last.purchase_offer_code_discount
+      assert_equal offer_code, discount.offer_code
+      assert_equal 100, discount.offer_code_amount
+      assert_equal false, discount.offer_code_is_percent
+    end
+  end
+
+  test "#charge! discount with duration legacy subscription when the discount is no longer valid charges the full price" do
+    VCR.use_cassette("Subscription/_charge_/discount_with_duration/legacy_subscription/when_the_discount_is_no_longer_valid/charges_the_full_price") do
+      user = create_user
+      product = create_subscription_product(user:, price_cents: 300)
+      offer_code = create_offer_code(products: [product], amount_cents: 100)
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product)
+      purchase = create_purchase(link: product, email: subscription.user.email, full_name: "squiddy",
+                                 price_cents: 200, is_original_subscription_purchase: true,
+                                 subscription:, offer_code:, created_at: 2.days.ago)
+      purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
+
+      subscription.charge!
+
+      last = Purchase.last
+      assert_nil last.offer_code
+      assert_equal 300, last.displayed_price_cents
+      assert_equal 300, last.price_cents
+      assert_nil last.purchase_offer_code_discount
+    end
+  end
+
+  test "#charge! discount with duration legacy subscription when the discount is still valid charges the discounted price" do
+    VCR.use_cassette("Subscription/_charge_/discount_with_duration/legacy_subscription/when_the_discount_is_still_valid/charges_the_discounted_price") do
+      user = create_user
+      product = create_subscription_product(user:, price_cents: 300)
+      offer_code = create_offer_code(products: [product], amount_cents: 100)
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product)
+      purchase = create_purchase(link: product, email: subscription.user.email, full_name: "squiddy",
+                                 price_cents: 200, is_original_subscription_purchase: true,
+                                 subscription:, offer_code:, created_at: 2.days.ago)
+      purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
+      subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+
+      subscription.charge!
+
+      last = Purchase.last
+      assert_equal 200, last.displayed_price_cents
+      assert_equal 200, last.price_cents
+      discount = last.purchase_offer_code_discount
+      assert_equal offer_code, discount.offer_code
+      assert_equal 100, discount.offer_code_amount
+      assert_equal false, discount.offer_code_is_percent
+    end
+  end
+
+  # --- #charge! yen ----------------------------------------------------------
+
+  test "#charge! yen charges user at the same amount that they originally subscribed in" do
+    VCR.use_cassette("Subscription/_charge_/yen/charges_user_at_the_same_amount_that_they_originally_subscribed_in") do
+      product = create_subscription_product(user: create_user, price_currency_type: "jpy", price_cents: 400)
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product)
+      original_purchase = create_purchase(link: product, email: subscription.user.email, price_cents: get_usd_cents("jpy", product.price_cents),
+                                          displayed_price_cents: product.price_cents, is_original_subscription_purchase: true, subscription:)
+
+      Purchase.any_instance.stubs(:get_rate).with(:jpy).returns(90)
+      travel_to(1.month.from_now) do
+        purchase = subscription.charge!
+        assert_equal subscription, purchase.subscription
+        assert_equal product, purchase.link
+        assert_equal original_purchase.email, purchase.email
+        assert_equal original_purchase.ip_address, purchase.ip_address
+        assert_equal original_purchase.browser_guid, purchase.browser_guid
+        assert_equal false, purchase.is_original_subscription_purchase
+        assert_equal original_purchase.displayed_price_cents, purchase.displayed_price_cents
+        assert_not_equal original_purchase.price_cents, purchase.price_cents
+      end
+    end
+  end
+
+  # --- #charge! price changes ------------------------------------------------
+
+  test "#charge! price changes charges the user the original amount" do
+    VCR.use_cassette("Subscription/_charge_/price_changes/charges_the_user_the_original_amount") do
+      product = create_subscription_product(user: create_user, price_cents: 400)
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product)
+      original_purchase = create_purchase(link: product, email: subscription.user.email, price_cents: product.price_cents,
+                                          is_original_subscription_purchase: true, subscription:, created_at: Date.yesterday)
+
+      product.update(price_cents: 500)
+
+      purchase = subscription.charge!
+      assert_equal subscription, purchase.subscription
+      assert_equal product, purchase.link
+      assert_equal original_purchase.email, purchase.email
+      assert_equal original_purchase.ip_address, purchase.ip_address
+      assert_equal original_purchase.browser_guid, purchase.browser_guid
+      assert_equal false, purchase.is_original_subscription_purchase
+      assert_equal original_purchase.displayed_price_cents, purchase.displayed_price_cents
+      assert_equal original_purchase.price_cents, purchase.price_cents
+      assert_equal "successful", purchase.purchase_state
+    end
+  end
+
+  test "#charge! price changes with foreign currency charges the user the original amount in the foreign currency" do
+    VCR.use_cassette("Subscription/_charge_/price_changes/with_foreign_currency/charges_the_user_the_original_amount_in_the_foreign_currency") do
+      product = create_subscription_product(user: create_user, price_currency_type: "jpy", price_cents: 400)
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product)
+      original_purchase = create_purchase(link: product, email: subscription.user.email, price_cents: get_usd_cents("jpy", product.price_cents),
+                                          displayed_price_cents: product.price_cents, is_original_subscription_purchase: true,
+                                          subscription:, created_at: Date.yesterday)
+
+      product.update(price_cents: 500)
+      Purchase.any_instance.stubs(:get_rate).with(:jpy).returns(50)
+
+      purchase = subscription.charge!
+      assert_equal subscription, purchase.subscription
+      assert_equal product, purchase.link
+      assert_equal original_purchase.email, purchase.email
+      assert_equal original_purchase.ip_address, purchase.ip_address
+      assert_equal original_purchase.browser_guid, purchase.browser_guid
+      assert_equal false, purchase.is_original_subscription_purchase
+      assert_equal original_purchase.displayed_price_cents, purchase.displayed_price_cents
+      assert_equal 800, purchase.price_cents # 400 yen in usd cents based on the new rate
+      assert_equal "successful", purchase.purchase_state
+    end
+  end
+
+  # --- #charge! failure ------------------------------------------------------
+
+  test "#charge! failure stripe unavailable does not send out email" do
+    VCR.use_cassette("Subscription/_charge_/failure/stripe_unavailable/does_not_send_out_email") do
+      charge_section_setup
+      Stripe::PaymentIntent.stubs(:create).raises(Stripe::APIConnectionError)
+      CustomerLowPriorityMailer.expects(:subscription_card_declined).never
+      @subscription.charge!
+    end
+  end
+
+  test "#charge! failure stripe unavailable does not schedule ChargeDeclinedReminderWorker" do
+    VCR.use_cassette("Subscription/_charge_/failure/stripe_unavailable/does_not_schedule_ChargeDeclinedReminderWorker") do
+      charge_section_setup
+      Stripe::PaymentIntent.stubs(:create).raises(Stripe::APIConnectionError)
+      @subscription.charge!
+      refute_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id])
+    end
+  end
+
+  test "#charge! failure stripe unavailable requeues RecurringCharge" do
+    VCR.use_cassette("Subscription/_charge_/failure/stripe_unavailable/requeues_RecurringCharge") do
+      charge_section_setup
+      Stripe::PaymentIntent.stubs(:create).raises(Stripe::APIConnectionError)
+      @subscription.charge!
+      assert_sidekiq_enqueued(RecurringChargeWorker, args: [@subscription.id])
+    end
+  end
+
+  test "#charge! failure stripe unavailable schedules the UnsubscribeAndFail job" do
+    VCR.use_cassette("Subscription/_charge_/failure/stripe_unavailable/schedules_the_UnsubscribeAndFail_job") do
+      charge_section_setup
+      Stripe::PaymentIntent.stubs(:create).raises(Stripe::APIConnectionError)
+      @subscription.charge!
+      assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
+    end
+  end
+
+  test "#charge! failure from card declined email does not send out email" do
+    VCR.use_cassette("Subscription/_charge_/failure/from_card_declined_email/does_not_send_out_email") do
+      charge_section_setup
+      CustomerLowPriorityMailer.expects(:subscription_card_declined).never
+      @subscription.charge!(from_failed_charge_email: true)
+    end
+  end
+
+  test "#charge! failure from card declined email does not schedule ChargeDeclinedReminderWorker" do
+    VCR.use_cassette("Subscription/_charge_/failure/from_card_declined_email/does_not_schedule_ChargeDeclinedReminderWorker") do
+      freeze_time do
+        charge_section_setup
+        @subscription.charge!(from_failed_charge_email: true)
+        refute_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id])
+      end
+    end
+  end
+
+  test "#charge! failure from card declined email schedules the UnsubscribeAndFail job" do
+    VCR.use_cassette("Subscription/_charge_/failure/from_card_declined_email/schedules_the_UnsubscribeAndFail_job") do
+      freeze_time do
+        charge_section_setup
+        ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("card_declined"))
+        @subscription.charge!(from_failed_charge_email: true)
+        assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
+      end
+    end
+  end
+
+  test "#charge! failure from card declined email does not requeue 1 hour job" do
+    VCR.use_cassette("Subscription/_charge_/failure/from_card_declined_email/does_not_requeue_1_hour_job") do
+      freeze_time do
+        charge_section_setup
+        ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorUnavailableError.new)
+        @subscription.charge!(from_failed_charge_email: true)
+        refute_sidekiq_enqueued(RecurringChargeWorker, args: [@subscription.id])
+      end
+    end
+  end
+
+  test "#charge! failure user removed credit card sends charge declined emails" do
+    VCR.use_cassette("Subscription/_charge_/failure/user_removed_credit_card/sends_charge_declined_emails") do
+      charge_section_setup
+      @subscription.user.update!(credit_card_id: nil)
+      mail = mock
+      mail.stubs(:deliver_later)
+      CustomerLowPriorityMailer.expects(:subscription_card_declined).returns(mail)
+      @subscription.charge!
+    end
+  end
+
+  test "#charge! failure user removed credit card schedules the UnsubscribeAndFail job" do
+    VCR.use_cassette("Subscription/_charge_/failure/user_removed_credit_card/schedules_the_UnsubscribeAndFail_job") do
+      charge_section_setup
+      @subscription.user.update!(credit_card_id: nil)
+      @subscription.charge!
+      assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
+    end
+  end
+
+  test "#charge! failure when there are no successful, non-refunded or reversed purchases schedules the UnsubscribeAndFail job" do
+    VCR.use_cassette("Subscription/_charge_/failure/when_there_are_no_successful_non-refunded_or_reversed_purchases/schedules_the_UnsubscribeAndFail_job") do
+      charge_section_setup
+      @subscription.original_purchase.update!(chargeback_date: 1.day.ago)
+      Stripe::PaymentIntent.stubs(:create).raises(Stripe::APIConnectionError)
+
+      @subscription.charge!
+      assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
+    end
+  end
+
+  # --- #charge! double charged -----------------------------------------------
+
+  test "#charge! double charged does not create the purchase row" do
+    VCR.use_cassette("Subscription/_charge_/double_charged/does_not_create_the_purchase_row") do
+      charge_section_setup
+      create_purchase(link: @product, ip_address: @purchase.ip_address, email: @purchase.email, created_at: Time.current)
+      assert_raises(StateMachines::InvalidTransition) do
+        @subscription.charge!
+      end
+    end
+  end
+
+  # --- #charge! card error ---------------------------------------------------
+
+  test "#charge! card error card_declined sends the correct email" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined/sends_the_correct_email") do
+      charge_section_setup
+      ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("card_declined"))
+      mail = mock
+      mail.stubs(:deliver_later)
+      CustomerLowPriorityMailer.expects(:subscription_card_declined).returns(mail)
+      @subscription.charge!
+    end
+  end
+
+  test "#charge! card error card_declined schedules ChargeDeclinedReminderWorker" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined/schedules_ChargeDeclinedReminderWorker") do
+      freeze_time do
+        charge_section_setup
+        ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("card_declined"))
+        @subscription.charge!
+        assert_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id], at: 3.days.from_now)
+      end
+    end
+  end
+
+  test "#charge! card error card_declined schedules the UnsubscribeAndFail job" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined/schedules_the_UnsubscribeAndFail_job") do
+      charge_section_setup
+      ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("card_declined"))
+      @subscription.charge!
+      assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
+    end
+  end
+
+  test "#charge! card error card_declined invalid_cvc sends the correct email" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined/invalid_cvc/sends_the_correct_email") do
+      charge_section_setup
+      ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("invalid_cvc"))
+      mail = mock
+      mail.stubs(:deliver_later)
+      CustomerLowPriorityMailer.expects(:subscription_card_declined).returns(mail)
+      @subscription.charge!
+    end
+  end
+
+  test "#charge! card error card_declined invalid_cvc schedules ChargeDeclinedReminderWorker" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined/invalid_cvc/schedules_ChargeDeclinedReminderWorker") do
+      freeze_time do
+        charge_section_setup
+        ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("invalid_cvc"))
+        @subscription.charge!
+        assert_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id])
+      end
+    end
+  end
+
+  test "#charge! card error card_declined invalid_cvc requeues UnsubscribeAndFail" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined/invalid_cvc/requeues_UnsubscribeAndFail") do
+      freeze_time do
+        charge_section_setup
+        ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("invalid_cvc"))
+        @subscription.charge!
+        assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
+      end
+    end
+  end
+
+  test "#charge! card error card_declined_insufficient_funds emails the subscriber" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined_insufficient_funds/emails_the_subscriber") do
+      charge_section_setup
+      ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("card_declined_insufficient_funds"))
+      mail = mock
+      mail.stubs(:deliver_later)
+      CustomerLowPriorityMailer.expects(:subscription_card_declined).returns(mail)
+      @subscription.charge!
+    end
+  end
+
+  test "#charge! card error card_declined_insufficient_funds schedules a ChargeDeclinedReminderWorker" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined_insufficient_funds/schedules_a_ChargeDeclinedReminderWorker") do
+      charge_section_setup
+      ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("card_declined_insufficient_funds"))
+      @subscription.charge!
+      assert_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id])
+    end
+  end
+
+  test "#charge! card error card_declined_insufficient_funds requeues RecurringCharge" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined_insufficient_funds/requeues_RecurringCharge") do
+      freeze_time do
+        charge_section_setup
+        ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("card_declined_insufficient_funds"))
+        @subscription.charge!
+        assert_sidekiq_enqueued(RecurringChargeWorker, args: [@subscription.id], at: 1.day.from_now)
+      end
+    end
+  end
+
+  test "#charge! card error card_declined_insufficient_funds schedules the UnsubscribeAndFail job" do
+    VCR.use_cassette("Subscription/_charge_/card_error/card_declined_insufficient_funds/schedules_the_UnsubscribeAndFail_job") do
+      charge_section_setup
+      ChargeProcessor.stubs(:create_payment_intent_or_charge!).raises(ChargeProcessorCardError.new("card_declined_insufficient_funds"))
+      @subscription.charge!
+      assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
+    end
+  end
+
+  # --- #charge! affiliates ---------------------------------------------------
+
+  test "#charge! affiliates associates the recurring charges to the same affiliate" do
+    VCR.use_cassette("Subscription/_charge_/affiliates/associates_the_recurring_charges_to_the_same_affiliate") do
+      charge_section_setup
+      @product.update!(price_cents: 10_00)
+      affiliate_user = create_affiliate_user
+      direct_affiliate = create_direct_affiliate(affiliate_user:, seller: @product.user, affiliate_basis_points: 1000, products: [@product])
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+      purchase = create_purchase_in_progress(link: @product, email: subscription.user.email, full_name: "squiddy",
+                                             price_cents: @product.price_cents, is_original_subscription_purchase: true,
+                                             subscription:, created_at: 2.days.ago, affiliate: direct_affiliate)
+      purchase.process!
+      purchase.update_balance_and_mark_successful!
+      recurring_purchase = subscription.charge!
+      assert_equal "successful", recurring_purchase.purchase_state
+      assert_equal 79, recurring_purchase.affiliate_credit_cents
+      assert_equal direct_affiliate, recurring_purchase.affiliate
+      assert_equal direct_affiliate, recurring_purchase.affiliate_credit.affiliate
+      assert_equal 712 * 2, @product.user.unpaid_balance_cents # original subs purchase and the recurring purchase
+      assert_equal 79 * 2, affiliate_user.unpaid_balance_cents
+    end
+  end
+
+  test "#charge! affiliates does not associate the recurring charge to the affiliate if affiliate is using a Brazilian Stripe Connect account" do
+    VCR.use_cassette("Subscription/_charge_/affiliates/does_not_associate_the_recurring_charge_to_the_affiliate_if_affiliate_is_using_a_Brazilian_Stripe_Connect_account") do
+      charge_section_setup
+      @product.update!(price_cents: 10_00)
+      affiliate_user = create_affiliate_user
+      direct_affiliate = create_direct_affiliate(affiliate_user:, seller: @product.user, affiliate_basis_points: 1000, products: [@product])
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+      purchase = create_purchase_in_progress(link: @product, email: subscription.user.email, full_name: "squiddy",
+                                             price_cents: @product.price_cents, is_original_subscription_purchase: true,
+                                             subscription:, created_at: 2.days.ago, affiliate: direct_affiliate)
+      purchase.process!
+      purchase.update_balance_and_mark_successful!
+      assert_equal 79, purchase.affiliate_credit_cents
+      assert_equal direct_affiliate, purchase.affiliate
+      assert_equal direct_affiliate, purchase.affiliate_credit.affiliate
+      assert_equal 712, @product.user.reload.unpaid_balance_cents # original subscription purchase
+      assert_equal 79, affiliate_user.reload.unpaid_balance_cents
+
+      brazilian_stripe_account = create_merchant_account_stripe_connect(user: affiliate_user, country: "BR")
+      affiliate_user.update!(check_merchant_account_is_linked: true)
+      assert_equal brazilian_stripe_account, affiliate_user.merchant_account(StripeChargeProcessor.charge_processor_id)
+
+      recurring_purchase = subscription.charge!
+      assert_equal "successful", recurring_purchase.purchase_state
+      assert_equal 0, recurring_purchase.affiliate_credit_cents
+      assert_nil recurring_purchase.affiliate
+      assert_nil recurring_purchase.affiliate_credit
+      assert_equal 712 + 791, @product.user.reload.unpaid_balance_cents # original subscription purchase and the recurring purchase
+      assert_equal 79, affiliate_user.reload.unpaid_balance_cents
+    end
+  end
+
+  # --- #charge! recommended --------------------------------------------------
+
+  test "#charge! recommended shows the recurring charges as recommended, charge the extra fee, and create a new recommended_purchase_info" do
+    VCR.use_cassette("Subscription/_charge_/recommended/shows_the_recurring_charges_as_recommended_charge_the_extra_fee_and_create_a_new_recommended_purchase_info") do
+      charge_section_setup
+      Link.any_instance.stubs(:recommendable?).returns(true)
+      @product.update!(price_cents: 10_00)
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+      purchase = create_purchase_in_progress(link: @product, email: subscription.user.email, full_name: "squiddy",
+                                             price_cents: @product.price_cents, is_original_subscription_purchase: true,
+                                             subscription:, created_at: 2.days.ago, was_product_recommended: true)
+      purchase.process!
+      purchase.update_balance_and_mark_successful!
+      recurring_purchase = subscription.charge!
+      assert_equal "successful", recurring_purchase.purchase_state
+      assert_equal 209, recurring_purchase.fee_cents # 100c (10% flat fee) + 50c + 29c (2.9% cc fee) + 30c (fixed cc fee)
+      assert_equal true, recurring_purchase.was_product_recommended
+      assert_predicate recurring_purchase.recommended_purchase_info, :present?
+      assert_equal true, recurring_purchase.recommended_purchase_info.is_recurring_purchase
+      assert_equal 100, recurring_purchase.recommended_purchase_info.discover_fee_per_thousand
+      assert_equal 791 + 700, @product.user.unpaid_balance_cents # original subs purchase and the recurring purchase
+    end
+  end
+
+  test "#charge! recommended discover fee charges the discover fee percentage from the original purchase instead of the current product discover fee" do
+    VCR.use_cassette("Subscription/_charge_/recommended/discover_fee/charges_the_discover_fee_percentage_from_the_original_purchase_instead_of_the_current_product_discover_fee") do
+      setup_subscription(was_product_recommended: true, discover_fee_per_thousand: 300)
+      @product.update!(discover_fee_per_thousand: 400)
+      Subscription.any_instance.stubs(:mor_fee_applicable?).returns(false)
+
+      travel_to(1.day.from_now) { @subscription.charge! }
+
+      recurring_purchase = @subscription.purchases.last
+      assert_equal 300, recurring_purchase.discover_fee_per_thousand
+      assert_equal 227, recurring_purchase.fee_cents # 599*0.329 + 30c
+    end
+  end
+
+  test "#charge! recommended free trials charges the discover fee percentage from the original free trial purchase instead of the current product discover fee" do
+    VCR.use_cassette("Subscription/_charge_/recommended/free_trials/charges_the_discover_fee_percentage_from_the_original_free_trial_purchase_instead_of_the_current_product_discover_fee") do
+      setup_subscription(free_trial: true, was_product_recommended: true, discover_fee_per_thousand: 300)
+      @product.update!(discover_fee_per_thousand: 100)
+      Subscription.any_instance.stubs(:mor_fee_applicable?).returns(false)
+
+      travel_to(1.day.from_now) { @subscription.charge! }
+
+      recurring_purchase = @subscription.purchases.last
+      assert_equal 300, recurring_purchase.discover_fee_per_thousand
+      assert_equal 227, recurring_purchase.fee_cents # 599*0.329 + 30c
+    end
+  end
+
+  # --- #charge! free trial ratings -------------------------------------------
+
+  test "#charge! free trial ratings allows free trial subscriptions' ratings to be counted on successful charge" do
+    VCR.use_cassette("Subscription/_charge_/free_trial_ratings/allows_free_trial_subscriptions_ratings_to_be_counted_on_successful_charge") do
+      charge_section_setup
+      purchase = create_free_trial_membership_purchase
+      assert_equal true, purchase.should_exclude_product_review?
+
+      purchase.subscription.charge!
+
+      assert_equal false, purchase.reload.should_exclude_product_review?
     end
   end
 end
