@@ -4,6 +4,28 @@ describe Order::ChargeService, :vcr do
   include StripeMerchantAccountHelper
 
   describe "#perform" do
+    # Builds a quote the way the surcharge endpoint would for a one-product cart: a single
+    # line item carrying the whole price with no tip/tax/shipping. Keeps the specs in sync
+    # with the line-item quote API (Checkout::BuyerCurrencyQuote.create takes line_items,
+    # not products, since the multi-item allocation work).
+    def buyer_currency_quote_for(product, ip: "24.48.0.1")
+      Checkout::BuyerCurrencyQuote.create(
+        line_items: [
+          Checkout::BuyerCurrencyQuote::LineItem.new(
+            permalink: product.unique_permalink,
+            product:,
+            price_cents: product.price_cents,
+            tip_cents: 0,
+            seller_tax_cents: 0,
+            gumroad_tax_cents: 0,
+            shipping_cents: 0
+          )
+        ],
+        canonical_total_cents: product.price_cents,
+        ip:
+      )
+    end
+
     let(:seller_1) { create(:user) }
     let(:seller_2) { create(:user) }
     let(:seller_3) { create(:user) }
@@ -209,9 +231,7 @@ describe Order::ChargeService, :vcr do
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
 
-      quote = Checkout::BuyerCurrencyQuote.create(products: [product_1],
-                                                  canonical_total_cents: product_1.price_cents,
-                                                  ip: "24.48.0.1")
+      quote = buyer_currency_quote_for(product_1)
       one_line_item_params = {
         line_items: [
           {
@@ -303,9 +323,7 @@ describe Order::ChargeService, :vcr do
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
 
-      quote = Checkout::BuyerCurrencyQuote.create(products: [product_1],
-                                                  canonical_total_cents: product_1.price_cents,
-                                                  ip: "24.48.0.1")
+      quote = buyer_currency_quote_for(product_1)
       params = {
         line_items: [
           {
@@ -367,9 +385,7 @@ describe Order::ChargeService, :vcr do
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
 
-      quote = Checkout::BuyerCurrencyQuote.create(products: [bundle],
-                                                  canonical_total_cents: bundle.price_cents,
-                                                  ip: "24.48.0.1")
+      quote = buyer_currency_quote_for(bundle)
       params = {
         line_items: [
           {
@@ -452,9 +468,7 @@ describe Order::ChargeService, :vcr do
       allow(CardParamsHelper).to receive(:build_chargeable).and_return(commission_chargeable)
 
       commission_product = create(:commission_product, user: seller_1, price_cents: 10_00)
-      expect(Checkout::BuyerCurrencyQuote.create(products: [commission_product],
-                                                 canonical_total_cents: 10_00,
-                                                 ip: "24.48.0.1")).to be_nil
+      expect(buyer_currency_quote_for(commission_product)).to be_nil
 
       # Commissions charge only the deposit, so a locked full-total quote can never match.
       # Simulate a stale token minted for a same-seller, same-total product. The checkout
@@ -465,9 +479,7 @@ describe Order::ChargeService, :vcr do
       decoy_product = create(:product, user: seller_1, price_cents: 10_00)
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
-      quote = Checkout::BuyerCurrencyQuote.create(products: [decoy_product],
-                                                  canonical_total_cents: 10_00,
-                                                  ip: "24.48.0.1")
+      quote = buyer_currency_quote_for(decoy_product)
 
       deposit_cents = (commission_product.price_cents * Commission::COMMISSION_DEPOSIT_PROPORTION).round
       params = {
@@ -511,9 +523,7 @@ describe Order::ChargeService, :vcr do
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
 
-      quote = Checkout::BuyerCurrencyQuote.create(products: [product_1],
-                                                  canonical_total_cents: product_1.price_cents,
-                                                  ip: "24.48.0.1")
+      quote = buyer_currency_quote_for(product_1)
       params = {
         line_items: [
           {
