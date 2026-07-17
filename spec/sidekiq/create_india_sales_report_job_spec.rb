@@ -44,6 +44,13 @@ describe CreateIndiaSalesReportJob do
         allow(purchase_double).to receive_message_chain(:where, :not).and_return(purchase_double)
         allow(purchase_double).to receive(:find_each).and_return([])
 
+        refund_double = double
+        allow(Refund).to receive(:effective).and_return(refund_double)
+        allow(refund_double).to receive(:joins).and_return(refund_double)
+        allow(refund_double).to receive(:where).and_return(refund_double)
+        allow(refund_double).to receive_message_chain(:where, :not).and_return(refund_double)
+        allow(refund_double).to receive(:find_each).and_return([])
+
         # Mock ZipTaxRate lookup
         zip_tax_rate_double = double
         allow(ZipTaxRate).to receive_message_chain(:where, :alive, :last).and_return(zip_tax_rate_double)
@@ -103,19 +110,25 @@ describe CreateIndiaSalesReportJob do
         vat_purchase.mark_test_successful!
         vat_purchase.create_purchase_sales_tax_info!(business_vat_id: "GST123456789")
 
-        refunded_purchase = create(:purchase,
-                                   link: product,
-                                   purchaser: product.user,
-                                   purchase_state: "in_progress",
-                                   quantity: 1,
-                                   perceived_price_cents: 1000,
-                                   country: "India",
-                                   ip_country: "India",
-                                   stripe_transaction_id: "txn_test789"
+        # A purchase refunded inside the same month. The sale must still appear as a
+        # "sale" entry (dated by the purchase), and the refund as its own "refund"
+        # entry (dated by the refund) — refunded purchases are no longer dropped.
+        @refunded_purchase = create(:purchase,
+                                    link: product,
+                                    purchaser: product.user,
+                                    purchase_state: "in_progress",
+                                    quantity: 1,
+                                    perceived_price_cents: 1000,
+                                    country: "India",
+                                    ip_country: "India",
+                                    ip_state: "MH",
+                                    stripe_transaction_id: "txn_test789"
         )
-        refunded_purchase.mark_test_successful!
-        refunded_purchase.stripe_refunded = true
-        refunded_purchase.save!
+        @refunded_purchase.mark_test_successful!
+        @refunded_purchase.update!(gumroad_tax_cents: 180)
+        @refunded_purchase.stripe_refunded = true
+        @refunded_purchase.save!
+        create(:refund, purchase: @refunded_purchase, amount_cents: 1000, gumroad_tax_cents: 180)
       end
     end
 
@@ -142,10 +155,12 @@ describe CreateIndiaSalesReportJob do
                                         "Expected Tax (cents, rounded)",
                                         "Expected Tax (cents, floored)",
                                         "Tax Difference (rounded)",
-                                        "Tax Difference (floored)"
+                                        "Tax Difference (floored)",
+                                        "Entry Type"
                                       ])
 
-      expect(actual_payload.length).to eq(2)
+      # Header + two sale rows + one refund row (the VAT-registered purchase is excluded).
+      expect(actual_payload.length).to eq(4)
 
       data_row = actual_payload[1]
 
@@ -160,6 +175,28 @@ describe CreateIndiaSalesReportJob do
       expect(data_row[8]).to eq("180")                        # Expected Tax (cents, floored) - (1000 * 0.18).floor = 180
       expect(data_row[9]).to eq("0")                          # Tax Difference (rounded) - 180 - 180 = 0
       expect(data_row[10]).to eq("0")                         # Tax Difference (floored) - 180 - 180 = 0
+      expect(data_row[11]).to eq("sale")                      # Entry Type
+
+      # The refunded purchase's gross sale stays in the report as a normal sale row...
+      sale_row = actual_payload[2]
+      expect(sale_row[0]).to eq(@refunded_purchase.external_id)
+      expect(sale_row[4]).to eq("1000")
+      expect(sale_row[5]).to eq("180")
+      expect(sale_row[11]).to eq("sale")
+
+      # ...and the refund appears as its own entry with negated amounts, dated by the refund.
+      refund_row = actual_payload[3]
+      expect(refund_row[0]).to eq(@refunded_purchase.external_id)
+      expect(refund_row[1]).to eq("2023-06-15")
+      expect(refund_row[2]).to eq("MH")
+      expect(refund_row[4]).to eq("-1000")
+      expect(refund_row[5]).to eq("-180")
+      expect(refund_row[6]).to eq("18.0")
+      expect(refund_row[7]).to eq("-180")
+      expect(refund_row[8]).to eq("-180")
+      expect(refund_row[9]).to eq("0")
+      expect(refund_row[10]).to eq("0")
+      expect(refund_row[11]).to eq("refund")
 
       temp_file.close(true)
     end
@@ -174,7 +211,8 @@ describe CreateIndiaSalesReportJob do
       temp_file.rewind
       actual_payload = CSV.read(temp_file)
 
-      expect(actual_payload.length).to eq(2)
+      # Header + two sale rows + one refund row; the VAT-registered purchase contributes nothing.
+      expect(actual_payload.length).to eq(4)
       temp_file.close(true)
     end
 
@@ -223,6 +261,156 @@ describe CreateIndiaSalesReportJob do
       expect(invalid_state_row[10]).to eq("90")                               # Tax Difference (floored) - 90 - 0 = 90
 
       temp_file.close(true)
+    end
+
+    describe "cross-month refund attribution" do
+      before do
+        cross_month_product = create(:product, price_cents: 2000)
+
+        # Sold in June 2023, refunded in July 2023. The sale must stay in June's
+        # report (dated by the purchase), and the refund must appear only in July's
+        # report (dated by the refund) — so re-generating June after the refund is
+        # issued no longer silently shrinks an already-filed month.
+        travel_to(Time.zone.local(2023, 6, 20)) do
+          @cross_month_purchase = create(:purchase,
+                                         link: cross_month_product,
+                                         purchaser: cross_month_product.user,
+                                         purchase_state: "in_progress",
+                                         quantity: 1,
+                                         perceived_price_cents: 2000,
+                                         country: "India",
+                                         ip_country: "India",
+                                         ip_state: "KA",
+                                         stripe_transaction_id: "txn_cross_month"
+          )
+          @cross_month_purchase.mark_test_successful!
+          @cross_month_purchase.update!(gumroad_tax_cents: 360)
+        end
+
+        travel_to(Time.zone.local(2023, 7, 5)) do
+          @cross_month_purchase.stripe_refunded = true
+          @cross_month_purchase.save!
+          create(:refund, purchase: @cross_month_purchase, amount_cents: 2000, gumroad_tax_cents: 360)
+        end
+      end
+
+      it "keeps the sale in the purchase month's report even after it is refunded in a later month" do
+        s3_object_june = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-june-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(s3_object_june)
+
+        described_class.new.perform(6, 2023)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        s3_object_june.get(response_target: temp_file)
+        temp_file.rewind
+        actual_payload = CSV.read(temp_file)
+
+        sale_row = actual_payload.find { |row| row[0] == @cross_month_purchase.external_id }
+        expect(sale_row).to be_present
+        expect(sale_row[1]).to eq("2023-06-20")
+        expect(sale_row[4]).to eq("2000")
+        expect(sale_row[5]).to eq("360")
+        expect(sale_row[11]).to eq("sale")
+
+        # The July refund must not leak backwards into June's report.
+        refund_rows = actual_payload.select { |row| row[11] == "refund" && row[0] == @cross_month_purchase.external_id }
+        expect(refund_rows).to be_empty
+
+        temp_file.close(true)
+      end
+
+      it "reports the refund as its own entry in the month the refund happened" do
+        s3_object_july = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-july-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(s3_object_july)
+
+        described_class.new.perform(7, 2023)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        s3_object_july.get(response_target: temp_file)
+        temp_file.rewind
+        actual_payload = CSV.read(temp_file)
+
+        # July has no sales — only the refund entry for June's purchase.
+        expect(actual_payload.length).to eq(2)
+
+        refund_row = actual_payload[1]
+        expect(refund_row[0]).to eq(@cross_month_purchase.external_id)
+        expect(refund_row[1]).to eq("2023-07-05")
+        expect(refund_row[2]).to eq("KA")
+        expect(refund_row[4]).to eq("-2000")
+        expect(refund_row[5]).to eq("-360")
+        expect(refund_row[11]).to eq("refund")
+
+        temp_file.close(true)
+      end
+    end
+
+    describe "terminally-failed refunds" do
+      before do
+        failed_refund_product = create(:product, price_cents: 5000)
+
+        travel_to(Time.zone.local(2023, 9, 10)) do
+          # A refund that failed after acceptance but whose balance debits were NOT reversed:
+          # the seller is still out the money, so it must still back out of the report.
+          @still_debited_purchase = create(:purchase,
+                                           link: failed_refund_product,
+                                           purchaser: failed_refund_product.user,
+                                           purchase_state: "in_progress",
+                                           quantity: 1,
+                                           perceived_price_cents: 5000,
+                                           country: "India",
+                                           ip_country: "India",
+                                           ip_state: "KA",
+                                           stripe_transaction_id: "txn_still_debited"
+          )
+          @still_debited_purchase.mark_test_successful!
+          @still_debited_purchase.update!(gumroad_tax_cents: 900)
+          create(:refund, purchase: @still_debited_purchase, amount_cents: 5000, gumroad_tax_cents: 900, status: "failed")
+
+          # A refund that failed AND had its balance debits reversed: the money came back to
+          # us and the buyer never received it, so it must NOT back out of the report.
+          @reversed_purchase = create(:purchase,
+                                      link: failed_refund_product,
+                                      purchaser: failed_refund_product.user,
+                                      purchase_state: "in_progress",
+                                      quantity: 1,
+                                      perceived_price_cents: 5000,
+                                      country: "India",
+                                      ip_country: "India",
+                                      ip_state: "KA",
+                                      stripe_transaction_id: "txn_reversed"
+          )
+          @reversed_purchase.mark_test_successful!
+          @reversed_purchase.update!(gumroad_tax_cents: 900)
+          reversed_refund = create(:refund, purchase: @reversed_purchase, amount_cents: 5000, gumroad_tax_cents: 900, status: "failed")
+          reversed_refund.balance_reversed_on_failure = true
+          reversed_refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+          reversed_refund.save!
+        end
+      end
+
+      it "backs out a failed refund still on our books but ignores one whose balance debits were reversed" do
+        s3_object_sept = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-sept-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(s3_object_sept)
+
+        described_class.new.perform(9, 2023)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        s3_object_sept.get(response_target: temp_file)
+        temp_file.rewind
+        actual_payload = CSV.read(temp_file)
+
+        # Both sales are real (neither buyer was actually refunded) and stay as sale rows.
+        expect(actual_payload.count { |row| row[11] == "sale" }).to eq(2)
+
+        # Only the still-debited failed refund backs out; the reversed one is excluded by
+        # Refund.effective. A blanket status filter would drop BOTH; the old unfiltered leg
+        # would keep BOTH — so this pins the effective semantics specifically.
+        refund_rows = actual_payload.select { |row| row[11] == "refund" }
+        expect(refund_rows.map { |row| row[0] }).to contain_exactly(@still_debited_purchase.external_id)
+
+        temp_file.close(true)
+      end
     end
   end
 end

@@ -634,6 +634,9 @@ describe "PurchaseRefunds", :vcr do
                                   stripe_transaction_id: "5HR31200C31692256",
                                   charge_processor_id: "paypal")
       purchase.charge = create(:charge, processor_transaction_id: purchase.stripe_transaction_id)
+      # refund_purchase! now locks the purchase row (reload.lock!), which requires a
+      # persisted record — as every real refund has. Save the built purchase first.
+      purchase.save!
       expect(purchase.merchant_account_id).to eq(merchant_account.id)
       expect(purchase.charge.purchases.many?).to be false
 

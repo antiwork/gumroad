@@ -139,6 +139,41 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
     end
   end
 
+  describe "presentment amounts display" do
+    # Purchases charged in the buyer's own currency ("presentment" purchases) show the
+    # buyer-currency amount in parentheses next to the canonical USD figure, both for the
+    # transaction total and for each refund that carries a presentment snapshot. These
+    # specs drive the real page so a regression in the TSX rendering (not just the
+    # presenter props) turns the suite red.
+    let(:product) { create(:product, price_cents: 1000) }
+    let(:presentment_purchase) { create(:purchase, link: product) }
+
+    it "renders the paired USD and buyer-currency amounts for a presentment purchase" do
+      create(:purchase_presentment, purchase: presentment_purchase, presentment_currency: Currency::CAD, presentment_total_cents: 13_50)
+      refund = create(:refund, purchase: presentment_purchase, total_transaction_cents: 10_00)
+      refund.update!(presentment_currency: Currency::CAD, presentment_amount_cents: 14_30)
+
+      usd_total = MoneyFormatter.format(presentment_purchase.total_transaction_cents, :usd, no_cents_if_whole: true, symbol: true)
+
+      visit admin_purchase_path(presentment_purchase.id)
+
+      expect(page).to have_text("Transaction Total #{usd_total} (CAD$13.50)", normalize_ws: true)
+      expect(page).to have_text("$10 (CAD$14.30)", normalize_ws: true)
+    end
+
+    it "renders no parenthesized second currency for a non-presentment purchase" do
+      purchase = create(:purchase, link: product)
+      create(:refund, purchase:)
+
+      visit admin_purchase_path(purchase.id)
+
+      expect(page).to have_text("Transaction Total #{purchase.formatted_total_transaction_amount}", normalize_ws: true)
+      # No amount on the page should be wrapped in parentheses — that formatting is
+      # reserved for the buyer-currency pairing.
+      expect(page.text).not_to match(/\([^)]*[$€£]/)
+    end
+  end
+
   describe "discount display" do
     it "displays discount code when offer_code has a code" do
       product = create(:product, price_cents: 1000)
