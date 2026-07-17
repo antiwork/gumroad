@@ -170,8 +170,10 @@ class ProductFile < ApplicationRecord
     safe_signed_download_url(s3_key, s3_filename, is_video: streamable?)
   end
 
+  # Files that can be read in the browser's built-in reader (the /read page).
+  # PDFs are rendered with pdf.js and EPUBs with epub.js.
   def readable?
-    pdf?
+    pdf? || epub?
   end
 
   def stream_only?

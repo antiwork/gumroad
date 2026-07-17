@@ -504,7 +504,8 @@ class Link < ApplicationRecord
   end
 
   def readable?
-    has_filetype?("pdf")
+    # Mirrors ProductFile#readable?: PDFs and EPUBs can be read in the browser.
+    has_filetype?("pdf") || has_filetype?("epub")
   end
 
   def can_enable_rentals?

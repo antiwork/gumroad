@@ -76,6 +76,9 @@ class UrlRedirectPresenter
       product_file_id: product_file.external_id,
       latest_media_location: product_file.latest_media_location_for(purchase),
       title:,
+      # Tells the Read page which in-browser reader to mount: pdf.js for PDFs,
+      # epub.js for EPUBs. `readable?` guarantees the file is one of the two.
+      file_type: product_file.epub? ? "epub" : "pdf",
     }
   end
 

@@ -75,6 +75,23 @@ describe ProductFile do
     end
   end
 
+  describe "#readable?" do
+    it "returns true for PDF files" do
+      expect(build(:readable_document).readable?).to eq(true)
+    end
+
+    it "returns true for EPUB files" do
+      expect(build(:epub_product_file).readable?).to eq(true)
+    end
+
+    it "returns false for other file types" do
+      expect(build(:non_readable_document).readable?).to eq(false)
+      expect(build(:streamable_video).readable?).to eq(false)
+      expect(build(:listenable_audio).readable?).to eq(false)
+      expect(build(:external_link).readable?).to eq(false)
+    end
+  end
+
   describe "#must_be_pdf_stamped?" do
     it "returns false for a non-pdf file" do
       product_file = create(:non_readable_document)

@@ -53,6 +53,7 @@ import { FileKindIcon } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { EpubNudge } from "$app/components/ProductEdit/ContentTab/EpubNudge";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
@@ -856,6 +857,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             }
           />
         ) : null}
+        <EpubNudge />
         <PageListLayout
           ref={scrollContainerRef}
           className="md:h-auto! md:flex-1"

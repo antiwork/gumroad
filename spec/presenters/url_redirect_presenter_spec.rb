@@ -843,7 +843,23 @@ describe UrlRedirectPresenter do
         product_file_id: product_file.external_id,
         latest_media_location: nil,
         title:,
+        file_type: "pdf",
       )
+    end
+
+    it "returns file_type epub for an EPUB file" do
+      product = create(:product)
+      product_file = create(:epub_product_file, link: product)
+      purchase = create(:purchase, link: product, purchaser: create(:user))
+      url_redirect = create(:url_redirect, purchase:)
+
+      props = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).read_page_props(
+        product_file:,
+        read_url: "https://example.com/read/test.epub",
+        title: "Test EPUB",
+      )
+
+      expect(props[:file_type]).to eq("epub")
     end
 
     it "includes latest_media_location when available" do
