@@ -84,6 +84,78 @@ describe AddEditProfileScopeToGumroadCliOauthApplication, "rollback concurrency"
     request_thread&.kill if request_thread&.alive?
   end
 
+  it "rejects a refresh that waits for the rollback application lock" do
+    access_token = create(
+      "doorkeeper/access_token",
+      application: @oauth_application,
+      resource_owner_id: @seller.id,
+      scopes: "account edit_profile",
+      use_refresh_token: true
+    )
+    migration = described_class.new
+    access_tokens_swept = Queue.new
+    release_rollback = Queue.new
+    request_waiting_for_application = Queue.new
+    migration_thread = nil
+    request_thread = nil
+
+    allow(migration).to receive(:revoke_scope).and_wrap_original do |method, records, *args, **kwargs|
+      method.call(records, *args, **kwargs)
+      if records.table_name == Doorkeeper::AccessToken.table_name
+        access_tokens_swept << true
+        release_rollback.pop
+      end
+    end
+    allow_any_instance_of(Doorkeeper.config.application_model).to receive(:with_lock).and_wrap_original do |method, *args, &block|
+      if Thread.current[:refresh_token_request] && method.receiver.id == @oauth_application.id
+        request_waiting_for_application << true
+      end
+      method.call(*args, &block)
+    end
+
+    begin
+      migration_thread = start_worker { migration.down }
+      wait_for(access_tokens_swept)
+
+      request_thread = start_worker do
+        Thread.current[:refresh_token_request] = true
+        session = ActionDispatch::Integration::Session.new(Rails.application)
+        session.host! DOMAIN
+        session.post(
+          "/oauth/token",
+          params: {
+            grant_type: "refresh_token",
+            refresh_token: access_token.refresh_token,
+            client_id: @oauth_application.uid,
+            scope: "account edit_profile"
+          }
+        )
+        [session.response.status, session.response.parsed_body]
+      ensure
+        Thread.current[:refresh_token_request] = nil
+      end
+
+      wait_for(request_waiting_for_application)
+      expect(request_thread).to be_alive
+    ensure
+      release_rollback << true
+    end
+
+    migration_thread.value
+    status, body = request_thread.value
+
+    expect(status).to eq(400)
+    expect(body).to include("error" => "invalid_scope")
+    expect(access_token.reload.scopes.to_s).to eq("account")
+    edit_profile_tokens = Doorkeeper::AccessToken
+      .where(application_id: @oauth_application.id)
+      .where("scopes LIKE ?", "%edit_profile%")
+    expect(edit_profile_tokens).to be_empty
+  ensure
+    migration_thread&.kill if migration_thread&.alive?
+    request_thread&.kill if request_thread&.alive?
+  end
+
   def start_worker(&block)
     Thread.new do
       ActiveRecord::Base.connection_pool.with_connection(&block)
