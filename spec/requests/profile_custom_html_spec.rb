@@ -116,16 +116,23 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response.body).to include("data-gumroad-follow-wrapper")
       expect(response.body).to include(seller.external_id)
       expect(response.body).to include("/follow_from_embed_form")
+      # The wrapper carries a csrf-token meta tag (via CsrfTokenInjector) so
+      # the follow fetch keeps the visitor's session — that's what lets a
+      # signed-in visitor following with their own verified email skip the
+      # confirmation-email round trip.
+      expect(response.body).to include(%(name="csrf-token"))
     end
 
     # The wrapper fetches the follow endpoint relative to its own host — the
     # seller's custom domain or subdomain — which routes through
     # UserCustomDomainConstraint, not the apex-host block where the canonical
-    # route lives. Without the custom-domain route the bridge would 404.
+    # route lives. Without the custom-domain route the bridge would 404. The
+    # body is form-encoded like the bridge sends it: the Rack::Attack
+    # per-(IP, seller) throttle reads req.params, which never parses JSON.
     it "accepts the follow POST on the custom domain the wrapper is served from" do
       post "http://seller.example.com/follow_from_embed_form",
-           params: { seller_id: seller.external_id, email: "fan@example.com" }.to_json,
-           headers: { "Content-Type" => "application/json", "Accept" => "application/json" }
+           params: { seller_id: seller.external_id, email: "fan@example.com" },
+           headers: { "Accept" => "application/json" }
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to be(true)
@@ -137,11 +144,19 @@ describe "Profile custom HTML rendering", type: :request do
 
     it "accepts the follow POST on the seller's subdomain" do
       post "http://#{URI(seller.subdomain_with_protocol).host}/follow_from_embed_form",
-           params: { seller_id: seller.external_id, email: "fan@example.com" }.to_json,
-           headers: { "Content-Type" => "application/json", "Accept" => "application/json" }
+           params: { seller_id: seller.external_id, email: "fan@example.com" },
+           headers: { "Accept" => "application/json" }
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "does not route a .json-suffixed path — that path variant would bypass the path-matched Rack::Attack throttles" do
+      post "http://seller.example.com/follow_from_embed_form.json",
+           params: { seller_id: seller.external_id, email: "fan@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(Follower.count).to eq(0)
     end
   end
 

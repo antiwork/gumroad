@@ -46,7 +46,7 @@ class UsersController < ApplicationController
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
       live_fields: params[:preview].present? && current_seller_owns_profile?,
       navigation_bridge: custom_html_navigation_bridge_script(allowed_hostnames: profile_store_hostnames(@user)),
-      follow_bridge: custom_html_follow_bridge_script,
+      follow_bridge: FOLLOW_BRIDGE_SCRIPT,
     ).html_safe, layout: false
   end
 
@@ -302,6 +302,7 @@ class UsersController < ApplicationController
             <meta property="og:url" content="#{canonical}">
             #{og_image_tag}
             #{profile_custom_html_analytics_head(user)}
+            <meta name="csrf-token" content="#{CsrfTokenInjector::TOKEN_PLACEHOLDER}">
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
           </head>
           <body>

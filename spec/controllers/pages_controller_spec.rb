@@ -186,6 +186,12 @@ describe PagesController, type: :controller, inertia: true do
       expect(csp).to include("default-src 'none'")
     end
 
+    it "injects the follow bridge so a data-gumroad-follow form doesn't native-submit and navigate the preview frame away" do
+      get :preview, params: { slug: "about" }
+
+      expect(response.body).to include("data-gumroad-follow-bridge")
+    end
+
     it "renders the profile's custom HTML takeover for the profile slug" do
       seller.custom_html = "<h1>Home takeover</h1>"
       seller.save!

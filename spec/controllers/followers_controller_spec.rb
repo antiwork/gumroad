@@ -261,6 +261,17 @@ describe FollowersController, inertia: true do
           expect(response).to have_http_status(:not_found)
         end
       end
+
+      # The action deliberately branches on request.format.json? instead of
+      # respond_to: formats that never had an explicit branch (feeds, crawlers
+      # sending odd Accept headers) must keep the old always-render/redirect
+      # behavior rather than start raising UnknownFormat.
+      it "keeps the legacy redirect behavior for formats other than HTML and JSON" do
+        post :from_embed_form, params: { email: "exampleexample.com", seller_id: seller.external_id }, format: :xml
+
+        expect(response).to redirect_to(seller.profile_url)
+        expect(flash[:warning]).to include("Email invalid")
+      end
     end
 
     describe "GET cancel" do

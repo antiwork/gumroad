@@ -540,7 +540,10 @@ Rails.application.routes.draw do
     # followers
     resources :followers, only: [:index, :destroy]
 
-    post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form
+    # format: false — the Rack::Attack throttles for this endpoint match the
+    # literal path, so a routable "/follow_from_embed_form.json" would slip
+    # past every rate limit. Clients negotiate JSON via the Accept header.
+    post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form, format: false
     post "/follow", to: "followers#create", as: :follow_user
     get "/follow/:id/cancel", to: "followers#cancel", as: :cancel_follow
     get "/follow/:id/confirm", to: "followers#confirm", as: :confirm_follow
@@ -1354,8 +1357,10 @@ Rails.application.routes.draw do
     # the wrapper page, which is served on the seller's subdomain or custom
     # domain — hosts this block routes, not GumroadDomainConstraint (where the
     # canonical route lives). Rack::Attack throttles match on the request path,
-    # so the /follow_from_embed_form limits apply here identically.
-    post "/follow_from_embed_form", to: "followers#from_embed_form"
+    # so the /follow_from_embed_form limits apply here identically. format:
+    # false for the same reason as the canonical route: a ".json" suffix would
+    # change the path and slip past those throttles.
+    post "/follow_from_embed_form", to: "followers#from_embed_form", format: false
 
     resources :consumption_analytics, only: [:create], format: :json
     resources :media_locations, only: [:create], format: :json
