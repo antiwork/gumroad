@@ -268,8 +268,17 @@ class Purchase
       presentment_refund ||= derived.presentment_refund
     end
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
-    partially_refunded_previously = self.stripe_partially_refunded
     ActiveRecord::Base.transaction do
+      # Failed-refund reversals lock the purchase before their refund and balance rows.
+      # Use the same order here so a single-purchase refund cannot hold a balance while
+      # waiting for a purchase row that a reversal already holds. (Combined-charge
+      # refunds still acquire purchase and balance locks interleaved across purchases
+      # inside Charge#refund_and_save!'s transaction — tracked as a follow-up.)
+      # reload first: reading any json_data-backed attribute on a row whose json_data
+      # column is NULL dirties the record in memory, and lock! raises on dirty records.
+      # Reloading discards that phantom change; lock! reloads again under FOR UPDATE.
+      reload.lock!
+      partially_refunded_previously = self.stripe_partially_refunded
       self.stripe_refunded = (gross_amount_refunded_cents + funds_refunded) >= total_transaction_cents
       self.stripe_partially_refunded = !self.stripe_refunded
 

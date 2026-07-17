@@ -12,7 +12,7 @@ class Refund < ApplicationRecord
   # for the persisted status itself, which keeps Stripe's actual value.
   TERMINAL_FAILURE_STATUSES = %w(failed canceled).freeze
 
-  include JsonData, FlagShihTzu
+  include JsonData, FlagShihTzu, ExternalId
 
   belongs_to :user, foreign_key: :refunding_user_id, optional: true
   belongs_to :purchase

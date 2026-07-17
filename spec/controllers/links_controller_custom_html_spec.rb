@@ -70,6 +70,54 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include(%(ALLOWED_CHECKOUT_KEYS = ["variant","option","quantity","price","recurrence"]))
     end
 
+    describe "social share image meta tags" do
+      it "omits og:image and twitter:image when the product has no thumbnail or cover" do
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).not_to include(%(property="og:image"))
+        expect(response.body).not_to include(%(property="twitter:image"))
+      end
+
+      it "uses the thumbnail when one is set" do
+        thumbnail = create(:thumbnail, product:)
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(thumbnail.url)}">))
+        expect(response.body).to include(%(<meta property="twitter:card" content="summary_large_image">))
+        expect(response.body).to include(%(<meta property="twitter:image" content="#{ERB::Util.h(thumbnail.url)}">))
+      end
+
+      it "falls back to the cover image when there is no thumbnail" do
+        create(:asset_preview, link: product, unsplash_url: "https://images.unsplash.com/example.jpeg", attach: false)
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta property="og:image" content="https://images.unsplash.com/example.jpeg">))
+        expect(response.body).to include(%(<meta property="twitter:image" content="https://images.unsplash.com/example.jpeg">))
+      end
+
+      it "falls back to the generated poster for an uploaded video cover" do
+        product.preview = Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "thing.mov"), "video/quicktime")
+        allow_any_instance_of(AssetPreview).to receive(:video_poster_url).and_return("https://files.example.com/poster.jpg")
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta property="og:image" content="https://files.example.com/poster.jpg">))
+        expect(response.body).to include(%(<meta property="twitter:image" content="https://files.example.com/poster.jpg">))
+      end
+
+      it "prefers the thumbnail over the cover when both exist" do
+        thumbnail = create(:thumbnail, product:)
+        create(:asset_preview, link: product, unsplash_url: "https://images.unsplash.com/example.jpeg", attach: false)
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(thumbnail.url)}">))
+        expect(response.body).not_to include(%(content="https://images.unsplash.com/example.jpeg"))
+      end
+    end
+
     it "escapes the checkout URL for JavaScript string context" do
       allow(product).to receive(:unique_permalink).and_return(%(abc</script><script>alert(1)</script>))
 
