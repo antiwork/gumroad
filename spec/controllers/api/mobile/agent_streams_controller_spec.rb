@@ -103,6 +103,12 @@ describe Api::Mobile::AgentStreamsController do
       expect(response.body).to include("event: done")
       expect(response.body).to include("You have 3 products.")
       expect(response.body).not_to include("event: error")
+
+      # The key must be absent from the done payload, not present-with-null: the client validates
+      # the frame against a schema where conversation_id is an optional string, so a null would
+      # fail validation and turn a benign persistence failure into a spurious stream interruption.
+      done_data = response.body[/event: done\ndata: (.*)/, 1]
+      expect(JSON.parse(done_data)).not_to have_key("conversation_id")
     end
 
     it "emits an error event (not a new conversation) for another seller's conversation id" do
