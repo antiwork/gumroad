@@ -22,14 +22,17 @@ class GenerateSalesReportJob
 
       timeout_seconds = ($redis.get(RedisKey.generate_sales_report_job_max_execution_time_seconds) || 1.hour).to_i
       WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
+        country_condition = ["(purchases.country = ?) OR ((purchases.country IS NULL OR purchases.country = ?) AND purchases.ip_country = ?)",
+                             country.common_name, country.common_name, country.common_name]
+
         sales = Purchase.successful
-                        .not_fully_refunded
+                        .not_fully_refunded_for_tax_reporting
                         .not_chargedback_or_chargedback_reversed
                         .where.not(stripe_transaction_id: nil)
                         .where("purchases.created_at BETWEEN ? AND ?",
                                start_time,
                                end_time)
-                        .where("(country = ?) OR ((country IS NULL OR country = ?) AND ip_country = ?)", country.common_name, country.common_name, country.common_name)
+                        .where(*country_condition)
 
         sales = sales.where("purchases.flags & ? > 0", Purchase.flag_mapping["flags"][:was_product_recommended]) if sales_type == DISCOVER_SALES
 
@@ -38,8 +41,8 @@ class GenerateSalesReportJob
                  purchase.seller.external_id, purchase.seller.form_email&.gsub(/.{0,4}@/, '####@'),
                  purchase.seller.user_compliance_infos.last&.legal_entity_country,
                  purchase.email&.gsub(/.{0,4}@/, '####@'), purchase.card_visual&.gsub(/.{0,4}@/, '####@'),
-                 purchase.price_cents_net_of_refunds, purchase.fee_cents_net_of_refunds, purchase.gumroad_tax_cents_net_of_refunds,
-                 purchase.shipping_cents, purchase.total_cents_net_of_refunds, purchase.purchase_sales_tax_info&.business_vat_id]
+                 purchase.price_cents_for_tax_reporting, purchase.fee_cents_for_tax_reporting, purchase.gumroad_tax_cents_for_tax_reporting,
+                 purchase.shipping_cents, purchase.total_cents_for_tax_reporting, purchase.purchase_sales_tax_info&.business_vat_id]
 
           if %w(AU SG).include?(country_code)
             row += [purchase.link.is_physical? ? "DTC" : "BS", purchase.zip_tax_rate_id]
@@ -48,6 +51,41 @@ class GenerateSalesReportJob
           # Do not include free recommendations like library and more-like-this in the discover sales report
           # because we don't charge our discover/marketplace fee in those cases.
           next if sales_type == DISCOVER_SALES && RecommendationType.is_free_recommendation_type?(purchase.recommended_by)
+
+          temp_file.write(row.to_csv)
+          temp_file.flush
+        end
+
+        # Refund leg: refunds issued during the reported period appear as their own negative
+        # rows, dated by the refund's date, regardless of when the original purchase happened.
+        # The purchase-side filters mirror the sales leg above (minus its date window) so a
+        # refund is only reported when its purchase's sale was — or would have been — reported.
+        refunds = Refund.for_tax_period_reporting(start_time, end_time)
+                        .joins(:purchase)
+                        .merge(
+                          Purchase.successful
+                            .not_chargedback_or_chargedback_reversed
+                            .where.not(purchases: { stripe_transaction_id: nil })
+                            .where(*country_condition)
+                        )
+
+        refunds = refunds.where("purchases.flags & ? > 0", Purchase.flag_mapping["flags"][:was_product_recommended]) if sales_type == DISCOVER_SALES
+
+        refunds.find_each do |refund|
+          purchase = refund.purchase
+
+          next if sales_type == DISCOVER_SALES && RecommendationType.is_free_recommendation_type?(purchase.recommended_by)
+
+          row = [refund.created_at, purchase.external_id,
+                 purchase.seller.external_id, purchase.seller.form_email&.gsub(/.{0,4}@/, '####@'),
+                 purchase.seller.user_compliance_infos.last&.legal_entity_country,
+                 purchase.email&.gsub(/.{0,4}@/, '####@'), purchase.card_visual&.gsub(/.{0,4}@/, '####@'),
+                 -refund.amount_cents.to_i, -refund.fee_cents.to_i, -refund.gumroad_tax_cents.to_i,
+                 0, -refund.total_transaction_cents.to_i, purchase.purchase_sales_tax_info&.business_vat_id]
+
+          if %w(AU SG).include?(country_code)
+            row += [purchase.link.is_physical? ? "DTC" : "BS", purchase.zip_tax_rate_id]
+          end
 
           temp_file.write(row.to_csv)
           temp_file.flush

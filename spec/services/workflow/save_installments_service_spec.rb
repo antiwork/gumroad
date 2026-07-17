@@ -209,6 +209,37 @@ describe Workflow::SaveInstallmentsService do
       expect(workflow.installments.alive.pluck(:published_at).uniq).to eq([nil])
     end
 
+    context "when content moderation flags one email during publish" do
+      before do
+        allow(ContentModeration::ModerateRecordService).to receive(:check) do |record, _entity_type|
+          if record.name == "Flagged email"
+            ContentModeration::ModerateRecordService::CheckResult.new(
+              passed: false,
+              reasons: ["spam: aggressive call-to-action phrases ('Watch HERE') without providing substantial information"]
+            )
+          else
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+          end
+        end
+      end
+
+      it "returns an error naming the flagged email and the category, and does not publish" do
+        params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
+        params[:installments] = [
+          default_installment_params.merge(id: SecureRandom.uuid, name: "Clean email"),
+          default_installment_params.merge(id: SecureRandom.uuid, name: "Flagged email"),
+        ]
+
+        success, errors = described_class.new(seller:, params:, workflow:, preview_email_recipient:).process
+
+        expect(success).to be(false)
+        message = errors.full_messages.first
+        expect(message).to include('The email "Flagged email"')
+        expect(message).to include("content that reads as promotional spam")
+        expect(workflow.reload.published_at).to be_nil
+      end
+    end
+
     context "when delayed_delivery_time changes" do
       let(:installment) { create(:installment, workflow:, name: "Installment 1", message: "Message 1") }
       let!(:installment_rule) { create(:installment_rule, installment:, delayed_delivery_time: 1.hour.to_i, time_period: "hour") }

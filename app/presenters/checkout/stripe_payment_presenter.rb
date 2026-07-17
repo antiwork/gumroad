@@ -255,9 +255,10 @@ class Checkout::StripePaymentPresenter
         #   2. The buyer-currency card shape (single USD-priced one-time item — the same cart
         #      shape the eligibility service's card mode accepts), which mounts the
         #      server-confirm Payment Element in the buyer's quote currency (see props).
-        # Live mode and non-flagged sellers never produce a candidate
-        # (buyer_presentment_candidate? checks both), so neither branch changes production
-        # behavior.
+        # Non-flagged sellers never produce a candidate (buyer_presentment_candidate? checks
+        # the seller flags), so neither branch changes behavior for unflagged checkouts. The
+        # card shape (2) runs in live mode since the production rollout; the method-forced
+        # shape (1) is still test-mode only (method_forced_qa_shape? checks the Stripe key).
         supported = (method_forced_qa_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
@@ -269,7 +270,7 @@ class Checkout::StripePaymentPresenter
     # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
     # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
     # a single one-time, USD-priced, non-commission item from a presentment-candidate seller
-    # (candidate? already covers test mode, the seller's flags, and an active buyer-local
+    # (candidate? already covers the seller's flags and an active buyer-local
     # display). Products that offer installments stay on CardElement even when the buyer chooses
     # a one-time purchase because quote creation cannot see that choice and rejects the product.
     # Charge-time-only gates (merchant account model, wallet params, GeoIP re-check, quote

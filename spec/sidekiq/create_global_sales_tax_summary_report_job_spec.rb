@@ -199,6 +199,48 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
     end
 
+    describe "mixed pre/post-cutover refunds on a fully refunded pre-cutover purchase" do
+      let(:cutover) { Purchase::Reportable::REFUND_REPORTING_CUTOVER }
+
+      before do
+        travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do
+          product = create(:product, price_cents: 100_00, native_type: "digital")
+          @straddling_purchase = create_taxed_purchase(product, country: "Germany", gumroad_tax_cents: 19_00)
+        end
+
+        # First (pre-cutover) refund covers part of the purchase, the second (post-cutover)
+        # refund covers the rest — flipping stripe_refunded true and stripe_partially_refunded
+        # back to false.
+        create(:refund, purchase: @straddling_purchase, total_transaction_cents: 30_00, gumroad_tax_cents: 4_00)
+          .update_column(:created_at, cutover.beginning_of_day - 10.days)
+        create(:refund, purchase: @straddling_purchase, total_transaction_cents: 89_00, gumroad_tax_cents: 15_00)
+          .update_column(:created_at, cutover.beginning_of_day + 16.days)
+        @straddling_purchase.update_columns(stripe_refunded: true, stripe_partially_refunded: false)
+      end
+
+      it "nets the pre-cutover refund from the sale month and reports only the post-cutover refund in its own month" do
+        # Sale month: the row stays (its post-cutover refund reports separately) at amounts net
+        # of only the pre-cutover refund.
+        described_class.new.perform(month, year)
+        sale_month_payload = read_csv_from_s3
+
+        de_row = sale_month_payload.find { |row| row[0] == "Germany" }
+        expect(de_row).to be_present
+        expect(de_row[2]).to eq("89.00") # 119.00 gross - 30.00 pre-cutover refund
+        expect(de_row[4]).to eq("15.00") # 19.00 gross - 4.00 pre-cutover refund
+
+        # Refund month: only the post-cutover refund shows up, as a negative row.
+        refund_month = cutover.beginning_of_day + 16.days
+        described_class.new.perform(refund_month.month, refund_month.year)
+        refund_month_payload = read_csv_from_s3
+
+        de_refund_row = refund_month_payload.find { |row| row[0] == "Germany" }
+        expect(de_refund_row).to be_present
+        expect(de_refund_row[2]).to eq("-89.00")
+        expect(de_refund_row[4]).to eq("-15.00")
+      end
+    end
+
     describe "failed refund handling" do
       before do
         travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do

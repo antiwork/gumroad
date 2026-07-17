@@ -71,7 +71,6 @@ class Checkout::BuyerCurrencyQuote
     product = products.first
     seller = product.user
     return unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-    return unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
     return unless product.price_currency_type.to_s.downcase == Currency::USD
     return if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?
     # Commissions charge only a deposit now and installment plans charge only the first
