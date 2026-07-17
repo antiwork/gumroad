@@ -34,6 +34,9 @@ const quote = (token: string) => ({
   rate: 1.4,
   subunit_to_unit: 100,
   expires_at: "2999-01-01T00:00:00Z",
+  line_allocations: [
+    { permalink: "prod", price_cents: 1_400, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1_400 },
+  ],
 });
 
 const initialArgs = {

@@ -1,6 +1,22 @@
 # frozen_string_literal: true
 
 describe Checkout::BuyerCurrencyQuote do
+  # Plain price-only cart lines (no tip/tax/shipping), one per product, as the surcharge
+  # controller would build them for an untaxed digital cart.
+  def line_items_for(*products)
+    products.map do |product|
+      described_class::LineItem.new(
+        permalink: product.unique_permalink,
+        product:,
+        price_cents: product.price_cents,
+        tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0
+      )
+    end
+  end
+
   let(:seller) { create(:user, disable_buyer_local_currency: false) }
   let(:product) { create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD) }
   let!(:merchant_account) do
@@ -29,7 +45,7 @@ describe Checkout::BuyerCurrencyQuote do
 
   describe ".create" do
     it "creates a signed quote for an eligible single-product checkout" do
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result).to have_attributes(currency: Currency::CAD,
                                         canonical_total_cents: 10_00,
@@ -45,7 +61,7 @@ describe Checkout::BuyerCurrencyQuote do
 
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end
@@ -53,7 +69,7 @@ describe Checkout::BuyerCurrencyQuote do
     it "creates a signed quote locking the cart total for a multi-product single-seller checkout" do
       second_product = create(:product, user: seller, price_cents: 5_00, price_currency_type: Currency::USD)
 
-      result = described_class.create(products: [product, second_product], canonical_total_cents: 15_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product, second_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
 
       expect(result).to have_attributes(currency: Currency::CAD,
                                         canonical_total_cents: 15_00,
@@ -61,6 +77,80 @@ describe Checkout::BuyerCurrencyQuote do
                                         fx_rate: BigDecimal("0.8"),
                                         stripe_fx_quote_id: "fxq_test")
       expect(result.token).to be_present
+    end
+
+    it "returns per-line allocations identical to what Charge::PresentmentAllocator persists at charge time" do
+      # The reviewer's odd-cent case: $3.34 + $6.67 at 0.8 USD per CAD unit locks CA$12.51,
+      # while independent per-line rounding would display CA$4.18 + CA$8.34 = CA$12.52.
+      # The quote must return the largest-remainder split [417, 834] — the same amounts the
+      # allocator later persists on the purchase presentment rows.
+      first_product = create(:product, user: seller, price_cents: 3_34, price_currency_type: Currency::USD)
+      second_product = create(:product, user: seller, price_cents: 6_67, price_currency_type: Currency::USD)
+
+      result = described_class.create(line_items: line_items_for(first_product, second_product), canonical_total_cents: 10_01, ip: "24.48.0.1")
+
+      expect(result.presentment_total_cents).to eq(12_51)
+      expect(result.line_allocations.map(&:permalink)).to eq([first_product.unique_permalink, second_product.unique_permalink])
+      expect(result.line_allocations.map(&:presentment_total_cents)).to eq([4_17, 8_34])
+      expect(result.line_allocations.sum(&:presentment_total_cents)).to eq(result.presentment_total_cents)
+
+      charge_time_purchases = [3_34, 6_67].map do |total_transaction_cents|
+        instance_double(Purchase,
+                        total_transaction_cents:,
+                        total_transaction_amount_for_gumroad_cents: 0,
+                        tip: nil,
+                        tax_cents: 0,
+                        gumroad_tax_cents: 0,
+                        shipping_cents: 0)
+      end
+      charge_time_allocations = Charge::PresentmentAllocator.new(
+        purchases: charge_time_purchases,
+        presentment_total_cents: result.presentment_total_cents,
+        presentment_gumroad_amount_cents: 0
+      ).allocations
+
+      expect(result.line_allocations.map(&:presentment_total_cents)).to eq(charge_time_allocations.map(&:presentment_total_cents))
+      expect(result.line_allocations.map(&:presentment_price_cents)).to eq(charge_time_allocations.map(&:presentment_price_cents))
+    end
+
+    it "allocates each line's tip, tax and shipping components so every line reconciles to its own share" do
+      second_product = create(:product, user: seller, price_cents: 5_00, price_currency_type: Currency::USD)
+      line_items = [
+        described_class::LineItem.new(permalink: product.unique_permalink, product:,
+                                      price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 50, shipping_cents: 2_00),
+        described_class::LineItem.new(permalink: second_product.unique_permalink, product: second_product,
+                                      price_cents: 5_00, tip_cents: 0, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+      ]
+
+      result = described_class.create(line_items:, canonical_total_cents: 18_50, ip: "24.48.0.1")
+
+      expect(result.presentment_total_cents).to eq(23_13)
+      expect(result.line_allocations.sum(&:presentment_total_cents)).to eq(23_13)
+      result.line_allocations.each do |allocation|
+        expect(allocation.presentment_price_cents +
+               allocation.presentment_tip_cents +
+               allocation.presentment_seller_tax_cents +
+               allocation.presentment_gumroad_tax_cents +
+               allocation.presentment_shipping_cents).to eq(allocation.presentment_total_cents)
+      end
+      expect(result.line_allocations.first.presentment_tip_cents).to be_positive
+      expect(result.line_allocations.first.presentment_shipping_cents).to be_positive
+      expect(result.line_allocations.second).to have_attributes(presentment_tip_cents: 0,
+                                                                presentment_seller_tax_cents: 0,
+                                                                presentment_gumroad_tax_cents: 0,
+                                                                presentment_shipping_cents: 0)
+    end
+
+    it "returns nil when the line items do not reconcile to the cart total" do
+      # A quote whose lines cannot honestly represent the locked total must not be issued;
+      # the cart falls back to canonical USD display and charging.
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_01, ip: "24.48.0.1")
+
+      expect(result).to be_nil
     end
 
     it "returns nil for carts spanning multiple sellers even when both sellers are flagged in" do
@@ -72,7 +162,7 @@ describe Checkout::BuyerCurrencyQuote do
       other_seller_product = create(:product, user: other_seller, price_cents: 5_00, price_currency_type: Currency::USD)
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [product, other_seller_product], canonical_total_cents: 15_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     ensure
@@ -84,7 +174,7 @@ describe Checkout::BuyerCurrencyQuote do
       eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [product, eur_product], canonical_total_cents: 20_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product, eur_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end
@@ -94,7 +184,7 @@ describe Checkout::BuyerCurrencyQuote do
       create(:product_installment_plan, link: second_product, number_of_installments: 3)
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [product, second_product.reload], canonical_total_cents: 15_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product, second_product.reload), canonical_total_cents: 15_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end
@@ -106,7 +196,7 @@ describe Checkout::BuyerCurrencyQuote do
       commission_product = create(:commission_product, user: seller, price_cents: 10_00)
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [commission_product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(commission_product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end
@@ -117,7 +207,7 @@ describe Checkout::BuyerCurrencyQuote do
       create(:product_installment_plan, link: product, number_of_installments: 3)
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [product.reload], canonical_total_cents: 10_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product.reload), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end
@@ -128,7 +218,7 @@ describe Checkout::BuyerCurrencyQuote do
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "175.223.10.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "175.223.10.1")
 
       expect(result).to be_nil
     end
@@ -139,7 +229,7 @@ describe Checkout::BuyerCurrencyQuote do
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::TWD)
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "1.164.0.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "1.164.0.1")
 
       expect(result).to be_nil
     end
@@ -153,7 +243,7 @@ describe Checkout::BuyerCurrencyQuote do
         stripe_account_id: merchant_account.charge_processor_merchant_id
       ).and_return(jpy_quote)
 
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "126.79.0.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "126.79.0.1")
 
       # $10.00 at 0.00694 USD per JPY is 1440.92 yen, in whole yen — not 1/100-yen units.
       expect(result).to have_attributes(currency: Currency::JPY, presentment_total_cents: 1441)
@@ -162,7 +252,7 @@ describe Checkout::BuyerCurrencyQuote do
 
   describe ".verify!" do
     it "returns the locked quote when the checkout context matches" do
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       verified_quote = described_class.verify!(
         token: result.token,
@@ -180,7 +270,7 @@ describe Checkout::BuyerCurrencyQuote do
     end
 
     it "rejects tokens when the canonical total changes" do
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect do
         described_class.verify!(
@@ -194,7 +284,7 @@ describe Checkout::BuyerCurrencyQuote do
     end
 
     it "rejects expired tokens" do
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       travel_to stripe_fx_quote.expires_at + 1.second do
         expect do

@@ -6,7 +6,11 @@ const rootPath = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   resolve: {
-    alias: { $app: path.resolve(rootPath, "app/javascript") },
+    // Mirror the vite.config.ts aliases components under test import from.
+    alias: {
+      $app: path.resolve(rootPath, "app/javascript"),
+      $assets: path.resolve(rootPath, "public"),
+    },
   },
   test: {
     include: ["app/javascript/**/*.test.{ts,tsx}"],

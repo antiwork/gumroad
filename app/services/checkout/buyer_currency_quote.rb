@@ -5,6 +5,9 @@ class Checkout::BuyerCurrencyQuote
 
   InvalidToken = Class.new(StandardError)
 
+  # line_allocations is only present on freshly created quotes (it drives the checkout
+  # display); verified tokens don't carry it because the charge re-derives the allocation
+  # from its purchases with the same shared code (Charge::PresentmentAllocator).
   Result = Struct.new(:token,
                       :currency,
                       :canonical_total_cents,
@@ -12,6 +15,7 @@ class Checkout::BuyerCurrencyQuote
                       :fx_rate,
                       :stripe_fx_quote_id,
                       :stripe_fx_quote_expires_at,
+                      :line_allocations,
                       keyword_init: true) do
     def id
       stripe_fx_quote_id
@@ -22,10 +26,60 @@ class Checkout::BuyerCurrencyQuote
     end
   end
 
+  # One cart line's canonical (USD) money, as computed by the surcharge endpoint. The
+  # components mirror the layout Charge::PresentmentAllocator allocates at charge time
+  # (price, tip, seller tax, Gumroad tax, shipping), so the quote-time allocation and the
+  # persisted purchase rows are computed from identical inputs.
+  LineItem = Struct.new(:permalink, :product, :price_cents, :tip_cents,
+                        :seller_tax_cents, :gumroad_tax_cents, :shipping_cents,
+                        keyword_init: true) do
+    # Builds a line from one product's surcharge calculation. The submitted price includes
+    # the buyer's tip share, so the tip is carved back out here; the tax lands in the same
+    # bucket Purchase#calculate_taxes will use at charge time (seller-responsible lookup
+    # rates vs Gumroad-collected VAT / marketplace-facilitator tax).
+    def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:)
+      price_cents = tax_result.price_cents.to_i
+      tip_cents = tip_cents.to_i.clamp(0, price_cents)
+      tax_cents = tax_result.tax_cents > 0 ? tax_result.tax_cents.round.to_i : 0
+      seller_responsible = if tax_result.zip_tax_rate.present?
+        tax_result.zip_tax_rate.is_seller_responsible
+      else
+        tax_result.used_taxjar && !tax_result.gumroad_is_mpf
+      end
+
+      new(
+        permalink:,
+        product:,
+        price_cents: price_cents - tip_cents,
+        tip_cents:,
+        seller_tax_cents: seller_responsible ? tax_cents : 0,
+        gumroad_tax_cents: seller_responsible ? 0 : tax_cents,
+        shipping_cents: shipping_usd_cents.round.to_i
+      )
+    end
+
+    def canonical_component_cents
+      [price_cents, tip_cents, seller_tax_cents, gumroad_tax_cents, shipping_cents]
+    end
+
+    def canonical_total_cents
+      canonical_component_cents.sum
+    end
+  end
+
+  LineAllocation = Struct.new(:permalink,
+                              :presentment_price_cents,
+                              :presentment_tip_cents,
+                              :presentment_seller_tax_cents,
+                              :presentment_gumroad_tax_cents,
+                              :presentment_shipping_cents,
+                              :presentment_total_cents,
+                              keyword_init: true)
+
   TOKEN_PURPOSE = :buyer_currency_quote
 
-  def self.create(products:, canonical_total_cents:, ip:)
-    new(products:, canonical_total_cents:, ip:).create
+  def self.create(line_items:, canonical_total_cents:, ip:)
+    new(line_items:, canonical_total_cents:, ip:).create
   end
 
   def self.verify!(token:, seller:, merchant_account:, currency:, canonical_total_cents:)
@@ -56,18 +110,23 @@ class Checkout::BuyerCurrencyQuote
   end
   private_class_method :verifier
 
-  attr_reader :products, :canonical_total_cents, :ip
+  attr_reader :line_items, :canonical_total_cents, :ip
 
-  def initialize(products:, canonical_total_cents:, ip:)
-    @products = products
+  def initialize(line_items:, canonical_total_cents:, ip:)
+    @line_items = line_items
     @canonical_total_cents = canonical_total_cents.to_i
     @ip = ip
   end
 
   def create
     return if canonical_total_cents <= 0
-    return if products.empty?
+    return if line_items.blank?
+    # The per-line amounts are what the checkout will display, and the cart total is what
+    # the quote locks and the buyer is charged; if they don't reconcile the lines cannot
+    # honestly represent the total, so the whole cart falls back to canonical USD.
+    return unless line_items.sum(&:canonical_total_cents) == canonical_total_cents
 
+    products = line_items.map(&:product)
     sellers = products.map(&:user).uniq
     # A quote locks one total for one PaymentIntent, but the order pipeline creates one
     # charge (one PaymentIntent) per seller. A cart spanning several sellers would need
@@ -113,11 +172,12 @@ class Checkout::BuyerCurrencyQuote
       presentment_total_cents:,
       fx_rate: quote.fx_rate,
       stripe_fx_quote_id: quote.id,
-      stripe_fx_quote_expires_at: quote.expires_at
+      stripe_fx_quote_expires_at: quote.expires_at,
+      line_allocations: line_allocations_for(presentment_total_cents)
     )
   rescue StandardError => e
     ErrorNotifier.notify(e, context: {
-                           product_ids: products.map(&:id),
+                           product_ids: line_items.map { _1.product&.id },
                            canonical_total_cents:,
                            ip:
                          })
@@ -126,6 +186,35 @@ class Checkout::BuyerCurrencyQuote
   end
 
   private
+    # Splits the locked presentment total across the cart lines with the SAME shared
+    # largest-remainder code the charge later uses to persist purchase presentment rows
+    # (Charge::PresentmentAllocator). The browser renders these amounts verbatim instead of
+    # converting each line itself, so the line items the buyer sees always sum to the locked
+    # total and match the persisted rows on the receipt.
+    def line_allocations_for(presentment_total_cents)
+      Charge::PresentmentAllocator.allocate_lines(
+        presentment_total_cents:,
+        lines: line_items.map do |line_item|
+          Charge::PresentmentAllocator::Line.new(
+            canonical_total_cents: line_item.canonical_total_cents,
+            canonical_component_cents: line_item.canonical_component_cents
+          )
+        end
+      ).each_with_index.map do |line_allocation, index|
+        component_shares = line_allocation.presentment_component_cents
+
+        LineAllocation.new(
+          permalink: line_items[index].permalink,
+          presentment_price_cents: component_shares[0],
+          presentment_tip_cents: component_shares[1],
+          presentment_seller_tax_cents: component_shares[2],
+          presentment_gumroad_tax_cents: component_shares[3],
+          presentment_shipping_cents: component_shares[4],
+          presentment_total_cents: line_allocation.presentment_total_cents
+        )
+      end
+    end
+
     def quotable_product?(product)
       return false unless product.price_currency_type.to_s.downcase == Currency::USD
       return false if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?

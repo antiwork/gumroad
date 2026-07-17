@@ -6,6 +6,7 @@ import {
   formatCheckoutPrice,
   getCheckoutBuyerCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
+  getCheckoutPresentmentAmounts,
   toBuyerCurrencyCents,
   toCanonicalCents,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
@@ -25,6 +26,9 @@ const surcharges = (overrides: Partial<SurchargesResponse> = {}): SurchargesResp
     rate: 1.25,
     subunit_to_unit: 100,
     expires_at: "2026-07-01T00:00:00Z",
+    line_allocations: [
+      { permalink: "prod", price_cents: 1_250, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1_250 },
+    ],
   },
   ...overrides,
 });
@@ -34,7 +38,15 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
     const display = getCheckoutBuyerCurrencyDisplay(surcharges());
 
     if (!display) throw new Error("Expected a buyer-currency display");
-    expect(display).toEqual({ currencyCode: "cad", rate: 1.25, subunitToUnit: 100 });
+    expect(display).toEqual({
+      currencyCode: "cad",
+      rate: 1.25,
+      subunitToUnit: 100,
+      presentmentTotalCents: 1_250,
+      lineAllocations: [
+        { permalink: "prod", price_cents: 1_250, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1_250 },
+      ],
+    });
     expect(toBuyerCurrencyCents(1_000, display)).toBe(1_250);
     expect(toCanonicalCents(1_250, display)).toBe(1_000);
   });
@@ -57,6 +69,110 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
     expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "paypal" })).toBeNull();
     expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "stripePaymentRequest" })).toBeNull();
     expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "card" })).not.toBeNull();
+  });
+});
+
+describe("getCheckoutPresentmentAmounts", () => {
+  // The PR's odd-cent example: 334 + 667 cents at a 1.25 rate. Converting each line
+  // independently renders 418 + 834 = 1252, one cent above the locked/charged total of
+  // 1251; the server allocation is [417, 834].
+  const oddCentDisplay = () =>
+    getCheckoutBuyerCurrencyDisplay(
+      surcharges({
+        subtotal: 1_001,
+        buyer_currency_quote: {
+          token: "quote-token",
+          currency: "cad",
+          canonical_total_cents: 1_001,
+          presentment_total_cents: 1_251,
+          rate: 1.25,
+          subunit_to_unit: 100,
+          expires_at: "2026-07-01T00:00:00Z",
+          line_allocations: [
+            { permalink: "first", price_cents: 417, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 417 },
+            { permalink: "second", price_cents: 834, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 834 },
+          ],
+        },
+      }),
+    );
+
+  it("renders the server's allocated line amounts so the visible lines sum exactly to the locked total", () => {
+    const amounts = getCheckoutPresentmentAmounts(oddCentDisplay(), [
+      { permalink: "first", discountCents: 0 },
+      { permalink: "second", discountCents: 0 },
+    ]);
+
+    if (!amounts) throw new Error("Expected presentment amounts");
+    expect(amounts.linePriceCents).toEqual([417, 834]);
+    expect(amounts.totalCents).toBe(1_251);
+    // The independently rounded conversions (418 + 834) would NOT reconcile; the allocated
+    // amounts must.
+    expect(
+      amounts.linePriceCents.reduce((sum, cents) => sum + cents, 0) -
+        amounts.discountCents +
+        amounts.taxCents +
+        amounts.shippingCents +
+        amounts.tipCents,
+    ).toBe(amounts.totalCents);
+    expect(amounts.subtotalCents).toBe(1_251);
+  });
+
+  it("reconciles every visible row (lines, discount, tip, tax, shipping) to the locked total", () => {
+    const display = getCheckoutBuyerCurrencyDisplay(
+      surcharges({
+        buyer_currency_quote: {
+          token: "quote-token",
+          currency: "cad",
+          canonical_total_cents: 1_850,
+          presentment_total_cents: 2_313,
+          rate: 1.25,
+          subunit_to_unit: 100,
+          expires_at: "2026-07-01T00:00:00Z",
+          line_allocations: [
+            {
+              permalink: "first",
+              price_cents: 1_250,
+              tip_cents: 125,
+              tax_cents: 63,
+              shipping_cents: 250,
+              total_cents: 1_688,
+            },
+            { permalink: "second", price_cents: 625, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 625 },
+          ],
+        },
+      }),
+    );
+
+    // The first line is displayed pre-discount (the discount has its own row), so its
+    // visible price is the allocated charged amount plus the converted 100-cent discount.
+    const amounts = getCheckoutPresentmentAmounts(display, [
+      { permalink: "first", discountCents: 100 },
+      { permalink: "second", discountCents: 0 },
+    ]);
+
+    if (!amounts) throw new Error("Expected presentment amounts");
+    expect(amounts.linePriceCents).toEqual([1_375, 625]);
+    expect(amounts.discountCents).toBe(125);
+    expect(amounts.tipCents).toBe(125);
+    expect(amounts.taxCents).toBe(63);
+    expect(amounts.shippingCents).toBe(250);
+    expect(amounts.subtotalCents).toBe(2_125);
+    expect(amounts.subtotalCents - amounts.discountCents + amounts.taxCents + amounts.shippingCents).toBe(
+      amounts.totalCents,
+    );
+  });
+
+  it("returns null while the allocation does not line up with the cart lines", () => {
+    // A cart edit whose surcharge refresh hasn't landed yet: the caller falls back to
+    // per-row conversion instead of rendering another cart's allocation.
+    expect(getCheckoutPresentmentAmounts(oddCentDisplay(), [{ permalink: "first", discountCents: 0 }])).toBeNull();
+    expect(
+      getCheckoutPresentmentAmounts(oddCentDisplay(), [
+        { permalink: "first", discountCents: 0 },
+        { permalink: "other", discountCents: 0 },
+      ]),
+    ).toBeNull();
+    expect(getCheckoutPresentmentAmounts(null, [])).toBeNull();
   });
 });
 

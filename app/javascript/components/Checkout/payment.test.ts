@@ -636,6 +636,9 @@ describe("buyer-currency presentment lane", () => {
     rate: 1.25,
     subunit_to_unit: 100,
     expires_at: "2026-07-10T00:00:00Z",
+    line_allocations: [
+      { permalink: "prod", price_cents: 1_625, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1_625 },
+    ],
   };
   const loadedSurchargesWithQuote = {
     type: "loaded" as const,

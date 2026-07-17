@@ -321,8 +321,22 @@ describe Charge::CreateService, :vcr do
       # per-purchase snapshots must reconcile through largest-remainder allocation.
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_multi", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
-      quote = Checkout::BuyerCurrencyQuote.create(products:, canonical_total_cents: 10_01, ip: "203.0.113.1")
+      quote_line_items = products.map do |product|
+        Checkout::BuyerCurrencyQuote::LineItem.new(
+          permalink: product.unique_permalink,
+          product:,
+          price_cents: product.price_cents,
+          tip_cents: 0,
+          seller_tax_cents: 0,
+          gumroad_tax_cents: 0,
+          shipping_cents: 0
+        )
+      end
+      quote = Checkout::BuyerCurrencyQuote.create(line_items: quote_line_items, canonical_total_cents: 10_01, ip: "203.0.113.1")
       expect(quote).to be_present
+      # The same allocation the browser displayed ([417, 834] — the largest-remainder split
+      # of the locked 12.51 CAD) must be what the charge persists below.
+      expect(quote.line_allocations.map(&:presentment_total_cents)).to eq([4_17, 8_34])
 
       captured_intent_args = nil
       allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*args, **kwargs|
@@ -335,6 +349,9 @@ describe Charge::CreateService, :vcr do
                                                       stripe_fx_quote_id: "fxq_multi")
         purchase_presentments = purchases.map { _1.reload.purchase_presentment }
         expect(purchase_presentments.map(&:charge_presentment).uniq).to eq([charge_presentment])
+        # Identical to the quote's line allocations the checkout displayed — the receipt
+        # can never show a different cent than the cart did.
+        expect(purchase_presentments.map(&:presentment_total_cents)).to eq([4_17, 8_34])
         expect(purchase_presentments.sum(&:presentment_total_cents)).to eq(12_51)
         nil
       end

@@ -524,16 +524,18 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
 
   return getSurcharges(
     {
-      products: state.products.map((item) => ({
-        permalink: item.permalink,
-        quantity: item.quantity,
-        price:
-          item.hasFreeTrial && !isGift
-            ? 0
-            : Math.round(item.price + (computeTipForPrice(state, item.price, item.permalink) ?? 0)),
-        subscription_id: item.subscription_id,
-        recommended_by: item.recommended_by,
-      })),
+      products: state.products.map((item) => {
+        const tipCents =
+          item.hasFreeTrial && !isGift ? 0 : (computeTipForPrice(state, item.price, item.permalink) ?? 0);
+        return {
+          permalink: item.permalink,
+          quantity: item.quantity,
+          price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + tipCents),
+          tip_cents: tipCents,
+          subscription_id: item.subscription_id,
+          recommended_by: item.recommended_by,
+        };
+      }),
       country: state.country,
       state: state.state,
       vat_id: state.vatId,
