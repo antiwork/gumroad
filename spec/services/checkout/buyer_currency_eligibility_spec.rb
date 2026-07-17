@@ -98,6 +98,40 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:unsupported_product_type)
   end
 
+  it "falls back for recurring-billing products even when a quote token matched seller, currency, and total" do
+    # The quote token binds only seller, currency, and total — not product ids — so the
+    # charge path must reject the same product shapes the quote refuses to lock.
+    membership = create(:membership_product, user: seller, price_currency_type: Currency::USD)
+    purchase.update!(link: membership)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
+  it "falls back for products in a preorder state" do
+    product.update!(is_in_preorder_state: true)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
+  it "falls back for free-trial products" do
+    free_trial_product = create(:membership_product, :with_free_trial_enabled, user: seller, price_currency_type: Currency::USD)
+    purchase.update!(link: free_trial_product)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
+  it "falls back for products offering an installment plan" do
+    installment_product = create(:product, user: seller, price_cents: 9_00, price_currency_type: Currency::USD)
+    create(:product_installment_plan, link: installment_product, number_of_installments: 3)
+    purchase.update!(link: installment_product.reload)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
   it "falls back for buyer currencies Gumroad stores in different minor units than Stripe charges" do
     allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
 

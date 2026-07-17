@@ -102,8 +102,13 @@ class Checkout::BuyerCurrencyEligibility
 
     # The verified quote locked the cart total, so every purchase on the charge must
     # individually support presentment — one unsupported item invalidates the whole cart.
+    # The gates here must mirror BuyerCurrencyQuote#quotable_product?: the quote token
+    # binds only seller, currency, and total (not product ids), so a stale token issued
+    # for a supported cart could otherwise be replayed against an unsupported product
+    # whose charged amount differs from the locked total.
     purchases.each do |purchase|
       return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
+      return fallback(:unsupported_product_type) if unquotable_product?(purchase.link)
       return fallback(:unsupported_product_currency) unless purchase.link.price_currency_type.to_s.downcase == Currency::USD
     end
 
@@ -219,5 +224,18 @@ class Checkout::BuyerCurrencyEligibility
       purchase.is_commission_deposit_purchase? ||
         purchase.is_installment_payment? ||
         purchase.link.native_type == Link::NATIVE_TYPE_COMMISSION
+    end
+
+    # Charge-time mirror of the product-shape gates BuyerCurrencyQuote#quotable_product?
+    # applies at quote time. Preorders, subscriptions, free trials, and products offering
+    # an installment plan all charge an amount that can differ from the locked cart total
+    # (nothing now, a first period, $0, or a first installment), so a quote replayed
+    # against them must fall back instead of being honored. Only the card-mode #decision
+    # uses this — the method-forced lane (iDEAL/Bancontact) has no locked cart quote.
+    def unquotable_product?(product)
+      product.is_in_preorder_state? ||
+        product.is_recurring_billing? ||
+        product.free_trial_enabled? ||
+        product.installment_plan.present?
     end
 end
