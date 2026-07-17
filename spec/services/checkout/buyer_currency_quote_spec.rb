@@ -153,6 +153,21 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
+    it "returns nil instead of reporting an error when a line item carries no product" do
+      orphan_line = described_class::LineItem.new(
+        permalink: "gone", product: nil,
+        price_cents: 5_00, tip_cents: 0, seller_tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0
+      )
+
+      # Without the nil-product guard this path raises NoMethodError, which the blanket
+      # fallback rescue swallows — so also assert the error reporter stays quiet.
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      result = described_class.create(line_items: line_items_for(product) + [orphan_line], canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
     it "returns nil for carts spanning multiple sellers even when both sellers are flagged in" do
       # One quote locks one PaymentIntent total, but each seller gets their own charge
       # (and intent) — splitting the locked total across intents is not supported.

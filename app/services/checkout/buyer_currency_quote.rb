@@ -127,6 +127,12 @@ class Checkout::BuyerCurrencyQuote
     return unless line_items.sum(&:canonical_total_cents) == canonical_total_cents
 
     products = line_items.map(&:product)
+    # A line item can carry a nil product when the caller built it from a product lookup
+    # that found nothing (seen from an ad-hoc QA script — Sentry GUMROAD-Z5). The surcharge
+    # endpoint already withholds the quote for unknown products, but the service must not
+    # depend on every caller doing that: fall back to canonical USD instead of raising.
+    return if products.any?(&:nil?)
+
     sellers = products.map(&:user).uniq
     # A quote locks one total for one PaymentIntent, but the order pipeline creates one
     # charge (one PaymentIntent) per seller. A cart spanning several sellers would need
