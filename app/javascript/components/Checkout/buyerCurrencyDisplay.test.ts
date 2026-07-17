@@ -174,6 +174,17 @@ describe("getCheckoutPresentmentAmounts", () => {
     ).toBeNull();
     expect(getCheckoutPresentmentAmounts(null, [])).toBeNull();
   });
+
+  it("returns null instead of throwing when the quote carries no line allocations", () => {
+    // During a rolling deploy, a browser on this bundle can receive a quote from an app
+    // server that predates line_allocations. The types say the field is always present,
+    // so this must be pinned at runtime: fall back to per-row conversion, don't crash
+    // the checkout render.
+    const display = oddCentDisplay();
+    // @ts-expect-error -- simulating an older server response missing the field
+    delete display.lineAllocations;
+    expect(getCheckoutPresentmentAmounts(display, [{ permalink: "first", discountCents: 0 }])).toBeNull();
+  });
 });
 
 describe("getCheckoutBuyerCurrencyQuoteToken", () => {

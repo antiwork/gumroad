@@ -62,7 +62,12 @@ class CustomerSurchargeController < ApplicationController
       subtotal: subtotal.round.to_i,
       buyer_currency_quote: buyer_currency_quote_props(
         line_items: all_lines_quotable ? quote_line_items : nil,
-        canonical_total_cents: subtotal + tax_rate + shipping_rate
+        # Sum the per-line integer totals rather than rounding the fractional running
+        # totals once: two lines with fractional taxes (0.4 + 0.4) round to 0 per line
+        # but 1 when summed first, and a quote whose lines don't reconcile to its total
+        # is refused. The per-line integers are also what the purchases carry at charge
+        # time, so this is the total the quote verification will see.
+        canonical_total_cents: quote_line_items.sum(&:canonical_total_cents)
       )
     }
   end

@@ -92,6 +92,11 @@ export const getCheckoutPresentmentAmounts = (
 ): CheckoutPresentmentAmounts | null => {
   if (!buyerCurrencyDisplay) return null;
   const allocations = buyerCurrencyDisplay.lineAllocations;
+  // The types say line_allocations is always present, but during a rolling deploy a
+  // browser running this bundle can receive a quote from an app server that predates the
+  // field. Guard at runtime so we fall back to the per-row conversion instead of crashing
+  // the checkout render.
+  if (!Array.isArray(allocations)) return null;
   if (allocations.length !== cartLines.length) return null;
   if (!allocations.every((allocation, index) => allocation.permalink === cartLines[index]?.permalink)) return null;
 

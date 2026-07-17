@@ -144,6 +144,25 @@ describe CustomerSurchargeController, :vcr do
 
       expect(response.parsed_body["buyer_currency_quote"]).to be_nil
     end
+
+    it "responds without a quote instead of erroring when a crafted request submits a negative price" do
+      # A negative submitted price flows through SalesTaxCalculation.zero_tax unchanged;
+      # the line-item tip clamp must not raise (clamp with min > max is an ArgumentError)
+      # and the malformed cart must simply get no quote.
+      post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: -100, quantity: 1 }] }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["buyer_currency_quote"]).to be_nil
+    end
+
+    it "responds without a quote instead of erroring when tip_cents is not a scalar" do
+      post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, tip_cents: { x: 1 }, quantity: 1 }] }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      quote_props = response.parsed_body["buyer_currency_quote"]
+      # The malformed tip is treated as zero, so the quote still locks the plain price.
+      expect(quote_props["line_allocations"].sole["tip_cents"]).to eq(0)
+    end
   end
 
   it "allows querying multiple products at once" do

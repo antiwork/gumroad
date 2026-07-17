@@ -39,7 +39,12 @@ class Checkout::BuyerCurrencyQuote
     # rates vs Gumroad-collected VAT / marketplace-facilitator tax).
     def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:)
       price_cents = tax_result.price_cents.to_i
-      tip_cents = tip_cents.to_i.clamp(0, price_cents)
+      # The submitted price and tip are buyer-controlled request params. A crafted
+      # negative price would make clamp's bounds invalid (min > max) and raise, and a
+      # nested/non-scalar tip has no #to_i — sanitize both so a malformed request falls
+      # back to canonical USD (no quote) instead of erroring the surcharge endpoint.
+      tip_cents = tip_cents.is_a?(String) || tip_cents.is_a?(Numeric) ? tip_cents.to_i : 0
+      tip_cents = tip_cents.clamp(0, [price_cents, 0].max)
       tax_cents = tax_result.tax_cents > 0 ? tax_result.tax_cents.round.to_i : 0
       seller_responsible = if tax_result.zip_tax_rate.present?
         tax_result.zip_tax_rate.is_seller_responsible
@@ -125,6 +130,10 @@ class Checkout::BuyerCurrencyQuote
     # the quote locks and the buyer is charged; if they don't reconcile the lines cannot
     # honestly represent the total, so the whole cart falls back to canonical USD.
     return unless line_items.sum(&:canonical_total_cents) == canonical_total_cents
+    # A negative component means the submitted request was malformed (prices and tips
+    # are sanitized above, but defense in depth: never lock a quote whose lines could
+    # not represent a real cart).
+    return if line_items.any? { |line| line.to_h.except(:permalink, :product).values.any?(&:negative?) }
 
     products = line_items.map(&:product)
     # A line item can carry a nil product when the caller built it from a product lookup
@@ -133,14 +142,15 @@ class Checkout::BuyerCurrencyQuote
     # depend on every caller doing that: fall back to canonical USD instead of raising.
     return if products.any?(&:nil?)
 
-    sellers = products.map(&:user).uniq
     # A quote locks one total for one PaymentIntent, but the order pipeline creates one
     # charge (one PaymentIntent) per seller. A cart spanning several sellers would need
     # the locked cart total split across several intents — how to do that atomically is
     # Open Question 9 on issue #5419 — so those carts fall back to canonical USD.
-    return unless sellers.one?
+    # Compare ids rather than loading a User row per cart line (an N+1 on this hot,
+    # debounced endpoint) — the single-seller gate only needs identity.
+    return unless products.map(&:user_id).uniq.one?
 
-    seller = sellers.first
+    seller = products.first.user
     return unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
     return unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
     # The quote locks the whole cart total, so every item must individually support

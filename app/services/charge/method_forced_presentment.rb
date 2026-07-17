@@ -147,7 +147,11 @@ class Charge::MethodForcedPresentment
       # Mirror Charge::PresentmentAllocator's canonical decomposition: price is what
       # remains of the total after the separately-tracked components.
       price_cents = [presentment_total_cents - tip_cents - seller_tax_cents - gumroad_tax_cents - shipping_cents, 0].max
-      presentment_gumroad_amount_cents = usd_cents_to_currency(currency, gumroad_amount_cents, rate)
+      # The Gumroad share is converted independently of the listed-price-based total, so
+      # adverse double-rounding (e.g. a ~100% Gumroad cut) could put it a cent above the
+      # purchase total and fail PurchasePresentment's gumroad-amount validation — which
+      # would degrade this lane to an unconfirmable USD intent. Cap it at the total.
+      presentment_gumroad_amount_cents = [usd_cents_to_currency(currency, gumroad_amount_cents, rate), presentment_total_cents].min
 
       allocation = Charge::PresentmentAllocator::Allocation.new(
         purchase:,
