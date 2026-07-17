@@ -10,10 +10,10 @@ class ContentModeration::Strategies::PromptStrategy
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
 
   # A single language-model evaluation is nondeterministic: the same content
-  # can flag as spam on one attempt and pass on the next. So a spam flag alone
-  # is never enough to block a publish. When the spam preset flags, we ask the
-  # model the same question this many more times, and only block when every
-  # resample flags too. Real spam (gibberish, keyword stuffing, identical
+  # can flag as spam on one attempt and pass on the next, so one flag is too
+  # noisy a basis for blocking a publish. When the spam preset flags, we ask
+  # the model the same question this many more times, and only block when
+  # every resample flags too. Real spam (gibberish, keyword stuffing, identical
   # repeated CTAs) reproduces reliably; a noisy one-off flag does not, and is
   # downgraded to an audit record instead of blocking the seller.
   # Adult-content flags are not resampled — this gate is spam-only.
