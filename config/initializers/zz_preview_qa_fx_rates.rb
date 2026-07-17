@@ -9,9 +9,21 @@
 #
 # Seeds a few plausible USD-based rates at boot so QA testers (and the scripted QA run)
 # can exercise the presentment-mounted Payment Element. Gated to Stripe test mode so it
-# can never run in production (production runs live keys).
+# can never run in production (production runs live keys), and — like the request
+# middleware below — scoped to per-PR preview apps (ENV["BRANCH_DEPLOYMENT"], the same
+# boot-time flag the rest of the preview tooling keys off) plus local development. The
+# shared staging site also runs test keys but shares one Redis, so seeding there would
+# overwrite the real :currencies cache for everyone until UpdateCurrenciesWorker refreshes it.
 Rails.application.config.after_initialize do
   next unless Stripe.api_key.to_s.start_with?("sk_test_")
+  next unless Rails.env.development? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true")
+  # Scope: like the middleware below, this must only affect throwaway per-PR preview
+  # apps and local development. The shared staging site also boots with test Stripe
+  # keys and shares the :currencies Redis namespace, so seeding there would change
+  # buyer-local display for everyone on staging until UpdateCurrenciesWorker next
+  # refreshes the cache. Preview apps are the only staging boots that set
+  # BRANCH_DEPLOYMENT (see config/environments/staging.rb), so gate on it.
+  next unless Rails.env.development? || ENV["BRANCH_DEPLOYMENT"].present?
 
   begin
     namespace = Redis::Namespace.new(:currencies, redis: $redis)
