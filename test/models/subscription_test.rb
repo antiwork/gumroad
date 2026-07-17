@@ -2246,4 +2246,619 @@ class SubscriptionTest < ActiveSupport::TestCase
 
     assert_equal 0, SendWorkflowInstallmentWorker.jobs.size
   end
+
+  # --- #update_current_plan! -------------------------------------------------
+  # setup_subscription charges the original purchase, so each test replays its
+  # cassette. The discount-focused examples reuse the shared "creates a new
+  # original purchase..." recording, exactly as the RSpec cassette_name overrides.
+
+  UPDATE_PLAN_SHARED_CASSETTE = "Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity"
+  UPDATE_PLAN_CLEAR_CASSETTE = "Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true"
+
+  test "#update_current_plan! archives the existing original purchase" do
+    VCR.use_cassette("Subscription/_update_current_plan_/archives_the_existing_original_purchase") do
+      setup_subscription
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+      assert_equal true, @original_purchase.reload.is_archived_original_subscription_purchase
+    end
+  end
+
+  test "#update_current_plan! creates a new original purchase with the updated tier, price, and quantity" do
+    VCR.use_cassette("Subscription/_update_current_plan_/creates_a_new_original_purchase_with_the_updated_tier_price_and_quantity") do
+      setup_subscription
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, new_quantity: 2)
+      assert_equal new_purchase, @subscription.reload.original_purchase
+      new_purchase.reload
+      assert_predicate new_purchase, :persisted?
+      assert_equal 40_00, new_purchase.displayed_price_cents
+      assert_equal [@new_tier], new_purchase.variant_attributes
+      assert_equal "not_charged", new_purchase.purchase_state
+    end
+  end
+
+  test "#update_current_plan! copies correct attributes from the original purchase" do
+    VCR.use_cassette("Subscription/_update_current_plan_/copies_correct_attributes_from_the_original_purchase") do
+      setup_subscription(free_trial: true, was_product_recommended: true)
+      Subscription.any_instance.stubs(:mor_fee_applicable?).returns(false)
+
+      @original_purchase.update!(
+        full_name: "Jane Gumroad",
+        street_address: "100 Main Street",
+        city: "San Francisco",
+        state: "CA",
+        zip_code: "11111",
+        country: "US",
+        referrer: "https://gumroad.com",
+        ip_country: "USA",
+        ip_state: "CA",
+        offer_code: create_offer_code(products: [@product], amount_cents: 300),
+        affiliate: create_direct_affiliate(seller: @product.user, affiliate_basis_points: 200),
+        was_product_recommended: true,
+        stripe_transaction_id: "abc123",
+        stripe_status: "foo",
+        stripe_error_code: "bar",
+        error_code: "baz",
+        affiliate_credit_cents: 11
+      )
+      @original_purchase.seller.mark_compliant!(author_name: "ContentModeration")
+      @original_purchase.purchase_custom_fields.create!(name: "favorite color", type: CustomField::TYPE_TEXT, value: "Blue")
+      @original_purchase.create_recommended_purchase_info(
+        recommended_link_id: @original_purchase.link_id,
+        recommended_by_link_id: @original_purchase.link_id,
+        recommendation_type: RecommendationType::GUMROAD_DISCOVER_RECOMMENDATION,
+        is_recurring_purchase: true,
+        discover_fee_per_thousand: 300
+      )
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, new_quantity: 2)
+
+      %i[seller_id email link_id displayed_price_currency_type full_name
+         street_address country state zip_code city ip_address ip_state
+         ip_country browser_guid referrer was_product_recommended
+         offer_code_id affiliate_id credit_card_id is_free_trial_purchase
+         custom_fields].each do |purchase_attr|
+        assert_equal @original_purchase.send(purchase_attr), new_purchase.send(purchase_attr), purchase_attr.to_s
+      end
+      assert_equal @original_purchase.purchase_custom_fields.pluck(:name, :value, :field_type), new_purchase.purchase_custom_fields.pluck(:name, :value, :field_type)
+
+      assert_nil new_purchase.stripe_transaction_id
+      assert_nil new_purchase.succeeded_at
+      assert_nil new_purchase.stripe_status
+      assert_nil new_purchase.stripe_error_code
+      assert_nil new_purchase.error_code
+
+      assert_equal 2, new_purchase.quantity
+      assert_equal 3400, new_purchase.price_cents
+      assert_equal 3400, new_purchase.displayed_price_cents
+      assert_equal 1119, new_purchase.fee_cents
+      assert_equal 45, new_purchase.affiliate_credit_cents
+      assert_equal 3400, new_purchase.total_transaction_cents
+
+      %i[recommended_link_id recommended_by_link_id recommendation_type
+         is_recurring_purchase discover_fee_per_thousand].each do |attr|
+        assert_equal @original_purchase.recommended_purchase_info.send(attr), new_purchase.recommended_purchase_info.send(attr)
+      end
+    end
+  end
+
+  test "#update_current_plan! creates a purchase event for the new original purchase" do
+    VCR.use_cassette("Subscription/_update_current_plan_/creates_a_purchase_event_for_the_new_original_purchase") do
+      setup_subscription
+      create_purchase_event(purchase: @original_purchase)
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+      event = new_purchase.events.first
+      assert_equal 1, new_purchase.events.size
+      assert_equal new_purchase.id, event.purchase_id
+      assert_equal new_purchase.price_cents, event.price_cents
+      assert_equal false, event.is_recurring_subscription_charge
+      assert_equal "not_charged", event.purchase_state
+    end
+  end
+
+  test "#update_current_plan! does not charge the user" do
+    VCR.use_cassette("Subscription/_update_current_plan_/does_not_charge_the_user") do
+      setup_subscription
+      assert_no_difference -> { @subscription.reload.purchases.not_is_original_subscription_purchase.count } do
+        @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+      end
+    end
+  end
+
+  test "#update_current_plan! caches the buyer-specific amount when applying a tiered existing-customer discount" do
+    VCR.use_cassette(UPDATE_PLAN_SHARED_CASSETTE) do
+      setup_subscription
+      offer_code = create_tiered_offer_code(for_existing_customers: true, products: [@product], ownership_products: [@product])
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, offer_code:)
+
+      assert_equal 50, new_purchase.purchase_offer_code_discount.offer_code_amount
+      assert_equal true, new_purchase.purchase_offer_code_discount.offer_code_is_percent
+      assert_equal 10_00, new_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! does not use the subscription owner to auto-discover discounts for unauthenticated updates" do
+    VCR.use_cassette(UPDATE_PLAN_SHARED_CASSETTE) do
+      setup_subscription
+      create_tiered_offer_code(for_existing_customers: true, code: "autovictim", products: [@product], ownership_products: [@product], user: @product.user)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: @new_tier_yearly_price.price_cents,
+        authenticated_offer_code_buyer: nil
+      )
+
+      assert_nil new_purchase.offer_code
+      assert_nil new_purchase.purchase_offer_code_discount
+      assert_equal @new_tier_yearly_price.price_cents, new_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! does not copy an exhausted original discount onto a different auto-discovered tiered discount" do
+    VCR.use_cassette(UPDATE_PLAN_SHARED_CASSETTE) do
+      setup_subscription
+      @original_purchase.update!(created_at: 1.month.ago)
+      original_offer_code = create_offer_code(code: "singlecycle", products: [@product], amount_cents: nil, amount_percentage: 50, currency_type: nil, duration_in_billing_cycles: 1)
+      @original_purchase.update!(offer_code: original_offer_code)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: original_offer_code,
+        offer_code_amount: 50,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: 1
+      )
+      tiered_offer_code = create_tiered_offer_code(for_existing_customers: true, code: "zeroseedplan", products: [@product], ownership_products: [@product], user: @product.user)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        authenticated_offer_code_buyer: @user
+      )
+
+      new_discount = new_purchase.purchase_offer_code_discount
+      assert_equal tiered_offer_code, new_purchase.offer_code
+      assert_equal tiered_offer_code, new_discount.offer_code
+      assert_equal 0, new_discount.offer_code_amount
+      assert_equal true, new_discount.offer_code_is_percent
+      assert_nil new_discount.duration_in_months
+      assert_equal @new_tier_yearly_price.price_cents, new_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! keeps a re-resolved tiered discount when clear_discount is true" do
+    VCR.use_cassette(UPDATE_PLAN_SHARED_CASSETTE) do
+      setup_subscription
+      offer_code = create_tiered_offer_code(for_existing_customers: true, code: "tieredrestart", products: [@product], ownership_products: [@product], user: @product.user)
+      @original_purchase.update!(offer_code:)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 0,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: nil
+      )
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: 10_00,
+        clear_discount: true,
+        authenticated_offer_code_buyer: @user
+      )
+
+      assert_equal offer_code, new_purchase.offer_code
+      assert_equal 50, new_purchase.purchase_offer_code_discount.offer_code_amount
+      assert_equal true, new_purchase.purchase_offer_code_discount.offer_code_is_percent
+      assert_equal 10_00, new_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! keeps a re-resolved non-tiered discount when clear_discount is true" do
+    VCR.use_cassette(UPDATE_PLAN_SHARED_CASSETTE) do
+      setup_subscription
+      original_offer_code = create_offer_code(code: "singlecycle", products: [@product], amount_cents: nil, amount_percentage: 20, currency_type: nil, duration_in_billing_cycles: 1)
+      @original_purchase.update!(offer_code: original_offer_code)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: original_offer_code,
+        offer_code_amount: 20,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+        duration_in_months: 1
+      )
+      replacement_code = create_offer_code(code: "loyalrestart", user: @product.user, products: [@product], ownership_products: [@product], existing_customers_only: true, amount_cents: nil, amount_percentage: 25, currency_type: nil)
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: 15_00,
+        clear_discount: true,
+        authenticated_offer_code_buyer: @user
+      )
+
+      assert_equal replacement_code, new_purchase.offer_code
+      assert_equal 25, new_purchase.purchase_offer_code_discount.offer_code_amount
+      assert_equal true, new_purchase.purchase_offer_code_discount.offer_code_is_percent
+      assert_equal 15_00, new_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! does not use the subscription owner to qualify unauthenticated discount updates" do
+    VCR.use_cassette(UPDATE_PLAN_SHARED_CASSETTE) do
+      setup_subscription
+      ownership_product = create_product(user: @product.user)
+      create_purchase(link: ownership_product, seller: @product.user, purchaser: @user, price_cents: ownership_product.price_cents)
+      offer_code = create_offer_code(code: "existingbuyer", amount_cents: nil, amount_percentage: 100, products: [@product], ownership_products: [ownership_product], existing_customers_only: true, user: @product.user)
+
+      error = assert_raises(Subscription::UpdateFailed) do
+        @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          offer_code:,
+          authenticated_offer_code_buyer: nil
+        )
+      end
+      assert_equal "Sorry, this discount code is only for existing customers.", error.message
+      assert_equal @original_purchase, @subscription.reload.original_purchase
+    end
+  end
+
+  test "#update_current_plan! does not update the creator's balance" do
+    VCR.use_cassette("Subscription/_update_current_plan_/does_not_update_the_creator_s_balance") do
+      setup_subscription
+      creator = @product.user
+      assert_equal 1, creator.balances.count
+      assert_no_difference -> { creator.reload.balances.count } do
+        @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+      end
+    end
+  end
+
+  test "#update_current_plan! updating to a PWYW tier calculates displayed_price_cents correctly" do
+    VCR.use_cassette("Subscription/_update_current_plan_/updating_to_a_PWYW_tier/calculates_displayed_price_cents_correctly") do
+      setup_subscription
+      @new_tier.update!(customizable_price: true)
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, perceived_price_cents: 20_01)
+      assert_equal 20_01, new_purchase.reload.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! updating to a PWYW tier with a price that is too low raises an error" do
+    VCR.use_cassette("Subscription/_update_current_plan_/updating_to_a_PWYW_tier/with_a_price_that_is_too_low/raises_an_error") do
+      setup_subscription
+      @new_tier.update!(customizable_price: true)
+      error = assert_raises(Subscription::UpdateFailed) do
+        @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, perceived_price_cents: 19_99)
+      end
+      assert_equal "Please enter an amount greater than or equal to the minimum.", error.message
+    end
+  end
+
+  test "#update_current_plan! when skip_preparing_for_charge is true does not call Stripe or perform any chargeable-related operations" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_skip_preparing_for_charge_is_true/does_not_call_Stripe_or_perform_any_chargeable-related_operations") do
+      setup_subscription
+      Purchase.any_instance.expects(:load_chargeable_for_charging).never
+      Stripe::PaymentIntent.expects(:create).never
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, skip_preparing_for_charge: true)
+    end
+  end
+
+  test "#update_current_plan! when applying a quantity change updates the purchase quantity and price" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_applying_a_quantity_change/updates_the_purchase_quantity_and_price") do
+      setup_subscription
+      @subscription.update_current_plan!(new_variants: [@subscription.tier], new_price: @subscription.price, new_quantity: 2)
+      @subscription.reload
+      assert_equal 11_98, @subscription.original_purchase.displayed_price_cents
+      assert_equal 2, @subscription.original_purchase.quantity
+    end
+  end
+
+  test "#update_current_plan! when applying a plan change uses that price as the new price even if product price is higher" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_applying_a_plan_change/uses_that_price_as_the_new_price_even_if_product_price_is_higher") do
+      setup_subscription
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, perceived_price_cents: 10_00, is_applying_plan_change: true)
+      assert_equal 10_00, @subscription.reload.original_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! when applying a plan change uses that price as the new price even if product price is lower" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_applying_a_plan_change/uses_that_price_as_the_new_price_even_if_product_price_is_lower") do
+      setup_subscription
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, perceived_price_cents: 30_00, is_applying_plan_change: true)
+      assert_equal 30_00, @subscription.reload.original_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! when applying a plan change and free trial is enabled does not require the new original purchase to be marked a free trial purchase" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_applying_a_plan_change/and_free_trial_is_enabled/does_not_require_the_new_original_purchase_to_be_marked_a_free_trial_purchase") do
+      setup_subscription
+      @product.update!(free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week)
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, perceived_price_cents: 10_00, is_applying_plan_change: true)
+    end
+  end
+
+  test "#update_current_plan! when applying a plan change but product is no longer for sale still allows the plan to be changed" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_applying_a_plan_change/but_product_is_no_longer_for_sale/still_allows_the_plan_to_be_changed") do
+      setup_subscription
+      @product.update!(purchase_disabled_at: 1.day.ago)
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, perceived_price_cents: 10_00, is_applying_plan_change: true)
+      assert_equal 10_00, @subscription.reload.original_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! when purchase has a license associates the license with the new original_purchase" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_purchase_has_a_license/associates_the_license_with_the_new_original_purchase") do
+      setup_subscription
+      license = create_license(purchase: @original_purchase)
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+      new_original_purchase = @subscription.reload.original_purchase
+      assert_not_equal @original_purchase.id, new_original_purchase.id
+      assert_equal new_original_purchase.id, license.reload.purchase_id
+    end
+  end
+
+  test "#update_current_plan! when purchase was recommended charges the discover fee percentage from the original purchase instead of the current product discover fee" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_purchase_was_recommended/charges_the_discover_fee_percentage_from_the_original_purchase_instead_of_the_current_product_discover_fee") do
+      setup_subscription(was_product_recommended: true, discover_fee_per_thousand: 300)
+      @product.update!(discover_fee_per_thousand: 400)
+      Subscription.any_instance.stubs(:mor_fee_applicable?).returns(false)
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+      @subscription.reload
+
+      assert_equal 658, new_purchase.fee_cents # 2000*0.329, rounded
+
+      recurring_purchase = @subscription.charge!
+      assert_equal "successful", recurring_purchase.purchase_state
+      assert_equal 688, recurring_purchase.fee_cents
+      assert_equal 300, recurring_purchase.discover_fee_per_thousand
+    end
+  end
+
+  test "#update_current_plan! when purchase has sent emails associates the emails with the new original_purchase" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_purchase_has_sent_emails/associates_the_emails_with_the_new_original_purchase") do
+      setup_subscription
+      installment = create_installment(link: @product, seller: @product.user, published_at: Time.current)
+      email_info = create_email_info(installment:, purchase: @original_purchase, state: "created")
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+      new_original_purchase = @subscription.reload.original_purchase
+      assert_equal new_original_purchase.id, email_info.reload.purchase_id
+    end
+  end
+
+  test "#update_current_plan! when comments are associated with the purchase updates the comments with the new original_purchase" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_comments_are_associated_with_the_purchase/updates_the_comments_with_the_new_original_purchase") do
+      setup_subscription
+      purchase = create_purchase(link: create_product, created_at: 1.second.ago)
+      comment1 = create_comment(purchase: @original_purchase)
+      comment2 = create_comment
+      comment3 = create_comment(purchase:)
+      comment4 = create_comment(purchase: @original_purchase)
+
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+      new_original_purchase = @subscription.reload.original_purchase
+      assert_equal new_original_purchase.id, comment1.reload.purchase_id
+      assert_nil comment2.reload.purchase_id
+      assert_equal purchase.id, comment3.reload.purchase_id
+      assert_equal new_original_purchase.id, comment4.reload.purchase_id
+    end
+  end
+
+  test "#update_current_plan! when purchase has a URL redirect creates a URL redirect for the new original_purchase" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_purchase_has_a_URL_redirect/creates_a_URL_redirect_for_the_new_original_purchase") do
+      setup_subscription(with_product_files: true)
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+      new_original_purchase = @subscription.reload.original_purchase
+      assert_not_equal @original_purchase.id, new_original_purchase.id
+      assert new_original_purchase.url_redirect
+    end
+  end
+
+  test "#update_current_plan! for test subscription marks the new original purchase 'test_successful'" do
+    VCR.use_cassette("Subscription/_update_current_plan_/for_test_subscription/marks_the_new_original_purchase_test_successful_") do
+      setup_subscription
+      @product.update!(user: @user)
+      @subscription.update!(is_test_subscription: true)
+      @original_purchase.update!(purchase_state: "test_successful", seller: @user)
+
+      @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+      assert_equal "test_successful", @subscription.reload.original_purchase.purchase_state
+    end
+  end
+
+  # Shared context for the "offer code discount with duration_in_months" examples.
+  def update_plan_offer_code_duration_context
+    setup_subscription
+    @offer_code = create_offer_code(amount_percentage: 25, products: [@product])
+    @original_purchase.update!(offer_code: @offer_code)
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months copies duration_in_months to the new original purchase's discount" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/copies_duration_in_months_to_the_new_original_purchase_s_discount") do
+      update_plan_offer_code_duration_context
+      @offer_code.update!(duration_in_months: 3)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: @offer_code, offer_code_amount: 25, offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount, duration_in_months: 3
+      )
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+      new_discount = new_purchase.purchase_offer_code_discount
+      assert_predicate new_discount, :present?
+      assert_equal 25, new_discount.offer_code_amount
+      assert_equal true, new_discount.offer_code_is_percent
+      assert_equal 3, new_discount.duration_in_months
+    end
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months preserves nil duration_in_months for unlimited discounts" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/preserves_nil_duration_in_months_for_unlimited_discounts") do
+      update_plan_offer_code_duration_context
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: @offer_code, offer_code_amount: 25, offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount, duration_in_months: nil
+      )
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+      new_discount = new_purchase.purchase_offer_code_discount
+      assert_predicate new_discount, :present?
+      assert_nil new_discount.duration_in_months
+    end
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months uses current offer code values when offer_code is provided" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/uses_current_offer_code_values_when_offer_code_is_provided") do
+      update_plan_offer_code_duration_context
+      @offer_code.update!(amount_percentage: 50, duration_in_months: 6)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: @offer_code, offer_code_amount: 25, offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount, duration_in_months: 1
+      )
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, offer_code: @offer_code)
+
+      new_discount = new_purchase.purchase_offer_code_discount
+      assert_predicate new_discount, :present?
+      assert_equal @offer_code, new_discount.offer_code
+      assert_equal 50, new_discount.offer_code_amount
+      assert_equal true, new_discount.offer_code_is_percent
+      assert_equal 6, new_discount.duration_in_months
+      assert_equal new_purchase.minimum_paid_price_cents_per_unit_before_discount, new_discount.pre_discount_minimum_price_cents
+    end
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months sets a new offer code on the new purchase when offer_code is a different code" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/sets_a_new_offer_code_on_the_new_purchase_when_offer_code_is_a_different_code") do
+      update_plan_offer_code_duration_context
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: @offer_code, offer_code_amount: 25, offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount, duration_in_months: 1
+      )
+
+      new_offer_code = create_offer_code(code: "newcode", amount_cents: 1_00, products: [@product])
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, offer_code: new_offer_code, clear_discount: true)
+
+      assert_equal new_offer_code, new_purchase.offer_code
+      new_discount = new_purchase.purchase_offer_code_discount
+      assert_predicate new_discount, :present?
+      assert_equal new_offer_code, new_discount.offer_code
+      assert_equal 1_00, new_discount.offer_code_amount
+      assert_equal false, new_discount.offer_code_is_percent
+    end
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months builds a discount for a new offer code when original had no discount" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/builds_a_discount_for_a_new_offer_code_when_original_had_no_discount") do
+      update_plan_offer_code_duration_context
+      new_offer_code = create_offer_code(code: "newcode", amount_percentage: 30, products: [@product])
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, offer_code: new_offer_code)
+
+      assert_equal new_offer_code, new_purchase.offer_code
+      new_discount = new_purchase.purchase_offer_code_discount
+      assert_predicate new_discount, :present?
+      assert_equal new_offer_code, new_discount.offer_code
+      assert_equal 30, new_discount.offer_code_amount
+      assert_equal true, new_discount.offer_code_is_percent
+    end
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months clears the offer code and discount when clear_discount is true" do
+    VCR.use_cassette("Subscription/_update_current_plan_/when_the_original_purchase_has_an_offer_code_discount_with_duration_in_months/clears_the_offer_code_and_discount_when_clear_discount_is_true") do
+      update_plan_offer_code_duration_context
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: @offer_code, offer_code_amount: 25, offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount, duration_in_months: 3
+      )
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, clear_discount: true)
+
+      assert_nil new_purchase.offer_code
+      assert_nil new_purchase.purchase_offer_code_discount
+    end
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months keeps a deleted offer code without applying its discount when clear_deleted_discount is true" do
+    VCR.use_cassette(UPDATE_PLAN_CLEAR_CASSETTE) do
+      update_plan_offer_code_duration_context
+      @offer_code.mark_deleted!
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: @offer_code, offer_code_amount: 25, offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount, duration_in_months: 3
+      )
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, clear_deleted_discount: true)
+
+      assert_equal @offer_code, new_purchase.offer_code
+      assert_equal new_purchase.minimum_paid_price_cents_per_unit_before_discount, new_purchase.displayed_price_cents
+      assert_equal 0, new_purchase.purchase_offer_code_discount.offer_code_amount
+    end
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months keeps a deleted tiered offer code discount when clear_deleted_discount is true" do
+    VCR.use_cassette(UPDATE_PLAN_CLEAR_CASSETTE) do
+      update_plan_offer_code_duration_context
+      tiered_code = create_tiered_offer_code(for_existing_customers: true, code: "tieredclear", user: @product.user, products: [@product], ownership_products: [@product])
+      @original_purchase.update!(offer_code: tiered_code)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: tiered_code, offer_code_amount: 50, offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount, duration_in_months: nil
+      )
+      tiered_code.mark_deleted!
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, clear_deleted_discount: true)
+
+      assert_equal tiered_code, new_purchase.offer_code
+      assert_equal 50, new_purchase.purchase_offer_code_discount.offer_code_amount
+      assert_equal true, new_purchase.purchase_offer_code_discount.offer_code_is_percent
+      assert_equal 10_00, new_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! offer code discount with duration_in_months does not clear an auto-discovered replacement discount when clear_deleted_discount is true" do
+    VCR.use_cassette(UPDATE_PLAN_CLEAR_CASSETTE) do
+      update_plan_offer_code_duration_context
+      @offer_code.update!(duration_in_months: 1)
+      @original_purchase.create_purchase_offer_code_discount!(
+        offer_code: @offer_code, offer_code_amount: 25, offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount, duration_in_months: 1
+      )
+      @offer_code.mark_deleted!
+      replacement_code = create_offer_code(code: "replacementdiscount", user: @product.user, products: [@product], ownership_products: [@product], existing_customers_only: true, amount_cents: nil, amount_percentage: 25, currency_type: nil)
+
+      new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price, perceived_price_cents: 15_00, clear_deleted_discount: true)
+
+      assert_equal replacement_code, new_purchase.offer_code
+      assert_equal 25, new_purchase.purchase_offer_code_discount.offer_code_amount
+      assert_equal true, new_purchase.purchase_offer_code_discount.offer_code_is_percent
+      assert_equal 15_00, new_purchase.displayed_price_cents
+    end
+  end
+
+  test "#update_current_plan! for a subscription with fixed length raises an error" do
+    VCR.use_cassette("Subscription/_update_current_plan_/for_a_subscription_with_fixed_length/raises_an_error") do
+      setup_subscription
+      @subscription.update!(charge_occurrence_count: 4)
+      error = assert_raises(Subscription::UpdateFailed) do
+        @subscription.update_current_plan!(new_variants: [@original_tier], new_price: @yearly_product_price)
+      end
+      assert_equal "Changing plans for fixed-length subscriptions is not currently supported.", error.message
+    end
+  end
+
+  test "#update_current_plan! for installment plans raises an error" do
+    purchase = create_installment_plan_purchase
+    subscription = purchase.subscription
+    error = assert_raises(Subscription::UpdateFailed) do
+      subscription.update_current_plan!(new_variants: [], new_price: nil)
+    end
+    assert_equal "Installment plans cannot be updated.", error.message
+  end
 end

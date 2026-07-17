@@ -647,6 +647,56 @@ module ModelFactories
     offer_code
   end
 
+  # A tiered offer code whose discount depends on how long the buyer has owned an
+  # ownership product (mirrors :tiered_offer_code). Pass for_existing_customers:
+  # true for the :for_existing_customers trait (existing_customers_only + the
+  # products doubling as ownership products).
+  def create_tiered_offer_code(products:, user: nil, for_existing_customers: false, **attrs)
+    user ||= products.first&.user || create_user
+    defaults = {
+      amount_cents: nil,
+      amount_percentage: 0,
+      ownership_duration_tiers: [
+        { "months" => 0, "amount_percentage" => 0 },
+        { "months" => 12, "amount_percentage" => 50 },
+      ],
+    }
+    if for_existing_customers
+      defaults[:existing_customers_only] = true
+      defaults[:ownership_products] = products
+    end
+    create_offer_code(products:, user:, **defaults.merge(attrs))
+  end
+
+  # A purchase analytics event (mirrors :purchase_event): a successful "purchase"
+  # event carrying the purchase's link and price.
+  def create_purchase_event(purchase:, **attrs)
+    Event.create!({
+      event_name: "purchase",
+      purchase_state: "successful",
+      from_profile: false,
+      ip_country: "United States",
+      ip_state: "CA",
+      purchase:,
+      link_id: purchase.link_id,
+      price_cents: purchase.price_cents,
+    }.merge(attrs))
+  end
+
+  # A user-submitted comment (mirrors :comment), defaulting to hanging off a
+  # published installment. Pass purchase: to attribute it to a buyer.
+  def create_comment(commentable: nil, author: nil, purchase: nil, **attrs)
+    author ||= create_user
+    Comment.create!({
+      commentable: commentable || create_published_installment,
+      author:,
+      author_name: author.display_name,
+      comment_type: Comment::COMMENT_TYPE_USER_SUBMITTED,
+      content: "Famous last words.",
+      purchase:,
+    }.merge(attrs))
+  end
+
   def create_universal_offer_code(user: nil, amount_cents: 100, excluded_products: [], **attrs)
     user ||= create_user
     OfferCode.create!({ user:, universal: true, products: [], excluded_products:, code: "uni#{unique_suffix[0, 6]}", amount_cents:, currency_type: user.currency_type }.merge(attrs))
