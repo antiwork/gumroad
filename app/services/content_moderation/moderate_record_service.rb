@@ -22,25 +22,40 @@ class ContentModeration::ModerateRecordService
     "violence/graphic" => "graphic violence",
   }.freeze
 
+  # PromptStrategy prefixes its reasons with the preset name (e.g.
+  # "spam: <model reasoning>"). Map those presets to a phrase the seller can
+  # act on, since the free-text reasoning itself never matches a category.
+  PROMPT_PRESET_LABELS = {
+    "spam" => "content that reads as promotional spam",
+    "adult_content" => "adult content",
+  }.freeze
+
   # Turn raw moderation reasons (e.g. "OpenAI moderation flagged: violence
-  # (score: 0.86, threshold: 0.9)") into a friendly, de-duplicated phrase the
-  # seller can act on — without leaking scores, thresholds, or the provider.
-  # Generic fallback for blocklist/prompt reasons that aren't a known category.
+  # (score: 0.86, threshold: 0.9)" or "spam: repeated unrelated slogans") into
+  # a friendly, de-duplicated phrase the seller can act on — without leaking
+  # scores, thresholds, or the provider. Generic fallback for blocklist
+  # reasons that aren't a known category.
   def self.humanize_reasons(reasons)
     labels = Array(reasons).map do |r|
+      preset = r.to_s.split(":").first.to_s.strip.downcase
+      next PROMPT_PRESET_LABELS[preset] if PROMPT_PRESET_LABELS.key?(preset)
+
       key = r.to_s.split(" (").first.to_s.split(": ").last.to_s.strip.downcase
       CATEGORY_LABELS[key]
     end.compact.uniq
     labels.empty? ? "something that may violate our content guidelines" : labels.to_sentence
   end
 
-  def self.seller_message(reasons, noun)
+  # `title` names the specific record in the error (e.g. which email of a
+  # 17-email workflow was flagged) so sellers don't have to guess what to fix.
+  def self.seller_message(reasons, noun, title: nil)
     rs = Array(reasons)
     transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
     else
-      "This #{noun} can’t be saved because it looks like it contains #{humanize_reasons(reasons)}. Please update the content to follow our content guidelines."
+      subject = title.present? ? "The #{noun} \"#{title}\"" : "This #{noun}"
+      "#{subject} can’t be saved because it looks like it contains #{humanize_reasons(reasons)}. Please update the content to follow our content guidelines."
     end
   end
 
@@ -127,17 +142,12 @@ class ContentModeration::ModerateRecordService
       end
 
       content = "Content moderation blocked publish of #{record_label}: #{reasons.join("; ")}"
-      return if user.comments
-                    .with_type_note
-                    .where(author_name: AUTHOR_NAME, content: content)
-                    .where("created_at > ?", ADMIN_COMMENT_DEDUP_WINDOW.ago)
-                    .exists?
-
-      user.comments.create!(
-        author_name: AUTHOR_NAME,
-        comment_type: Comment::COMMENT_TYPE_NOTE,
-        content: content,
-      )
+      # Created via a background job, not inline: this check runs inside the
+      # blocked record's save transaction, and the failed save's rollback
+      # would erase a synchronously created comment. The Sidekiq push happens
+      # outside the DB transaction, so the note survives. The job also
+      # dedupes identical notes within ADMIN_COMMENT_DEDUP_WINDOW.
+      ContentModerationAdminCommentJob.perform_async(user.id, content)
     rescue StandardError => e
       Rails.logger.error("ContentModeration failed to leave admin comment: #{e.message}")
     end

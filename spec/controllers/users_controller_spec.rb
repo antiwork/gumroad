@@ -816,6 +816,26 @@ describe UsersController do
       expect(@purchase.reload.purchaser).to be(nil)
     end
 
+    it "doesn't associate a reassignment-locked purchase with the signed_in user even when the email matches" do
+      @purchase.update!(is_reassignment_locked: true)
+
+      sign_in(@user)
+      post :add_purchase_to_library, params: @params
+
+      expect(@purchase.reload.purchaser).to be(nil)
+      expect(response.parsed_body["success"]).to eq false
+    end
+
+    it "doesn't associate a reassignment-locked purchase or sign the user in when logged out" do
+      @purchase.update!(is_reassignment_locked: true)
+
+      post :add_purchase_to_library, params: @params
+
+      expect(@purchase.reload.purchaser).to be(nil)
+      expect(response.parsed_body["success"]).to eq false
+      expect(controller.logged_in_user).to be(nil)
+    end
+
     context "when two factor authentication is enabled for the user" do
       before do
         @user.two_factor_authentication_enabled = true

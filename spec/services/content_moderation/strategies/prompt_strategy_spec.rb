@@ -317,6 +317,18 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     end
   end
 
+  # Pins the announcement-email language in SPAM_RULES so a future prompt
+  # refactor can't silently drop the carveout that lets short "new video out,
+  # watch here" style emails through — those were being flagged as
+  # aggressive-CTA spam despite being normal creator marketing.
+  describe "SPAM_RULES (announcement email carveout)" do
+    it "tells the model that short CTA announcement emails are legitimate" do
+      expect(described_class::SPAM_RULES).to include("Announcement emails promoting the creator's own new release")
+      expect(described_class::SPAM_RULES).to include("Watch HERE")
+      expect(described_class::SPAM_RULES).to include("SAME call-to-action repeated many")
+    end
+  end
+
   def json_chat_response(payload)
     { "choices" => [{ "message" => { "content" => payload.to_json } }] }
   end

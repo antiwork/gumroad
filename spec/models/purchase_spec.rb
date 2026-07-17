@@ -7550,4 +7550,33 @@ describe Purchase, :vcr do
       expect(offer_code.reload).not_to be_deleted
     end
   end
+
+  describe "#attach_to_user_and_card" do
+    let(:user) { create(:user) }
+
+    it "attaches the purchase to the user" do
+      purchase = create(:purchase)
+
+      purchase.attach_to_user_and_card(user, nil, nil)
+
+      expect(purchase.reload.purchaser).to eq user
+    end
+
+    it "refuses to attach a reassignment-locked purchase" do
+      purchase = create(:purchase, is_reassignment_locked: true)
+
+      expect(purchase.attach_to_user_and_card(user, nil, nil)).to eq false
+      expect(purchase.reload.purchaser).to be_nil
+    end
+
+    it "does not move a reassignment-locked purchase's subscription" do
+      purchase = create(:membership_purchase, is_reassignment_locked: true)
+      subscription = purchase.subscription
+      original_subscriber = subscription.user
+
+      purchase.attach_to_user_and_card(user, nil, nil)
+
+      expect(subscription.reload.user).to eq original_subscriber
+    end
+  end
 end
