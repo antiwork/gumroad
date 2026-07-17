@@ -576,6 +576,14 @@ module ModelFactories
     build_asset_preview(link:, fixture: "thing.mov", content_type: "video/quicktime", **attrs)
   end
 
+  def create_asset_preview_jpg(link: nil, **attrs)
+    build_asset_preview(link:, fixture: "test-small.jpg", content_type: "image/jpeg", **attrs)
+  end
+
+  def create_asset_preview_gif(link: nil, **attrs)
+    build_asset_preview(link:, fixture: "sample.gif", content_type: "image/gif", **attrs)
+  end
+
   # A recommendable product: a compliant seller with a payout address, the films
   # taxonomy, and a completed sale — the DB-only conditions Product#recommendable?
   # checks (mirrors the :recommendable trait, minus the ES reindex).
