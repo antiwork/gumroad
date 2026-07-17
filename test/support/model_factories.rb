@@ -271,6 +271,11 @@ module ModelFactories
   def build_purchase(link:, seller: :default, purchaser: nil, variant_attributes: nil, chargeable: nil, **attrs)
     seller = link.user if seller == :default
     price_cents = attrs.delete(:price_cents) || link.price_cents || 100
+    # Mirror the :purchase factory: a $0 sale carries no charge-processor/stripe
+    # ids or merchant account, so financial_transaction_validation treats it as
+    # free rather than a broken paid charge. (Tiered memberships price on their
+    # tiers, so their product-level price_cents is 0 and lands here.)
+    paid = price_cents.to_i > 0
     purchase = Purchase.new({
       link:,
       seller:,
@@ -288,10 +293,13 @@ module ModelFactories
       card_type: "visa",
       card_visual: "**** **** **** 4062",
       card_country: "US",
-      stripe_fingerprint: "shfbeg5142fff",
-      stripe_transaction_id: "2763276372637263",
-      charge_processor_id: "stripe",
-      merchant_account: merchant_accounts(:gumroad_stripe),
+      stripe_fingerprint: paid ? "shfbeg5142fff" : nil,
+      stripe_transaction_id: paid ? "2763276372637263" : nil,
+      charge_processor_id: paid ? "stripe" : nil,
+      merchant_account: paid ? merchant_accounts(:gumroad_stripe) : nil,
+      # The factory sets a simple flow of funds so purchases that credit the
+      # seller's balance (e.g. :purchase_with_balance) have one to split.
+      flow_of_funds: FlowOfFunds.build_simple_flow_of_funds(Currency::USD, price_cents),
     }.merge(attrs))
     purchase.purchaser = purchaser if purchaser
     purchase.variant_attributes = variant_attributes if variant_attributes
