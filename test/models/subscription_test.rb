@@ -2861,4 +2861,1039 @@ class SubscriptionTest < ActiveSupport::TestCase
     end
     assert_equal "Installment plans cannot be updated.", error.message
   end
+
+  # --- last purchase state ---------------------------------------------------
+
+  test "last purchase state failed within time frame is false" do
+    VCR.use_cassette("Subscription/last_purchase_state/failed/within_time_frame_is_false") do
+      travel_to(Date.current + 3) do
+        @subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+        purchase = create_purchase(is_original_subscription_purchase: true, link: @product, subscription: @subscription)
+        purchase.update_attribute(:purchase_state, "failed")
+      end
+      travel_to(Date.current + 4) do
+        assert_not @subscription.purchases.paid.where("succeeded_at > ?", 48.hours.ago).present?
+      end
+    end
+  end
+
+  test "last purchase state failed outside time frame is false" do
+    VCR.use_cassette("Subscription/last_purchase_state/failed/outside_time_frame_is_false") do
+      travel_to(Date.current + 3) do
+        @subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+        purchase = create_purchase(is_original_subscription_purchase: true, link: @product, subscription: @subscription)
+        purchase.update_attribute(:purchase_state, "failed")
+      end
+      travel_to(Date.current + 6) do
+        assert_not @subscription.purchases.paid.where("succeeded_at > ?", 48.hours.ago).present?
+      end
+    end
+  end
+
+  test "last purchase state successful within time frame is true" do
+    VCR.use_cassette("Subscription/last_purchase_state/successful/within_time_frame_is_true") do
+      travel_to(Date.current + 3) do
+        @subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+        purchase = create_purchase(is_original_subscription_purchase: true, link: @product, subscription: @subscription)
+        purchase.update_attribute(:succeeded_at, Time.current)
+      end
+      travel_to(Date.current + 4) do
+        assert @subscription.purchases.paid.where("succeeded_at > ?", 48.hours.ago).present?
+      end
+    end
+  end
+
+  test "last purchase state successful outside time frame is false" do
+    VCR.use_cassette("Subscription/last_purchase_state/successful/outside_time_frame_is_false") do
+      travel_to(Date.current + 3) do
+        @subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+        purchase = create_purchase(is_original_subscription_purchase: true, link: @product, subscription: @subscription)
+        purchase.update_attribute(:succeeded_at, Time.current)
+      end
+      travel_to(Date.current + 6) do
+        assert_not @subscription.purchases.paid.where("succeeded_at > ?", 48.hours.ago).present?
+      end
+    end
+  end
+
+  # --- #cancel_effective_immediately! ----------------------------------------
+
+  test "#cancel_effective_immediately! sends email and sets cancelled attributes" do
+    freeze_time do
+      mailer = mock
+      mailer.stubs(:deliver_later)
+      CustomerLowPriorityMailer.expects(:subscription_product_deleted).once.returns(mailer)
+
+      @subscription.cancel_effective_immediately!
+      assert_equal Time.current.to_s, @subscription.user_requested_cancellation_at.to_s
+      assert_equal Time.current.to_s, @subscription.cancelled_at.to_s
+      assert_equal Time.current.to_s, @subscription.deactivated_at.to_s
+      assert_equal false, @subscription.cancelled_by_buyer
+    end
+  end
+
+  test "#cancel_effective_immediately! does not send email but sets cancelled attributes if from chargeback" do
+    freeze_time do
+      CustomerLowPriorityMailer.expects(:subscription_product_deleted).never
+
+      @subscription.cancel_effective_immediately!(by_buyer: true)
+      assert_equal Time.current.to_s, @subscription.user_requested_cancellation_at.to_s
+      assert_equal Time.current.to_s, @subscription.cancelled_at.to_s
+      assert_equal Time.current.to_s, @subscription.deactivated_at.to_s
+      assert_equal true, @subscription.cancelled_by_buyer
+    end
+  end
+
+  test "#cancel_effective_immediately! enqueues the ping job to notify seller of subscription cancellation" do
+    @subscription.cancel_effective_immediately!
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, @subscription.id])
+  end
+
+  test "#cancel_effective_immediately! enqueues the ping job to notify seller of subscription ending" do
+    @subscription.cancel_effective_immediately!
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME, @subscription.id])
+  end
+
+  # --- #cancel_immediately_if_pending_cancellation! --------------------------
+
+  test "#cancel_immediately_if_pending_cancellation! enqueues the ping job to notify seller of subscription ending" do
+    @subscription.update!(cancelled_at: 1.day.from_now)
+    @subscription.cancel_immediately_if_pending_cancellation!
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME, @subscription.id])
+  end
+
+  # --- #for_tier? ------------------------------------------------------------
+
+  test "#for_tier? returns true if the subscription is currently for that tier" do
+    product = create_membership_product_with_preset_tiered_pricing
+    tier_1 = product.tiers.first
+    subscription = create_membership_purchase(link: product, variant_attributes: [tier_1]).subscription
+    assert subscription.for_tier?(tier_1)
+  end
+
+  test "#for_tier? returns true if the subscription is pending a change to that tier" do
+    product = create_membership_product_with_preset_tiered_pricing
+    tier_1 = product.tiers.first
+    tier_2 = product.tiers.second
+    subscription = create_membership_purchase(link: product, variant_attributes: [tier_1]).subscription
+    create_subscription_plan_change(subscription:, tier: tier_2)
+    assert_equal true, subscription.for_tier?(tier_1)
+    assert_equal true, subscription.for_tier?(tier_2)
+  end
+
+  test "#for_tier? returns false if the subscription is not for that tier or pending a change to that tier" do
+    product = create_membership_product_with_preset_tiered_pricing
+    tier_1 = product.tiers.first
+    tier_2 = product.tiers.second
+    subscription = create_membership_purchase(link: product, variant_attributes: [tier_1]).subscription
+    assert_equal false, subscription.for_tier?(tier_2)
+  end
+
+  # --- #pending_cancellation? ------------------------------------------------
+
+  test "#pending_cancellation? returns true if the subscription is pending cancellation" do
+    @subscription.cancel!
+    assert_equal true, @subscription.pending_cancellation?
+  end
+
+  test "#pending_cancellation? returns false if the subscription has already been cancelled" do
+    @subscription.cancel_effective_immediately!
+    assert_equal false, @subscription.pending_cancellation?
+  end
+
+  test "#pending_cancellation? returns false if the subscription was deactivated for some other reason" do
+    @subscription.unsubscribe_and_fail!
+    assert_equal false, @subscription.pending_cancellation?
+  end
+
+  test "#pending_cancellation? returns false for a live subscription" do
+    assert_equal false, @subscription.pending_cancellation?
+  end
+
+  # --- #cancelled? -----------------------------------------------------------
+
+  test "#cancelled? returns true if the subscription has been cancelled" do
+    @subscription.cancel_effective_immediately!
+    assert_equal true, @subscription.cancelled?
+  end
+
+  test "#cancelled? returns false if the subscription is pending cancellation" do
+    @subscription.cancel!
+    assert_equal false, @subscription.cancelled?
+  end
+
+  test "#cancelled? returns true if the subscription is pending cancellation but flag to treat as cancelled is set" do
+    @subscription.cancel!
+    assert_equal true, @subscription.cancelled?(treat_pending_cancellation_as_live: false)
+  end
+
+  test "#cancelled? returns false if the subscription was deactivated for some other reason" do
+    @subscription.unsubscribe_and_fail!
+    assert_equal false, @subscription.cancelled?
+  end
+
+  test "#cancelled? returns false for a live subscription" do
+    assert_equal false, @subscription.cancelled?
+  end
+
+  # --- #deactivated? ---------------------------------------------------------
+
+  test "#deactivated? returns true if the subscription has been deactivated" do
+    @subscription.deactivated_at = 1.day.ago
+    assert_equal true, @subscription.deactivated?
+  end
+
+  test "#deactivated? returns false if the subscription has not been deactivated" do
+    @subscription.deactivated_at = nil
+    assert_equal false, @subscription.deactivated?
+  end
+
+  # --- #cancelled_by_seller? -------------------------------------------------
+
+  test "#cancelled_by_seller? returns true for a subscription that was cancelled by the seller" do
+    subscription = build_subscription(cancelled_at: 1.day.ago, cancelled_by_buyer: false)
+    assert_equal true, subscription.cancelled_by_seller?
+  end
+
+  test "#cancelled_by_seller? returns false for a subscription that was cancelled by the buyer" do
+    subscription = build_subscription(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
+    assert_equal false, subscription.cancelled_by_seller?
+  end
+
+  test "#cancelled_by_seller? returns false for a live subscription that is not pending cancellation" do
+    subscription = build_subscription
+    assert_equal false, subscription.cancelled_by_seller?
+  end
+
+  test "#cancelled_by_seller? returns false for a live subscription that is pending cancellation by buyer" do
+    subscription = build_subscription(cancelled_at: 1.week.from_now, cancelled_by_buyer: true)
+    assert_equal false, subscription.cancelled_by_seller?
+  end
+
+  test "#cancelled_by_seller? returns true for a live subscription that is pending cancellation by seller" do
+    subscription = build_subscription(cancelled_at: 1.week.from_now, cancelled_by_buyer: false)
+    assert_equal true, subscription.cancelled_by_seller?
+  end
+
+  test "#cancelled_by_seller? returns false for a failed subscription" do
+    subscription = build_subscription(failed_at: 1.day.ago)
+    assert_equal false, subscription.cancelled_by_seller?
+  end
+
+  test "#cancelled_by_seller? returns false for an ended subscription" do
+    subscription = build_subscription(ended_at: 1.day.ago)
+    assert_equal false, subscription.cancelled_by_seller?
+  end
+
+  # --- #pending_failure? -----------------------------------------------------
+
+  test "#pending_failure? returns false for a subscription in free trial" do
+    purchase = create_free_trial_membership_purchase
+    assert_equal false, purchase.subscription.pending_failure?
+  end
+
+  test "#pending_failure? returns false for a live subscription" do
+    subscription = build_subscription
+    assert_not subscription.pending_failure?
+  end
+
+  test "#pending_failure? returns false for a failed subscription" do
+    subscription = build_subscription(failed_at: 1.day.ago)
+    assert_equal false, subscription.pending_failure?
+  end
+
+  test "#pending_failure? returns true for a live subscription in grace period" do
+    subscription = create_subscription
+    create_purchase(link: subscription.link, subscription:, is_original_subscription_purchase: true, purchase_state: "successful")
+    travel_to 1.month.from_now
+    create_purchase(link: subscription.link, subscription:, purchase_state: "failed")
+
+    assert_equal true, subscription.pending_failure?
+  end
+
+  # --- #status ---------------------------------------------------------------
+
+  test "#status returns 'alive' for a live subscription" do
+    subscription = build_subscription
+    assert_equal "alive", subscription.status
+  end
+
+  test "#status returns 'pending_failure' for a subscription in a grace period" do
+    subscription = create_subscription
+    create_purchase(link: subscription.link, subscription:, is_original_subscription_purchase: true, purchase_state: "successful")
+    travel_to 1.month.from_now
+    create_purchase(link: subscription.link, subscription:, purchase_state: "failed")
+
+    assert_equal "pending_failure", subscription.status
+  end
+
+  test "#status returns 'pending_cancellation' for a subscription pending cancellation" do
+    subscription = create_subscription(cancelled_at: 1.month.from_now)
+    assert_equal "pending_cancellation", subscription.status
+  end
+
+  test "#status returns termination reason for a terminated subscription" do
+    subscription = create_subscription(failed_at: 1.day.ago, deactivated_at: 1.day.ago)
+    assert_equal "failed_payment", subscription.status
+  end
+
+  # --- #end_time_of_subscription ---------------------------------------------
+
+  test "#end_time_of_subscription is in 1 month" do
+    freeze_time do
+      purchase = create_purchase(link: @product, price_cents: @product.price_cents, is_original_subscription_purchase: false, subscription: @subscription)
+      purchase.update!(succeeded_at: Time.current)
+      assert_equal 1.month.from_now, @subscription.end_time_of_subscription
+    end
+  end
+
+  test "#end_time_of_subscription is in 3 months" do
+    VCR.use_cassette("Subscription/_end_time_of_subscription/is_in_3_months") do
+      freeze_time do
+        product = create_membership_product(subscription_duration: :quarterly)
+        subscription = create_membership_purchase(link: product, succeeded_at: Time.current).subscription
+        assert_equal 3.months.from_now, subscription.end_time_of_subscription
+      end
+    end
+  end
+
+  test "#end_time_of_subscription is in 6 months" do
+    VCR.use_cassette("Subscription/_end_time_of_subscription/is_in_6_months") do
+      freeze_time do
+        product = create_membership_product(subscription_duration: :biannually)
+        subscription = create_membership_purchase(link: product, succeeded_at: Time.current).subscription
+        assert_equal 6.months.from_now, subscription.end_time_of_subscription
+      end
+    end
+  end
+
+  test "#end_time_of_subscription is in 1 year" do
+    VCR.use_cassette("Subscription/_end_time_of_subscription/is_in_1_year") do
+      freeze_time do
+        product = create_membership_product(subscription_duration: :yearly)
+        subscription = create_membership_purchase(link: product, succeeded_at: Time.current).subscription
+        assert_equal 1.year.from_now, subscription.end_time_of_subscription
+      end
+    end
+  end
+
+  test "#end_time_of_subscription is in 2 years" do
+    VCR.use_cassette("Subscription/_end_time_of_subscription/is_in_2_years") do
+      freeze_time do
+        product = create_membership_product(subscription_duration: :every_two_years)
+        subscription = create_membership_purchase(link: product, succeeded_at: Time.current).subscription
+        assert_equal 2.years.from_now, subscription.end_time_of_subscription
+      end
+    end
+  end
+
+  test "#end_time_of_subscription is the most recent ended time for test subscription" do
+    VCR.use_cassette("Subscription/_end_time_of_subscription/is_the_most_recent_ended_time_for_test_subscription") do
+      freeze_time do
+        product = create_membership_product(subscription_duration: :quarterly)
+        subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product, is_test_subscription: true)
+        # RSpec passed a bogus `state:` here (not purchase_state), so this stays a
+        # plain successful sale — a test subscription has no test_successful
+        # purchases, so end_time falls back to the current time.
+        purchase = create_purchase(link: product, price_cents: product.price_cents, is_original_subscription_purchase: true,
+                                   subscription:, succeeded_at: Time.current)
+        purchase.update!(succeeded_at: Time.current)
+        assert_equal Time.current, subscription.end_time_of_subscription
+      end
+    end
+  end
+
+  test "#end_time_of_subscription is Time.current for test subscription without succeeded_at set" do
+    VCR.use_cassette("Subscription/_end_time_of_subscription/is_Time_current_for_test_subscription_without_succeeded_at_set") do
+      freeze_time do
+        product = create_membership_product(subscription_duration: :quarterly)
+        subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product, is_test_subscription: true)
+        # As above, RSpec's bogus `state:` left this a plain successful sale.
+        create_purchase(link: product, price_cents: product.price_cents, is_original_subscription_purchase: true, subscription:)
+        assert_equal Time.current, subscription.end_time_of_subscription
+      end
+    end
+  end
+
+  test "#end_time_of_subscription is Time.current when there are no successful purchases" do
+    VCR.use_cassette("Subscription/_end_time_of_subscription/is_Time_current_when_there_are_no_successful_purchases") do
+      freeze_time do
+        product = create_membership_product(subscription_duration: :quarterly)
+        subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: product)
+        create_purchase(link: product, price_cents: product.price_cents, is_original_subscription_purchase: true, subscription:, purchase_state: "in_progress")
+        assert_equal Time.current, subscription.end_time_of_subscription
+      end
+    end
+  end
+
+  test "#end_time_of_subscription returns the time the free trial ends during the free trial" do
+    purchase = create_free_trial_membership_purchase
+    subscription = purchase.subscription
+    assert_equal subscription.free_trial_ends_at, subscription.end_time_of_subscription
+  end
+
+  test "#end_time_of_subscription returns the time the free trial ends after the free trial" do
+    purchase = create_free_trial_membership_purchase
+    subscription = purchase.subscription
+    travel_to(1.week.from_now) do
+      assert_equal subscription.free_trial_ends_at, subscription.end_time_of_subscription
+    end
+  end
+
+  test "#end_time_of_subscription returns the current time if it is the only refunded/chargedback purchase" do
+    freeze_time do
+      purchase = create_membership_purchase
+      subscription = purchase.subscription
+      purchase.update!(stripe_refunded: true)
+      assert_equal Time.current, subscription.end_time_of_subscription
+
+      purchase.update!(stripe_refunded: false, chargeback_date: 1.day.ago)
+      assert_equal Time.current, subscription.end_time_of_subscription
+    end
+  end
+
+  test "#end_time_of_subscription returns the current time if the last paid period has lapsed" do
+    purchase = create_membership_purchase
+    subscription = purchase.subscription
+    end_time = purchase.succeeded_at + subscription.period
+    later_purchase = create_purchase(subscription:, link: subscription.link, stripe_refunded: true)
+    assert_equal end_time, subscription.end_time_of_subscription
+
+    later_purchase.update!(stripe_refunded: false, chargeback_date: 1.day.ago)
+    assert_equal end_time, subscription.end_time_of_subscription
+  end
+
+  test "#end_time_of_subscription returns the end time based on a prior purchase that covers the current time" do
+    purchase = create_membership_purchase
+    subscription = purchase.subscription
+    end_time = purchase.succeeded_at + subscription.period
+    later_purchase = create_purchase(subscription:, link: subscription.link, stripe_refunded: true)
+    assert_equal end_time, subscription.end_time_of_subscription
+
+    later_purchase.update!(stripe_refunded: false, chargeback_date: 1.day.ago)
+    assert_equal end_time, subscription.end_time_of_subscription
+  end
+
+  # --- #send_renewal_reminders? / #send_renewal_reminder_at ------------------
+
+  test "#send_renewal_reminders? returns false when feature membership_renewal_reminders is disabled" do
+    VCR.use_cassette("Subscription/_send_renewal_reminders_/returns_false_when_feature_membership_renewal_reminders_is_disabled") do
+      setup_subscription(recurrence: BasePrice::Recurrence::QUARTERLY)
+      assert_equal false, @subscription.send_renewal_reminders?
+    end
+  end
+
+  test "#send_renewal_reminders? returns true when feature membership_renewal_reminders is enabled" do
+    VCR.use_cassette("Subscription/_send_renewal_reminders_/returns_true_when_feature_membership_renewal_reminders_is_enabled") do
+      setup_subscription(recurrence: BasePrice::Recurrence::QUARTERLY)
+      Feature.activate_user(:membership_renewal_reminders, @subscription.seller)
+      assert_equal true, @subscription.send_renewal_reminders?
+    end
+  end
+
+  test "#send_renewal_reminder_at returns one day prior when the subscription is monthly" do
+    VCR.use_cassette("Subscription/_send_renewal_reminder_at/when_the_subscription_is_monthly/returns_one_day_prior") do
+      setup_subscription(recurrence: BasePrice::Recurrence::MONTHLY)
+      travel_to(Time.current) do
+        @original_purchase.update!(succeeded_at: Time.current)
+        assert_equal 1.month.from_now - 1.day, @subscription.send_renewal_reminder_at
+      end
+    end
+  end
+
+  test "#send_renewal_reminder_at returns seven days prior when the subscription is quarterly" do
+    VCR.use_cassette("Subscription/_send_renewal_reminder_at/when_the_subscription_is_quarterly/returns_seven_days_prior") do
+      setup_subscription(recurrence: BasePrice::Recurrence::QUARTERLY)
+      travel_to(Time.current) do
+        @original_purchase.update!(succeeded_at: Time.current)
+        assert_equal 3.months.from_now - 7.days, @subscription.send_renewal_reminder_at
+      end
+    end
+  end
+
+  test "#send_renewal_reminder_at returns seven days prior when the subscription is yearly" do
+    VCR.use_cassette("Subscription/_send_renewal_reminder_at/when_the_subscription_is_yearly/returns_seven_days_prior") do
+      setup_subscription(recurrence: BasePrice::Recurrence::YEARLY)
+      travel_to(Time.current) do
+        @original_purchase.update!(succeeded_at: Time.current)
+        assert_equal 1.year.from_now - 7.days, @subscription.send_renewal_reminder_at
+      end
+    end
+  end
+
+  test "#send_renewal_reminder_at returns seven days prior when the subscription is every two years" do
+    VCR.use_cassette("Subscription/_send_renewal_reminder_at/when_the_subscription_is_every_two_years/returns_seven_days_prior") do
+      setup_subscription(recurrence: BasePrice::Recurrence::EVERY_TWO_YEARS)
+      travel_to(Time.current) do
+        @original_purchase.update!(succeeded_at: Time.current)
+        assert_equal 2.years.from_now - 7.days, @subscription.send_renewal_reminder_at
+      end
+    end
+  end
+
+  # --- #end_time_of_last_paid_period -----------------------------------------
+
+  def end_time_of_last_paid_period_context
+    @last_successful_purchase_at = Time.utc(2020, 2, 1)
+    @original_purchase = create_membership_purchase(succeeded_at: Time.utc(2020, 1, 1))
+    @subscription = @original_purchase.subscription
+    create_purchase(link: @subscription.link, subscription: @subscription, succeeded_at: Time.utc(2020, 3, 1), stripe_refunded: true)
+    create_purchase(link: @subscription.link, subscription: @subscription, succeeded_at: Time.utc(2020, 4, 1), purchase_state: "failed")
+    create_purchase(link: @subscription.link, subscription: @subscription, succeeded_at: Time.utc(2020, 6, 1), chargeback_date: Time.utc(2020, 6, 1))
+  end
+
+  test "#end_time_of_last_paid_period returns the paid-through time of the most recent successful, not charged back, fully refunded, or deleted purchase" do
+    end_time_of_last_paid_period_context
+    create_purchase(link: @subscription.link, subscription: @subscription, succeeded_at: @last_successful_purchase_at)
+    assert_equal @last_successful_purchase_at + @subscription.period, @subscription.reload.end_time_of_last_paid_period
+  end
+
+  test "#end_time_of_last_paid_period returns the paid-through time of a partially refunded purchase if that is the most recent successful purchase" do
+    end_time_of_last_paid_period_context
+    create_purchase(link: @subscription.link, subscription: @subscription, stripe_partially_refunded: true, succeeded_at: @last_successful_purchase_at)
+    assert_equal @last_successful_purchase_at + @subscription.period, @subscription.end_time_of_last_paid_period
+  end
+
+  test "#end_time_of_last_paid_period returns the paid-through time of a chargedback purchase if it is the most recent successful and the chargeback was reversed" do
+    end_time_of_last_paid_period_context
+    create_purchase(link: @subscription.link, subscription: @subscription, chargeback_date: 5.months.ago, chargeback_reversed: true, succeeded_at: @last_successful_purchase_at)
+    assert_equal @last_successful_purchase_at + @subscription.period, @subscription.end_time_of_last_paid_period
+  end
+
+  test "#end_time_of_last_paid_period returns the free trial termination time if there are no successful charges" do
+    end_time_of_last_paid_period_context
+    @original_purchase.update!(purchase_state: "not_charged", succeeded_at: nil)
+    free_trial_ends_at = @original_purchase.created_at + 1.week
+    @subscription.update!(free_trial_ends_at:)
+    assert_equal free_trial_ends_at, @subscription.reload.end_time_of_last_paid_period
+  end
+
+  # --- #last_successful_charge_at --------------------------------------------
+
+  test "#last_successful_charge_at returns the succeeded_at time of the most recent successful purchase" do
+    subscription = create_subscription
+    purchase = create_purchase(link: subscription.link, subscription:, is_original_subscription_purchase: true, succeeded_at: Time.current)
+    assert_equal purchase.succeeded_at, subscription.last_successful_charge_at
+  end
+
+  test "#last_successful_charge_at returns the succeeded_at time of the most recent successful test purchase" do
+    subscription = create_subscription(is_test_subscription: true)
+    create_purchase(link: subscription.link, subscription:, is_original_subscription_purchase: true, purchase_state: "test_successful", succeeded_at: 1.day.ago)
+    purchase = create_purchase(link: subscription.link, subscription:, purchase_state: "test_successful", succeeded_at: Time.current)
+    assert_equal purchase.succeeded_at, subscription.last_successful_charge_at
+  end
+
+  test "#last_successful_charge_at returns nil when there are no successful purchases" do
+    subscription = create_subscription
+    subscription.purchases.update_all(succeeded_at: nil)
+    assert_nil subscription.last_successful_charge_at
+  end
+
+  # --- #overdue_for_charge? --------------------------------------------------
+
+  test "#overdue_for_charge? returns false before the end of the subscription period" do
+    subscription = create_membership_purchase.subscription
+    assert_equal false, subscription.overdue_for_charge?
+  end
+
+  test "#overdue_for_charge? returns true after the end of the subscription period" do
+    subscription = create_membership_purchase.subscription
+    travel_to(1.month.from_now + 1.day) do
+      assert_equal true, subscription.overdue_for_charge?
+    end
+  end
+
+  test "#overdue_for_charge? returns true when there are no successful purchases" do
+    purchase = create_membership_purchase
+    subscription = purchase.subscription
+    purchase.update!(purchase_state: "failed")
+    assert_equal true, subscription.reload.overdue_for_charge?
+  end
+
+  test "#overdue_for_charge? returns false during a free trial" do
+    purchase = create_membership_purchase
+    subscription = purchase.subscription
+    purchase.update!(purchase_state: "not_charged", is_free_trial_purchase: true)
+    subscription.update!(free_trial_ends_at: 1.day.from_now)
+    assert_equal false, subscription.reload.overdue_for_charge?
+  end
+
+  test "#overdue_for_charge? returns true after a free trial" do
+    purchase = create_membership_purchase
+    subscription = purchase.subscription
+    purchase.update!(purchase_state: "not_charged", is_free_trial_purchase: true)
+    subscription.update!(free_trial_ends_at: 1.day.ago)
+    assert_equal true, subscription.reload.overdue_for_charge?
+  end
+
+  # --- #seconds_overdue_for_charge -------------------------------------------
+
+  test "#seconds_overdue_for_charge returns 0 for currently active subscriptions" do
+    subscription = create_membership_purchase(succeeded_at: 1.hour.ago).subscription
+    assert_equal 0, subscription.seconds_overdue_for_charge
+  end
+
+  test "#seconds_overdue_for_charge returns 0 for a subscription with no successful purchases" do
+    purchase = create_membership_purchase(succeeded_at: 1.hour.ago)
+    purchase.update!(purchase_state: "failed")
+    assert_equal 0, purchase.subscription.seconds_overdue_for_charge
+  end
+
+  test "#seconds_overdue_for_charge returns the seconds overdue for charge for a subscription overdue for a charge" do
+    purchase = create_membership_purchase(succeeded_at: 1.hour.ago)
+    subscription = purchase.subscription
+    travel_to purchase.succeeded_at + 1.month + 43.seconds do
+      assert_equal 43, subscription.seconds_overdue_for_charge
+    end
+  end
+
+  # --- #has_a_charge_in_progress? --------------------------------------------
+
+  test "#has_a_charge_in_progress? returns true if there's an associated purchase in progress otherwise returns false" do
+    purchase = create_membership_purchase(succeeded_at: 1.hour.ago)
+    subscription = purchase.subscription
+    create_recurring_membership_purchase(subscription:, purchase_state: "failed")
+
+    assert_equal false, subscription.has_a_charge_in_progress?
+
+    in_progress_purchase = create_recurring_membership_purchase(subscription:, purchase_state: "in_progress")
+    assert_equal true, subscription.has_a_charge_in_progress?
+
+    in_progress_purchase.update!(purchase_state: "successful")
+    assert_equal false, subscription.has_a_charge_in_progress?
+  end
+
+  # --- #prorated_discount_price_cents ----------------------------------------
+
+  def prorated_discount_context
+    @succeeded_at = Time.utc(2020, 0o4, 0o1)
+    product = create_membership_product_with_preset_tiered_pricing
+    tier = product.default_tier
+    tier_price = tier.prices.find_by(recurrence: BasePrice::Recurrence::MONTHLY) # $3.00
+    @subscription = create_subscription(link: product)
+    @purchase = create_purchase(link: product, subscription: @subscription, is_original_subscription_purchase: true, succeeded_at: @succeeded_at, price_cents: tier_price.price_cents)
+  end
+
+  test "#prorated_discount_price_cents returns 0 when there are no successful purchases" do
+    prorated_discount_context
+    @subscription.purchases.update_all(succeeded_at: nil)
+    assert_equal 0, @subscription.prorated_discount_price_cents
+  end
+
+  test "#prorated_discount_price_cents returns the full price before the start of the subscription period" do
+    prorated_discount_context
+    assert_equal 300, @subscription.prorated_discount_price_cents(calculate_as_of: @succeeded_at - 1.minute)
+  end
+
+  test "#prorated_discount_price_cents returns half the price halfway through the subscription period" do
+    prorated_discount_context
+    calculate_as_of = @succeeded_at + @subscription.current_billing_period_seconds / 2
+    assert_equal 150, @subscription.prorated_discount_price_cents(calculate_as_of:)
+  end
+
+  test "#prorated_discount_price_cents returns 0 after the end of the subscription period" do
+    prorated_discount_context
+    assert_equal 0, @subscription.prorated_discount_price_cents(calculate_as_of: Time.utc(2020, 0o5, 0o2))
+  end
+
+  test "#prorated_discount_price_cents returns half the price halfway through a month with less than 30 days" do
+    prorated_discount_context
+    @succeeded_at = Time.utc(2021, 0o2, 0o1)
+    @purchase.update!(succeeded_at: @succeeded_at)
+    assert_equal 150, @subscription.prorated_discount_price_cents(calculate_as_of: @succeeded_at + 2.weeks)
+  end
+
+  test "#prorated_discount_price_cents returns 0 after the end of a month with less than 30 days" do
+    prorated_discount_context
+    @succeeded_at = Time.utc(2021, 0o2, 0o1)
+    @purchase.update!(succeeded_at: @succeeded_at)
+    assert_equal 0, @subscription.prorated_discount_price_cents(calculate_as_of: Time.utc(2021, 0o3, 0o1))
+  end
+
+  test "#prorated_discount_price_cents prorates against the most recent successful charge when a renewal cycle's price diverges" do
+    prorated_discount_context
+    renewal_price_cents = 150 # signup was 300; this renewal charged half
+    renewal_succeeded_at = @succeeded_at + 1.month
+    create_purchase(link: @subscription.link, subscription: @subscription, succeeded_at: renewal_succeeded_at, price_cents: renewal_price_cents)
+    calculate_as_of = renewal_succeeded_at + @subscription.current_billing_period_seconds / 2
+    assert_equal renewal_price_cents / 2, @subscription.prorated_discount_price_cents(calculate_as_of:)
+  end
+
+  # --- #current_billing_period_seconds ---------------------------------------
+
+  SECONDS_PER_DAY = 24 * 60 * 60
+
+  test "#current_billing_period_seconds returns the correct number of seconds in a 28 day month" do
+    purchase = create_membership_purchase(succeeded_at: Time.utc(2021, 0o2, 0o1))
+    assert_equal 28 * SECONDS_PER_DAY, purchase.subscription.current_billing_period_seconds
+  end
+
+  test "#current_billing_period_seconds returns the correct number of seconds in a 29 day month" do
+    purchase = create_membership_purchase(succeeded_at: Time.utc(2020, 0o2, 0o1))
+    assert_equal 29 * SECONDS_PER_DAY, purchase.subscription.current_billing_period_seconds
+  end
+
+  test "#current_billing_period_seconds returns the correct number of seconds in a 30 day month" do
+    purchase = create_membership_purchase(succeeded_at: Time.utc(2021, 0o4, 0o1))
+    assert_equal 30 * SECONDS_PER_DAY, purchase.subscription.current_billing_period_seconds
+  end
+
+  test "#current_billing_period_seconds returns the correct number of seconds in a 31 day month" do
+    purchase = create_membership_purchase(succeeded_at: Time.utc(2021, 0o1, 0o1))
+    assert_equal 31 * SECONDS_PER_DAY, purchase.subscription.current_billing_period_seconds
+  end
+
+  test "#current_billing_period_seconds returns the correct number of seconds for a quarterly subscription starting in January" do
+    product = create_membership_product_with_preset_tiered_pricing(subscription_duration: "quarterly", recurrence_price_values: [
+                                                                     { "quarterly": { enabled: true, price: 3 } },
+                                                                     { "quarterly": { enabled: true, price: 5 } }
+                                                                   ])
+    purchase = create_membership_purchase(link: product, succeeded_at: Time.utc(2021, 0o1, 0o1))
+    assert_equal (31 + 28 + 31) * SECONDS_PER_DAY, purchase.subscription.current_billing_period_seconds
+  end
+
+  test "#current_billing_period_seconds returns the correct number of seconds for a quarterly subscription starting in June" do
+    product = create_membership_product_with_preset_tiered_pricing(subscription_duration: "quarterly", recurrence_price_values: [
+                                                                     { "quarterly": { enabled: true, price: 3 } },
+                                                                     { "quarterly": { enabled: true, price: 5 } }
+                                                                   ])
+    purchase = create_membership_purchase(link: product, succeeded_at: Time.utc(2021, 0o6, 0o1))
+    assert_equal (30 + 31 + 31) * SECONDS_PER_DAY, purchase.subscription.current_billing_period_seconds
+  end
+
+  test "#current_billing_period_seconds returns 0 with no successful charges" do
+    subscription = create_subscription
+    assert_equal 0, subscription.current_billing_period_seconds
+  end
+
+  test "#current_billing_period_seconds returns the duration of the free trial during a free trial" do
+    purchased_at = Time.utc(2021, 0o1, 0o1)
+    purchase = create_free_trial_membership_purchase(created_at: purchased_at)
+    subscription = purchase.subscription
+    subscription.update!(free_trial_ends_at: purchased_at + 1.week)
+    assert_equal 7 * SECONDS_PER_DAY, subscription.current_billing_period_seconds
+  end
+
+  # --- #termination_reason ---------------------------------------------------
+
+  test "#termination_reason returns the correct reason if subscription ended due to fixed period ending" do
+    terminated_at = Date.new(2020, 1, 1)
+    subscription = build_subscription(ended_at: terminated_at, deactivated_at: terminated_at)
+    assert_equal "fixed_subscription_period_ended", subscription.termination_reason
+  end
+
+  test "#termination_reason returns the correct reason if subscription was cancelled" do
+    terminated_at = Date.new(2020, 1, 1)
+    subscription = build_subscription(cancelled_at: terminated_at, deactivated_at: terminated_at)
+    assert_equal "cancelled", subscription.termination_reason
+  end
+
+  test "#termination_reason returns the correct reason if subscription was cancelled due to failed payments" do
+    terminated_at = Date.new(2020, 1, 1)
+    subscription = build_subscription(failed_at: terminated_at, deactivated_at: terminated_at)
+    assert_equal "failed_payment", subscription.termination_reason
+  end
+
+  test "#termination_reason returns nil if the subscription does not have a termination time set" do
+    subscription = build_subscription
+    assert_nil subscription.termination_reason
+  end
+
+  # --- payment options -------------------------------------------------------
+
+  test "payment options for a non-tiered membership subscription has the proper payment option" do
+    VCR.use_cassette("Subscription/payment_options/for_a_non-tiered_membership_subscription/has_the_proper_payment_option") do
+      user = create_user(credit_card: create_credit_card)
+      product = create_subscription_product
+      subscription = create_subscription(link: product, user:, created_at: 3.days.ago)
+      create_purchase(is_original_subscription_purchase: true, link: product, subscription:, purchaser: user)
+
+      assert_equal 1, subscription.payment_options.count
+      assert_equal product.prices.alive.is_buy.last, subscription.payment_options.last.price
+    end
+  end
+
+  test "payment options for a tiered membership subscription has the proper payment option" do
+    VCR.use_cassette("Subscription/payment_options/for_a_tiered_membership_subscription/has_the_proper_payment_option") do
+      user = create_user(credit_card: create_credit_card)
+      product = create_membership_product
+      subscription = create_subscription(link: product, user:, created_at: 3.days.ago)
+      create_purchase(is_original_subscription_purchase: true, link: product, subscription:, purchaser: user)
+
+      assert_equal 1, subscription.payment_options.count
+      assert_equal product.prices.alive.is_buy.last, subscription.payment_options.last.price
+    end
+  end
+
+  # --- #expected_completion_time ---------------------------------------------
+
+  test "#expected_completion_time returns nil for non fixed-length subscriptions" do
+    freeze_time do
+      subscription = create_membership_purchase.subscription
+      assert_nil subscription.expected_completion_time
+    end
+  end
+
+  test "#expected_completion_time calculates end_of_last_paid_period + period * remaining when some charges completed" do
+    freeze_time do
+      t0 = Time.utc(2023, 1, 1, 12, 0, 0)
+      travel_to(t0)
+      purchase = create_membership_purchase(succeeded_at: t0)
+      subscription = purchase.subscription
+      subscription.update!(charge_occurrence_count: 3)
+      assert_equal purchase.succeeded_at + 3.months, subscription.expected_completion_time
+    end
+  end
+
+  test "#expected_completion_time considers free_trial_ends_at during the free trial" do
+    freeze_time do
+      t0 = Time.utc(2023, 1, 1, 12, 0, 0)
+      travel_to(t0)
+      free_trial_purchase = create_free_trial_membership_purchase(created_at: t0)
+      subscription = free_trial_purchase.subscription
+      subscription.update!(charge_occurrence_count: 3)
+      assert_equal subscription.free_trial_ends_at + 3.months, subscription.expected_completion_time
+    end
+  end
+
+  test "#expected_completion_time equals end_of_last_paid_period when all required charges are completed" do
+    freeze_time do
+      t0 = Time.utc(2023, 1, 1, 12, 0, 0)
+      travel_to(t0)
+      purchase = create_membership_purchase(succeeded_at: t0)
+      subscription = purchase.subscription
+      subscription.update!(charge_occurrence_count: 3)
+      create_purchase(subscription:, link: subscription.link, succeeded_at: t0 + 1.month)
+      create_purchase(subscription:, link: subscription.link, succeeded_at: t0 + 2.months)
+      assert_equal true, subscription.charges_completed?
+      assert_equal subscription.end_time_of_last_paid_period, subscription.expected_completion_time
+    end
+  end
+
+  test "#expected_completion_time returns nil when there is no paid period to anchor on" do
+    freeze_time do
+      t0 = Time.utc(2023, 1, 1, 12, 0, 0)
+      travel_to(t0)
+      purchase = create_membership_purchase(succeeded_at: t0)
+      subscription = purchase.subscription
+      subscription.update!(charge_occurrence_count: 3)
+      purchase.update!(stripe_refunded: true)
+      assert_nil subscription.end_time_of_last_paid_period
+      assert_nil subscription.expected_completion_time
+    end
+  end
+
+  # --- #has_fixed_length? / #single_charge? / #charges_completed? ------------
+
+  test "#has_fixed_length? returns true if charge_occurrence_count is set" do
+    assert_equal true, build_subscription(charge_occurrence_count: 1).has_fixed_length?
+  end
+
+  test "#has_fixed_length? returns false if charge_occurrence_count is not set" do
+    assert_equal false, build_subscription.has_fixed_length?
+  end
+
+  test "#single_charge? returns true when the subscription only ever charges once" do
+    assert_equal true, build_subscription(charge_occurrence_count: 1).single_charge?
+  end
+
+  test "#single_charge? returns false when the subscription charges more than once" do
+    assert_equal false, build_subscription(charge_occurrence_count: 2).single_charge?
+  end
+
+  test "#single_charge? returns false when the subscription has no fixed length" do
+    assert_equal false, build_subscription.single_charge?
+  end
+
+  def charges_completed_context
+    product = create_membership_product
+    @subscription = create_subscription(link: product)
+    create_purchase(is_original_subscription_purchase: true, link: product, subscription: @subscription, purchaser: @subscription.user)
+    create_purchase(link: product, subscription: @subscription, purchaser: @subscription.user, purchase_state: "failed")
+  end
+
+  test "#charges_completed? returns true when the required number of charges are processed" do
+    charges_completed_context
+    @subscription.update_columns(charge_occurrence_count: 2)
+    create_purchase(link: @subscription.link, subscription: @subscription, purchaser: @subscription.user)
+    assert_equal true, @subscription.charges_completed?
+  end
+
+  test "#charges_completed? returns false when the required number of charges are not processed" do
+    charges_completed_context
+    @subscription.update_columns(charge_occurrence_count: 2)
+    assert_equal false, @subscription.charges_completed?
+  end
+
+  test "#charges_completed? returns false when the subscription has no set number of charges" do
+    charges_completed_context
+    assert_equal false, @subscription.charges_completed?
+  end
+
+  # --- #price ----------------------------------------------------------------
+
+  test "#price uses the last_payment_option_id column if it's not nil" do
+    payment_option = create_payment_option
+    subscription = create_subscription
+    subscription.payment_options.delete_all
+    subscription.update_columns(last_payment_option_id: payment_option.id)
+    assert_equal payment_option.price, subscription.reload.price
+  end
+
+  test "#price uses the 'payment_options.alive.last' query if last_payment_option is nil" do
+    subscription = create_subscription
+    subscription.update_columns(last_payment_option_id: nil)
+    assert_equal subscription.payment_options.alive.last.price, subscription.price
+  end
+
+  # --- #current_subscription_price_cents -------------------------------------
+
+  test "#current_subscription_price_cents returns the original purchase displayed price when no limited-duration offer code" do
+    @subscription.original_purchase.update!(displayed_price_cents: 1234)
+    assert_equal 1234, @subscription.current_subscription_price_cents
+  end
+
+  def limited_duration_offer_code_context
+    @offer_code = create_offer_code(products: [@product], amount_cents: 100, duration_in_billing_cycles: 1)
+    @purchase.update!(offer_code: @offer_code, displayed_price_cents: 900)
+    @purchase.create_purchase_offer_code_discount!(offer_code: @offer_code, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 1000, duration_in_billing_cycles: 1)
+    @subscription.reload
+  end
+
+  test "#current_subscription_price_cents returns the pre-discount price when the discount's duration has elapsed" do
+    limited_duration_offer_code_context
+    assert_equal 1000, @subscription.current_subscription_price_cents
+  end
+
+  test "#current_subscription_price_cents returns the displayed price when the discount's duration has not elapsed" do
+    limited_duration_offer_code_context
+    @purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+    assert_equal 900, @subscription.current_subscription_price_cents
+  end
+
+  def installment_plan_price_context
+    @ip_product = create_product(name: "Awesome product", user: @seller, price_cents: 1000)
+    create_product_installment_plan(link: @ip_product, number_of_installments: 3)
+    @ip_subscription = create_subscription(link: @ip_product, is_installment_plan: true)
+  end
+
+  test "#current_subscription_price_cents installment plans no discounts returns the next installment price" do
+    installment_plan_price_context
+    purchase = create_installment_plan_purchase(subscription: @ip_subscription, link: @ip_product)
+    assert_equal 334, purchase.price_cents
+    assert_equal 333, @ip_subscription.current_subscription_price_cents
+  end
+
+  test "#current_subscription_price_cents installment plans no discounts returns the last installment price when the installment plan is completed" do
+    installment_plan_price_context
+    create_installment_plan_purchase(subscription: @ip_subscription, link: @ip_product)
+    create_recurring_installment_plan_purchase(subscription: @ip_subscription, link: @ip_product)
+    create_recurring_installment_plan_purchase(subscription: @ip_subscription, link: @ip_product)
+    assert_equal true, @ip_subscription.charges_completed?
+    assert_equal 333, @ip_subscription.current_subscription_price_cents
+  end
+
+  test "#current_subscription_price_cents installment plans with a discount applies to all installments even if it's only for one membership cycle" do
+    installment_plan_price_context
+    offer_code = create_offer_code(products: [@ip_product], amount_cents: 100, duration_in_billing_cycles: 1)
+    purchase = create_installment_plan_purchase(subscription: @ip_subscription, link: @ip_product, offer_code:)
+    assert_equal 300, purchase.price_cents
+    assert_equal 300, @ip_subscription.current_subscription_price_cents
+  end
+
+  test "#current_subscription_price_cents installment plans legacy plan without a snapshot keeps charging the cached discounted price after offer code deleted" do
+    installment_plan_price_context
+    offer_code = create_offer_code(products: [@ip_product], amount_cents: 100)
+    purchase = create_installment_plan_purchase(subscription: @ip_subscription, link: @ip_product, offer_code:)
+    # Legacy installment subscriptions predate snapshots; drop it so the price
+    # is recomputed from the (deleted) offer code via the cached discount.
+    PaymentOption.where(subscription_id: @ip_subscription.id).each { |po| po.installment_plan_snapshot&.destroy }
+
+    assert_equal 300, Subscription.find(@ip_subscription.id).current_subscription_price_cents
+
+    offer_code.mark_deleted!
+
+    assert_equal 300, Purchase.find(purchase.id).minimum_paid_price_cents
+    fresh_subscription = Subscription.find(@ip_subscription.id)
+    assert_equal 300, fresh_subscription.current_subscription_price_cents
+    assert_equal 300, fresh_subscription.build_purchase.perceived_price_cents
+  end
+
+  test "#current_subscription_price_cents installment plans keeps charging the snapshot price when the product price later drops below a cached discount" do
+    installment_plan_price_context
+    offer_code = create_offer_code(products: [@ip_product], amount_cents: 200)
+    create_installment_plan_purchase(subscription: @ip_subscription, link: @ip_product, offer_code:)
+
+    agreed_price = Subscription.find(@ip_subscription.id).current_subscription_price_cents
+    assert agreed_price > 0
+
+    @ip_product.default_price.update!(price_cents: 100)
+    offer_code.mark_deleted!
+
+    assert_equal agreed_price, Subscription.find(@ip_subscription.id).current_subscription_price_cents
+  end
+
+  # --- #current_plan_displayed_price_cents -----------------------------------
+
+  test "#current_plan_displayed_price_cents non-tiered memberships returns the original purchase displayed price" do
+    @subscription.original_purchase.update!(displayed_price_cents: 1234)
+    assert_equal 1234, @subscription.reload.current_subscription_price_cents
+  end
+
+  def current_plan_tiered_context
+    @cpd_product = create_membership_product_with_preset_tiered_pricing
+    @cpd_tier = @cpd_product.default_tier
+    @cpd_tier_price = @cpd_tier.prices.find_by(recurrence: BasePrice::Recurrence::MONTHLY) # $3.00
+    @cpd_subscription = create_subscription(link: @cpd_product)
+    @cpd_purchase = create_purchase(link: @cpd_product, subscription: @cpd_subscription, is_original_subscription_purchase: true, price_cents: @cpd_tier_price.price_cents)
+  end
+
+  test "#current_plan_displayed_price_cents tiered non-PWYW tier returns the original purchase displayed price" do
+    current_plan_tiered_context
+    @cpd_subscription.original_purchase.update!(displayed_price_cents: 1234)
+    assert_equal 1234, @cpd_subscription.current_subscription_price_cents
+  end
+
+  test "#current_plan_displayed_price_cents tiered PWYW tier returns the tier minimum price if it is lower than the current subscription price" do
+    current_plan_tiered_context
+    @cpd_tier.update!(customizable_price: true)
+    original_price = @cpd_tier_price.price_cents
+    @cpd_tier_price.update!(price_cents: original_price - 100)
+    assert_equal original_price, @cpd_subscription.current_subscription_price_cents
+  end
+
+  test "#current_plan_displayed_price_cents tiered PWYW tier returns the current subscription price if it is lower than the tier price" do
+    current_plan_tiered_context
+    @cpd_tier.update!(customizable_price: true)
+    new_price = @cpd_tier_price.price_cents - 100
+    @cpd_subscription.original_purchase.update!(displayed_price_cents: new_price)
+    assert_equal new_price, @cpd_subscription.current_subscription_price_cents
+  end
+
+  test "#current_plan_displayed_price_cents tiered with offer code returns the cached pre-discount price when the purchase has cached offer code details" do
+    current_plan_tiered_context
+    offer_code = create_offer_code(products: [@cpd_product], amount_cents: 100)
+    @cpd_purchase.update!(offer_code:)
+    @cpd_subscription.reload
+    @cpd_purchase.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 500)
+    assert_equal 500, @cpd_subscription.current_plan_displayed_price_cents
+  end
+
+  test "#current_plan_displayed_price_cents tiered with offer code uses the existing offer code to calculate the pre-discount cost when not cached" do
+    current_plan_tiered_context
+    offer_code = create_offer_code(products: [@cpd_product], amount_cents: 100)
+    @cpd_purchase.update!(offer_code:)
+    @cpd_subscription.reload
+    assert_equal 400, @cpd_subscription.current_plan_displayed_price_cents # $3 paid price + $1 discount
+  end
+
+  test "#current_plan_displayed_price_cents tiered with a 100% off offer code and no cache falls back to the purchase displayed price" do
+    current_plan_tiered_context
+    offer_code = create_offer_code(products: [@cpd_product], amount_cents: 100)
+    @cpd_purchase.update!(offer_code:)
+    @cpd_subscription.reload
+    offer_code.update!(amount_cents: 0, amount_percentage: 100)
+    @cpd_purchase.update!(displayed_price_cents: 0)
+    assert_equal 0, @cpd_subscription.current_plan_displayed_price_cents
+  end
 end

@@ -339,13 +339,33 @@ module ModelFactories
 
   # An original subscription sale (mirrors :membership_purchase). Defaults to a
   # plain non-tiered recurring product, which is enough for code that only cares
-  # about the subscription; pass a tiered membership product + variant_attributes
-  # (and an explicit price_cents, since tier pricing lives on the tiers) for
-  # tier-aware cases. An explicit subscription is reused rather than replaced.
-  def create_membership_purchase(link: nil, subscription: nil, created_at: nil, **attrs)
+  # about the subscription; pass a tiered membership product for tier-aware
+  # cases. Like the factory, the variant defaults to the product's tiers (or the
+  # explicit `tier:`). An explicit subscription is reused rather than replaced.
+  def create_membership_purchase(link: nil, subscription: nil, tier: nil, created_at: nil, **attrs)
     link ||= create_subscription_product
     subscription ||= create_subscription(link:)
-    create_purchase(link:, subscription:, is_original_subscription_purchase: true, created_at:, **attrs)
+    variant_attributes = attrs.delete(:variant_attributes)
+    variant_attributes ||= tier ? [tier] : link.tiers.presence
+    create_purchase(link:, subscription:, is_original_subscription_purchase: true, created_at:, variant_attributes:, **attrs)
+  end
+
+  # A recurring (non-original) membership charge (mirrors
+  # :recurring_membership_purchase).
+  def create_recurring_membership_purchase(subscription: nil, link: nil, **attrs)
+    link ||= subscription&.link || create_membership_product
+    subscription ||= create_subscription(link:)
+    variant_attributes = attrs.delete(:variant_attributes) || link.tiers.presence
+    create_purchase(link:, subscription:, is_original_subscription_purchase: false, variant_attributes:, **attrs)
+  end
+
+  # An unsaved subscription (mirrors `build(:subscription)`): no payment option is
+  # created, matching the factory's create-only before hook. Enough for the
+  # predicate methods (status, termination_reason, cancelled_by_seller?, …).
+  def build_subscription(link: nil, user: :default, **attrs)
+    link ||= create_product
+    user = create_user if user == :default
+    Subscription.new({ link:, user:, is_installment_plan: false }.merge(attrs))
   end
 
   # Subscriptions must have a payment_option before they validate, so build it
@@ -382,6 +402,13 @@ module ModelFactories
     end
     subscription.save!
     subscription
+  end
+
+  # A subscription payment option (mirrors :payment_option): priced at the
+  # product's default price unless overridden.
+  def create_payment_option(subscription: nil, price: nil, **attrs)
+    subscription ||= create_subscription
+    PaymentOption.create!({ subscription:, price: price || subscription.link.default_price }.merge(attrs))
   end
 
   # A pending/applied plan change on a subscription (mirrors
