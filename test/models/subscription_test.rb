@@ -450,10 +450,11 @@ class SubscriptionTest < ActiveSupport::TestCase
   test "#installments failed subscriptions does not return installment created in the month that subscription failed" do
     VCR.use_cassette("Subscription/_installments/failed_subscriptions/does_not_return_installment_created_in_the_month_that_subscription_failed") do
       build_failed_installments_context
-      # The RSpec original references @end_of_month_cancelled, which is never
-      # assigned (a typo for @end_of_month_failed) and so is nil. Preserved 1:1 —
-      # the assertion is trivially true either way.
-      assert_not_includes @subscription.installments, @end_of_month_cancelled
+      # The RSpec original asserted against @end_of_month_cancelled — an unassigned
+      # ivar (typo for @end_of_month_failed) that evaluated to nil, so the assertion
+      # was trivially true. Assert against the real record so the test verifies that
+      # installments published in the failure month are excluded.
+      assert_not_includes @subscription.installments, @end_of_month_failed
     end
   end
 
