@@ -86,16 +86,35 @@ class FollowersController < ApplicationController
 
     if @follower.nil? || @follower.errors.present?
       message = @follower&.errors&.full_messages&.to_sentence || "Something went wrong. Please try to follow the creator again."
-      flash[:warning] = message
-      user = User.find_by_external_id(params[:seller_id])
-      e404 unless user.try(:username)
-      return redirect_to user.profile_url, allow_other_host: true
+      respond_to do |format|
+        format.html do
+          flash[:warning] = message
+          user = User.find_by_external_id(params[:seller_id])
+          e404 unless user.try(:username)
+          redirect_to user.profile_url, allow_other_host: true
+        end
+        # Serves the gumroad:follow bridge on custom HTML pages, where the
+        # trusted wrapper fetches this endpoint and relays the outcome into the
+        # sandboxed page — a redirect would be invisible there. Mirrors the JSON
+        # shape of #create. An unknown seller_id 404s like the HTML branch.
+        format.json do
+          if @follower.nil? && User.find_by_external_id(params[:seller_id]).nil?
+            e404_json
+          else
+            render json: { success: false, message: }, status: :unprocessable_entity
+          end
+        end
+      end
+      return
     end
 
     message = @follower.confirmed? ?
       "You are now following #{@follower.user.name_or_username}!" :
       "Check your inbox to confirm your follow request."
-    render inertia: "Followers/FromEmbedForm", props: { success: true, message: }
+    respond_to do |format|
+      format.html { render inertia: "Followers/FromEmbedForm", props: { success: true, message: } }
+      format.json { render json: { success: true, message: } }
+    end
   end
 
   def confirm

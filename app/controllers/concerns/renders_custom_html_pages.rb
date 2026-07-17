@@ -155,6 +155,123 @@ module RendersCustomHtmlPages
       HTML
     end
 
+    # Injected into the sandboxed landing document at serve time (never authored
+    # by the seller), alongside the navigation bridge above. The sandbox blocks
+    # every direct path to the follow endpoint on purpose — the sanitizer strips
+    # form actions and the CSP sets connect-src 'none' — so an email-capture
+    # form inside the page can't reach gumroad.com on its own. Instead of
+    # weakening any of that, this helper asks the trusted parent wrapper to do
+    # the follow: it intercepts submits of forms the seller marks with
+    # data-gumroad-follow, posts the typed email up as a gumroad:follow message,
+    # and reflects the wrapper's success/failure reply back into the page. The
+    # parent supplies the seller id from its own context and re-validates
+    # everything, so (as with gumroad:navigate) nothing in here is load-bearing
+    # for security — a page script could post the same message itself, and
+    # script-driven pages are welcome to do exactly that and listen for the
+    # gumroad:follow:result window event.
+    def custom_html_follow_bridge_script
+      <<~HTML
+        <script data-cfasync="false" data-gumroad-follow-bridge>
+          (function () {
+            // Viewed directly (not framed) there is no trusted parent to ask,
+            // so leave forms alone.
+            if (window.parent === window) return;
+            document.addEventListener("submit", function (e) {
+              var form = e.target && e.target.closest ? e.target.closest("form[data-gumroad-follow]") : null;
+              if (!form || e.defaultPrevented) return;
+              e.preventDefault();
+              var input = form.querySelector('input[type="email"], input[name="email"]');
+              var email = input ? String(input.value || "").trim() : "";
+              parent.postMessage({ type: "gumroad:follow", email: email }, "*");
+            }, true);
+            window.addEventListener("message", function (e) {
+              // Only the parent wrapper's reply drives the confirmation UI —
+              // nested iframes (e.g. embedded video players) can't spoof it.
+              if (e.source !== window.parent) return;
+              var d = e.data;
+              if (!d || typeof d !== "object" || d.type !== "gumroad:follow:result") return;
+              var success = d.success === true;
+              var message = typeof d.message === "string" ? d.message : "";
+              var forms = document.querySelectorAll("form[data-gumroad-follow]");
+              for (var i = 0; i < forms.length; i++) {
+                forms[i].setAttribute("data-gumroad-follow-state", success ? "success" : "error");
+              }
+              var slots = document.querySelectorAll("[data-gumroad-follow-message]");
+              for (var j = 0; j < slots.length; j++) {
+                slots[j].textContent = message;
+              }
+              // For pages that manage their own UI (popups etc.) instead of
+              // using the declarative hooks above.
+              try {
+                window.dispatchEvent(new CustomEvent("gumroad:follow:result", { detail: { success: success, message: message } }));
+              } catch (_err) {}
+            });
+          })();
+        </script>
+      HTML
+    end
+
+    # The trusted-wrapper half of the follow bridge, shared by the profile
+    # wrapper (UsersController) and the slugged-page wrapper
+    # (UserPagesController) so the two surfaces can't drift. It listens for
+    # gumroad:follow messages from the sandboxed landing iframe and POSTs the
+    # email to the public follow endpoint. The iframe content is seller-authored
+    # and untrusted, so this side is the security boundary:
+    # - only messages from the landing frame's opaque origin are accepted;
+    # - the seller id comes exclusively from this wrapper's render context —
+    #   a seller_id in the message is ignored, so the page can never subscribe
+    #   a visitor to someone else's audience;
+    # - the email is treated as an opaque string and validated server-side
+    #   (the endpoint already serves third-party embed forms and is throttled
+    #   by Rack::Attack; follows still require email confirmation).
+    # The outcome is posted back into the frame so the page can show a
+    # confirmation. targetOrigin must be "*" because the sandboxed frame's
+    # origin is opaque — the reply carries only a boolean and a public message.
+    def custom_html_follow_wrapper_script(seller_external_id:, nonce:)
+      seller_id_json = ERB::Util.json_escape(seller_external_id.to_json)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false" data-gumroad-follow-wrapper>
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var SELLER_ID = #{seller_id_json};
+            var inFlight = false;
+            window.addEventListener("message", function (e) {
+              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              var d = e.data;
+              if (!d || typeof d !== "object" || d.type !== "gumroad:follow") return;
+              function reply(success, message) {
+                frame.contentWindow.postMessage({ type: "gumroad:follow:result", success: success, message: message }, "*");
+              }
+              var email = typeof d.email === "string" ? d.email.trim() : "";
+              // Real validation happens server-side; this only rejects shapes
+              // that can't possibly be an address so we don't burn a request.
+              if (!email || email.length > 320 || email.indexOf("@") === -1) {
+                reply(false, "Please enter a valid email address.");
+                return;
+              }
+              if (inFlight) return;
+              inFlight = true;
+              function done(success, message) { inFlight = false; reply(success, message); }
+              fetch("/follow_from_embed_form", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ seller_id: SELLER_ID, email: email })
+              }).then(function (r) {
+                return r.json().then(
+                  function (data) { done(data && data.success === true, data && typeof data.message === "string" ? data.message : "Something went wrong. Please try again."); },
+                  // Non-JSON response — e.g. a Rack::Attack 429 while throttled.
+                  function () { done(false, "Something went wrong. Please try again later."); }
+                );
+              }, function () {
+                done(false, "Something went wrong. Please try again.");
+              });
+            });
+          })();
+        </script>
+      HTML
+    end
+
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end

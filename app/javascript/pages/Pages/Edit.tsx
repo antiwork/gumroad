@@ -32,11 +32,15 @@ type PageProps = {
 };
 
 // The copy-paste prompt for building a page with an agent. The CLI commands it
-// references are the same ones a seller can run by hand.
+// references are the same ones a seller can run by hand. The follow-form
+// instructions match the serve-time gumroad:follow bridge: a form marked
+// data-gumroad-follow gets wired to the seller's email audience automatically.
+const followFormHint = `If I want an email signup, add a \`<form data-gumroad-follow>\` with an email input and an element marked \`data-gumroad-follow-message\` for the confirmation text — Gumroad wires the form to my email audience automatically.`;
+
 const agentPrompt = (username: string, slug: string | null, isProfile: boolean) =>
   isProfile
-    ? `Build and publish a custom landing page for my Gumroad profile (@${username}). Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push profile\`. The page replaces my entire profile, so link visitors to my product pages instead of adding checkout elements.`
-    : `Build and publish a custom page for my Gumroad store (@${username})${slug ? ` at /${slug}` : ""}. Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push ${slug ?? "<slug>"}\`.`;
+    ? `Build and publish a custom landing page for my Gumroad profile (@${username}). Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push profile\`. The page replaces my entire profile, so link visitors to my product pages instead of adding checkout elements. ${followFormHint}`
+    : `Build and publish a custom page for my Gumroad store (@${username})${slug ? ` at /${slug}` : ""}. Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push ${slug ?? "<slug>"}\`. ${followFormHint}`;
 
 export default function PagesEdit() {
   const { page, is_profile, is_new, username, profile_url } = typia.assert<PageProps>(usePage().props);

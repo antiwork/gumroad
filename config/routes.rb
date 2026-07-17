@@ -1350,6 +1350,12 @@ Rails.application.routes.draw do
         get "/:id/confirm", to: "followers#confirm"
       end
     end
+    # The gumroad:follow bridge on custom HTML pages fetches this relative to
+    # the wrapper page, which is served on the seller's subdomain or custom
+    # domain — hosts this block routes, not GumroadDomainConstraint (where the
+    # canonical route lives). Rack::Attack throttles match on the request path,
+    # so the /follow_from_embed_form limits apply here identically.
+    post "/follow_from_embed_form", to: "followers#from_embed_form"
 
     resources :consumption_analytics, only: [:create], format: :json
     resources :media_locations, only: [:create], format: :json

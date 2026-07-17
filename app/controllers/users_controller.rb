@@ -46,6 +46,7 @@ class UsersController < ApplicationController
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
       live_fields: params[:preview].present? && current_seller_owns_profile?,
       navigation_bridge: custom_html_navigation_bridge_script(allowed_hostnames: profile_store_hostnames(@user)),
+      follow_bridge: custom_html_follow_bridge_script,
     ).html_safe, layout: false
   end
 
@@ -243,7 +244,7 @@ class UsersController < ApplicationController
       hostnames.compact.uniq
     end
 
-    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "")
+    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "", follow_bridge: "")
       <<~HTML
         <!doctype html>
         <html>
@@ -257,6 +258,7 @@ class UsersController < ApplicationController
             <script id="gumroad-data" type="application/json">#{data_json}</script>
             #{custom_html}
             #{navigation_bridge}
+            #{follow_bridge}
             #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
           </body>
         </html>
@@ -329,6 +331,7 @@ class UsersController < ApplicationController
                 });
               })();
             </script>
+            #{custom_html_follow_wrapper_script(seller_external_id: user.external_id, nonce:)}
             #{live_reload}
           </body>
         </html>

@@ -46,6 +46,7 @@ class UserPagesController < ApplicationController
         <body>
           #{interpolated}
           #{custom_html_navigation_bridge_script(allowed_hostnames: page_store_hostnames)}
+          #{custom_html_follow_bridge_script}
         </body>
       </html>
     HTML
@@ -142,6 +143,7 @@ class UserPagesController < ApplicationController
                 });
               })();
             </script>
+            #{custom_html_follow_wrapper_script(seller_external_id: @user.external_id, nonce:)}
             #{live_reload}
           </body>
         </html>
