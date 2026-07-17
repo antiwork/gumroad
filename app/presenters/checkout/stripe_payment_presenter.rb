@@ -184,7 +184,7 @@ class Checkout::StripePaymentPresenter
     def client_confirm_props
       resolution = payment_method_resolver.resolve
       payment_method_types = resolution.payment_method_types
-      method_forced = method_forced_qa_shape?(items)
+      method_forced = method_forced_shape?(items)
       if method_forced
         # The EUR-only methods (iDEAL/Bancontact) never render on a USD-mode Payment Element —
         # Stripe hides methods that can't charge in the element's currency — so the QA surface
@@ -258,8 +258,10 @@ class Checkout::StripePaymentPresenter
         # Non-flagged sellers never produce a candidate (buyer_presentment_candidate? checks
         # the seller flags), so neither branch changes behavior for unflagged checkouts. The
         # card shape (2) runs in live mode since the production rollout; the method-forced
-        # shape (1) is still test-mode only (method_forced_qa_shape? checks the Stripe key).
-        supported = (method_forced_qa_shape?(items) && client_confirm_eligible?) ||
+        # shape (1) runs in live mode only for sellers with a launched forced-currency
+        # method (method_forced_shape? checks the per-method launch flags via
+        # Checkout::BuyerCurrencyEligibility.forced_currency_surface_available?).
+        supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
       end
@@ -289,21 +291,26 @@ class Checkout::StripePaymentPresenter
       item[:product_currency] == Currency::USD
     end
 
-    # The method-forced QA surface's cart shape, mirroring the gates under which
-    # Checkout::PaymentMethodResolver#forced_currency_test_mode_methods offers iDEAL/Bancontact:
-    # Stripe test mode + the seller's buyer-currency flags + a single item whose product is
-    # priced in a currency some payment method forces (EUR today — the eligibility service's
+    # The method-forced cart shape, mirroring the gates under which
+    # Checkout::PaymentMethodResolver#forced_currency_methods offers iDEAL/Bancontact:
+    # the seller's buyer-currency flags + a single item whose product is priced in a
+    # currency some payment method forces (EUR today — the eligibility service's
     # "direct listed amount" case, where the buyer pays the listed price as-is with no FX
-    # quote). Only this simple shape is supported by the QA surface; USD-priced products keep
-    # today's behavior. Inert in live mode and for non-flagged sellers by construction.
-    def method_forced_qa_shape?(items)
-      return false unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
+    # quote) + the surface being available (always in Stripe test mode for QA; in live
+    # mode only when a method forcing that currency has its per-method launch flag on —
+    # the #5362 Phase 4 ramp lever). Only this simple shape mounts the element in the
+    # forced currency; USD-priced products keep today's behavior.
+    def method_forced_shape?(items)
       return false unless items.one?
 
       item = items.first
       return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(item[:seller])
+      return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(item[:product_currency])
 
-      Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(item[:product_currency])
+      Checkout::BuyerCurrencyEligibility.forced_currency_surface_available?(
+        currency: item[:product_currency],
+        seller: item[:seller]
+      )
     end
 
     def method_forced_element_currency

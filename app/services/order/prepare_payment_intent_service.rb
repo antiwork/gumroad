@@ -262,8 +262,8 @@ class Order::PreparePaymentIntentService
     #   1. The buyer picked a method-forced local payment method (iDEAL/Bancontact —
     #      methods that can only charge in one currency).
     #   2. The buyer picked ANY other method (card, Link) on a Payment Element that was
-    #      mounted in a forced currency (the method-forced QA shape: single item priced
-    #      in a forced currency, seller flags on, test mode). The ConfirmationToken
+    #      mounted in a forced currency (the method-forced shape: single item priced
+    #      in a forced currency, seller flags on, surface available). The ConfirmationToken
     #      inherits the element's currency, so a canonical USD intent can never accept
     #      it — Stripe rejects the confirm with a currency mismatch.
     # Returns nil (canonical USD intent, no presentment rows — byte-for-byte today's
@@ -292,17 +292,20 @@ class Order::PreparePaymentIntentService
     end
 
     # The currency the Payment Element was mounted in when it differs from USD, derived
-    # from the same basis as Checkout::StripePaymentPresenter#method_forced_qa_shape?
-    # (test mode + seller flags + a single purchase whose product is priced in a currency
-    # some payment method forces). Nil everywhere else — flags off, live mode, USD-priced
-    # or multi-item carts — which keeps every other checkout on the canonical USD intent.
+    # from the same basis as Checkout::StripePaymentPresenter#method_forced_shape?
+    # (seller flags + surface availability + a single purchase whose product is priced in
+    # a currency some payment method forces). Nil everywhere else — flags off, no launched
+    # method for the currency in live mode, USD-priced or multi-item carts — which keeps
+    # every other checkout on the canonical USD intent.
     def element_mount_forced_currency
-      return nil unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       return nil unless purchases_to_charge.one?
 
       product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
-      product_currency if Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
+      return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
+      return nil unless Checkout::BuyerCurrencyEligibility.forced_currency_surface_available?(currency: product_currency, seller:)
+
+      product_currency
     end
 
     # Once the buyer confirmed on a forced-currency Payment Element — with a forced-currency
@@ -319,7 +322,7 @@ class Order::PreparePaymentIntentService
       if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?
         Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       else
-        # element_mount_forced_currency already checks the seller flags (and test mode).
+        # element_mount_forced_currency already checks the seller flags and surface availability.
         element_mount_forced_currency.present?
       end
     end
@@ -378,9 +381,9 @@ class Order::PreparePaymentIntentService
 
     # The buyer confirmed with a method-forced local method, so the intent must list that
     # method or Stripe rejects the (payment_method_types-scoped) ConfirmationToken. The
-    # resolver's launched set does not include iDEAL/Bancontact yet — a checkout only
-    # reaches this branch behind the eligibility service's test-mode flags — so append
-    # the confirmed method to the resolved set here rather than widening the resolver.
+    # resolver already lists launched forced-currency methods on this cart shape, but the
+    # append (deduped below) also covers the test-mode QA surface and keeps the confirmed
+    # method on the intent even if the resolver's inputs drift from the element mount.
     def intent_payment_method_types(presentment)
       return resolved_payment_method_types if presentment.nil?
 

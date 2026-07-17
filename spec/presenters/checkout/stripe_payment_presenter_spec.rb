@@ -723,7 +723,7 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
-    it "keeps today's USD element behavior for the same EUR-priced cart in live mode" do
+    it "keeps today's USD element behavior for the same EUR-priced cart in live mode when no local method is launched" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
@@ -732,6 +732,26 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     ensure
       deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "mounts the EUR element with only the launched local method in live mode when its launch flag is on" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(
+        payment_element_client_confirm_props(
+          currency: "eur",
+          presentment_amount_cents: 1500,
+          payment_method_types: %w[card link ideal],
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_ideal, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
     end
 
     it "selects the buyer-currency presentment Payment Element for a non-US buyer of a USD-priced product with the flags on" do
