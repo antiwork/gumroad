@@ -109,7 +109,6 @@
   },
   "overrides": {
     "@tiptap/extension-blockquote": "$@tiptap/starter-kit",
-    "@xmldom/xmldom": "^0.8.11",
     "@tiptap/extension-bold": "$@tiptap/starter-kit",
     "@tiptap/extension-bubble-menu": "$@tiptap/react",
     "@tiptap/extension-bullet-list": "$@tiptap/starter-kit",
