@@ -481,4 +481,361 @@ class SubscriptionTest < ActiveSupport::TestCase
       assert_equal 0, @subscription.installments.length
     end
   end
+
+  # --- #charge! --------------------------------------------------------------
+
+  test "#charge! uses the authenticated buyer when resolving charge discounts" do
+    ownership_product = create_product(user: @product.user)
+    authenticated_buyer = create_user
+    create_purchase(link: ownership_product, seller: @product.user, purchaser: authenticated_buyer, price_cents: ownership_product.price_cents)
+    offer_code = create_offer_code(
+      code: "authenticatedbuyer",
+      user: @product.user,
+      products: [@product],
+      ownership_products: [ownership_product],
+      existing_customers_only: true,
+      amount_cents: nil,
+      amount_percentage: 1,
+      currency_type: nil
+    )
+    # Short-circuit the actual charge: return the built purchase untouched so the
+    # test only exercises discount resolution (mirrors the RSpec stub of
+    # process_purchase!). No HTTP happens, so no cassette is needed here.
+    @subscription.define_singleton_method(:process_purchase!) { |purchase, *_args, **_kwargs| purchase }
+
+    new_purchase = @subscription.charge!(authenticated_offer_code_buyer: authenticated_buyer)
+
+    assert_equal offer_code, new_purchase.offer_code
+    assert_equal 1, new_purchase.purchase_offer_code_discount.offer_code_amount
+    assert_equal true, new_purchase.purchase_offer_code_discount.offer_code_is_percent
+  end
+
+  # The second RSpec `#charge!` describe adds a card to the subscriber before
+  # each example; replayed via cassette because card tokenization hits Stripe.
+  def charge_section_setup
+    @subscription.user.update!(credit_card: create_credit_card)
+  end
+
+  test "#charge! creates a new purchase row" do
+    VCR.use_cassette("Subscription/_charge_/creates_a_new_purchase_row") do
+      charge_section_setup
+      assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
+        @subscription.charge!
+      end
+    end
+  end
+
+  test "#charge! gives new purchase right attributes" do
+    VCR.use_cassette("Subscription/_charge_/gives_new_purchase_right_attributes") do
+      charge_section_setup
+      new_purchase = @subscription.charge!
+
+      assert_equal "successful", new_purchase.purchase_state
+      assert_equal @subscription, new_purchase.subscription
+      assert_equal @product, new_purchase.link
+      assert_equal @purchase.email, new_purchase.email
+      assert_equal @purchase.full_name, new_purchase.full_name
+      assert_equal @purchase.ip_address, new_purchase.ip_address
+      assert_equal @purchase.ip_country, new_purchase.ip_country
+      assert_equal @purchase.ip_state, new_purchase.ip_state
+      assert_equal @purchase.referrer, new_purchase.referrer
+      assert_equal @purchase.browser_guid, new_purchase.browser_guid
+      assert_equal false, new_purchase.is_original_subscription_purchase
+      assert_equal @product.price_cents, new_purchase.price_cents
+    end
+  end
+
+  test "#charge! charges stripe" do
+    VCR.use_cassette("Subscription/_charge_/charges_stripe") do
+      charge_section_setup
+      @subscription.charge!
+    end
+  end
+
+  test "#charge! creates a purchase event without copying the original buyer email forward" do
+    VCR.use_cassette("Subscription/_charge_/creates_a_purchase_event_without_copying_the_original_buyer_email_forward") do
+      charge_section_setup
+      create_event(purchase_id: @purchase.id, email: @purchase.email)
+      recurring_purchase = @subscription.charge!
+      purchase_event = Event.last
+      assert_equal true, purchase_event.is_recurring_subscription_charge
+      assert_equal recurring_purchase.id, purchase_event.purchase_id
+      assert_nil purchase_event.email
+    end
+  end
+
+  test "#charge! uses the previously saved payment instrument to charge an unregistered user's subscription" do
+    VCR.use_cassette("Subscription/_charge_/uses_the_previously_saved_payment_instrument_to_charge_an_unregistered_user_s_subscription") do
+      charge_section_setup
+      discover_cc = CreditCard.create(build_chargeable(card: StripePaymentMethodHelper.success_discover))
+      subscription = nil
+      travel_to(1.month.ago) do
+        subscription = create_subscription(user: nil, link: @product, credit_card: discover_cc)
+        create_purchase(is_original_subscription_purchase: true, link: @product, subscription:, credit_card: discover_cc)
+      end
+
+      assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
+        subscription.charge!
+      end
+
+      subscription.reload
+      latest_purchase = Purchase.last
+      assert_equal "successful", latest_purchase.purchase_state
+      assert_equal "**** **** **** 9424", latest_purchase.card_visual
+      assert_equal discover_cc, subscription.credit_card
+      assert_equal latest_purchase.credit_card, subscription.credit_card
+    end
+  end
+
+  test "#charge! uses the previously saved payment instrument to charge a registered user's subscription" do
+    VCR.use_cassette("Subscription/_charge_/uses_the_previously_saved_payment_instrument_to_charge_a_registered_user_s_subscription") do
+      charge_section_setup
+      user = create_user
+      discover_cc = CreditCard.create(build_chargeable(card: StripePaymentMethodHelper.success_discover))
+      user.credit_card = discover_cc
+      user.save!
+
+      subscription = nil
+      travel_to(1.month.ago) do
+        subscription = create_subscription(user:, link: @product, credit_card: discover_cc)
+        create_purchase(is_original_subscription_purchase: true, link: @product, subscription:, credit_card: discover_cc)
+      end
+
+      assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
+        subscription.charge!
+      end
+
+      subscription.reload
+      latest_purchase = Purchase.last
+      assert_equal "successful", latest_purchase.purchase_state
+      assert_equal "**** **** **** 9424", latest_purchase.card_visual
+      assert_equal discover_cc, subscription.credit_card
+      assert_equal latest_purchase.credit_card, subscription.credit_card
+    end
+  end
+
+  test "#charge! uses the payment instrument attached to the subscription in case the purchaser account does not have a saved payment instrument" do
+    VCR.use_cassette("Subscription/_charge_/uses_the_payment_instrument_attached_to_the_subscription_in_case_the_purchaser_account_does_not_have_a_saved_payment_instrument") do
+      charge_section_setup
+      user = create_user
+      discover_cc = CreditCard.create(build_chargeable(card: StripePaymentMethodHelper.success_discover), nil, user)
+
+      subscription = nil
+      travel_to(1.month.ago) do
+        subscription = create_subscription(user:, link: @product, credit_card: discover_cc)
+        create_purchase(is_original_subscription_purchase: true, link: @product, subscription:, credit_card: discover_cc)
+      end
+
+      assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
+        subscription.charge!
+      end
+
+      subscription.reload
+      latest_purchase = Purchase.last
+      assert_equal "successful", latest_purchase.purchase_state
+      assert_equal "**** **** **** 9424", latest_purchase.card_visual
+      assert_equal discover_cc, subscription.credit_card
+      assert_equal latest_purchase.credit_card, subscription.credit_card
+    end
+  end
+
+  test "#charge! with an Indian credit card uses the mandate associated with the saved credit card to successfully charge" do
+    VCR.use_cassette("Subscription/_charge_/with_an_Indian_credit_card/with_a_successful_mandate/uses_the_mandate_associated_with_the_saved_credit_card_to_successfully_charge") do
+      charge_section_setup
+      buyer = create_user
+      product = create_membership_product_with_preset_tiered_pricing(recurrence_price_values: [
+                                                                       { "monthly": { enabled: true, price: 5 } },
+                                                                       { "monthly": { enabled: true, price: 8 } }
+                                                                     ])
+      indian_cc = CreditCard.create(build_chargeable(card: StripePaymentMethodHelper.success_indian_card_mandate), nil, buyer)
+      indian_cc.update!(
+        json_data: { stripe_payment_intent_id: "pi_3SOdR0IBOqvOFDrf1MBxDys4" },
+        processor_payment_method_id: "pm_1SOdQxIBOqvOFDrfANv6cZO4",
+        stripe_customer_id: "cus_TLK5KncEpdGdIH"
+      )
+      subscription = create_subscription(link: product, user: buyer, credit_card: indian_cc)
+      create_membership_purchase(is_original_subscription_purchase: true, link: product, variant_attributes: [product.default_tier],
+                                 price_cents: 5_00, subscription:, purchaser: buyer, credit_card: indian_cc)
+
+      assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
+        subscription.charge!
+      end
+
+      subscription.reload
+      latest_purchase = Purchase.last
+
+      assert_equal "in_progress", latest_purchase.purchase_state
+      assert_equal indian_cc, subscription.credit_card
+      assert_equal latest_purchase.credit_card, subscription.credit_card
+    end
+  end
+
+  test "#charge! with an Indian credit card uses the mandate associated with the saved credit card and fails" do
+    VCR.use_cassette("Subscription/_charge_/with_an_Indian_credit_card/with_a_cancelled_mandate/uses_the_mandate_associated_with_the_saved_credit_card_and_fails") do
+      charge_section_setup
+      buyer = create_user
+      product = create_membership_product_with_preset_tiered_pricing(recurrence_price_values: [
+                                                                       { "monthly": { enabled: true, price: 5 } },
+                                                                       { "monthly": { enabled: true, price: 8 } }
+                                                                     ])
+      indian_cc = CreditCard.create(build_chargeable(card: StripePaymentMethodHelper.cancelled_indian_card_mandate), nil, buyer)
+      indian_cc.update!(
+        json_data: { stripe_payment_intent_id: "pi_3SOdsrIBOqvOFDrf1VLLMqSi" },
+        processor_payment_method_id: "pm_1SOdsoIBOqvOFDrfq67sVBc6",
+        stripe_customer_id: "cus_TLKXDRZTbaggkA"
+      )
+      subscription = create_subscription(link: product, user: buyer, credit_card: indian_cc)
+      create_membership_purchase(is_original_subscription_purchase: true, link: product, variant_attributes: [product.default_tier],
+                                 price_cents: 5_00, subscription:, purchaser: buyer, credit_card: indian_cc)
+
+      assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
+        subscription.charge!
+      end
+
+      subscription.reload
+      latest_purchase = Purchase.last
+      assert_equal "failed", latest_purchase.purchase_state
+      assert_equal "india_recurring_payment_mandate_canceled", latest_purchase.stripe_error_code
+      assert_equal indian_cc, subscription.credit_card
+      assert_equal latest_purchase.credit_card, subscription.credit_card
+    end
+  end
+
+  test "#charge! uses the payment instrument attached to the subscription in case the purchaser account's saved payment instrument is not supported by this creator" do
+    VCR.use_cassette("Subscription/_charge_/uses_the_payment_instrument_attached_to_the_subscription_in_case_the_purchaser_account_s_saved_payment_instrument_is_not_supported_by_this_creator") do
+      charge_section_setup
+      user = create_user
+      native_paypal_card = CreditCard.create(build_native_paypal_chargeable, nil, user)
+      user.credit_card = native_paypal_card
+      user.save!
+
+      discover_cc = CreditCard.create(build_chargeable(card: StripePaymentMethodHelper.success_discover), nil, user)
+      subscription = nil
+      travel_to(1.month.ago) do
+        subscription = create_subscription(user:, link: @product, credit_card: discover_cc)
+        create_purchase(is_original_subscription_purchase: true, link: @product, subscription:, credit_card: discover_cc)
+      end
+
+      assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
+        subscription.charge!
+      end
+
+      subscription.reload
+      assert_equal 2, subscription.purchases.count
+      latest_purchase = subscription.purchases.last
+      assert_equal "successful", latest_purchase.purchase_state
+      assert_equal "**** **** **** 9424", latest_purchase.card_visual
+      assert_equal discover_cc, subscription.credit_card
+      assert_equal latest_purchase.credit_card, subscription.credit_card
+
+      travel_to(1.month.from_now) do
+        # Creator adds support for native paypal payments
+        create_merchant_account_paypal(user: @product.user, charge_processor_merchant_id: "CJS32DZ7NDN5L", currency: "gbp")
+
+        assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
+          subscription.charge!
+        end
+
+        subscription.reload
+        assert_equal 3, subscription.purchases.count
+        latest_purchase = subscription.purchases.last
+        assert_equal "successful", latest_purchase.purchase_state
+        assert_equal discover_cc, latest_purchase.credit_card
+      end
+    end
+  end
+
+  test "#charge! transfers VAT ID and elected tax country from the original purchase to recurring charge" do
+    VCR.use_cassette("Subscription/_charge_/transfers_VAT_ID_and_elected_tax_country_from_the_original_purchase_to_recurring_charge") do
+      charge_section_setup
+      create_zip_tax_rate(country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+      original_purchase = build_purchase(is_original_subscription_purchase: true, link: @product,
+                                         subscription:, chargeable: build_chargeable, purchase_state: "in_progress",
+                                         full_name: "gum stein", ip_address: "2.47.255.255", country: "Italy", created_at: 2.days.ago)
+      original_purchase.business_vat_id = "IE6388047V"
+      original_purchase.process!
+      assert_equal 0, original_purchase.reload.gumroad_tax_cents
+
+      subscription.charge!
+      charge_purchase = subscription.reload.purchases.last
+      assert_equal "successful", charge_purchase.purchase_state
+      assert_equal "IE6388047V", charge_purchase.purchase_sales_tax_info.business_vat_id
+      assert_equal original_purchase.total_transaction_cents, charge_purchase.total_transaction_cents
+      assert_equal 0, charge_purchase.gumroad_tax_cents
+    end
+  end
+
+  test "#charge! transfers VAT ID from the original purchase's tax refund to recurring charge" do
+    VCR.use_cassette("Subscription/_charge_/transfers_VAT_ID_from_the_original_purchase_s_tax_refund_to_recurring_charge") do
+      charge_section_setup
+      create_zip_tax_rate(country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+      original_purchase = create_purchase(is_original_subscription_purchase: true, link: @product,
+                                          subscription:, chargeable: build_chargeable, purchase_state: "in_progress",
+                                          full_name: "gum stein", ip_address: "2.47.255.255", country: "Italy", created_at: 2.days.ago)
+      original_purchase.process!(off_session: false)
+      assert_equal 22, original_purchase.gumroad_tax_cents
+      original_purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "Sample Note", business_vat_id: "IE6388047V")
+
+      subscription.charge!
+      charge_purchase = subscription.reload.purchases.last
+      assert_equal "successful", charge_purchase.purchase_state
+      assert_equal "IE6388047V", charge_purchase.purchase_sales_tax_info.business_vat_id
+      assert_equal 0, charge_purchase.gumroad_tax_cents
+    end
+  end
+
+  test "#charge! transfers VAT ID from subscription's stored business_vat_id to recurring charge" do
+    VCR.use_cassette("Subscription/_charge_/transfers_VAT_ID_from_subscription_s_stored_business_vat_id_to_recurring_charge") do
+      charge_section_setup
+      create_zip_tax_rate(country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product, business_vat_id: "IE6388047V")
+      original_purchase = create_purchase(is_original_subscription_purchase: true, link: @product,
+                                          subscription:, chargeable: build_chargeable, purchase_state: "in_progress",
+                                          full_name: "gum stein", ip_address: "2.47.255.255", country: "Italy", created_at: 2.days.ago)
+      original_purchase.process!(off_session: false)
+      assert_equal 22, original_purchase.gumroad_tax_cents
+
+      subscription.charge!
+      charge_purchase = subscription.reload.purchases.last
+      assert_equal "successful", charge_purchase.purchase_state
+      assert_equal "IE6388047V", charge_purchase.purchase_sales_tax_info.business_vat_id
+      assert_equal 0, charge_purchase.gumroad_tax_cents
+    end
+  end
+
+  test "#charge! transfers VAT ID from a recurring charge's VAT refund to subsequent recurring charges" do
+    VCR.use_cassette("Subscription/_charge_/transfers_VAT_ID_from_a_recurring_charge_s_VAT_refund_to_subsequent_recurring_charges") do
+      charge_section_setup
+      create_zip_tax_rate(country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+
+      subscription = create_subscription(user: create_user(credit_card: create_credit_card), link: @product)
+      original_purchase = create_purchase(is_original_subscription_purchase: true, link: @product,
+                                          subscription:, chargeable: build_chargeable, purchase_state: "in_progress",
+                                          full_name: "gum stein", ip_address: "2.47.255.255", country: "Italy", created_at: 2.months.ago)
+
+      travel_to(2.months.ago) do
+        original_purchase.process!(off_session: false)
+        assert_equal 22, original_purchase.gumroad_tax_cents
+      end
+
+      travel_to(1.month.ago) do
+        first_recurring_purchase = subscription.charge!
+        assert_equal "successful", first_recurring_purchase.purchase_state
+        assert_equal 22, first_recurring_purchase.gumroad_tax_cents
+
+        first_recurring_purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "Sample Note", business_vat_id: "IE6388047V")
+        assert_equal "IE6388047V", subscription.reload.business_vat_id
+      end
+
+      second_recurring_purchase = subscription.charge!
+      assert_equal "successful", second_recurring_purchase.purchase_state
+      assert_equal "IE6388047V", second_recurring_purchase.purchase_sales_tax_info.business_vat_id
+      assert_equal 0, second_recurring_purchase.gumroad_tax_cents
+    end
+  end
 end

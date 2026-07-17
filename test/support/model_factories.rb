@@ -268,7 +268,7 @@ module ModelFactories
   # same money math): a successful sale on the platform Stripe account.
   # calculate_fees is an after(:build) hook in the factory, so invoke it
   # explicitly before saving.
-  def create_purchase(link:, seller: :default, purchaser: nil, variant_attributes: nil, **attrs)
+  def build_purchase(link:, seller: :default, purchaser: nil, variant_attributes: nil, chargeable: nil, **attrs)
     seller = link.user if seller == :default
     price_cents = attrs.delete(:price_cents) || link.price_cents || 100
     purchase = Purchase.new({
@@ -295,9 +295,13 @@ module ModelFactories
     }.merge(attrs))
     purchase.purchaser = purchaser if purchaser
     purchase.variant_attributes = variant_attributes if variant_attributes
+    purchase.chargeable = chargeable if chargeable
     purchase.send(:calculate_fees)
-    purchase.save!
     purchase
+  end
+
+  def create_purchase(**args)
+    build_purchase(**args).tap(&:save!)
   end
 
   # A failed sale (mirrors :failed_purchase): the base purchase with its state
@@ -322,11 +326,14 @@ module ModelFactories
     create_purchase(link:, purchase_state: "preorder_authorization_successful", **attrs)
   end
 
-  # An original subscription sale on a plain (non-tiered) recurring product —
-  # enough for code that only cares about the subscription, not membership tiers.
-  def create_membership_purchase(link: nil, created_at: nil, **attrs)
+  # An original subscription sale (mirrors :membership_purchase). Defaults to a
+  # plain non-tiered recurring product, which is enough for code that only cares
+  # about the subscription; pass a tiered membership product + variant_attributes
+  # (and an explicit price_cents, since tier pricing lives on the tiers) for
+  # tier-aware cases. An explicit subscription is reused rather than replaced.
+  def create_membership_purchase(link: nil, subscription: nil, created_at: nil, **attrs)
     link ||= create_subscription_product
-    subscription = create_subscription(link:)
+    subscription ||= create_subscription(link:)
     create_purchase(link:, subscription:, is_original_subscription_purchase: true, created_at:, **attrs)
   end
 
@@ -365,14 +372,78 @@ module ModelFactories
     License.create!({ link:, purchase: purchase || create_purchase(link:), uses: 0 }.merge(attrs))
   end
 
+  # A Chargeable built from a Stripe test payment method (mirrors :chargeable).
+  # Tokenizes the card against Stripe, so callers must be inside a VCR cassette.
+  def build_chargeable(card: nil, product_permalink: "xx")
+    card ||= StripePaymentMethodHelper.success
+    Chargeable.new([
+                     StripeChargeablePaymentMethod.new(card.to_stripejs_payment_method_id, zip_code: card[:cc_zipcode], product_permalink:)
+                   ])
+  end
+
+  # A native-PayPal Chargeable (mirrors :native_paypal_chargeable).
+  def build_native_paypal_chargeable
+    Chargeable.new([PaypalChargeable.new("B-8AM85704X2276171X", "paypal_paypal-gr-integspecs@gumroad.com", "US")])
+  end
+
+  # A Braintree-backed PayPal Chargeable (mirrors :paypal_chargeable).
+  def build_paypal_chargeable
+    Chargeable.new([BraintreeChargeableNonce.new(Braintree::Test::Nonce::PayPalFuturePayment, nil)])
+  end
+
   # A credit card built from a Stripe test payment method (mirrors :credit_card,
   # which does `CreditCard.create(chargeable, nil, user)`).
-  def create_credit_card(user: nil, card: nil, **attrs)
-    card ||= StripePaymentMethodHelper.success
-    chargeable = Chargeable.new([
-                                  StripeChargeablePaymentMethod.new(card.to_stripejs_payment_method_id, zip_code: card[:cc_zipcode], product_permalink: "xx")
-                                ])
+  def create_credit_card(user: nil, card: nil, chargeable: nil, **attrs)
+    chargeable ||= build_chargeable(card:)
     CreditCard.create(chargeable, nil, user)
+  end
+
+  # An analytics Event (mirrors :event): the base factory only sets geo defaults.
+  def create_event(**attrs)
+    Event.create!({ from_profile: false, ip_country: "United States", ip_state: "CA" }.merge(attrs))
+  end
+
+  # A sales-tax rate row (mirrors :zip_tax_rate). Defaults match the factory.
+  def create_zip_tax_rate(**attrs)
+    ZipTaxRate.create!({
+      combined_rate: "0.1100000", county_rate: "0.0100000", special_rate: "0.0300000",
+      state_rate: "0.0500000", city_rate: "0.0200000", state: "NY", zip_code: "10087",
+      country: "US", is_seller_responsible: 1, is_epublication_rate: 0,
+    }.merge(attrs))
+  end
+
+  # A PayPal merchant account (mirrors :merchant_account_paypal).
+  def create_merchant_account_paypal(user: nil, **attrs)
+    MerchantAccount.create!({
+      user: user || create_user,
+      charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: "acct_#{unique_suffix}",
+      charge_processor_alive_at: Time.current,
+    }.merge(attrs))
+  end
+
+  # A Stripe Connect merchant account (mirrors :merchant_account_stripe_connect).
+  def create_merchant_account_stripe_connect(user: nil, **attrs)
+    MerchantAccount.create!({
+      user: user || create_user,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d",
+      charge_processor_alive_at: Time.current,
+      json_data: { "meta" => { "stripe_connect" => "true" } },
+    }.merge(attrs))
+  end
+
+  # An in-progress sale (mirrors :purchase_in_progress).
+  def create_purchase_in_progress(link:, **attrs)
+    create_purchase(link:, purchase_state: "in_progress", **attrs)
+  end
+
+  # An in-progress sale that is then marked successful and credited to the
+  # seller's balance (mirrors :purchase_with_balance).
+  def create_purchase_with_balance(link:, **attrs)
+    purchase = create_purchase_in_progress(link:, **attrs)
+    purchase.update_balance_and_mark_successful!
+    purchase
   end
 
   # A free-trial membership sale (mirrors :free_trial_membership_purchase): a
@@ -392,31 +463,6 @@ module ModelFactories
       succeeded_at: nil,
       **attrs
     )
-  end
-
-  # An original subscription purchase on a membership (tiered) product (mirrors
-  # :membership_purchase): defaults the variant to the product's tiers unless a
-  # specific tier is passed.
-  def create_membership_product_purchase(link: nil, tier: nil, subscription: nil, **attrs)
-    link ||= create_membership_product
-    purchase = Purchase.new({
-      link:,
-      seller: link.user,
-      is_original_subscription_purchase: true,
-      price_cents: link.price_cents || 100,
-      displayed_price_cents: link.price_cents || 100,
-      ip_address: unique_ip,
-      browser_guid: "guid-#{unique_suffix}",
-      email: "buyer-#{unique_suffix}@example.com",
-      purchase_state: "successful",
-      succeeded_at: Time.current,
-    }.merge(attrs))
-    purchase.variant_attributes = tier.present? ? [tier] : purchase.tiers
-    purchase.subscription = subscription if subscription
-    purchase.save!
-    purchase.subscription ||= create_subscription(link:)
-    purchase.save!
-    purchase
   end
 
   # Mirrors the :workflow factories. Product/variant workflows hang off a
