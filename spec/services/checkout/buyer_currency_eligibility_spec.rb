@@ -76,11 +76,12 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:feature_disabled)
   end
 
-  it "falls back in live mode" do
+  it "stays eligible in live mode now that the card presentment path has shipped its safety gates" do
     allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
 
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:live_mode)
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.fallback_reason).to be_nil
   end
 
   it "falls back for commission deposit purchases even when a quote token is present" do

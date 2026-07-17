@@ -152,7 +152,6 @@ class Checkout::BuyerCurrencyQuote
 
     seller = products.first.user
     return unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-    return unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
     # The quote locks the whole cart total, so every item must individually support
     # presentment; one unsupported item (whose charge amount could differ from the total
     # the quote locked) means the whole cart falls back to canonical USD.
