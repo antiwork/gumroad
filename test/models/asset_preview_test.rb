@@ -132,6 +132,10 @@ class AssetPreviewTest < ActiveSupport::TestCase
   end
 
   test "extracts MOV dimensions and duration matching the stubbed metadata" do
+    # The image canaries above only need ImageMagick; extracting video metadata
+    # needs ffprobe, which the lightweight Minitest CI runner doesn't provide.
+    # Runs wherever ffprobe is available (locally, or a CI job with ffmpeg).
+    skip "video analysis requires ffprobe, which isn't available in this environment" unless ffprobe_available?
     asset_preview = analyze_fixture("thing.mov", "video/quicktime")
     expected = AssetPreviewAnalysisStub::KNOWN_METADATA["thing.mov"]
     metadata = asset_preview.file.blob.metadata
@@ -513,6 +517,10 @@ class AssetPreviewTest < ActiveSupport::TestCase
       yield
     ensure
       SsrfFilter.singleton_class.send(:define_method, :get, original)
+    end
+
+    def ffprobe_available?
+      system("ffprobe", "-version", out: File::NULL, err: File::NULL)
     end
 
     # Runs the real analyzer (bypassing the factory stub) on a fixture file, the
