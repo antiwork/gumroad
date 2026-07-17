@@ -271,6 +271,47 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
+  it "falls back to CardElement for a flag-on seller's unsupported presentment shape in live mode" do
+    # Lifting the test-mode gate makes every buyer-local-display cart from a double-flagged
+    # seller a presentment candidate in live, not just the supported card shape. Unsupported
+    # shapes (here: a recurring membership) get the safety posture — CardElement with wallets
+    # disabled — instead of the full Payment Element, because a wallet or multi-method charge
+    # would collect canonical USD while the cart displays buyer-currency totals. This example
+    # pins that live-mode downgrade so the flag ramp is done knowing a seller's whole catalog
+    # changes checkout surface, not only their USD one-time products.
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:membership_product, user: seller, price_cents: 1234)
+    allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        # Membership products keep their price on tiers, so the checkout item's price must be
+        # passed explicitly or the cart totals zero and trips the earlier not_charged fallback
+        # before reaching the presentment gate this example is about.
+        price: 1234,
+        recurrence: "monthly",
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason: "buyer_currency_presentment_unsupported",
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      elements_options: nil,
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
   it "selects Stripe Payment Element for a multi-seller cart when every seller is flagged" do
     cart = create(:cart, :guest)
     products = [
