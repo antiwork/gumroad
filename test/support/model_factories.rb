@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# StripePaymentMethodHelper lives under spec/support and has no RSpec
+# dependency; require it directly so credit-card builders can tokenize a card
+# the same way the RSpec :chargeable factory does. The actual Stripe calls it
+# makes are replayed from the shared VCR cassettes (see test/support/vcr.rb).
+require Rails.root.join("spec", "support", "stripe_payment_method_helper")
+
 # Factory-equivalent builders for the Minitest + fixtures suite (#5801).
 #
 # The suite has no FactoryBot, but complex hub models (Installment, Purchase,
@@ -105,6 +111,9 @@ module ModelFactories
       subscription_duration: "monthly",
       is_tiered_membership: true,
       native_type: Link::NATIVE_TYPE_MEMBERSHIP,
+      # The :product parent factory turns review display on; membership products
+      # inherit it, and Product#recommendable? requires it.
+      display_product_reviews: true,
     }.merge(attrs))
   end
 
@@ -253,13 +262,23 @@ module ModelFactories
     build_installment(**args).tap(&:save!)
   end
 
+  # Mirrors the :installment_rule / :post_rule factory.
+  def create_installment_rule(installment:, **attrs)
+    InstallmentRule.create!({ installment:, to_be_published_at: 1.week.from_now, time_period: "hour" }.merge(attrs))
+  end
+
   # Mirrors the base :purchase factory (see test/fixtures/purchases.yml for the
   # same money math): a successful sale on the platform Stripe account.
   # calculate_fees is an after(:build) hook in the factory, so invoke it
   # explicitly before saving.
-  def create_purchase(link:, seller: :default, purchaser: nil, variant_attributes: nil, **attrs)
+  def build_purchase(link:, seller: :default, purchaser: nil, variant_attributes: nil, chargeable: nil, **attrs)
     seller = link.user if seller == :default
     price_cents = attrs.delete(:price_cents) || link.price_cents || 100
+    # Mirror the :purchase factory: a $0 sale carries no charge-processor/stripe
+    # ids or merchant account, so financial_transaction_validation treats it as
+    # free rather than a broken paid charge. (Tiered memberships price on their
+    # tiers, so their product-level price_cents is 0 and lands here.)
+    paid = price_cents.to_i > 0
     purchase = Purchase.new({
       link:,
       seller:,
@@ -277,16 +296,30 @@ module ModelFactories
       card_type: "visa",
       card_visual: "**** **** **** 4062",
       card_country: "US",
-      stripe_fingerprint: "shfbeg5142fff",
-      stripe_transaction_id: "2763276372637263",
-      charge_processor_id: "stripe",
-      merchant_account: merchant_accounts(:gumroad_stripe),
+      stripe_fingerprint: paid ? "shfbeg5142fff" : nil,
+      stripe_transaction_id: paid ? "2763276372637263" : nil,
+      charge_processor_id: paid ? "stripe" : nil,
+      merchant_account: paid ? merchant_accounts(:gumroad_stripe) : nil,
+      # The factory sets a simple flow of funds so purchases that credit the
+      # seller's balance (e.g. :purchase_with_balance) have one to split.
+      flow_of_funds: FlowOfFunds.build_simple_flow_of_funds(Currency::USD, price_cents),
     }.merge(attrs))
     purchase.purchaser = purchaser if purchaser
     purchase.variant_attributes = variant_attributes if variant_attributes
+    purchase.chargeable = chargeable if chargeable
     purchase.send(:calculate_fees)
-    purchase.save!
     purchase
+  end
+
+  def create_purchase(**args)
+    build_purchase(**args).tap(&:save!)
+  end
+
+  # A failed sale (mirrors :failed_purchase): the base purchase with its state
+  # flipped to "failed". Kept succeeded_at as-is, matching the factory (which
+  # only overrides purchase_state).
+  def create_failed_purchase(link:, **attrs)
+    create_purchase(link:, purchase_state: "failed", **attrs)
   end
 
   # A $0 sale (mirrors :free_purchase): no charge processor, card, or stripe ids.
@@ -304,24 +337,243 @@ module ModelFactories
     create_purchase(link:, purchase_state: "preorder_authorization_successful", **attrs)
   end
 
-  # An original subscription sale on a plain (non-tiered) recurring product —
-  # enough for code that only cares about the subscription, not membership tiers.
-  def create_membership_purchase(link: nil, created_at: nil, **attrs)
+  # An original subscription sale (mirrors :membership_purchase). Defaults to a
+  # plain non-tiered recurring product, which is enough for code that only cares
+  # about the subscription; pass a tiered membership product for tier-aware
+  # cases. Like the factory, the variant defaults to the product's tiers (or the
+  # explicit `tier:`). An explicit subscription is reused rather than replaced.
+  def create_membership_purchase(link: nil, subscription: nil, tier: nil, created_at: nil, **attrs)
     link ||= create_subscription_product
-    subscription = create_subscription(link:)
-    create_purchase(link:, subscription:, is_original_subscription_purchase: true, created_at:, **attrs)
+    subscription ||= create_subscription(link:)
+    variant_attributes = attrs.delete(:variant_attributes)
+    variant_attributes ||= tier ? [tier] : link.tiers.presence
+    create_purchase(link:, subscription:, is_original_subscription_purchase: true, created_at:, variant_attributes:, **attrs)
+  end
+
+  # A recurring (non-original) membership charge (mirrors
+  # :recurring_membership_purchase).
+  def create_recurring_membership_purchase(subscription: nil, link: nil, **attrs)
+    link ||= subscription&.link || create_membership_product
+    subscription ||= create_subscription(link:)
+    variant_attributes = attrs.delete(:variant_attributes) || link.tiers.presence
+    create_purchase(link:, subscription:, is_original_subscription_purchase: false, variant_attributes:, **attrs)
+  end
+
+  # An unsaved subscription (mirrors `build(:subscription)`): no payment option is
+  # created, matching the factory's create-only before hook. Enough for the
+  # predicate methods (status, termination_reason, cancelled_by_seller?, …).
+  def build_subscription(link: nil, user: :default, **attrs)
+    link ||= create_product
+    user = create_user if user == :default
+    Subscription.new({ link:, user:, is_installment_plan: false }.merge(attrs))
   end
 
   # Subscriptions must have a payment_option before they validate, so build it
   # (priced at the product's default price) before saving, like the :subscription
   # factory's before(:create) hook does.
-  def create_subscription(link: nil, user: nil, **attrs)
+  #
+  # `user:` uses a :default sentinel (like create_free_purchase's seller:) so an
+  # explicit `user: nil` builds a GUEST subscription (Subscription#user is
+  # optional), matching FactoryBot's `create(:subscription, user: nil)` override
+  # semantics — whereas omitting the argument creates a fresh user.
+  def create_subscription(link: nil, user: :default, price: nil, **attrs)
     link ||= create_product
-    user ||= create_user
+    user = create_user if user == :default
     subscription = Subscription.new({ link:, user:, is_installment_plan: false }.merge(attrs))
-    subscription.payment_options << PaymentOption.new(subscription:, price: link.default_price)
+    # `price` mirrors the :subscription factory's transient: the payment option
+    # is priced at the given Price, defaulting to the product's default price.
+    option_price = price || link.default_price
+    if subscription.is_installment_plan
+      # Mirror the factory's before(:create): an installment-plan subscription's
+      # payment option carries the product's installment plan, and its charge
+      # count is the number of installments. When the product has no plan yet, a
+      # placeholder option is saved unvalidated so the subscription still saves.
+      installment_plan = link.installment_plan
+      if installment_plan.present?
+        subscription.payment_options << PaymentOption.new(subscription:, price: option_price, installment_plan:)
+        subscription.charge_occurrence_count = installment_plan.number_of_installments
+      else
+        placeholder = PaymentOption.new(subscription:, price: option_price, installment_plan: nil)
+        placeholder.save!(validate: false)
+        subscription.payment_options << placeholder
+      end
+    else
+      subscription.payment_options << PaymentOption.new(subscription:, price: option_price)
+    end
     subscription.save!
     subscription
+  end
+
+  # A subscription lifecycle event (mirrors :subscription_event).
+  def create_subscription_event(subscription:, event_type: :deactivated, occurred_at: Time.current, **attrs)
+    SubscriptionEvent.create!({ subscription:, event_type:, occurred_at: }.merge(attrs))
+  end
+
+  # A gift (mirrors :gift): links a gifter to a giftee by email.
+  def create_gift(link: nil, gifter_email: nil, giftee_email: nil, **attrs)
+    Gift.create!({
+      link: link || create_product,
+      gifter_email: gifter_email || "gifter-#{unique_suffix}@example.com",
+      giftee_email: giftee_email || "giftee-#{unique_suffix}@example.com",
+    }.merge(attrs))
+  end
+
+  # A custom-field value on a purchase (mirrors :purchase_custom_field). Built
+  # unsaved so callers can push it onto a purchase's association.
+  def build_purchase_custom_field(purchase: nil, **attrs)
+    PurchaseCustomField.new({
+      purchase:,
+      field_type: CustomField::TYPE_TEXT,
+      name: "Custom field",
+      value: "custom field value",
+    }.merge(attrs))
+  end
+
+  # A subscription payment option (mirrors :payment_option): priced at the
+  # product's default price unless overridden.
+  def create_payment_option(subscription: nil, price: nil, **attrs)
+    subscription ||= create_subscription
+    PaymentOption.create!({ subscription:, price: price || subscription.link.default_price }.merge(attrs))
+  end
+
+  # A pending/applied plan change on a subscription (mirrors
+  # :subscription_plan_change). The tier defaults to a standalone variant, just
+  # like the factory's `association :tier, factory: :variant`.
+  def create_subscription_plan_change(subscription:, tier: nil, recurrence: "monthly", perceived_price_cents: 500, **attrs)
+    SubscriptionPlanChange.create!({
+      subscription:,
+      tier: tier || create_variant,
+      recurrence:,
+      perceived_price_cents:,
+    }.merge(attrs))
+  end
+
+  # A license key tied to a purchase (mirrors :license).
+  def create_license(link: nil, purchase: nil, **attrs)
+    link ||= create_product
+    License.create!({ link:, purchase: purchase || create_purchase(link:), uses: 0 }.merge(attrs))
+  end
+
+  # A Chargeable built from a Stripe test payment method (mirrors :chargeable).
+  # Tokenizes the card against Stripe, so callers must be inside a VCR cassette.
+  def build_chargeable(card: nil, product_permalink: "xx")
+    card ||= StripePaymentMethodHelper.success
+    Chargeable.new([
+                     StripeChargeablePaymentMethod.new(card.to_stripejs_payment_method_id, zip_code: card[:cc_zipcode], product_permalink:)
+                   ])
+  end
+
+  # A native-PayPal Chargeable (mirrors :native_paypal_chargeable).
+  def build_native_paypal_chargeable
+    Chargeable.new([PaypalChargeable.new("B-8AM85704X2276171X", "paypal_paypal-gr-integspecs@gumroad.com", "US")])
+  end
+
+  # A Braintree-backed PayPal Chargeable (mirrors :paypal_chargeable).
+  def build_paypal_chargeable
+    Chargeable.new([BraintreeChargeableNonce.new(Braintree::Test::Nonce::PayPalFuturePayment, nil)])
+  end
+
+  # A credit card built from a Stripe test payment method (mirrors :credit_card,
+  # which does `CreditCard.create(chargeable, nil, user)`).
+  def create_credit_card(user: nil, card: nil, chargeable: nil, **attrs)
+    chargeable ||= build_chargeable(card:)
+    CreditCard.create(chargeable, nil, user)
+  end
+
+  # An analytics Event (mirrors :event): the base factory only sets geo defaults.
+  def create_event(**attrs)
+    Event.create!({ from_profile: false, ip_country: "United States", ip_state: "CA" }.merge(attrs))
+  end
+
+  # A sales-tax rate row (mirrors :zip_tax_rate). Defaults match the factory.
+  def create_zip_tax_rate(**attrs)
+    ZipTaxRate.create!({
+      combined_rate: "0.1100000", county_rate: "0.0100000", special_rate: "0.0300000",
+      state_rate: "0.0500000", city_rate: "0.0200000", state: "NY", zip_code: "10087",
+      country: "US", is_seller_responsible: 1, is_epublication_rate: 0,
+    }.merge(attrs))
+  end
+
+  # A PayPal merchant account (mirrors :merchant_account_paypal).
+  def create_merchant_account_paypal(user: nil, **attrs)
+    MerchantAccount.create!({
+      user: user || create_user,
+      charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: "acct_#{unique_suffix}",
+      charge_processor_alive_at: Time.current,
+    }.merge(attrs))
+  end
+
+  # A Stripe Connect merchant account (mirrors :merchant_account_stripe_connect).
+  def create_merchant_account_stripe_connect(user: nil, **attrs)
+    MerchantAccount.create!({
+      user: user || create_user,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d",
+      charge_processor_alive_at: Time.current,
+      json_data: { "meta" => { "stripe_connect" => "true" } },
+    }.merge(attrs))
+  end
+
+  # A product review tied to a purchase (mirrors :product_review).
+  def create_product_review(purchase: nil, link: nil, rating: 1, **attrs)
+    purchase ||= create_purchase(link: link || create_product)
+    ProductReview.create!({ purchase:, link: link || purchase.link, rating:, message: "A fine review." }.merge(attrs))
+  end
+
+  # A Discover recommendation record for a purchase (mirrors
+  # :recommended_purchase_info_via_discover).
+  def create_recommended_purchase_info_via_discover(purchase:, **attrs)
+    RecommendedPurchaseInfo.create!({
+      purchase:,
+      recommended_link: purchase.link,
+      recommendation_type: "discover",
+    }.merge(attrs))
+  end
+
+  # A tiered membership that also satisfies Product#recommendable? (mirrors the
+  # :recommendable trait applied to a membership product): a compliant seller
+  # with a payout address, the films taxonomy, and a reviewed sale.
+  def create_recommendable_membership_product_with_preset_tiered_pricing(recurrence_price_values: nil, **attrs)
+    seller = create_user(user_risk_state: "compliant", name: "gumbo", payment_address: "gumbo-#{unique_suffix}@example.com")
+    product = create_membership_product_with_preset_tiered_pricing(user: seller, recurrence_price_values:,
+                                                                   taxonomy: Taxonomy.find_or_create_by(slug: "films"), **attrs)
+    reviewed = create_purchase(link: product, created_at: 1.week.ago)
+    create_product_review(purchase: reviewed, rating: 5)
+    product.reload
+    product
+  end
+
+  # An in-progress sale (mirrors :purchase_in_progress).
+  def create_purchase_in_progress(link:, **attrs)
+    create_purchase(link:, purchase_state: "in_progress", **attrs)
+  end
+
+  # An in-progress sale that is then marked successful and credited to the
+  # seller's balance (mirrors :purchase_with_balance).
+  def create_purchase_with_balance(link:, **attrs)
+    purchase = create_purchase_in_progress(link:, **attrs)
+    purchase.update_balance_and_mark_successful!
+    purchase
+  end
+
+  # A free-trial membership sale (mirrors :free_trial_membership_purchase): a
+  # tiered membership with a free trial enabled, an original "not_charged"
+  # purchase flagged as a free trial, and a subscription whose free trial ends
+  # after the product's configured trial duration.
+  def create_free_trial_membership_purchase(link: nil, user: nil, **attrs)
+    link ||= create_membership_product(free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week)
+    subscription = create_subscription(link:, user:, free_trial_ends_at: Time.current + link.free_trial_duration)
+    create_purchase(
+      link:, subscription:, purchaser: user,
+      variant_attributes: [link.tiers.first],
+      is_original_subscription_purchase: true,
+      is_free_trial_purchase: true,
+      should_exclude_product_review: true,
+      purchase_state: "not_charged",
+      succeeded_at: nil,
+      **attrs
+    )
   end
 
   # Mirrors the :workflow factories. Product/variant workflows hang off a
@@ -334,6 +586,71 @@ module ModelFactories
       link = nil
     end
     Workflow.create!({ seller:, link:, name: "my workflow", workflow_type:, workflow_trigger: nil }.merge(attrs))
+  end
+
+  # A seller-scoped workflow (mirrors :seller_workflow): no product link.
+  def create_seller_workflow(seller: nil, **attrs)
+    create_workflow(workflow_type: Workflow::SELLER_TYPE, seller:, link: nil, **attrs)
+  end
+
+  # An audience workflow (mirrors :audience_workflow): no product link.
+  def create_audience_workflow(seller: nil, **attrs)
+    create_workflow(workflow_type: Workflow::AUDIENCE_TYPE, seller:, link: nil, **attrs)
+  end
+
+  # A published post (mirrors :published_installment): an installment already
+  # published. Pass workflow:/workflow_trigger:/link: for workflow posts.
+  def create_published_installment(**attrs)
+    create_installment(published_at: Time.current, **attrs)
+  end
+
+  # A price snapshot for an installment-plan payment option (mirrors
+  # :installment_plan_snapshot).
+  def create_installment_plan_snapshot(payment_option:, number_of_installments: 3, recurrence: "monthly", total_price_cents: 14700, **attrs)
+    InstallmentPlanSnapshot.create!({ payment_option:, number_of_installments:, recurrence:, total_price_cents: }.merge(attrs))
+  end
+
+  # A product with an installment plan (mirrors the :with_installment_plan
+  # trait): a $30 product with a 3-installment plan.
+  def create_product_with_installment_plan(number_of_installments: 3, **attrs)
+    product = create_product(price_cents: 3000, **attrs)
+    create_product_installment_plan(link: product, number_of_installments:)
+    product.reload
+    product
+  end
+
+  # An original installment-plan purchase (mirrors :installment_plan_purchase):
+  # a paid, in-full-priced sale whose subscription is flagged is_installment_plan
+  # and carries a plan snapshot.
+  def create_installment_plan_purchase(link: nil, purchaser: nil, **attrs)
+    link ||= create_product_with_installment_plan
+    purchase = build_purchase(link:, purchaser:, is_original_subscription_purchase: true, is_installment_payment: true, **attrs)
+    purchase.installment_plan = link.installment_plan
+    purchase.set_price_and_rate
+    purchase.save!
+    purchase.subscription ||= create_subscription(link:, is_installment_plan: true, user: purchase.purchaser)
+    purchase.save!
+    payment_option = purchase.subscription.last_payment_option
+    if payment_option && !payment_option.installment_plan_snapshot
+      create_installment_plan_snapshot(
+        payment_option:,
+        number_of_installments: link.installment_plan.number_of_installments,
+        recurrence: link.installment_plan.recurrence,
+        total_price_cents: purchase.total_price_before_installments || purchase.price_cents
+      )
+    end
+    purchase
+  end
+
+  # A recurring (non-original) installment-plan charge (mirrors
+  # :recurring_installment_plan_purchase).
+  def create_recurring_installment_plan_purchase(link: nil, **attrs)
+    link ||= create_product_with_installment_plan
+    purchase = build_purchase(link:, is_original_subscription_purchase: false, is_installment_payment: true, **attrs)
+    purchase.installment_plan = link.installment_plan
+    purchase.set_price_and_rate
+    purchase.save!
+    purchase
   end
 
   # A published installment attached to a workflow, with an installment_rule
@@ -380,6 +697,56 @@ module ModelFactories
     offer_code.user_id = products.first.user_id if products.present? # mirrors the factory's before(:create)
     offer_code.save!
     offer_code
+  end
+
+  # A tiered offer code whose discount depends on how long the buyer has owned an
+  # ownership product (mirrors :tiered_offer_code). Pass for_existing_customers:
+  # true for the :for_existing_customers trait (existing_customers_only + the
+  # products doubling as ownership products).
+  def create_tiered_offer_code(products:, user: nil, for_existing_customers: false, **attrs)
+    user ||= products.first&.user || create_user
+    defaults = {
+      amount_cents: nil,
+      amount_percentage: 0,
+      ownership_duration_tiers: [
+        { "months" => 0, "amount_percentage" => 0 },
+        { "months" => 12, "amount_percentage" => 50 },
+      ],
+    }
+    if for_existing_customers
+      defaults[:existing_customers_only] = true
+      defaults[:ownership_products] = products
+    end
+    create_offer_code(products:, user:, **defaults.merge(attrs))
+  end
+
+  # A purchase analytics event (mirrors :purchase_event): a successful "purchase"
+  # event carrying the purchase's link and price.
+  def create_purchase_event(purchase:, **attrs)
+    Event.create!({
+      event_name: "purchase",
+      purchase_state: "successful",
+      from_profile: false,
+      ip_country: "United States",
+      ip_state: "CA",
+      purchase:,
+      link_id: purchase.link_id,
+      price_cents: purchase.price_cents,
+    }.merge(attrs))
+  end
+
+  # A user-submitted comment (mirrors :comment), defaulting to hanging off a
+  # published installment. Pass purchase: to attribute it to a buyer.
+  def create_comment(commentable: nil, author: nil, purchase: nil, **attrs)
+    author ||= create_user
+    Comment.create!({
+      commentable: commentable || create_published_installment,
+      author:,
+      author_name: author.display_name,
+      comment_type: Comment::COMMENT_TYPE_USER_SUBMITTED,
+      content: "Famous last words.",
+      purchase:,
+    }.merge(attrs))
   end
 
   def create_universal_offer_code(user: nil, amount_cents: 100, excluded_products: [], **attrs)
