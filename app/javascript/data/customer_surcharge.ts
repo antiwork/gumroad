@@ -38,14 +38,18 @@ export type SurchargesResponse = {
     // lines, in request order, computed with the same largest-remainder rounding the charge
     // uses to persist purchase presentment rows. The checkout renders these amounts
     // verbatim so the visible lines always sum to the locked total and match the receipt.
-    line_allocations: {
-      permalink: string;
-      price_cents: number;
-      tip_cents: number;
-      tax_cents: number;
-      shipping_cents: number;
-      total_cents: number;
-    }[];
+    // Optional only for rolling deploy compatibility with servers that predate this field;
+    // without it the browser treats the quote as unusable and stays in canonical currency.
+    line_allocations?:
+      | {
+          permalink: string;
+          price_cents: number;
+          tip_cents: number;
+          tax_cents: number;
+          shipping_cents: number;
+          total_cents: number;
+        }[]
+      | undefined;
   } | null;
 };
 

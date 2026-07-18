@@ -33,9 +33,11 @@ const surcharges = (overrides: Partial<SurchargesResponse> = {}): SurchargesResp
   ...overrides,
 });
 
+const cartOptions = { cartPermalinks: ["prod"] };
+
 describe("getCheckoutBuyerCurrencyDisplay", () => {
   it("uses the locked surcharge quote as the checkout display rate", () => {
-    const display = getCheckoutBuyerCurrencyDisplay(surcharges());
+    const display = getCheckoutBuyerCurrencyDisplay(surcharges(), cartOptions);
 
     if (!display) throw new Error("Expected a buyer-currency display");
     expect(display).toEqual({
@@ -52,23 +54,35 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
   });
 
   it("does not use buyer-currency display when there is no quote", () => {
-    expect(getCheckoutBuyerCurrencyDisplay(surcharges({ buyer_currency_quote: null }))).toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges({ buyer_currency_quote: null }), cartOptions)).toBeNull();
   });
 
   it("does not use buyer-currency display when the checkout will save the card", () => {
     // Saving a card charges through the canonical path, so displaying locked local-currency
     // totals would show an amount the buyer is never charged.
-    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { willSaveCard: true })).toBeNull();
-    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { willSaveCard: false })).not.toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, willSaveCard: true })).toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, willSaveCard: false })).not.toBeNull();
   });
 
   it("does not use buyer-currency display while a non-card payment method is selected", () => {
     // PayPal and wallet charges can only be canonical USD, so the cart must show the USD
     // totals those methods will actually charge — and withhold the quote token, which would
     // otherwise dead-end the charge (it fails closed on a token it cannot present).
-    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "paypal" })).toBeNull();
-    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "stripePaymentRequest" })).toBeNull();
-    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { paymentMethod: "card" })).not.toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentMethod: "paypal" })).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentMethod: "stripePaymentRequest" }),
+    ).toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentMethod: "card" })).not.toBeNull();
+  });
+
+  it("does not use buyer-currency display when the allocation is missing or belongs to another cart", () => {
+    const responseWithoutAllocations = surcharges();
+    if (responseWithoutAllocations.buyer_currency_quote) {
+      delete responseWithoutAllocations.buyer_currency_quote.line_allocations;
+    }
+
+    expect(getCheckoutBuyerCurrencyDisplay(responseWithoutAllocations, cartOptions)).toBeNull();
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { cartPermalinks: ["other"] })).toBeNull();
   });
 });
 
@@ -94,6 +108,7 @@ describe("getCheckoutPresentmentAmounts", () => {
           ],
         },
       }),
+      { cartPermalinks: ["first", "second"] },
     );
 
   it("renders the server's allocated line amounts so the visible lines sum exactly to the locked total", () => {
@@ -141,6 +156,7 @@ describe("getCheckoutPresentmentAmounts", () => {
           ],
         },
       }),
+      { cartPermalinks: ["first", "second"] },
     );
 
     // The first line is displayed pre-discount (the discount has its own row), so its
@@ -163,8 +179,7 @@ describe("getCheckoutPresentmentAmounts", () => {
   });
 
   it("returns null while the allocation does not line up with the cart lines", () => {
-    // A cart edit whose surcharge refresh hasn't landed yet: the caller falls back to
-    // per-row conversion instead of rendering another cart's allocation.
+    // Defense in depth for a caller holding a display derived from an earlier cart.
     expect(getCheckoutPresentmentAmounts(oddCentDisplay(), [{ permalink: "first", discountCents: 0 }])).toBeNull();
     expect(
       getCheckoutPresentmentAmounts(oddCentDisplay(), [
@@ -174,29 +189,26 @@ describe("getCheckoutPresentmentAmounts", () => {
     ).toBeNull();
     expect(getCheckoutPresentmentAmounts(null, [])).toBeNull();
   });
-
-  it("returns null instead of throwing when the quote carries no line allocations", () => {
-    // During a rolling deploy, a browser on this bundle can receive a quote from an app
-    // server that predates line_allocations. The types say the field is always present,
-    // so this must be pinned at runtime: fall back to per-row conversion, don't crash
-    // the checkout render.
-    const display = oddCentDisplay();
-    // @ts-expect-error -- simulating an older server response missing the field
-    delete display.lineAllocations;
-    expect(getCheckoutPresentmentAmounts(display, [{ permalink: "first", discountCents: 0 }])).toBeNull();
-  });
 });
 
 describe("getCheckoutBuyerCurrencyQuoteToken", () => {
   it("sends the locked quote token only when buyer-currency totals are displayed", () => {
-    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges())).toBe("quote-token");
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), cartOptions)).toBe("quote-token");
     // Saving the card charges canonically, so the token must be withheld with the display.
-    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { willSaveCard: true })).toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { ...cartOptions, willSaveCard: true })).toBeNull();
     // A non-card method (PayPal) also charges canonically; sending the token with it would
     // make the charge fail closed on every attempt instead of completing in USD.
-    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { paymentMethod: "paypal" })).toBeNull();
-    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges({ buyer_currency_quote: null }))).toBeNull();
-    expect(getCheckoutBuyerCurrencyQuoteToken(null)).toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { ...cartOptions, paymentMethod: "paypal" })).toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges({ buyer_currency_quote: null }), cartOptions)).toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(null, cartOptions)).toBeNull();
+  });
+
+  it("withholds the token when the quote allocation cannot be displayed", () => {
+    const response = surcharges();
+    if (response.buyer_currency_quote) delete response.buyer_currency_quote.line_allocations;
+
+    expect(getCheckoutBuyerCurrencyQuoteToken(response, cartOptions)).toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { cartPermalinks: ["other"] })).toBeNull();
   });
 });
 

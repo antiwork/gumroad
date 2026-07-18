@@ -17,6 +17,10 @@ describe Checkout::BuyerCurrencyQuote do
     end
   end
 
+  def canonical_line_items_for(*products)
+    products.map { |product| { permalink: product.unique_permalink, total_cents: product.price_cents } }
+  end
+
   let(:seller) { create(:user, disable_buyer_local_currency: false) }
   let(:product) { create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD) }
   let!(:merchant_account) do
@@ -282,7 +286,8 @@ describe Checkout::BuyerCurrencyQuote do
         seller:,
         merchant_account:,
         currency: Currency::CAD,
-        canonical_total_cents: 10_00
+        canonical_total_cents: 10_00,
+        canonical_line_items: canonical_line_items_for(product)
       )
 
       expect(verified_quote).to have_attributes(currency: Currency::CAD,
@@ -301,9 +306,33 @@ describe Checkout::BuyerCurrencyQuote do
           seller:,
           merchant_account:,
           currency: Currency::CAD,
-          canonical_total_cents: 11_00
+          canonical_total_cents: 11_00,
+          canonical_line_items: canonical_line_items_for(product)
         )
       end.to raise_error(described_class::InvalidToken, "total mismatch")
+    end
+
+    it "rejects tokens when the ordered cart lines change without changing the total" do
+      second_product = create(:product, user: seller, price_cents: 5_00, price_currency_type: Currency::USD)
+      result = described_class.create(
+        line_items: line_items_for(product, second_product),
+        canonical_total_cents: 15_00,
+        ip: "24.48.0.1"
+      )
+
+      expect do
+        described_class.verify!(
+          token: result.token,
+          seller:,
+          merchant_account:,
+          currency: Currency::CAD,
+          canonical_total_cents: 15_00,
+          canonical_line_items: [
+            { permalink: product.unique_permalink, total_cents: 9_00 },
+            { permalink: second_product.unique_permalink, total_cents: 6_00 },
+          ]
+        )
+      end.to raise_error(described_class::InvalidToken, "line items mismatch")
     end
 
     it "rejects expired tokens" do
@@ -316,7 +345,8 @@ describe Checkout::BuyerCurrencyQuote do
             seller:,
             merchant_account:,
             currency: Currency::CAD,
-            canonical_total_cents: 10_00
+            canonical_total_cents: 10_00,
+            canonical_line_items: canonical_line_items_for(product)
           )
         end.to raise_error(described_class::InvalidToken, "expired buyer currency quote")
       end

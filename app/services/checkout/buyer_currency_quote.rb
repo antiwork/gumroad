@@ -87,7 +87,7 @@ class Checkout::BuyerCurrencyQuote
     new(line_items:, canonical_total_cents:, ip:).create
   end
 
-  def self.verify!(token:, seller:, merchant_account:, currency:, canonical_total_cents:)
+  def self.verify!(token:, seller:, merchant_account:, currency:, canonical_total_cents:, canonical_line_items:)
     payload = verifier.verify(token)
 
     raise InvalidToken, "expired buyer currency quote" if Time.zone.parse(payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
@@ -96,6 +96,7 @@ class Checkout::BuyerCurrencyQuote
     raise InvalidToken, "currency mismatch" unless payload.fetch("currency") == currency.to_s
     raise InvalidToken, "total mismatch" unless payload.fetch("canonical_total_cents") == canonical_total_cents.to_i
     raise InvalidToken, "stripe account mismatch" unless payload.fetch("stripe_account_id") == merchant_account.charge_processor_merchant_id
+    raise InvalidToken, "line items mismatch" unless payload.fetch("canonical_line_items") == normalize_canonical_line_items(canonical_line_items)
 
     Result.new(
       token:,
@@ -113,7 +114,11 @@ class Checkout::BuyerCurrencyQuote
   def self.verifier
     Rails.application.message_verifier(TOKEN_PURPOSE)
   end
-  private_class_method :verifier
+
+  def self.normalize_canonical_line_items(line_items)
+    line_items.map { |line_item| [line_item.fetch(:permalink).to_s, line_item.fetch(:total_cents).to_i] }
+  end
+  private_class_method :verifier, :normalize_canonical_line_items
 
   attr_reader :line_items, :canonical_total_cents, :ip
 
@@ -251,6 +256,10 @@ class Checkout::BuyerCurrencyQuote
           stripe_account_id: merchant_account.charge_processor_merchant_id,
           currency: buyer_currency,
           canonical_total_cents:,
+          # The total alone cannot distinguish two carts whose lines changed but still add
+          # up to the same amount. Bind the ordered line identities and totals so charge-time
+          # allocation cannot persist a different split from the one checkout displayed.
+          canonical_line_items: line_items.map { |line_item| [line_item.permalink.to_s, line_item.canonical_total_cents.to_i] },
           presentment_total_cents:,
           stripe_fx_quote_id: quote.id,
           stripe_fx_quote_expires_at: quote.expires_at.iso8601,

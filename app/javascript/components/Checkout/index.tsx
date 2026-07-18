@@ -222,11 +222,15 @@ export const Checkout = ({
   const displayTipSelector = isTippingEnabled(state);
   const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
     state.surcharges.type === "loaded" ? state.surcharges.result : null,
-    { willSaveCard: state.willSaveCard, paymentMethod: state.paymentMethod },
+    {
+      cartPermalinks: cart.items.map((item) => item.product.permalink),
+      willSaveCard: state.willSaveCard,
+      paymentMethod: state.paymentMethod,
+    },
   );
   // The buyer-currency amounts every row of the table renders from, so the visible numbers
-  // sum exactly to the locked total the buyer is charged. Null (falling back to per-row
-  // conversion) only in the brief window where the loaded surcharges predate a cart edit.
+  // sum exactly to the locked total the buyer is charged. An unusable allocation makes
+  // buyerCurrencyDisplay null above, keeping every row and the submitted token canonical.
   const presentmentAmounts = getCheckoutPresentmentAmounts(
     buyerCurrencyDisplay,
     cart.items.map((item) => ({

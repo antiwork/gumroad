@@ -637,7 +637,14 @@ describe("buyer-currency presentment lane", () => {
     subunit_to_unit: 100,
     expires_at: "2026-07-10T00:00:00Z",
     line_allocations: [
-      { permalink: "prod", price_cents: 1_625, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1_625 },
+      {
+        permalink: "product-a",
+        price_cents: 1_625,
+        tip_cents: 0,
+        tax_cents: 0,
+        shipping_cents: 0,
+        total_cents: 1_625,
+      },
     ],
   };
   const loadedSurchargesWithQuote = {
@@ -672,6 +679,29 @@ describe("buyer-currency presentment lane", () => {
     });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
     expect(getStripePaymentElementAmount(s)).toBe(1_300);
+  });
+
+  it("mounts canonical USD when the quote allocation does not match the cart", () => {
+    const s = state({
+      checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      surcharges: {
+        type: "loaded",
+        result: {
+          ...loadedSurchargesWithQuote.result,
+          buyer_currency_quote: {
+            ...buyerCurrencyQuote,
+            line_allocations: buyerCurrencyQuote.line_allocations.map((allocation) => ({
+              ...allocation,
+              permalink: "other",
+            })),
+          },
+        },
+      },
+    });
+
+    expect(getStripePaymentElementPresentment(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
   });
 
   it("mounts canonical USD when the buyer opts to save the card (canonical charge path)", () => {

@@ -14,6 +14,7 @@ import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
+import { getCheckoutBuyerCurrencyDisplay } from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -374,13 +375,14 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
   if (state.surcharges.type !== "loaded") return null;
 
-  const quote = state.surcharges.result.buyer_currency_quote;
-  // Mirrors the display/token gate (getCheckoutBuyerCurrencyDisplay): saving a card or
-  // selecting a non-card payment method (PayPal) charges canonically, so the element must
-  // not present local currency the buyer won't be charged.
-  if (!quote || state.willSaveCard || state.paymentMethod !== "card") return null;
+  const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
+    cartPermalinks: state.products.map((product) => product.permalink),
+    willSaveCard: state.willSaveCard,
+    paymentMethod: state.paymentMethod,
+  });
+  if (!display) return null;
 
-  return { currency: quote.currency, amountCents: quote.presentment_total_cents };
+  return { currency: display.currencyCode, amountCents: display.presentmentTotalCents };
 }
 
 // The currency the server-confirm Payment Element should mount in, or null while it cannot be

@@ -250,7 +250,13 @@ describe Charge::CreateService, :vcr do
         seller: seller_1,
         merchant_account:,
         currency: Currency::CAD,
-        canonical_total_cents: amount_cents
+        canonical_total_cents: amount_cents,
+        canonical_line_items: [
+          {
+            permalink: product_1.unique_permalink,
+            total_cents: purchase.total_transaction_cents,
+          },
+        ]
       ).and_return(locked_quote)
       allow_any_instance_of(Charge::PresentmentOrchestrator).to receive(:perform).and_return(presentment_result)
 

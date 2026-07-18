@@ -231,18 +231,18 @@ describe("Checkout buyer-currency line amounts", () => {
     expect(getAllByText("CA$12.51")).toHaveLength(2);
   });
 
-  it("renders per-line converted amounts as a fallback when the allocation does not match the cart", () => {
+  it("falls back to canonical currency when the allocation does not match the cart", () => {
     const cart = oddCentCart();
     // Simulate a stale surcharge response for a different cart shape: the allocation no
-    // longer lines up, so the page falls back to per-line conversion until the refresh.
+    // longer lines up, so the page must suppress both the local-currency display and token.
     const state = oddCentState();
-    if (state.surcharges.type === "loaded" && state.surcharges.result.buyer_currency_quote) {
+    if (state.surcharges.type === "loaded" && state.surcharges.result.buyer_currency_quote?.line_allocations) {
       state.surcharges.result.buyer_currency_quote.line_allocations =
         state.surcharges.result.buyer_currency_quote.line_allocations.slice(0, 1);
     }
 
     const { getAllByLabelText } = renderCheckout(state, cart);
 
-    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$4.18", "CA$8.34"]);
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$3.34", "US$6.67"]);
   });
 });

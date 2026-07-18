@@ -259,7 +259,13 @@ class Charge::CreateService
       seller:,
       merchant_account:,
       currency: eligibility_decision.currency,
-      canonical_total_cents: amount_cents
+      canonical_total_cents: amount_cents,
+      canonical_line_items: purchases.map do |purchase|
+        {
+          permalink: purchase.link.unique_permalink,
+          total_cents: purchase.total_transaction_cents,
+        }
+      end
     )
   rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
     Rails.logger.info("Buyer currency presentment quote rejected for charge #{charge.external_id}: #{e.message}")

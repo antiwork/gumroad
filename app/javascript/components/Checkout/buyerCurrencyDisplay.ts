@@ -8,9 +8,14 @@ import {
 
 import type { PaymentMethodType } from "$app/components/Checkout/payment";
 
-export type BuyerCurrencyLineAllocation = NonNullable<
-  SurchargesResponse["buyer_currency_quote"]
->["line_allocations"][number];
+type BuyerCurrencyQuote = NonNullable<SurchargesResponse["buyer_currency_quote"]>;
+export type BuyerCurrencyLineAllocation = NonNullable<BuyerCurrencyQuote["line_allocations"]>[number];
+
+type CheckoutBuyerCurrencyOptions = {
+  cartPermalinks: readonly string[];
+  willSaveCard?: boolean;
+  paymentMethod?: PaymentMethodType;
+};
 
 export type CheckoutBuyerCurrencyDisplay = {
   currencyCode: CurrencyCode;
@@ -29,7 +34,7 @@ export type CheckoutBuyerCurrencyDisplay = {
 
 export const getCheckoutBuyerCurrencyDisplay = (
   surcharges: SurchargesResponse | null,
-  { willSaveCard = false, paymentMethod = "card" }: { willSaveCard?: boolean; paymentMethod?: PaymentMethodType } = {},
+  { cartPermalinks, willSaveCard = false, paymentMethod = "card" }: CheckoutBuyerCurrencyOptions,
 ): CheckoutBuyerCurrencyDisplay | null => {
   const quote = surcharges?.buyer_currency_quote;
   // Saving a card charges through the canonical path (buyer-presentment excludes
@@ -40,12 +45,28 @@ export const getCheckoutBuyerCurrencyDisplay = (
   // charge path fails closed if a quote token arrives on a charge that cannot present —
   // so while such a method is selected the cart must show the USD totals it will charge.
   if (!quote || willSaveCard || paymentMethod !== "card") return null;
+
+  const lineAllocations = quote.line_allocations;
+  if (!Array.isArray(lineAllocations)) return null;
+  if (lineAllocations.length !== cartPermalinks.length) return null;
+  if (!lineAllocations.every((allocation, index) => allocation.permalink === cartPermalinks[index])) return null;
+  if (
+    lineAllocations.some(
+      (allocation) =>
+        allocation.price_cents + allocation.tip_cents + allocation.tax_cents + allocation.shipping_cents !==
+        allocation.total_cents,
+    )
+  )
+    return null;
+  if (lineAllocations.reduce((sum, allocation) => sum + allocation.total_cents, 0) !== quote.presentment_total_cents)
+    return null;
+
   return {
     currencyCode: quote.currency,
     rate: quote.rate,
     subunitToUnit: quote.subunit_to_unit,
     presentmentTotalCents: quote.presentment_total_cents,
-    lineAllocations: quote.line_allocations,
+    lineAllocations,
   };
 };
 
@@ -53,7 +74,7 @@ export const getCheckoutBuyerCurrencyDisplay = (
 // display (or vice versa) lets the charged amount diverge from what the buyer confirmed.
 export const getCheckoutBuyerCurrencyQuoteToken = (
   surcharges: SurchargesResponse | null,
-  options: { willSaveCard?: boolean; paymentMethod?: PaymentMethodType } = {},
+  options: CheckoutBuyerCurrencyOptions,
 ): string | null =>
   getCheckoutBuyerCurrencyDisplay(surcharges, options) ? (surcharges?.buyer_currency_quote?.token ?? null) : null;
 
@@ -71,8 +92,8 @@ export const toCanonicalCents = (
 // per-line allocation of the locked total so that (line items − discount + tip + tax +
 // shipping) sums exactly to the locked total — and each line matches the amount the charge
 // later persists for the receipt. Returns null when the allocation doesn't line up with the
-// cart lines (a cart edit whose surcharge refresh hasn't landed yet); callers fall back to
-// the per-row conversion until the fresh response arrives.
+// cart lines; the quote usability gate normally catches that first and keeps the checkout in
+// canonical currency until a matching response arrives.
 export type CheckoutPresentmentAmounts = {
   // Per cart line, in cart order: the allocated (charged) amount plus the line's converted
   // discount, since the table shows pre-discount line prices with the discount itemized in
@@ -92,11 +113,6 @@ export const getCheckoutPresentmentAmounts = (
 ): CheckoutPresentmentAmounts | null => {
   if (!buyerCurrencyDisplay) return null;
   const allocations = buyerCurrencyDisplay.lineAllocations;
-  // The types say line_allocations is always present, but during a rolling deploy a
-  // browser running this bundle can receive a quote from an app server that predates the
-  // field. Guard at runtime so we fall back to the per-row conversion instead of crashing
-  // the checkout render.
-  if (!Array.isArray(allocations)) return null;
   if (allocations.length !== cartLines.length) return null;
   if (!allocations.every((allocation, index) => allocation.permalink === cartLines[index]?.permalink)) return null;
 
