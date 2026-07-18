@@ -54,6 +54,13 @@ export const recurrenceDurationLabels: Record<RecurrenceId, string> = {
   every_two_years: `2 years`,
 };
 
+// A membership whose fixed duration equals a single recurrence period (e.g. a
+// 12-month membership billed yearly) only ever charges the buyer once, so
+// recurring wording like "Yearly" or "a year" reads as an auto-renewing charge.
+// Keep in sync with BasePrice::Recurrence.single_charge_duration?
+export const isSingleChargeDuration = (recurrenceId: RecurrenceId, durationInMonths: null | number): boolean =>
+  durationInMonths === numberOfMonthsInRecurrence(recurrenceId);
+
 // Should match CurrencyHelper#recurrence_label
 export const formatRecurrenceWithDuration = (recurrenceId: RecurrenceId, productDuration: null | number): string => {
   const numberOfMonths = numberOfMonthsInRecurrence(recurrenceId);
@@ -61,6 +68,9 @@ export const formatRecurrenceWithDuration = (recurrenceId: RecurrenceId, product
 
   if (productDuration == null) {
     return baseFormattedLabel;
+  }
+  if (isSingleChargeDuration(recurrenceId, productDuration)) {
+    return "once";
   }
   return `${baseFormattedLabel} x ${(productDuration / numberOfMonths).toFixed(0)}`;
 };

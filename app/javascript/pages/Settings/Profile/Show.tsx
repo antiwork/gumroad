@@ -17,7 +17,6 @@ import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Props as ProfileProps } from "$app/components/Profile";
 import { EditProfile, ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
-import { ProfileLandingPageEditor } from "$app/components/Profile/LandingPageEditor";
 import { ProfileLandingPagePreview } from "$app/components/Profile/LandingPagePreview";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
@@ -216,23 +215,6 @@ export default function SettingsPage() {
   };
 
   const isMobileAppWebView = Boolean(usePage<{ is_mobile_app_web_view?: boolean }>().props.is_mobile_app_web_view);
-
-  // Clear the custom profile HTML through the session-authed profile form. We send only custom_html
-  // (no name/bio/avatar, no tabs/sections), so this is a pure reset that can't prune the layout or
-  // clobber other profile fields with a stale snapshot. The controller rejects any NON-blank
-  // custom_html (authoring is API-only), so this is reset-only. Returns true on success so the modal
-  // closes only when the page was actually removed.
-  const removeCustomHtml = async (): Promise<boolean> => {
-    try {
-      await saveProfileSettings({ custom_html: "" });
-      await new Promise<void>((resolve) => router.reload({ onFinish: () => resolve() }));
-      return true;
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-      return false;
-    }
-  };
 
   useReactNativeMessage((data) => {
     if (data.type === "mobileAppSettingsSave") void save();
@@ -479,26 +461,16 @@ export default function SettingsPage() {
               </section>
             </>
           ) : (
-            <>
-              <section className="grid gap-8 p-4! md:p-8!">
-                <header>
-                  <h2>Share</h2>
-                </header>
-                <ShareButtons
-                  url={profileUrl}
-                  twitterText={`Check out ${profileSettings.name || username} on @Gumroad`}
-                  facebookText={profileSettings.name || username}
-                />
-              </section>
-              {custom_html_pages_enabled ? (
-                <ProfileLandingPageEditor
-                  username={username}
-                  profileUrl={profileUrl}
-                  hasLandingPage={has_custom_landing_page}
-                  onRemove={removeCustomHtml}
-                />
-              ) : null}
-            </>
+            <section className="grid gap-8 p-4! md:p-8!">
+              <header>
+                <h2>Share</h2>
+              </header>
+              <ShareButtons
+                url={profileUrl}
+                twitterText={`Check out ${profileSettings.name || username} on @Gumroad`}
+                facebookText={profileSettings.name || username}
+              />
+            </section>
           )}
         </div>
         {previewSidebar}

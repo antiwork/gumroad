@@ -18,6 +18,9 @@ describe "Main Navigation", type: :system, js: true do
         expect(page).to have_link("Sales")
         expect(page).to have_link("Products")
         expect(page).to have_link("Profile", href: %r{://[^/]+/profile\z})
+        # Roles that can manage pages also get a "Pages" entry alongside
+        # Profile in the primary nav.
+        expect(page).to have_link("Pages", href: %r{://[^/]+/pages\z})
         expect(page).to have_link("Emails")
         expect(page).to have_link("Analytics")
 

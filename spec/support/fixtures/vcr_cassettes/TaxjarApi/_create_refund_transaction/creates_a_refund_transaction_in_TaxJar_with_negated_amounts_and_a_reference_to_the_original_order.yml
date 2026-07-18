@@ -1,0 +1,55 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/transactions/refunds
+    body:
+      encoding: UTF-8
+      string: '{"transaction_id":"G_-mnBf9b1j9A7a4ub4nFQ==-refund","transaction_reference_id":"G_-mnBf9b1j9A7a4ub4nFQ==","transaction_date":"2023-09-15T20:06:20Z","provider":"api","from_country":"US","from_state":"CA","from_zip":"94104","to_country":"US","to_state":"PA","to_zip":"19106","amount":-15.0,"shipping":0,"sales_tax":-1.0,"line_items":[{"quantity":1,"unit_price":-15.0,"sales_tax":-1.0,"product_tax_code":"31000"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Ershads-MacBook-Pro-office.local 24.6.0 Darwin Kernel
+        Version 24.6.0: Mon Jul 14 11:30:40 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T6041
+        arm64; ruby 3.4.3-p32; OpenSSL 3.6.2 7 Apr 2026) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=utf-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json; charset=utf-8
+      Content-Length:
+      - '634'
+      Connection:
+      - close
+      Date:
+      - Thu, 16 Jul 2026 14:33:48 GMT
+      X-Amzn-Trace-Id:
+      - Root=1-6a58ebcc-7412946a5a53af5a17778a5d
+      X-Amzn-Requestid:
+      - d5f1030b-a281-44b2-b336-02187de03e5d
+      X-Amz-Apigw-Id:
+      - AmnICF3qIAMEgxw=
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 afbfd408986dc787ed2a25b327ab1f78.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - MAA51-P1
+      X-Amz-Cf-Id:
+      - a1hOh-54bRjURhtHQtCWvbN0lCHW9VORWgvkEDrll7afR1c_ILqgtw==
+    body:
+      encoding: UTF-8
+      string: '{"refund":{"transaction_reference_id":"G_-mnBf9b1j9A7a4ub4nFQ==","to_zip":"19106","to_street":null,"to_state":"PA","to_country":"US","to_city":null,"from_zip":"94104","from_street":null,"from_state":"CA","from_country":"US","from_city":null,"customer_id":null,"transaction_date":"2023-09-15T20:06:20.000Z","exemption_type":null,"line_items":[{"product_identifier":null,"discount":"0.0","unit_price":"-15.0","quantity":1,"product_tax_code":"31000","sales_tax":"-1.0","description":null,"id":0}],"shipping":"-0.0","user_id":126159,"sales_tax":"-1.0","provider":"api","transaction_id":"G_-mnBf9b1j9A7a4ub4nFQ==-refund","amount":"-15.0"}}'
+  recorded_at: Thu, 16 Jul 2026 14:33:48 GMT
+recorded_with: VCR 6.2.0

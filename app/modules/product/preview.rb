@@ -75,6 +75,28 @@ module Product::Preview
     main_preview&.url
   end
 
+  # The image social scrapers (Facebook, iMessage, X, etc.) should use when this
+  # product is shared: the cover image when one exists, otherwise the thumbnail
+  # of a video/oembed cover. Shared by the standard product page meta tags
+  # (PageMeta::Product) and the custom-HTML wrapper document (LinksController)
+  # so the two surfaces can't drift apart — the wrapper previously implemented
+  # its own og:image logic without these fallbacks, which dropped the image for
+  # any product that had a cover but no thumbnail (gumroad-private#1122).
+  # Oembed thumbnail URLs come from third-party hosts and can contain characters
+  # that are invalid in a URL, so that branch is URI-escaped here; cover URLs
+  # and video poster URLs are our own storage/CDN URLs and are returned as-is.
+  # For a video file uploaded directly to Gumroad the poster is the ffmpeg
+  # frame generated in the background by GenerateVideoPosterWorker — nil until
+  # that has run, in which case the share image is simply omitted.
+  # (Named without a _url suffix because CONTRIBUTING.md forbids new methods
+  # ending in _url/_path — they can collide with Rails route helpers.)
+  def social_share_image
+    return preview_url if preview_image_path?
+    return Addressable::URI.escape(preview_oembed_thumbnail_url) if preview_oembed_thumbnail_url.present?
+
+    main_preview&.video_poster_url
+  end
+
   def preview_width_for_mobile
     preview_width || 0
   end

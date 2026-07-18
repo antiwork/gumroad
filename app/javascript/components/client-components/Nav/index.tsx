@@ -14,6 +14,7 @@ import {
   Cart,
   DollarCircle,
   Envelope,
+  FileDetail,
   Gift,
   Handshake,
   HomeAlt2,
@@ -147,6 +148,17 @@ export const Nav = (props: Props) => {
             icon={<Store pack="filled" className="size-5" />}
             href={Routes.profile_url(routeParams)}
             exactHrefMatch
+          />
+        ) : null}
+        {currentSeller && loggedInUser?.policies.page.index ? (
+          // Pages sits alongside Profile in the nav: Profile jumps straight to
+          // the public storefront, while Pages manages the full page tree
+          // (with the profile pinned as its home page).
+          <ClientNavLink
+            text="Pages"
+            icon={<FileDetail pack="filled" className="size-5" />}
+            href={Routes.pages_url(routeParams)}
+            additionalPatterns={["/pages/"]}
           />
         ) : null}
         <ClientNavLink

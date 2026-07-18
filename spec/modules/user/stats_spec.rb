@@ -129,6 +129,103 @@ describe User::Stats, :vcr do
       end
     end
 
+    describe "#returned_fees_due_to_refunds_and_chargebacks" do
+      it "counts fees from failed refunds as returned until their balance debits are reversed" do
+        balance = create(:balance, user: @user)
+        product = create(:product, user: @user, price_cents: 20_00)
+
+        # One refunded sale where Gumroad waived its fee, one where part of the fee was
+        # retained, and one disputed sale with an earlier partial refund — each feeds a
+        # different component of the returned-fee total, and each must stop counting a
+        # refund once its money has come back to the seller.
+        waived_purchase = create(:purchase, link: product, purchase_refund_balance_id: balance.id, is_refund_chargeback_fee_waived: true)
+        waived_refund = create(:refund, purchase: waived_purchase, amount_cents: 20_00, fee_cents: 1_00)
+        kept_fee_purchase = create(:purchase, link: product, purchase_refund_balance_id: balance.id)
+        kept_fee_refund = create(:refund, purchase: kept_fee_purchase, amount_cents: 20_00, fee_cents: 2_00)
+        disputed_purchase = create(:purchase, link: product, purchase_chargeback_balance_id: balance.id)
+        disputed_refund = create(:refund, purchase: disputed_purchase, amount_cents: 9_00, fee_cents: 1_50)
+
+        refunds = [waived_refund, kept_fee_refund, disputed_refund]
+        with_refunds_counted = 1_00 + 2_00 + (disputed_purchase.fee_cents - 1_50)
+        expect(@user.returned_fees_due_to_refunds_and_chargebacks([balance.id])).to eq with_refunds_counted
+
+        # A refund that failed at the processor but whose seller debits were not yet
+        # reversed still cost the seller money, so its fees still count as returned.
+        refunds.each { |refund| refund.update!(status: "failed") }
+        expect(@user.returned_fees_due_to_refunds_and_chargebacks([balance.id])).to eq with_refunds_counted
+
+        # Once the debits are reversed the seller was made whole, so no refund row may
+        # contribute: only the disputed sale's own fee remains.
+        refunds.each do |refund|
+          refund.balance_reversed_on_failure = true
+          refund.save!
+        end
+        expect(@user.returned_fees_due_to_refunds_and_chargebacks([balance.id])).to eq disputed_purchase.fee_cents
+      end
+    end
+
+    describe "#returned_discover_fees_due_to_refunds_and_chargebacks" do
+      it "counts discover fees from failed refunds as returned until their balance debits are reversed" do
+        balance = create(:balance, user: @user)
+        product = create(:product, user: @user, price_cents: 20_00)
+
+        # Same three components as the overall returned-fee total, restricted to sales
+        # that were charged the Discover (marketplace) fee.
+        waived_purchase = create(:purchase, link: product, was_discover_fee_charged: true, purchase_refund_balance_id: balance.id, is_refund_chargeback_fee_waived: true)
+        waived_refund = create(:refund, purchase: waived_purchase, amount_cents: 20_00, fee_cents: 1_00)
+        kept_fee_purchase = create(:purchase, link: product, was_discover_fee_charged: true, purchase_refund_balance_id: balance.id)
+        kept_fee_refund = create(:refund, purchase: kept_fee_purchase, amount_cents: 20_00, fee_cents: 2_00)
+        disputed_purchase = create(:purchase, link: product, was_discover_fee_charged: true, purchase_chargeback_balance_id: balance.id)
+        disputed_refund = create(:refund, purchase: disputed_purchase, amount_cents: 9_00, fee_cents: 1_50)
+
+        refunds = [waived_refund, kept_fee_refund, disputed_refund]
+        with_refunds_counted = 1_00 + 2_00 + (disputed_purchase.fee_cents - 1_50)
+        expect(@user.returned_discover_fees_due_to_refunds_and_chargebacks([balance.id])).to eq with_refunds_counted
+
+        # Failed but not reversed: the seller is still out the money, so nothing changes.
+        refunds.each { |refund| refund.update!(status: "failed") }
+        expect(@user.returned_discover_fees_due_to_refunds_and_chargebacks([balance.id])).to eq with_refunds_counted
+
+        # Reversed: the refunds no longer count anywhere in the total.
+        refunds.each do |refund|
+          refund.balance_reversed_on_failure = true
+          refund.save!
+        end
+        expect(@user.returned_discover_fees_due_to_refunds_and_chargebacks([balance.id])).to eq disputed_purchase.fee_cents
+      end
+    end
+
+    describe "#returned_direct_fees_due_to_refunds_and_chargebacks" do
+      it "counts direct fees from failed refunds as returned until their balance debits are reversed" do
+        balance = create(:balance, user: @user)
+        product = create(:product, user: @user, price_cents: 20_00)
+
+        # Same three components as the overall returned-fee total, restricted to direct
+        # (non-Discover) sales — the purchase factory default.
+        waived_purchase = create(:purchase, link: product, purchase_refund_balance_id: balance.id, is_refund_chargeback_fee_waived: true)
+        waived_refund = create(:refund, purchase: waived_purchase, amount_cents: 20_00, fee_cents: 1_00)
+        kept_fee_purchase = create(:purchase, link: product, purchase_refund_balance_id: balance.id)
+        kept_fee_refund = create(:refund, purchase: kept_fee_purchase, amount_cents: 20_00, fee_cents: 2_00)
+        disputed_purchase = create(:purchase, link: product, purchase_chargeback_balance_id: balance.id)
+        disputed_refund = create(:refund, purchase: disputed_purchase, amount_cents: 9_00, fee_cents: 1_50)
+
+        refunds = [waived_refund, kept_fee_refund, disputed_refund]
+        with_refunds_counted = 1_00 + 2_00 + (disputed_purchase.fee_cents - 1_50)
+        expect(@user.returned_direct_fees_due_to_refunds_and_chargebacks([balance.id])).to eq with_refunds_counted
+
+        # Failed but not reversed: the seller is still out the money, so nothing changes.
+        refunds.each { |refund| refund.update!(status: "failed") }
+        expect(@user.returned_direct_fees_due_to_refunds_and_chargebacks([balance.id])).to eq with_refunds_counted
+
+        # Reversed: the refunds no longer count anywhere in the total.
+        refunds.each do |refund|
+          refund.balance_reversed_on_failure = true
+          refund.save!
+        end
+        expect(@user.returned_direct_fees_due_to_refunds_and_chargebacks([balance.id])).to eq disputed_purchase.fee_cents
+      end
+    end
+
     describe "refunds_cents_for_balances" do
       before do
         @user = create(:user)
@@ -176,6 +273,45 @@ describe User::Stats, :vcr do
         balance_ids = @user.unpaid_balances.map(&:id)
         refunds_cents_for_balances = @user.refunds_cents_for_balances(balance_ids)
         expect(refunds_cents_for_balances).to eq(purchase1.price_cents + purchase2.price_cents - 10)
+      end
+
+      it "keeps a failed refund in the totals until its balance debits are reversed" do
+        purchase = Purchase.last
+        purchase.refund_and_save!(nil)
+        refund = purchase.refunds.last
+        balance_ids = @user.unpaid_balances.map(&:id)
+
+        # Failed but not yet reversed: the seller is still debited, so the refund
+        # still counts.
+        refund.update!(status: "failed")
+        expect(@user.refunds_cents_for_balances(balance_ids)).to eq purchase.price_cents
+
+        # Reversed: the money came back, so the refund stops counting.
+        Purchase::HandleFailedRefundService.new(refund: refund.reload).perform
+        expect(refund.reload.balance_reversed_on_failure).to eq(true)
+        expect(@user.refunds_cents_for_balances(balance_ids)).to eq 0
+      end
+
+      it "drops only the reversed failed refund from the totals when a partial refund survives" do
+        # A partial refund keeps purchase_refund_balance_id pointing at the surviving
+        # refund's balance, so the purchase stays inside this sum's filter. Only the
+        # effective_refunds join can exclude the reversed row here — this pins that the
+        # sum filters per refund, not just per purchase.
+        purchase = Purchase.last
+        purchase.refund_and_save!(nil, amount_cents: purchase.price_cents - 10)
+        surviving_refund = purchase.refunds.last
+        purchase.refund_and_save!(nil)
+        failing_refund = (purchase.refunds.reload - [surviving_refund]).sole
+        balance_ids = @user.unpaid_balances.map(&:id)
+
+        expect(@user.refunds_cents_for_balances(balance_ids)).to eq purchase.price_cents
+
+        failing_refund.update!(status: "failed")
+        Purchase::HandleFailedRefundService.new(refund: failing_refund.reload).perform
+        expect(failing_refund.reload.balance_reversed_on_failure).to eq(true)
+
+        expect(purchase.reload.purchase_refund_balance_id).to be_present
+        expect(@user.refunds_cents_for_balances(balance_ids)).to eq(purchase.price_cents - 10)
       end
     end
 
@@ -391,6 +527,30 @@ describe User::Stats, :vcr do
         balance_ids = @user.unpaid_balances.map(&:id)
         chargebacks_cents_for_balances = @user.chargebacks_cents_for_balances(balance_ids)
         expect(chargebacks_cents_for_balances).to eq 20_00 * 2
+      end
+    end
+
+    describe "#chargebacks_cents_for_balances with terminally failed refunds" do
+      it "keeps subtracting a failed partial refund from the disputed amount until its balance debits are reversed" do
+        balance = create(:balance, user: @user)
+        product = create(:product, user: @user, price_cents: 20_00)
+        purchase = create(:purchase, link: product, purchase_chargeback_balance_id: balance.id)
+        refund = create(:refund, purchase:, amount_cents: 9_00)
+
+        # A partial refund issued before the dispute means the chargeback only claws
+        # back the remainder, so the refunded amount is subtracted from the total.
+        expect(@user.chargebacks_cents_for_balances([balance.id])).to eq(20_00 - 9_00)
+
+        # Failed but not reversed: the refund's seller debit still stands, so it keeps
+        # reducing the disputed amount.
+        refund.update!(status: "failed")
+        expect(@user.chargebacks_cents_for_balances([balance.id])).to eq(20_00 - 9_00)
+
+        # Reversed: the refund money came back to the seller, so the chargeback covers
+        # the full price again.
+        refund.balance_reversed_on_failure = true
+        refund.save!
+        expect(@user.chargebacks_cents_for_balances([balance.id])).to eq 20_00
       end
     end
 
@@ -676,6 +836,25 @@ describe User::Stats, :vcr do
       end
     end
 
+    describe "#paypal_refunds_in_duration with terminally failed refunds" do
+      it "keeps a failed PayPal refund in the results until its balance debits are reversed" do
+        product = create(:product, user: @user)
+        purchase = create(:purchase, link: product, charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+        refund = create(:refund, purchase:)
+
+        # A refund PayPal reported as failed still counts while the seller's balance
+        # debits stand: the seller has not gotten the money back yet.
+        refund.update!(status: "failed")
+        expect(@user.paypal_refunds_in_duration(start_date: nil, end_date: nil)).to eq [refund]
+
+        # Once the debits are reversed the refund never effectively happened, so it
+        # must drop out of the refund totals.
+        refund.balance_reversed_on_failure = true
+        refund.save!
+        expect(@user.paypal_refunds_in_duration(start_date: nil, end_date: nil)).to eq []
+      end
+    end
+
     describe "Stripe Connect stats" do
       before :each do
         @creator = create(:user)
@@ -907,6 +1086,26 @@ describe User::Stats, :vcr do
         end
       end
     end
+
+    describe "#stripe_connect_refunds_in_duration with terminally failed refunds" do
+      it "keeps a failed Stripe Connect refund in the results until its balance debits are reversed" do
+        merchant_account = create(:merchant_account_stripe_connect, user: @user)
+        product = create(:product, user: @user)
+        purchase = create(:purchase, link: product, charge_processor_id: StripeChargeProcessor.charge_processor_id, merchant_account:)
+        refund = create(:refund, purchase:)
+
+        # A refund Stripe reported as failed still counts while the seller's balance
+        # debits stand: the seller has not gotten the money back yet.
+        refund.update!(status: "failed")
+        expect(@user.stripe_connect_refunds_in_duration(start_date: nil, end_date: nil)).to eq [refund]
+
+        # Once the debits are reversed the refund never effectively happened, so it
+        # must drop out of the refund totals.
+        refund.balance_reversed_on_failure = true
+        refund.save!
+        expect(@user.stripe_connect_refunds_in_duration(start_date: nil, end_date: nil)).to eq []
+      end
+    end
   end
 
   describe "active?" do
@@ -996,6 +1195,31 @@ describe User::Stats, :vcr do
       create(:purchase, link: product, created_at:, purchase_state: "successful", price_cents: 100, fee_cents: 30)
       create(:purchase, link: product, created_at:, purchase_state: "not_charged", price_cents: 200, fee_cents: 60)
       expect(@user.last_weeks_sales).to eq 7
+    end
+  end
+
+  describe "#total_from" do
+    it "subtracts a failed refund from net revenue until its balance debits are reversed" do
+      product = create(:product, user: @user, price_cents: 10_00)
+      purchase = create(:purchase, link: product)
+      refund = create(:refund, purchase:, amount_cents: 4_00, fee_cents: 50)
+      paid_sales = @user.sales.paid
+
+      net_without_refund = purchase.price_cents - purchase.fee_cents
+      net_with_refund = net_without_refund - refund.amount_cents + refund.fee_cents
+
+      expect(@user.total_from(paid_sales, 0)).to eq net_with_refund
+
+      # Failed but not reversed: the seller is still debited for the refund, so it
+      # keeps reducing net revenue.
+      refund.update!(status: "failed")
+      expect(@user.total_from(paid_sales, 0)).to eq net_with_refund
+
+      # Reversed: the debited money came back to the seller, so the refund no longer
+      # reduces net revenue.
+      refund.balance_reversed_on_failure = true
+      refund.save!
+      expect(@user.total_from(paid_sales, 0)).to eq net_without_refund
     end
   end
 

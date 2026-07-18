@@ -10,6 +10,15 @@ class AccountingMailerPreview < ActionMailer::Preview
     AccountingMailer.funds_received_report(last_month.month, last_month.year)
   end
 
+  def stripe_balance_summaries_report
+    last_month = Time.current.last_month
+    csvs = {
+      "Gumroad" => "Section,Description,Count,Amount,Currency\nBalance Summary,Starting balance (2026-06-01),,1000000.00,usd\n",
+      "Flexile" => "Section,Description,Count,Amount,Currency\nBalance Summary,Starting balance (2026-06-01),,50000.00,usd\n",
+    }
+    AccountingMailer.stripe_balance_summaries_report(csvs, ["Helper", "Iffy"], last_month.month, last_month.year)
+  end
+
   def deferred_refunds_report
     last_month = Time.current.last_month
     AccountingMailer.deferred_refunds_report(last_month.month, last_month.year)

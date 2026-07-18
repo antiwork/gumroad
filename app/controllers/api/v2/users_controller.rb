@@ -29,9 +29,18 @@ class Api::V2::UsersController < Api::V2::BaseController
 
   # GET the seller's own profile landing page HTML. has_landing_page lets the
   # agent decide whether it's editing an existing page or authoring a new one.
+  #
+  # rendered_html is the pull path for going custom: a faithful standalone-HTML
+  # render of the profile as it serves today. When no custom HTML is published
+  # yet, that's a render of the default storefront (creator header, product
+  # grid, posts) — so an agent taking over the home page starts from what the
+  # profile already looks like instead of a blank file. Once custom HTML is
+  # live, the stored HTML already IS the document, so it's returned as-is.
+  # Slugged pages have the same field on GET /v2/pages/:slug.
   def custom_html
     user = current_resource_owner
-    render_response(true, custom_html: user.custom_html, has_landing_page: user.has_custom_landing_page?, profile_url: profile_url_for(user))
+    rendered_html = user.custom_html.presence || Pages::DefaultProfileDocument.render(user)
+    render_response(true, custom_html: user.custom_html, rendered_html:, has_landing_page: user.has_custom_landing_page?, profile_url: profile_url_for(user))
   end
 
   # PUT the profile landing page. Mirrors the product custom_html surface but is

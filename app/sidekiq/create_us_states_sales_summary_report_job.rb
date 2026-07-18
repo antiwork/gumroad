@@ -33,12 +33,27 @@ class CreateUsStatesSalesSummaryReportJob
       ends_at: Date.new(year, month).end_of_month.end_of_day
     )
 
+    # Refund leg: refunds issued during the reported month are subtracted from the month's
+    # summary totals, dated by the refund's date, regardless of when the original purchase
+    # happened. Selection mirrors the order leg's (see UsStateSalesTaxUploader) and only
+    # includes refunds created on/after the refund reporting cutover — earlier refunds are
+    # already netted into their purchase's order totals.
+    refund_ids_by_state = UsStateSalesTaxUploader.grouped_refund_ids_by_state(
+      subdivision_codes:,
+      starts_at: Date.new(year, month).beginning_of_month.beginning_of_day,
+      ends_at: Date.new(year, month).end_of_month.end_of_day
+    )
+
     begin
       temp_file = Tempfile.new
       temp_file.write(row_headers.to_csv)
 
-      purchase_ids_by_state.each do |subdivision_code, purchase_ids|
-        next if purchase_ids.empty?
+      subdivision_codes_with_activity = (purchase_ids_by_state.keys + refund_ids_by_state.keys).uniq
+
+      subdivision_codes_with_activity.each do |subdivision_code|
+        purchase_ids = purchase_ids_by_state[subdivision_code] || []
+        refund_ids = refund_ids_by_state[subdivision_code] || []
+        next if purchase_ids.empty? && refund_ids.empty?
 
         subdivision = Compliance::Countries::USA.subdivisions[subdivision_code]
         gmv_cents = 0
@@ -54,6 +69,17 @@ class CreateUsStatesSalesSummaryReportJob
           gmv_cents += totals[:gmv_cents]
           order_count += 1
           tax_collected_cents += totals[:tax_cents]
+        end
+
+        refund_ids.each do |id|
+          refund = Refund.find(id)
+
+          totals = uploader.upload_refund(refund:, subdivision:)
+          next unless totals
+
+          # Refunds reduce GMV and tax but not the order count — the order still happened.
+          gmv_cents -= totals[:total_refunded_cents]
+          tax_collected_cents -= totals[:tax_refunded_cents]
         end
 
         temp_file.write([

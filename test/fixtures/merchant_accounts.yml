@@ -1,0 +1,19 @@
+# Merchant accounts for the Minitest + fixtures suite.
+#
+# The one that matters most is `gumroad_stripe`: the platform's own Stripe
+# account (`user_id` is nil). `MerchantAccount.gumroad("stripe")` looks up
+# exactly this row — `where(user_id: nil, charge_processor_id: "stripe").first`
+# — and the standard purchase attaches to it. Without this row, any successful
+# purchase fixture/flow that resolves a Gumroad-managed account comes back nil
+# and fee/charge logic breaks (this is the local "MerchantAccount.gumroad is
+# nil" failure mode). Keep the `user:` association off so `user_id` stays nil.
+
+gumroad_stripe:
+  charge_processor_id: stripe
+  charge_processor_merchant_id: "000000001"
+  charge_processor_alive_at: <%= Time.current %>
+  country: US
+  currency: usd
+  json_data: "{}"
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>

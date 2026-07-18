@@ -10,8 +10,7 @@
 #     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
 #   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Card and
 #     Link are always launched (Link is inline and auto-enables with the Payment Element itself); the
-#     US-locked first-launch methods (Cash App Pay, ACH Direct Debit) join for US buyers via the GeoIP
-#     gate below.
+#     US-locked first-launch method (Cash App Pay) joins for US buyers via the GeoIP gate below.
 #
 # Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
 # Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
@@ -32,11 +31,13 @@ class Checkout::PaymentMethodResolver
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
   # element flags themselves since Stripe's dashboard payment-method settings are the emergency
-  # kill switch, per-seller Flipper adds no useful lever); plus the US-locked first-launch methods
-  # (region-gated below) — Cash App Pay (redirect; confirms via the #5664 return page) and ACH Direct
-  # Debit (delayed-notification; settles via the PaymentIntent webhook lifecycle). The EUR methods
-  # (iDEAL/Bancontact/SEPA) stay gated until buyer-currency FX lands.
-  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card link cashapp us_bank_account].freeze
+  # kill switch, per-seller Flipper adds no useful lever); plus Cash App Pay (US-locked, region-gated
+  # below; redirect — confirms via the #5664 return page). The EUR methods (iDEAL/Bancontact/SEPA)
+  # stay gated until buyer-currency FX lands. ACH Direct Debit (us_bank_account) was launched and
+  # then withdrawn platform-wide: it settles in ~4 business days and content only delivers on
+  # settlement, which doesn't fit digital products (gumroad-private#1143). Its webhook settlement
+  # lifecycle stays wired so in-flight ACH purchases still complete.
+  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card link cashapp].freeze
   LINK_PAYMENT_METHOD_TYPE = "link"
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.

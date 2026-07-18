@@ -71,6 +71,9 @@ Rails.application.routes.draw do
       match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
       post "/user/custom_html/edit", to: "users#edit_custom_html"
       post "/user/preview_custom_html", to: "users#preview_custom_html"
+      # First-class Pages: slugged storefront pages, addressed by slug. The
+      # profile root page stays on the /user/custom_html endpoints above.
+      resources :pages, only: [:index, :show, :create, :update, :destroy]
       # Creator public media library (images hosted on public storage so they render on
       # custom pages under their CSP). `create` accepts a remote url (downloaded server-side with
       # SSRF protection) or a signed_blob_id; also the store agent's media ingestion path.
@@ -328,6 +331,7 @@ Rails.application.routes.draw do
         end
         get "/agent/meta", to: "agent#meta"
         get "/agent/conversations/latest", to: "agent#latest_conversation"
+        get "/agent/turns/:client_turn_id", to: "agent#turn_status"
         post "/agent/messages", to: "agent#create"
         post "/agent/messages/stream", to: "agent_streams#create"
         post "/agent/actions", to: "agent#execute"
@@ -449,6 +453,7 @@ Rails.application.routes.draw do
     get "/terms", to: "home#terms"
     get "/prohibited", to: "home#prohibited"
     get "/privacy", to: "home#privacy"
+    get "/dpa", to: "home#dpa"
     get "/taxes", to: redirect("/pricing", status: 301)
     get "/hackathon", to: "home#hackathon"
     get "/small-bets", to: "home#small_bets"
@@ -1019,6 +1024,14 @@ Rails.application.routes.draw do
     end
     get "/posts", to: redirect("/emails")
 
+    # custom pages (design draft for the first-class Pages feature)
+    resources :pages, only: [:index, :new, :create, :edit, :update, :destroy], param: :slug do
+      # Same-origin render of a custom HTML page for the editor's preview pane.
+      # The public page can't be framed from the dashboard (its embed sends
+      # X-Frame-Options: SAMEORIGIN and the dashboard is a different origin).
+      get :preview, on: :member
+    end
+
     # workflows
     resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
       scope module: "workflows" do
@@ -1139,6 +1152,7 @@ Rails.application.routes.draw do
         post "/agent/messages/stream", to: "agent_message_streams#create", as: :agent_messages_stream
         post "/agent/actions", to: "agent_messages#execute", as: :agent_actions
         get "/agent/conversations/latest", to: "agent_conversations#latest", as: :agent_conversations_latest
+        get "/agent/turns/:client_turn_id", to: "agent_conversations#turn_status", as: :agent_turn_status
       end
     end
 
@@ -1368,6 +1382,15 @@ Rails.application.routes.draw do
 
     get "/landing/embed", to: "users#landing_iframe_content"
     get "/landing/version", to: "users#landing_version"
+    # First-class Pages: a seller's slugged pages serve at the root of their
+    # subdomain / custom domain. These come last in this block so every real
+    # route above wins; Page::RESERVED_SLUGS additionally blocks creating a
+    # page whose slug would shadow any of them. The slug constraint mirrors the
+    # model's format validation (and keeps dotted paths like favicon.ico out).
+    page_slug = /[a-z0-9]+(?:-[a-z0-9]+)*/
+    get "/:slug/landing/embed", to: "user_pages#landing_iframe_content", constraints: { slug: page_slug }, as: :user_page_landing
+    get "/:slug/landing/version", to: "user_pages#landing_version", constraints: { slug: page_slug }, as: :user_page_landing_version
+    get "/:slug", to: "user_pages#show", constraints: { slug: page_slug }, as: :user_page
     get "/", to: "users#show", defaults: { format: "html" }
   end
 

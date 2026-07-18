@@ -675,6 +675,12 @@ class Subscription < ApplicationRecord
   def expected_completion_time
     return nil unless has_fixed_length?
 
+    # end_time_of_last_paid_period is nil when the subscription has no
+    # successful, non-refunded/non-chargedback charge and no free trial (for
+    # example, when the only installment charge was refunded or charged back).
+    # In that case there is no anchor date to project the final charge from.
+    return nil if end_time_of_last_paid_period.nil?
+
     end_time_of_last_paid_period + period * remaining_charges_count
   end
 
@@ -824,6 +830,13 @@ class Subscription < ApplicationRecord
 
   def has_fixed_length?
     charge_occurrence_count.present?
+  end
+
+  # True for fixed-length subscriptions that only ever charge the buyer once,
+  # e.g. a 12-month membership billed yearly. These are effectively one-time
+  # payments, so buyer-facing copy avoids recurring wording for them.
+  def single_charge?
+    charge_occurrence_count == 1
   end
 
   def charges_completed?

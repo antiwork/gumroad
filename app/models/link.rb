@@ -91,7 +91,9 @@ class Link < ApplicationRecord
   has_many :prices
   has_many :alive_prices, -> { alive }, class_name: "Price"
   has_one :installment_plan, -> { alive }, class_name: "ProductInstallmentPlan"
-  has_one :page, as: :pageable, dependent: :destroy, autosave: true
+  # Products only have the root page (the custom HTML product-page takeover);
+  # slugged first-class pages are a user-level concept.
+  has_one :page, -> { roots }, as: :pageable, dependent: :destroy, autosave: true
   delegate :custom_html, to: :page, allow_nil: true
 
   def custom_html=(value)

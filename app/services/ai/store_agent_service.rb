@@ -181,7 +181,14 @@ class Ai::StoreAgentService
   #   [:proposed_action, { proposed_action: }] — a single staged change awaiting confirmation
   #   [:suggestions, { suggestions: }]    — up to three "what next" prompts
   # Returns the same hash shape as #respond (plus :suggestions) once the stream is complete.
-  def respond_streaming(messages:, &emit)
+  #
+  # `on_reply_complete` (optional) is invoked with { reply:, proposed_action:, objects: } the
+  # moment the reply is final — BEFORE any trailing event is written to the (possibly already
+  # dead) client socket and before the extra follow-up-suggestions LLM call. Callers use it to
+  # persist the turn: if the client's connection died mid-stream, the very next socket write
+  # raises ClientDisconnected, and without this hook a fully generated reply would be discarded
+  # unpersisted — the seller watched it stream in, but no record of it survives.
+  def respond_streaming(messages:, on_reply_complete: nil, &emit)
     conversation = build_conversation(messages)
     last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
     proposed_action = nil
@@ -209,12 +216,12 @@ class Ai::StoreAgentService
       if result.stop_reason == "max_tokens"
         emit.call(:reset, {}) if streamed_any
         emit.call(:token, { text: TRUNCATED_REPLY })
-        return finish_stream(reply: TRUNCATED_REPLY, proposed_action:, last_user_message:, emit:)
+        return finish_stream(reply: TRUNCATED_REPLY, proposed_action:, last_user_message:, emit:, on_reply_complete:)
       end
 
       if result.tool_uses.blank?
         reply = result.text.to_s.strip
-        return finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+        return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:)
       end
 
       # Intermediate tool-use turn: any text it streamed was preamble, not the answer. Tell the UI to
@@ -227,7 +234,7 @@ class Ai::StoreAgentService
     # reply, then close out with the same objects/action/suggestions as a normal turn.
     reply = tool_cap_reply(proposed_action)
     emit.call(:token, { text: reply })
-    finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+    finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:)
   end
 
   private
@@ -277,14 +284,19 @@ class Ai::StoreAgentService
     end
 
     # Emit the trailing events for a completed streaming turn (objects, any staged change, and the
-    # follow-up suggestions) and return the full result hash.
-    def finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+    # follow-up suggestions) and return the full result hash. The on_reply_complete hook fires
+    # first — before any further socket write — so the caller can persist the finished turn even
+    # when the client's connection is already dead (the next emit would raise ClientDisconnected
+    # and abandon the turn) and before the seller waits out the extra suggestions LLM call.
+    def finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete: nil)
       objects = deduped_objects
+      result = { reply:, proposed_action: proposed_action&.as_json, objects: }
+      on_reply_complete&.call(result)
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: proposed_action.as_json }) if proposed_action
       suggestions = follow_up_suggestions(reply:, last_user_message:)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
-      { reply:, proposed_action: proposed_action&.as_json, objects:, suggestions: }
+      result.merge(suggestions:)
     end
 
     # Ask the model for a few short, in-voice next prompts based on the turn that just happened. Kept

@@ -15,7 +15,7 @@ class RefundUnpaidPurchasesWorker
 
   def self.unpaid_balance_summary_for(user)
     refundable_amounts = unpaid_purchases_for(user)
-      .left_joins(:refunds)
+      .left_joins(:effective_refunds)
       .group("purchases.id", "purchases.price_cents", "purchases.gumroad_tax_cents")
       .pluck(Arel.sql(
                "COALESCE(purchases.price_cents, 0) + " \

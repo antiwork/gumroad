@@ -541,10 +541,13 @@ describe Purchase, :vcr do
       let(:product) { create(:product, price_cents: 10_00) }
       let(:purchase) { build(:purchase, link: product, perceived_price_cents: 5_00) }
 
-      it "returns false if the perceived price is different from the link price" do
+      it "adds a buyer-facing error without an attribute-name prefix if the perceived price is different from the product price" do
         purchase.save
 
-        expect(purchase.errors.full_messages).to include "Price cents The price just changed! Refresh the page for the updated price."
+        # Checkout shows errors.full_messages to buyers verbatim, so the message must not
+        # carry a humanized attribute prefix like "Price cents".
+        expect(purchase.errors.full_messages).to include "The price just changed! Refresh the page for the updated price."
+        expect(purchase.error_code).to eq PurchaseErrorCode::PERCEIVED_PRICE_CENTS_NOT_MATCHING
       end
 
       it "returns true if the purchase is_upgrade_purchase" do
@@ -7106,6 +7109,22 @@ describe Purchase, :vcr do
         expect(purchase.formatted_total_display_price_per_unit).to eq("$5")
       end
     end
+
+    context "membership purchase" do
+      let(:purchase) { create(:membership_purchase, price_cents: 300) }
+
+      it "returns the price with the recurring label" do
+        expect(purchase.formatted_total_display_price_per_unit).to eq("$3 a month")
+      end
+
+      context "when the membership only ever charges once" do
+        before { purchase.subscription.update!(charge_occurrence_count: 1) }
+
+        it "renders one-time wording instead of a recurring label" do
+          expect(purchase.formatted_total_display_price_per_unit).to eq("$3 once")
+        end
+      end
+    end
   end
 
   describe "#call" do
@@ -7529,6 +7548,35 @@ describe Purchase, :vcr do
 
       expect(purchase).to be_persisted
       expect(offer_code.reload).not_to be_deleted
+    end
+  end
+
+  describe "#attach_to_user_and_card" do
+    let(:user) { create(:user) }
+
+    it "attaches the purchase to the user" do
+      purchase = create(:purchase)
+
+      purchase.attach_to_user_and_card(user, nil, nil)
+
+      expect(purchase.reload.purchaser).to eq user
+    end
+
+    it "refuses to attach a reassignment-locked purchase" do
+      purchase = create(:purchase, is_reassignment_locked: true)
+
+      expect(purchase.attach_to_user_and_card(user, nil, nil)).to eq false
+      expect(purchase.reload.purchaser).to be_nil
+    end
+
+    it "does not move a reassignment-locked purchase's subscription" do
+      purchase = create(:membership_purchase, is_reassignment_locked: true)
+      subscription = purchase.subscription
+      original_subscriber = subscription.user
+
+      purchase.attach_to_user_and_card(user, nil, nil)
+
+      expect(subscription.reload.user).to eq original_subscriber
     end
   end
 end

@@ -39,18 +39,53 @@ preview_asset_cache_logger() {
 }
 
 # Everything that can change the output of `docker/web/compile_assets.sh`.
-# Kept deliberately broad (all of config/, vendored assets, tracked public
-# files, the base-image definition that pins the Node version, the Makefile
-# recipe the cache-hit path mirrors, and these two buildkite scripts
-# themselves — the cache-hit image bakes in env vars defined in
+# Kept deliberately broad (vendored assets, tracked public files, the
+# base-image definition that pins the Node version, the Makefile recipe the
+# cache-hit path mirrors, and these two buildkite scripts themselves — the
+# cache-hit image bakes in env vars defined in
 # .buildkite/scripts/compile_assets.sh, so changing them must invalidate
 # existing entries): a false miss costs one full compile; a false hit serves
 # stale assets on a preview app.
+#
+# config/ is keyed on the subset the compile actually reads, not the whole
+# directory — hashing all of config/ made every runtime-only initializer
+# toggle (QA spoofs, feature constants, rate limits) a false miss that cost a
+# 13-minute compile. The compile touches config/ through exactly three
+# channels:
+#   1. `rails js:export` (lib/tasks/js_export.rake) boots Rails and serializes
+#      the routes via JsRoutes — the output depends on the routes files, the
+#      constants they reference (all defined in config/domain.rb), the
+#      JsRoutes initializer, and the boot plumbing that loads them. "Boot
+#      plumbing" includes every file config/application.rb require_relatives
+#      directly (config/redis.rb, lib/catch_bad_request_errors.rb,
+#      lib/utilities/global_config.rb) — they run at boot before js:export, so
+#      they're keyed even though today's versions don't shape the output.
+#   2. Vite reads config/vite.json plus the plugins under config/vite/.
+#   3. app/javascript imports config/currencies.json directly.
+# Nothing else under config/ can reach the compiled artifacts: the other
+# initializers, locales, and service configs (database/mongo/puma/
+# sidekiq/certs) only affect runtime behavior. If you add a new compile-time
+# read of config/ — a JS `import` from config/, a new file consumed by
+# js:export or the Vite configs, or a routes-file reference to a constant
+# defined outside config/domain.rb — add its path here.
 preview_asset_cache_inputs() {
   git ls-tree -r HEAD -- \
     app/assets \
     app/javascript \
-    config \
+    config/routes.rb \
+    config/routes \
+    config/domain.rb \
+    config/application.rb \
+    config/boot.rb \
+    config/environment.rb \
+    config/environments \
+    config/redis.rb \
+    lib/catch_bad_request_errors.rb \
+    lib/utilities/global_config.rb \
+    config/initializers/js-routes.rb \
+    config/vite.json \
+    config/vite \
+    config/currencies.json \
     lib/json_schemas \
     lib/tasks \
     Rakefile \

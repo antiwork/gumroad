@@ -63,6 +63,40 @@ class TaxjarApi
     end
   end
 
+  # Creates a refund transaction in TaxJar so the refunded tax is credited in the period the
+  # refund happened. TaxJar expects refund amounts as negative numbers; callers pass the
+  # positive refunded amounts and this method negates them. transaction_reference_id links the
+  # refund back to the original order transaction (the purchase's external id).
+  def create_refund_transaction(transaction_id:, transaction_reference_id:, transaction_date:, destination:, quantity:, product_tax_code:, amount_dollars:, sales_tax_dollars:, unit_price_dollars:)
+    taxjar_params = {
+      transaction_id: transaction_id,
+      transaction_reference_id: transaction_reference_id,
+      transaction_date: transaction_date,
+      provider: "api",
+      from_country: GumroadAddress::COUNTRY.alpha2,
+      from_state: GumroadAddress::STATE,
+      from_zip: GumroadAddress::ZIP,
+      to_country: destination[:country],
+      to_state: destination[:state],
+      to_zip: destination[:zip],
+      amount: -amount_dollars,
+      shipping: 0,
+      sales_tax: -sales_tax_dollars,
+      line_items: [
+        {
+          quantity:,
+          unit_price: -unit_price_dollars,
+          sales_tax: -sales_tax_dollars,
+          product_tax_code:,
+        }
+      ]
+    }
+
+    with_caching(taxjar_params) do
+      @client.create_refund(taxjar_params).to_json
+    end
+  end
+
   private
     def with_caching(taxjar_params)
       cache_key = taxjar_params.to_s

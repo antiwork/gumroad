@@ -47,6 +47,58 @@ describe CreatorAnalytics::Web do
     end
   end
 
+  describe "hourly interval" do
+    let(:hourly_service) do
+      described_class.new(user: @user, dates: [Date.new(2021, 1, 1)], interval: "hour")
+    end
+
+    it "returns hourly buckets for #by_date" do
+      result = hourly_service.by_date
+
+      expect(result[:dates_and_months].size).to eq(24)
+      expect(result[:dates_and_months].first).to eq(date: "Friday, January 1st, 12 AM", month: "January 2021", month_index: 0)
+      expect(result[:dates_and_months].second).to eq(date: "Friday, January 1st, 1 AM", month: "January 2021", month_index: 0)
+      expect(result[:by_date][:views][@products[0].unique_permalink]).to eq([1] + [0] * 23)
+      expect(result[:by_date][:sales][@products[0].unique_permalink]).to eq([1] + [0] * 23)
+      expect(result[:by_date][:totals][@products[0].unique_permalink]).to eq([100] + [0] * 23)
+      expect(result[:by_date][:views][@products[1].unique_permalink]).to eq([0] * 24)
+    end
+
+    it "returns hourly buckets for #by_referral" do
+      result = hourly_service.by_referral
+
+      expect(result[:dates_and_months].size).to eq(24)
+      expect(result[:by_referral][:views][@products[0].unique_permalink]["direct"]).to eq([1] + [0] * 23)
+      expect(result[:by_referral][:sales][@products[0].unique_permalink]["direct"]).to eq([1] + [0] * 23)
+      expect(result[:by_referral][:totals][@products[0].unique_permalink]["direct"]).to eq([100] + [0] * 23)
+    end
+
+    it "aligns hourly buckets with the seller's timezone" do
+      user = create(:user, timezone: "Pacific Time (US & Canada)")
+      product = create(:product, user: user)
+      # 20:00 UTC on Jan 1 is noon Pacific time, so the sale must land at index 12.
+      create(:purchase, link: product, created_at: Time.utc(2021, 1, 1, 20))
+      index_model_records(Purchase)
+
+      result = described_class.new(user:, dates: [Date.new(2021, 1, 1)], interval: "hour").by_date
+
+      expect(result[:by_date][:sales][product.unique_permalink]).to eq([0] * 12 + [1] + [0] * 11)
+      expect(result[:dates_and_months][12]).to eq(date: "Friday, January 1st, 12 PM", month: "January 2021", month_index: 0)
+    end
+
+    it "keeps the hour domain inside the requested range when DST starts at midnight" do
+      # In Santiago, DST begins at midnight on Sep 6, 2026, so that local day has
+      # no 00:00 and only 23 hours; the domain must not leak a Sep 7 bucket.
+      user = create(:user, timezone: "Santiago")
+
+      result = described_class.new(user:, dates: [Date.new(2026, 9, 6)], interval: "hour").by_date
+
+      expect(result[:dates_and_months].size).to eq(23)
+      expect(result[:dates_and_months].first[:date]).to eq("Sunday, September 6th, 1 AM")
+      expect(result[:dates_and_months].last[:date]).to eq("Sunday, September 6th, 11 PM")
+    end
+  end
+
   describe "#by_state" do
     it "returns expected data" do
       expected_result = {

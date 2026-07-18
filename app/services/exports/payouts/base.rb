@@ -41,13 +41,16 @@ class Exports::Payouts::Base
         end
 
         bal.refunded_sales.joins(:link).find_each do |purchase|
-          balance_transactions_related_to_purchase_refunds = bal.balance_transactions.joins(:refund).where("balance_transactions.refund_id in (?)", purchase.refunds.pluck(:id))
+          # Reversed failed refunds are excluded here and rendered below as an explicit
+          # debit + reversal row pair, so the export explains both movements instead of
+          # showing a refund that (financially) no longer happened.
+          balance_transactions_related_to_purchase_refunds = bal.balance_transactions.joins(:refund).where("balance_transactions.refund_id in (?)", purchase.refunds.effective.pluck(:id))
 
-          if balance_transactions_related_to_purchase_refunds.size == 0 && purchase.refunds.size == 1
+          if balance_transactions_related_to_purchase_refunds.size == 0 && purchase.refunds.effective.size == 1
             # Refunds made a while ago don't seem to have a balance_transaction associated with them.
             # If that's the case, and if there is only one refund in the full amount, we can format that refund properly
             # even with the missing balance transaction.
-            refund = purchase.refunds.first
+            refund = purchase.refunds.effective.first
             if refund.total_transaction_cents == purchase.total_transaction_cents
               data << summarize_full_refund(refund, purchase)
             end
@@ -65,6 +68,16 @@ class Exports::Payouts::Base
           end
         end
 
+        # A refund that FAILED after acceptance (buyer's bank returned the money) and
+        # was auto-reversed appears in the ledger as its original debit rows plus
+        # equal-and-opposite offsets, all linked to the same refund. Render each
+        # movement as its own labeled row (netting to zero across the pair) instead
+        # of letting the debit masquerade as a live refund with no explanation for
+        # the offsetting credit.
+        bal.balance_transactions.joins(:refund).merge(Refund.reversed_failures).find_each do |btxn|
+          data << summarize_failed_refund_transaction(btxn)
+        end
+
         affiliate_credit_cents = calculate_affiliate_for_balance(bal)
 
         if affiliate_credit_cents != 0
@@ -72,14 +85,28 @@ class Exports::Payouts::Base
         end
 
         Credit.where(balance: bal).find_each do |credit|
-          next if credit.fee_retention_refund.present? && credit.amount_cents <= 0
+          # Fee-retention debits are normally folded into the refund rows' fee columns
+          # (via retained_fee_cents), so the negative credit row is skipped to avoid
+          # double-counting. When the refund FAILED and was reversed, its refund rows
+          # are excluded above — show the retention debit and its give-back explicitly
+          # instead, so the pair is visible and nets to zero.
+          retention_refund = credit.fee_retention_refund
+          reversed_failure = retention_refund.present? &&
+            retention_refund.terminally_failed? &&
+            retention_refund.balance_reversed_on_failure.present?
+          next if retention_refund.present? && credit.amount_cents <= 0 && !reversed_failure
 
+          credit_type = if reversed_failure
+            credit.failed_refund_id.present? ? "Failed Refund Fee Returned" : "Failed Refund Fee Retained"
+          else
+            "Credit"
+          end
           amount = (credit.amount_cents / 100.0).round(2)
           @running_total += credit.amount_cents
           data << [
-            "Credit",
+            credit_type,
             bal.date.to_s,
-            credit.fee_retention_refund.present? ? credit.fee_retention_refund.purchase.external_id.to_s : credit.chargebacked_purchase&.external_id.to_s,
+            retention_refund.present? ? retention_refund.purchase.external_id.to_s : credit.chargebacked_purchase&.external_id.to_s,
             "",
             "",
             "",
@@ -112,7 +139,12 @@ class Exports::Payouts::Base
         @running_total -= payout.gumroad_fee_cents
       end
 
-      data.sort_by!(&:second) # Sort by date
+      # Sort by date, keeping the original insertion order for rows that share a date.
+      # Ruby's sort is not stable, so sorting on the date alone can shuffle same-day
+      # rows (for example a sale and a credit) whenever the row count changes, which
+      # makes the export's ordering depend on unrelated rows. Using the index as a
+      # tiebreaker keeps same-day ordering deterministic.
+      data = data.sort_by.with_index { |row, index| [row.second, index] }
 
       if payout.currency == Currency::USD && payout.amount_cents != @running_total
         # Our calculation produced a net total that is different from the actual payout total.
@@ -309,6 +341,32 @@ class Exports::Payouts::Base
         -0.0, # TODO can be partial - what happens to shipping?
         gross_amount.round(2),
         gumroad_fee_amount.round(2),
+        net_amount.round(2),
+      ]
+    end
+
+    # A balance transaction for a refund that failed after acceptance and was
+    # auto-reversed. The original debit and its offsetting credit both link to the
+    # same refund; label each by its sign so the export shows the refund attempt and
+    # its reversal as an explicit pair that nets to zero. Amounts come from the
+    # transaction itself (not the refund) so partial refunds and affiliate rows fall
+    # out correctly.
+    def summarize_failed_refund_transaction(btxn)
+      purchase = btxn.refund.purchase
+      net_amount = btxn.issued_amount_net_cents / 100.0
+      @running_total += btxn.issued_amount_net_cents
+
+      [
+        btxn.issued_amount_net_cents.negative? ? "Failed Refund" : "Failed Refund Reversal",
+        btxn.created_at.to_date.to_s,
+        purchase.external_id,
+        purchase.link.name,
+        purchase.full_name,
+        purchase.purchaser_email_or_email,
+        "",
+        "",
+        (btxn.issued_amount_gross_cents / 100.0).round(2),
+        ((btxn.issued_amount_gross_cents - btxn.issued_amount_net_cents) / 100.0).round(2),
         net_amount.round(2),
       ]
     end

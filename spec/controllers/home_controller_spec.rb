@@ -39,4 +39,16 @@ describe HomeController do
       expect(assigns(:hide_layouts)).to be(true)
     end
   end
+
+  describe "GET dpa" do
+    it "renders successfully" do
+      get :dpa
+
+      expect(response).to be_successful
+      expect(controller.send(:page_title)).to eq("Gumroad data processing addendum")
+      expect(response.body).to include("Data Processing")
+      expect(response.body).to include("Subprocessors")
+      expect(response.body).to include("International Transfers")
+    end
+  end
 end

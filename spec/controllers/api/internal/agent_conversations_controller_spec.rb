@@ -101,4 +101,112 @@ describe Api::Internal::AgentConversationsController do
       end
     end
   end
+
+  describe "GET turn_status" do
+    let(:client_turn_id) { SecureRandom.uuid }
+    let(:turn_status_key) { RedisKey.agent_turn_status(seller.id, client_turn_id) }
+
+    after { $redis.del(turn_status_key) }
+
+    it_behaves_like "authentication required for action", :get, :turn_status do
+      let(:request_params) { { client_turn_id: } }
+    end
+
+    it_behaves_like "authorize called for action", :get, :turn_status do
+      let(:record) { seller }
+      let(:policy_method) { :use_store_agent? }
+      let(:request_params) { { client_turn_id: } }
+      let(:request_format) { :json }
+    end
+
+    context "when authenticated and authorized" do
+      it "returns the persisted turn with its conversation id and message" do
+        conversation = create(:ai_conversation, seller:)
+        create(:ai_message, ai_conversation: conversation, content: "what does my bio say")
+        create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "Your bio has three lines.",
+          metadata: {
+            "client_turn_id" => client_turn_id,
+            "proposed_action" => { "type" => "api_write", "summary" => "Update the bio" },
+          },
+        )
+
+        get :turn_status, params: { client_turn_id: }, format: :json
+
+        expect(response.parsed_body).to eq(
+          "success" => true,
+          "status" => "persisted",
+          "conversation_id" => conversation.external_id,
+          "message" => {
+            "role" => "assistant",
+            "content" => "Your bio has three lines.",
+            "proposed_action" => { "type" => "api_write", "summary" => "Update the bio" },
+          },
+        )
+      end
+
+      it "returns in_progress while the streaming endpoint's liveness marker is armed" do
+        $redis.set(turn_status_key, "in_progress", ex: 60)
+
+        get :turn_status, params: { client_turn_id: }, format: :json
+
+        expect(response.parsed_body).to eq("success" => true, "status" => "in_progress")
+      end
+
+      it "returns failed when the turn was marked as never going to persist" do
+        $redis.set(turn_status_key, "failed", ex: 60)
+
+        get :turn_status, params: { client_turn_id: }, format: :json
+
+        expect(response.parsed_body).to eq("success" => true, "status" => "failed")
+      end
+
+      it "returns unknown when there is no stored turn and no marker" do
+        get :turn_status, params: { client_turn_id: }, format: :json
+
+        expect(response.parsed_body).to eq("success" => true, "status" => "unknown")
+      end
+
+      it "never returns another seller's turn for the same id" do
+        other_conversation = create(:ai_conversation) # different seller
+        create(
+          :ai_message,
+          ai_conversation: other_conversation,
+          role: "assistant",
+          content: "Someone else's reply.",
+          metadata: { "client_turn_id" => client_turn_id },
+        )
+
+        get :turn_status, params: { client_turn_id: }, format: :json
+
+        expect(response.parsed_body).to eq("success" => true, "status" => "unknown")
+      end
+
+      it "does not find turns older than the recovery lookup window" do
+        conversation = create(:ai_conversation, seller:)
+        create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "An old reply.",
+          metadata: { "client_turn_id" => client_turn_id },
+          created_at: 2.hours.ago,
+        )
+
+        get :turn_status, params: { client_turn_id: }, format: :json
+
+        expect(response.parsed_body).to eq("success" => true, "status" => "unknown")
+      end
+
+      it "rejects a malformed turn id" do
+        get :turn_status, params: { client_turn_id: "not/a?valid*id" }, format: :json
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+    end
+  end
 end

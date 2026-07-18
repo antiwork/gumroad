@@ -189,14 +189,14 @@ describe Order::PreparePaymentIntentService, :vcr do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
-        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp])
       end
 
       it "gates Link out of the intent on a PPP checkout" do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
-        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp])
       end
 
       it "does not gate the intent when the seller disabled PPP payment verification" do
@@ -204,7 +204,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
-        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card link cashapp us_bank_account])
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card link cashapp])
       end
     end
 
@@ -491,7 +491,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_us").perform
 
-        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp us_bank_account])
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
       # The presenter derives the Element's Link config from the same resolver output, so the

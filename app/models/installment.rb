@@ -1120,7 +1120,11 @@ class Installment < ApplicationRecord
       result = ContentModeration::ModerateRecordService.check(self, :post)
       return if result.passed
 
-      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "post"))
+      # Workflows publish all their emails in one action, so the error must
+      # name the flagged one — otherwise the seller has no way to tell which
+      # of their emails to fix.
+      noun = workflow_id.present? ? "email" : "post"
+      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, noun, title: name))
     end
 
     def normalize_tag(raw)

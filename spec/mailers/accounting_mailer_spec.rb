@@ -96,6 +96,30 @@ describe AccountingMailer, :vcr do
     end
   end
 
+  describe "#stripe_balance_summaries_report" do
+    it "attaches one CSV per entity and names entities skipped for missing keys" do
+      csvs = {
+        "Gumroad" => "Section,Description,Count,Amount,Currency\nBalance Summary,Starting balance,,100.00,usd\n",
+        "Flexile" => "Section,Description,Count,Amount,Currency\nBalance Summary,Starting balance,,50.00,usd\n",
+      }
+      email = AccountingMailer.stripe_balance_summaries_report(csvs, ["Helper", "Iffy"], 6, 2026)
+
+      expect(email.to).to eq([ApplicationMailer::FINANCE_EMAIL])
+      expect(email.subject).to include("Stripe Balance Summaries Report – 6/2026")
+      expect(email.attachments.map(&:filename)).to match_array(["stripe-balance-gumroad-6-2026.csv", "stripe-balance-flexile-6-2026.csv"])
+      html_body = email.body.parts.find { |part| part.content_type.include?("html") }.body
+      expect(html_body).to include("Helper, Iffy")
+    end
+
+    it "omits the missing-key note when every entity was reported" do
+      csvs = { "Gumroad" => "Section,Description,Count,Amount,Currency\n" }
+      email = AccountingMailer.stripe_balance_summaries_report(csvs, [], 6, 2026)
+
+      html_body = email.body.parts.find { |part| part.content_type.include?("html") }.body
+      expect(html_body).not_to include("no Stripe API key configured")
+    end
+  end
+
   describe "#stripe_currency_balances_report" do
     it "sends an email with balances report attached as csv" do
       last_month = Time.current.last_month

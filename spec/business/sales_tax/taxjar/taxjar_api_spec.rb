@@ -194,6 +194,44 @@ describe TaxjarApi, :vcr do
     }
   end
 
+  let(:expected_create_refund_transaction_response) do
+    {
+      "transaction_id" => "G_-mnBf9b1j9A7a4ub4nFQ==-refund",
+      "user_id" => 126159,
+      "provider" => "api",
+      "transaction_date" => "2023-09-15T20:06:20.000Z",
+      "transaction_reference_id" => "G_-mnBf9b1j9A7a4ub4nFQ==",
+      "customer_id" => nil,
+      "exemption_type" => nil,
+      "from_country" => "US",
+      "from_zip" => "94104",
+      "from_state" => "CA",
+      "from_city" => nil,
+      "from_street" => nil,
+      "to_country" => "US",
+      "to_zip" => "19106",
+      "to_state" => "PA",
+      "to_city" => nil,
+      "to_street" => nil,
+      "amount" => "-15.0",
+      "shipping" => "-0.0",
+      "sales_tax" => "-1.0",
+      "line_items" =>
+      [
+        {
+          "id" => 0,
+          "quantity" => 1,
+          "product_identifier" => nil,
+          "product_tax_code" => "31000",
+          "description" => nil,
+          "unit_price" => "-15.0",
+          "discount" => "0.0",
+          "sales_tax" => "-1.0"
+        }
+      ]
+    }
+  end
+
   let(:expected_create_order_transaction_response) do
     {
       "transaction_id" => "G_-mnBf9b1j9A7a4ub4nFQ==",
@@ -375,6 +413,23 @@ describe TaxjarApi, :vcr do
                                                           shipping_dollars: 5.0,
                                                           sales_tax_dollars: 1.0,
                                                           unit_price_dollars: 10.0)).to eq(expected_create_order_transaction_response)
+    end
+  end
+
+  describe "#create_refund_transaction" do
+    it "creates a refund transaction in TaxJar with negated amounts and a reference to the original order" do
+      # transaction_reference_id points at the order created by the #create_order_transaction
+      # cassette above (same sandbox account), so the refund resolves against a real order.
+      # Amounts are sent as negative numbers — TaxJar's convention for a refund transaction.
+      expect(described_class.new.create_refund_transaction(transaction_id: "G_-mnBf9b1j9A7a4ub4nFQ==-refund",
+                                                           transaction_reference_id: "G_-mnBf9b1j9A7a4ub4nFQ==",
+                                                           transaction_date: "2023-09-15T20:06:20Z",
+                                                           destination: { country: "US", state: "PA", zip: "19106" },
+                                                           quantity: 1,
+                                                           product_tax_code: "31000",
+                                                           amount_dollars: 15.0,
+                                                           sales_tax_dollars: 1.0,
+                                                           unit_price_dollars: 15.0)).to eq(expected_create_refund_transaction_response)
     end
   end
 end

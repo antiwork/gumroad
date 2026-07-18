@@ -16,6 +16,22 @@ basic_user:
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 
+# A standard buyer. The `create(:buyer)`/`create(:buyer_user)` equivalent: a
+# confirmed account that purchases products. Like every fixture user, `flags`
+# is left at the DB default of 1 (just announcement_notification_enabled) — the
+# other notification/tipping/discover/2FA defaults are set by User's
+# `before_create` callbacks, which fixtures bypass. A test that needs one of
+# those flags on should set it explicitly.
+buyer:
+  email: fixture-buyer@example.com
+  username: fixturebuyer
+  encrypted_password: <%= User.new.send(:password_digest, "test-password-123!") %>
+  confirmed_at: <%= Time.current %>
+  user_risk_state: not_reviewed
+  recommendation_type: own_products
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
 # The standard seller + 4-role team used by policy tests (mirrors the RSpec
 # `create(:named_seller)` + team_membership factory setup).
 named_seller:
