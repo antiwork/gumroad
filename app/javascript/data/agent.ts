@@ -123,6 +123,34 @@ export const fetchLatestAgentConversation = async (): Promise<Conversation | nul
   return json.conversation;
 };
 
+// What the server knows about one streamed turn, identified by the client-generated id sent with
+// the stream request. Used to recover a turn whose SSE connection broke: `persisted` carries the
+// stored assistant message and the conversation it landed in; `in_progress` means the server is
+// still generating it (keep polling); `failed` means it errored and will never persist;
+// `unknown` means there's no record and no liveness marker (waiting longer won't help).
+export type AgentTurnStatus =
+  | { status: "persisted"; conversation_id: string; message: ConversationMessage }
+  | { status: "in_progress" | "failed" | "unknown" };
+
+type AgentTurnStatusResponse =
+  | { success: true; status: "persisted"; conversation_id: string; message: ConversationMessage }
+  | { success: true; status: "in_progress" | "failed" | "unknown" }
+  | { success: false; error: string };
+
+export const fetchAgentTurnStatus = async (clientTurnId: string): Promise<AgentTurnStatus> => {
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: Routes.internal_agent_turn_status_path(clientTurnId),
+  });
+  if (!response.ok) throw new ResponseError();
+  const json = typia.assert<AgentTurnStatusResponse>(await response.json());
+  if (!json.success) throw new ResponseError(json.error);
+  return json.status === "persisted"
+    ? { status: json.status, conversation_id: json.conversation_id, message: json.message }
+    : { status: json.status };
+};
+
 // Events the streaming endpoint emits, surfaced to the caller as they arrive so the UI can render a
 // reply token-by-token and then show follow-up suggestions. `token` carries a chunk of reply text;
 // `objects` / `proposedAction` mirror the buffered response; `suggestions` is the list of "what
@@ -174,16 +202,24 @@ export class AgentStreamInterruptedError extends ResponseError {}
 // resolves with the fully-assembled turn once the `done` event lands. Falls back to throwing a
 // ResponseError (so the caller can show the same alert as the non-streaming path) on an `error`
 // event, or an AgentStreamInterruptedError when the stream breaks without one.
+// `clientTurnId` (a caller-generated UUID) tags the turn server-side so that, after an
+// interruption, the caller can recover this exact turn via fetchAgentTurnStatus instead of
+// guessing from the seller's latest conversation.
 export const streamAgentMessage = async (
   messages: ChatMessage[],
   handlers: AgentStreamHandlers = {},
   conversationId?: string | null,
+  clientTurnId?: string | null,
 ): Promise<StreamResult> => {
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.internal_agent_messages_stream_path(),
-    data: { messages, ...(conversationId ? { conversation_id: conversationId } : {}) },
+    data: {
+      messages,
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(clientTurnId ? { client_turn_id: clientTurnId } : {}),
+    },
   });
 
   // request() only rejects 5xx/429, so a 4xx or an HTML response from auth/CSRF/authorization

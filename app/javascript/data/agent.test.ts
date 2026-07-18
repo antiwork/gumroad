@@ -9,10 +9,11 @@ vi.mock("$app/utils/request", async (importOriginal) => {
 
 vi.stubGlobal("Routes", {
   internal_agent_messages_stream_path: () => "/internal/agent/messages/stream",
+  internal_agent_turn_status_path: (id: string) => `/internal/agent/turns/${id}`,
 });
 
 const { request } = vi.mocked(await import("$app/utils/request"));
-const { AgentStreamInterruptedError, streamAgentMessage } = await import("$app/data/agent");
+const { AgentStreamInterruptedError, fetchAgentTurnStatus, streamAgentMessage } = await import("$app/data/agent");
 
 // A real Response whose body streams the given SSE chunks. `fail` ends the stream by erroring the
 // reader (a dropped connection) instead of a clean EOF.
@@ -53,7 +54,7 @@ describe("streamAgentMessage", () => {
         }),
       ]),
     );
-    const onToken = vi.fn();
+    const onToken = vi.fn<(text: string) => void>();
 
     const result = await streamAgentMessage(MESSAGES, { onToken });
 
@@ -104,5 +105,61 @@ describe("streamAgentMessage", () => {
     expect(error).toBeInstanceOf(ResponseError);
     expect(error).not.toBeInstanceOf(AgentStreamInterruptedError);
     expect(error).toMatchObject({ message: "Too many requests." });
+  });
+
+  it("sends the client turn id with the stream request so the turn is recoverable by id", async () => {
+    request.mockResolvedValue(
+      sseResponse([frame("done", { reply: "Hi.", proposed_action: null, conversation_id: "conv1" })]),
+    );
+
+    await streamAgentMessage(MESSAGES, {}, null, "11111111-2222-4333-8444-555555555555");
+
+    const call = request.mock.calls[request.mock.calls.length - 1]?.[0];
+    expect(call && "data" in call ? call.data : undefined).toMatchObject({
+      client_turn_id: "11111111-2222-4333-8444-555555555555",
+    });
+  });
+});
+
+describe("fetchAgentTurnStatus", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const jsonResponse = (body: object) =>
+    new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+
+  it("returns the persisted turn with its conversation id and stored message", async () => {
+    request.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        status: "persisted",
+        conversation_id: "conv1",
+        message: { role: "assistant", content: "The full reply." },
+      }),
+    );
+
+    const result = await fetchAgentTurnStatus("11111111-2222-4333-8444-555555555555");
+
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "/internal/agent/turns/11111111-2222-4333-8444-555555555555" }),
+    );
+    expect(result).toEqual({
+      status: "persisted",
+      conversation_id: "conv1",
+      message: { role: "assistant", content: "The full reply." },
+    });
+  });
+
+  it.each(["in_progress", "failed", "unknown"] as const)("returns a bare %s status", async (status) => {
+    request.mockResolvedValue(jsonResponse({ success: true, status }));
+
+    await expect(fetchAgentTurnStatus("11111111-2222-4333-8444-555555555555")).resolves.toEqual({ status });
+  });
+
+  it("throws when the server rejects the turn id", async () => {
+    request.mockResolvedValue(jsonResponse({ success: false, error: "Invalid turn id." }));
+
+    await expect(fetchAgentTurnStatus("nope")).rejects.toBeInstanceOf(ResponseError);
   });
 });

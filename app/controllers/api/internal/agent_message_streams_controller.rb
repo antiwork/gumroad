@@ -24,7 +24,8 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
   private_constant :AGENT_REQUESTS_PER_PERIOD, :AGENT_REQUESTS_PERIOD_WINDOW
 
   # POST /internal/agent/messages/stream
-  # params: { messages: [{ role:, content: }, ...], conversation_id: <optional external id> }
+  # params: { messages: [{ role:, content: }, ...], conversation_id: <optional external id>,
+  #           client_turn_id: <optional client-generated id for this turn> }
   # Each event is `event: <name>` + `data: <json>` + a blank line. Event names: `token` (a chunk of
   # reply text), `objects`, `proposed_action`, `suggestions`, `done` (terminal, carrying the final
   # assembled payload), and `error` (a friendly message; the stream still closes cleanly).
@@ -33,16 +34,23 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
   # with a conversation_id the turn appends to that stored conversation and the model replays the
   # server-held transcript; without one a new conversation is created. The `done` event carries the
   # conversation's external id so the client can send it on subsequent turns.
+  #
+  # `client_turn_id` makes a broken stream recoverable by exact identity: the id is stored on the
+  # persisted assistant message and a Redis liveness marker tracks the turn while it's generating,
+  # so the turn-status endpoint (agent_turns#turn_status) can tell a reconnecting client whether
+  # THIS turn persisted, is still being generated, or failed — no guessing from "latest".
   def create
     response.headers["Content-Type"] = "text/event-stream"
     response.headers["Cache-Control"] = "no-cache"
     # Disable buffering at the proxy (nginx) layer so events flush to the browser as they're written.
     response.headers["X-Accel-Buffering"] = "no"
     sse = ActionController::Live::SSE.new(response.stream)
+    client_turn_id = agent_client_turn_id
 
     begin
       messages = sanitize_messages(params[:messages])
       if messages.empty?
+        mark_agent_turn_failed!(client_turn_id)
         sse.write({ message: "A message is required." }, event: "error")
         return
       end
@@ -52,9 +60,16 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       begin
         conversation = find_agent_conversation!
       rescue ActiveRecord::RecordNotFound
+        mark_agent_turn_failed!(client_turn_id)
         sse.write({ message: "That conversation could not be found." }, event: "error")
         return
       end
+
+      # From here the turn is genuinely in flight. Arm the liveness marker so a client whose
+      # connection breaks can distinguish "still generating — keep waiting" from "gone". It's
+      # re-armed on every stream write below, keeping it alive across the model's silent stretches
+      # (the model client tolerates up to 120s between chunks, well under the marker's TTL).
+      mark_agent_turn_in_progress!(client_turn_id)
 
       # The last user entry in the posted history is this turn's new message; when resuming, the
       # earlier entries are replaced by the stored transcript so a stale client can't rewrite
@@ -80,15 +95,22 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       # recording the turn fails (e.g. a DB hiccup after a long LLM call), log + report it but let
       # the stream finish — dropping `done` would leave the client without a conversation id, so
       # the next turn would silently start a brand-new conversation. The only cost of a
-      # persistence failure is that this turn isn't stored.
+      # persistence failure is that this turn isn't stored — the failure marker tells a
+      # recovering client to stop waiting for it.
+      turn_persisted = false
       on_reply_complete = lambda do |turn|
-        conversation = persist_agent_turn!(conversation, new_user_message, turn, fallback_first_message: messages.last[:content])
+        conversation = persist_agent_turn!(conversation, new_user_message, turn, fallback_first_message: messages.last[:content], client_turn_id:)
+        turn_persisted = true
       rescue => e
+        mark_agent_turn_failed!(client_turn_id)
         Rails.logger.error("Store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
       end
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:)
         .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
+        # Each write proves the turn is still alive — refresh the marker so long multi-tool turns
+        # never read as dead to a recovering client.
+        mark_agent_turn_in_progress!(client_turn_id)
         sse.write(payload, event:)
       end
       # conversation_id is omitted entirely (not null) when creating the conversation itself
@@ -105,10 +127,17 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       done_payload[:conversation_id] = conversation.external_id if conversation
       sse.write(done_payload, event: "done")
     rescue ::Ai::StoreAgentService::Error => e
+      mark_agent_turn_failed!(client_turn_id) unless turn_persisted
       sse.write({ message: e.message }, event: "error")
     rescue ActionController::Live::ClientDisconnected
-      # The seller navigated away or closed the tab mid-stream. Nothing to surface; just stop.
+      # The seller navigated away or closed the tab mid-stream. Nothing to surface on the dead
+      # socket. If this raised before the turn persisted (a token write failed mid-generation, so
+      # the service aborted and the reply will never be stored), record the failure so a
+      # recovering client stops waiting. When the turn DID persist first, leave the stored row as
+      # the answer — no marker needed.
+      mark_agent_turn_failed!(client_turn_id) unless turn_persisted
     rescue => e
+      mark_agent_turn_failed!(client_turn_id) unless turn_persisted
       Rails.logger.error("Store agent stream failed: #{e.full_message}")
       ErrorNotifier.notify(e)
       sse.write({ message: "Something went wrong. Please try again." }, event: "error")
