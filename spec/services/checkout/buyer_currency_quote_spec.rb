@@ -335,6 +335,28 @@ describe Checkout::BuyerCurrencyQuote do
       end.to raise_error(described_class::InvalidToken, "line items mismatch")
     end
 
+    it "does not bind zero-total cart lines that the charge pipeline completes separately" do
+      free_product = create(:product, user: seller, price_cents: 0, price_currency_type: Currency::USD)
+      result = described_class.create(
+        line_items: line_items_for(product, free_product),
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1"
+      )
+
+      verified_quote = described_class.verify!(
+        token: result.token,
+        seller:,
+        merchant_account:,
+        currency: Currency::CAD,
+        canonical_total_cents: 10_00,
+        canonical_line_items: canonical_line_items_for(product)
+      )
+
+      expect(verified_quote).to have_attributes(currency: Currency::CAD,
+                                                canonical_total_cents: 10_00,
+                                                presentment_total_cents: 12_50)
+    end
+
     it "rejects expired tokens" do
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 

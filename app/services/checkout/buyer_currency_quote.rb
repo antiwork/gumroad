@@ -256,10 +256,16 @@ class Checkout::BuyerCurrencyQuote
           stripe_account_id: merchant_account.charge_processor_merchant_id,
           currency: buyer_currency,
           canonical_total_cents:,
-          # The total alone cannot distinguish two carts whose lines changed but still add
-          # up to the same amount. Bind the ordered line identities and totals so charge-time
-          # allocation cannot persist a different split from the one checkout displayed.
-          canonical_line_items: line_items.map { |line_item| [line_item.permalink.to_s, line_item.canonical_total_cents.to_i] },
+          # The total alone cannot distinguish two paid carts whose lines changed but still
+          # add up to the same amount. Bind the ordered paid-line identities and totals so
+          # charge-time allocation cannot persist a different split from what checkout showed.
+          # Free lines are omitted because Order::ChargeService completes them before building
+          # the paid purchase list, and they can only receive a zero-cent allocation.
+          canonical_line_items: line_items.filter_map do |line_item|
+            next if line_item.canonical_total_cents.zero?
+
+            [line_item.permalink.to_s, line_item.canonical_total_cents.to_i]
+          end,
           presentment_total_cents:,
           stripe_fx_quote_id: quote.id,
           stripe_fx_quote_expires_at: quote.expires_at.iso8601,

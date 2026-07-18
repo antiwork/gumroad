@@ -260,7 +260,9 @@ class Charge::CreateService
       merchant_account:,
       currency: eligibility_decision.currency,
       canonical_total_cents: amount_cents,
-      canonical_line_items: purchases.map do |purchase|
+      canonical_line_items: purchases.filter_map do |purchase|
+        next if purchase.total_transaction_cents.zero?
+
         {
           permalink: purchase.link.unique_permalink,
           total_cents: purchase.total_transaction_cents,
