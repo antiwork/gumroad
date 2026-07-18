@@ -324,9 +324,24 @@ class Order::PreparePaymentIntentService
       if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?
         Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       else
-        # element_mount_forced_currency already checks the seller flags and surface availability.
-        element_mount_forced_currency.present?
+        element_mount_forced_currency.present? || forced_currency_element_mount_currency.present?
       end
+    end
+
+    # The browser reports the Element's mount currency only to fail a stale token closed. It does
+    # not choose a presentment currency: #element_mount_forced_currency remains the current,
+    # server-authoritative launch and capability check. If a seller rolls a local method back
+    # after an EUR Element minted a card/Link ConfirmationToken, the current check returns nil;
+    # this shape check still prevents us from creating a USD intent that Stripe will reject.
+    def forced_currency_element_mount_currency
+      return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      return nil unless purchases_to_charge.one?
+
+      product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
+      return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
+      return nil unless params[:payment_element_mount_currency].to_s.downcase == product_currency
+
+      product_currency
     end
 
     def create_unconfirmed_intent(charge, presentment = nil)
