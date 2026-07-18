@@ -71,10 +71,24 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
         expect(body["html"]).not_to include("evil.com")
       end
 
-      it "renders an error for a proposal that clears the page" do
+      it "previews the default storefront for a proposal that clears the page" do
         post :create, params: { endpoint: "update_user_custom_html", custom_html: "" }, format: :json
 
-        expect(response.parsed_body).to eq("success" => false, "error" => "This change removes the custom page, so there is nothing to preview.")
+        body = response.parsed_body
+        expect(body["success"]).to be(true)
+        # Clearing unpublishes the custom page, so the profile falls back to the default
+        # storefront — the preview shows that render rather than erroring out.
+        expect(body["html"]).to eq(Pages::DefaultProfileDocument.render(seller))
+      end
+
+      it "previews the default storefront when the proposed page sanitizes down to nothing" do
+        # Applying stores `result.html.presence`, so a page that is all disallowed markup
+        # unpublishes — the preview mirrors that outcome.
+        post :create, params: { endpoint: "update_user_custom_html", custom_html: %(<script src="https://evil.com/x.js"></script>) }, format: :json
+
+        body = response.parsed_body
+        expect(body["success"]).to be(true)
+        expect(body["html"]).to eq(Pages::DefaultProfileDocument.render(seller))
       end
     end
 
@@ -139,6 +153,18 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
         post :create, params: { endpoint: "edit_user_custom_html", find: "<p>a</p>", replace: "<p>b</p>" }, format: :json
 
         expect(response.parsed_body).to eq("success" => false, "error" => "There is no custom HTML page to edit.")
+      end
+
+      it "previews the default storefront when the edit empties the page" do
+        # An edit that deletes the whole content unpublishes the page on apply (the real endpoint
+        # stores the sanitized result's presence), so the preview shows the default storefront.
+        # `find` is read back from the record because saving may normalize the markup.
+        post :create, params: { endpoint: "edit_user_custom_html", find: seller.reload.custom_html, replace: "" }, format: :json
+
+        body = response.parsed_body
+        expect(body["error"]).to be_nil
+        expect(body["success"]).to be(true)
+        expect(body["html"]).to eq(Pages::DefaultProfileDocument.render(seller))
       end
 
       it "inserts replacements containing backslashes literally" do

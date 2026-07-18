@@ -31,11 +31,13 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
 
     resulting_html, marked_html, error = resulting_custom_html
     return render json: { success: false, error: } if error
+    # A blank update is the real endpoint's "clear the page" — a valid change, not an error.
+    return render_cleared_page_preview if resulting_html.nil?
 
     sanitized = Ai::PageSanitizer.sanitize_with_report(resulting_html).html.presence
-    if sanitized.nil?
-      return render json: { success: false, error: "This change would leave the page empty, so there is nothing to preview." }
-    end
+    # The apply path stores `result.html.presence`, so a page that sanitizes down to nothing also
+    # unpublishes — preview that outcome the same way instead of blocking the proposal.
+    return render_cleared_page_preview if sanitized.nil?
 
     display_html, scroll_to_change = marked_preview_html(sanitized, marked_html)
     document = profile_custom_html_document(
@@ -52,18 +54,34 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
       authorize current_seller, :use_store_agent?
     end
 
+    # The preview for a proposal that unpublishes the custom page (a blank update, or an edit
+    # whose result sanitizes down to nothing). Clearing reverts the profile to the default
+    # storefront, so the preview shows that — the same render GET /v2/user/custom_html hands
+    # agents as a starting point — instead of treating a valid "remove the page" proposal as
+    # an unpreviewable error (which would leave its Confirm button permanently disabled).
+    def render_cleared_page_preview
+      render json: { success: true, html: Pages::DefaultProfileDocument.render(current_seller) }
+    end
+
     # [resulting_html, marked_html, error]: the page as it would read after the proposed change
     # (or an error explaining why it can't be computed), plus — for edits — a variant with
     # PREVIEW_CHANGED_MARKER spliced in front of the replacement so the preview document can
-    # scroll to where the page changed. Mirrors the matching rules of the real edit endpoint so
-    # the preview and the eventual apply always agree on what the change does.
+    # scroll to where the page changed. All-nil means the proposal clears the page (a valid
+    # outcome the caller previews as the default storefront). Mirrors the matching rules of the
+    # real edit endpoint so the preview and the eventual apply always agree on what the change
+    # does.
     def resulting_custom_html
       case params[:endpoint].to_s
       when "update_user_custom_html"
         custom_html = params[:custom_html]
-        unless custom_html.is_a?(String) && custom_html.present?
-          return [nil, nil, "This change removes the custom page, so there is nothing to preview."]
+        if custom_html.present? && !custom_html.is_a?(String)
+          return [nil, nil, "custom_html must be a string."]
         end
+        # Blank clears the page on the real endpoint (Api::V2::UsersController#update_custom_html
+        # normalizes blank to nil), so it's a previewable outcome — signalled as a nil result, not
+        # an error, and the caller previews the cleared state instead.
+        return [nil, nil, nil] if custom_html.blank?
+
         return [nil, nil, custom_html_length_error(custom_html)] if custom_html_length_error(custom_html)
 
         # A whole-page update has no single "changed area" to point at, so no marked variant.
