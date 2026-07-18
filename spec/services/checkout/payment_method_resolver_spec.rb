@@ -58,12 +58,14 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(buyer_country: "US", ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
         end
 
-        it "keeps it out of the recorded eligible set's launch-gated-out log entry" do
+        it "records ACH Direct Debit in the enabled payment methods" do
           allow(Rails.logger).to receive(:info)
 
           resolve(buyer_country: "US")
 
-          expect(Rails.logger).to have_received(:info).with(a_string_matching(/enabled=.*us_bank_account/))
+          expect(Rails.logger).to have_received(:info).with(
+            a_string_matching(/buyer_country="US".*enabled=\["card", "link", "cashapp", "us_bank_account"\]/)
+          )
         end
       end
 
