@@ -68,6 +68,12 @@ class ContentModeration::Strategies::PromptStrategy
       compliant unless paired with classic MLM red flags (multi-level downline
       structures, guaranteed returns, "no selling required", recruitment over
       product sales).
+    - Announcement emails promoting the creator's own new release — a new
+      YouTube video, song, episode, stream, or product drop — with short
+      call-to-action lines like "Watch HERE", "Go watch, like and comment",
+      "Listen now", or "Get it here". A brief email whose entire point is one
+      or two links to the creator's new content is normal creator marketing,
+      not spam, even when it contains little other text.
 
     Important: this content is extracted from HTML and stripped of structure. You
     will not see images, headings, or layout. For posts/emails the visual content
@@ -86,8 +92,11 @@ class ContentModeration::Strategies::PromptStrategy
       (slogans for unrelated brands, off-topic SEO keywords, link farms)
     - Obvious keyword stuffing of unrelated terms
     - Fake reviews, artificial engagement, or bot-generated text
-    - Aggressive call-to-action spam ("BUY NOW BUY NOW BUY NOW", "click here click
-      here click here") with no other information
+    - Aggressive call-to-action spam: the SAME call-to-action repeated many
+      times back-to-back ("BUY NOW BUY NOW BUY NOW", "click here click here
+      click here") with no other content. A short email with one or two
+      distinct CTAs pointing at the creator's own content is NOT this — see
+      the announcement-email allowance above.
 
     If the content describes a real product, OR reads as a coherent installment of
     creative or editorial work — even one that is repetitive, surreal, or makes no

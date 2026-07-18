@@ -6,7 +6,9 @@ class BruneiBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /^[0-9a-zA-Z]{8,11}$/
   private_constant :BANK_CODE_FORMAT_REGEX
 
-  ACCOUNT_NUMBER_FORMAT_REGEX = /^[0-9]{1,13}$/
+  # Stripe accepts Brunei account numbers of up to 14 digits, which matches the
+  # standard length of BIBD (Bank Islam Brunei Darussalam) account numbers.
+  ACCOUNT_NUMBER_FORMAT_REGEX = /^[0-9]{1,14}$/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number

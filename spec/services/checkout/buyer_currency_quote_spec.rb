@@ -50,6 +50,14 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
+    it "creates a signed quote in live mode now that the card presentment path has shipped its safety gates" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_presentment")
+
+      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 12_50)
+    end
+
     it "returns nil for multi-product checkouts" do
       expect(StripeFxQuote).not_to receive(:create)
 

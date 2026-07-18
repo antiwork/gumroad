@@ -215,6 +215,76 @@ describe GenerateSalesReportJob do
     end
   end
 
+  describe "refund period attribution" do
+    let(:cutover) { Purchase::Reportable::REFUND_REPORTING_CUTOVER }
+    let(:report_quarter_start) { (cutover + 3.months).beginning_of_quarter }
+    let(:report_quarter_end) { report_quarter_start.end_of_quarter }
+
+    before do
+      @mock_service = double("ExpiringS3FileService")
+      allow(@mock_service).to receive(:perform).and_return("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/test-url")
+
+      product = create(:product, price_cents: 100_00, native_type: "digital")
+
+      # Sold (post-cutover) in the quarter before the reported one, refunded during the
+      # reported quarter: the refund must appear in the reported quarter as a negative row.
+      travel_to(report_quarter_start - 10.days) do
+        @cross_quarter_purchase = create(:purchase, link: product, price_cents: 100_00, fee_cents: 30_00,
+                                                    gumroad_tax_cents: 20_00, total_transaction_cents: 120_00,
+                                                    country: "United Kingdom")
+      end
+
+      travel_to(report_quarter_start + 10.days) do
+        @refund = create(:refund, purchase: @cross_quarter_purchase, amount_cents: 50_00, fee_cents: 15_00,
+                                  gumroad_tax_cents: 10_00, total_transaction_cents: 60_00)
+        @cross_quarter_purchase.update!(stripe_partially_refunded: true)
+      end
+    end
+
+    it "reports the refund as a negative row dated by the refund's date" do
+      csv_content = nil
+      expect(ExpiringS3FileService).to receive(:new) do |args|
+        csv_content = args[:file].read
+        args[:file].rewind
+        @mock_service
+      end
+
+      described_class.new.perform("GB", report_quarter_start.to_date, report_quarter_end.to_date, GenerateSalesReportJob::ALL_SALES)
+
+      csv = CSV.parse(csv_content, headers: true)
+      # The purchase's sale row belongs to the previous quarter, so this quarter contains
+      # only the refund row.
+      expect(csv.length).to eq(1)
+      refund_row = csv[0]
+      expect(refund_row["Sale ID"]).to eq(@cross_quarter_purchase.external_id)
+      expect(refund_row["Sale time"]).to eq(@refund.created_at.to_s)
+      expect(refund_row["Price"]).to eq("-5000")
+      expect(refund_row["Gumroad Fee"]).to eq("-1500")
+      expect(refund_row["GST"]).to eq("-1000")
+      expect(refund_row["Total"]).to eq("-6000")
+    end
+
+    it "does not restate the purchase's own quarter when re-generated after the refund" do
+      csv_content = nil
+      expect(ExpiringS3FileService).to receive(:new) do |args|
+        csv_content = args[:file].read
+        args[:file].rewind
+        @mock_service
+      end
+
+      purchase_quarter_start = (report_quarter_start - 3.months).beginning_of_quarter
+      described_class.new.perform("GB", purchase_quarter_start.to_date, purchase_quarter_start.end_of_quarter.to_date, GenerateSalesReportJob::ALL_SALES)
+
+      csv = CSV.parse(csv_content, headers: true)
+      # The sale quarter regenerates with the purchase at its gross amounts — the later refund
+      # belongs to the following quarter and must not leak backwards.
+      expect(csv.length).to eq(1)
+      sale_row = csv[0]
+      expect(sale_row["Sale ID"]).to eq(@cross_quarter_purchase.external_id)
+      expect(sale_row["Price"]).to eq("10000")
+    end
+  end
+
   describe "#update_job_status_to_completed" do
     let(:job_attributes) do
       {

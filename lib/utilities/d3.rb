@@ -31,6 +31,28 @@ class D3
       end
     end
 
+    # Like date_month_domain, but for hourly buckets. Takes the first instant of
+    # each bucket (as times in the seller's timezone) and labels it with the
+    # wall-clock hour, eg "Thursday, July 16th, 1 PM".
+    def hour_month_domain(hours)
+      last_month = nil
+      month_index = -1
+      hours.map do |hour|
+        month = hour.strftime("%B %Y")
+
+        if month != last_month
+          last_month = month
+          month_index = month_index + 1
+        end
+
+        {
+          date: "#{hour.strftime("%A, %B")} #{hour.day.ordinalize}, #{hour.strftime("%l %p").strip}",
+          month:,
+          month_index:
+        }
+      end
+    end
+
     def date_month_domain(dates)
       last_month = nil
       month_index = -1

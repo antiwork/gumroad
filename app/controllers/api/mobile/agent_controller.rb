@@ -55,6 +55,35 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
     render json: { success: true, conversation: conversation && agent_conversation_props(conversation) }
   end
 
+  # GET /mobile/agent/turns/:client_turn_id
+  # Recovery read for a streamed turn whose connection broke, mirroring the web endpoint
+  # (Api::Internal::AgentConversationsController#turn_status): the app generated the turn id
+  # before sending, so this answers "did MY exact turn persist?" instead of guessing from the
+  # seller's latest conversation. Statuses: persisted (with the stored turn + conversation id),
+  # in_progress (server still generating — keep polling), failed (will never persist — stop),
+  # unknown (no record, no liveness marker — stop). Cheap read, so not LLM-throttled.
+  def turn_status
+    turn_id = agent_client_turn_id
+    if turn_id.nil?
+      render json: { success: false, error: "Invalid turn id." }, status: :bad_request
+      return
+    end
+
+    message = find_agent_turn_message(turn_id)
+    if message
+      render json: {
+        success: true,
+        status: "persisted",
+        conversation_id: message.ai_conversation.external_id,
+        message: agent_message_props(message),
+      }
+    else
+      marker = agent_turn_marker(turn_id)
+      status = %w[in_progress failed].include?(marker) ? marker : "unknown"
+      render json: { success: true, status: }
+    end
+  end
+
   # POST /mobile/agent/messages
   # params: { messages: [{ role:, content: }, ...], conversation_id: <optional external id> }
   # With a conversation_id, the turn appends to that stored conversation and the model sees the
