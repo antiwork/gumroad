@@ -41,16 +41,14 @@ module PageMeta::Product
     end
 
     def set_open_graph_image_meta(product)
-      if product.preview_image_path?
-        set_meta_tag(property: "og:image", content: product.preview_url)
-        set_meta_tag(property: "og:image:alt", content: "")
-      elsif product.preview_oembed_thumbnail_url
-        set_meta_tag(
-          property: "og:image",
-          content: Addressable::URI.escape(product.preview_oembed_thumbnail_url).html_safe,
-        )
-        set_meta_tag(property: "og:image:alt", content: "")
-      end
+      # Cover image (or the thumbnail/poster of a video/oembed cover) — shared
+      # with the custom-HTML wrapper document via Link#social_share_image so
+      # both surfaces resolve the share image the same way.
+      image_url = product.social_share_image
+      return if image_url.blank?
+
+      set_meta_tag(property: "og:image", content: image_url)
+      set_meta_tag(property: "og:image:alt", content: "")
     end
 
     # Equivalent to `twitter_product_card(product, product_description:).html_safe`

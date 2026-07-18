@@ -123,6 +123,42 @@ describe Api::Mobile::AgentStreamsController do
       expect(response.body).to include("event: error")
     end
 
+    context "with a client turn id" do
+      let(:client_turn_id) { SecureRandom.uuid }
+      let(:turn_status_key) { RedisKey.agent_turn_status(@seller.id, client_turn_id) }
+
+      after { $redis.del(turn_status_key) }
+
+      it "stores the id on the persisted assistant message and arms the liveness marker" do
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
+          # Mid-generation, before the turn persists, the marker must already read in_progress.
+          expect($redis.get(turn_status_key)).to eq("in_progress")
+          emit.call(:token, { text: "You have 3 products." })
+          turn = { reply: "You have 3 products.", proposed_action: nil, objects: [] }
+          on_reply_complete&.call(turn)
+          turn.merge(suggestions: [])
+        end
+
+        post :create, params: valid_params.merge(client_turn_id:)
+
+        message = @seller.ai_conversations.sole.ai_messages.role_assistant.sole
+        expect(message.metadata["client_turn_id"]).to eq(client_turn_id)
+      end
+
+      it "records a failed marker when the service errors before the turn persists" do
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming).and_raise(Ai::StoreAgentService::Error, "nope")
+
+        post :create, params: valid_params.merge(client_turn_id:)
+
+        expect($redis.get(turn_status_key)).to eq("failed")
+        expect(response.body).to include("event: error")
+      end
+    end
+
     it "emits an error event and persists nothing when the service fails mid-stream" do
       # The response is already committed as an event stream by the time the service raises, so the
       # failure has to arrive as an `error` event (not an HTTP error status) and the stream must

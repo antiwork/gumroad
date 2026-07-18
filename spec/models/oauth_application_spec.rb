@@ -129,6 +129,16 @@ describe OauthApplication do
       expect(@oauth_application.access_grants.last.scopes.to_s).to eq("edit_products view_sales")
     end
 
+    it "reloads the application scopes under its lock before generating credentials" do
+      @oauth_application.update!(scopes: "edit_products edit_profile")
+      OauthApplication.where(id: @oauth_application.id).update_all(scopes: "edit_products")
+
+      access_token = @oauth_application.get_or_generate_access_token
+
+      expect(access_token.scopes.to_s).to eq("edit_products")
+      expect(@oauth_application.access_grants.last.scopes.to_s).to eq("edit_products")
+    end
+
     it "generates new access token if existing ones are revoked" do
       @oauth_application.get_or_generate_access_token
       Doorkeeper::AccessToken.revoke_all_for(@oauth_application.id, @oauth_application.owner)

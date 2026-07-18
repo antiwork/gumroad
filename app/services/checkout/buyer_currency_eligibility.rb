@@ -53,8 +53,7 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   def self.buyer_presentment_candidate?(seller:, buyer_currency_display:)
-    stripe_test_mode? &&
-      seller_enabled?(seller) &&
+    seller_enabled?(seller) &&
       buyer_presentment_display?(buyer_currency_display)
   end
 
@@ -83,7 +82,6 @@ class Checkout::BuyerCurrencyEligibility
 
   def decision
     return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
-    return fallback(:live_mode) unless stripe_test_mode?
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
     return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?

@@ -66,11 +66,13 @@ class OauthApplication < Doorkeeper::Application
 
   # Returns an existing active access token or creates one if none exist
   def get_or_generate_access_token
-    allowed_scopes = scopes.to_s
-    ensure_access_grant_exists(allowed_scopes:)
-    access_tokens.where(resource_owner_id: owner.id,
-                        revoked_at: nil,
-                        scopes: allowed_scopes).first_or_create!
+    with_lock do
+      allowed_scopes = scopes.to_s
+      ensure_access_grant_exists(allowed_scopes:)
+      access_tokens.where(resource_owner_id: owner.id,
+                          revoked_at: nil,
+                          scopes: allowed_scopes).first_or_create!
+    end
   end
 
   def revoke_access_for(user)

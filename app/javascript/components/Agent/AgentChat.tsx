@@ -4,13 +4,14 @@ import * as React from "react";
 import {
   type AgentStreamHandlers,
   AgentStreamInterruptedError,
+  type AgentTurnStatus,
   type ChatMessage,
-  type Conversation,
   type ConversationMessage,
   type DisplayObject,
   type ProposedAction,
   executeAgentAction,
   fetchCustomHtmlProposalPreview,
+  fetchAgentTurnStatus,
   fetchLatestAgentConversation,
   isCustomHtmlProposal,
   streamAgentMessage,
@@ -30,12 +31,38 @@ import { Textarea } from "$app/components/ui/Textarea";
 // near-bottom threshold the Communities chat uses.)
 const STICK_TO_BOTTOM_THRESHOLD_PX = 200;
 
-// After a stream breaks, when to look again for the persisted turn (the first look happens
-// immediately). The server persists the turn the moment the reply completes, so the immediate
-// look usually wins — but a connection that broke mid-generation leaves the server unaware,
-// still generating, until its next socket write. The retries stretch out to cover that window
-// rather than polling quickly and giving up.
-const STREAM_RECOVERY_RETRY_DELAYS_MS = [3000, 10000];
+// After a stream breaks, how often to ask the server what became of the turn (identified by the
+// client-generated turn id sent with the stream request), and how long to keep asking. The server
+// tracks the turn's liveness while generating (its model client tolerates up to 120 seconds of
+// silence between chunks, across up to 5 tool iterations), so recovery keeps polling as long as
+// the server says "in_progress" — a fixed short deadline would abandon turns the server goes on
+// to finish. The hard cap only guards against a marker that never resolves.
+const TURN_RECOVERY_POLL_INTERVAL_MS = 3000;
+const TURN_RECOVERY_MAX_POLLS = 200;
+// Consecutive "unknown" statuses tolerated before giving up. Unknown means no stored turn and no
+// liveness marker — normally conclusive, but a Redis blip can produce one spuriously, so allow a
+// couple of confirming looks.
+const TURN_RECOVERY_MAX_CONSECUTIVE_UNKNOWNS = 2;
+// Consecutive failed status fetches tolerated before giving up — the same flaky network that
+// broke the stream may still be down, so this is more generous than the unknown allowance.
+const TURN_RECOVERY_MAX_CONSECUTIVE_FETCH_FAILURES = 10;
+
+// A UUID v4 for tagging a streamed turn. `crypto.randomUUID` only exists in secure contexts
+// (HTTPS or localhost), and the app also runs on plain-HTTP origins (system tests, local dev on
+// a custom host) — there we build the UUID from `crypto.getRandomValues`, which has no such
+// restriction. The id only has to be unique per turn, not cryptographically meaningful.
+const generateTurnId = (): string => {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const hex = [...bytes]
+    .map((byte, index) => {
+      if (index === 6) byte = (byte & 0x0f) | 0x40; // version 4
+      if (index === 8) byte = (byte & 0x3f) | 0x80; // RFC 4122 variant
+      return byte.toString(16).padStart(2, "0");
+    })
+    .join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
 
 type DisplayMessage = ChatMessage & {
   // A proposed change attached to an assistant turn. Once the seller acts on it, we record the
@@ -306,15 +333,6 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   // "latest conversation" response must not overwrite the chat or its conversation id — otherwise
   // subsequent turns would be appended to the wrong stored conversation.
   const hasSentMessageRef = React.useRef(false);
-  // The id of the seller's most recent stored conversation as seen by the mount-time fetch below,
-  // recorded even when hydration is skipped (the seller sent a message before it resolved). Used by
-  // stream recovery on a fresh chat: a first turn that persisted creates a brand-NEW conversation,
-  // so if the "latest" fetch still returns this pre-existing one, this turn was never stored.
-  const preexistingConversationIdRef = React.useRef<string | null>(null);
-  // Whether the mount-time fetch actually resolved. `preexistingConversationIdRef` being null is
-  // ambiguous on its own (no stored conversations vs. the fetch failed / hasn't landed yet);
-  // fresh-chat stream recovery only trusts the null when this flag confirms the fetch completed.
-  const preexistingConversationKnownRef = React.useRef(false);
   // Whether the assistant reply has started arriving this turn — drives the "Thinking..." bubble,
   // which we show only until the first token lands, then let the streaming text take over.
   const [isStreaming, setIsStreaming] = React.useState(false);
@@ -355,11 +373,6 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     void fetchLatestAgentConversation()
       .then((conversation) => {
         if (cancelled) return;
-        // Remember which conversation was already the seller's latest before this chat wrote
-        // anything, whether or not we hydrate it — stream recovery uses it to tell "our first turn
-        // was persisted as a new conversation" apart from "the latest is still someone else's".
-        preexistingConversationIdRef.current = conversation?.id ?? null;
-        preexistingConversationKnownRef.current = true;
         if (!conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
         setMessages([
           { role: "assistant", content: greeting },
@@ -378,79 +391,66 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     };
   }, []);
 
-  // A streamed turn died before its terminal `done` frame. Check whether the turn completed
-  // server-side anyway, and if so replace the partially-rendered assistant message with the
-  // persisted one (including its proposed-action card and object cards). `streamedContent` is the
-  // reply text that reached the screen before the break. Returns whether the turn was recovered;
-  // when it wasn't (the failure was real and nothing was stored), the caller falls back to the
-  // normal error handling.
-  const recoverInterruptedTurn = async (
-    sentText: string,
-    assistantIndex: number,
-    streamedContent: string,
-  ): Promise<boolean> => {
-    // One look at the stored conversation. `false` means the turn may still be persisting (worth
-    // another look); "abort" means no amount of waiting can make recovery correct.
-    const attempt = async (): Promise<boolean | "abort"> => {
-      let conversation: Conversation | null;
-      try {
-        conversation = await fetchLatestAgentConversation();
-      } catch {
-        // Best-effort: the same flaky network that broke the stream may fail this fetch too.
-        return false;
-      }
-      if (!conversation) return false;
-      if (conversationIdRef.current) {
-        // Only reconcile against the conversation this chat is appending to. A different latest
-        // conversation (another tab or device took over) can't become ours by waiting — stop.
-        if (conversation.id !== conversationIdRef.current) return "abort";
-      } else {
-        // Fresh chat: this turn has no conversation id yet, so a persisted first turn lives in a
-        // brand-new conversation the server just created. Accept the fetched conversation only
-        // when we know it is NOT one that already existed before this chat sent anything —
-        // otherwise another tab appending the same prompt text to an older conversation would be
-        // mistaken for our turn, and this chat would adopt that conversation's id and append all
-        // future turns to the wrong transcript. When the mount-time fetch hasn't resolved we
-        // can't make that call yet, so decline this look rather than risk hijacking.
-        if (!preexistingConversationKnownRef.current) return false;
-        if (preexistingConversationIdRef.current !== null && conversation.id === preexistingConversationIdRef.current)
-          return false;
-        // Correlate by shape too: the interrupted first turn would have been persisted as a
-        // brand-new conversation holding exactly this one turn (the message we sent + the reply).
-        // A longer conversation is some existing chat, not this turn.
-        if (conversation.messages.length !== 2) return false;
-      }
-      const persisted = conversation.messages;
-      const reply = persisted[persisted.length - 1];
-      const userTurn = persisted[persisted.length - 2];
-      // Recover only when the stored tail is exactly this turn: the message we just sent followed
-      // by an assistant reply. Anything else means this turn hasn't been persisted (yet).
-      if (!reply || reply.role !== "assistant" || userTurn?.role !== "user" || userTurn.content !== sentText)
-        return false;
-      // ...and only when the stored reply extends the text the seller actually watched stream in.
-      // An earlier turn in this conversation could have used identical text (a repeated "yes"),
-      // and adopting its reply would silently rewrite this failed turn as that old one. Preamble
-      // that a reset event cleared never lingers in streamedContent (the tracker resets with it).
-      if (streamedContent.trim().length > 0 && !reply.content.startsWith(streamedContent.trim())) return false;
+  // A streamed turn died before its terminal `done` frame. The turn was tagged with a
+  // client-generated id when it was sent, so ask the server what became of that EXACT turn —
+  // persisted, still generating, failed, or unknown — instead of inferring from the seller's
+  // latest conversation (which another tab or device can change at any moment). Polls for as long
+  // as the server reports the turn in progress: the server allows long silent stretches between
+  // model chunks, so a completed reply can persist well after the stream broke. When the turn is
+  // recovered, replaces the partially-rendered assistant message with the persisted one (including
+  // its proposed-action card and object cards) and adopts the conversation id. Returns whether the
+  // turn was recovered; when it wasn't, the caller falls back to the normal error handling.
+  const recoverInterruptedTurn = async (clientTurnId: string, assistantIndex: number): Promise<boolean> => {
+    const adopt = (turn: Extract<AgentTurnStatus, { status: "persisted" }>) => {
       setMessages((prev) => {
         const next = [...prev];
         // Unlike the mount-time hydration (where a status-less proposal is stale and rendered
         // dismissed), this proposal was made moments ago in the live session — keep it
         // confirmable, exactly as it would have been had the stream survived.
-        next[assistantIndex] = toDisplayMessage(reply, { staleProposalsDismissed: false });
+        next[assistantIndex] = toDisplayMessage(turn.message, { staleProposalsDismissed: false });
         return next;
       });
-      setConversationId(conversation.id);
-      return true;
+      // Adopting the conversation id matters even mid-conversation, but especially on a fresh
+      // chat: without it the next turn would silently start a brand-new conversation.
+      setConversationId(turn.conversation_id);
     };
 
-    let result = await attempt();
-    for (const delayMs of STREAM_RECOVERY_RETRY_DELAYS_MS) {
-      if (result !== false) break;
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      result = await attempt();
+    let consecutiveUnknowns = 0;
+    let consecutiveFetchFailures = 0;
+    for (let poll = 0; poll < TURN_RECOVERY_MAX_POLLS; poll++) {
+      if (poll > 0) await new Promise((resolve) => setTimeout(resolve, TURN_RECOVERY_POLL_INTERVAL_MS));
+      let turn: AgentTurnStatus;
+      try {
+        turn = await fetchAgentTurnStatus(clientTurnId);
+      } catch {
+        // The same flaky network that broke the stream may fail this fetch too — keep trying for
+        // a while before concluding anything.
+        consecutiveFetchFailures += 1;
+        if (consecutiveFetchFailures >= TURN_RECOVERY_MAX_CONSECUTIVE_FETCH_FAILURES) return false;
+        continue;
+      }
+      consecutiveFetchFailures = 0;
+      switch (turn.status) {
+        case "persisted":
+          adopt(turn);
+          return true;
+        case "failed":
+          // The server's verdict: this turn errored and will never persist. Stop immediately.
+          return false;
+        case "in_progress":
+          // The server is still generating — keep waiting, however long it takes; its own
+          // liveness marker (not a client-side deadline) decides when the turn is dead.
+          consecutiveUnknowns = 0;
+          continue;
+        case "unknown":
+          // No stored turn and no liveness marker. Conclusive unless it's a transient blip, so
+          // allow a couple of confirming looks before giving up.
+          consecutiveUnknowns += 1;
+          if (consecutiveUnknowns >= TURN_RECOVERY_MAX_CONSECUTIVE_UNKNOWNS) return false;
+          continue;
+      }
     }
-    return result === true;
+    return false;
   };
 
   const send = async (text: string) => {
@@ -470,6 +470,9 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     }));
     // The index the streamed assistant reply will occupy: right after the user message we add.
     const assistantIndex = messages.length + 1;
+    // Tag the turn with a unique id before sending so, if the stream breaks, recovery can ask the
+    // server about this exact turn instead of guessing from the seller's latest conversation.
+    const clientTurnId = generateTurnId();
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
     setFollowUps([]);
@@ -503,20 +506,14 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         return next;
       });
 
-    // The reply text that has reached the screen this turn, mirrored outside React state so the
-    // recovery path can compare it against a persisted reply without reading component state.
-    let streamedContent = "";
-
     const handlers: AgentStreamHandlers = {
       onToken: (chunk) => {
-        streamedContent += chunk;
         setIsStreaming(true);
         appendToken(chunk);
       },
       onReset: () => {
         // An intermediate tool-use turn streamed preamble text; clear it so the real reply replaces
         // it instead of appending to it.
-        streamedContent = "";
         setMessages((prev) =>
           prev.map((msg, i) => (i === assistantIndex && msg.role === "assistant" ? { ...msg, content: "" } : msg)),
         );
@@ -527,7 +524,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     };
 
     try {
-      const result = await streamAgentMessage(history, handlers, conversationIdRef.current);
+      const result = await streamAgentMessage(history, handlers, conversationIdRef.current, clientTurnId);
       if (result.conversationId) setConversationId(result.conversationId);
       // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
       // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
@@ -546,13 +543,13 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       });
       setFollowUps(result.suggestions);
     } catch (e) {
-      // A broken stream usually means the server finished and persisted the turn without noticing
-      // the client stopped receiving — so the truncated text on screen misrepresents a reply that
-      // exists in full server-side. Reconcile with the stored conversation before treating this as
-      // a failure. Server-reported errors (`error` events) skip this: those turns were never saved.
+      // A broken stream usually means the server finished (or is still finishing) the turn
+      // without noticing the client stopped receiving — so the truncated text on screen
+      // misrepresents a reply that exists (or will exist) in full server-side. Recover this exact
+      // turn by its id before treating this as a failure. Server-reported errors (`error` events)
+      // skip this: those turns were never saved.
       const recovered =
-        e instanceof AgentStreamInterruptedError &&
-        (await recoverInterruptedTurn(trimmed, assistantIndex, streamedContent));
+        e instanceof AgentStreamInterruptedError && (await recoverInterruptedTurn(clientTurnId, assistantIndex));
       if (!recovered) {
         showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
         setMessages((prev) => {

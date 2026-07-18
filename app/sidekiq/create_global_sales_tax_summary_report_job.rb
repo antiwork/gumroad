@@ -32,7 +32,7 @@ class CreateGlobalSalesTaxSummaryReportJob
 
     aggregation = Hash.new { |h, k| h[k] = { gmv_cents: 0, order_count: 0, tax_collected_cents: 0 } }
     base_scope = Purchase.successful
-      .not_fully_refunded
+      .not_fully_refunded_for_tax_reporting
       .not_chargedback_or_chargedback_reversed
       .where.not(stripe_transaction_id: nil)
       .where("gumroad_tax_cents > 0")
@@ -67,6 +67,17 @@ class CreateGlobalSalesTaxSummaryReportJob
     Rails.logger.info(
       "#{self.class.name}: aggregation_complete " \
       "month=#{month} year=#{year} chunks=#{chunk_index} aggregated_locations=#{aggregation.size} elapsed_seconds=#{elapsed_seconds(job_started_at)}"
+    )
+
+    # Refund leg: refunds issued during the reported month are subtracted from the month's
+    # totals, dated by the refund's date, regardless of when the original purchase happened.
+    # (Pre-cutover refunds are instead netted into their purchase's month by the partial-refund
+    # adjustments above — see Purchase::Reportable::REFUND_REPORTING_CUTOVER.)
+    refund_leg_started_at = monotonic_seconds
+    refund_count = apply_refund_leg(aggregation, start_date, end_date)
+    Rails.logger.info(
+      "#{self.class.name}: refund_leg_complete " \
+      "month=#{month} year=#{year} refunds=#{refund_count} elapsed_seconds=#{elapsed_seconds(refund_leg_started_at)}"
     )
 
     write_and_upload_csv(aggregation, month, year)
@@ -161,11 +172,22 @@ class CreateGlobalSalesTaxSummaryReportJob
       }
     end
 
+    # Nets refund amounts into their purchase's own period — the LEGACY attribution, kept only
+    # for refunds created before the refund reporting cutover so historical months regenerate
+    # close to their as-filed numbers. Refunds created on/after the cutover are attributed to
+    # the month the refund happened in by apply_refund_leg instead, so they must not also be
+    # netted here (that would relieve the same tax twice).
     def prefetch_partial_refund_adjustments(purchases_scope)
       key_sqls = BINARY_SAFE_KEY_COLUMNS.values
 
+      # Includes fully refunded purchases too, not just partially refunded ones: a pre-cutover
+      # purchase whose refunds straddle the cutover ends up with stripe_refunded true (and
+      # stripe_partially_refunded flipped back to false), yet its PRE-cutover refunds must
+      # still be netted from its sale row here — only the post-cutover refund is offset by a
+      # refund row in the refund's own period. refund_totals_by_purchase only sums pre-cutover
+      # refunds, and a post-cutover purchase can't have any, so this stays exact.
       partial_purchases = purchases_scope
-        .where(stripe_partially_refunded: true)
+        .where("purchases.stripe_partially_refunded = TRUE OR purchases.stripe_refunded = TRUE")
         .pluck(
           :id,
           Arel.sql("purchases.total_transaction_cents"),
@@ -223,17 +245,19 @@ class CreateGlobalSalesTaxSummaryReportJob
 
       fallback_scope = purchases_scope.where(Arel.sql(combined_condition_sql))
 
+      # Same widening as prefetch_partial_refund_adjustments: fully refunded purchases can
+      # still carry pre-cutover refunds that must be netted from their sale amounts.
       fallback_refunds = refund_totals_by_purchase(
-        fallback_scope.where(stripe_partially_refunded: true).pluck(:id)
+        fallback_scope.where("purchases.stripe_partially_refunded = TRUE OR purchases.stripe_refunded = TRUE").pluck(:id)
       )
 
       fallback_purchases = 0
       fallback_partial_refund_purchases = 0
 
-      fallback_scope.select(:id, :ip_address, :total_transaction_cents, :gumroad_tax_cents, :stripe_partially_refunded)
+      fallback_scope.select(:id, :ip_address, :total_transaction_cents, :gumroad_tax_cents, :stripe_partially_refunded, :stripe_refunded)
         .find_each do |purchase|
           state_code = GeoIp.lookup(purchase.ip_address)&.region_name || ""
-          refund = fallback_refunds[purchase.id] if purchase.stripe_partially_refunded?
+          refund = fallback_refunds[purchase.id]
           bucket = aggregation[["United States", state_code]]
           bucket[:gmv_cents] += net_cents(purchase.total_transaction_cents, refund&.dig(:total))
           bucket[:order_count] += 1
@@ -321,13 +345,59 @@ class CreateGlobalSalesTaxSummaryReportJob
       Compliance::Countries.valid_indian_state?(raw_state) ? raw_state : ""
     end
 
+    # Sums only PRE-CUTOVER refunds: these are the refunds still netted into their purchase's
+    # period. Post-cutover refunds are handled by apply_refund_leg in the refund's own month.
     def refund_totals_by_purchase(purchase_ids)
       # .effective keeps failed-but-not-reversed refunds (the seller is still debited)
       # and drops reversed ones, matching the refunded sums everywhere else.
       Refund.effective.where(purchase_id: purchase_ids)
+        .where("refunds.created_at < ?", Purchase::Reportable::REFUND_REPORTING_CUTOVER.beginning_of_day)
         .group(:purchase_id)
         .pluck(:purchase_id, Arel.sql("SUM(refunds.total_transaction_cents)"), Arel.sql("SUM(refunds.gumroad_tax_cents)"))
         .to_h { |pid, total, tax| [pid, { total: total.to_i, tax: tax.to_i }] }
+    end
+
+    # Subtracts refunds issued in [starts_at, ends_at] from the aggregation, bucketed by the
+    # buyer location of the ORIGINAL purchase (resolved with the same rules as the sales leg),
+    # dated by the refund's own date. The purchase-side filters mirror the sales leg's base
+    # scope minus its date window, so a refund is only subtracted when its purchase's sale was
+    # (or would have been) counted. Order counts are left untouched — the order still happened.
+    def apply_refund_leg(aggregation, starts_at, ends_at)
+      refund_count = 0
+
+      Refund.for_tax_period_reporting(starts_at, ends_at)
+        .joins(:purchase)
+        .merge(
+          Purchase.successful
+            .not_chargedback_or_chargedback_reversed
+            .where.not(purchases: { stripe_transaction_id: nil })
+            .where("purchases.gumroad_tax_cents > 0")
+            .where(purchases: { charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids] })
+        )
+        .includes(:purchase)
+        .find_each do |refund|
+          purchase = refund.purchase
+          country_name = resolve_country_name(purchase.country.presence || purchase.ip_country.presence)
+
+          state_code = case country_name
+                       when "United States"
+                         UsZipCodes.identify_state_code(purchase.zip_code) ||
+                           GeoIp.lookup(purchase.ip_address)&.region_name || ""
+                       when "Canada"
+                         resolve_canada_province(purchase.state, purchase.ip_state)
+                       when "India"
+                         resolve_india_state(purchase.ip_state)
+                       else
+                         ""
+          end
+
+          bucket = aggregation[[country_name, state_code]]
+          bucket[:gmv_cents] -= refund.total_transaction_cents.to_i
+          bucket[:tax_collected_cents] -= refund.gumroad_tax_cents.to_i
+          refund_count += 1
+        end
+
+      refund_count
     end
 
     def net_cents(gross_cents, refunded_cents)

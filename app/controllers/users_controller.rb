@@ -159,6 +159,12 @@ class UsersController < ApplicationController
   def add_purchase_to_library
     purchase = Purchase.find_by_external_id(params["user"]["purchase_id"])
     if purchase.present? && ActiveSupport::SecurityUtils.secure_compare(purchase.email.to_s, params["user"]["purchase_email"].to_s)
+      # A reassignment-locked purchase is frozen by our support team while its
+      # ownership is being reviewed, so knowing the purchase email is not
+      # enough to move it into another account. Deny before changing the
+      # purchaser or signing anyone in.
+      return render json: { success: false } if purchase.is_reassignment_locked?
+
       if logged_in_user.present?
         purchase.purchaser = logged_in_user
         purchase.save

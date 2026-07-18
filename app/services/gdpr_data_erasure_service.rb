@@ -21,6 +21,7 @@ class GdprDataErasureService
     ActiveRecord::Base.transaction do
       @products_deleted = deactivate_account!
       anonymized_email = anonymize_user_pii!
+      anonymize_compliance_info!
       delete_device_records!
       anonymize_carts!(anonymized_email)
       anonymize_credit_cards!(credit_card_ids)
@@ -101,6 +102,35 @@ class GdprDataErasureService
       )
 
       anonymized_email
+    end
+
+    def anonymize_compliance_info!
+      # Compliance (KYC) records hold the person's legal name, date of birth, street
+      # address, and phone number. deactivate_account! only soft-deletes them, which hides
+      # the rows from the app but leaves that data in the table, so erasure must also null
+      # the columns. This intentionally covers every row for the user, not just alive ones:
+      # UserComplianceInfo is Immutable, meaning each edit creates a new row and soft-deletes
+      # the previous one, and those older rows hold the same PII. update_all writes SQL
+      # directly, which also bypasses the Immutable guard — appropriate here because this is
+      # a legally mandated destruction (Article 17), not a normal edit.
+      #
+      # json_data is nulled because it stores PII too: phone numbers, nationality, and the
+      # kana/kanji name and address variants used for Japanese accounts. Country and the
+      # tax ids (encrypted at rest) are retained with the transaction and tax records per
+      # Article 17(3)(b), as are the business-entity columns.
+      @user.user_compliance_infos.update_all(
+        full_name: nil,
+        first_name: nil,
+        last_name: nil,
+        birthday: nil,
+        street_address: nil,
+        city: nil,
+        state: nil,
+        zip_code: nil,
+        telephone_number: nil,
+        json_data: nil,
+        updated_at: Time.current,
+      )
     end
 
     def anonymize_carts!(anonymized_email)
@@ -213,6 +243,7 @@ class GdprDataErasureService
         user_id: @user.id,
         email_anonymized: true,
         profile_anonymized: true,
+        compliance_info_anonymized: true,
         purchases_anonymized: true,
         account_deactivated: true,
         products_deleted: @products_deleted,
