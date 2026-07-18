@@ -324,9 +324,26 @@ describe("AgentChat custom-html proposal cards", () => {
     expect(fetchCustomHtmlProposalPreview).toHaveBeenCalledWith(
       expect.objectContaining({ params: customHtmlAction.params }),
     );
+    // With the preview rendered, the proposal is confirmable.
+    expect(screen.getByText("Confirm").closest("button")?.disabled).toBe(false);
   });
 
-  it("shows why a preview is unavailable instead of failing the card", async () => {
+  it("disables Confirm until the preview has rendered", async () => {
+    streamTurnWithAction(customHtmlAction);
+    // A fetch that never settles: the card stays in the loading state.
+    fetchCustomHtmlProposalPreview.mockReturnValue(new Promise(() => {}));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await waitFor(() => expect(screen.getByText("Loading preview…")).toBeTruthy());
+    // The seller hasn't seen the result yet, so the change can't be applied — but they can
+    // still walk away from it.
+    expect(screen.getByText("Confirm").closest("button")?.disabled).toBe(true);
+    expect(screen.getByText("Dismiss").closest("button")?.disabled).toBe(false);
+  });
+
+  it("shows why a preview is unavailable and keeps Confirm disabled", async () => {
     streamTurnWithAction(customHtmlAction);
     fetchCustomHtmlProposalPreview.mockRejectedValue(
       new Error("The snippet to replace no longer appears in the current page."),
@@ -340,8 +357,9 @@ describe("AgentChat custom-html proposal cards", () => {
         screen.getByText("Preview unavailable: The snippet to replace no longer appears in the current page."),
       ).toBeTruthy(),
     );
-    // The card is still confirmable — the preview is an aid, not a gate.
-    expect(screen.getByText("Confirm")).toBeTruthy();
+    // An invalid proposal would fail on apply too — Confirm stays off; Dismiss remains the way out.
+    expect(screen.getByText("Confirm").closest("button")?.disabled).toBe(true);
+    expect(screen.getByText("Dismiss").closest("button")?.disabled).toBe(false);
   });
 
   it("leaves non-page proposals on the plain field rows without fetching a preview", async () => {
@@ -357,6 +375,8 @@ describe("AgentChat custom-html proposal cards", () => {
     await waitFor(() => expect(screen.getByText("New name")).toBeTruthy());
     expect(screen.queryByTitle("Preview of your page after this change")).toBeNull();
     expect(fetchCustomHtmlProposalPreview).not.toHaveBeenCalled();
+    // Non-page proposals never wait on a preview.
+    expect(screen.getByText("Confirm").closest("button")?.disabled).toBe(false);
   });
 });
 

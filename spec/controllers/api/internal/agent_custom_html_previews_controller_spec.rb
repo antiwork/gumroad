@@ -54,6 +54,14 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
         expect(html).not_to include("sandbox allow-scripts")
       end
 
+      it "does not carry the scroll-to-change script — a whole-page update has no single changed area" do
+        post :create, params: valid_params, format: :json
+
+        html = response.parsed_body["html"]
+        expect(html).not_to include("data-gumroad-preview-scroll")
+        expect(html).not_to include(RendersCustomHtmlPages::PREVIEW_CHANGED_MARKER)
+      end
+
       it "sanitizes the proposed HTML the same way applying it would" do
         post :create, params: { endpoint: "update_user_custom_html", custom_html: %(<section><script src="https://evil.com/x.js"></script><h1>Hi</h1></section>) }, format: :json
 
@@ -84,6 +92,29 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
         expect(body["html"]).to include("<h1>New headline</h1>")
         expect(body["html"]).to include("<p>Keep me</p>")
         expect(body["html"]).not_to include("Old headline")
+      end
+
+      it "marks the changed area and ships the scroll-to-change script so the preview opens on the edit" do
+        post :create, params: { endpoint: "edit_user_custom_html", find: "<h1>Old headline</h1>", replace: "<h1>New headline</h1>" }, format: :json
+
+        html = response.parsed_body["html"]
+        expect(html).to include("#{RendersCustomHtmlPages::PREVIEW_CHANGED_MARKER}<h1>New headline</h1>")
+        expect(html).to include("data-gumroad-preview-scroll")
+      end
+
+      it "falls back to the unmarked page when the marker cannot land as a comment node" do
+        # The edit matches inside an attribute value, so splicing a comment there would corrupt
+        # the markup — the marked variant no longer sanitizes to the real result and is discarded.
+        seller.custom_html = %(<section><p class="headline-old">Hi</p></section>)
+        seller.save!
+
+        post :create, params: { endpoint: "edit_user_custom_html", find: "headline-old", replace: "headline-new" }, format: :json
+
+        body = response.parsed_body
+        expect(body["success"]).to be(true)
+        expect(body["html"]).to include(%(class="headline-new"))
+        expect(body["html"]).not_to include(RendersCustomHtmlPages::PREVIEW_CHANGED_MARKER)
+        expect(body["html"]).not_to include("data-gumroad-preview-scroll")
       end
 
       it "renders an error when the snippet no longer matches the current page" do

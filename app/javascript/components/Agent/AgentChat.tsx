@@ -131,19 +131,22 @@ const ObjectList = ({ objects }: { objects: DisplayObject[] }) =>
     </div>
   ) : null;
 
-// The rendered "what your page will look like" preview on a custom-HTML proposal card. The server
-// computes the resulting page exactly the way confirming would apply it and returns the same
-// sandboxed document /landing/embed serves; it renders here on an opaque origin (no
-// allow-same-origin), just like the live page embed, so the proposed HTML can't reach cookies or
-// the dashboard DOM. Unlike the live page's iframe, the sandbox below deliberately omits
-// allow-popups-to-escape-sandbox (matching ProfileLandingPagePreview): this HTML is a
-// not-yet-confirmed agent proposal shown inside the seller's dashboard, so any popup it opens
-// stays sandboxed rather than getting a full unsandboxed window. Popup escape only changes
-// popup behavior, not how the page itself renders, so preview fidelity is unaffected.
-const CustomHtmlProposalPreview = ({ action }: { action: ProposedAction }) => {
-  const [state, setState] = React.useState<
-    { status: "loading" } | { status: "loaded"; html: string } | { status: "error"; message: string }
-  >({ status: "loading" });
+// The rendered "what your page will look like" preview state for a custom-HTML proposal card. The
+// server computes the resulting page exactly the way confirming would apply it and returns the
+// same sandboxed document /landing/embed serves. `enabled: false` (a non-page proposal, or a card
+// already acted on) skips the fetch entirely. The state lives here rather than in the preview
+// element because the card gates its Confirm button on it: a proposal whose preview hasn't
+// rendered — still loading, or invalid (say the page changed under it) — shouldn't be
+// confirmable, since the seller would be applying a change they haven't seen (and an invalid one
+// would fail anyway).
+type CustomHtmlPreviewState =
+  | { status: "disabled" }
+  | { status: "loading" }
+  | { status: "loaded"; html: string }
+  | { status: "error"; message: string };
+
+const useCustomHtmlProposalPreview = (action: ProposedAction, enabled: boolean): CustomHtmlPreviewState => {
+  const [state, setState] = React.useState<CustomHtmlPreviewState>({ status: enabled ? "loading" : "disabled" });
 
   // Refetch only when the proposed change itself differs — the surrounding card re-renders with
   // fresh (but identical) action objects as the stream's events land, and each shouldn't re-POST.
@@ -151,6 +154,10 @@ const CustomHtmlProposalPreview = ({ action }: { action: ProposedAction }) => {
   actionRef.current = action;
   const paramsKey = JSON.stringify(action.params);
   React.useEffect(() => {
+    if (!enabled) {
+      setState({ status: "disabled" });
+      return;
+    }
     let cancelled = false;
     setState({ status: "loading" });
     fetchCustomHtmlProposalPreview(actionRef.current)
@@ -167,8 +174,20 @@ const CustomHtmlProposalPreview = ({ action }: { action: ProposedAction }) => {
     return () => {
       cancelled = true;
     };
-  }, [paramsKey]);
+  }, [paramsKey, enabled]);
 
+  return state;
+};
+
+// Renders the preview state produced by useCustomHtmlProposalPreview. The document renders on an
+// opaque origin (no allow-same-origin), just like the live page embed, so the proposed HTML can't
+// reach cookies or the dashboard DOM. Unlike the live page's iframe, the sandbox below
+// deliberately omits allow-popups-to-escape-sandbox (matching ProfileLandingPagePreview): this
+// HTML is a not-yet-confirmed agent proposal shown inside the seller's dashboard, so any popup it
+// opens stays sandboxed rather than getting a full unsandboxed window. Popup escape only changes
+// popup behavior, not how the page itself renders, so preview fidelity is unaffected.
+const CustomHtmlProposalPreview = ({ state }: { state: CustomHtmlPreviewState }) => {
+  if (state.status === "disabled") return null;
   if (state.status === "loading")
     return (
       <span className="text-sm text-muted" role="status">
@@ -202,6 +221,15 @@ const ProposedActionCard = ({
   onConfirm: () => void;
   onDismiss: () => void;
 }) => {
+  const isHtmlProposal = isCustomHtmlProposal(action);
+  // Only pending cards fetch/render the preview: once acted on, it no longer reflects anything
+  // actionable (and an applied edit's find-snippet no longer matches).
+  const preview = useCustomHtmlProposalPreview(action, isHtmlProposal && !status);
+  // A page proposal is only confirmable once its preview has rendered — before that the seller
+  // hasn't seen what they'd be applying, and a preview that failed (say, the page changed under
+  // the proposal) means confirming would fail the same way. Dismiss stays available throughout.
+  const confirmBlockedOnPreview = isHtmlProposal && !status && preview.status !== "loaded";
+
   const fieldRows =
     action.fields && action.fields.length > 0 ? (
       <DefinitionList className="text-sm">
@@ -222,14 +250,12 @@ const ProposedActionCard = ({
     <Card>
       <CardContent className="flex-col items-stretch gap-2">
         <strong>{action.title ?? "Proposed change"}</strong>
-        {isCustomHtmlProposal(action) ? (
+        {isHtmlProposal ? (
           // A page edit's fields are literal find/replace HTML — a wall of markup that reads as a
           // glitch, not a preview. Lead with the rendered result instead, and keep the exact HTML
           // (the safety boundary: precisely what confirming will apply) available but collapsed.
-          // Once acted on, the preview no longer reflects anything actionable (and an applied
-          // edit's find-snippet no longer matches), so only pending cards render it.
           <>
-            {status ? null : <CustomHtmlProposalPreview action={action} />}
+            <CustomHtmlProposalPreview state={preview} />
             <Details>
               <DetailsToggle className="text-sm text-muted">View raw HTML</DetailsToggle>
               {fieldRows}
@@ -253,7 +279,7 @@ const ProposedActionCard = ({
             <Button disabled={isPending} onClick={onDismiss}>
               Dismiss
             </Button>
-            <Button color="accent" disabled={isPending} onClick={onConfirm}>
+            <Button color="accent" disabled={isPending || confirmBlockedOnPreview} onClick={onConfirm}>
               {isApplying ? "Applying…" : "Confirm"}
             </Button>
           </>

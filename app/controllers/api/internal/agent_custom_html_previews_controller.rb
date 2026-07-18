@@ -29,7 +29,7 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
       return render json: { success: false, error: "Custom HTML pages are not enabled on this account." }
     end
 
-    resulting_html, error = resulting_custom_html
+    resulting_html, marked_html, error = resulting_custom_html
     return render json: { success: false, error: } if error
 
     sanitized = Ai::PageSanitizer.sanitize_with_report(resulting_html).html.presence
@@ -37,10 +37,12 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
       return render json: { success: false, error: "This change would leave the page empty, so there is nothing to preview." }
     end
 
+    display_html, scroll_to_change = marked_preview_html(sanitized, marked_html)
     document = profile_custom_html_document(
-      Pages::Interpolator.interpolate_profile(sanitized, profile: current_seller),
+      Pages::Interpolator.interpolate_profile(display_html, profile: current_seller),
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(current_seller).to_json),
       meta_csp: true,
+      scroll_to_change:,
     )
     render json: { success: true, html: document }
   end
@@ -50,40 +52,75 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
       authorize current_seller, :use_store_agent?
     end
 
-    # [resulting_html, error]: the page as it would read after the proposed change, or an error
-    # explaining why it can't be computed. Mirrors the matching rules of the real edit endpoint so
+    # [resulting_html, marked_html, error]: the page as it would read after the proposed change
+    # (or an error explaining why it can't be computed), plus — for edits — a variant with
+    # PREVIEW_CHANGED_MARKER spliced in front of the replacement so the preview document can
+    # scroll to where the page changed. Mirrors the matching rules of the real edit endpoint so
     # the preview and the eventual apply always agree on what the change does.
     def resulting_custom_html
       case params[:endpoint].to_s
       when "update_user_custom_html"
         custom_html = params[:custom_html]
         unless custom_html.is_a?(String) && custom_html.present?
-          return [nil, "This change removes the custom page, so there is nothing to preview."]
+          return [nil, nil, "This change removes the custom page, so there is nothing to preview."]
         end
-        return [nil, custom_html_length_error(custom_html)] if custom_html_length_error(custom_html)
+        return [nil, nil, custom_html_length_error(custom_html)] if custom_html_length_error(custom_html)
 
-        [custom_html, nil]
+        # A whole-page update has no single "changed area" to point at, so no marked variant.
+        [custom_html, nil, nil]
       when "edit_user_custom_html"
         current = current_seller.custom_html
-        return [nil, "There is no custom HTML page to edit."] if current.blank?
+        return [nil, nil, "There is no custom HTML page to edit."] if current.blank?
 
         find = params[:find].to_s
-        return [nil, "The proposed edit is missing the snippet to replace."] if find.empty?
+        return [nil, nil, "The proposed edit is missing the snippet to replace."] if find.empty?
 
         occurrences = current.scan(find).size
-        return [nil, "The snippet to replace no longer appears in the current page."] if occurrences.zero?
-        return [nil, "The snippet to replace matches #{occurrences} places in the current page."] if occurrences > 1
+        return [nil, nil, "The snippet to replace no longer appears in the current page."] if occurrences.zero?
+        return [nil, nil, "The snippet to replace matches #{occurrences} places in the current page."] if occurrences > 1
 
         # Block form so the replacement is inserted literally — the two-argument form of
         # String#sub treats backslash sequences (\0, \1, \\) specially, which would corrupt HTML
         # that legitimately contains backslashes. Matches the real edit endpoint.
         edited = current.sub(find) { params[:replace].to_s }
-        return [nil, custom_html_length_error(edited)] if custom_html_length_error(edited)
+        return [nil, nil, custom_html_length_error(edited)] if custom_html_length_error(edited)
 
-        [edited, nil]
+        # If the page (or the replacement) somehow already contains the marker text, the scroll
+        # script could land on the wrong occurrence — skip marking and let the preview open at
+        # the top rather than point somewhere misleading.
+        marked =
+          if edited.include?(PREVIEW_CHANGED_MARKER_TEXT)
+            nil
+          else
+            current.sub(find) { PREVIEW_CHANGED_MARKER + params[:replace].to_s }
+          end
+        [edited, marked, nil]
       else
-        [nil, "This change doesn't have a page preview."]
+        [nil, nil, "This change doesn't have a page preview."]
       end
+    end
+
+    # [html_to_render, scroll_to_change]. Serves the marker-carrying variant only when — marker
+    # comments aside — it sanitizes to exactly the page the seller would publish. An edit can
+    # match mid-text or even inside an attribute value, where the spliced comment wouldn't land
+    # as a standalone comment node; in that case the marked variant is NOT the real result, so
+    # the preview falls back to the unmarked page (opening at the top) rather than showing
+    # something confirming wouldn't produce.
+    def marked_preview_html(sanitized, marked_html)
+      return [sanitized, false] if marked_html.nil?
+
+      sanitized_marked = Ai::PageSanitizer.sanitize_with_report(marked_html).html.to_s
+      # Both sides run through the same strip-and-reserialize so serialization quirks can't
+      # produce a spurious mismatch — for the unmarked page stripping is a semantic no-op.
+      return [sanitized, false] unless strip_preview_markers(sanitized_marked) == strip_preview_markers(sanitized)
+
+      [sanitized_marked, true]
+    end
+
+    def strip_preview_markers(html)
+      fragment = Loofah.fragment(html)
+      fragment.traverse { |node| node.remove if node.comment? && node.content == PREVIEW_CHANGED_MARKER_TEXT }
+      fragment.to_html
     end
 
     def custom_html_length_error(html)
