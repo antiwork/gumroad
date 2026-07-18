@@ -1284,6 +1284,33 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(purchase.was_purchase_taxable).to be(true)
       end
 
+      it "charges a whole-cent tax amount when the rate produces fractional cents, matching the quoted total" do
+        # Regression coverage for the buyer-currency "total mismatch" incident: 18% GST on a
+        # $9.99 product is 179.82 fractional cents. The checkout quote rounded the summed
+        # total (tax 180 => total 1179) while charge-time persistence truncated the tax into
+        # the integer column (179 => total 1178), so the total charged never matched the
+        # total quoted. With rounding at the calculator boundary, both the displayed checkout
+        # total and the persisted purchase must agree on 180 cents of tax / a 1179-cent total.
+        # This spec fails if the calculator's rounding is reverted (tax truncates to 179).
+        fractional_product = create(:product, user: @product.user, price_cents: 9_99)
+
+        visit "/l/#{fractional_product.unique_permalink}"
+        expect(page).to have_text("$9.99")
+        add_to_cart(fractional_product)
+
+        check_out(fractional_product, zip_code: nil, credit_card: { number: "4000000360000006" }) do
+          expect(page).to have_text("GST", normalize_ws: true)
+          expect(page).to have_text("Total US$11.79", normalize_ws: true)
+        end
+
+        purchase = Purchase.last
+        expect(purchase.total_transaction_cents).to eq(11_79)
+        expect(purchase.price_cents).to eq(9_99)
+        expect(purchase.tax_cents).to eq(0)
+        expect(purchase.gumroad_tax_cents).to eq(1_80)
+        expect(purchase.was_purchase_taxable).to be(true)
+      end
+
       it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
