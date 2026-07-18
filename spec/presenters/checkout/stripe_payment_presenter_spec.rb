@@ -310,6 +310,9 @@ describe Checkout::StripePaymentPresenter do
       fallback_reason: "buyer_currency_presentment_unsupported",
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
+      # CardElement fallbacks never mount a Payment Element, so the wallets-in-the-element
+      # rollout flag can't apply — this branch's presenter reports the surface as off.
+      payment_element_wallets: false,
       elements_options: nil,
     )
   ensure
