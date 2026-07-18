@@ -262,8 +262,9 @@ class Order::PreparePaymentIntentService
     #   1. The buyer picked a method-forced local payment method (iDEAL/Bancontact —
     #      methods that can only charge in one currency).
     #   2. The buyer picked ANY other method (card, Link) on a Payment Element that was
-    #      mounted in a forced currency (the method-forced shape: single item priced
-    #      in a forced currency, seller flags on, surface available). The ConfirmationToken
+    #      mounted in a forced currency (the method-forced shape: a single item priced in a
+    #      forced currency whose resolver result offers a capability-eligible local method).
+    #      The ConfirmationToken
     #      inherits the element's currency, so a canonical USD intent can never accept
     #      it — Stripe rejects the confirm with a currency mismatch.
     # Returns nil (canonical USD intent, no presentment rows — byte-for-byte today's
@@ -293,10 +294,10 @@ class Order::PreparePaymentIntentService
 
     # The currency the Payment Element was mounted in when it differs from USD, derived
     # from the same basis as Checkout::StripePaymentPresenter#method_forced_shape?
-    # (seller flags + surface availability + a single purchase whose product is priced in
-    # a currency some payment method forces). Nil everywhere else — flags off, no launched
-    # method for the currency in live mode, USD-priced or multi-item carts — which keeps
-    # every other checkout on the canonical USD intent.
+    # (seller flags + a resolver result that exposes a capability-eligible local method + a
+    # single purchase whose product is priced in a currency some payment method forces). Nil
+    # everywhere else — flags off, no launched method for the currency in live mode, USD-priced
+    # or multi-item carts — which keeps every other checkout on the canonical USD intent.
     def element_mount_forced_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       return nil unless purchases_to_charge.one?
@@ -315,9 +316,9 @@ class Order::PreparePaymentIntentService
     # canonical USD intent is never a usable fallback: Stripe rejects confirming such a
     # ConfirmationToken against a USD intent, synchronously and without a payment_failed
     # webhook, so the purchase would sit in_progress until the abandonment worker instead of
-    # failing cleanly here. Gated on the seller flags so the dark feature preserves today's
-    # USD behavior byte-for-byte — with the flags off, a crafted iDEAL token gets exactly
-    # the same (dead) response as before.
+    # failing cleanly here. A seller with buyer-currency disabled remains on the canonical USD
+    # path; a forced-currency token received after its local-method flag rolls back fails cleanly
+    # instead of creating an intent the token can never confirm.
     def method_forced_presentment_required?
       return false if @previewed_payment_method_type.blank?
 
@@ -398,9 +399,9 @@ class Order::PreparePaymentIntentService
 
     # The buyer confirmed with a method-forced local method, so the intent must list that
     # method or Stripe rejects the (payment_method_types-scoped) ConfirmationToken. The
-    # resolver already lists launched forced-currency methods on this cart shape, but the
-    # append (deduped below) also covers the test-mode QA surface and keeps the confirmed
-    # method on the intent even if the resolver's inputs drift from the element mount.
+    # resolver normally lists launched forced-currency methods on this cart shape, but the
+    # append (deduped below) keeps the confirmed method on the intent if the resolver's inputs
+    # drift after the Element mounts, including in Stripe test mode.
     def intent_payment_method_types(presentment)
       return resolved_payment_method_types if presentment.nil?
 

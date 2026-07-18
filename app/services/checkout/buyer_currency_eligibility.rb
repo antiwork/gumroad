@@ -53,12 +53,12 @@ class Checkout::BuyerCurrencyEligibility
     feature.present? && seller.present? && Feature.active?(feature, seller)
   end
 
-  # Whether the method-forced Payment Element surface may mount in `currency` for this
-  # seller: always in Stripe test mode (the QA surface), and in live mode only when at
-  # least one registry method forcing that currency has its launch flag active. Used by
-  # the presenter (element mount) and the prepare service (intent currency) so both
-  # derive the same answer; card/Link ConfirmationTokens minted on such an element are
-  # covered too, because they inherit the element's currency.
+  # Whether a method-forced surface for `currency` is available to card or Link in this
+  # eligibility check: always in Stripe test mode, and in live mode when at least one
+  # registry method forcing that currency has its launch flag active. The presenter and
+  # prepare service independently require a capability-filtered resolver result before
+  # mounting or charging this surface; this fallback gate only handles the non-registry
+  # card/Link tokens that inherit the Element's currency.
   def self.forced_currency_surface_available?(currency:, seller:)
     return false if currency.blank?
     return true if stripe_test_mode?
