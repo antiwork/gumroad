@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
+  computeTip,
+  computeTipsForLines,
   getChargeTodayPrice,
   getFutureInstallmentsTotal,
   getStripePaymentElementAmount,
@@ -1267,5 +1269,73 @@ describe("getFutureInstallmentsTotal", () => {
         }),
       ),
     ).toBe(0);
+  });
+});
+
+describe("computeTipsForLines", () => {
+  const tippableProducts = (prices: number[]) =>
+    prices.map((price, index) => product({ permalink: `product-${index}`, price, hasTippingEnabled: true }));
+  const linesFor = (s: State) => s.products.map((item) => ({ price: item.price, permalink: item.permalink }));
+
+  it("returns null per line when tipping is disabled", () => {
+    const s = state({ products: [product({ price: 1_000 })], tip: { type: "fixed", amount: 100 } });
+    expect(computeTipsForLines(s, linesFor(s))).toEqual([null]);
+  });
+
+  it("splits a fixed tip proportionally across lines", () => {
+    const s = state({ products: tippableProducts([1_000, 3_000]), tip: { type: "fixed", amount: 100 } });
+    expect(computeTipsForLines(s, linesFor(s))).toEqual([25, 75]);
+  });
+
+  // The regression this function exists to prevent: per-line rounding of a 1-cent fixed
+  // tip across two equal items sends 1 + 1 = 2 cents even though the buyer chose 1.
+  it("never sends more fixed tip than the buyer selected (two equal items, 1-cent tip)", () => {
+    const s = state({ products: tippableProducts([1_000, 1_000]), tip: { type: "fixed", amount: 1 } });
+    const tips = computeTipsForLines(s, linesFor(s));
+    expect(tips).toEqual([1, 0]);
+    expect(tips.reduce((sum: number, tip) => sum + (tip ?? 0), 0)).toBe(computeTip(s));
+  });
+
+  it("hands remainder cents to the lines with the largest fractional shares", () => {
+    // Exact shares: 33.33..., 33.33..., 33.33... for 100 cents over three equal lines.
+    const s = state({ products: tippableProducts([1_000, 1_000, 1_000]), tip: { type: "fixed", amount: 100 } });
+    const tips = computeTipsForLines(s, linesFor(s));
+    expect(tips).toEqual([34, 33, 33]);
+    expect(tips.reduce((sum: number, tip) => sum + (tip ?? 0), 0)).toBe(computeTip(s));
+  });
+
+  it("sums exactly to the selected fixed tip across many uneven lines", () => {
+    const prices = [199, 1_050, 333, 2_499, 61];
+    const s = state({ products: tippableProducts(prices), tip: { type: "fixed", amount: 137 } });
+    const tips = computeTipsForLines(s, linesFor(s));
+    expect(tips.reduce((sum: number, tip) => sum + (tip ?? 0), 0)).toBe(137);
+  });
+
+  it("matches computeTipForPrice's per-line rounding for percentage tips", () => {
+    const s = state({ products: tippableProducts([999, 1_001]), tip: { type: "percentage", percentage: 10 } });
+    expect(computeTipsForLines(s, linesFor(s))).toEqual([100, 100]);
+  });
+
+  // isTippingEnabled requires a positive cart total, so a free cart yields no tips here —
+  // the free-cart split in computeTipForFreeCart is kept for parity with computeTipForPrice.
+  it("returns null per line for a free cart (tipping requires a positive total)", () => {
+    const s = state({
+      products: [
+        product({ permalink: "product-a", price: 0, hasTippingEnabled: true }),
+        product({
+          permalink: "product-b",
+          price: 0,
+          hasTippingEnabled: true,
+          creator: { id: "seller-b", name: "Seller B", profile_url: "", avatar_url: "" },
+        }),
+      ],
+      tip: { type: "fixed", amount: 100 },
+    });
+    expect(computeTipsForLines(s, linesFor(s))).toEqual([null, null]);
+  });
+
+  it("returns zero tips when the fixed tip amount is not positive", () => {
+    const s = state({ products: tippableProducts([1_000, 2_000]), tip: { type: "fixed", amount: 0 } });
+    expect(computeTipsForLines(s, linesFor(s))).toEqual([0, 0]);
   });
 });
