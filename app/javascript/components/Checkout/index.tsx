@@ -623,7 +623,11 @@ const CartItemComponent = ({
         <CartItemQuantity>{item.quantity}</CartItemQuantity>
       </div>
 
-      <CartItemMain>
+      {/* min-w-2/5 keeps the title/tier column at least 40% of the row on narrow
+          viewports. Without a real floor, a wide CartItemEnd (long price strings on
+          free-trial memberships) squeezes this zero-basis column down to one letter
+          per line. */}
+      <CartItemMain className="min-w-2/5">
         <CartItemTitle>
           <a href={item.product.url} className="no-underline">
             {item.product.name}
