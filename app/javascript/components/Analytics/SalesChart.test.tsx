@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { type AnalyticsDailyTotal } from "$app/components/Analytics";
 import { SalesChart } from "$app/components/Analytics/SalesChart";
+import { UserAgentProvider } from "$app/components/UserAgent";
 
 // ResponsiveContainer measures its DOM node, which has no size in a headless test
 // environment, so the chart would render nothing. Replace it with a passthrough that
@@ -37,14 +38,18 @@ const data = [
 
 const renderChart = (props: Partial<React.ComponentProps<typeof SalesChart>> = {}) =>
   render(
-    <SalesChart
-      data={data}
-      startDate="Jul 12"
-      endDate="Today"
-      aggregateBy="daily"
-      sellerTimeZone="America/New_York"
-      {...props}
-    />,
+    // SalesChart (via the hourly-view work that landed on main) reads the user-agent context, so
+    // the test must provide it the same way the real page layout does.
+    <UserAgentProvider value={{ isMobile: false, locale: "en-US" }}>
+      <SalesChart
+        data={data}
+        startDate="Jul 12"
+        endDate="Today"
+        aggregateBy="daily"
+        sellerTimeZone="America/New_York"
+        {...props}
+      />
+    </UserAgentProvider>,
   );
 
 const expectNoNaNAttributes = (container: HTMLElement) => {
