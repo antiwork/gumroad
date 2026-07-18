@@ -303,7 +303,13 @@ class Checkout::StripePaymentPresenter
       return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(item[:seller])
       return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(item[:product_currency])
 
-      payment_method_resolver.resolve.payment_method_types.any? do |payment_method_type|
+      # The resolver returns nil payment_method_types when it rejects the cart (recurring,
+      # commission, multi-seller, etc.), so check its eligibility verdict before inspecting
+      # the method list — an ineligible cart is never method-forced.
+      resolution = payment_method_resolver.resolve
+      return false unless resolution.client_confirm_eligible?
+
+      resolution.payment_method_types.any? do |payment_method_type|
         Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == item[:product_currency]
       end
     end

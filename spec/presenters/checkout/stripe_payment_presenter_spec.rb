@@ -842,6 +842,44 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     end
 
+    it "falls back to CardElement for a recurring EUR-priced presentment candidate instead of crashing" do
+      # A recurring cart is rejected by the payment method resolver (client-confirm only
+      # covers one-time purchases), so its resolution carries a nil method list. The
+      # method-forced shape check must consult the resolver's eligibility verdict before
+      # scanning the method list — otherwise this cart raises instead of returning the
+      # buyer_currency_presentment_unsupported fallback.
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:membership_product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      add_products = [
+        checkout_product_for(
+          product,
+          # Membership products keep their price on tiers, so the checkout item's price must
+          # be passed explicitly or the cart totals zero and trips the earlier not_charged
+          # fallback before reaching the presentment gate this example is about.
+          price: 1500,
+          recurrence: "monthly",
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::EUR,
+          }
+        )
+      ]
+
+      expect(stripe_payment_props(add_products:)).to eq(
+        integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "buyer_currency_presentment_unsupported",
+        disable_wallets: true,
+        request_apple_pay_merchant_tokens: false,
+        elements_options: nil,
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
     it "keeps the CardElement fallback for an EUR-priced product when the client-confirm flag is off" do
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
