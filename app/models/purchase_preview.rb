@@ -25,6 +25,16 @@ class PurchasePreview
   validates :orderable, presence: true
   validate :validate_custom_fields
 
+  # ReceiptPresenter::MailSubject builds the receipt's subject line from these two purchase
+  # attributes ("You bought {name}!" vs "You got {name}!" for free products). Without explicit
+  # definitions they'd fall into method_missing below and return nil, silently producing a
+  # subject like "You bought !" in the preview.
+  delegate :name, to: :link, prefix: true, allow_nil: true
+
+  def price_cents
+    displayed_price_cents
+  end
+
   # The receipt template uses a lot of fields of `purchase`
   # in different pieces of business logic that are not relevant to our preview need.
   # For them it's fine to return `nil` instead of trying to add fields

@@ -127,6 +127,7 @@ export const Layout = ({
   previewScaleFactor = 0.4,
   showBorder = true,
   showNavigationButton = true,
+  receiptSubject = null,
 }: {
   children: React.ReactNode;
   preview?: React.ReactNode;
@@ -135,6 +136,9 @@ export const Layout = ({
   previewScaleFactor?: number;
   showBorder?: boolean;
   showNavigationButton?: boolean;
+  // The receipt's subject as rendered by the server preview endpoint (same response as the
+  // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
+  receiptSubject?: string | null;
 }) => {
   const { id, product, updateProduct, uniquePermalink, saving, save, currencyType, receiptEmailFrom } =
     useProductEditContext();
@@ -331,16 +335,11 @@ export const Layout = ({
                     // The Receipt tab previews an EMAIL, so the chrome shows email-client
                     // headers instead of browser chrome. Both values are honest: the From
                     // line comes from the server's mailer config (CustomerMailer#receipt),
-                    // and the subject mirrors ReceiptPresenter::MailSubject for the
-                    // single-purchase preview the receipt endpoint renders.
+                    // and the subject comes from the SAME preview response as the rendered
+                    // body (ReceiptPresenter#mail_subject), so the two can never disagree.
                     variant: "email" as const,
                     from: receiptEmailFrom,
-                    subject:
-                      product.native_type === "membership"
-                        ? `You've subscribed to ${product.name || "Untitled"}!`
-                        : product.price_cents === 0
-                          ? `You got ${product.name || "Untitled"}!`
-                          : `You bought ${product.name || "Untitled"}!`,
+                    subject: receiptSubject ?? undefined,
                   }
                 : {
                     title: product.name || "Untitled",

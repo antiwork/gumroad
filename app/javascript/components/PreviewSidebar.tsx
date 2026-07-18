@@ -61,12 +61,18 @@ type PreviewChromeProps = { children: React.ReactNode } & (
       // fabricate one.
       url?: string | undefined;
       // Render prop for the open-in-new-tab button so each surface keeps its own navigation
-      // behavior (plain link, or save-then-open). The chrome passes the compact sizing and the
-      // arrow icon so the button looks identical everywhere; spread `props` onto a Button or
-      // NavigationButton. Omit when there is nothing to open.
+      // behavior (plain link, or save-then-open). The chrome invokes it twice: once as a
+      // compact icon button inside the desktop chrome bar, and once as a full labeled button
+      // above the frame on mobile (a 32px icon-only target is too small and too cryptic for
+      // touch). Spread `props` onto a Button or NavigationButton. Omit when there is nothing
+      // to open.
       link?:
         | ((
-            props: React.AriaAttributes & { size: "icon"; className: string; children: React.ReactNode },
+            props: React.AriaAttributes & {
+              size: "icon" | "default";
+              className?: string;
+              children: React.ReactNode;
+            },
           ) => React.ReactNode)
         | undefined;
     }
@@ -82,56 +88,77 @@ type PreviewChromeProps = { children: React.ReactNode } & (
 );
 
 export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
-  // `bg-background` (not a hardcoded white) so the chrome follows the dashboard's light/dark
-  // theme — the framed content paints its own background, but the chrome's rounded corners
-  // and the pre-load area would otherwise flash white in dark mode.
-  //
-  // `shrink-0` matters: the chrome renders as a flex item inside the sidebar's fixed-height
-  // flex column, and `overflow-hidden` (needed to clip children to the rounded corners)
-  // zeroes a flex item's automatic minimum size — without shrink-0 the chrome would compress
-  // to the viewport and silently clip tall previews instead of letting the sidebar scroll.
-  <div className="flex shrink-0 flex-col overflow-hidden rounded border border-border bg-background">
-    {props.variant === "email" ? (
-      // Email headers read left-to-right like an email client, not centered like a browser
-      // tab, and there is no open-in-new-tab arrow — an email has no URL to open.
-      <div className="flex flex-col gap-0.5 border-b border-border bg-background px-4 py-2 text-sm">
-        <div className="flex min-w-0 gap-2">
-          <span className="shrink-0 text-muted">From</span>
-          <span className="truncate">{props.from}</span>
-        </div>
-        {props.subject ? (
-          <div className="flex min-w-0 gap-2">
-            <span className="shrink-0 text-muted">Subject</span>
-            <span className="truncate font-medium">{props.subject}</span>
-          </div>
-        ) : null}
+  <>
+    {/* On touch screens the compact in-bar arrow (32px, icon-only) is too small a target and
+        too cryptic without its hover tooltip, so mobile gets the full labeled button in its
+        own row above the frame instead — the same affordance the mobile preview pane had
+        before the chrome existed. Desktop keeps the compact arrow inside the bar. */}
+    {props.variant !== "email" && props.link ? (
+      <div className="flex shrink-0 justify-end lg:hidden">
+        {props.link({
+          size: "default",
+          children: (
+            <>
+              <ArrowUpRight className="size-5" />
+              Open in new tab
+            </>
+          ),
+        })}
       </div>
-    ) : (
-      <div className="relative border-b border-border bg-background px-10 py-2">
-        <div className="min-w-0 text-center">
-          <div className="truncate text-sm font-medium">{props.title}</div>
-          {props.url ? (
-            <div className="truncate text-xs text-muted">{props.url.replace(/^https?:\/\//u, "")}</div>
+    ) : null}
+    {/* `bg-background` (not a hardcoded white) so the chrome follows the dashboard's light/dark
+        theme — the framed content paints its own background, but the chrome's rounded corners
+        and the pre-load area would otherwise flash white in dark mode.
+
+        `shrink-0` matters: the chrome renders as a flex item inside the sidebar's fixed-height
+        flex column, and `overflow-hidden` (needed to clip children to the rounded corners)
+        zeroes a flex item's automatic minimum size — without shrink-0 the chrome would compress
+        to the viewport and silently clip tall previews instead of letting the sidebar scroll. */}
+    <div className="flex shrink-0 flex-col overflow-hidden rounded border border-border bg-background">
+      {props.variant === "email" ? (
+        // Email headers read left-to-right like an email client, not centered like a browser
+        // tab, and there is no open-in-new-tab arrow — an email has no URL to open.
+        <div className="flex flex-col gap-0.5 border-b border-border bg-background px-4 py-2 text-sm">
+          <div className="flex min-w-0 gap-2">
+            <span className="shrink-0 text-muted">From</span>
+            <span className="truncate">{props.from}</span>
+          </div>
+          {props.subject ? (
+            <div className="flex min-w-0 gap-2">
+              <span className="shrink-0 text-muted">Subject</span>
+              <span className="truncate font-medium">{props.subject}</span>
+            </div>
           ) : null}
         </div>
-        {props.link ? (
-          <div className="absolute inset-y-0 right-2 flex items-center">
-            <WithTooltip tip="Open in new tab">
-              {props.link({
-                "aria-label": "Open in new tab",
-                size: "icon",
-                // The default icon size (size-12) dwarfs the slim chrome bar — shrink to a
-                // compact 32px hit target that fits inside it.
-                className: "size-8",
-                children: <ArrowUpRight className="size-4" />,
-              })}
-            </WithTooltip>
+      ) : (
+        <div className="relative border-b border-border bg-background px-10 py-2">
+          <div className="min-w-0 text-center">
+            <div className="truncate text-sm font-medium">{props.title}</div>
+            {props.url ? (
+              <div className="truncate text-xs text-muted">{props.url.replace(/^https?:\/\//u, "")}</div>
+            ) : null}
           </div>
-        ) : null}
-      </div>
-    )}
-    {children}
-  </div>
+          {props.link ? (
+            // Hidden below lg — mobile gets the labeled button row above the frame instead
+            // (see the comment on the render prop).
+            <div className="absolute inset-y-0 right-2 flex items-center max-lg:hidden">
+              <WithTooltip tip="Open in new tab">
+                {props.link({
+                  "aria-label": "Open in new tab",
+                  size: "icon",
+                  // The default icon size (size-12) dwarfs the slim chrome bar — shrink to a
+                  // compact 32px hit target that fits inside it.
+                  className: "size-8",
+                  children: <ArrowUpRight className="size-4" />,
+                })}
+              </WithTooltip>
+            </div>
+          ) : null}
+        </div>
+      )}
+      {children}
+    </div>
+  </>
 );
 
 export const PreviewSidebar = ({

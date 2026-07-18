@@ -2,7 +2,6 @@ import * as React from "react";
 
 import { CardProduct } from "$app/parsers/product";
 
-import { NavigationButton } from "$app/components/Button";
 import { Checkout } from "$app/components/Checkout";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { StateContext as PaymentStateContext, createReducer } from "$app/components/Checkout/payment";
@@ -91,14 +90,11 @@ export const CheckoutPreview = ({
 
   return (
     <PreviewSidebar>
-      {/* The dashboard's sample cart only exists here, so there's no live page that would
-          show this exact preview — the chrome links to the real checkout page, which renders
-          the buyer's actual cart. */}
-      <PreviewChrome
-        title="Checkout"
-        url={checkoutUrl}
-        link={(props) => <NavigationButton {...props} href={checkoutUrl} target="_blank" rel="noreferrer" />}
-      >
+      {/* The chrome shows the checkout URL as identity, but deliberately has no
+          open-in-new-tab arrow: the pane renders a synthetic sample cart that only exists
+          here, while /checkout would load the seller's own persisted cart — a different
+          page than the preview shows. */}
+      <PreviewChrome title="Checkout" url={checkoutUrl}>
         <Preview scaleFactor={0.4}>
           <PaymentStateContext.Provider value={paymentState}>
             <Checkout
