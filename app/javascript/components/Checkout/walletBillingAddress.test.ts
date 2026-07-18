@@ -51,10 +51,10 @@ describe("applyWalletBillingAddressToCheckout", () => {
     ]);
   });
 
-  it("keeps the existing checkout state when the wallet's country matches checkout's country", () => {
+  it("keeps the existing checkout state and ZIP when the wallet's country matches checkout's country", () => {
     expect(dispatched({ country: "US", postal_code: null, state: null })).toEqual([
       { type: "set-value", country: "US" },
-      { type: "set-value", zipCode: undefined },
+      { type: "set-value", zipCode: "94103" },
       { type: "set-value", state: "CA" },
     ]);
   });
@@ -78,6 +78,10 @@ describe("applyWalletBillingAddressToCheckout", () => {
       expect(applied({ country: "US", postal_code: "10001", state: "NY" }).taxLocationChanged).toBe(true);
     });
 
+    it("reports a change when a US wallet shares a ZIP+4 — the reducer invalidates on any US ZIP change", () => {
+      expect(applied({ country: "US", postal_code: "10001-1234", state: "NY" }).taxLocationChanged).toBe(true);
+    });
+
     it("reports a change when a Canadian wallet's province differs from checkout's", () => {
       expect(
         applied({ country: "CA", postal_code: "H2X 1Y4", state: null }, { country: "CA", state: "ON", zipCode: "" })
@@ -87,7 +91,8 @@ describe("applyWalletBillingAddressToCheckout", () => {
 
     it("reports no change when the wallet's tax location matches checkout's — the submission need not wait", () => {
       expect(applied({ country: "US", postal_code: "94103", state: "CA" }).taxLocationChanged).toBe(false);
-      // Same country, no ZIP shared: the reducer would not invalidate surcharges either.
+      // Same country, no ZIP shared: checkout's existing ZIP is kept, so the reducer does not
+      // invalidate surcharges either.
       expect(applied({ country: "US", postal_code: null, state: null }).taxLocationChanged).toBe(false);
       expect(
         applied({ country: "CA", postal_code: "H2X 1Y4", state: "QC" }, { country: "CA", state: "QC", zipCode: "" })

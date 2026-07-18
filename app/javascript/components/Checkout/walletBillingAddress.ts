@@ -33,10 +33,12 @@ import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/
 // provincial tax to a jurisdiction they may not be in.
 // Returns whether applying the address changed checkout's tax location — mirroring exactly the
 // conditions under which the checkout reducer invalidates the surcharges quote (a country
-// change, a completed 5-digit US ZIP change, or a Canadian province change). Callers holding a
-// tokenized wallet payment use this to know the wallet-approved total may no longer match the
-// recalculated charge and the submission must wait for the surcharges reload (see the held
-// wallet submission handling in PaymentForm.tsx).
+// change, ANY US ZIP change — the reducer does not require a completed 5-digit ZIP, so neither
+// can we, or a wallet ZIP+4 like "10001-1234" would invalidate the quote while we report no
+// change — or a Canadian province change). Callers holding a tokenized wallet payment use this
+// to know the wallet-approved total may no longer match the recalculated charge and the
+// submission must wait for the surcharges reload (see the held wallet submission handling in
+// PaymentForm.tsx).
 export const applyWalletBillingAddressToCheckout = (
   billingAddress: { country: string | null; postal_code: string | null; state: string | null } | null | undefined,
   checkout: { country: string; state: string; zipCode: string },
@@ -48,16 +50,26 @@ export const applyWalletBillingAddressToCheckout = (
     (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null) ||
     (billingAddress.country === checkout.country ? checkout.state : null) ||
     (billingAddress.country === "CA" ? GST_ONLY_FALLBACK_PROVINCE : null);
-  const billingZipCode = billingAddress.postal_code || undefined;
+  // When the wallet shares no postal code and the country isn't changing, keep checkout's
+  // existing ZIP (same reasoning as keeping the existing state above: it belonged to this same
+  // country, so it isn't stale). Clearing it instead would both needlessly invalidate the
+  // surcharges quote (the reducer treats any US ZIP change — including clearing — as a
+  // tax-location change) and, for US buyers, wipe a ZIP the server requires.
+  const billingZipCode =
+    billingAddress.postal_code || (billingAddress.country === checkout.country ? checkout.zipCode : undefined);
   dispatch({ type: "set-value", country: billingAddress.country });
   dispatch({ type: "set-value", zipCode: billingZipCode });
   dispatch({ type: "set-value", state: billingState ?? "" });
   // Each condition matches the reducer's surcharge-invalidation rule for the corresponding
   // dispatch above, evaluated the way the reducer sees it (the country dispatch lands first, so
-  // the ZIP and state rules key on the wallet's country).
+  // the ZIP and state rules key on the wallet's country). The US ZIP rule deliberately has no
+  // length/format requirement — the reducer invalidates on ANY US ZIP change (partial ZIPs and
+  // ZIP+4 included, since the server derives the taxable location from whatever ZIP is
+  // submitted), so this must report those changes too or a held wallet payment would be
+  // released against a stale quote.
   return (
     billingAddress.country !== checkout.country ||
-    (billingAddress.country === "US" && billingZipCode !== checkout.zipCode && billingZipCode?.length === 5) ||
+    (billingAddress.country === "US" && billingZipCode !== checkout.zipCode) ||
     (billingAddress.country === "CA" && (billingState ?? "") !== checkout.state)
   );
 };
