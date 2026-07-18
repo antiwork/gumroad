@@ -19,6 +19,7 @@ describe Checkout::FormPresenter do
               display_offer_code_field: false,
               recommendation_type: User::RecommendationType::OWN_PRODUCTS,
               tipping_enabled: false,
+              ach_payments_enabled: false,
             },
             cart_item: nil,
             card_product: nil,
@@ -35,6 +36,16 @@ describe Checkout::FormPresenter do
 
       it "returns true for tipping_enabled" do
         expect(presenter.form_props[:user][:tipping_enabled]).to eq(true)
+      end
+    end
+
+    context "when the seller has opted into ACH payments" do
+      before do
+        seller.update!(ach_payments_enabled: true)
+      end
+
+      it "returns true for ach_payments_enabled" do
+        expect(presenter.form_props[:user][:ach_payments_enabled]).to eq(true)
       end
     end
 
