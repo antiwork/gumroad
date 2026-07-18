@@ -26,6 +26,35 @@ describe GdprDataErasureService do
       expect(user.deleted_at).to be_present
     end
 
+    it "nulls PII columns on all compliance info rows, including previously replaced ones" do
+      # Compliance edits replace the row (Immutable), so a user accumulates soft-deleted
+      # rows that still carry PII — erasure must scrub those too, not just the alive one.
+      replaced_info = create(:user_compliance_info, user:, full_name: "John Doe", telephone_number: "+1 555 555 0100")
+      replaced_info.mark_deleted!
+      current_info = create(:user_compliance_info, user:, full_name: "John Doe", telephone_number: "+1 555 555 0100")
+
+      described_class.new(user, performed_by: admin).perform!
+
+      [replaced_info, current_info].each do |compliance_info|
+        compliance_info.reload
+        expect(compliance_info.deleted_at).to be_present
+        expect(compliance_info.full_name).to be_nil
+        expect(compliance_info.first_name).to be_nil
+        expect(compliance_info.last_name).to be_nil
+        expect(compliance_info.birthday).to be_nil
+        expect(compliance_info.street_address).to be_nil
+        expect(compliance_info.city).to be_nil
+        expect(compliance_info.state).to be_nil
+        expect(compliance_info.zip_code).to be_nil
+        expect(compliance_info.telephone_number).to be_nil
+        expect(compliance_info.phone).to be_nil
+        # The JsonData concern deserializes a NULL column as an empty hash.
+        expect(compliance_info.json_data).to be_blank
+        # Country stays with the retained transaction/tax records (Article 17(3)(b)).
+        expect(compliance_info.country).to eq("United States")
+      end
+    end
+
     it "anonymizes buyer purchases" do
       purchase = create(
         :free_purchase,

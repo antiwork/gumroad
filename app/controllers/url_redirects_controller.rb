@@ -214,6 +214,15 @@ class UrlRedirectsController < ApplicationController
     end
 
     purchase = @url_redirect.purchase
+
+    # A reassignment-locked purchase is frozen by our support team while its
+    # ownership is being reviewed, so knowing the purchase email is not enough
+    # to move it into another account.
+    if purchase.is_reassignment_locked?
+      flash[:alert] = "This purchase is under review and cannot be moved to another account. Please contact support for help."
+      return redirect_to url_redirect_check_purchaser_path({ id: @url_redirect.token, next: params[:next].presence }.compact)
+    end
+
     purchase.purchaser = logged_in_user
     purchase.save!
     redirect_to_next

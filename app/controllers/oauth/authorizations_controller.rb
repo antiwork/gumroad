@@ -11,6 +11,20 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?
 
   private
+    # Scope migrations lock the application while revoking credentials. Re-read
+    # and validate the requested scopes under that same lock so a request that
+    # saw the old scopes cannot create a grant after the revocation sweep.
+    def authorize_response
+      oauth_application = OauthApplication.alive.find_by(uid: params[:client_id])
+      return super if oauth_application.nil?
+
+      oauth_application.with_lock do
+        @pre_auth = nil
+        @strategy = nil
+        super
+      end
+    end
+
     def redirect_or_render(auth)
       if admin_authorization_redirect?(auth)
         admin_authorization_code = AdminApiAuthorizationCode.create_for!(

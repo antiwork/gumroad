@@ -5,6 +5,13 @@ class CustomerSurchargeController < ApplicationController
 
   def calculate_all
     products = params.require(:products)
+    # Malformed requests can send `products` as a raw string (or an array containing
+    # strings) instead of an array of product hashes. Reject those with a 400 instead
+    # of letting `products.each` / `item[:permalink]` raise a NoMethodError.
+    unless products.is_a?(Array) && products.all? { |item| item.is_a?(ActionController::Parameters) || item.is_a?(Hash) }
+      return head :bad_request
+    end
+
     vat_id_valid = false
     has_vat_id_input = false
     shipping_rate = 0

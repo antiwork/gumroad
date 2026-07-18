@@ -82,35 +82,36 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         described_class.check(product, :product)
       end
 
-      it "leaves a note on the user for Gumclaw review" do
-        expect do
-          described_class.check(product, :product)
-        end.to change { seller.reload.comments.count }.by(1)
+      it "enqueues a note on the user for Gumclaw review" do
+        ContentModerationAdminCommentJob.clear
 
-        comment = seller.comments.last
-        expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_NOTE)
-        expect(comment.author_name).to eq(described_class::AUTHOR_NAME)
-        expect(comment.content).to include("Product ##{product.id}")
-        expect(comment.content).to include("Matched blocked word: banned")
-      end
-
-      it "does not create a duplicate note on rapid retries with identical content" do
         described_class.check(product, :product)
 
-        expect do
-          described_class.check(product, :product)
-          described_class.check(product, :product)
-        end.not_to change { seller.reload.comments.count }
+        expect(ContentModerationAdminCommentJob.jobs.size).to eq(1)
+        user_id, content = ContentModerationAdminCommentJob.jobs.last["args"]
+        expect(user_id).to eq(seller.id)
+        expect(content).to include("Product ##{product.id}")
+        expect(content).to include("Matched blocked word: banned")
       end
 
-      it "creates a fresh note once the dedup window has elapsed" do
-        described_class.check(product, :product)
+      it "preserves the note even when the check runs inside a transaction that rolls back" do
+        ContentModerationAdminCommentJob.clear
+        # Materialize the lazily created records now so the savepoint rollback
+        # below only undoes work done during the check itself.
+        product
 
-        travel_to(described_class::ADMIN_COMMENT_DEDUP_WINDOW.from_now + 1.second) do
-          expect do
-            described_class.check(product, :product)
-          end.to change { seller.reload.comments.count }.by(1)
+        # Publishing runs this check as a validation inside the record's save
+        # transaction, and a blocked publish rolls that transaction back. The
+        # note must survive the rollback or blocked publishes leave no trail.
+        ActiveRecord::Base.transaction(requires_new: true) do
+          described_class.check(product, :product)
+          raise ActiveRecord::Rollback
         end
+
+        expect do
+          ContentModerationAdminCommentJob.drain
+        end.to change { seller.reload.comments.count }.by(1)
+        expect(seller.comments.last.content).to include("Matched blocked word: banned")
       end
     end
 
@@ -129,24 +130,25 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(result.reasons).to include("OpenAI moderation flagged: sexual")
       end
 
-      it "leaves a note on the user" do
-        expect do
-          described_class.check(product, :product)
-        end.to change { seller.reload.comments.count }.by(1)
+      it "enqueues a note on the user" do
+        ContentModerationAdminCommentJob.clear
 
-        expect(seller.comments.last.content).to include("OpenAI moderation flagged: sexual")
+        described_class.check(product, :product)
+
+        expect(ContentModerationAdminCommentJob.jobs.size).to eq(1)
+        expect(ContentModerationAdminCommentJob.jobs.last["args"].second).to include("OpenAI moderation flagged: sexual")
       end
     end
 
     context "when all strategies return compliant" do
-      it "returns passed: true without creating a comment" do
-        result = nil
-        expect do
-          result = described_class.check(product, :product)
-        end.not_to change { seller.reload.comments.count }
+      it "returns passed: true without enqueuing a comment" do
+        ContentModerationAdminCommentJob.clear
+
+        result = described_class.check(product, :product)
 
         expect(result.passed).to eq(true)
         expect(result.reasons).to eq([])
+        expect(ContentModerationAdminCommentJob.jobs).to be_empty
       end
     end
 
@@ -166,6 +168,43 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
 
         described_class.check(post, :post)
       end
+    end
+  end
+
+  describe ".humanize_reasons" do
+    it "maps prompt strategy spam reasons to an actionable label" do
+      reasons = ["spam: aggressive call-to-action phrases ('Watch HERE') without providing substantial information"]
+
+      expect(described_class.humanize_reasons(reasons)).to eq("content that reads as promotional spam")
+    end
+
+    it "maps prompt strategy adult content reasons to an actionable label" do
+      expect(described_class.humanize_reasons(["adult_content: explicit imagery"])).to eq("adult content")
+    end
+
+    it "maps classifier category reasons to category labels" do
+      reasons = ["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.9)"]
+
+      expect(described_class.humanize_reasons(reasons)).to eq("violent content")
+    end
+
+    it "falls back to a generic phrase for unrecognized reasons" do
+      expect(described_class.humanize_reasons(["Matched blocked word: banned"]))
+        .to eq("something that may violate our content guidelines")
+    end
+  end
+
+  describe ".seller_message" do
+    it "names the flagged record when a title is given" do
+      message = described_class.seller_message(["spam: repetitive CTAs"], "email", title: "Email #7")
+
+      expect(message).to eq("The email \"Email #7\" can’t be saved because it looks like it contains content that reads as promotional spam. Please update the content to follow our content guidelines.")
+    end
+
+    it "keeps the generic subject when no title is given" do
+      message = described_class.seller_message(["OpenAI moderation flagged: violence"], "product")
+
+      expect(message).to start_with("This product can’t be saved")
     end
   end
 end

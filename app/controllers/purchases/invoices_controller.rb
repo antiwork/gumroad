@@ -123,6 +123,13 @@ class Purchases::InvoicesController < ApplicationController
 
     def set_chargeable
       @chargeable = Charge::Chargeable.find_by_purchase_or_charge!(purchase: @purchase)
+      # A Charge only exposes buyer details (full_name, address, etc.) through its
+      # first purchase in a successful state. If the buyer opens the invoice page in
+      # the brief window before their purchase transitions to a successful state (or
+      # after every purchase on the charge failed), those delegations raise because
+      # there is no successful purchase to delegate to. Fall back to the purchase
+      # itself, which carries the same buyer details and predates the Charge model.
+      @chargeable = @purchase if @chargeable.is_a?(Charge) && @chargeable.successful_purchases.none?
     end
 
     def is_vat_id_valid?(raw_vat_id)

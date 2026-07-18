@@ -14,19 +14,26 @@ class GenerateFeesByCreatorLocationReportJob
 
     timeout_seconds = ($redis.get(RedisKey.generate_fees_by_creator_location_job_max_execution_time_seconds) || 1.hour).to_i
     WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
+      starts_at = Date.new(year, month).beginning_of_month.beginning_of_day
+      ends_at = Date.new(year, month).end_of_month.end_of_day
+
       Purchase.successful
-        .not_fully_refunded
+        .not_fully_refunded_for_tax_reporting
         .not_chargedback_or_chargedback_reversed
         .where.not(stripe_transaction_id: nil)
-        .where("purchases.created_at BETWEEN ? AND ?",
-               Date.new(year, month).beginning_of_month.beginning_of_day,
-               Date.new(year, month).end_of_month.end_of_day)
+        .where("purchases.created_at BETWEEN ? AND ?", starts_at, ends_at)
         .includes(:seller).find_each do |purchase|
         GC.start if purchase.id % 10000 == 0
 
-        next if purchase.chargedback_not_reversed_or_refunded?
+        # Chargebacks keep their existing purchase-flag attribution (the chargeback
+        # event-date pass is tracked separately). There is deliberately NO per-row
+        # fully-refunded skip here: the not_fully_refunded_for_tax_reporting scope above is
+        # the single gate. Any refunded purchase that reaches this loop either contributes its
+        # gross fee (post-cutover) or has a post-cutover refund whose leg below subtracts the
+        # refunded fee — re-skipping it here would understate the period pair.
+        next if purchase.chargedback_not_reversed?
 
-        fee_cents = purchase.fee_cents_net_of_refunds
+        fee_cents = purchase.fee_cents_for_tax_reporting
 
         country_name, state_name = determine_country_name_and_state_name(purchase)
 
@@ -36,6 +43,32 @@ class GenerateFeesByCreatorLocationReportJob
         if country_name == "United States"
           state_data[state_name] ||= 0
           state_data[state_name] += fee_cents
+        end
+      end
+
+      # Refund leg: fees refunded during the reported month are subtracted in this month,
+      # dated by the refund's date, regardless of when the original purchase happened. The
+      # purchase-side filters mirror the sales leg above (minus its date window).
+      Refund.for_tax_period_reporting(starts_at, ends_at)
+        .joins(:purchase)
+        .merge(
+          Purchase.successful
+            .not_chargedback_or_chargedback_reversed
+            .where.not(purchases: { stripe_transaction_id: nil })
+        )
+        .includes(purchase: :seller)
+        .find_each do |refund|
+        refunded_fee_cents = refund.fee_cents.to_i
+        next if refunded_fee_cents.zero?
+
+        country_name, state_name = determine_country_name_and_state_name(refund.purchase)
+
+        country_data[country_name] ||= 0
+        country_data[country_name] -= refunded_fee_cents
+
+        if country_name == "United States"
+          state_data[state_name] ||= 0
+          state_data[state_name] -= refunded_fee_cents
         end
       end
     end

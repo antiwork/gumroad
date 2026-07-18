@@ -11,6 +11,26 @@ class Oauth::TokensController < Doorkeeper::TokensController
   end
 
   private
+    # Doorkeeper validates an explicit refresh scope before it locks and reloads
+    # the source token. Take the application lock before it builds that request
+    # so a scope rollback either sweeps the replacement token or finishes first
+    # and makes Doorkeeper validate against the reduced scopes.
+    def authorize_response
+      oauth_application = refresh_token_application
+      return super if oauth_application.nil?
+
+      oauth_application.with_lock do
+        @strategy = nil
+        super
+      end
+    end
+
+    def refresh_token_application
+      return unless params[:grant_type] == "refresh_token"
+
+      Doorkeeper.config.access_token_model.by_refresh_token(params[:refresh_token])&.application
+    end
+
     def device_access_token_request?
       request.path.match?(%r{\A#{Regexp.escape(oauth_token_path)}(?:\.[^/]+)?\z}) &&
         params[:grant_type] == OauthDeviceAuthorization::GRANT_TYPE

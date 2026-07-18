@@ -87,7 +87,11 @@ export const CartItemMain = ({ className, children, ...props }: BaseProps) => {
   const bundleClasses = isBundleItem ? "justify-center self-stretch border-l border-border p-4" : "";
 
   return (
-    <section className={classNames("flex flex-1 flex-col gap-1", bundleClasses, className)} {...props}>
+    // min-w-0 lets this column shrink below its content width so CartItemTitle's
+    // line-clamp can do its job, but the real floor against a wide CartItemEnd
+    // (e.g. "US$99.99 monthly after" on a free-trial membership) is the
+    // max-w cap applied at the CartItemEnd call site in Checkout.
+    <section className={classNames("flex min-w-0 flex-1 flex-col gap-1", bundleClasses, className)} {...props}>
       {children}
     </section>
   );
