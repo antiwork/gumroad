@@ -44,6 +44,23 @@ const TURN_RECOVERY_MAX_CONSECUTIVE_UNKNOWNS = 2;
 // broke the stream may still be down, so this is more generous than the unknown allowance.
 const TURN_RECOVERY_MAX_CONSECUTIVE_FETCH_FAILURES = 10;
 
+// A UUID v4 for tagging a streamed turn. `crypto.randomUUID` only exists in secure contexts
+// (HTTPS or localhost), and the app also runs on plain-HTTP origins (system tests, local dev on
+// a custom host) — there we build the UUID from `crypto.getRandomValues`, which has no such
+// restriction. The id only has to be unique per turn, not cryptographically meaningful.
+const generateTurnId = (): string => {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const hex = [...bytes]
+    .map((byte, index) => {
+      if (index === 6) byte = (byte & 0x0f) | 0x40; // version 4
+      if (index === 8) byte = (byte & 0x3f) | 0x80; // RFC 4122 variant
+      return byte.toString(16).padStart(2, "0");
+    })
+    .join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
 type DisplayMessage = ChatMessage & {
   // A proposed change attached to an assistant turn. Once the seller acts on it, we record the
   // outcome so the confirmation card collapses into a status line and can't be triggered twice.
@@ -350,7 +367,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     const assistantIndex = messages.length + 1;
     // Tag the turn with a unique id before sending so, if the stream breaks, recovery can ask the
     // server about this exact turn instead of guessing from the seller's latest conversation.
-    const clientTurnId = crypto.randomUUID();
+    const clientTurnId = generateTurnId();
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
     setFollowUps([]);
