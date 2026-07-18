@@ -368,7 +368,11 @@ const EpubReader = ({
       if (!contentRef.current) return;
 
       const ePub = (await import("epubjs")).default;
-      const book = ePub(url);
+      // The download URL is signed and carries query parameters, which defeats
+      // epub.js's extension-based type detection (it would treat the URL as an
+      // unpacked book directory and request META-INF/container.xml relative to
+      // it). Explicitly declare the resource as a packaged .epub archive.
+      const book = ePub(url, { openAs: "epub" });
       const rendition = book.renderTo(contentRef.current, { width: "100%", height: "100%" });
       renditionRef.current = rendition;
 
