@@ -100,7 +100,14 @@ module RendersCustomHtmlPages
         // Viewed directly (not framed) there is no trusted parent to ask,
         // so leave forms alone.
         if (window.parent === window) return;
-        var activeForm = null;
+        // Each submit gets its own request id, and the wrapper echoes the id
+        // back in its reply. That correlation is what lets two forms on the
+        // same page (hero + footer) be submitted in quick succession without
+        // the first reply landing on the second form — a single "active form"
+        // slot would be overwritten by the second submit before the first
+        // reply arrives.
+        var pendingForms = {};
+        var nextRequestId = 0;
         document.addEventListener("submit", function (e) {
           var form = e.target && e.target.closest ? e.target.closest("form[data-gumroad-follow]") : null;
           if (!form || e.defaultPrevented) return;
@@ -111,8 +118,10 @@ module RendersCustomHtmlPages
           // DOM.
           var input = form.querySelector('input[type="email"]') || form.querySelector('input[name="email"]');
           var email = input ? String(input.value || "").trim() : "";
-          activeForm = form;
-          parent.postMessage({ type: "gumroad:follow", email: email }, "*");
+          nextRequestId += 1;
+          var requestId = "gumroad-follow-" + nextRequestId;
+          pendingForms[requestId] = form;
+          parent.postMessage({ type: "gumroad:follow", email: email, requestId: requestId }, "*");
         }, true);
         window.addEventListener("message", function (e) {
           // Only the parent wrapper's reply drives the confirmation UI —
@@ -122,22 +131,26 @@ module RendersCustomHtmlPages
           if (!d || typeof d !== "object" || d.type !== "gumroad:follow:result") return;
           var success = d.success === true;
           var message = typeof d.message === "string" ? d.message : "";
-          // Scope the outcome to the form that asked, so a page with two
-          // signup forms (hero + footer) doesn't flip both. When the message
-          // came from a page script instead of a tracked form submit, fall
-          // back to every marked form. Message slots inside the active form
-          // win; a page whose slot lives elsewhere (e.g. a paragraph after
-          // the form) still gets the document-wide slots.
-          var forms = activeForm ? [activeForm] : document.querySelectorAll("form[data-gumroad-follow]");
+          // Scope the outcome to the form whose submit produced this reply
+          // (matched by the echoed request id), so a page with two signup
+          // forms (hero + footer) doesn't flip both — even when they're
+          // submitted while another request is still in flight. When the
+          // message came from a page script instead of a tracked form submit,
+          // fall back to every marked form. Message slots inside the matched
+          // form win; a page whose slot lives elsewhere (e.g. a paragraph
+          // after the form) still gets the document-wide slots.
+          var requestId = typeof d.requestId === "string" ? d.requestId : null;
+          var matchedForm = requestId && pendingForms[requestId] ? pendingForms[requestId] : null;
+          if (requestId) delete pendingForms[requestId];
+          var forms = matchedForm ? [matchedForm] : document.querySelectorAll("form[data-gumroad-follow]");
           for (var i = 0; i < forms.length; i++) {
             forms[i].setAttribute("data-gumroad-follow-state", success ? "success" : "error");
           }
-          var slots = activeForm ? activeForm.querySelectorAll("[data-gumroad-follow-message]") : [];
+          var slots = matchedForm ? matchedForm.querySelectorAll("[data-gumroad-follow-message]") : [];
           if (!slots.length) slots = document.querySelectorAll("[data-gumroad-follow-message]");
           for (var j = 0; j < slots.length; j++) {
             slots[j].textContent = message;
           }
-          activeForm = null;
           // For pages that manage their own UI (popups etc.) instead of
           // using the declarative hooks above.
           try {
@@ -257,13 +270,19 @@ module RendersCustomHtmlPages
             var SELLER_ID = #{seller_id_json};
             var ENDPOINT = #{endpoint_json};
             var GENERIC_ERROR = "Something went wrong. Please try again.";
-            var inFlight = false;
             window.addEventListener("message", function (e) {
               if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
               var d = e.data;
               if (!d || typeof d !== "object" || d.type !== "gumroad:follow") return;
+              // The child sends a per-submit request id; echoing it back is
+              // what lets the child route each reply to the form that asked,
+              // so two forms submitted in quick succession each get their own
+              // outcome instead of the first reply landing on the second
+              // form. Requests are allowed to overlap — abuse is bounded by
+              // the endpoint's Rack::Attack throttle, not by this script.
+              var requestId = typeof d.requestId === "string" ? d.requestId : null;
               function reply(success, message) {
-                frame.contentWindow.postMessage({ type: "gumroad:follow:result", success: success, message: message }, "*");
+                frame.contentWindow.postMessage({ type: "gumroad:follow:result", success: success, message: message, requestId: requestId }, "*");
               }
               var email = typeof d.email === "string" ? d.email.trim() : "";
               // Real validation happens server-side; only skip the request
@@ -272,9 +291,6 @@ module RendersCustomHtmlPages
                 reply(false, "Please enter a valid email address.");
                 return;
               }
-              if (inFlight) return;
-              inFlight = true;
-              function done(success, message) { inFlight = false; reply(success, message); }
               var token = document.querySelector('meta[name="csrf-token"]');
               var body = new URLSearchParams();
               body.set("seller_id", SELLER_ID);
@@ -286,10 +302,10 @@ module RendersCustomHtmlPages
                 body: body
               })
                 .then(function (r) { return r.json(); })
-                .then(function (data) { done(data && data.success === true, data && typeof data.message === "string" ? data.message : GENERIC_ERROR); })
+                .then(function (data) { reply(data && data.success === true, data && typeof data.message === "string" ? data.message : GENERIC_ERROR); })
                 // Network failure, or a non-JSON body such as a Rack::Attack
                 // 429 while throttled.
-                .catch(function () { done(false, GENERIC_ERROR); });
+                .catch(function () { reply(false, GENERIC_ERROR); });
             });
           })();
         </script>
