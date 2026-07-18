@@ -89,17 +89,19 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
         sse.write(payload, event:)
       end
-      sse.write(
-        {
-          reply: result[:reply],
-          proposed_action: result[:proposed_action],
-          objects: result[:objects] || [],
-          suggestions: result[:suggestions] || [],
-          # Omitted (nil) when creating the conversation itself failed above.
-          conversation_id: conversation&.external_id,
-        },
-        event: "done",
-      )
+      # conversation_id is omitted entirely (not null) when creating the conversation itself
+      # failed above — this matches the web streaming controller, whose client validates the
+      # done frame against a schema where conversation_id is an optional string (a null would
+      # fail validation and turn a benign persistence failure into a spurious interrupted-stream
+      # recovery). Keeping the mobile frame shape identical means one contract for both clients.
+      done_payload = {
+        reply: result[:reply],
+        proposed_action: result[:proposed_action],
+        objects: result[:objects] || [],
+        suggestions: result[:suggestions] || [],
+      }
+      done_payload[:conversation_id] = conversation.external_id if conversation
+      sse.write(done_payload, event: "done")
     rescue ::Ai::StoreAgentService::Error => e
       sse.write({ message: e.message }, event: "error")
     rescue ActionController::Live::ClientDisconnected

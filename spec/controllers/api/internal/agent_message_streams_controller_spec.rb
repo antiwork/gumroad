@@ -99,6 +99,10 @@ describe Api::Internal::AgentMessageStreamsController do
         expect(response.body).to include("event: done")
         expect(response.body).to include("You have 3 products.")
         expect(response.body).not_to include("event: error")
+        # The key must be omitted (not serialized as null) so the frame stays valid against the
+        # client schema, where conversation_id is an optional string.
+        done_data = response.body[/event: done\ndata: (.*)\n/, 1]
+        expect(JSON.parse(done_data)).not_to have_key("conversation_id")
       end
 
       it "persists the turn before any trailing write, so a client disconnect can't drop it" do
