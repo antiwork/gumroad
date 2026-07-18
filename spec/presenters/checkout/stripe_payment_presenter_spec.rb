@@ -754,6 +754,31 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
+    it "keeps the canonical USD element for a direct-charge seller without an iDEAL capability snapshot" do
+      seller = create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 1500)
+      connect_account = create(:merchant_account_stripe_connect, user: seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      allow(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(
+        payment_element_client_confirm_props(
+          payment_method_types: ["card"],
+          stripe_link_enabled: false,
+          stripe_connect_account_id: connect_account.charge_processor_merchant_id,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_ideal, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
     it "selects the buyer-currency presentment Payment Element for a non-US buyer of a USD-priced product with the flags on" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
       activate_buyer_currency_flags(seller)

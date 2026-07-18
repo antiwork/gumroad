@@ -303,7 +303,9 @@ class Order::PreparePaymentIntentService
 
       product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
       return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
-      return nil unless Checkout::BuyerCurrencyEligibility.forced_currency_surface_available?(currency: product_currency, seller:)
+      return nil unless payment_method_resolution.payment_method_types.any? do |payment_method_type|
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == product_currency
+      end
 
       product_currency
     end

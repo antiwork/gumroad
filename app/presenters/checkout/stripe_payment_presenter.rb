@@ -307,10 +307,9 @@ class Checkout::StripePaymentPresenter
       return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(item[:seller])
       return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(item[:product_currency])
 
-      Checkout::BuyerCurrencyEligibility.forced_currency_surface_available?(
-        currency: item[:product_currency],
-        seller: item[:seller]
-      )
+      payment_method_resolver.resolve.payment_method_types.any? do |payment_method_type|
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == item[:product_currency]
+      end
     end
 
     def method_forced_element_currency
