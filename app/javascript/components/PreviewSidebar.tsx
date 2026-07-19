@@ -87,6 +87,27 @@ type PreviewChromeProps = { children: React.ReactNode } & (
     }
 );
 
+// Browser-style middle truncation for the address field: the START of the URL (domain) and
+// the END (the page's own path segment) are the parts that identify the page, so when space
+// runs out the ellipsis lands in the middle instead of eating the path. CSS alone can only
+// truncate at the end, so the string is split into a truncating head and a fixed tail. The
+// full URL stays in the accessibility tree (and in Capybara's visible text) via the
+// screen-reader-only copy; the split spans are presentation only.
+const MiddleTruncatedUrl = ({ url }: { url: string }) => {
+  const tailLength = Math.min(12, Math.floor(url.length / 2));
+  const head = url.slice(0, url.length - tailLength);
+  const tail = url.slice(url.length - tailLength);
+  return (
+    <>
+      <span className="sr-only">{url}</span>
+      <span aria-hidden className="flex max-w-full min-w-0">
+        <span className="truncate">{head}</span>
+        <span className="shrink-0">{tail}</span>
+      </span>
+    </>
+  );
+};
+
 export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
   <>
     {/* On touch screens the compact in-bar arrow (32px, icon-only) is too small a target and
@@ -106,9 +127,10 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
         })}
       </div>
     ) : null}
-    {/* `bg-background` (not a hardcoded white) so the chrome follows the dashboard's light/dark
-        theme — the framed content paints its own background, but the chrome's rounded corners
-        and the pre-load area would otherwise flash white in dark mode.
+    {/* `bg-body` gives the chrome bar a subtle surface fill (the dashboard's page background,
+        one step off the preview's own `bg-background`) so it reads as browser chrome sitting
+        apart from the page it frames — in both light and dark mode. The frame's own corners
+        stay `bg-background` so the pre-load area doesn't flash white in dark mode.
 
         `shrink-0` matters: the chrome renders as a flex item inside the sidebar's fixed-height
         flex column, and `overflow-hidden` (needed to clip children to the rounded corners)
@@ -118,7 +140,7 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
       {props.variant === "email" ? (
         // Email headers read left-to-right like an email client, not centered like a browser
         // tab, and there is no open-in-new-tab arrow — an email has no URL to open.
-        <div className="flex flex-col gap-0.5 border-b border-border bg-background px-4 py-2 text-sm">
+        <div className="flex flex-col gap-0.5 border-b border-border bg-body px-4 py-2 text-sm">
           <div className="flex min-w-0 gap-2">
             <span className="shrink-0 text-muted">From</span>
             <span className="truncate">{props.from}</span>
@@ -131,24 +153,33 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
           ) : null}
         </div>
       ) : (
-        <div className="relative border-b border-border bg-background px-10 py-2">
-          <div className="min-w-0 text-center">
-            <div className="truncate text-sm font-medium">{props.title}</div>
-            {props.url ? (
-              <div className="truncate text-xs text-muted">{props.url.replace(/^https?:\/\//u, "")}</div>
-            ) : null}
-          </div>
+        <div className="relative flex flex-col items-center gap-1 border-b border-border bg-body px-10 py-2">
+          <div className="w-full truncate text-center text-sm font-medium">{props.title}</div>
+          {props.url ? (
+            // The URL sits in a quiet inset address field (like a browser's address bar at
+            // rest) rather than as bare caption text. Middle truncation keeps the page's own
+            // path segment visible when the domain is long — the end of the URL is what
+            // distinguishes this page from the seller's others.
+            <div className="flex max-w-full min-w-0 items-center rounded-sm bg-active-bg px-2.5 py-0.5 text-xs text-muted">
+              <MiddleTruncatedUrl url={props.url.replace(/^https?:\/\//u, "")} />
+            </div>
+          ) : null}
           {props.link ? (
             // Hidden below lg — mobile gets the labeled button row above the frame instead
             // (see the comment on the render prop).
             <div className="absolute inset-y-0 right-2 flex items-center max-lg:hidden">
-              <WithTooltip tip="Open in new tab">
+              {/* bottom-end keeps the tooltip inside the sidebar: the default centered
+                  position hangs it past the arrow (which sits at the frame's right edge)
+                  and the sidebar's overflow clips it mid-word. */}
+              <WithTooltip tip="Open in new tab" position="bottom-end">
                 {props.link({
                   "aria-label": "Open in new tab",
                   size: "icon",
-                  // The default icon size (size-12) dwarfs the slim chrome bar — shrink to a
-                  // compact 32px hit target that fits inside it.
-                  className: "size-8",
+                  // The default icon size (size-12) dwarfs the slim chrome bar, so the arrow
+                  // stays a compact 32px visually — but a 32px touch/click target is below
+                  // the 44px minimum, so an invisible ::after pad extends the hit area to
+                  // 44×44px without changing what's drawn.
+                  className: 'relative size-8 after:absolute after:-inset-1.5 after:content-[""]',
                   children: <ArrowUpRight className="size-4" />,
                 })}
               </WithTooltip>
