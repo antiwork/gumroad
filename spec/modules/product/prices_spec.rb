@@ -289,6 +289,21 @@ describe Product::Prices do
         expect(product.display_price_cents).to eq 1_00
       end
     end
+
+    context "for a persisted product with no alive prices" do
+      it "returns 0 instead of raising NoMethodError" do
+        product = create(:product, price_cents: 5_00)
+        # A persisted product reads its price from the associated Price records.
+        # If all of those records are gone (e.g. bad data or a partial deletion),
+        # default_price_cents returns nil — the display price must degrade to 0
+        # rather than crash the seller's products dashboard.
+        product.prices.destroy_all
+        product.reload
+
+        expect(product.default_price_cents).to be_nil
+        expect(product.display_price_cents).to eq 0
+      end
+    end
   end
 
   describe "#available_price_cents" do
