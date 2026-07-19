@@ -10,7 +10,7 @@
   "canceled_at": null,
   "cancellation_reason": null,
   "capture_method": "automatic",
-  "client_secret": "pi_2TuZbR9e1RjUNIyY083tdCfB_secret_jnLKY2yBGWuw3TD6iYq1tl11T",
+  "client_secret": "[REDACTED]",
   "confirmation_method": "automatic",
   "created": 1784386353,
   "currency": "eur",

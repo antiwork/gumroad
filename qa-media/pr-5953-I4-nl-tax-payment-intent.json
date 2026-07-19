@@ -1,8 +1,8 @@
 {
-  "id": "pi_2TuRaL9e1RjUNIyY1feaT3Mg",
+  "id": "pi_2TufCJ9e1RjUNIyY1JAcOWi9",
   "object": "payment_intent",
   "allowed_payment_method_types": null,
-  "amount": 2300,
+  "amount": 2420,
   "amount_details": {
     "tip": {}
   },
@@ -10,16 +10,16 @@
   "canceled_at": null,
   "cancellation_reason": null,
   "capture_method": "automatic",
-  "client_secret": "pi_2TuRaL9e1RjUNIyY1feaT3Mg_secret_BcDqntcBOQfmtFRWG9LxXTYxx",
+  "client_secret": "[REDACTED]",
   "confirmation_method": "automatic",
-  "created": 1784355533,
+  "created": 1784407859,
   "currency": "eur",
-  "description": "Gumroad Charge dXd6tfP3nwvh7DEerI47hg==",
+  "description": "Gumroad Charge 73EOCycXrBgmAMFtumbtJA==",
   "excluded_payment_method_types": null,
   "last_payment_error": null,
   "livemode": false,
   "next_action": null,
-  "payment_method": "pm_0TuRaJ9e1RjUNIyYGJlVYQFn",
+  "payment_method": "pm_0TufCG9e1RjUNIyY95Wg36ar",
   "payment_method_configuration_details": null,
   "payment_method_types": [
     "card",
