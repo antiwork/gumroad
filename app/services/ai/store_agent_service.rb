@@ -30,7 +30,14 @@ class Ai::StoreAgentService
   # network timeouts on real (slow but working) generations, so this is deliberately generous — the
   # client fails fast on connect problems and retries transient failures on its own.
   REQUEST_TIMEOUT_IN_SECONDS = 120
-  MAX_TOOL_ITERATIONS = 5
+  # Upper bound on model turns per reply (each turn may run one or more tools). This has to leave
+  # room for pagination: list endpoints return 10 items per page and the system prompt tells the
+  # model to walk EVERY page for "all of X" tasks, so each page fetch consumes one turn and the
+  # final answer needs one more. The previous cap of 5 meant a seller with more than ~40 products
+  # hit the generic "couldn't finish" fallback on exactly the catalog-wide tasks the pagination
+  # rule exists for. 25 turns covers catalogs of roughly 240 items while still bounding the cost
+  # of a runaway tool loop; past that the honest cap reply below is the correct outcome.
+  MAX_TOOL_ITERATIONS = 25
   MAX_MESSAGE_LENGTH = 2_000
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
   # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a

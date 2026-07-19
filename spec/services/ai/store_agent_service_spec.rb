@@ -139,6 +139,37 @@ describe Ai::StoreAgentService do
         expect(captured).to include("next_page_key" => "key-2")
       end
 
+      # Regression for the review finding on gumroad-private#1168's fix: the pagination prompt rule
+      # is useless if the tool-iteration cap stops the walk first. With the old cap of 5, a seller
+      # whose list spanned more than ~4 pages got the generic "couldn't finish" fallback on exactly
+      # the "all of X" tasks pagination exists for. This walks 8 pages and still gets a real answer.
+      it "lets the model walk well past five pages before the tool-iteration cap" do
+        pages = 8
+        call_count = 0
+        allow(api_client).to receive(:get) do |_path, _params|
+          call_count += 1
+          key = call_count < pages ? "key-#{call_count}" : nil
+          { "success" => true, "products" => [{ "id" => "p#{call_count}", "name" => "Product #{call_count}" }], "next_page_key" => key, "http_status" => 200 }.compact
+        end
+        turns = 0
+        allow(client).to receive(:messages) do
+          turns += 1
+          if turns <= pages
+            input = turns == 1 ? { "endpoint" => "list_products" } : { "endpoint" => "list_products", "params" => { "page_key" => "key-#{turns - 1}" } }
+            tool_result("api_read", input)
+          else
+            text_result("You have #{pages} pages of products; here's the full list.")
+          end
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "list all my products" }])
+
+        expect(call_count).to eq(pages)
+        expect(result[:reply]).to include("full list")
+        # The reply is the model's real answer, not the iteration-cap fallback.
+        expect(result[:reply]).not_to match(/couldn't finish/i)
+      end
+
       it "teaches the model to paginate list reads in the system prompt" do
         captured = nil
         allow(client).to receive(:messages) do |args|
