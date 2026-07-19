@@ -763,20 +763,24 @@ describe StripeChargeProcessor, :vcr do
       expect(charge_intent.processing?).to eq(true)
     end
 
-    it "fails fast before creating a direct-charge payment intent when the seller has no proceeds" do
+    it "allows a direct-charge payment intent when Gumroad's fee equals the whole total" do
       merchant_account = create(:merchant_account_stripe_connect, user: create(:user), charge_processor_merchant_id: "acct_presentment")
-
-      expect(Stripe::PaymentIntent).not_to receive(:create)
-      expect(ErrorNotifier).to receive(:notify).with(
-        "Charge rejected before Stripe submit: seller proceeds would be non-positive",
-        hash_including(reference: "reference", charge_amount_cents: 100, gumroad_amount_cents: 100, seller_amount_cents: 0)
+      payment_intent = Stripe::PaymentIntent.construct_from(
+        id: "pi_direct_charge_zero_proceeds",
+        status: StripeIntentStatus::PROCESSING,
+        client_secret: "secret"
       )
 
-      expect do
-        subject.create_payment_intent_or_charge!(merchant_account, chargeable, 100, 100, "reference", "test description")
-      end.to raise_error(ChargeProcessorCardError) do |error|
-        expect(error.error_code).to eq(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE)
-      end
+      expect(Stripe::PaymentIntent).to receive(:create).with(
+        hash_including(amount: 100, application_fee_amount: 100),
+        { stripe_account: merchant_account.charge_processor_merchant_id }
+      ).and_return(payment_intent)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      charge_intent = subject.create_payment_intent_or_charge!(merchant_account, chargeable, 100, 100, "reference", "test description")
+
+      expect(charge_intent).to be_a(StripeChargeIntent)
+      expect(charge_intent.processing?).to eq(true)
     end
 
     context "for a card without SCA support" do

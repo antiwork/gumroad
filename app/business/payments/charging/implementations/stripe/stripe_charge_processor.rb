@@ -329,11 +329,10 @@ class StripeChargeProcessor
           raise "Merchant Account #{merchant_account.external_id} assigned to user #{merchant_account.user.external_id} "\
               "but has no Charge Processor Merchant ID."
         end
-        # A charge where our fee meets or exceeds the amount collected leaves the seller with
-        # zero or negative revenue. The destination-charge path below hard-fails on this at
-        # Stripe; fail the connected-account variant identically ourselves so tiny totals
-        # behave the same on both processor paths.
-        validate_seller_proceeds!(charge_amount_cents - charge_gumroad_amount_cents, charge_amount_cents, charge_gumroad_amount_cents, charge_currency, reference)
+        # Stripe caps a direct charge's application fee at the collected amount, so an exactly
+        # zero seller balance is valid. It does reject an application fee above the charge, which
+        # is the negative-proceeds case we must stop before submitting the PaymentIntent.
+        validate_seller_proceeds!(charge_amount_cents - charge_gumroad_amount_cents, charge_amount_cents, charge_gumroad_amount_cents, charge_currency, reference, minimum_seller_proceeds_cents: 0)
         params[:application_fee_amount] = charge_gumroad_amount_cents
         payment_intent = Stripe::PaymentIntent.create(params, stripe_options.merge(stripe_account: merchant_account.charge_processor_merchant_id))
       elsif merchant_account.user
@@ -347,7 +346,7 @@ class StripeChargeProcessor
         # attaches, which buyers saw as an unexplained "temporary problem" error. Fail fast with
         # a clear buyer-facing error instead of submitting a request we know Stripe will refuse.
         seller_transfer_amount_cents = charge_amount_cents - charge_gumroad_amount_cents
-        validate_seller_proceeds!(seller_transfer_amount_cents, charge_amount_cents, charge_gumroad_amount_cents, charge_currency, reference)
+        validate_seller_proceeds!(seller_transfer_amount_cents, charge_amount_cents, charge_gumroad_amount_cents, charge_currency, reference, minimum_seller_proceeds_cents: 1)
         params[:transfer_data] = {
           destination: merchant_account.charge_processor_merchant_id,
           amount: seller_transfer_amount_cents
@@ -1208,15 +1207,12 @@ class StripeChargeProcessor
       end
     end
 
-    # Guards destination/connected-account charges whose seller proceeds would be zero or
-    # negative because our fee (fixed fee floor + percentage legs + tax we collect) meets or
-    # exceeds the whole charge amount. This happens on very small totals — e.g. a £0.85 checkout
-    # where the fee floor alone is larger than the total. Stripe would reject the request anyway
-    # (`parameter_invalid_integer` on `transfer_data[amount]`, which must be >= 1) before the
-    # card attaches, so raising here loses nothing and lets us show the buyer a clear
-    # "total too small" message instead of a generic "temporary problem" retry prompt.
-    def validate_seller_proceeds!(seller_amount_cents, charge_amount_cents, gumroad_amount_cents, currency, reference)
-      return if seller_amount_cents >= 1
+    # Stops seller payouts that violate the lower bound for their Stripe charge route. Destination
+    # transfers must be at least one subunit, while a direct charge may keep an application fee
+    # equal to the payment but never one greater. We reject only the values Stripe would reject so
+    # the buyer gets an actionable explanation instead of a generic processor error.
+    def validate_seller_proceeds!(seller_amount_cents, charge_amount_cents, gumroad_amount_cents, currency, reference, minimum_seller_proceeds_cents:)
+      return if seller_amount_cents >= minimum_seller_proceeds_cents
 
       ErrorNotifier.notify(
         "Charge rejected before Stripe submit: seller proceeds would be non-positive",
