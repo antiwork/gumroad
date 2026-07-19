@@ -73,10 +73,16 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
     def resulting_custom_html
       case params[:endpoint].to_s
       when "update_user_custom_html"
+        # Mirror the real endpoint's parameter validation exactly: it rejects a request without a
+        # custom_html key and a non-nil non-string value. If the preview were laxer here, a
+        # malformed staged proposal would render fine and enable Confirm, then fail on apply.
+        return [nil, nil, "The proposed update is missing its custom_html value."] unless params.key?(:custom_html)
+
         custom_html = params[:custom_html]
-        if custom_html.present? && !custom_html.is_a?(String)
+        if !custom_html.nil? && !custom_html.is_a?(String)
           return [nil, nil, "custom_html must be a string."]
         end
+
         # Blank clears the page on the real endpoint (Api::V2::UsersController#update_custom_html
         # normalizes blank to nil), so it's a previewable outcome — signalled as a nil result, not
         # an error, and the caller previews the cleared state instead.
@@ -87,11 +93,21 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
         # A whole-page update has no single "changed area" to point at, so no marked variant.
         [custom_html, nil, nil]
       when "edit_user_custom_html"
+        # Same principle as the update branch: validate find/replace with the exact rules the real
+        # edit endpoint applies (find must be a non-empty string, replace must be a string), and
+        # in the same order, so a proposal that would fail on apply also fails to preview.
+        find = params[:find]
+        unless find.is_a?(String) && find.present?
+          return [nil, nil, "The proposed edit is missing the snippet to replace."]
+        end
+
+        replace = params[:replace]
+        unless replace.is_a?(String)
+          return [nil, nil, "The proposed edit is missing the replacement text."]
+        end
+
         current = current_seller.custom_html
         return [nil, nil, "There is no custom HTML page to edit."] if current.blank?
-
-        find = params[:find].to_s
-        return [nil, nil, "The proposed edit is missing the snippet to replace."] if find.empty?
 
         occurrences = current.scan(find).size
         return [nil, nil, "The snippet to replace no longer appears in the current page."] if occurrences.zero?
@@ -100,7 +116,7 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
         # Block form so the replacement is inserted literally — the two-argument form of
         # String#sub treats backslash sequences (\0, \1, \\) specially, which would corrupt HTML
         # that legitimately contains backslashes. Matches the real edit endpoint.
-        edited = current.sub(find) { params[:replace].to_s }
+        edited = current.sub(find) { replace }
         return [nil, nil, custom_html_length_error(edited)] if custom_html_length_error(edited)
 
         # If the page (or the replacement) somehow already contains the marker text, the scroll
@@ -110,7 +126,7 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
           if edited.include?(PREVIEW_CHANGED_MARKER_TEXT)
             nil
           else
-            current.sub(find) { PREVIEW_CHANGED_MARKER + params[:replace].to_s }
+            current.sub(find) { PREVIEW_CHANGED_MARKER + replace }
           end
         [edited, marked, nil]
       else

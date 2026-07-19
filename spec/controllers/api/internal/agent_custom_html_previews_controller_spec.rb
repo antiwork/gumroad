@@ -90,6 +90,20 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
         expect(body["success"]).to be(true)
         expect(body["html"]).to eq(Pages::DefaultProfileDocument.render(seller))
       end
+
+      it "renders an error when the custom_html key is missing, mirroring the apply endpoint" do
+        # Api::V2::UsersController#update_custom_html rejects a request without the key, so a
+        # proposal missing it must not preview successfully and enable Confirm.
+        post :create, params: { endpoint: "update_user_custom_html" }, format: :json
+
+        expect(response.parsed_body).to eq("success" => false, "error" => "The proposed update is missing its custom_html value.")
+      end
+
+      it "renders an error when custom_html is not a string, mirroring the apply endpoint" do
+        post :create, params: { endpoint: "update_user_custom_html", custom_html: { nested: "value" } }, format: :json
+
+        expect(response.parsed_body).to eq("success" => false, "error" => "custom_html must be a string.")
+      end
     end
 
     context "for edit_user_custom_html" do
@@ -153,6 +167,20 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
         post :create, params: { endpoint: "edit_user_custom_html", find: "<p>a</p>", replace: "<p>b</p>" }, format: :json
 
         expect(response.parsed_body).to eq("success" => false, "error" => "There is no custom HTML page to edit.")
+      end
+
+      it "renders an error when find is not a string, mirroring the apply endpoint" do
+        post :create, params: { endpoint: "edit_user_custom_html", find: { nested: "value" }, replace: "<p>b</p>" }, format: :json
+
+        expect(response.parsed_body).to eq("success" => false, "error" => "The proposed edit is missing the snippet to replace.")
+      end
+
+      it "renders an error when replace is missing, mirroring the apply endpoint" do
+        # Api::V2::UsersController#edit_custom_html requires replace to be a string (it has no
+        # default), so a proposal without one must fail the preview rather than enable Confirm.
+        post :create, params: { endpoint: "edit_user_custom_html", find: "<h1>Old headline</h1>" }, format: :json
+
+        expect(response.parsed_body).to eq("success" => false, "error" => "The proposed edit is missing the replacement text.")
       end
 
       it "previews the default storefront when the edit empties the page" do
