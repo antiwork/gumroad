@@ -998,6 +998,49 @@ describe StripeChargeProcessor, :vcr do
         subject.create_payment_intent_or_charge!(merchant_account, chargeable, 100, 30, "reference", "test description")
       end
 
+      describe "when the total is so small that gumroad's fee leaves the seller nothing" do
+        # Stripe rejects transfer_data[amount] below 1 with `parameter_invalid_integer` before
+        # the card attaches, so we fail these ourselves with a clear buyer-facing error.
+        it "fails fast with net_negative_seller_revenue when the seller transfer would be negative" do
+          expect(Stripe::PaymentIntent).not_to receive(:create)
+          expect(ErrorNotifier).to receive(:notify).with(
+            "Charge rejected before Stripe submit: seller proceeds would be non-positive",
+            hash_including(reference: "reference", charge_amount_cents: 85, gumroad_amount_cents: 100, seller_amount_cents: -15)
+          )
+
+          expect do
+            subject.create_payment_intent_or_charge!(merchant_account, chargeable, 85, 100, "reference", "test description")
+          end.to raise_error(ChargeProcessorCardError) do |error|
+            expect(error.error_code).to eq(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE)
+          end
+        end
+
+        it "fails fast when the seller transfer would be exactly zero" do
+          expect(Stripe::PaymentIntent).not_to receive(:create)
+          allow(ErrorNotifier).to receive(:notify)
+
+          expect do
+            subject.create_payment_intent_or_charge!(merchant_account, chargeable, 100, 100, "reference", "test description")
+          end.to raise_error(ChargeProcessorCardError) do |error|
+            expect(error.error_code).to eq(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE)
+          end
+        end
+
+        it "applies the guard to buyer-presentment processor amounts, not the USD canonical amounts" do
+          expect(Stripe::PaymentIntent).not_to receive(:create)
+          allow(ErrorNotifier).to receive(:notify)
+
+          expect do
+            subject.create_payment_intent_or_charge!(
+              merchant_account, chargeable, 10_00, 3_00, "reference", "test description",
+              processor_amount_cents: 85, processor_currency: Currency::GBP, processor_gumroad_amount_cents: 100
+            )
+          end.to raise_error(ChargeProcessorCardError) do |error|
+            expect(error.error_code).to eq(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE)
+          end
+        end
+      end
+
       describe "if the charge_processor_merchant_id isn't set for some reason" do
         describe "nil" do
           before do
