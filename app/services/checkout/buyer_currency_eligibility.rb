@@ -16,6 +16,17 @@ class Checkout::BuyerCurrencyEligibility
     "bancontact" => Currency::EUR,
   }.freeze
 
+  # Per-method production launch flags for the forced-currency local methods. Stripe test
+  # mode keeps every registry method available for QA regardless of these flags; in live
+  # mode a method is offered only when its own launch flag is active for the seller (on
+  # top of the buyer-currency seller flags checked by seller_enabled?). Each method gets
+  # its own flag so it can ramp and roll back independently — iDEAL first, then the rest
+  # of the #5362 Phase 4 cohort.
+  LOCAL_METHOD_LAUNCH_FEATURES = {
+    "ideal" => :checkout_local_method_ideal,
+    "bancontact" => :checkout_local_method_bancontact,
+  }.freeze
+
   # `direct_listed_amount` is only set by the method-forced mode: true means the
   # product is already priced in the forced currency, so the charge path can use
   # the listed price as-is and skip fetching an FX quote. For the card mode
@@ -32,6 +43,29 @@ class Checkout::BuyerCurrencyEligibility
 
   def self.forced_currency_for(payment_method)
     FORCED_CURRENCY_PAYMENT_METHODS[payment_method.to_s.downcase]
+  end
+
+  # Whether this registry method may charge live-mode checkouts for this seller. Test
+  # mode is not consulted here — callers that also serve the QA surface should OR this
+  # with stripe_test_mode?.
+  def self.local_method_launched?(payment_method, seller)
+    feature = LOCAL_METHOD_LAUNCH_FEATURES[payment_method.to_s.downcase]
+    feature.present? && seller.present? && Feature.active?(feature, seller)
+  end
+
+  # Whether a method-forced surface for `currency` is available to card or Link in this
+  # eligibility check: always in Stripe test mode, and in live mode when at least one
+  # registry method forcing that currency has its launch flag active. The presenter and
+  # prepare service independently require a capability-filtered resolver result before
+  # mounting or charging this surface; this fallback gate only handles the non-registry
+  # card/Link tokens that inherit the Element's currency.
+  def self.forced_currency_surface_available?(currency:, seller:)
+    return false if currency.blank?
+    return true if stripe_test_mode?
+
+    FORCED_CURRENCY_PAYMENT_METHODS.any? do |method, forced|
+      forced == currency.to_s.downcase && local_method_launched?(method, seller)
+    end
   end
 
   attr_reader :order, :seller, :merchant_account, :chargeable, :purchases, :params, :setup_future_charges, :off_session
@@ -118,7 +152,7 @@ class Checkout::BuyerCurrencyEligibility
   # a forced currency: the ConfirmationToken inherits the element's currency, so the
   # intent must be created in it no matter which method the buyer chose. The presenter
   # only mounts a forced-currency element for a product priced in that currency
-  # (method_forced_qa_shape?), so these checkouts land in the direct-listed-amount case.
+  # (method_forced_shape?), so these checkouts land in the direct-listed-amount case.
   #
   # This mode intentionally does not look at the buyer's GeoIP location or at the
   # buyer_currency_display params — the payment method (or the element mount currency
@@ -130,7 +164,13 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:unsupported_payment_method) if forced_currency.blank?
 
     return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
-    return fallback(:live_mode) unless stripe_test_mode?
+    # Live mode is no longer a blanket refusal: each registry method carries its own
+    # per-method launch flag (LOCAL_METHOD_LAUNCH_FEATURES) so the #5362 Phase 4 cohort
+    # can ramp one method at a time — iDEAL first. Test mode keeps the whole registry
+    # available for QA. Card/Link tokens minted on a forced-currency element carry no
+    # registry entry of their own; they are allowed whenever the surface that mounted
+    # the element is available (some launched method forces the element's currency).
+    return fallback(:method_not_launched) unless method_forced_mode_allowed?(payment_method, forced_currency)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
     # Presentment currency and settlement currency are separate questions: even
@@ -177,6 +217,19 @@ class Checkout::BuyerCurrencyEligibility
 
     def stripe_test_mode?
       self.class.stripe_test_mode?
+    end
+
+    # See the launch-flag comment in #method_forced_decision. Registry methods gate on
+    # their own launch flag in live mode; non-registry methods (card/Link on a
+    # forced-currency element) gate on the element surface being available at all.
+    def method_forced_mode_allowed?(payment_method, forced_currency)
+      return true if stripe_test_mode?
+
+      if self.class.forced_currency_for(payment_method).present?
+        self.class.local_method_launched?(payment_method, seller)
+      else
+        self.class.forced_currency_surface_available?(currency: forced_currency, seller:)
+      end
     end
 
     def usd_settling_merchant_account?

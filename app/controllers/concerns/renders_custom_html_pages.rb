@@ -31,6 +31,14 @@ module RendersCustomHtmlPages
     "form-action 'self'",
   ].join("; ") + ";"
 
+  # CUSTOM_HTML_CSP for documents delivered without response headers — e.g. the agent's
+  # proposed-change preview, which reaches the browser as an iframe srcdoc. A meta CSP tag can't
+  # carry the `sandbox` directive (browsers ignore it there), so it's stripped; the embedding
+  # iframe's sandbox attribute supplies the sandboxing instead. Everything else applies unchanged,
+  # so a previewed page blocks exactly the resources (external images, fetches, ...) the live page
+  # would block.
+  CUSTOM_HTML_META_CSP = CUSTOM_HTML_CSP.split("; ").reject { |directive| directive.start_with?("sandbox ") }.join("; ")
+
   # Loaded in <head> so it runs before any seller script (without becoming the
   # body's first child). On the opaque origin (allow-scripts, no
   # allow-same-origin) localStorage/sessionStorage/document.cookie throw, so a
@@ -162,6 +170,44 @@ module RendersCustomHtmlPages
   HTML
 
   POLL_INTERVAL_MS = 2000
+
+  # The HTML comment the agent-preview endpoint splices in front of an edit's replacement so the
+  # preview can find where the page changed. Chosen as a comment because Ai::PageSanitizer passes
+  # comments through untouched and they render as nothing, so a page marked this way is
+  # byte-for-byte the page the seller would publish (the preview controller verifies that before
+  # serving the marked variant).
+  PREVIEW_CHANGED_MARKER_TEXT = "gumroad-preview-changed"
+  PREVIEW_CHANGED_MARKER = "<!--#{PREVIEW_CHANGED_MARKER_TEXT}-->"
+
+  # Injected only into the agent's proposed-change preview document (never the live page). An edit
+  # can land anywhere on the page, and the preview iframe is opaque-origin so the dashboard can't
+  # scroll it from outside — without this the preview always opens at the top and an edit further
+  # down looks like no change at all. Finds the marker comment the preview endpoint spliced in
+  # front of the replacement and scrolls the surrounding content into view; when the marker is
+  # absent (whole-page updates, or a marker the endpoint had to discard) it does nothing and the
+  # preview opens at the top as before.
+  PREVIEW_SCROLL_TO_CHANGE_SCRIPT = <<~HTML
+    <script data-cfasync="false" data-gumroad-preview-scroll>
+      (function () {
+        function scrollToChange() {
+          var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT, null);
+          var node;
+          while ((node = walker.nextNode())) {
+            if (node.nodeValue !== "#{PREVIEW_CHANGED_MARKER_TEXT}") continue;
+            // The marker sits immediately before the replacement: when the replacement starts
+            // with an element that element is the change; when it's bare text, the enclosing
+            // element is the closest thing to "the changed area".
+            var target = node.nextElementSibling || node.parentElement;
+            if (target && target !== document.body) target.scrollIntoView({ block: "center" });
+            return;
+          }
+        }
+        // After load so the inlined stylesheet and any seller scripts have laid the page out —
+        // scrolling earlier would center on coordinates that then shift.
+        window.addEventListener("load", function () { requestAnimationFrame(scrollToChange); });
+      })();
+    </script>
+  HTML
 
   PROFILE_FIELDS_PREVIEW_SCRIPT = <<~HTML
     <script data-cfasync="false">
@@ -314,6 +360,36 @@ module RendersCustomHtmlPages
 
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
+    end
+
+    # The full sandboxed document for a profile custom-HTML page. Shared by the live
+    # /landing/embed endpoint (UsersController) and the agent's proposed-change preview
+    # (Api::Internal::AgentCustomHtmlPreviewsController) so a preview can never drift from what
+    # actually ships. `meta_csp` embeds CUSTOM_HTML_META_CSP for delivery paths that have no
+    # response headers to carry the real CSP (iframe srcdoc). `scroll_to_change` adds the
+    # preview-only script that jumps to the PREVIEW_CHANGED_MARKER comment, so an edit further
+    # down the page opens in view instead of hiding below the fold.
+    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "", follow_bridge: "", meta_csp: false, scroll_to_change: false)
+      <<~HTML
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            #{meta_csp ? %(<meta http-equiv="Content-Security-Policy" content="#{ERB::Util.h(CUSTOM_HTML_META_CSP)}">) : ""}
+            #{SANDBOX_COMPAT_SCRIPT}
+            #{self.class.pages_tailwind_inline}
+          </head>
+          <body>
+            <script id="gumroad-data" type="application/json">#{data_json}</script>
+            #{custom_html}
+            #{navigation_bridge}
+            #{follow_bridge}
+            #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
+            #{scroll_to_change ? PREVIEW_SCROLL_TO_CHANGE_SCRIPT : ""}
+          </body>
+        </html>
+      HTML
     end
 
     def custom_html_live_reload_script(version_src:, nonce:)

@@ -329,6 +329,10 @@ class StripeChargeProcessor
           raise "Merchant Account #{merchant_account.external_id} assigned to user #{merchant_account.user.external_id} "\
               "but has no Charge Processor Merchant ID."
         end
+        # Stripe caps a direct charge's application fee at the collected amount, so an exactly
+        # zero seller balance is valid. It does reject an application fee above the charge, which
+        # is the negative-proceeds case we must stop before submitting the PaymentIntent.
+        StripeIntentChargeRouting.validate_seller_proceeds!(merchant_account:, amount_cents: charge_amount_cents, amount_for_gumroad_cents: charge_gumroad_amount_cents, currency: charge_currency, reference:)
         params[:application_fee_amount] = charge_gumroad_amount_cents
         payment_intent = Stripe::PaymentIntent.create(params, stripe_options.merge(stripe_account: merchant_account.charge_processor_merchant_id))
       elsif merchant_account.user
@@ -336,9 +340,16 @@ class StripeChargeProcessor
           raise "Merchant Account #{merchant_account.external_id} assigned to user #{merchant_account.user.external_id} "\
               "but has no Charge Processor Merchant ID."
         end
+        # On very small totals our fixed fee components can meet or exceed the whole charge,
+        # making this seller transfer amount zero or negative. Stripe deterministically rejects
+        # that with `parameter_invalid_integer` on `transfer_data[amount]` BEFORE the card
+        # attaches, which buyers saw as an unexplained "temporary problem" error. Fail fast with
+        # a clear buyer-facing error instead of submitting a request we know Stripe will refuse.
+        seller_transfer_amount_cents = charge_amount_cents - charge_gumroad_amount_cents
+        StripeIntentChargeRouting.validate_seller_proceeds!(merchant_account:, amount_cents: charge_amount_cents, amount_for_gumroad_cents: charge_gumroad_amount_cents, currency: charge_currency, reference:)
         params[:transfer_data] = {
           destination: merchant_account.charge_processor_merchant_id,
-          amount: charge_amount_cents - charge_gumroad_amount_cents
+          amount: seller_transfer_amount_cents
         }
         payment_intent = stripe_options.present? ? Stripe::PaymentIntent.create(params, stripe_options) : Stripe::PaymentIntent.create(params)
       else

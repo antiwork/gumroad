@@ -35,6 +35,19 @@ describe D3 do
     end
   end
 
+  describe "#hour_month_domain" do
+    it "returns hour labels with month indexes for the given instants" do
+      timezone = ActiveSupport::TimeZone["UTC"]
+      hours = [timezone.local(2021, 1, 31, 23), timezone.local(2021, 2, 1, 0), timezone.local(2021, 2, 1, 13)]
+
+      expect(D3.hour_month_domain(hours)).to eq [
+        { date: "Sunday, January 31st, 11 PM", month: "January 2021", month_index: 0 },
+        { date: "Monday, February 1st, 12 AM", month: "February 2021", month_index: 1 },
+        { date: "Monday, February 1st, 1 PM", month: "February 2021", month_index: 1 }
+      ]
+    end
+  end
+
   describe "#date_month_domain" do
     it "returns proper months for given dates in two different years" do
       dates = Date.parse("2018-12-31")..Date.parse("2019-01-01")

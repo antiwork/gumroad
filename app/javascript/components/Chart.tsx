@@ -3,7 +3,7 @@ import { ResponsiveContainer, ComposedChart, XAxisProps, YAxisProps, LineProps }
 
 import { WithTooltip } from "$app/components/WithTooltip";
 
-type TickProps = {
+export type TickProps = {
   x: number;
   y: number;
   payload: { value: string; index: number };

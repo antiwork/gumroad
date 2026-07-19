@@ -97,6 +97,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
+import { resolveCopiedFileEmbeds } from "./resolveCopiedFileEmbeds";
 import { NodeVisibilityProvider } from "./useNodeVisibility";
 
 declare global {
@@ -310,21 +311,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
-    const newFiles: FileEntry[] = [];
-    fragment.querySelectorAll("file-embed[url]").forEach((node) => {
-      const file = existingFiles.find(
-        (file) => file.id === node.getAttribute("id") || file.url === node.getAttribute("url"),
-      );
-      if (file) {
-        node.setAttribute("id", file.id);
-        if (node.hasAttribute("url")) {
-          newFiles.push(file);
-          node.removeAttribute("url");
-        }
-      } else {
-        node.remove();
-      }
-    });
+    const newFiles: FileEntry[] = resolveCopiedFileEmbeds(fragment, filesById, existingFiles);
     if (newFiles.length > 0) {
       updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
     }

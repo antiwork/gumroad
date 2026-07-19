@@ -138,4 +138,31 @@ describe("Purchase from a product page", type: :system, js: true) do
     click_on "Pay"
     expect_focused find_field("ZIP code")
   end
+
+  describe "when the total is so small that Gumroad's fee leaves the seller no proceeds" do
+    before do
+      # A seller on a 100% custom fee with a minimum-priced product is the cheapest real
+      # checkout shape whose fee (100% + fixed fee floor) meets or exceeds the whole total,
+      # which makes the would-be seller transfer amount non-positive. The seller needs their
+      # own (non-migrated) merchant account so the charge takes the destination-charge path,
+      # where Stripe would otherwise reject `transfer_data[amount] < 1` with an opaque error.
+      @creator.update!(custom_fee_per_thousand: 1000)
+      create(:merchant_account, user: @creator)
+      @product.update!(price_cents: 99)
+      allow(ErrorNotifier).to receive(:notify)
+    end
+
+    it "fails the purchase with a clear 'total too small' error instead of the generic retry prompt" do
+      visit "/l/#{@product.unique_permalink}"
+
+      add_to_cart(@product)
+      check_out(@product, error: "The purchase total is too small for us to process. Please add another item to your order or contact the creator.")
+
+      purchase = Purchase.last
+      expect(purchase.purchase_state).to eq("failed")
+      expect(purchase.stripe_error_code).to eq(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE)
+      # The guard raises before any PaymentIntent is submitted, so no charge exists.
+      expect(purchase.stripe_transaction_id).to be_nil
+    end
+  end
 end

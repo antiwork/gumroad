@@ -174,6 +174,45 @@ describe AnalyticsController do
       ).and_return({})
       get :data_by_referral, params: { start_time:, end_time: }
     end
+
+    it "serves hourly data via CreatorAnalytics::Web, bypassing the day-keyed cache" do
+      start_time = "Sun Jun 01 2025 00:00:00 GMT-0000"
+      end_time = "Tue Jun 03 2025 00:00:00 GMT-0000"
+      web = instance_double(CreatorAnalytics::Web)
+      expect(CreatorAnalytics::Web).to receive(:new).with(
+        user: seller,
+        dates: (Date.new(2025, 6, 1) .. Date.new(2025, 6, 3)).to_a,
+        interval: "hour"
+      ).and_return(web)
+      expect(web).to receive(:by_referral).and_return({ "some" => "data" })
+
+      get :data_by_referral, params: { start_time:, end_time:, interval: "hour" }
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("some" => "data")
+    end
+
+    it "rejects hourly requests with a reversed date range" do
+      start_time = "Mon Jun 09 2025 00:00:00 GMT-0000"
+      end_time = "Sun Jun 01 2025 00:00:00 GMT-0000"
+      expect(CreatorAnalytics::Web).not_to receive(:new)
+
+      get :data_by_referral, params: { start_time:, end_time:, interval: "hour" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("error" => "Invalid date range.")
+    end
+
+    it "rejects hourly requests spanning more than 7 days" do
+      start_time = "Sun Jun 01 2025 00:00:00 GMT-0000"
+      end_time = "Mon Jun 09 2025 00:00:00 GMT-0000"
+      expect(CreatorAnalytics::Web).not_to receive(:new)
+
+      get :data_by_referral, params: { start_time:, end_time:, interval: "hour" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("error" => "Date range cannot exceed 7 days for the hourly interval.")
+    end
   end
 
   describe "GET data_by_date" do
