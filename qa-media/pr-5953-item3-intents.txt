@@ -1,0 +1,36 @@
+{
+  "id": "pi_2TuZbR9e1RjUNIyY083tdCfB",
+  "object": "payment_intent",
+  "allowed_payment_method_types": null,
+  "amount": 2000,
+  "amount_details": {
+    "tip": {}
+  },
+  "automatic_payment_methods": null,
+  "canceled_at": null,
+  "cancellation_reason": null,
+  "capture_method": "automatic",
+  "client_secret": "[REDACTED]",
+  "confirmation_method": "automatic",
+  "created": 1784386353,
+  "currency": "eur",
+  "description": "Gumroad Charge mZERkVSdEkeyz_l71A4StA==",
+  "excluded_payment_method_types": null,
+  "last_payment_error": null,
+  "livemode": false,
+  "next_action": null,
+  "payment_method": "pm_0TuZbP9e1RjUNIyY7Sv4W0la",
+  "payment_method_configuration_details": null,
+  "payment_method_types": [
+    "card",
+    "link",
+    "ideal",
+    "bancontact"
+  ],
+  "processing": null,
+  "receipt_email": null,
+  "setup_future_usage": null,
+  "shipping": null,
+  "source": null,
+  "status": "succeeded"
+}
