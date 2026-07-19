@@ -30,6 +30,11 @@ class DispatchPendingFailedRefundExceptionsJob
   # a run behaves exactly as before; above it, the run sends a single digest.
   ESCALATION_DIGEST_THRESHOLD = 5
 
+  # A row collected for escalation, its trigger kind (:delivery_exhausted or
+  # :overdue), and the human-readable reason recorded on the row.
+  Escalation = Struct.new(:row, :kind, :reason)
+  private_constant :Escalation
+
   def perform
     FailedRefundException.notification_deliverable.find_each do |failed_refund_exception|
       NotifyFailedRefundExceptionJob.perform_async(failed_refund_exception.id)
@@ -69,8 +74,6 @@ class DispatchPendingFailedRefundExceptionsJob
   end
 
   private
-    Escalation = Struct.new(:row, :kind, :reason)
-
     def escalate(failed_refund_exception, reason:)
       message = "Failed-refund exception ##{failed_refund_exception.id} escalated. #{reason} " \
         "Refund #{failed_refund_exception.refund_id}, owner #{failed_refund_exception.owner}."
@@ -106,7 +109,11 @@ class DispatchPendingFailedRefundExceptionsJob
     def escalate_with_digest(escalations)
       rows = escalations.map(&:row)
       ids = rows.map(&:id)
-      due_ats = rows.map(&:due_at)
+      # due_at is presence-validated, but a validation-bypassing backfill could
+      # leave it nil on delivery-exhausted rows; skip nils so one bad row cannot
+      # crash the whole dispatcher run.
+      due_ats = rows.filter_map(&:due_at)
+      due_window = due_ats.any? ? "due between #{due_ats.min.iso8601} and #{due_ats.max.iso8601}, " : ""
       owners = rows.map(&:owner).tally
       exhausted_count = escalations.count { |escalation| escalation.kind == :delivery_exhausted }
       overdue_count = escalations.size - exhausted_count
@@ -116,8 +123,8 @@ class DispatchPendingFailedRefundExceptionsJob
 
       message = "#{rows.size} failed-refund exceptions escalated in one dispatcher run " \
         "(#{exhausted_count} with notification delivery exhausted, #{overdue_count} past their response SLA). " \
-        "IDs #{ids.min}–#{ids.max}, owners: #{owners.map { |owner, count| "#{owner} (#{count})" }.join(", ")}, " \
-        "due between #{due_ats.min.iso8601} and #{due_ats.max.iso8601}, " \
+        "ID range #{ids.min}–#{ids.max}, owners: #{owners.map { |owner, count| "#{owner} (#{count})" }.join(", ")}, " \
+        "#{due_window}" \
         "refund amounts totaling #{total_refund_amount_cents} cents. " \
         "Per-row notifications were replaced by this digest to avoid flooding; " \
         "each exception row records its own escalation reason."
