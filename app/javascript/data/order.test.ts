@@ -31,6 +31,7 @@ const requestData: StartCartPurchaseRequestPayload = {
     confirmationTokenId: "ct_123",
     cardCountry: "US",
     walletType: null,
+    mountCurrency: "usd",
   },
   email: "buyer@example.com",
   fullName: "Buyer",
@@ -106,6 +107,23 @@ describe("startClientConfirmOrderCreation", () => {
     const stripe: Stripe = Object.create(null);
     stripe.confirmPayment = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
+  });
+
+  it("sends the Payment Element mount currency when preparing a client-confirm checkout", async () => {
+    requestMock.mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));
+
+    await startClientConfirmOrderCreation(requestData, "ct_123");
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        url: "/orders/prepare",
+        data: expect.objectContaining({
+          confirmation_token: "ct_123",
+          payment_element_mount_currency: "usd",
+        }),
+      }),
+    );
   });
 
   it("throws a non-resubmittable error when finalize returns a failed line item after capture", async () => {

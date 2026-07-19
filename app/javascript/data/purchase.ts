@@ -19,6 +19,7 @@ export type PurchasePaymentMethod =
       confirmationTokenId: string;
       cardCountry: string | null;
       walletType: string | null;
+      mountCurrency: string;
     };
 
 export type SuccessfulLineItemResult = {
@@ -309,6 +310,9 @@ export const createPurchasesRequestData = (
 
   const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod, payload.usedStripePaymentElement);
   if (paymentDetailsSource) data.payment_details_source = paymentDetailsSource;
+  if (payload.paymentMethod.type === "payment-element-client-confirm") {
+    data.payment_element_mount_currency = payload.paymentMethod.mountCurrency;
+  }
 
   // Client-confirm wallet payments: the payment details live in the ConfirmationToken, so the
   // wallet type is the only card-related param this lane reports (for server analytics).

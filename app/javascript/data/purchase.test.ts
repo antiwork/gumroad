@@ -101,6 +101,7 @@ describe("getPaymentDetailsSource", () => {
       confirmationTokenId: "ctoken_123",
       cardCountry: "US",
       walletType: null,
+      mountCurrency: "usd",
     };
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, true)).toBe("payment_element");
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, false)).toBe("payment_element");
@@ -153,6 +154,7 @@ describe("createPurchasesRequestData wallet_type threading", () => {
         confirmationTokenId: "ctoken_123",
         cardCountry: "US",
         walletType: "google_pay",
+        mountCurrency: "usd",
       }),
       {},
     );

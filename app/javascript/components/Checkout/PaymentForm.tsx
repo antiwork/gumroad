@@ -799,6 +799,7 @@ const CreditCardContent = ({
           confirmationTokenId: tokenResult.confirmationTokenId,
           cardCountry: tokenResult.cardCountry,
           walletType: tokenResult.wallet?.type ?? null,
+          mountCurrency: stripePaymentElementConfig.currency,
         };
         if (tokenResult.wallet && !hasShipping(state)) {
           const taxLocationChanged = applyWalletBillingAddressToCheckout(

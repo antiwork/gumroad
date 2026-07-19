@@ -51,7 +51,10 @@ class OrdersController < ApplicationController
     # The ConfirmationToken is deliberately absent from permitted_order_params: only this endpoint
     # accepts it, so #create requests can never carry one. It is merged here so purchase creation
     # can record the client-confirm lane in the purchase's payment-flow analytics row.
-    order_params = build_order_params.merge(confirmation_token: params[:confirmation_token].presence)
+    order_params = build_order_params.merge(
+      confirmation_token: params[:confirmation_token].presence,
+      payment_element_mount_currency: params[:payment_element_mount_currency].presence,
+    )
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,

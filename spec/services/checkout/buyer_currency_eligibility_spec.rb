@@ -262,11 +262,71 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(forced_decision.fallback_reason).to eq(:feature_disabled)
     end
 
-    it "withholds the method in live mode" do
+    it "withholds the method in live mode when its launch flag is off" do
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
 
       expect(forced_decision).not_to be_eligible
-      expect(forced_decision.fallback_reason).to eq(:live_mode)
+      expect(forced_decision.fallback_reason).to eq(:method_not_launched)
+    end
+
+    it "allows the method in live mode when its per-method launch flag is on" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+    end
+
+    it "does not let one method's launch flag launch a sibling method in live mode" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+
+      bancontact_decision = described_class.new(order:,
+                                                seller:,
+                                                merchant_account:,
+                                                chargeable:,
+                                                purchases:,
+                                                params:,
+                                                setup_future_charges:,
+                                                off_session:).method_forced_decision(payment_method: "bancontact")
+
+      expect(bancontact_decision).not_to be_eligible
+      expect(bancontact_decision.fallback_reason).to eq(:method_not_launched)
+    end
+
+    it "allows a card token from a forced-currency element in live mode when a method forcing that currency is launched" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      card_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params:,
+                                          setup_future_charges:,
+                                          off_session:).method_forced_decision(payment_method: "card", forced_currency: Currency::EUR)
+
+      expect(card_decision).to be_eligible
+      expect(card_decision.currency).to eq(Currency::EUR)
+    end
+
+    it "withholds a card token from a forced-currency element in live mode when no method forcing that currency is launched" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      card_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params:,
+                                          setup_future_charges:,
+                                          off_session:).method_forced_decision(payment_method: "card", forced_currency: Currency::EUR)
+
+      expect(card_decision).not_to be_eligible
+      expect(card_decision.fallback_reason).to eq(:method_not_launched)
     end
 
     it "withholds the method for non-Stripe merchant accounts" do
