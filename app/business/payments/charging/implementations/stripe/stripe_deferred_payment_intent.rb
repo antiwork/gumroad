@@ -52,7 +52,7 @@ class StripeDeferredPaymentIntent
       params[:fx_quote] = stripe_fx_quote_id if stripe_fx_quote_id.present?
       params[:transfer_group] = transfer_group if transfer_group.present?
       params[:statement_descriptor_suffix] = statement_descriptor_suffix if statement_descriptor_suffix.present?
-      params.merge!(StripeIntentChargeRouting.fee_params(merchant_account:, amount_cents:, amount_for_gumroad_cents:))
+      params.merge!(StripeIntentChargeRouting.fee_params(merchant_account:, amount_cents:, amount_for_gumroad_cents:, currency:, reference:))
       params
     end
 
