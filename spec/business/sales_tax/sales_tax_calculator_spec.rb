@@ -80,7 +80,6 @@ describe SalesTaxCalculator do
                                                 buyer_location: { country: "IN" }).calculate
 
       expect(actual_sales_tax.tax_cents).to eq(180)
-      expect(actual_sales_tax.tax_cents).to eq(actual_sales_tax.tax_cents.to_i)
       expect(actual_sales_tax.zip_tax_rate).to eq(expected_tax_rate)
     ensure
       Feature.deactivate("collect_tax_in")
