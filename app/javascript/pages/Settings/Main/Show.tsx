@@ -355,15 +355,16 @@ export default function MainPage() {
             </>
           }
         >
-          {!props.user.seller_refund_policy.editable ? (
+          {props.user.seller_refund_policy.refund_policy_enforced ? (
+            <Alert variant="info" role="status">
+              Due to a high rate of chargebacks, a refund policy is currently enforced on your entire account and can't
+              be edited here. To request a change, contact us with the specific steps you've taken to reduce disputes
+              and we'll apply the update for you.
+            </Alert>
+          ) : !props.user.seller_refund_policy.editable ? (
             <Alert variant="info" role="status">
               Account-level refund policies are currently managed by Gumroad and can't be edited here. Refunds are
               handled per product instead — you can set a refund policy on each product in the product editor.
-            </Alert>
-          ) : props.user.seller_refund_policy.refund_policy_enforced ? (
-            <Alert variant="info" role="status">
-              Due to a high rate of chargebacks, a refund policy is currently enforced on your account. You can choose a
-              different refund period of at least 7 days below; the "No refunds allowed" option is unavailable for now.
             </Alert>
           ) : null}
           <Fieldset>

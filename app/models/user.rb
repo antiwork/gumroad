@@ -1105,15 +1105,15 @@ class User < ApplicationRecord
 
   # Whether the seller can edit the account-level refund policy section in Settings.
   # The section always renders; when this is false the UI shows the controls disabled
-  # with a note explaining that the policy is managed by Gumroad. Normally this follows
-  # account_level_refund_policy_enabled?, but when a refund policy has been enforced on
-  # the account because of a high dispute rate
-  # (see Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!),
-  # the enforcement email tells the seller they can pick a different refund period of
-  # at least 7 days in Settings. That has to work even while account-level refund
-  # policies are switched off globally, so enforcement alone unlocks editing.
+  # with a note explaining why. Two things make it read-only:
+  # - Account-level refund policies are switched off (account_level_refund_policy_enabled?
+  #   is false), in which case refunds are handled per product instead.
+  # - A refund policy has been enforced on the whole account because of a high dispute
+  #   rate (see Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!).
+  #   While enforced, the seller cannot change the policy themselves — they have to
+  #   contact us with the remediation steps they've taken, and we apply any update.
   def refund_policy_settings_editable?
-    refund_policy_enforced? || account_level_refund_policy_enabled?
+    !refund_policy_enforced? && account_level_refund_policy_enabled?
   end
 
   def has_all_eligible_refund_policies_as_no_refunds?

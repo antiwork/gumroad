@@ -744,6 +744,12 @@ describe User, :vcr do
       expect(user.refund_policy_settings_editable?).to be true
     end
 
+    it "returns false when a refund policy is enforced on the account, even with account-level refund policies enabled" do
+      user.update!(refund_policy_enforced: true)
+
+      expect(user.refund_policy_settings_editable?).to be false
+    end
+
     context "with seller_refund_policy_disabled_for_all" do
       before { Feature.activate(:seller_refund_policy_disabled_for_all) }
 
@@ -751,10 +757,10 @@ describe User, :vcr do
         expect(user.refund_policy_settings_editable?).to be false
       end
 
-      it "returns true when a refund policy is enforced on the account" do
+      it "returns false when a refund policy is enforced on the account" do
         user.update!(refund_policy_enabled: false, refund_policy_enforced: true)
 
-        expect(user.refund_policy_settings_editable?).to be true
+        expect(user.refund_policy_settings_editable?).to be false
       end
     end
   end
