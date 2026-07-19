@@ -7,9 +7,7 @@
     "stripe_elements_mode": "payment",
     "currency": "usd",
     "buyer_currency_presentment": true,
-    "payment_method_types": [
-      "card"
-    ],
+    "payment_method_types": ["card"],
     "payment_method_creation": "manual",
     "stripe_link_enabled": true
   }
