@@ -272,8 +272,8 @@ class Purchase
       # Failed-refund reversals lock the purchase before their refund and balance rows.
       # Use the same order here so a single-purchase refund cannot hold a balance while
       # waiting for a purchase row that a reversal already holds. (Combined-charge
-      # refunds still acquire purchase and balance locks interleaved across purchases
-      # inside Charge#refund_and_save!'s transaction — tracked as a follow-up.)
+      # refunds take all their purchase locks up front in id order — see
+      # Charge#refund_and_save! — so they follow the same purchase-first order.)
       # reload first: reading any json_data-backed attribute on a row whose json_data
       # column is NULL dirties the record in memory, and lock! raises on dirty records.
       # Reloading discards that phantom change; lock! reloads again under FOR UPDATE.
@@ -351,8 +351,15 @@ class Purchase
   end
 
   def refund_partial_purchase!(gross_refund_amount_cents, refunding_user_id, processor_refund_id: nil)
-    partially_refunded_previously = self.stripe_partially_refunded
     ActiveRecord::Base.transaction do
+      # Same purchase-first lock order as refund_purchase!: take the purchase row
+      # lock before touching refund or balance rows, so this path cannot hold a
+      # balance while a failed-refund reversal holds the purchase. reload first
+      # because reading a json_data-backed attribute on a row whose json_data is
+      # NULL dirties the record, and lock! raises on dirty records. Read the
+      # partial-refund flag only after the lock so it reflects committed state.
+      reload.lock!
+      partially_refunded_previously = self.stripe_partially_refunded
       if (gross_amount_refunded_cents + gross_refund_amount_cents) >= total_transaction_cents
         self.stripe_partially_refunded = false
         self.stripe_refunded = true

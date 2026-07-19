@@ -171,6 +171,7 @@ class Charge < ApplicationRecord
 
   def refund_and_save!(refunding_user_id, reason: nil)
     transaction do
+      lock_successful_purchases_in_id_order!
       refunded_all_purchases = true
       successful_purchases.each do |purchase|
         refunded = purchase.refund_and_save!(refunding_user_id, reason:)
@@ -199,6 +200,7 @@ class Charge < ApplicationRecord
 
   def refund_for_fraud_and_block_buyer!(refunding_user_id)
     with_lock do
+      lock_successful_purchases_in_id_order!
       return false unless successful_purchases.all? { _1.refund_for_fraud!(refunding_user_id) }
 
       block_buyer!(blocking_user_id: refunding_user_id)
@@ -267,6 +269,25 @@ class Charge < ApplicationRecord
   end
 
   private
+    # Combined-charge refunds update every purchase in the charge plus the shared
+    # seller balance inside one transaction. Each Purchase#refund_purchase! locks
+    # its purchase row and then the balance, so without this pre-pass the
+    # transaction's acquisition sequence is purchase₁ → balance → purchase₂ → …:
+    # it holds the balance while waiting for later purchase rows. A concurrent
+    # failed-refund reversal (Purchase::HandleFailedRefundService) that already
+    # holds one of those later purchases and is waiting for the same balance
+    # completes a deadlock cycle. Taking every purchase lock up front, in id
+    # order, before any refund work keeps this path inside the global
+    # purchase-first lock order established for single-purchase refunds (#5917).
+    #
+    # reload before lock!: reading any json_data-backed attribute on a row whose
+    # json_data column is NULL dirties the record in memory, and lock! raises on
+    # dirty records. Reloading discards that phantom change; lock! reloads again
+    # under FOR UPDATE.
+    def lock_successful_purchases_in_id_order!
+      successful_purchases.sort_by(&:id).each { _1.reload.lock! }
+    end
+
     def copy_refund_errors_from(purchase)
       purchase.errors.full_messages.each { errors.add(:base, _1) }
     end
