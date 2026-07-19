@@ -23,6 +23,38 @@ class Api::Internal::AgentConversationsController < Api::Internal::BaseControlle
     render json: { success: true, conversation: conversation && agent_conversation_props(conversation) }
   end
 
+  # GET /internal/agent/turns/:client_turn_id
+  # Recovery read for a streamed turn whose SSE connection broke: the client generated the turn id
+  # before sending, so this answers "did MY exact turn persist?" without guessing from the seller's
+  # latest conversation (which another tab or device can change at any moment). `status` is:
+  #   persisted   -> the turn is stored; `message` is the assistant turn (same shape hydration
+  #                  uses) and `conversation_id` is the conversation it landed in
+  #   in_progress -> the server is still generating the turn; keep polling
+  #   failed      -> the turn errored or couldn't be persisted; it will never appear — stop
+  #   unknown     -> no record and no liveness marker (the server died mid-turn, or the marker
+  #                  expired); waiting longer won't help
+  def turn_status
+    turn_id = agent_client_turn_id
+    if turn_id.nil?
+      render json: { success: false, error: "Invalid turn id." }, status: :bad_request
+      return
+    end
+
+    message = find_agent_turn_message(turn_id)
+    if message
+      render json: {
+        success: true,
+        status: "persisted",
+        conversation_id: message.ai_conversation.external_id,
+        message: agent_message_props(message),
+      }
+    else
+      marker = agent_turn_marker(turn_id)
+      status = %w[in_progress failed].include?(marker) ? marker : "unknown"
+      render json: { success: true, status: }
+    end
+  end
+
   private
     def authorize_store_agent
       authorize current_seller, :use_store_agent?

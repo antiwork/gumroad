@@ -46,7 +46,16 @@ class AnalyticsController < Sellers::BaseController
   def data_by_referral
     authorize :analytics, :index?
 
-    if Feature.active?(:use_creator_analytics_web_in_controller)
+    if params[:interval] == "hour"
+      return render json: { error: "Invalid date range." }, status: :bad_request if @end_date < @start_date
+      if (@end_date - @start_date).to_i > CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS
+        return render json: { error: "Date range cannot exceed #{CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS} days for the hourly interval." }, status: :bad_request
+      end
+
+      # Hourly data bypasses CreatorAnalytics::CachingProxy, which only stores
+      # day-keyed data; the range is at most 7 days so the live query is cheap.
+      data = creator_analytics_web(interval: "hour").by_referral
+    elsif Feature.active?(:use_creator_analytics_web_in_controller)
       data = creator_analytics_web.by_referral
     else
       data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :referral)
@@ -73,8 +82,8 @@ class AnalyticsController < Sellers::BaseController
       end
     end
 
-    def creator_analytics_web
-      CreatorAnalytics::Web.new(user: current_seller, dates: (@start_date .. @end_date).to_a)
+    def creator_analytics_web(interval: "day")
+      CreatorAnalytics::Web.new(user: current_seller, dates: (@start_date .. @end_date).to_a, interval:)
     end
 
     def set_default_page_title

@@ -495,6 +495,31 @@ describe Ai::StoreAgentService do
       expect(result[:suggestions]).to eq(["List my products", "Show my sales"])
     end
 
+    it "invokes on_reply_complete with the finished turn before trailing events and the suggestions call" do
+      stub_stream_turns(stream: ["Here are your numbers."], result: text_result("Here are your numbers."))
+      order = []
+      allow(client).to receive(:messages) do
+        order << :suggestions_call
+        text_result('["Show my sales"]')
+      end
+
+      completed_turn = nil
+      on_reply_complete = lambda do |turn|
+        order << :reply_complete
+        completed_turn = turn
+      end
+      result = service.respond_streaming(messages: [{ role: "user", content: "how are sales" }], on_reply_complete:) do |event, _payload|
+        order << event unless event == :token
+      end
+
+      # The finished turn reaches the hook before anything else happens — before the extra
+      # suggestions LLM call and before any trailing event is written to the (possibly already
+      # dead) client socket — so callers can persist it no matter what happens afterwards.
+      expect(order).to eq([:reply_complete, :suggestions_call, :suggestions])
+      expect(completed_turn).to eq(reply: "Here are your numbers.", proposed_action: nil, objects: [])
+      expect(result[:suggestions]).to eq(["Show my sales"])
+    end
+
     it "emits a proposed action over the stream without mutating" do
       stub_stream_turns(
         { stream: [], result: tool_result("api_write", { "endpoint" => "create_offer_code", "path_params" => { "link_id" => "p1" }, "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" } }) },

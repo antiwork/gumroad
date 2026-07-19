@@ -66,6 +66,25 @@ describe SalesTaxCalculator do
       compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
     end
 
+    it "returns whole-cent tax amounts when the rate produces a fractional cent (regression for buyer-currency quote total mismatch)" do
+      # India GST 18% on a $9.99 product yields 179.82 fractional cents. Before rounding
+      # here, the checkout quote endpoint rounded the summed total (=> 180 within 1179)
+      # while charge-time persistence truncated via the integer column (=> 179 within
+      # 1178), so the buyer-currency quote's locked canonical total never matched at
+      # charge time for Gumroad-collected VAT/GST checkouts.
+      expected_tax_rate = create(:zip_tax_rate, country: "IN", zip_code: nil, state: nil, combined_rate: 0.18, is_seller_responsible: false)
+      Feature.activate("collect_tax_in")
+
+      actual_sales_tax = SalesTaxCalculator.new(product: create(:product, user: @seller),
+                                                price_cents: 999,
+                                                buyer_location: { country: "IN" }).calculate
+
+      expect(actual_sales_tax.tax_cents).to eq(180)
+      expect(actual_sales_tax.zip_tax_rate).to eq(expected_tax_rate)
+    ensure
+      Feature.deactivate("collect_tax_in")
+    end
+
     describe "with TaxJar", :vcr do
       before do
         @creator = create(:user_with_compliance_info)
@@ -645,7 +664,7 @@ describe SalesTaxCalculator do
           product = create(:product, user: @seller)
 
           expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
-                                                       tax_cents: 8.1,
+                                                       tax_cents: 8, # 8.1 rounded to whole cents at the calculation boundary
                                                        zip_tax_rate: standard_tax_rate)
 
           actual_sales_tax = SalesTaxCalculator.new(product:,
@@ -659,7 +678,7 @@ describe SalesTaxCalculator do
           product = create(:product, user: @seller, is_epublication: true)
 
           expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
-                                                       tax_cents: 2.6,
+                                                       tax_cents: 3, # 2.6 rounded to whole cents at the calculation boundary
                                                        zip_tax_rate: epublication_tax_rate)
 
           actual_sales_tax = SalesTaxCalculator.new(product:,
@@ -1435,7 +1454,7 @@ describe SalesTaxCalculator do
           product = create(:product, user: @seller)
 
           expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
-                                                       tax_cents: 7.5,
+                                                       tax_cents: 8, # 7.5 rounded to whole cents at the calculation boundary
                                                        zip_tax_rate: standard_tax_rate)
 
           actual_sales_tax = SalesTaxCalculator.new(product:,
