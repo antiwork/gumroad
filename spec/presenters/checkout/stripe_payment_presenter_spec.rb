@@ -691,6 +691,7 @@ describe Checkout::StripePaymentPresenter do
           currency: "eur",
           presentment_amount_cents: 1500,
           payment_method_types: %w[card link ideal bancontact],
+          disable_wallets: true,
         )
       )
     ensure
@@ -745,6 +746,7 @@ describe Checkout::StripePaymentPresenter do
           currency: "eur",
           presentment_amount_cents: 1500,
           payment_method_types: %w[card link ideal],
+          disable_wallets: true,
         )
       )
     ensure

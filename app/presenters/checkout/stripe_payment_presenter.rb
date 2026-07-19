@@ -202,11 +202,14 @@ class Checkout::StripePaymentPresenter
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
-        # When this cart is also a buyer-currency presentment candidate, wallets stay disabled:
-        # a wallet payment would charge canonical USD while checkout displays buyer-currency
-        # totals. Other method-forced checkouts retain the existing wallet behavior; rollout QA
-        # must confirm the wallet sheet agrees with the deferred intent's full total.
-        disable_wallets: items.any? { buyer_currency_presentment_candidate?(_1) },
+        # Wallets cannot use the method-forced client-confirm lane safely yet. The Element mounts
+        # with the product's listed amount so Stripe can show the EUR-only methods, while the
+        # deferred intent includes tax, tips, and shipping calculated later. Letting a Payment
+        # Request wallet stay enabled could show the listed amount but charge that later total.
+        # Keep every forced-currency checkout wallet-free until the wallet flow can carry the
+        # same presentment total. Buyer-currency candidates also stay wallet-free because their
+        # wallets use the canonical USD path while checkout displays buyer-currency totals.
+        disable_wallets: method_forced || items.any? { buyer_currency_presentment_candidate?(_1) },
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
