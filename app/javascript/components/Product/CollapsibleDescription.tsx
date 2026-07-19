@@ -38,7 +38,7 @@ export const CollapsibleDescription = ({ children }: { children: React.ReactNode
       <div
         className={classNames(
           isCollapsed &&
-            "max-h-[25rem] overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-5rem),transparent)] lg:max-h-none lg:overflow-visible lg:[mask-image:none]",
+            "max-h-[25rem] overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%_-_5rem),transparent)] lg:max-h-none lg:overflow-visible lg:[mask-image:none]",
         )}
       >
         <div ref={contentRef}>{children}</div>
