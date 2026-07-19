@@ -101,7 +101,8 @@ describe SettingsPresenter do
           disable_affiliate_requests: false,
           product_level_support_emails: [],
           seller_refund_policy: {
-            enabled: true,
+            editable: true,
+            refund_policy_enforced: false,
             allowed_refund_periods_in_days: [
               {
                 key: 0,
@@ -141,14 +142,18 @@ describe SettingsPresenter do
         expect(allowed_periods.map { _1[:key] }).to eq([7, 14, 30, 183])
       end
 
+      it "exposes the enforcement so the UI can explain it" do
+        expect(presenter.main_props[:user][:seller_refund_policy][:refund_policy_enforced]).to eq(true)
+      end
+
       context "when the seller_refund_policy_disabled_for_all feature flag is on" do
         before do
           Feature.activate(:seller_refund_policy_disabled_for_all)
           seller.update!(refund_policy_enabled: false)
         end
 
-        it "still shows the refund policy section so the seller can change the enforced period" do
-          expect(presenter.main_props[:user][:seller_refund_policy][:enabled]).to eq(true)
+        it "still keeps the refund policy section editable so the seller can change the enforced period" do
+          expect(presenter.main_props[:user][:seller_refund_policy][:editable]).to eq(true)
         end
       end
     end
@@ -156,8 +161,8 @@ describe SettingsPresenter do
     context "when the seller_refund_policy_disabled_for_all feature flag is on and no refund policy is enforced" do
       before { Feature.activate(:seller_refund_policy_disabled_for_all) }
 
-      it "hides the refund policy section" do
-        expect(presenter.main_props[:user][:seller_refund_policy][:enabled]).to eq(false)
+      it "marks the refund policy section as not editable" do
+        expect(presenter.main_props[:user][:seller_refund_policy][:editable]).to eq(false)
       end
     end
 
