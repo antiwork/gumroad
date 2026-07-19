@@ -4048,6 +4048,17 @@ describe LinksController, :vcr, inertia: true do
           expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to be_present
         end
 
+        it "keeps the price meta tags for a free (zero-priced) product" do
+          product = create(:product, user: @user, price_cents: 0)
+
+          get :show, params: { id: product.unique_permalink }
+
+          expect(response).to be_successful
+          html_doc = Nokogiri::HTML(response.body)
+          expect(html_doc.css("meta[property='product:price:amount'][content='0.0']")).to_not be_empty
+          expect(html_doc.css("meta[property='product:price:currency'][content='USD']")).to_not be_empty
+        end
+
         it "sets canonical and og:url meta tags for product without reviews" do
           product = create(:product, user: @user)
           get :show, params: { id: product.unique_permalink }

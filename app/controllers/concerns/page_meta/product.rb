@@ -18,7 +18,7 @@ module PageMeta::Product
       # Skip the price meta tags rather than crash the whole product page —
       # Product::StructuredData applies the same nil guard for its "price" field.
       price_cents = product.price_cents
-      if price_cents.present?
+      unless price_cents.nil?
         set_meta_tag(property: "product:price:amount", content: (price_cents / 100.0).round(2))
         set_meta_tag(property: "product:price:currency", content: product.price_currency_type.upcase)
       end
