@@ -23,7 +23,6 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { DefinitionList } from "$app/components/ui/DefinitionList";
-import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Textarea } from "$app/components/ui/Textarea";
 
 // While the seller is within this many px of the bottom we keep auto-scrolling as new content
@@ -279,15 +278,15 @@ const ProposedActionCard = ({
         <strong>{action.title ?? "Proposed change"}</strong>
         {isHtmlProposal ? (
           // A page edit's fields are literal find/replace HTML — a wall of markup that reads as a
-          // glitch, not a preview. Lead with the rendered result instead, and keep the exact HTML
-          // (the safety boundary: precisely what confirming will apply) available but collapsed.
-          <>
+          // glitch, not a preview. The rendered result IS the review surface, so it replaces the
+          // raw rows entirely. Once the card has been acted on there is no preview to show
+          // (an applied edit's find-snippet no longer matches), so fall back to the one-line
+          // summary rather than an empty card.
+          status ? (
+            <span className="break-words">{action.summary}</span>
+          ) : (
             <CustomHtmlProposalPreview state={preview} />
-            <Details>
-              <DetailsToggle className="text-sm text-muted">View raw HTML</DetailsToggle>
-              {fieldRows}
-            </Details>
-          </>
+          )
         ) : (
           fieldRows
         )}

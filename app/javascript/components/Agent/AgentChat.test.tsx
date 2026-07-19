@@ -301,7 +301,7 @@ describe("AgentChat custom-html proposal cards", () => {
     vi.clearAllMocks();
   });
 
-  it("renders a page preview instead of top-level raw HTML fields", async () => {
+  it("renders a page preview instead of raw HTML fields", async () => {
     streamTurnWithAction(customHtmlAction);
     fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
 
@@ -312,8 +312,9 @@ describe("AgentChat custom-html proposal cards", () => {
     expect(iframe.getAttribute("srcdoc")).toContain("<h1>New headline</h1>");
     // The document renders on an opaque origin, exactly like the live page embed.
     expect(iframe.getAttribute("sandbox")).toBe("allow-scripts allow-forms allow-popups");
-    // The exact HTML that confirming will apply stays available, but collapsed.
-    expect(screen.getByText("View raw HTML")).toBeTruthy();
+    // The raw find/replace rows are gone — the rendered preview is the review surface.
+    expect(screen.queryByText("View raw HTML")).toBeNull();
+    expect(screen.queryByText("<h1>Old headline</h1>")).toBeNull();
     expect(fetchCustomHtmlProposalPreview).toHaveBeenCalledWith(
       expect.objectContaining({ params: customHtmlAction.params }),
     );
