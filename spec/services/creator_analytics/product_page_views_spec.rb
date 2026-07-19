@@ -61,6 +61,61 @@ describe CreatorAnalytics::ProductPageViews do
     end
   end
 
+  describe "hourly interval" do
+    before do
+      add_page_view(@products[0], Time.utc(2021, 1, 1))
+      add_page_view(@products[0], Time.utc(2021, 1, 1, 1))
+      add_page_view(@products[1], Time.utc(2021, 1, 1, 2))
+      ProductPageView.__elasticsearch__.refresh_index!
+    end
+
+    let(:hourly_service) do
+      described_class.new(
+        user: @user,
+        products: @products,
+        dates: [Date.new(2021, 1, 1)],
+        interval: "hour"
+      )
+    end
+
+    it "buckets page views by hour in #by_product_and_date" do
+      expect(hourly_service.by_product_and_date).to eq(
+        [@products[0].id, "2021-01-01T00:00"] => 1,
+        [@products[0].id, "2021-01-01T01:00"] => 1,
+        [@products[1].id, "2021-01-01T02:00"] => 1,
+      )
+    end
+
+    it "merges the repeated local hour at a DST fall-back" do
+      user = create(:user, timezone: "Pacific Time (US & Canada)")
+      product = create(:product, user: user)
+      # On Nov 1, 2026 Pacific clocks fall back at 2:00 AM, so 08:30 UTC (01:30 PDT)
+      # and 09:30 UTC (01:30 PST) are distinct Elasticsearch buckets that map onto
+      # the same "2026-11-01T01:00" wall-clock key.
+      add_page_view(product, Time.utc(2026, 11, 1, 8, 30))
+      add_page_view(product, Time.utc(2026, 11, 1, 9, 30))
+      ProductPageView.__elasticsearch__.refresh_index!
+
+      service = described_class.new(user:, products: [product], dates: [Date.new(2026, 11, 1)], interval: "hour")
+
+      expect(service.by_product_and_date).to eq({ [product.id, "2026-11-01T01:00"] => 2 })
+    end
+
+    it "raises an error for an unsupported interval" do
+      expect do
+        described_class.new(user: @user, products: @products, dates: [Date.new(2021, 1, 1)], interval: "minute")
+      end.to raise_error(ArgumentError, "interval must be one of: day, hour")
+    end
+
+    it "raises an error when the hourly date range is longer than the allowed maximum" do
+      dates = (Date.new(2021, 1, 1) .. Date.new(2021, 1, 9)).to_a
+
+      expect do
+        described_class.new(user: @user, products: @products, dates:, interval: "hour")
+      end.to raise_error(ArgumentError, "date range cannot exceed 7 days for the hour interval")
+    end
+  end
+
   describe "#by_product_and_country_and_state" do
     before do
       add_page_view(@products[0], Time.utc(2021, 1, 1), country: "United States", state: "CA")
