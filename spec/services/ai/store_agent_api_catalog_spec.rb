@@ -98,4 +98,24 @@ describe Ai::StoreAgentApiCatalog do
       expect(described_class.find("list_media").summary).to match(/blocked/i)
     end
   end
+
+  describe "paginated list endpoints" do
+    # Regression: gumroad-private#1168. list_products exposed no params, so the model could never
+    # pass page_key even though the v2 endpoint supports it — any seller with >10 products was
+    # invisible past the newest 10, and the model fabricated "I checked page two" claims. Every
+    # paginated list read must declare page_key and teach the model to walk pages.
+    %w[list_products list_product_subscribers list_emails list_payouts list_sales].each do |id|
+      it "#{id} declares page_key so the model can fetch pages past the first" do
+        endpoint = described_class.find(id)
+
+        expect(endpoint.params).to include("page_key")
+      end
+    end
+
+    it "teaches the model that more pages exist when next_page_key is returned" do
+      %w[list_products list_product_subscribers list_emails list_payouts].each do |id|
+        expect(described_class.find(id).summary).to include("next_page_key")
+      end
+    end
+  end
 end

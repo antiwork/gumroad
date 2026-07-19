@@ -114,6 +114,44 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "show product abc123" }])
       end
 
+      # Regression: gumroad-private#1168. list_products is paginated (10 per page) but the agent
+      # could never reach past page one, and the raw next_page_key had to reach the model so it
+      # knows more pages exist. A seller with >10 products would otherwise get silently incomplete
+      # catalog-wide answers.
+      it "passes page_key through to the API and feeds next_page_key back to the model" do
+        expect(api_client).to receive(:get).with("/products", { "page_key" => "key-1" }).and_return(
+          { "success" => true, "products" => [{ "id" => "p11", "name" => "Older Product" }], "next_page_key" => "key-2", "http_status" => 200 },
+        )
+        captured = nil
+        first = true
+        allow(client).to receive(:messages) do |args|
+          captured = captured_tool_result(args) unless first
+          if first
+            first = false
+            tool_result("api_read", { "endpoint" => "list_products", "params" => { "page_key" => "key-1" } })
+          else
+            text_result("Here is the next page.")
+          end
+        end
+
+        service.respond(messages: [{ role: "user", content: "show the rest of my products" }])
+
+        expect(captured).to include("next_page_key" => "key-2")
+      end
+
+      it "teaches the model to paginate list reads in the system prompt" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("next_page_key")
+        expect(captured[:system]).to include("imply you checked items you did not actually fetch")
+      end
+
       it "rejects an unknown endpoint id without calling the API" do
         expect(api_client).not_to receive(:get)
         captured = nil

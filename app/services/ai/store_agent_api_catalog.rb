@@ -115,7 +115,8 @@ module Ai::StoreAgentApiCatalog
                                                                                                             params: %w[refund_period fine_print]),
 
     # ---- Products ----
-    ep("list_products", :get, "/products", "List the creator's products with price, status, and stats.", read: true, scope: "view_sales"),
+    ep("list_products", :get, "/products", "List the creator's products with price, status, and stats. Returns 10 per page, newest first; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_sales",
+                                                                                                                                                                                                                                       params: %w[page_key]),
     ep("get_product", :get, "/products/:id", "Get one product by its id.", read: true, scope: "view_sales", path_params: %w[id]),
     ep("create_product", :post, "/products", "Create a new product.", scope: "edit_products",
                                                                       params: %w[name price description custom_permalink price_currency_type max_purchase_count]),
@@ -165,7 +166,7 @@ module Ai::StoreAgentApiCatalog
     ep("delete_cover", :delete, "/products/:link_id/covers/:id", "Remove a product cover image.", scope: "edit_products", path_params: %w[link_id id]),
 
     # ---- Product subscribers ----
-    ep("list_product_subscribers", :get, "/products/:link_id/subscribers", "List subscribers of a membership product.", read: true, scope: "view_sales", path_params: %w[link_id]),
+    ep("list_product_subscribers", :get, "/products/:link_id/subscribers", "List subscribers of a membership product. When the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_sales", path_params: %w[link_id], params: %w[page_key]),
     ep("get_subscriber", :get, "/subscribers/:id", "Get one subscriber by id.", read: true, scope: "view_sales", path_params: %w[id]),
 
     # ---- Upsells ----
@@ -178,7 +179,7 @@ module Ai::StoreAgentApiCatalog
     # ---- Emails (workflows / posts) ----
     # The v2 EmailsController gates EVERY action (incl. index/show) on edit_emails, so the reads use
     # edit_emails too (not view_sales) to match the real contract.
-    ep("list_emails", :get, "/emails", "List the creator's email posts.", read: true, scope: "edit_emails"),
+    ep("list_emails", :get, "/emails", "List the creator's email posts. Returns 10 per page; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "edit_emails", params: %w[page_key]),
     ep("get_email", :get, "/emails/:id", "Get one email post.", read: true, scope: "edit_emails", path_params: %w[id]),
     ep("create_email", :post, "/emails", "Draft a new email post to subscribers/customers.", scope: "edit_emails", params: %w[subject body audience product_id link_id publish draft]),
     ep("preview_email", :post, "/emails/:id/preview", "Send a preview of an email to the creator.", scope: "edit_emails", path_params: %w[id]),
@@ -197,7 +198,7 @@ module Ai::StoreAgentApiCatalog
     ep("resend_receipt", :post, "/sales/:id/resend_receipt", "Resend the purchase receipt email to the buyer.", scope: "edit_sales", path_params: %w[id]),
 
     # ---- Payouts ----
-    ep("list_payouts", :get, "/payouts", "List the creator's payouts.", read: true, scope: "view_payouts"),
+    ep("list_payouts", :get, "/payouts", "List the creator's payouts. Returns 10 per page; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_payouts", params: %w[page_key]),
     ep("upcoming_payout", :get, "/payouts/upcoming", "Get the creator's upcoming (not-yet-paid) payout.", read: true, scope: "view_payouts"),
     ep("get_payout", :get, "/payouts/:id", "Get one payout by id.", read: true, scope: "view_payouts", path_params: %w[id]),
 
