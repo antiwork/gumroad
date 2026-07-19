@@ -46,7 +46,15 @@ class AssetPreview < ApplicationRecord
   end
 
   def display_height
-    width && height && (height.to_i * (display_width.to_i / width.to_f)).to_i
+    # A zero width slips past the `width &&` truthiness check (0 is truthy in
+    # Ruby) — e.g. an oEmbed provider reporting a non-numeric width like
+    # "auto", which `to_i`s to 0. Dividing by 0.0 yields NaN, and NaN.to_i
+    # raises FloatDomainError, which used to crash API responses that
+    # serialize the product's covers. Treat an unusable width as "no
+    # dimensions known" instead.
+    return nil unless width.to_i.positive? && height
+
+    (height.to_i * (display_width.to_i / width.to_f)).to_i
   end
 
   def display_width
