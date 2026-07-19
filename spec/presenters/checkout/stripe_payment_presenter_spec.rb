@@ -884,6 +884,7 @@ describe Checkout::StripePaymentPresenter do
         fallback_reason: "buyer_currency_presentment_unsupported",
         disable_wallets: true,
         request_apple_pay_merchant_tokens: false,
+        payment_element_wallets: false,
         elements_options: nil,
       )
     ensure
