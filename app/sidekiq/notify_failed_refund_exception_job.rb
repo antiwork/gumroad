@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Reports a failed-refund exception to Sentry. This is deliberately Sentry-only:
+# these are operational error conditions, not correspondence, so they belong in
+# the error tracker with the rest of the 500-class signal (decision: Sahil,
+# 2026-07-19, after a backfill made the per-row email version flood the finance
+# inbox with ~2,000 messages). The durable FailedRefundException row remains the
+# work item; Sentry is just the alert channel.
 class NotifyFailedRefundExceptionJob
   include Sidekiq::Job
 
@@ -9,34 +15,21 @@ class NotifyFailedRefundExceptionJob
     failed_refund_exception = FailedRefundException.find(exception_id)
     return unless failed_refund_exception.state == "pending"
     return if failed_refund_exception.notification_sent_at.present?
-    # Past the cap, delivery is considered broken: stop retrying and leave
-    # the row for the dispatcher to escalate through a channel that isn't email.
+    # Past the cap, reporting is considered broken: stop retrying and leave the
+    # row for the dispatcher to escalate on its own schedule.
     return if failed_refund_exception.notification_failures >= FailedRefundException::MAX_NOTIFICATION_FAILURES
 
     message = notification_message(failed_refund_exception)
     begin
-      InternalNotificationMailer.notify(
-        room_name: failed_refund_exception.notification_room,
-        sender: "Failed Refund Exception",
-        message_text: message
-      ).deliver_now
+      ErrorNotifier.notify(message, context: notification_context(failed_refund_exception))
     rescue
-      # Count only completed delivery failures. Incrementing before deliver_now would
-      # let the dispatcher mistake an in-flight final attempt for an exhausted one.
+      # Count only completed reporting failures. Incrementing before the notify
+      # call would let the dispatcher mistake an in-flight final attempt for an
+      # exhausted one.
       failed_refund_exception.increment!(:notification_failures)
       raise
     end
     failed_refund_exception.update!(notification_sent_at: Time.current)
-
-    # Secondary channel only, and deliberately last and rescued: notification_sent_at
-    # is the durability marker, so a raise here would fail the job into a retry that
-    # no-ops on the sent guard — the Sentry event would be lost either way, but the
-    # retry would waste an attempt and mislead the retry metrics.
-    begin
-      ErrorNotifier.notify(message, context: notification_context(failed_refund_exception))
-    rescue => e
-      Rails.logger.error("NotifyFailedRefundExceptionJob: Sentry capture failed for exception #{failed_refund_exception.id}: #{e.message}")
-    end
   end
 
   private
