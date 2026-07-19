@@ -113,6 +113,73 @@ describe Api::V2::SalesSummary do
                                        ])
     end
 
+    it "groups hourly breakdowns in the seller's timezone" do
+      seller = create(:user, timezone: "Pacific Time (US & Canada)")
+      product = create(:product, user: seller, price_cents: 10_00)
+      # 06:30 UTC on May 21 is 23:30 on May 20 in Pacific time; the two purchases
+      # around 08:00 UTC both fall inside the 01:00 hour on May 21 Pacific time.
+      create(:purchase, link: product, price_cents: 10_00, created_at: Time.utc(2026, 5, 21, 6, 30))
+      create(:purchase, link: product, price_cents: 20_00, created_at: Time.utc(2026, 5, 21, 8, 0))
+      create(:purchase, link: product, price_cents: 30_00, created_at: Time.utc(2026, 5, 21, 8, 45))
+      index_model_records(Purchase)
+
+      result = described_class.new(seller:, from: Date.new(2026, 5, 20), to: Date.new(2026, 5, 21), group_by: "hour").as_json
+
+      expect(result[:breakdown]).to eq([
+                                         {
+                                           key: "2026-05-20T23:00",
+                                           label: "2026-05-20T23:00",
+                                           gross_cents: 10_00,
+                                           net_cents: 10_00,
+                                           units: 1,
+                                           refunded_cents: 0,
+                                           refunded_units: 0,
+                                         },
+                                         {
+                                           key: "2026-05-21T01:00",
+                                           label: "2026-05-21T01:00",
+                                           gross_cents: 50_00,
+                                           net_cents: 50_00,
+                                           units: 2,
+                                           refunded_cents: 0,
+                                           refunded_units: 0,
+                                         }
+                                       ])
+    end
+
+    it "merges the repeated local hour at a DST fall-back into a single hourly item" do
+      seller = create(:user, timezone: "Pacific Time (US & Canada)")
+      product = create(:product, user: seller, price_cents: 10_00)
+      # On Nov 1, 2026 Pacific clocks fall back at 2:00 AM, so 08:30 UTC (01:30 PDT)
+      # and 09:30 UTC (01:30 PST) are distinct Elasticsearch buckets that format to
+      # the same "2026-11-01T01:00" key.
+      create(:purchase, link: product, price_cents: 10_00, created_at: Time.utc(2026, 11, 1, 8, 30))
+      create(:purchase, link: product, price_cents: 20_00, created_at: Time.utc(2026, 11, 1, 9, 30))
+      index_model_records(Purchase)
+
+      result = described_class.new(seller:, from: Date.new(2026, 11, 1), to: Date.new(2026, 11, 1), group_by: "hour").as_json
+
+      expect(result[:breakdown]).to eq([
+                                         {
+                                           key: "2026-11-01T01:00",
+                                           label: "2026-11-01T01:00",
+                                           gross_cents: 30_00,
+                                           net_cents: 30_00,
+                                           units: 2,
+                                           refunded_cents: 0,
+                                           refunded_units: 0,
+                                         }
+                                       ])
+    end
+
+    it "raises an error when grouping by hour over more than the allowed range" do
+      seller = create(:user, timezone: "UTC")
+
+      expect do
+        described_class.new(seller:, from: Date.new(2026, 5, 13), to: Date.new(2026, 5, 21), group_by: "hour")
+      end.to raise_error(ArgumentError, "date range cannot exceed 7 days when grouping by hour")
+    end
+
     it "groups monthly breakdowns" do
       seller = create(:user, timezone: "UTC")
       product = create(:product, user: seller, price_cents: 10_00)

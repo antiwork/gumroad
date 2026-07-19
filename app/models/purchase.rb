@@ -4710,7 +4710,9 @@ class Purchase < ApplicationRecord
     end
 
     def assign_is_multiseat_license
-      self.is_multiseat_license = link.is_multiseat_license?
+      # Uses the call-gated check so a call product with a stale/API-set flag never
+      # produces a purchase that reports seats (receipts, pings, license verify).
+      self.is_multiseat_license = link.multiseat_license_enabled?
     end
 
     def price_for_recurrence

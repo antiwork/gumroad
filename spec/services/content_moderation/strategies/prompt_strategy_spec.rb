@@ -51,6 +51,105 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     expect(result.reasoning).to eq(["spam: clear spam"])
   end
 
+  # A single language-model sample is nondeterministic, so a lone spam flag
+  # must not block a publish. These specs pin the corroboration gate: the flag
+  # only blocks when every resample reproduces it.
+  describe "spam corroboration resampling (corroborate_spam_flags: true)" do
+    it "downgrades a spam flag to audit-only when a resample comes back clean" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),           # adult_content preset
+        json_chat_response(flagged: true, reasoning: "clear spam"),  # spam preset
+        json_chat_response(uncertain: false),                        # uncertainty check
+        json_chat_response(flagged: true, reasoning: "clear spam"),  # resample 1
+        json_chat_response(flagged: false, reasoning: "")            # resample 2 disagrees
+      )
+
+      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.reasoning).to eq([])
+      expect(result.audit_reasoning).to eq(["spam (uncorroborated, 2/3 samples flagged): clear spam"])
+    end
+
+    it "keeps blocking when every resample also flags" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),
+        json_chat_response(flagged: true, reasoning: "clear spam"),
+        json_chat_response(uncertain: false),
+        json_chat_response(flagged: true, reasoning: "clear spam"),
+        json_chat_response(flagged: true, reasoning: "clear spam")
+      )
+
+      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+
+      expect(result.status).to eq("flagged")
+      expect(result.reasoning).to eq(["spam: clear spam"])
+      expect(result.audit_reasoning).to eq([])
+    end
+
+    it "stops resampling at the first clean resample" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),
+        json_chat_response(flagged: true, reasoning: "clear spam"),
+        json_chat_response(uncertain: false),
+        json_chat_response(flagged: false, reasoning: "")  # first resample decides
+      )
+
+      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.audit_reasoning).to eq(["spam (uncorroborated, 1/2 samples flagged): clear spam"])
+      expect(client).to have_received(:chat).exactly(4).times
+    end
+
+    it "treats a resample that times out as not flagging" do
+      call_count = 0
+      allow(client).to receive(:chat) do |_kwargs|
+        call_count += 1
+        case call_count
+        when 1 then json_chat_response(flagged: false, reasoning: "")
+        when 2 then json_chat_response(flagged: true, reasoning: "clear spam")
+        when 3 then json_chat_response(uncertain: false)
+        when 4 then raise Faraday::TimeoutError
+        else json_chat_response(flagged: true, reasoning: "clear spam")
+        end
+      end
+
+      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.audit_reasoning).to eq(["spam (uncorroborated, 1/2 samples flagged): clear spam"])
+    end
+
+    it "does not resample adult content flags" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: true, reasoning: "clear adult content"),  # adult_content preset
+        json_chat_response(uncertain: false),                                 # uncertainty check
+        json_chat_response(flagged: false, reasoning: "")                     # spam preset
+      )
+
+      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+
+      expect(result.status).to eq("flagged")
+      expect(result.reasoning).to eq(["adult_content: clear adult content"])
+      expect(client).to have_received(:chat).exactly(3).times
+    end
+
+    it "keeps single-sample blocking for callers that do not opt in" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),
+        json_chat_response(flagged: true, reasoning: "clear spam"),
+        json_chat_response(uncertain: false)
+      )
+
+      result = described_class.new(text: "moderate me").perform
+
+      expect(result.status).to eq("flagged")
+      expect(result.reasoning).to eq(["spam: clear spam"])
+      expect(client).to have_received(:chat).exactly(3).times
+    end
+  end
+
   it "logs and re-raises when the uncertainty check fails" do
     call_count = 0
     allow(client).to receive(:chat) do |_kwargs|

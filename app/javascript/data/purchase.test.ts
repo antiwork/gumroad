@@ -95,6 +95,7 @@ describe("getPaymentDetailsSource", () => {
       type: "payment-element-client-confirm",
       confirmationTokenId: "ctoken_123",
       cardCountry: "US",
+      mountCurrency: "usd",
     };
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, true)).toBe("payment_element");
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, false)).toBe("payment_element");

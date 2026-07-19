@@ -2494,6 +2494,16 @@ describe OrdersController, :vcr do
       expect(flow.stripe_payment_method_type).to eq("card")
     end
 
+    it "passes the Payment Element mount currency to the prepare service" do
+      expect(Order::PreparePaymentIntentService).to receive(:new).with(
+        hash_including(params: hash_including(payment_element_mount_currency: "eur"))
+      ).and_call_original
+
+      post :prepare, params: { line_items:, confirmation_token: confirmation_token_id, payment_element_mount_currency: "eur" }.merge(common_params)
+
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do
       allow(CheckoutRecaptcha).to receive(:site_key).and_return("test-site-key")
       allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)

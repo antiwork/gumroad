@@ -614,7 +614,41 @@ describe Api::V2::SalesController do
         expect(response.code).to eq "400"
         expect(response.parsed_body).to eq({
           status: 400,
-          error: "Invalid group_by. Valid values are: product, day, week, month."
+          error: "Invalid group_by. Valid values are: product, day, week, month, hour."
+        }.as_json)
+        expect(Api::V2::SalesSummary).not_to have_received(:new)
+      end
+
+      it "returns a sales summary grouped by hour for a date range at the allowed maximum" do
+        get :summary, params: @params.merge(from: "2026-05-14", to: "2026-05-21", group_by: "hour")
+
+        expect(response.parsed_body).to eq({ success: true }.merge(@summary).as_json)
+        expect(Api::V2::SalesSummary).to have_received(:new).with(
+          seller: @seller,
+          from: Date.new(2026, 5, 14),
+          to: Date.new(2026, 5, 21),
+          group_by: "hour"
+        )
+      end
+
+      it "returns a 400 error if date range is too wide for hourly grouping" do
+        get :summary, params: @params.merge(from: "2026-05-13", to: "2026-05-21", group_by: "hour")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Date range cannot exceed 7 days when grouping by hour."
+        }.as_json)
+        expect(Api::V2::SalesSummary).not_to have_received(:new)
+      end
+
+      it "returns a 400 error when grouping by hour with the default 30-day range" do
+        get :summary, params: @params.merge(group_by: "hour")
+
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Date range cannot exceed 7 days when grouping by hour."
         }.as_json)
         expect(Api::V2::SalesSummary).not_to have_received(:new)
       end

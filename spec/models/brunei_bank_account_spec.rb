@@ -39,6 +39,7 @@ describe BruneiBankAccount do
       expect(build(:brunei_bank_account, account_number: "000012345")).to be_valid
       expect(build(:brunei_bank_account, account_number: "1")).to be_valid
       expect(build(:brunei_bank_account, account_number: "000012345678")).to be_valid
+      expect(build(:brunei_bank_account, account_number: "00001234567891")).to be_valid
 
       bn_bank_account = build(:brunei_bank_account, account_number: "000012345678910")
       expect(bn_bank_account).to_not be_valid

@@ -3231,6 +3231,27 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal true, create_physical_product.can_enable_quantity?
   end
 
+  # --- #multiseat_license_enabled? ---------------------------------------------
+
+  test "multiseat_license_enabled? is true when the flag is set on a non-call product" do
+    product = create_product(is_licensed: true, is_multiseat_license: true)
+    assert_equal true, product.multiseat_license_enabled?
+  end
+
+  test "multiseat_license_enabled? is false when the flag is off" do
+    product = create_product(is_licensed: true)
+    assert_equal false, product.multiseat_license_enabled?
+  end
+
+  test "multiseat_license_enabled? is false for calls even when the flag is set" do
+    # The editor hides the seat toggle for calls, but the flag can still be set via
+    # the API or predate that gating. A call books one slot per purchase, so seats
+    # must never be offered or applied for it.
+    call = create_call_product
+    call.update_attribute(:is_multiseat_license, true)
+    assert_equal false, call.multiseat_license_enabled?
+  end
+
   # --- #require_captcha? ------------------------------------------------------
 
   test "require_captcha? is false for sellers older than 6 months, true for younger" do

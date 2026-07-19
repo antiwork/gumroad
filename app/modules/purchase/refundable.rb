@@ -456,14 +456,23 @@ class Purchase
     end
   end
 
-  def refund_for_fraud_and_block_buyer!(refunding_user_id)
-    return false unless refund_for_fraud!(refunding_user_id)
+  def refund_for_fraud_and_block_buyer!(refunding_user_id, skip_already_refunded: false)
+    result = refund_for_fraud!(refunding_user_id, skip_already_refunded:)
+    # nil means there was nothing to refund (see refund_for_fraud!); in that case the
+    # buyer must not be blocked either — no money moved, so no fraud side effects.
+    return result unless result == true
 
     block_buyer!(blocking_user_id: refunding_user_id)
   end
 
-  def refund_for_fraud!(refunding_user_id)
-    return false if refund_and_save!(refunding_user_id, is_for_fraud: true) == false
+  def refund_for_fraud!(refunding_user_id, skip_already_refunded: false)
+    result = refund_and_save!(refunding_user_id, is_for_fraud: true)
+    return false if result == false
+    # refund_and_save! returns nil (not false) when there is nothing left to refund:
+    # already refunded, no processor transaction, or nothing refundable. Bulk callers
+    # pass skip_already_refunded: true so a purchase refunded by a concurrent run is
+    # skipped cleanly — no subscription cancellation, no creator email, no counting.
+    return nil if skip_already_refunded && result.nil?
 
     subscription.cancel_effective_immediately! if subscription.present? && !subscription.deactivated?
     ContactingCreatorMailer.purchase_refunded_for_fraud(id).deliver_later(queue: "default") unless seller.suspended?

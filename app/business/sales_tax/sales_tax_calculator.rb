@@ -41,7 +41,14 @@ class SalesTaxCalculator
     return SalesTaxCalculation.zero_tax(price_cents) if tax_rate.nil?
     return SalesTaxCalculation.zero_tax(price_cents) unless tax_eligible?
 
-    tax_amount_cents = price_cents * tax_rate.combined_rate
+    # Round to whole cents here, at the calculation boundary, so every consumer sees the
+    # same integer amount. Previously this returned a fractional BigDecimal: the checkout
+    # quote endpoint summed it and rounded the total, while charge-time persistence
+    # assigned it to an integer column (which truncates). For any rate with a fractional
+    # cent part >= 0.5 the two totals differed by one cent, which broke the buyer-currency
+    # quote's locked-total check ("total mismatch") for every Gumroad-collected VAT/GST
+    # checkout. The TaxJar branch above already rounds; this makes both branches match.
+    tax_amount_cents = (price_cents * tax_rate.combined_rate).round
     SalesTaxCalculation.new(price_cents:,
                             tax_cents: tax_amount_cents,
                             zip_tax_rate: tax_rate,

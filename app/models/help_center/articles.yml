@@ -625,3 +625,8 @@
   title: "Casting videos to your TV"
   description: "Gumroad's video player does not support Chromecast or AirPlay casting. Here are the ways that do work to watch a video on your TV: casting a Chrome tab, AirPlay screen mirroring, a smart TV browser, or an HDMI cable."
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 351
+  slug: "351-ach-direct-debit-at-checkout"
+  title: "Offering bank account payments (ACH Direct Debit)"
+  description: "ACH Direct Debit lets customers in the United States pay for your products directly from their bank account instead of using a card. It is turned off by default; you can offer it by opting in from your checkout settings."
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>

@@ -44,6 +44,19 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
           expect(assigns(:_new_invoice_presenter).send(:chargeable)).to eq(charge)
         end
 
+        context "when the charge has no purchases in a successful state" do
+          let(:purchase_one) { create(:purchase_in_progress, created_at: date, link: product_one) }
+          let(:purchase_two) { create(:purchase_in_progress, created_at: date, link: product_two) }
+
+          it "falls back to the purchase as the chargeable and renders the page" do
+            get :new, params: params
+
+            expect(response).to be_successful
+            expect(assigns(:chargeable)).to eq(purchase)
+            expect(assigns(:_new_invoice_presenter).send(:chargeable)).to eq(purchase)
+          end
+        end
+
         context "when the second purchase is used as a param" do
           let(:purchase) { purchase_two }
 

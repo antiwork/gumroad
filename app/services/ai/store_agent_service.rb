@@ -30,7 +30,14 @@ class Ai::StoreAgentService
   # network timeouts on real (slow but working) generations, so this is deliberately generous — the
   # client fails fast on connect problems and retries transient failures on its own.
   REQUEST_TIMEOUT_IN_SECONDS = 120
-  MAX_TOOL_ITERATIONS = 5
+  # Upper bound on model turns per reply (each turn may run one or more tools). This has to leave
+  # room for pagination: list endpoints return 10 items per page and the system prompt tells the
+  # model to walk EVERY page for "all of X" tasks, so each page fetch consumes one turn and the
+  # final answer needs one more. The previous cap of 5 meant a seller with more than ~40 products
+  # hit the generic "couldn't finish" fallback on exactly the catalog-wide tasks the pagination
+  # rule exists for. 25 turns covers catalogs of roughly 240 items while still bounding the cost
+  # of a runaway tool loop; past that the honest cap reply below is the correct outcome.
+  MAX_TOOL_ITERATIONS = 25
   MAX_MESSAGE_LENGTH = 2_000
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
   # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a
@@ -95,6 +102,11 @@ class Ai::StoreAgentService
     - Only ever act on the current creator's own store. You cannot access other creators' data; the
       API enforces this and an endpoint the creator's role can't use will simply fail.
     - Always use api_read to get real ids and live numbers before acting. Never invent ids.
+    - List endpoints are PAGINATED (usually 10 items per page). When a read result includes a
+      next_page_key, more items exist: call the same endpoint again with page_key set to that value,
+      and keep going until the response has no next_page_key. Any task covering "all" of something
+      (all products, all sales, the whole catalog) requires walking every page first. Never state or
+      imply you checked items you did not actually fetch — if you can't or didn't fetch a page, say so.
     - Never claim a change has already been made. After api_write, tell the creator you've prepared it
       and it's ready for them to confirm.
     - When the creator already has a custom HTML page and asks for a change to it, ALWAYS read the
@@ -181,7 +193,14 @@ class Ai::StoreAgentService
   #   [:proposed_action, { proposed_action: }] — a single staged change awaiting confirmation
   #   [:suggestions, { suggestions: }]    — up to three "what next" prompts
   # Returns the same hash shape as #respond (plus :suggestions) once the stream is complete.
-  def respond_streaming(messages:, &emit)
+  #
+  # `on_reply_complete` (optional) is invoked with { reply:, proposed_action:, objects: } the
+  # moment the reply is final — BEFORE any trailing event is written to the (possibly already
+  # dead) client socket and before the extra follow-up-suggestions LLM call. Callers use it to
+  # persist the turn: if the client's connection died mid-stream, the very next socket write
+  # raises ClientDisconnected, and without this hook a fully generated reply would be discarded
+  # unpersisted — the seller watched it stream in, but no record of it survives.
+  def respond_streaming(messages:, on_reply_complete: nil, &emit)
     conversation = build_conversation(messages)
     last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
     proposed_action = nil
@@ -209,12 +228,12 @@ class Ai::StoreAgentService
       if result.stop_reason == "max_tokens"
         emit.call(:reset, {}) if streamed_any
         emit.call(:token, { text: TRUNCATED_REPLY })
-        return finish_stream(reply: TRUNCATED_REPLY, proposed_action:, last_user_message:, emit:)
+        return finish_stream(reply: TRUNCATED_REPLY, proposed_action:, last_user_message:, emit:, on_reply_complete:)
       end
 
       if result.tool_uses.blank?
         reply = result.text.to_s.strip
-        return finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+        return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:)
       end
 
       # Intermediate tool-use turn: any text it streamed was preamble, not the answer. Tell the UI to
@@ -227,7 +246,7 @@ class Ai::StoreAgentService
     # reply, then close out with the same objects/action/suggestions as a normal turn.
     reply = tool_cap_reply(proposed_action)
     emit.call(:token, { text: reply })
-    finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+    finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:)
   end
 
   private
@@ -277,14 +296,19 @@ class Ai::StoreAgentService
     end
 
     # Emit the trailing events for a completed streaming turn (objects, any staged change, and the
-    # follow-up suggestions) and return the full result hash.
-    def finish_stream(reply:, proposed_action:, last_user_message:, emit:)
+    # follow-up suggestions) and return the full result hash. The on_reply_complete hook fires
+    # first — before any further socket write — so the caller can persist the finished turn even
+    # when the client's connection is already dead (the next emit would raise ClientDisconnected
+    # and abandon the turn) and before the seller waits out the extra suggestions LLM call.
+    def finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete: nil)
       objects = deduped_objects
+      result = { reply:, proposed_action: proposed_action&.as_json, objects: }
+      on_reply_complete&.call(result)
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: proposed_action.as_json }) if proposed_action
       suggestions = follow_up_suggestions(reply:, last_user_message:)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
-      { reply:, proposed_action: proposed_action&.as_json, objects:, suggestions: }
+      result.merge(suggestions:)
     end
 
     # Ask the model for a few short, in-voice next prompts based on the turn that just happened. Kept

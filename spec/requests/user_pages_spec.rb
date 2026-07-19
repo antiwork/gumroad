@@ -84,6 +84,18 @@ describe "Public serving of seller pages", type: :request do
       expect(response.body).to include("seller.example.com")
     end
 
+    # Slugged pages share the profile's follow bridge: helper in the sandboxed
+    # embed, validating listener (with the seller id from the wrapper's own
+    # render context) in the trusted wrapper.
+    it "injects the follow bridge into the embed and the validating listener into the wrapper" do
+      get "http://seller.example.com/studio/landing/embed"
+      expect(response.body).to include("data-gumroad-follow-bridge")
+
+      get "http://seller.example.com/studio"
+      expect(response.body).to include("data-gumroad-follow-wrapper")
+      expect(response.body).to include(seller.external_id)
+    end
+
     it "reports the page version to the owner for live reload" do
       sign_in seller
       get "http://#{seller.subdomain}/studio/landing/version"
