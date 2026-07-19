@@ -368,18 +368,49 @@ describe("AgentChat custom-html proposal cards", () => {
     await screen.findByTitle("Preview of your page after this change");
     fireEvent.click(screen.getByText("Confirm"));
 
-    // The full card (preview + Confirm/Dismiss) collapses to a one-line applied record.
+    // The full card (Confirm/Dismiss) collapses to a one-line applied record.
     await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
     expect(screen.getByText("Edit your page")).toBeTruthy();
     expect(screen.queryByTitle("Preview of your page after this change")).toBeNull();
     expect(screen.queryByText("Confirm")).toBeNull();
     expect(screen.queryByText("Dismiss")).toBeNull();
-    // The summary stays available behind "Review" and toggles back closed via "Hide".
-    expect(screen.queryByText("Edit the custom page.")).toBeNull();
+    // "Review" re-shows the exact preview snapshot the seller confirmed (kept loaded, not
+    // refetched — an applied edit's find-snippet no longer matches the page), and "Hide" puts
+    // it away again.
     fireEvent.click(screen.getByText("Review"));
-    expect(screen.getByText("Edit the custom page.")).toBeTruthy();
+    expect(screen.getByTitle("Preview of your page after this change")).toBeTruthy();
+    expect(fetchCustomHtmlProposalPreview).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByText("Hide"));
-    expect(screen.queryByText("Edit the custom page.")).toBeNull();
+    expect(screen.queryByTitle("Preview of your page after this change")).toBeNull();
+  });
+
+  it("refetches a dismissed page proposal's preview on Review when no snapshot is loaded", async () => {
+    // Hydrate a conversation whose custom-HTML proposal was already dismissed in a previous
+    // session — the card mounts compact, so no preview was ever fetched in this session.
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        { role: "user", content: "change my headline" },
+        {
+          role: "assistant",
+          content: "Here's my proposal.",
+          proposed_action: customHtmlAction,
+          action_status: "dismissed",
+        },
+      ],
+    });
+    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+
+    await waitFor(() => expect(screen.getByText("Dismissed")).toBeTruthy());
+    expect(fetchCustomHtmlProposalPreview).not.toHaveBeenCalled();
+    // A dismissed change never touched the page, so the server can still render exactly what the
+    // seller evaluated — Review fetches it lazily.
+    fireEvent.click(screen.getByText("Review"));
+    await screen.findByTitle("Preview of your page after this change");
+    expect(fetchCustomHtmlProposalPreview).toHaveBeenCalledTimes(1);
   });
 
   it("collapses a dismissed non-page proposal and reviews its field rows", async () => {

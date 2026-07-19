@@ -178,12 +178,28 @@ const useCustomHtmlProposalPreview = (action: ProposedAction, enabled: boolean):
   // fresh (but identical) action objects as the stream's events land, and each shouldn't re-POST.
   const actionRef = React.useRef(action);
   actionRef.current = action;
+  // Mirrors of the current state and previous enabled flag, so the effect below can tell a
+  // re-enable (dismissed card's "Review" opened again) apart from a genuine params change without
+  // adding them as dependencies.
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
+  const wasEnabledRef = React.useRef(enabled);
   const paramsKey = JSON.stringify(action.params);
   React.useEffect(() => {
+    const wasEnabled = wasEnabledRef.current;
+    wasEnabledRef.current = enabled;
     if (!enabled) {
-      setState({ status: "disabled" });
+      // Keep an already-rendered preview around rather than discarding it: once the seller acts on
+      // the card the hook is disabled, but "Review" on the collapsed card should show the exact
+      // preview they evaluated. Refetching wouldn't work — an applied edit's find-snippet no
+      // longer matches the page — so the loaded snapshot is the only faithful record.
+      setState((current) => (current.status === "loaded" ? current : { status: "disabled" }));
       return;
     }
+    // Re-enabling with the snapshot still loaded (a dismissed card's "Review" toggled open): the
+    // page never changed, so the snapshot is still exact — keep it instead of re-POSTing and
+    // risking a transient error wiping what the seller already saw.
+    if (!wasEnabled && stateRef.current.status === "loaded") return;
     let cancelled = false;
     setState({ status: "loading" });
     fetchCustomHtmlProposalPreview(actionRef.current)
@@ -248,16 +264,23 @@ const ProposedActionCard = ({
   onDismiss: () => void;
 }) => {
   const isHtmlProposal = isCustomHtmlProposal(action);
-  // Only pending cards fetch/render the preview: once acted on, it no longer reflects anything
-  // actionable (and an applied edit's find-snippet no longer matches).
-  const preview = useCustomHtmlProposalPreview(action, isHtmlProposal && !status);
+  // Whether the acted-on compact card is expanded to show what the proposal was. Only meaningful
+  // once `status` is set; a fresh proposal always shows its full review surface.
+  const [isReviewOpen, setIsReviewOpen] = React.useState(false);
+  // Pending cards always fetch/render the preview. Acted-on cards keep the already-loaded snapshot
+  // (see the hook) so "Review" re-shows exactly what the seller evaluated. When no snapshot exists
+  // (the card was hydrated as already-acted-on), a DISMISSED proposal fetches lazily once "Review"
+  // is expanded — a dismissed change never touched the page, so the server can still compute what
+  // the seller saw. An APPLIED edit's find-snippet no longer matches the (now changed) page, so it
+  // can't be refetched; that case falls back to the one-line summary below.
+  const preview = useCustomHtmlProposalPreview(
+    action,
+    isHtmlProposal && (!status || (status === "dismissed" && isReviewOpen)),
+  );
   // A page proposal is only confirmable once its preview has rendered — before that the seller
   // hasn't seen what they'd be applying, and a preview that failed (say, the page changed under
   // the proposal) means confirming would fail the same way. Dismiss stays available throughout.
   const confirmBlockedOnPreview = isHtmlProposal && !status && preview.status !== "loaded";
-  // Whether the acted-on compact card is expanded to show what the proposal was. Only meaningful
-  // once `status` is set; a fresh proposal always shows its full review surface.
-  const [isReviewOpen, setIsReviewOpen] = React.useState(false);
 
   const fieldRows =
     action.fields && action.fields.length > 0 ? (
@@ -276,9 +299,9 @@ const ProposedActionCard = ({
   if (status) {
     // Once the seller has acted on the proposal, the full card no longer earns its space in the
     // chat — collapse it to a one-line record of what happened (like the change cards in coding
-    // agents), with the details available behind "Review". Custom-HTML proposals show their
-    // one-line summary when reviewed: there is no preview to re-render after the fact, since an
-    // applied edit's find-snippet no longer matches the page.
+    // agents), with the details available behind "Review". Custom-HTML proposals re-show the
+    // preview snapshot the seller evaluated (kept loaded by the hook above); if it never loaded
+    // (say, the card was hydrated as already-acted-on), fall back to the one-line summary.
     return (
       <Card>
         <CardContent className="items-center justify-between gap-3">
@@ -294,7 +317,19 @@ const ProposedActionCard = ({
         </CardContent>
         {isReviewOpen ? (
           <CardContent className="flex-col items-stretch gap-2">
-            {isHtmlProposal ? <span className="break-words">{action.summary}</span> : fieldRows}
+            {isHtmlProposal ? (
+              preview.status !== "disabled" ? (
+                // The kept snapshot (or the lazy dismissed-card fetch, including its loading and
+                // error states) — the same rendered surface the seller originally evaluated.
+                <CustomHtmlProposalPreview state={preview} />
+              ) : (
+                // No preview to show — an applied edit hydrated as already-acted-on can't be
+                // re-rendered (its find-snippet no longer matches the changed page).
+                <span className="break-words">{action.summary}</span>
+              )
+            ) : (
+              fieldRows
+            )}
           </CardContent>
         ) : null}
       </Card>
