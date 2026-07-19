@@ -13,7 +13,12 @@ export type PurchasePaymentMethod =
   | AnyPaymentMethodResult
   | { type: "not-applicable" }
   // Client-confirm cards live in the ConfirmationToken sent to #prepare.
-  | { type: "payment-element-client-confirm"; confirmationTokenId: string; cardCountry: string | null };
+  | {
+      type: "payment-element-client-confirm";
+      confirmationTokenId: string;
+      cardCountry: string | null;
+      mountCurrency: string;
+    };
 
 export type SuccessfulLineItemResult = {
   success: true;
@@ -303,6 +308,9 @@ export const createPurchasesRequestData = (
 
   const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod, payload.usedStripePaymentElement);
   if (paymentDetailsSource) data.payment_details_source = paymentDetailsSource;
+  if (payload.paymentMethod.type === "payment-element-client-confirm") {
+    data.payment_element_mount_currency = payload.paymentMethod.mountCurrency;
+  }
 
   if (
     payload.paymentMethod.type !== "saved" &&

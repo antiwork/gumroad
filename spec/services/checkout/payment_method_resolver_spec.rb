@@ -80,10 +80,34 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
         end
 
-        it "keeps them out of live mode — this is a test-mode-only QA surface" do
+        it "keeps them out of live mode without the per-method launch flags" do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
 
           expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
+        end
+
+        it "launches iDEAL in live mode when its per-method launch flag is on, without pulling Bancontact along" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+
+          methods = resolve(cart_product_currency: "eur").payment_method_types
+          expect(methods).to include("ideal")
+          expect(methods).not_to include("bancontact")
+        end
+
+        it "keeps a launched method off carts not priced in its forced currency, even in live mode" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+
+          expect(resolve(cart_product_currency: "usd").payment_method_types).not_to include("ideal")
+        end
+
+        it "still requires the buyer-currency seller flags in live mode with a launch flag on" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          Feature.deactivate_user(:buyer_currency_charging, seller)
+
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal")
         end
 
         it "keeps them out when the seller opted out of buyer-local currency" do

@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 class CreatorAnalytics::Web
-  def initialize(user:, dates:, products: nil)
+  def initialize(user:, dates:, products: nil, interval: "day")
     @user = user
     @dates = dates
     @_products = products
+    # Validated by CreatorAnalytics::Sales/ProductPageViews, which also bound
+    # hourly requests to CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS.
+    @interval = interval
   end
 
   def by_date
@@ -101,7 +104,7 @@ class CreatorAnalytics::Web
   private
     def result_metadata
       metadata = {
-        dates_and_months: D3.date_month_domain(@dates),
+        dates_and_months: @interval == "hour" ? D3.hour_month_domain(hourly_buckets.values) : D3.date_month_domain(@dates),
         start_date: D3.formatted_date(@dates.first),
         end_date: D3.formatted_date(@dates.last),
       }
@@ -111,11 +114,11 @@ class CreatorAnalytics::Web
     end
 
     def product_page_views
-      CreatorAnalytics::ProductPageViews.new(user: @user, products:, dates: @dates)
+      CreatorAnalytics::ProductPageViews.new(user: @user, products:, dates: @dates, interval: @interval)
     end
 
     def sales
-      CreatorAnalytics::Sales.new(user: @user, products:, dates: @dates)
+      CreatorAnalytics::Sales.new(user: @user, products:, dates: @dates, interval: @interval)
     end
 
     def products
@@ -126,8 +129,35 @@ class CreatorAnalytics::Web
       @_product_id_to_permalink ||= products.to_h { |product| [product.id, product.unique_permalink] }
     end
 
+    # The bucket keys the analytics services return for this interval, in order:
+    # day keys ("2026-07-16") or seller-local hour keys ("2026-07-16T13:00").
     def dates_strings
-      @_dates_strings ||= @dates.map(&:to_s)
+      @_dates_strings ||= @interval == "hour" ? hourly_buckets.keys : @dates.map(&:to_s)
+    end
+
+    # Every wall-clock hour of the requested dates in the seller's timezone, as
+    # { formatted key => first instant of that hour }. Walking instants (not labels)
+    # keeps DST straight: a spring-forward day yields 23 keys, and on a fall-back
+    # day the repeated hour keeps one key (the services merge its two Elasticsearch
+    # buckets into one), so keys line up one-to-one with returned buckets.
+    def hourly_buckets
+      @_hourly_buckets ||= begin
+        timezone = ActiveSupport::TimeZone[@user.timezone]
+        time = timezone.local(@dates.first.year, @dates.first.month, @dates.first.day)
+        # Resolve the end boundary from the day after the last date rather than
+        # adding 1.day to the last date's midnight: in zones where DST starts at
+        # midnight (e.g. Santiago), timezone.local shifts a nonexistent midnight
+        # forward to 01:00, and "+ 1.day" from there would leak an extra next-day
+        # hour into the domain.
+        day_after_last = @dates.last + 1
+        end_time = timezone.local(day_after_last.year, day_after_last.month, day_after_last.day)
+        buckets = {}
+        while time < end_time
+          buckets[time.strftime("%Y-%m-%dT%H:%M")] ||= time
+          time += 1.hour
+        end
+        buckets
+      end
     end
 
     def referrer_domain_to_name(referrer_domain)
