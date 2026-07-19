@@ -422,6 +422,14 @@ class Purchase
       logger.info("Refunding purchase: #{id} completed with ID: #{charge_refund.id}, Flow of Funds: #{charge_refund.flow_of_funds.to_h}")
 
       ActiveRecord::Base.transaction do
+        # Same purchase-first lock order as refund_purchase!: lock the purchase row
+        # before inserting the refund, so this path cannot hold an uncommitted
+        # refunds insert while a failed-refund reversal holds the purchase row and
+        # scans purchase.refunds under FOR UPDATE (an InnoDB deadlock cycle of the
+        # same class as the one fixed for combined charges — see #5918). reload
+        # first because reading a json_data-backed attribute on a row whose
+        # json_data is NULL dirties the record, and lock! raises on dirty records.
+        reload.lock!
         refund = Refund.new(total_transaction_cents: gumroad_tax_refundable_cents,
                             amount_cents: 0,
                             creator_tax_cents: 0,
