@@ -123,6 +123,34 @@ export const fetchLatestAgentConversation = async (): Promise<Conversation | nul
   return json.conversation;
 };
 
+// What the server knows about one streamed turn, identified by the client-generated id sent with
+// the stream request. Used to recover a turn whose SSE connection broke: `persisted` carries the
+// stored assistant message and the conversation it landed in; `in_progress` means the server is
+// still generating it (keep polling); `failed` means it errored and will never persist;
+// `unknown` means there's no record and no liveness marker (waiting longer won't help).
+export type AgentTurnStatus =
+  | { status: "persisted"; conversation_id: string; message: ConversationMessage }
+  | { status: "in_progress" | "failed" | "unknown" };
+
+type AgentTurnStatusResponse =
+  | { success: true; status: "persisted"; conversation_id: string; message: ConversationMessage }
+  | { success: true; status: "in_progress" | "failed" | "unknown" }
+  | { success: false; error: string };
+
+export const fetchAgentTurnStatus = async (clientTurnId: string): Promise<AgentTurnStatus> => {
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: Routes.internal_agent_turn_status_path(clientTurnId),
+  });
+  if (!response.ok) throw new ResponseError();
+  const json = typia.assert<AgentTurnStatusResponse>(await response.json());
+  if (!json.success) throw new ResponseError(json.error);
+  return json.status === "persisted"
+    ? { status: json.status, conversation_id: json.conversation_id, message: json.message }
+    : { status: json.status };
+};
+
 // Events the streaming endpoint emits, surfaced to the caller as they arrive so the UI can render a
 // reply token-by-token and then show follow-up suggestions. `token` carries a chunk of reply text;
 // `objects` / `proposedAction` mirror the buffered response; `suggestions` is the list of "what
@@ -162,20 +190,36 @@ type DoneData = {
   conversation_id?: string;
 };
 
+// Thrown when the stream dies before its terminal `done` frame — the connection dropped or a
+// frame arrived mangled — as opposed to the server explicitly reporting a failure via an `error`
+// event. The distinction matters to the caller: when the transport breaks, the server usually
+// never notices and finishes the turn anyway (its remaining writes land in dead socket buffers),
+// so the complete reply exists in the stored conversation and the caller can recover it from
+// there instead of leaving the partially-streamed text on screen as if it were the whole reply.
+export class AgentStreamInterruptedError extends ResponseError {}
+
 // Stream one conversation turn over Server-Sent Events. Calls the handlers as events arrive and
 // resolves with the fully-assembled turn once the `done` event lands. Falls back to throwing a
 // ResponseError (so the caller can show the same alert as the non-streaming path) on an `error`
-// event or a transport failure.
+// event, or an AgentStreamInterruptedError when the stream breaks without one.
+// `clientTurnId` (a caller-generated UUID) tags the turn server-side so that, after an
+// interruption, the caller can recover this exact turn via fetchAgentTurnStatus instead of
+// guessing from the seller's latest conversation.
 export const streamAgentMessage = async (
   messages: ChatMessage[],
   handlers: AgentStreamHandlers = {},
   conversationId?: string | null,
+  clientTurnId?: string | null,
 ): Promise<StreamResult> => {
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.internal_agent_messages_stream_path(),
-    data: { messages, ...(conversationId ? { conversation_id: conversationId } : {}) },
+    data: {
+      messages,
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(clientTurnId ? { client_turn_id: clientTurnId } : {}),
+    },
   });
 
   // request() only rejects 5xx/429, so a 4xx or an HTML response from auth/CSRF/authorization
@@ -256,24 +300,37 @@ export const streamAgentMessage = async (
     }
   };
 
-  for (;;) {
-    const { value, done: streamDone } = await reader.read();
-    if (streamDone) break;
-    buffer += decoder.decode(value, { stream: true });
-    // Frames are separated by a blank line. Process every complete frame, keep the remainder.
-    let separator = buffer.indexOf("\n\n");
-    while (separator !== -1) {
-      const frame = buffer.slice(0, separator);
-      buffer = buffer.slice(separator + 2);
-      if (frame.trim().length > 0) done = handleFrame(frame) ?? done;
-      separator = buffer.indexOf("\n\n");
+  try {
+    for (;;) {
+      const { value, done: streamDone } = await reader.read();
+      if (streamDone) break;
+      buffer += decoder.decode(value, { stream: true });
+      // Frames are separated by a blank line. Process every complete frame, keep the remainder.
+      let separator = buffer.indexOf("\n\n");
+      while (separator !== -1) {
+        const frame = buffer.slice(0, separator);
+        buffer = buffer.slice(separator + 2);
+        if (frame.trim().length > 0) done = handleFrame(frame) ?? done;
+        separator = buffer.indexOf("\n\n");
+      }
     }
+    if (buffer.trim().length > 0) done = handleFrame(buffer) ?? done;
+  } catch (e) {
+    // An unclean close AFTER the terminal `done` frame (a reset while draining trailing bytes, a
+    // mangled keepalive fragment) doesn't invalidate the turn — the assembled result is already in
+    // hand, so return it rather than discarding a successful turn as an interruption.
+    if (done) return done;
+    // An `error` event thrown by handleFrame is the server's own verdict on the turn — pass it
+    // through untouched. Anything else (the read rejecting on a dropped connection, unparseable
+    // JSON, a frame failing validation) means the transport broke mid-turn, which the caller must
+    // be able to tell apart because the turn itself likely completed server-side.
+    if (e instanceof ResponseError) throw e;
+    throw new AgentStreamInterruptedError();
   }
-  if (buffer.trim().length > 0) done = handleFrame(buffer) ?? done;
 
   // The controller always ends a successful turn with a `done` event (and surfaces failures as an
   // `error` event, which throws above). If the stream ended without `done`, the connection was
-  // truncated mid-turn — surface that as an error instead of accepting a partial/blank reply.
-  if (!done) throw new ResponseError();
+  // truncated mid-turn — surface that as an interruption instead of accepting a partial/blank reply.
+  if (!done) throw new AgentStreamInterruptedError();
   return done;
 };

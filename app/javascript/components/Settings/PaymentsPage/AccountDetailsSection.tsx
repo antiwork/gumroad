@@ -892,11 +892,12 @@ const AccountDetailsSection = ({
             <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               <Fieldset state={errorFieldNames.has("first_name_kanji") ? "danger" : undefined}>
                 <FieldsetTitle>
-                  <Label htmlFor={`${uid}-creator-first-name-kanji`}>First name (Kanji)</Label>
+                  <Label htmlFor={`${uid}-creator-first-name-kanji`}>First name / 名 (Kanji)</Label>
                 </FieldsetTitle>
                 <Input
                   id={`${uid}-creator-first-name-kanji`}
                   type="text"
+                  placeholder="太郎"
                   value={complianceInfo.first_name_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("first_name_kanji")}
@@ -906,11 +907,12 @@ const AccountDetailsSection = ({
               </Fieldset>
               <Fieldset state={errorFieldNames.has("last_name_kanji") ? "danger" : undefined}>
                 <FieldsetTitle>
-                  <Label htmlFor={`${uid}-creator-last-name-kanji`}>Last name (Kanji)</Label>
+                  <Label htmlFor={`${uid}-creator-last-name-kanji`}>Last name / 姓 (Kanji)</Label>
                 </FieldsetTitle>
                 <Input
                   id={`${uid}-creator-last-name-kanji`}
                   type="text"
+                  placeholder="山田"
                   value={complianceInfo.last_name_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("last_name_kanji")}
@@ -922,12 +924,12 @@ const AccountDetailsSection = ({
             <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               <Fieldset state={errorFieldNames.has("first_name_kana") ? "danger" : undefined}>
                 <FieldsetTitle>
-                  <Label htmlFor={`${uid}-creator-first-name-kana`}>First name (Kana)</Label>
+                  <Label htmlFor={`${uid}-creator-first-name-kana`}>First name / メイ (Kana)</Label>
                 </FieldsetTitle>
                 <Input
                   id={`${uid}-creator-first-name-kana`}
                   type="text"
-                  placeholder="カタカナ"
+                  placeholder="タロウ"
                   value={complianceInfo.first_name_kana || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("first_name_kana")}
@@ -937,12 +939,12 @@ const AccountDetailsSection = ({
               </Fieldset>
               <Fieldset state={errorFieldNames.has("last_name_kana") ? "danger" : undefined}>
                 <FieldsetTitle>
-                  <Label htmlFor={`${uid}-creator-last-name-kana`}>Last name (Kana)</Label>
+                  <Label htmlFor={`${uid}-creator-last-name-kana`}>Last name / セイ (Kana)</Label>
                 </FieldsetTitle>
                 <Input
                   id={`${uid}-creator-last-name-kana`}
                   type="text"
-                  placeholder="カタカナ"
+                  placeholder="ヤマダ"
                   value={complianceInfo.last_name_kana || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("last_name_kana")}

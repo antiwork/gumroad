@@ -691,6 +691,7 @@ describe Checkout::StripePaymentPresenter do
           currency: "eur",
           presentment_amount_cents: 1500,
           payment_method_types: %w[card link ideal bancontact],
+          disable_wallets: true,
         )
       )
     ensure
@@ -723,7 +724,7 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
-    it "keeps today's USD element behavior for the same EUR-priced cart in live mode" do
+    it "keeps today's USD element behavior for the same EUR-priced cart in live mode when no local method is launched" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
@@ -732,6 +733,52 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     ensure
       deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "mounts the EUR element with only the launched local method in live mode when its launch flag is on" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(
+        payment_element_client_confirm_props(
+          currency: "eur",
+          presentment_amount_cents: 1500,
+          payment_method_types: %w[card link ideal],
+          disable_wallets: true,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_ideal, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps the canonical USD element for a direct-charge seller without an iDEAL capability snapshot" do
+      seller = create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 1500)
+      connect_account = create(:merchant_account_stripe_connect, user: seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      allow(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(
+        payment_element_client_confirm_props(
+          payment_method_types: ["card"],
+          stripe_link_enabled: false,
+          stripe_connect_account_id: connect_account.charge_processor_merchant_id,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_ideal, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
     end
 
     it "selects the buyer-currency presentment Payment Element for a non-US buyer of a USD-priced product with the flags on" do
@@ -795,6 +842,44 @@ describe Checkout::StripePaymentPresenter do
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
         .to eq(payment_element_client_confirm_props)
+    end
+
+    it "falls back to CardElement for a recurring EUR-priced presentment candidate instead of crashing" do
+      # A recurring cart is rejected by the payment method resolver (client-confirm only
+      # covers one-time purchases), so its resolution carries a nil method list. The
+      # method-forced shape check must consult the resolver's eligibility verdict before
+      # scanning the method list — otherwise this cart raises instead of returning the
+      # buyer_currency_presentment_unsupported fallback.
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:membership_product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      add_products = [
+        checkout_product_for(
+          product,
+          # Membership products keep their price on tiers, so the checkout item's price must
+          # be passed explicitly or the cart totals zero and trips the earlier not_charged
+          # fallback before reaching the presentment gate this example is about.
+          price: 1500,
+          recurrence: "monthly",
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::EUR,
+          }
+        )
+      ]
+
+      expect(stripe_payment_props(add_products:)).to eq(
+        integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "buyer_currency_presentment_unsupported",
+        disable_wallets: true,
+        request_apple_pay_merchant_tokens: false,
+        elements_options: nil,
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
     end
 
     it "keeps the CardElement fallback for an EUR-priced product when the client-confirm flag is off" do

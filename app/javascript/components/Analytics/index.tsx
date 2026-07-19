@@ -1,4 +1,4 @@
-import { lightFormat } from "date-fns";
+import { differenceInDays, lightFormat, startOfDay } from "date-fns";
 import { pickBy } from "lodash-es";
 import * as React from "react";
 
@@ -29,6 +29,8 @@ import { Select } from "$app/components/ui/Select";
 import placeholder from "$assets/images/placeholders/sales.png";
 
 const MAX_DATE_RANGE_DAYS = 366;
+// Must match CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS on the backend.
+const MAX_HOURLY_DATE_RANGE_DAYS = 7;
 
 export type Product = {
   name: string;
@@ -109,8 +111,17 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
-  const [aggregateBy, setAggregateBy] = React.useState<"daily" | "monthly">("daily");
+  const [aggregateBy, setAggregateBy] = React.useState<"hourly" | "daily" | "monthly">("daily");
   const dateRange = useAnalyticsDateRange({ maxRangeDays: MAX_DATE_RANGE_DAYS });
+  // Hourly buckets are only available for short ranges (the backend rejects wider
+  // ones). Compare calendar days, not exact times: the picked dates carry a
+  // time-of-day, but only yyyy-MM-dd strings are sent to the backend.
+  const rangeDays = differenceInDays(startOfDay(dateRange.to), startOfDay(dateRange.from));
+  const canAggregateHourly = rangeDays >= 0 && rangeDays <= MAX_HOURLY_DATE_RANGE_DAYS;
+  React.useEffect(() => {
+    if (aggregateBy === "hourly" && !canAggregateHourly) setAggregateBy("daily");
+  }, [aggregateBy, canAggregateHourly]);
+  const hourly = aggregateBy === "hourly" && canAggregateHourly;
   const [data, setData] = React.useState<{
     byReferral: AnalyticsDataByReferral;
     byState: AnalyticsDataByState;
@@ -129,7 +140,11 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
         if (activeRequests.current) activeRequests.current.forEach((request) => request.abort());
         setData(null);
         const byStateRequest = fetchAnalyticsDataByState({ startTime, endTime });
-        const byReferralRequest = fetchAnalyticsDataByReferral({ startTime, endTime });
+        const byReferralRequest = fetchAnalyticsDataByReferral({
+          startTime,
+          endTime,
+          interval: hourly ? "hour" : undefined,
+        });
         activeRequests.current = [byStateRequest.abort, byReferralRequest.abort];
         const [byState, byReferral] = await Promise.all([byStateRequest.response, byReferralRequest.response]);
         setData({ byState, byReferral });
@@ -140,7 +155,7 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
       }
     };
     void loadData();
-  }, [startTime, endTime]);
+  }, [startTime, endTime, hourly]);
 
   const selectedProducts = products.filter((product) => product.selected).map((product) => product.unique_permalink);
 
@@ -157,9 +172,15 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
           <>
             <Select
               aria-label="Aggregate by"
-              onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
+              value={aggregateBy}
+              onChange={(e) =>
+                setAggregateBy(
+                  e.target.value === "hourly" ? "hourly" : e.target.value === "monthly" ? "monthly" : "daily",
+                )
+              }
               wrapperClassName="w-auto"
             >
+              {canAggregateHourly ? <option value="hourly">Hourly</option> : null}
               <option value="daily">Daily</option>
               <option value="monthly">Monthly</option>
             </Select>

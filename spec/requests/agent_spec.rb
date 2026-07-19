@@ -33,12 +33,17 @@ describe "Agent tab", type: :system, js: true do
   # reply as a single token, then the objects / proposed action / suggestions, mirroring what the
   # real service streams, and returns the same hash shape the controller's `done` event uses.
   def stub_agent_turn(reply:, proposed_action: nil, objects: [], suggestions: [])
-    allow_any_instance_of(Ai::StoreAgentService).to receive(:respond_streaming) do |_service, **_kwargs, &emit|
+    allow_any_instance_of(Ai::StoreAgentService).to receive(:respond_streaming) do |_service, **kwargs, &emit|
       emit.call(:token, { text: reply })
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: }) if proposed_action
+      turn = { reply:, proposed_action:, objects:, suggestions: }
+      # The real service persists the turn via on_reply_complete the moment the reply is final,
+      # before emitting suggestions — mirror that here so the controller has a conversation id
+      # to put in the terminal `done` frame, exactly like production.
+      kwargs[:on_reply_complete]&.call(turn)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
-      { reply:, proposed_action:, objects:, suggestions: }
+      turn
     end
   end
 

@@ -551,7 +551,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         # A capability snapshot must exist for the account to offer anything beyond card
         # (an uncached connect account resolves card-only while the refresh worker runs).
         connect_account.update!(stripe_capabilities_snapshot: {
-                                  "capabilities" => { "link_payments" => "active" },
+                                  "capabilities" => { "link_payments" => "active", "ideal_payments" => "active" },
                                   "refreshed_at" => Time.current.iso8601,
                                 })
         Feature.activate_user(:buyer_local_currency, seller)
@@ -734,6 +734,38 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(create_args[:stripe_fx_quote_id]).to be_nil
           expect(responses["unique-id-0"][:success]).to eq(true)
           expect(order.charges.last.charge_presentment).to be_nil
+        end
+
+        it "keeps the canonical USD intent when the direct-charge account cannot offer the launched local method" do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "link_payments" => "active" },
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+
+          order, params = build_order
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_card_without_ideal")
+
+          expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment).to be_nil
+        ensure
+          Feature.deactivate_user(:checkout_local_method_ideal, seller)
+        end
+
+        it "fails closed after the local-method flag rolls back from an EUR-mounted card token" do
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::EUR
+          allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+          Feature.deactivate_user(:checkout_local_method_ideal, seller)
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_card_after_rollback")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
         end
       end
 
