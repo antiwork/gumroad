@@ -19,6 +19,7 @@ vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }
 
 const {
   AgentStreamInterruptedError,
+  executeAgentAction,
   fetchAgentTurnStatus,
   fetchCustomHtmlProposalPreview,
   fetchLatestAgentConversation,
@@ -354,6 +355,53 @@ describe("AgentChat custom-html proposal cards", () => {
     // An invalid proposal would fail on apply too — Confirm stays off; Dismiss remains the way out.
     expect(screen.getByText("Confirm").closest("button")?.disabled).toBe(true);
     expect(screen.getByText("Dismiss").closest("button")?.disabled).toBe(false);
+  });
+
+  it("collapses an applied proposal into a compact card with the details behind Review", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+    executeAgentAction.mockResolvedValue({ message: "Done.", object: null });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    // The full card (preview + Confirm/Dismiss) collapses to a one-line applied record.
+    await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+    expect(screen.getByText("Edit your page")).toBeTruthy();
+    expect(screen.queryByTitle("Preview of your page after this change")).toBeNull();
+    expect(screen.queryByText("Confirm")).toBeNull();
+    expect(screen.queryByText("Dismiss")).toBeNull();
+    // The summary stays available behind "Review" and toggles back closed via "Hide".
+    expect(screen.queryByText("Edit the custom page.")).toBeNull();
+    fireEvent.click(screen.getByText("Review"));
+    expect(screen.getByText("Edit the custom page.")).toBeTruthy();
+    fireEvent.click(screen.getByText("Hide"));
+    expect(screen.queryByText("Edit the custom page.")).toBeNull();
+  });
+
+  it("collapses a dismissed non-page proposal and reviews its field rows", async () => {
+    streamTurnWithAction({
+      ...customHtmlAction,
+      params: { endpoint: "update_product", path_params: { id: "abc" }, params: { name: "New name" } },
+      title: "Rename your product",
+      fields: [{ label: "Name", value: "New name" }],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("rename my product");
+
+    await waitFor(() => expect(screen.getByText("Dismiss")).toBeTruthy());
+    fireEvent.click(screen.getByText("Dismiss"));
+
+    await waitFor(() => expect(screen.getByText("Dismissed")).toBeTruthy());
+    expect(screen.queryByText("Confirm")).toBeNull();
+    // The field rows are hidden in the compact card but come back under Review.
+    expect(screen.queryByText("New name")).toBeNull();
+    fireEvent.click(screen.getByText("Review"));
+    expect(screen.getByText("New name")).toBeTruthy();
   });
 
   it("leaves non-page proposals on the plain field rows without fetching a preview", async () => {

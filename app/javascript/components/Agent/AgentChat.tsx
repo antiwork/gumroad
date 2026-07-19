@@ -255,6 +255,9 @@ const ProposedActionCard = ({
   // hasn't seen what they'd be applying, and a preview that failed (say, the page changed under
   // the proposal) means confirming would fail the same way. Dismiss stays available throughout.
   const confirmBlockedOnPreview = isHtmlProposal && !status && preview.status !== "loaded";
+  // Whether the acted-on compact card is expanded to show what the proposal was. Only meaningful
+  // once `status` is set; a fresh proposal always shows its full review surface.
+  const [isReviewOpen, setIsReviewOpen] = React.useState(false);
 
   const fieldRows =
     action.fields && action.fields.length > 0 ? (
@@ -270,6 +273,34 @@ const ProposedActionCard = ({
       <span className="break-words">{action.summary}</span>
     );
 
+  if (status) {
+    // Once the seller has acted on the proposal, the full card no longer earns its space in the
+    // chat — collapse it to a one-line record of what happened (like the change cards in coding
+    // agents), with the details available behind "Review". Custom-HTML proposals show their
+    // one-line summary when reviewed: there is no preview to re-render after the fact, since an
+    // applied edit's find-snippet no longer matches the page.
+    return (
+      <Card>
+        <CardContent className="items-center justify-between gap-3">
+          <div className="min-w-0">
+            <strong className="block break-words">{action.title ?? "Proposed change"}</strong>
+            <span role="status" className={status === "applied" ? "text-sm text-green" : "text-sm text-muted"}>
+              {status === "applied" ? "Applied" : "Dismissed"}
+            </span>
+          </div>
+          <Button className="shrink-0" aria-expanded={isReviewOpen} onClick={() => setIsReviewOpen((open) => !open)}>
+            {isReviewOpen ? "Hide" : "Review"}
+          </Button>
+        </CardContent>
+        {isReviewOpen ? (
+          <CardContent className="flex-col items-stretch gap-2">
+            {isHtmlProposal ? <span className="break-words">{action.summary}</span> : fieldRows}
+          </CardContent>
+        ) : null}
+      </Card>
+    );
+  }
+
   return (
     // Same solid card treatment as the object cards (Card = rounded border-border + a divider), with the
     // actions in a divided footer — secondary on the left, primary (Confirm) on the right.
@@ -279,37 +310,19 @@ const ProposedActionCard = ({
         {isHtmlProposal ? (
           // A page edit's fields are literal find/replace HTML — a wall of markup that reads as a
           // glitch, not a preview. The rendered result IS the review surface, so it replaces the
-          // raw rows entirely. Once the card has been acted on there is no preview to show
-          // (an applied edit's find-snippet no longer matches), so fall back to the one-line
-          // summary rather than an empty card.
-          status ? (
-            <span className="break-words">{action.summary}</span>
-          ) : (
-            <CustomHtmlProposalPreview state={preview} />
-          )
+          // raw rows entirely.
+          <CustomHtmlProposalPreview state={preview} />
         ) : (
           fieldRows
         )}
       </CardContent>
       <CardContent className="justify-end gap-2">
-        {status === "applied" ? (
-          <span role="status" className="mr-auto text-green">
-            Applied
-          </span>
-        ) : status === "dismissed" ? (
-          <span role="status" className="mr-auto text-muted">
-            Dismissed
-          </span>
-        ) : (
-          <>
-            <Button disabled={isPending} onClick={onDismiss}>
-              Dismiss
-            </Button>
-            <Button color="accent" disabled={isPending || confirmBlockedOnPreview} onClick={onConfirm}>
-              {isApplying ? "Applying…" : "Confirm"}
-            </Button>
-          </>
-        )}
+        <Button disabled={isPending} onClick={onDismiss}>
+          Dismiss
+        </Button>
+        <Button color="accent" disabled={isPending || confirmBlockedOnPreview} onClick={onConfirm}>
+          {isApplying ? "Applying…" : "Confirm"}
+        </Button>
       </CardContent>
     </Card>
   );
