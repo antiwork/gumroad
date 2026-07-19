@@ -325,7 +325,7 @@ class Order::PreparePaymentIntentService
       if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?
         Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       else
-        element_mount_forced_currency.present? || forced_currency_element_mount_currency.present?
+        element_mount_forced_currency.present? || client_reported_mount_currency.present?
       end
     end
 
@@ -334,7 +334,7 @@ class Order::PreparePaymentIntentService
     # server-authoritative launch and capability check. If a seller rolls a local method back
     # after an EUR Element minted a card/Link ConfirmationToken, the current check returns nil;
     # this shape check still prevents us from creating a USD intent that Stripe will reject.
-    def forced_currency_element_mount_currency
+    def client_reported_mount_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       return nil unless purchases_to_charge.one?
 
