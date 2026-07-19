@@ -429,6 +429,11 @@ class Purchase
         # same class as the one fixed for combined charges — see #5918). reload
         # first because reading a json_data-backed attribute on a row whose
         # json_data is NULL dirties the record, and lock! raises on dirty records.
+        # Capture the subscription BEFORE reloading: reload clears the association
+        # cache, and callers (e.g. Subscription#charge! right after a VAT refund)
+        # may hold the same in-memory subscription instance and expect to see the
+        # VAT ID we store on it below.
+        subscription_to_update = subscription
         reload.lock!
         refund = Refund.new(total_transaction_cents: gumroad_tax_refundable_cents,
                             amount_cents: 0,
@@ -451,8 +456,9 @@ class Purchase
         save!
         Credit.create_for_vat_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
 
-        # Store VAT ID on subscription so future recurring charges are automatically VAT-exempt
-        subscription&.update_business_vat_id!(business_vat_id) if business_vat_id.present?
+        # Store VAT ID on subscription so future recurring charges are automatically VAT-exempt.
+        # Use the pre-reload instance: callers may hold it and read business_vat_id in memory.
+        subscription_to_update&.update_business_vat_id!(business_vat_id) if business_vat_id.present?
       end
       true
     rescue ChargeProcessorAlreadyRefundedError => e
