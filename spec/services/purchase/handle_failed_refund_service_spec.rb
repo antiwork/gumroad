@@ -442,13 +442,17 @@ describe Purchase::HandleFailedRefundService do
         described_class.new(refund:).perform
         failed_refund_exception = refund.reload.failed_refund_exception
 
-        expect do
-          NotifyFailedRefundExceptionJob.new.perform(failed_refund_exception.id)
-        end.to change { ActionMailer::Base.deliveries.count }.by(1)
+        # Alerts are Sentry-only (no email) as of 2026-07-19 — assert on the
+        # reported message instead of a delivered mail body.
+        reported_message = nil
+        expect(ErrorNotifier).to receive(:notify) do |message, **|
+          reported_message = message
+        end
 
-        body = ActionMailer::Base.deliveries.last.body.encoded
-        expect(body).to include("also given back to the seller")
-        expect(body).not_to include("NOT reversed")
+        NotifyFailedRefundExceptionJob.new.perform(failed_refund_exception.id)
+
+        expect(reported_message).to include("also given back to the seller")
+        expect(reported_message).not_to include("NOT reversed")
       end
     end
 

@@ -68,7 +68,8 @@ describe PostToPingEndpointsWorker, :vcr do
       product_name: link.name,
       permalink: "lic",
       product_permalink: link.long_url,
-      license_key: purchase.license.serial
+      license_key: purchase.license.serial,
+      is_multiseat_license: false
     )
     expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end

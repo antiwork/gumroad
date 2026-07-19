@@ -88,6 +88,12 @@ class ContentModeration::ModerateRecordService
     ai_results = run_ai_strategies(content)
     flagged = ai_results.select { |r| r.status == "flagged" }
 
+    # Spam flags that didn't reproduce when PromptStrategy resampled them.
+    # They don't block the publish, but we still leave a note so the flag
+    # rate and false-positive rate can be measured against blocked publishes.
+    audit_reasons = ai_results.flat_map { |r| r.respond_to?(:audit_reasoning) ? Array(r.audit_reasoning) : [] }
+    leave_admin_comment(audit_reasons, blocked: false) if audit_reasons.any?
+
     if flagged.any?
       reasons = flagged.flat_map(&:reasoning)
       leave_admin_comment(reasons)
@@ -119,7 +125,10 @@ class ContentModeration::ModerateRecordService
     def run_ai_strategies(content)
       strategies = [
         ContentModeration::Strategies::ClassifierStrategy.new(text: content.text, image_urls: content.image_urls),
-        ContentModeration::Strategies::PromptStrategy.new(text: content.text, image_urls: content.image_urls),
+        # `corroborate_spam_flags` makes a spam flag block only when it
+        # reproduces on resampling; a lone flag is returned as audit_reasoning
+        # and recorded as a non-blocking note instead (see `check` above).
+        ContentModeration::Strategies::PromptStrategy.new(text: content.text, image_urls: content.image_urls, corroborate_spam_flags: true),
       ]
 
       threads = strategies.map do |strategy|
@@ -133,7 +142,10 @@ class ContentModeration::ModerateRecordService
       threads.map(&:value)
     end
 
-    def leave_admin_comment(reasons)
+    # `blocked: false` records a flag that did not stop the publish (e.g. a
+    # spam flag that failed corroboration) so admins can still review it and
+    # so downgraded flags stay countable against blocked ones.
+    def leave_admin_comment(reasons, blocked: true)
       return if user.blank?
 
       record_label = case entity_type
@@ -141,7 +153,8 @@ class ContentModeration::ModerateRecordService
                      when :post then "Post ##{record.id} (#{record.name})"
       end
 
-      content = "Content moderation blocked publish of #{record_label}: #{reasons.join("; ")}"
+      action = blocked ? "blocked publish of" : "flagged but did not block"
+      content = "Content moderation #{action} #{record_label}: #{reasons.join("; ")}"
       # Created via a background job, not inline: this check runs inside the
       # blocked record's save transaction, and the failed save's rollback
       # would erase a synchronously created comment. The Sidekiq push happens

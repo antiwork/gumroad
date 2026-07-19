@@ -103,10 +103,14 @@ class CreatorAnalytics::Web
 
   private
     def result_metadata
+      # "Today" must be evaluated in the seller's time zone, not the server's: the
+      # analytics day buckets follow the seller's configured time zone, and the frontend
+      # keys behavior (like the projected end-of-day overlay) off the "Today" label.
+      today_in_time_zone = Time.current.in_time_zone(@user.timezone).to_date
       metadata = {
         dates_and_months: @interval == "hour" ? D3.hour_month_domain(hourly_buckets.values) : D3.date_month_domain(@dates),
-        start_date: D3.formatted_date(@dates.first),
-        end_date: D3.formatted_date(@dates.last),
+        start_date: D3.formatted_date(@dates.first, today_date: today_in_time_zone),
+        end_date: D3.formatted_date(@dates.last, today_date: today_in_time_zone),
       }
       first_sale_created_at = @user.first_sale_created_at_for_analytics
       metadata[:first_sale_date] = D3.formatted_date_with_timezone(first_sale_created_at, @user.timezone) if first_sale_created_at

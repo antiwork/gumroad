@@ -1211,7 +1211,9 @@ export const ContentTab = () => {
 
   const licenseInfo = {
     licenseKey: "6F0E4C97-B72A4E69-A11BF6C4-AF6517E7",
-    isMultiSeatLicense: product.native_type === "membership" ? product.is_multiseat_license : null,
+    // Seat-based licensing applies wherever a purchase quantity makes sense. Calls schedule
+    // one slot per purchase, so a seat count would conflict with the booking flow.
+    isMultiSeatLicense: product.native_type === "call" ? null : product.is_multiseat_license,
     seats: product.is_multiseat_license ? 5 : null,
     onIsMultiSeatLicenseChange: (value: boolean) => updateProduct({ is_multiseat_license: value }),
     productId: id,

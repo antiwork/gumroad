@@ -2,14 +2,18 @@
 
 # Safety net for the failed-refund exception queue. Runs every minute and:
 #
-# 1. Re-enqueues notifications whose enqueue was lost in the narrow window between
+# 1. Re-enqueues Sentry reports whose enqueue was lost in the narrow window between
 #    the exception row committing and perform_async running (the durable row is the
 #    source of truth, so a process exit there cannot permanently lose the alert).
-# 2. Escalates exceptions whose notification delivery has exhausted its failure cap
-#    — at that point the mailer is considered broken, so email cannot be the channel
-#    that reports the problem; Sentry is used instead.
+# 2. Escalates exceptions whose Sentry reporting has exhausted its failure cap.
 # 3. Escalates exceptions still pending past their response deadline (due_at), so
-#    the SLA recorded on the row is enforced rather than being a promise in an email.
+#    the SLA recorded on the row is enforced rather than being a promise in an alert.
+#
+# All reporting is Sentry-only — no email. These are operational error conditions,
+# not correspondence (decision: Sahil, 2026-07-19, after the 2026-07-18 backfill's
+# 1,975 rows crossed their SLA in the same hour and the per-row email version sent
+# ~2,000 messages to the finance inbox). Sentry groups repeated events natively,
+# so a bulk SLA crossing shows up as one issue with a count, not an inbox flood.
 class DispatchPendingFailedRefundExceptionsJob
   include Sidekiq::Job
 
@@ -23,7 +27,7 @@ class DispatchPendingFailedRefundExceptionsJob
     FailedRefundException.delivery_exhausted.find_each do |failed_refund_exception|
       escalate(
         failed_refund_exception,
-        reason: "Notification delivery failed #{failed_refund_exception.notification_failures} times; the internal mailer needs attention."
+        reason: "Sentry reporting failed #{failed_refund_exception.notification_failures} times; the error reporter needs attention."
       )
     end
 
@@ -40,9 +44,8 @@ class DispatchPendingFailedRefundExceptionsJob
       message = "Failed-refund exception ##{failed_refund_exception.id} escalated. #{reason} " \
         "Refund #{failed_refund_exception.refund_id}, owner #{failed_refund_exception.owner}."
 
-      # Sentry goes first and unrescued: for delivery-exhausted rows the mailer is
-      # the failing component, so it cannot be the only escalation channel. If Sentry
-      # itself raises, the row stays pending and the next run retries the escalation.
+      # Unrescued on purpose: if Sentry itself raises, the row stays pending and
+      # the next run retries the escalation, so the signal cannot be silently lost.
       ErrorNotifier.notify(
         message,
         context: {
@@ -54,17 +57,6 @@ class DispatchPendingFailedRefundExceptionsJob
           notification_failures: failed_refund_exception.notification_failures,
         }
       )
-
-      begin
-        InternalNotificationMailer.notify(
-          room_name: failed_refund_exception.notification_room,
-          sender: "Failed Refund Exception",
-          message_text: message
-        ).deliver_now
-      rescue => e
-        # Expected when escalating because delivery is broken; Sentry already fired.
-        Rails.logger.error("DispatchPendingFailedRefundExceptionsJob: escalation email failed for exception #{failed_refund_exception.id}: #{e.message}")
-      end
 
       failed_refund_exception.escalate!(resolution: reason)
     end

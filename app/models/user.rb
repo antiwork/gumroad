@@ -1104,6 +1104,19 @@ class User < ApplicationRecord
     refund_policy_enabled?
   end
 
+  # Whether the seller can edit the account-level refund policy section in Settings.
+  # The section always renders; when this is false the UI shows the controls disabled
+  # with a note explaining why. Two things make it read-only:
+  # - Account-level refund policies are switched off (account_level_refund_policy_enabled?
+  #   is false), in which case refunds are handled per product instead.
+  # - A refund policy has been enforced on the whole account because of a high dispute
+  #   rate (see Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!).
+  #   While enforced, the seller cannot change the policy themselves — they have to
+  #   contact us with the remediation steps they've taken, and we apply any update.
+  def refund_policy_settings_editable?
+    !refund_policy_enforced? && account_level_refund_policy_enabled?
+  end
+
   def has_all_eligible_refund_policies_as_no_refunds?
     return false if product_refund_policies.none?
 

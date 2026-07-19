@@ -39,8 +39,11 @@ module CreatorAnalytics::CachingProxy::Formatters::ByReferral
     end
 
     data[:dates_and_months] = D3.date_month_domain(dates.first .. dates.last)
-    data[:start_date] = D3.formatted_date(dates.first)
-    data[:end_date] = D3.formatted_date(dates.last)
+    # Format "Today" against the seller's time zone (same rule as
+    # CreatorAnalytics::Web#result_metadata) so the label matches the seller-local
+    # day buckets the analytics data is aggregated by.
+    data[:start_date] = D3.formatted_date(dates.first, today_date: today_date)
+    data[:end_date] = D3.formatted_date(dates.last, today_date: today_date)
     first_sale_created_at = @user.first_sale_created_at_for_analytics
     data[:first_sale_date] = D3.formatted_date_with_timezone(first_sale_created_at, @user.timezone) if first_sale_created_at
 

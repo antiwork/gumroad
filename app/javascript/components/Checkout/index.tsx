@@ -650,6 +650,7 @@ const CartItemComponent = ({
           <CartItemActions>
             {(item.product.rental && !item.product.rental.rent_only) ||
             item.product.is_quantity_enabled ||
+            item.product.is_multiseat_license ||
             item.product.recurrences ||
             item.product.options.length > 0 ||
             item.product.installment_plan ||
