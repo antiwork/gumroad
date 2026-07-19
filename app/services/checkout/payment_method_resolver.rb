@@ -38,8 +38,19 @@ class Checkout::PaymentMethodResolver
   # unwired until its own launch. ACH Direct Debit (us_bank_account) was launched and
   # then withdrawn platform-wide: it settles in ~4 business days and content only delivers on
   # settlement, which doesn't fit digital products (gumroad-private#1143). Its webhook settlement
-  # lifecycle stays wired so in-flight ACH purchases still complete.
+  # lifecycle stays wired so in-flight ACH purchases still complete. Sellers who want it anyway
+  # (e.g. large-ticket sales where card limits bite) can opt back in per seller — see
+  # SELLER_OPT_IN_PAYMENT_METHOD_TYPES below.
   LAUNCHED_PAYMENT_METHOD_TYPES = %w[card link cashapp].freeze
+  # Methods a seller can re-enable for their own checkouts from the checkout settings page
+  # (User#ach_payments_enabled?). They join the launched set only for that seller's carts and then
+  # flow through every downstream gate unchanged: the US region gate (ACH debits a US bank
+  # account), the PPP matrix, and the per-account capability intersection for direct-charge
+  # sellers. Opting in can therefore never widen the set past what the buyer/account could
+  # actually complete. Both the presenter and PreparePaymentIntentService resolve through this
+  # same class with the same seller, so the Payment Element and the deferred intent stay in sync
+  # (the handshake note above).
+  SELLER_OPT_IN_PAYMENT_METHOD_TYPES = %w[us_bank_account].freeze
   LINK_PAYMENT_METHOD_TYPE = "link"
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
@@ -156,10 +167,23 @@ class Checkout::PaymentMethodResolver
     # Card always survives, and Link (inline, not US-locked) is unaffected by the region gate.
     def launched_method_set(eligible)
       launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
+      launched += seller_opt_in_methods(eligible)
       launched += forced_currency_methods(eligible)
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched & account_supported_methods(launched)
+    end
+
+    # ACH Direct Debit is withdrawn from the default launched set (delayed ~4-business-day
+    # settlement, gumroad-private#1143) but a seller can opt back in from the checkout settings
+    # page. Added BEFORE the US region gate / PPP matrix / account-capability intersection so the
+    # opt-in is subject to all of them — it re-adds the method only where it could already have
+    # been offered pre-withdrawal. Only single-seller carts reach a non-Lane-A eligible set, so
+    # `sellers.one?` is belt-and-braces rather than a real branch.
+    def seller_opt_in_methods(eligible)
+      return [] unless sellers.one? && sellers.first&.ach_payments_enabled?
+
+      eligible & SELLER_OPT_IN_PAYMENT_METHOD_TYPES
     end
 
     # The methods (from our policy-resolved set) that the account the PaymentIntent will be created

@@ -39,6 +39,36 @@ describe Checkout::PaymentMethodResolver do
         expect(resolve(buyer_country: "US").payment_method_types).not_to include("us_bank_account")
       end
 
+      context "when the seller has opted back into ACH payments from the checkout settings page" do
+        before { seller.update!(ach_payments_enabled: true) }
+
+        it "re-adds ACH Direct Debit for a US buyer" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        end
+
+        it "still drops it for a non-US buyer — the opt-in never bypasses the US region lock" do
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
+        end
+
+        it "still drops it when the buyer country is unknown, failing safe" do
+          expect(resolve(buyer_country: nil).payment_method_types).to eq(%w[card link])
+        end
+
+        it "keeps it on a PPP-discounted US checkout — ACH is region-locked, which the U13 matrix accepts" do
+          expect(resolve(buyer_country: "US", ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
+        end
+
+        it "records ACH Direct Debit in the enabled payment methods" do
+          allow(Rails.logger).to receive(:info)
+
+          resolve(buyer_country: "US")
+
+          expect(Rails.logger).to have_received(:info).with(
+            a_string_matching(/buyer_country="US".*enabled=\["card", "link", "cashapp", "us_bank_account"\]/)
+          )
+        end
+      end
+
       it "drops US-locked methods (Cash App/ACH) for a non-US buyer, keeping card and Link" do
         expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
       end
@@ -238,6 +268,12 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
         end
 
+        it "re-adds ACH for a US buyer when the seller has opted in — the account's capability snapshot permits it" do
+          seller.update!(ach_payments_enabled: true)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        end
+
         it "still drops them for a non-US buyer — our region policy applies regardless of the account's capabilities" do
           expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
         end
@@ -252,6 +288,12 @@ describe Checkout::PaymentMethodResolver do
         end
 
         it "offers exactly the accepted method to a US buyer" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
+        end
+
+        it "keeps ACH out even for an opted-in seller — the opt-in never overrides the account's capabilities" do
+          seller.update!(ach_payments_enabled: true)
+
           expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
         end
       end

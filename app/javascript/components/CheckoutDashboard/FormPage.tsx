@@ -43,6 +43,7 @@ type FormData = {
     display_offer_code_field: boolean;
     recommendation_type: RecommendationType;
     tipping_enabled: boolean;
+    ach_payments_enabled: boolean;
   };
   custom_fields: CustomFieldWithKey[];
 };
@@ -51,7 +52,12 @@ let lastKey = 0;
 
 export type FormPageProps = {
   pages: Page[];
-  user: { display_offer_code_field: boolean; recommendation_type: RecommendationType; tipping_enabled: boolean };
+  user: {
+    display_offer_code_field: boolean;
+    recommendation_type: RecommendationType;
+    tipping_enabled: boolean;
+    ach_payments_enabled: boolean;
+  };
   cart_item: CartItem | null;
   card_product: CardProduct | null;
   custom_fields: CustomField[];
@@ -60,7 +66,7 @@ export type FormPageProps = {
 
 const FormPage = ({
   pages,
-  user: { display_offer_code_field, recommendation_type, tipping_enabled },
+  user: { display_offer_code_field, recommendation_type, tipping_enabled, ach_payments_enabled },
   cart_item,
   card_product,
   custom_fields,
@@ -81,6 +87,7 @@ const FormPage = ({
       display_offer_code_field,
       recommendation_type,
       tipping_enabled,
+      ach_payments_enabled,
     },
     custom_fields: custom_fields.map(addKey),
   });
@@ -151,6 +158,7 @@ const FormPage = ({
   const displayOfferCodeField = form.data.user.display_offer_code_field;
   const recommendationType = form.data.user.recommendation_type;
   const tippingEnabled = form.data.user.tipping_enabled;
+  const achPaymentsEnabled = form.data.user.ach_payments_enabled;
 
   const productOptions = React.useMemo(
     () => products.filter((product) => !product.archived).map((product) => ({ id: product.id, label: product.name })),
@@ -398,6 +406,21 @@ const FormPage = ({
               onChange={(e) => updateUserData({ tipping_enabled: e.target.checked })}
               label="Allow customers to add tips to their orders"
             />
+          </section>
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
+            <header>
+              <h2>Payment methods</h2>
+            </header>
+            <Switch
+              checked={achPaymentsEnabled}
+              onChange={(e) => updateUserData({ ach_payments_enabled: e.target.checked })}
+              label="Allow customers to pay by bank account (ACH Direct Debit)"
+            />
+            <p className="text-muted">
+              Bank account payments take about 4 business days to clear, and customers only receive their purchase once
+              the payment settles. Not recommended for time-sensitive products. Available to customers in the United
+              States.
+            </p>
           </section>
         </div>
         <CheckoutPreview
