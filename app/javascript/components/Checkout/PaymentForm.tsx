@@ -617,6 +617,8 @@ const PayButton = ({
 const CreditCardContent = ({
   onPaymentElementReadyChange,
   walletClickSubmitRef,
+  flatPaymentMethodsList = false,
+  paymentMethodsAppendix,
 }: {
   onPaymentElementReadyChange?: ((ready: boolean) => void) | undefined;
   // Set by this component to a function the card Pay button calls SYNCHRONOUSLY in its click
@@ -626,6 +628,15 @@ const CreditCardContent = ({
   // Checkout reaches tokenization through async effects several ticks after the click, so the
   // click handler triggers the submit here and tokenization reuses the in-flight promise.
   walletClickSubmitRef?: React.MutableRefObject<(() => void) | null> | undefined;
+  // The payment_element_wallets flat layout (see PaymentMethodsSection): this component stays
+  // mounted even while PayPal is checkout's selected payment method (the element's accordion IS
+  // the payment-method list, and unmounting it would wipe entered card details). Interacting
+  // with the element (focusing a field or picking one of its rows) re-selects the card/wallet
+  // lane, and the save-card checkbox only shows while that lane is selected.
+  flatPaymentMethodsList?: boolean;
+  // Rendered directly below the Payment Element in the flat layout — the PayPal row, styled to
+  // read as one more accordion item so Card / Apple Pay / PayPal form a single flat list.
+  paymentMethodsAppendix?: React.ReactNode;
 }) => {
   const [state, dispatch] = useState();
   const fail = useFail();
@@ -723,6 +734,17 @@ const CreditCardContent = ({
   React.useEffect(() => {
     if (!usesPaymentElement) handlePaymentElementReady(null);
   }, [handlePaymentElementReady, usesPaymentElement]);
+
+  // Flat layout only: the buyer touched the Payment Element (focused a field or picked one of
+  // its rows) while PayPal was checkout's selected payment method — that interaction IS the
+  // "select the card/wallet lane" gesture in a single flat list, so switch back. Clicks inside
+  // the element's iframe never reach the surrounding DOM, so the element's own focus/change
+  // events are the only reliable signal.
+  const reclaimCardLane = React.useCallback(() => {
+    if (!flatPaymentMethodsList) return;
+    if (state.paymentMethod !== "paypal" || isProcessing(state)) return;
+    dispatch({ type: "set-value", paymentMethod: "card" });
+  }, [flatPaymentMethodsList, state, dispatch]);
 
   // Expose the synchronous click-time wallet submit to the pay button (see walletClickSubmitRef
   // in the props above). Runs in the click handler itself: when a wallet row is selected on a
@@ -931,7 +953,11 @@ const CreditCardContent = ({
   }, [state.surcharges, state.status.type]);
 
   return (
-    <div className="flex flex-col gap-4">
+    // In the flat wallets layout a click anywhere in the card area (the saved-card box, the
+    // element's surrounding padding) re-selects the card/wallet lane from PayPal. Focus/change
+    // events inside the element's iframe are handled separately (see reclaimCardLane); the
+    // PayPal row itself stops propagation so selecting it doesn't immediately bounce back.
+    <div className="flex flex-col gap-4" onClick={flatPaymentMethodsList ? reclaimCardLane : undefined}>
       {stripePaymentElementConfig && !useSavedCard ? (
         <div className="flex flex-col gap-4">
           {state.savedCreditCard && paymentElementReady ? (
@@ -955,9 +981,15 @@ const CreditCardContent = ({
             defaultName={state.fullName}
             onReady={handlePaymentElementReady}
             invalid={cardError}
+            onFocus={reclaimCardLane}
             onChange={(evt) => {
               paymentElementTypeRef.current = evt.value.type;
               if (evt.complete) setCardError(false);
+              // A change means the buyer is interacting with the element — reclaim the
+              // card/wallet lane from PayPal. Ignore the empty card-form event a freshly
+              // (re)mounted element can emit without any interaction, so a background remount
+              // (e.g. a currency switch) can't silently steal the buyer's PayPal selection.
+              if (!evt.empty || isWalletPaymentElementType(evt.value.type)) reclaimCardLane();
             }}
           />
         </div>
@@ -973,7 +1005,8 @@ const CreditCardContent = ({
           enableLink
         />
       )}
-      {!useSavedCard && isLoggedIn ? (
+      {paymentMethodsAppendix}
+      {!useSavedCard && isLoggedIn && (!flatPaymentMethodsList || state.paymentMethod === "card") ? (
         <Label className="flex items-center gap-2">
           <Checkbox
             disabled={isProcessing(state)}
@@ -1459,6 +1492,41 @@ const StripePaymentRequestPayButton = ({ canPay }: { canPay: boolean }) => {
   return <StripePaymentRequestContent />;
 };
 
+// PayPal rendered as one more row of the flat payment-methods list used when the Payment
+// Element shows wallets (payment_element_wallets — see PaymentMethodsSection). The element's
+// accordion already lists Card / Apple Pay / Google Pay as bordered rounded rows (the
+// ".AccordionItem" appearance rule in PaymentElementInput.tsx), so this row copies that look —
+// same border, radius, and padding — and sits directly below the element, making the whole
+// list read as one selector: Card / wallets / PayPal.
+const FlatPayPalRow = () => {
+  const [state, dispatch] = useState();
+  const selected = state.paymentMethod === "paypal";
+  const disabled = !selected && isProcessing(state);
+
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      disabled={disabled}
+      className={classNames(
+        "flex w-full cursor-pointer items-center gap-3 rounded border p-4 text-left all-unset",
+        selected ? "border-accent" : "border-border",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+      onClick={(e) => {
+        // The surrounding CreditCardContent container treats clicks as "re-select the
+        // card/wallet lane" in this layout; picking PayPal must not bounce straight back.
+        e.stopPropagation();
+        if (state.paymentMethod !== "paypal") dispatch({ type: "set-value", paymentMethod: "paypal" });
+      }}
+    >
+      <Paypal pack="brands" className="size-5" />
+      <span className="font-medium">PayPal</span>
+    </button>
+  );
+};
+
 const PaymentMethodsSection = ({
   isPayPalAvailable,
   isTestPurchase,
@@ -1485,6 +1553,33 @@ const PaymentMethodsSection = ({
   const hasMultiplePaymentMethods = isPayPalAvailable || canPay;
   const usesPaymentElement = canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state);
   const cardPayDisabled = usesPaymentElement && !paymentElementReady;
+
+  // Flat payment-methods list (payment_element_wallets): the element's accordion IS the
+  // payment-method selector — Card and the wallets render as its rows — so the outer "Card"
+  // radio row is dropped entirely and PayPal is appended as one more matching row below the
+  // element (see FlatPayPalRow). No nesting, no duplicate "Card". The element stays mounted
+  // while PayPal is selected (unmounting would wipe entered card details); interacting with it
+  // re-selects the card/wallet lane.
+  if (usesPaymentElement && state.checkoutPayment.payment_element_wallets) {
+    return (
+      <>
+        <CreditCardContent
+          onPaymentElementReadyChange={handlePaymentElementReadyChange}
+          walletClickSubmitRef={walletClickSubmitRef}
+          flatPaymentMethodsList
+          paymentMethodsAppendix={isPayPalAvailable ? <FlatPayPalRow /> : null}
+        />
+        {state.paymentMethod === "paypal" ? <PayPalContent /> : null}
+        {state.paymentMethod === "card" ? (
+          <CreditCardPayButtonContent
+            disabled={cardPayDisabled}
+            isTestPurchase={isTestPurchase}
+            onPayClick={handleCardPayClick}
+          />
+        ) : null}
+      </>
+    );
+  }
 
   if (usesPaymentElement && !hasMultiplePaymentMethods) {
     return (

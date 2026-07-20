@@ -57,6 +57,7 @@ export const PaymentElementInput = ({
   invalid,
   onReady,
   onChange,
+  onFocus,
 }: {
   amount: number | null;
   // Mounts the element in this currency instead of elementsOptions.currency (from
@@ -85,6 +86,11 @@ export const PaymentElementInput = ({
   invalid?: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
+  // Fires when the buyer focuses any field inside the element. Used by the flat wallets layout
+  // (see PaymentMethodsSection in PaymentForm.tsx) to re-select the card/wallet lane when the
+  // buyer returns to the element after picking PayPal — clicks inside the element's iframe never
+  // reach the surrounding DOM, so this Stripe event is the only reliable interaction signal.
+  onFocus?: (() => void) | undefined;
 }) => {
   const [mountedAmount, setMountedAmount] = React.useState(amount);
 
@@ -135,6 +141,7 @@ export const PaymentElementInput = ({
             defaultName={linkPrefillContact.name}
             onReady={onReady}
             onChange={onChange}
+            onFocus={onFocus}
             onTouched={handlePaymentElementTouched}
           />
         </StripePaymentElementProvider>
@@ -157,6 +164,7 @@ const PaymentElementControllerInput = ({
   defaultName,
   onReady,
   onChange,
+  onFocus,
   onTouched,
 }: {
   amount: number | null;
@@ -168,6 +176,7 @@ const PaymentElementControllerInput = ({
   defaultName: string;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
+  onFocus?: (() => void) | undefined;
   onTouched: () => void;
 }) => {
   const stripe = useStripe();
@@ -248,7 +257,10 @@ const PaymentElementControllerInput = ({
         ...(applePayOption ? { applePay: applePayOption } : {}),
       }}
       onReady={() => setReady(true)}
-      onFocus={onTouched}
+      onFocus={() => {
+        onTouched();
+        onFocus?.();
+      }}
       onChange={(event) => {
         setSelectedType(event.value.type);
         onChange?.(event);

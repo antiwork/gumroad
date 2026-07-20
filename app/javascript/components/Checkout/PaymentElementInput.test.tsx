@@ -17,7 +17,8 @@ const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | und
 const paymentElementRender = vi.hoisted<{
   options: { fields?: { billingDetails?: unknown } } | null;
   onChange: ((event: { value: { type: string }; complete: boolean; empty: boolean }) => void) | null;
-}>(() => ({ options: null, onChange: null }));
+  onFocus: (() => void) | null;
+}>(() => ({ options: null, onChange: null, onFocus: null }));
 
 vi.mock("@stripe/react-stripe-js", async () => {
   const React = await import("react");
@@ -45,13 +46,16 @@ vi.mock("@stripe/react-stripe-js", async () => {
       onReady,
       options,
       onChange,
+      onFocus,
     }: {
       onReady: () => void;
       options: { fields?: { billingDetails?: unknown } };
       onChange?: (event: { value: { type: string }; complete: boolean; empty: boolean }) => void;
+      onFocus?: () => void;
     }) => {
       paymentElementRender.options = options;
       paymentElementRender.onChange = onChange ?? null;
+      paymentElementRender.onFocus = onFocus ?? null;
       React.useEffect(onReady, [onReady]);
       return null;
     },
@@ -171,5 +175,17 @@ describe("PaymentElementInput", () => {
         },
       },
     });
+  });
+
+  it("forwards element focus to onFocus, alongside the Link-prefill touch tracking", () => {
+    // The flat payment-methods layout (payment_element_wallets) re-selects the card/wallet lane
+    // from PayPal when the buyer interacts with the element. Clicks inside the element's iframe
+    // never reach the surrounding DOM, so PaymentForm relies on this callback being wired
+    // through to the underlying PaymentElement's focus event.
+    const onFocus = vi.fn();
+    render(<PaymentElementInput {...props} onFocus={onFocus} amount={1_000} mountCurrency="usd" />);
+
+    act(() => paymentElementRender.onFocus?.());
+    expect(onFocus).toHaveBeenCalledTimes(1);
   });
 });
