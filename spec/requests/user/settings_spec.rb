@@ -19,17 +19,20 @@ describe "User profile settings page", type: :system, js: true do
   end
 
   describe "profile preview" do
-    it "renders the header" do
+    it "renders the browser-style chrome" do
       visit profile_path
 
-      expect(page).to have_text "Preview"
-      expect(page).to have_link "Preview", href: root_url(host: @user.subdomain)
+      within find("aside[aria-label='Preview']") do
+        expect(page).to have_text @user.name
+        expect(page).to have_text root_url(host: @user.subdomain).sub(%r{\Ahttps?://}, "").chomp("/")
+        expect(page).to have_link "Open in new tab", href: root_url(host: @user.subdomain)
+      end
     end
 
     it "renders the profile" do
       visit profile_path
 
-      within_section "Preview", section_element: :aside do
+      within find("aside[aria-label='Preview']") do
         expect(page).to have_text @user.name
         expect(page).to have_text @user.bio
       end
@@ -41,7 +44,7 @@ describe "User profile settings page", type: :system, js: true do
       visit profile_path
       fill_in "Name", with: "Creator name", fill_options: { clear: :backspace }
       fill_in "Bio", with: "Creator bio", fill_options: { clear: :backspace }
-      within_section "Preview", section_element: :aside do
+      within find("aside[aria-label='Preview']") do
         expect(page).to have_text("Creator name")
         expect(page).to have_text("Creator bio")
       end
@@ -63,7 +66,7 @@ describe "User profile settings page", type: :system, js: true do
         it "saves the avatar" do
           visit profile_path
           upload_logo("test.png")
-          within_section("Preview", section_element: :aside) do
+          within find("aside[aria-label='Preview']") do
             expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
           end
           click_on "Update profile"
@@ -78,7 +81,7 @@ describe "User profile settings page", type: :system, js: true do
 
         visit profile_path
         upload_logo("test.png")
-        within_section("Preview", section_element: :aside) do
+        within find("aside[aria-label='Preview']") do
           expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
         end
         click_on "Update profile"
@@ -96,7 +99,7 @@ describe "User profile settings page", type: :system, js: true do
         expect(@user.reload.avatar_url).to eq(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))
         refresh
         expect(page).to have_selector("img[alt='Current avatar'][src*='gumroad-default-avatar-5']")
-        within_section("Preview", section_element: :aside) do
+        within find("aside[aria-label='Preview']") do
           expect(page).to have_selector("img[alt='Profile Picture'][src*='gumroad-default-avatar-5']")
         end
       end
@@ -105,7 +108,7 @@ describe "User profile settings page", type: :system, js: true do
         it "displays an error if either dimension is less than 200px" do
           visit profile_path
           upload_logo("test-small.png")
-          within_section("Preview", section_element: :aside) do
+          within find("aside[aria-label='Preview']") do
             expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
           end
           click_on "Update profile"

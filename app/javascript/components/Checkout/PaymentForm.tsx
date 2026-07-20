@@ -700,6 +700,7 @@ const CreditCardContent = ({
             type: "payment-element-client-confirm",
             confirmationTokenId: tokenResult.confirmationTokenId,
             cardCountry: tokenResult.cardCountry,
+            mountCurrency: stripePaymentElementConfig.currency,
           },
         });
       }

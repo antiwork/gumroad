@@ -1933,7 +1933,19 @@ class Purchase < ApplicationRecord
   # purchase. Failed refunds that were NOT auto-reversed still count — the seller
   # is still debited for them until a human resolves the exception.
   def amount_refunded_cents
-    refunds.effective.sum(:amount_cents)
+    # When the refunds association is already loaded (batch serializers like the
+    # mobile purchases endpoints preload it), sum in memory using Refund#effective?
+    # (the documented in-memory mirror of the .effective scope) instead of issuing
+    # a per-purchase SUM query — that per-row SUM is the N+1 Sentry flags on
+    # Api::Mobile::PurchasesController#search. Callers that haven't preloaded
+    # refunds (including every refund-processing write path) fall through to the
+    # DB-backed aggregate, so bulk SQL writes still see fresh state.
+    if association(:refunds).loaded?
+      # .to_i mirrors SQL SUM semantics, which skips NULL amount_cents rows.
+      refunds.select(&:effective?).sum { |refund| refund.amount_cents.to_i }
+    else
+      refunds.effective.sum(:amount_cents)
+    end
   end
 
   def fee_refunded_cents
@@ -2580,13 +2592,14 @@ class Purchase < ApplicationRecord
   def update_json_data_for_mobile
     return @cached_product_updates_data if defined?(@cached_product_updates_data)
 
-    return [] if subscription.present? && !subscription.alive? && link.block_access_after_membership_cancellation?
-
-    all_purchases_of_product = link.sales.for_displaying_installments(email:)
-
-    posts = self.class.product_installments(purchase_ids: all_purchases_of_product.pluck(:id))
-
-    posts.map { |post| post.installment_mobile_json_data(purchase: self) }.compact
+    # Delegate to the batched preloader even for a single purchase. The old inline
+    # implementation serialized each post with per-post queries (url_redirects,
+    # product_files, email_infos — one SELECT per installment), which surfaced as an
+    # N+1 on the mobile url_redirect_attributes endpoint. The preloader produces
+    # byte-identical output (covered by specs in purchase_installments_spec.rb) while
+    # batching those lookups into a bounded number of IN queries.
+    self.class.preload_product_updates_data!([self])
+    @cached_product_updates_data
   end
 
   def self.preload_product_updates_data!(purchases)
@@ -3912,7 +3925,7 @@ class Purchase < ApplicationRecord
       nil
     rescue ChargeProcessorPayeeAccountRestrictedError => e
       logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
-      errors.add :base, "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+      errors.add :base, "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
       self.stripe_error_code = PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED
       nil
     rescue ChargeProcessorPayerCancelledBillingAgreementError => e
@@ -3926,7 +3939,7 @@ class Purchase < ApplicationRecord
       self.stripe_error_code = PurchaseErrorCode::PAYPAL_PAYER_ACCOUNT_DECLINED_PAYMENT
       nil
     rescue ChargeProcessorUnsupportedPaymentTypeError => e
-      logger.info "Charge processor error: Unsupported paypal payment method selected"
+      logger.info "Charge processor error: Unsupported PayPal payment method selected"
       errors.add :base, "We weren't able to charge your PayPal account. Please select another method of payment."
       self.stripe_error_code = e.error_code
       self.stripe_transaction_id = e.charge_id
@@ -4777,7 +4790,9 @@ class Purchase < ApplicationRecord
     end
 
     def assign_is_multiseat_license
-      self.is_multiseat_license = link.is_multiseat_license?
+      # Uses the call-gated check so a call product with a stale/API-set flag never
+      # produces a purchase that reports seats (receipts, pings, license verify).
+      self.is_multiseat_license = link.multiseat_license_enabled?
     end
 
     def price_for_recurrence

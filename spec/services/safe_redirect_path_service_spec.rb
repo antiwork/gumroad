@@ -111,6 +111,18 @@ describe "SafeRedirectPathService" do
       end
     end
 
+    context "when path is a bare relative path without a leading slash" do
+      it "prepends a slash so the redirect stays on the current host" do
+        @path = "dashboard"
+        expect(service.process).to eq "/dashboard"
+      end
+
+      it "prepends a slash and preserves the query string" do
+        @path = "library?sort=recent"
+        expect(service.process).to eq "/library?sort=recent"
+      end
+    end
+
     context "when there is only a query parameter" do
       it "does not prepend unnecessary forward slash" do
         @path = "?query=param"

@@ -559,6 +559,37 @@ describe "PurchaseInstallments", :vcr do
         queries
       end
 
+      it "bounds queries for a bare update_json_data_for_mobile call (mobile url_redirect_attributes path)" do
+        # The mobile url_redirect_attributes endpoint calls purchase.update_json_data_for_mobile
+        # directly (via UrlRedirect#product_json_data) without an explicit preload pass. That
+        # call must route through the batched preloader — the old inline implementation issued
+        # one email_infos/url_redirects/product_files SELECT per installment (Sentry N+1 on
+        # Api::Mobile::UrlRedirectsController#url_redirect_attributes).
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        purchase = create(:membership_purchase, link: product, subscription:)
+        subscription.reload
+
+        5.times do |i|
+          post = create(:installment, link: product, published_at: (i + 1).days.ago)
+          create(:product_file, installment: post, link: product)
+          create(:url_redirect, installment: post, purchase:)
+          create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
+        end
+
+        fresh = Purchase.find(purchase.id)
+
+        queries = capture_queries do
+          fresh.update_json_data_for_mobile
+        end
+
+        per_installment_email_info = queries.count { |q| q.include?("email_infos") && q.include?("installment_id") && !q.include?("IN") }
+        per_installment_url_redirect = queries.count { |q| q.include?("url_redirects") && q.include?("installment_id") && !q.include?("IN") }
+
+        expect(per_installment_email_info).to eq(0)
+        expect(per_installment_url_redirect).to eq(0)
+      end
+
       it "produces output byte-identical to the single-purchase path" do
         product = create(:membership_product)
         subscription = create(:subscription, link: product)

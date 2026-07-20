@@ -202,6 +202,9 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
+  // The sender line receipt emails actually go out with (mirrors CustomerMailer#receipt),
+  // shown in the Receipt tab's email-style preview chrome.
+  receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
   customHtmlPagesEnabled: boolean;
   contentUpdates: ContentUpdates;

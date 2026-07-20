@@ -47,7 +47,12 @@ class Order::CreateService
             .except(
               :billing_agreement_id, :paypal_order_id, :visual, :stripe_payment_method_id, :stripe_customer_id,
               :stripe_setup_intent_id, :stripe_error, :braintree_transient_customer_store_key,
-              :braintree_device_data, :use_existing_card, :paymentToken, :buyer_currency_quote
+              :braintree_device_data, :use_existing_card, :paymentToken, :buyer_currency_quote,
+              # Client-confirm payment-surface hint consumed by Order::PreparePaymentIntentService
+              # (which receives the order params directly from the controller); it is not a
+              # Purchase attribute, so letting it through raises ActiveModel::UnknownAttributeError
+              # in Purchase::CreateService#build_purchase.
+              :payment_element_mount_currency
             )
             .merge(line_item_params.except(:uid, :permalink))
             .merge({ cart_items: })

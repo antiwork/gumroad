@@ -194,6 +194,28 @@ describe Charge::MethodForcedPresentment do
       expect(result).to be_nil
       expect(charge.reload.charge_presentment).to be_nil
     end
+
+    it "caps the converted Gumroad share at the purchase's presentment total" do
+      # The Gumroad share is converted from canonical cents independently of the
+      # listed-price-based total, so adverse rounding on a ~100% Gumroad cut could put
+      # it a cent above the purchase total — which would fail PurchasePresentment's
+      # gumroad-amount validation and degrade this lane to an unconfirmable USD intent.
+      # 18_76 canonical Gumroad cents * 0.8 = 15_01 EUR > the 15_00 EUR listed total.
+      charge.update!(gumroad_amount_cents: 18_76)
+
+      capped = described_class.new(charge:,
+                                   order:,
+                                   seller:,
+                                   merchant_account:,
+                                   purchases: [purchase],
+                                   amount_cents: 18_75,
+                                   gumroad_amount_cents: 18_76,
+                                   payment_method_type:,
+                                   params: {}).perform
+
+      expect(capped.presentment_gumroad_amount_cents).to eq(15_00)
+      expect(purchase.reload.purchase_presentment.presentment_gumroad_amount_cents).to eq(15_00)
+    end
   end
 
   describe ".idempotency_key_for" do
@@ -252,6 +274,26 @@ describe Charge::MethodForcedPresentment do
       expect(result).to be_nil
       expect(charge.reload.charge_presentment).to be_nil
       expect(ErrorNotifier).to have_received(:notify).with(instance_of(RuntimeError), context: hash_including(charge_id: charge.id))
+    end
+
+    it "falls back to nil without notifying Sentry when the account settles in a non-USD currency" do
+      # Expected condition (Stripe multi-currency settlement), not a defect — the intent
+      # is prepared in USD as before, and no error notification is sent.
+      allow(StripeFxQuote).to receive(:create).and_raise(
+        StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
+      )
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect(result).to be_nil
+      expect(charge.reload.charge_presentment).to be_nil
+    end
+
+    it "records the settlement-currency mismatch on the merchant account for later checkouts" do
+      allow(StripeFxQuote).to receive(:create).and_raise(
+        StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
+      )
+
+      expect { result }.to change { merchant_account.reload.settlement_currency_mismatch_active? }.from(false).to(true)
     end
   end
 end

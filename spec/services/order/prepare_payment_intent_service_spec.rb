@@ -189,14 +189,14 @@ describe Order::PreparePaymentIntentService, :vcr do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
-        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp])
       end
 
       it "gates Link out of the intent on a PPP checkout" do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
-        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp us_bank_account])
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card cashapp])
       end
 
       it "does not gate the intent when the seller disabled PPP payment verification" do
@@ -204,7 +204,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
-        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card link cashapp us_bank_account])
+        expect(create_args_for(order, params)[:payment_method_types]).to eq(%w[card link cashapp])
       end
     end
 
@@ -298,6 +298,28 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(purchase).to be_failed
         expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSOR_INVALID_REQUEST)
         expect(purchase.stripe_error_code).to eq("payment_intent_invalid_parameter")
+      end
+    end
+
+    context "when the client-confirm seller-proceeds guard rejects the PaymentIntent" do
+      before { create(:merchant_account, user: seller) }
+
+      it "returns the guard's buyer-facing error instead of the generic prepare failure" do
+        order, params = build_order
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        allow(StripeDeferredPaymentIntent).to receive(:create).and_raise(
+          ChargeProcessorCardError.new(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE, StripeIntentChargeRouting::SELLER_PROCEEDS_ERROR_MESSAGE)
+        )
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_small_total").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_message]).to eq(StripeIntentChargeRouting::SELLER_PROCEEDS_ERROR_MESSAGE)
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.stripe_error_code).to eq(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE)
       end
     end
 
@@ -491,7 +513,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_us").perform
 
-        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp us_bank_account])
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
       # The presenter derives the Element's Link config from the same resolver output, so the
@@ -551,7 +573,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         # A capability snapshot must exist for the account to offer anything beyond card
         # (an uncached connect account resolves card-only while the refresh worker runs).
         connect_account.update!(stripe_capabilities_snapshot: {
-                                  "capabilities" => { "link_payments" => "active" },
+                                  "capabilities" => { "link_payments" => "active", "ideal_payments" => "active" },
                                   "refreshed_at" => Time.current.iso8601,
                                 })
         Feature.activate_user(:buyer_local_currency, seller)
@@ -734,6 +756,38 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(create_args[:stripe_fx_quote_id]).to be_nil
           expect(responses["unique-id-0"][:success]).to eq(true)
           expect(order.charges.last.charge_presentment).to be_nil
+        end
+
+        it "keeps the canonical USD intent when the direct-charge account cannot offer the launched local method" do
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "link_payments" => "active" },
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+
+          order, params = build_order
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_card_without_ideal")
+
+          expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment).to be_nil
+        ensure
+          Feature.deactivate_user(:checkout_local_method_ideal, seller)
+        end
+
+        it "fails closed after the local-method flag rolls back from an EUR-mounted card token" do
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::EUR
+          allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+          Feature.deactivate_user(:checkout_local_method_ideal, seller)
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_card_after_rollback")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
         end
       end
 

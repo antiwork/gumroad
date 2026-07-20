@@ -1,8 +1,29 @@
 # frozen_string_literal: true
 
 class ContentModeration::Strategies::PromptStrategy
-  Result = Struct.new(:status, :reasoning, keyword_init: true)
+  # `reasoning` holds reasons that should block the publish. `audit_reasoning`
+  # holds spam flags that did NOT reproduce on resampling (see
+  # SPAM_CORROBORATION_RESAMPLES below) — the caller records them for review
+  # instead of blocking, because a one-off flag from a language model is too
+  # noisy to act on by itself.
+  Result = Struct.new(:status, :reasoning, :audit_reasoning, keyword_init: true)
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
+
+  # A single language-model evaluation is nondeterministic: the same content
+  # can flag as spam on one attempt and pass on the next, so one flag is too
+  # noisy a basis for blocking a publish. When the spam preset flags, we ask
+  # the model the same question this many more times, and only block when
+  # every resample flags too. Real spam (gibberish, keyword stuffing, identical
+  # repeated CTAs) reproduces reliably; a noisy one-off flag does not, and is
+  # downgraded to an audit record instead of blocking the seller.
+  # Adult-content flags are not resampled — this gate is spam-only.
+  #
+  # Corroboration is opt-in (`corroborate_spam_flags: true`) so that only
+  # callers designed for the downgrade path get it. ModerateRecordService
+  # opts in and records downgraded flags as non-blocking admin notes; other
+  # callers (e.g. CreatePublicMediaService screening uploads) keep the
+  # original single-sample blocking behavior and its latency profile.
+  SPAM_CORROBORATION_RESAMPLES = 2
 
   ADULT_CONTENT_RULES = <<~RULES
     You are a content moderator. Evaluate the following content for adult/sexual content policy violations.
@@ -107,20 +128,22 @@ class ContentModeration::Strategies::PromptStrategy
   JUDGE_MODEL = "gpt-4o-mini"
   SUPPORTED_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg .gif .webp].freeze
 
-  def initialize(text:, image_urls: [])
+  def initialize(text:, image_urls: [], corroborate_spam_flags: false)
     @text = text
     @image_urls = image_urls
+    @corroborate_spam_flags = corroborate_spam_flags
   end
 
   def perform
-    return Result.new(status: "compliant", reasoning: []) if @text.blank? && @image_urls.empty?
+    return Result.new(status: "compliant", reasoning: [], audit_reasoning: []) if @text.blank? && @image_urls.empty?
 
     api_key = GlobalConfig.get("OPENAI_ACCESS_TOKEN")
-    return Result.new(status: "compliant", reasoning: []) if api_key.blank?
+    return Result.new(status: "compliant", reasoning: [], audit_reasoning: []) if api_key.blank?
 
     @client = OpenAI::Client.new(access_token: api_key, request_timeout: OPENAI_REQUEST_TIMEOUT_IN_SECONDS)
 
     all_reasoning = []
+    audit_reasoning = []
 
     [
       { name: "adult_content", rules: ADULT_CONTENT_RULES, skip_images: false },
@@ -128,28 +151,61 @@ class ContentModeration::Strategies::PromptStrategy
     ].each do |preset|
       result = evaluate_preset(preset)
       next if result[:status] == "compliant"
+      next unless passes_uncertainty_check?(result[:reasoning])
 
-      if passes_uncertainty_check?(result[:reasoning])
-        all_reasoning << "#{preset[:name]}: #{result[:reasoning]}"
+      if preset[:name] == "spam" && @corroborate_spam_flags
+        flagged_resamples, resamples_run = run_spam_resamples(preset)
+        corroborated = flagged_resamples == SPAM_CORROBORATION_RESAMPLES
+        Rails.logger.info(
+          "ContentModeration::PromptStrategy spam corroboration: #{flagged_resamples}/#{resamples_run} resamples flagged; " \
+          "#{corroborated ? "blocking" : "downgrading to audit-only"}"
+        )
+        unless corroborated
+          audit_reasoning << "spam (uncorroborated, #{flagged_resamples + 1}/#{resamples_run + 1} samples flagged): #{result[:reasoning]}"
+          next
+        end
       end
+
+      all_reasoning << "#{preset[:name]}: #{result[:reasoning]}"
     end
 
     if all_reasoning.any?
-      Result.new(status: "flagged", reasoning: all_reasoning)
+      Result.new(status: "flagged", reasoning: all_reasoning, audit_reasoning: audit_reasoning)
     else
-      Result.new(status: "compliant", reasoning: [])
+      Result.new(status: "compliant", reasoning: [], audit_reasoning: audit_reasoning)
     end
   rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Faraday::ParsingError, Net::ReadTimeout => e
     Rails.logger.warn("ContentModeration::PromptStrategy timeout: #{e.class} - #{e.message}")
-    Result.new(status: "compliant", reasoning: [])
+    Result.new(status: "compliant", reasoning: [], audit_reasoning: [])
   rescue StandardError => e
     Rails.logger.error("ContentModeration::PromptStrategy error: #{e.message}")
     raise
   end
 
   private
-    def evaluate_preset(preset)
-      messages = build_messages(preset[:rules], skip_images: preset[:skip_images])
+    # Re-runs the spam preset to see whether the initial flag reproduces, and
+    # returns [how many resamples flagged, how many were run]. Blocking needs
+    # every resample to flag, so the first clean one decides the outcome and
+    # we stop there rather than spend another model call on the seller's
+    # publish request. Resamples skip the uncertainty check — the initial flag
+    # already passed it, and these calls only answer "does the model flag this
+    # again?". A resample that times out or is rejected by OpenAI counts as
+    # not flagging (evaluate_preset already maps those to compliant), so
+    # transient API trouble fails open — toward publishing — like the rest of
+    # this class.
+    def run_spam_resamples(preset)
+      flagged = 0
+      run = 0
+      SPAM_CORROBORATION_RESAMPLES.times do
+        run += 1
+        break unless evaluate_preset(preset)[:status] == "flagged"
+        flagged += 1
+      end
+      [flagged, run]
+    end
+
+    def evaluate_preset(preset, skip_images: preset[:skip_images])
+      messages = build_messages(preset[:rules], skip_images: skip_images)
 
       response = @client.chat(
         parameters: {
@@ -168,7 +224,22 @@ class ContentModeration::Strategies::PromptStrategy
         reasoning: parsed["reasoning"].to_s,
       }
     rescue Faraday::BadRequestError => e
-      notify_openai_rejection(e, stage: "preset:#{preset[:name]}", images_sent: !preset[:skip_images])
+      # OpenAI regularly fails to download some of our image URLs (signed
+      # attachment URLs on files.gumroad.com are the usual culprit) and
+      # responds 400 with code "invalid_image_url". When that happens, retry
+      # the same preset once without any images so the text still gets
+      # moderated — giving up entirely (the old behavior) meant the content
+      # passed with no evaluation at all. This is an expected, recurring
+      # condition, so it logs a warning instead of paging Sentry.
+      if openai_error_code(e) == "invalid_image_url" && !skip_images
+        Rails.logger.warn(
+          "ContentModeration::PromptStrategy OpenAI could not fetch an image on preset:#{preset[:name]}; " \
+          "retrying text-only (#{openai_error_message(e)[0, 500]})"
+        )
+        return evaluate_preset(preset, skip_images: true)
+      end
+
+      notify_openai_rejection(e, stage: "preset:#{preset[:name]}", images_sent: !skip_images)
       { status: "compliant", reasoning: "" }
     rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Faraday::ParsingError, Net::ReadTimeout => e
       Rails.logger.warn("ContentModeration::PromptStrategy preset timeout on #{preset[:name]}: #{e.class} - #{e.message}")
@@ -212,11 +283,29 @@ class ContentModeration::Strategies::PromptStrategy
       raise
     end
 
-    def notify_openai_rejection(error, stage:, images_sent:)
+    # Digs the machine-readable error code (e.g. "invalid_image_url") out of
+    # an OpenAI 400 response body, or nil when the body isn't shaped that way.
+    def openai_error_code(error)
+      payload = openai_error_payload(error)
+      payload.is_a?(Hash) ? payload["code"] : nil
+    end
+
+    # Human-readable message from an OpenAI 400 body (it names the URL that
+    # failed to download), falling back to the raw body for unexpected shapes.
+    def openai_error_message(error)
+      payload = openai_error_payload(error)
+      payload.is_a?(Hash) ? payload["message"].to_s : error.response&.dig(:body).to_s
+    end
+
+    def openai_error_payload(error)
       body = error.response&.dig(:body)
-      error_payload = body.is_a?(Hash) ? body["error"] : nil
-      error_message = error_payload.is_a?(Hash) ? error_payload["message"].to_s : body.to_s
-      error_code    = error_payload.is_a?(Hash) ? error_payload["code"] : nil
+      body.is_a?(Hash) ? body["error"] : nil
+    end
+
+    def notify_openai_rejection(error, stage:, images_sent:)
+      error_payload = openai_error_payload(error)
+      error_message = openai_error_message(error)
+      error_code    = openai_error_code(error)
       error_param   = error_payload.is_a?(Hash) ? error_payload["param"] : nil
 
       Rails.logger.warn(

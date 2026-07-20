@@ -166,7 +166,11 @@ module Product::Prices
     if is_tiered_membership?
       lowest_tier_price(for_default_duration:).price_cents || 0
     else
-      default_price_cents + (lowest_variant_price_difference_cents || 0)
+      # default_price_cents can be nil for a persisted product whose Price
+      # records are missing or all deleted (bad/partial data). Degrade to 0 so
+      # listing pages (e.g. the seller's products dashboard) render instead of
+      # raising NoMethodError on nil + integer.
+      (default_price_cents || 0) + (lowest_variant_price_difference_cents || 0)
     end
   end
 

@@ -172,4 +172,52 @@ describe MerchantAccount do
       expect(merchant_account.holder_of_funds).to eq(HolderOfFunds::GUMROAD)
     end
   end
+
+  describe "settlement currency mismatch marker" do
+    let(:merchant_account) { create(:merchant_account) }
+
+    describe "#settlement_currency_mismatch_active?" do
+      it "is false when no mismatch was ever recorded" do
+        expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
+      end
+
+      it "is true while the recorded mismatch is fresh" do
+        merchant_account.record_settlement_currency_mismatch!
+        expect(merchant_account.settlement_currency_mismatch_active?).to be(true)
+      end
+
+      it "expires after the TTL so accounts that fix their settlement config regain presentment" do
+        merchant_account.update!(settlement_currency_mismatch_noticed_at: (described_class::SETTLEMENT_CURRENCY_MISMATCH_TTL + 1.day).ago.iso8601)
+        expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
+      end
+
+      it "treats a malformed timestamp as no marker instead of raising" do
+        merchant_account.update!(settlement_currency_mismatch_noticed_at: "not-a-timestamp")
+        expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
+      end
+    end
+
+    describe "#record_settlement_currency_mismatch!" do
+      it "persists the current time so the TTL measures the LAST observed mismatch" do
+        travel_to(Time.zone.local(2026, 7, 1, 12)) { merchant_account.record_settlement_currency_mismatch! }
+        travel_to(Time.zone.local(2026, 7, 15, 12)) { merchant_account.record_settlement_currency_mismatch! }
+
+        expect(Time.zone.parse(merchant_account.reload.settlement_currency_mismatch_noticed_at)).to eq(Time.zone.local(2026, 7, 15, 12))
+      end
+    end
+
+    describe "#clear_settlement_currency_mismatch!" do
+      it "removes a recorded marker" do
+        merchant_account.record_settlement_currency_mismatch!
+        merchant_account.clear_settlement_currency_mismatch!
+
+        expect(merchant_account.reload.settlement_currency_mismatch_noticed_at).to be_nil
+        expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
+      end
+
+      it "does not touch the record when no marker is present" do
+        expect { merchant_account.clear_settlement_currency_mismatch! }.not_to change { merchant_account.reload.updated_at }
+      end
+    end
+  end
 end

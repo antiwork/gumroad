@@ -249,7 +249,7 @@ describe "User profile page", type: :system, js: true do
       end
 
       def within_profile_editor_preview(&block)
-        within_section "Preview", section_element: :aside, &block
+        within find("aside[aria-label='Preview']"), &block
       end
 
       def expect_profile_editor_product_cards_in_order(products)

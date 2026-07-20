@@ -12,11 +12,15 @@ class Api::V2::LinksController < Api::V2::BaseController
   ]).freeze
 
   RESULTS_PER_PAGE = 10
+  # Product-level refund policies accept the account-level periods plus "inherit",
+  # which disables the product override and falls back to the account default.
+  PRODUCT_REFUND_PERIOD_ALLOWED_VALUES = (["inherit"] + Api::V2::RefundPoliciesController::REFUND_PERIOD_ALLOWED_VALUES).freeze
   MISSING_BUY_AFFORDANCE_WARNING = "The custom landing page does not include a buy element, so buyers may not be able to purchase this product. " \
                                    'Add an element with data-gumroad-action="buy" or post a gumroad:checkout message.'
 
   SHOW_PRODUCT_ASSOCIATIONS = (BASE_PRODUCT_ASSOCIATIONS + [
     :page,
+    :product_refund_policy,
     :ordered_alive_product_files,
     :seller_profile_sections,
     :alive_rich_contents,
@@ -93,6 +97,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
     end
 
+    if (refund_policy_error = validate_product_refund_policy_params)
+      return render_response(false, message: refund_policy_error)
+    end
+
     if params.key?(:rich_content)
       if !params[:rich_content].is_a?(Array) || params[:rich_content].any? { |p| !p.respond_to?(:key?) }
         return render_response(false, message: "rich_content must be an array of content page objects.")
@@ -161,6 +169,8 @@ class Api::V2::LinksController < Api::V2::BaseController
 
       @product.save_tags!(params[:tags]) if params.key?(:tags)
 
+      apply_product_refund_policy! if params.key?(:refund_period) || params.key?(:refund_fine_print)
+
       if params.key?(:files)
         rich_content_params = extract_rich_content_params
         file_params = ActionController::Parameters.new(files: params[:files]).permit(files: [:id, :url, :display_name, :extension, :position, :stream_only, :description])
@@ -221,6 +231,10 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     if (length_error = custom_html_length_error)
       return render_response(false, message: length_error)
+    end
+
+    if (refund_policy_error = validate_product_refund_policy_params)
+      return render_response(false, message: refund_policy_error)
     end
 
     if params.key?(:tags)
@@ -344,6 +358,8 @@ class Api::V2::LinksController < Api::V2::BaseController
         if params.key?(:custom_summary)
           @product.json_data["custom_summary"] = params[:custom_summary]
         end
+
+        apply_product_refund_policy! if params.key?(:refund_period) || params.key?(:refund_fine_print)
 
         if params.key?(:custom_html)
           previous_custom_html = @product.custom_html
@@ -496,6 +512,58 @@ class Api::V2::LinksController < Api::V2::BaseController
   private
     def success_with_product(product = nil)
       success_with_object(:product, product)
+    end
+
+    # Validates the product-level refund policy params shared by create and
+    # update. Returns an error message string, or nil when the params are valid.
+    def validate_product_refund_policy_params
+      return nil if !params.key?(:refund_period) && !params.key?(:refund_fine_print)
+
+      if current_resource_owner.account_level_refund_policy_enabled?
+        return "Product-level refund policies are not available for this account; the account-level refund policy applies to all products. Use PUT /v2/refund_policy instead."
+      end
+
+      if params.key?(:refund_period)
+        refund_period = params[:refund_period]
+        if !refund_period.is_a?(String) || PRODUCT_REFUND_PERIOD_ALLOWED_VALUES.exclude?(refund_period)
+          return "refund_period must be one of: #{PRODUCT_REFUND_PERIOD_ALLOWED_VALUES.join(', ')}."
+        end
+        if refund_period == "inherit" && params[:refund_fine_print].present?
+          return "refund_fine_print cannot be set when refund_period is 'inherit'; the account-level policy's fine print applies."
+        end
+      end
+
+      if params.key?(:refund_fine_print)
+        fine_print = params[:refund_fine_print]
+        if !fine_print.nil? && !fine_print.is_a?(String)
+          return "refund_fine_print must be a string."
+        end
+        if !params.key?(:refund_period) && !(@product.present? && @product.product_refund_policy_enabled?)
+          return "refund_fine_print requires refund_period, or an existing product-level refund policy."
+        end
+      end
+
+      nil
+    end
+
+    # Applies the already-validated refund_period / refund_fine_print params to
+    # @product. "inherit" switches the product back to the account default by
+    # disabling the override; any other period enables the override and updates
+    # the product's own policy record.
+    def apply_product_refund_policy!
+      if params[:refund_period] == "inherit"
+        @product.update!(product_refund_policy_enabled: false)
+        return
+      end
+
+      policy_attributes = {}
+      if params.key?(:refund_period)
+        policy_attributes[:max_refund_period_in_days] = Api::V2::RefundPoliciesController::REFUND_PERIOD_VALUES[params[:refund_period]]
+      end
+      policy_attributes[:fine_print] = params[:refund_fine_print] if params.key?(:refund_fine_print)
+
+      @product.update!(product_refund_policy_enabled: true) unless @product.product_refund_policy_enabled?
+      @product.find_or_initialize_product_refund_policy.update!(policy_attributes)
     end
 
     def error_with_product(product = nil)

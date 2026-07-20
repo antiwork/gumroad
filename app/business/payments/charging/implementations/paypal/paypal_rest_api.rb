@@ -102,11 +102,11 @@ class PaypalRestApi
     paypal_account_id = merchant_account&.charge_processor_merchant_id
     currency = merchant_account&.currency
 
-    # If for some reason we don't have the paypal account id or currency in our records,
+    # If for some reason we don't have the PayPal account id or currency in our records,
     # fetch the original order and get those details from it
     if paypal_account_id.blank? || currency.blank?
       purchase = Purchase.where(stripe_transaction_id: capture_id).last
-      raise ArgumentError, "No purchase found for paypal transaction id #{capture_id}" unless purchase.present?
+      raise ArgumentError, "No purchase found for PayPal transaction id #{capture_id}" unless purchase.present?
 
       paypal_order = fetch_order(order_id: purchase.paypal_order_id).result
       if paypal_order.purchase_units.present?
@@ -202,10 +202,10 @@ class PaypalRestApi
     end
 
     def execute_request
-      Rails.logger.info "Making Paypal request:: #{LogRedactor.redact(@request)}"
+      Rails.logger.info "Making PayPal request:: #{LogRedactor.redact(@request)}"
       @paypal_client.execute(@request)
     rescue PayPalHttp::HttpError => e
-      Rails.logger.error "Paypal request failed:: Status code: #{e.status_code}, Result: #{e.result.inspect}"
+      Rails.logger.error "PayPal request failed:: Status code: #{e.status_code}, Result: #{e.result.inspect}"
       OpenStruct.new(status_code: e.status_code, result: e.result)
     end
 end

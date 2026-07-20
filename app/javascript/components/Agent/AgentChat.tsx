@@ -3,12 +3,17 @@ import * as React from "react";
 
 import {
   type AgentStreamHandlers,
+  AgentStreamInterruptedError,
+  type AgentTurnStatus,
   type ChatMessage,
   type ConversationMessage,
   type DisplayObject,
   type ProposedAction,
   executeAgentAction,
+  fetchCustomHtmlProposalPreview,
+  fetchAgentTurnStatus,
   fetchLatestAgentConversation,
+  isCustomHtmlProposal,
   streamAgentMessage,
 } from "$app/data/agent";
 import { classNames } from "$app/utils/classNames";
@@ -25,6 +30,39 @@ import { Textarea } from "$app/components/ui/Textarea";
 // near-bottom threshold the Communities chat uses.)
 const STICK_TO_BOTTOM_THRESHOLD_PX = 200;
 
+// After a stream breaks, how often to ask the server what became of the turn (identified by the
+// client-generated turn id sent with the stream request), and how long to keep asking. The server
+// tracks the turn's liveness while generating (its model client tolerates up to 120 seconds of
+// silence between chunks, across up to 5 tool iterations), so recovery keeps polling as long as
+// the server says "in_progress" — a fixed short deadline would abandon turns the server goes on
+// to finish. The hard cap only guards against a marker that never resolves.
+const TURN_RECOVERY_POLL_INTERVAL_MS = 3000;
+const TURN_RECOVERY_MAX_POLLS = 200;
+// Consecutive "unknown" statuses tolerated before giving up. Unknown means no stored turn and no
+// liveness marker — normally conclusive, but a Redis blip can produce one spuriously, so allow a
+// couple of confirming looks.
+const TURN_RECOVERY_MAX_CONSECUTIVE_UNKNOWNS = 2;
+// Consecutive failed status fetches tolerated before giving up — the same flaky network that
+// broke the stream may still be down, so this is more generous than the unknown allowance.
+const TURN_RECOVERY_MAX_CONSECUTIVE_FETCH_FAILURES = 10;
+
+// A UUID v4 for tagging a streamed turn. `crypto.randomUUID` only exists in secure contexts
+// (HTTPS or localhost), and the app also runs on plain-HTTP origins (system tests, local dev on
+// a custom host) — there we build the UUID from `crypto.getRandomValues`, which has no such
+// restriction. The id only has to be unique per turn, not cryptographically meaningful.
+const generateTurnId = (): string => {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const hex = [...bytes]
+    .map((byte, index) => {
+      if (index === 6) byte = (byte & 0x0f) | 0x40; // version 4
+      if (index === 8) byte = (byte & 0x3f) | 0x80; // RFC 4122 variant
+      return byte.toString(16).padStart(2, "0");
+    })
+    .join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
 type DisplayMessage = ChatMessage & {
   // A proposed change attached to an assistant turn. Once the seller acts on it, we record the
   // outcome so the confirmation card collapses into a status line and can't be triggered twice.
@@ -33,6 +71,27 @@ type DisplayMessage = ChatMessage & {
   // Objects the agent looked up or changed this turn, rendered inline as cards beneath the message.
   objects?: DisplayObject[];
 };
+
+// Build the renderable chat message for one persisted conversation message. Shared by the
+// mount-time hydration and the broken-stream recovery below, so the two paths can't drift on how
+// persisted extras (proposed-action card, object cards, applied status) come back to life.
+// `staleProposalsDismissed` is their one deliberate difference: a status-less proposal from a
+// previous session is stale — its context is gone, so hydration collapses it to dismissed — while
+// the same shape recovered moments after a broken stream is this session's live, confirmable card.
+const toDisplayMessage = (
+  message: ConversationMessage,
+  { staleProposalsDismissed }: { staleProposalsDismissed: boolean },
+): DisplayMessage => ({
+  role: message.role,
+  content: message.content,
+  ...(message.proposed_action ? { proposedAction: message.proposed_action } : {}),
+  ...(message.objects?.length ? { objects: message.objects } : {}),
+  ...(message.action_status
+    ? { actionStatus: message.action_status }
+    : staleProposalsDismissed && message.proposed_action
+      ? { actionStatus: "dismissed" as const }
+      : {}),
+});
 
 type Props = {
   greeting: string;
@@ -98,6 +157,97 @@ const ObjectList = ({ objects }: { objects: DisplayObject[] }) =>
     </div>
   ) : null;
 
+// The rendered "what your page will look like" preview state for a custom-HTML proposal card. The
+// server computes the resulting page exactly the way confirming would apply it and returns the
+// same sandboxed document /landing/embed serves. `enabled: false` (a non-page proposal, or a card
+// already acted on) skips the fetch entirely. The state lives here rather than in the preview
+// element because the card gates its Confirm button on it: a proposal whose preview hasn't
+// rendered — still loading, or invalid (say the page changed under it) — shouldn't be
+// confirmable, since the seller would be applying a change they haven't seen (and an invalid one
+// would fail anyway).
+type CustomHtmlPreviewState =
+  | { status: "disabled" }
+  | { status: "loading" }
+  | { status: "loaded"; html: string }
+  | { status: "error"; message: string };
+
+const useCustomHtmlProposalPreview = (action: ProposedAction, enabled: boolean): CustomHtmlPreviewState => {
+  const [state, setState] = React.useState<CustomHtmlPreviewState>({ status: enabled ? "loading" : "disabled" });
+
+  // Refetch only when the proposed change itself differs — the surrounding card re-renders with
+  // fresh (but identical) action objects as the stream's events land, and each shouldn't re-POST.
+  const actionRef = React.useRef(action);
+  actionRef.current = action;
+  // Mirrors of the current state and previous enabled flag, so the effect below can tell a
+  // re-enable (dismissed card's "Review" opened again) apart from a genuine params change without
+  // adding them as dependencies.
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
+  const wasEnabledRef = React.useRef(enabled);
+  const paramsKey = JSON.stringify(action.params);
+  React.useEffect(() => {
+    const wasEnabled = wasEnabledRef.current;
+    wasEnabledRef.current = enabled;
+    if (!enabled) {
+      // Keep an already-rendered preview around rather than discarding it: once the seller acts on
+      // the card the hook is disabled, but "Review" on the collapsed card should show the exact
+      // preview they evaluated. Refetching wouldn't work — an applied edit's find-snippet no
+      // longer matches the page — so the loaded snapshot is the only faithful record.
+      setState((current) => (current.status === "loaded" ? current : { status: "disabled" }));
+      return;
+    }
+    // Re-enabling with the snapshot still loaded (a dismissed card's "Review" toggled open): the
+    // page never changed, so the snapshot is still exact — keep it instead of re-POSTing and
+    // risking a transient error wiping what the seller already saw.
+    if (!wasEnabled && stateRef.current.status === "loaded") return;
+    let cancelled = false;
+    setState({ status: "loading" });
+    fetchCustomHtmlProposalPreview(actionRef.current)
+      .then((html) => {
+        if (!cancelled) setState({ status: "loaded", html });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setState({
+            status: "error",
+            message: e instanceof Error && e.message ? e.message : "The preview couldn't be loaded.",
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paramsKey, enabled]);
+
+  return state;
+};
+
+// Renders the preview state produced by useCustomHtmlProposalPreview. The document renders on an
+// opaque origin (no allow-same-origin), just like the live page embed, so the proposed HTML can't
+// reach cookies or the dashboard DOM. Unlike the live page's iframe, the sandbox below
+// deliberately omits allow-popups-to-escape-sandbox (matching ProfileLandingPagePreview): this
+// HTML is a not-yet-confirmed agent proposal shown inside the seller's dashboard, so any popup it
+// opens stays sandboxed rather than getting a full unsandboxed window. Popup escape only changes
+// popup behavior, not how the page itself renders, so preview fidelity is unaffected.
+const CustomHtmlProposalPreview = ({ state }: { state: CustomHtmlPreviewState }) => {
+  if (state.status === "disabled") return null;
+  if (state.status === "loading")
+    return (
+      <span className="text-sm text-muted" role="status">
+        Loading preview…
+      </span>
+    );
+  if (state.status === "error") return <span className="text-sm text-muted">Preview unavailable: {state.message}</span>;
+  return (
+    <iframe
+      title="Preview of your page after this change"
+      srcDoc={state.html}
+      sandbox="allow-scripts allow-forms allow-popups"
+      referrerPolicy="no-referrer"
+      className="h-96 w-full rounded border border-border bg-white"
+    />
+  );
+};
+
 const ProposedActionCard = ({
   action,
   status,
@@ -112,47 +262,106 @@ const ProposedActionCard = ({
   isApplying: boolean;
   onConfirm: () => void;
   onDismiss: () => void;
-}) => (
-  // Same solid card treatment as the object cards (Card = rounded border-border + a divider), with the
-  // actions in a divided footer — secondary on the left, primary (Confirm) on the right.
-  <Card>
-    <CardContent className="flex-col items-stretch gap-2">
-      <strong>{action.title ?? "Proposed change"}</strong>
-      {action.fields && action.fields.length > 0 ? (
-        <DefinitionList className="text-sm">
-          {action.fields.map((field) => (
-            <React.Fragment key={field.label}>
-              <dt className="text-muted">{field.label}</dt>
-              <dd className="break-words">{field.value}</dd>
-            </React.Fragment>
-          ))}
-        </DefinitionList>
-      ) : (
-        <span className="break-words">{action.summary}</span>
-      )}
-    </CardContent>
-    <CardContent className="justify-end gap-2">
-      {status === "applied" ? (
-        <span role="status" className="mr-auto text-green">
-          Applied
-        </span>
-      ) : status === "dismissed" ? (
-        <span role="status" className="mr-auto text-muted">
-          Dismissed
-        </span>
-      ) : (
-        <>
-          <Button disabled={isPending} onClick={onDismiss}>
-            Dismiss
+}) => {
+  const isHtmlProposal = isCustomHtmlProposal(action);
+  // Whether the acted-on compact card is expanded to show what the proposal was. Only meaningful
+  // once `status` is set; a fresh proposal always shows its full review surface.
+  const [isReviewOpen, setIsReviewOpen] = React.useState(false);
+  // Pending cards always fetch/render the preview. Acted-on cards keep the already-loaded snapshot
+  // (see the hook) so "Review" re-shows exactly what the seller evaluated. When no snapshot exists
+  // (the card was hydrated as already-acted-on), a DISMISSED proposal fetches lazily once "Review"
+  // is expanded — a dismissed change never touched the page, so the server can still compute what
+  // the seller saw. An APPLIED edit's find-snippet no longer matches the (now changed) page, so it
+  // can't be refetched; that case falls back to the one-line summary below.
+  const preview = useCustomHtmlProposalPreview(
+    action,
+    isHtmlProposal && (!status || (status === "dismissed" && isReviewOpen)),
+  );
+  // A page proposal is only confirmable once its preview has rendered — before that the seller
+  // hasn't seen what they'd be applying, and a preview that failed (say, the page changed under
+  // the proposal) means confirming would fail the same way. Dismiss stays available throughout.
+  const confirmBlockedOnPreview = isHtmlProposal && !status && preview.status !== "loaded";
+
+  const fieldRows =
+    action.fields && action.fields.length > 0 ? (
+      <DefinitionList className="text-sm">
+        {action.fields.map((field) => (
+          <React.Fragment key={field.label}>
+            <dt className="text-muted">{field.label}</dt>
+            <dd className="break-words">{field.value}</dd>
+          </React.Fragment>
+        ))}
+      </DefinitionList>
+    ) : (
+      <span className="break-words">{action.summary}</span>
+    );
+
+  if (status) {
+    // Once the seller has acted on the proposal, the full card no longer earns its space in the
+    // chat — collapse it to a one-line record of what happened (like the change cards in coding
+    // agents), with the details available behind "Review". Custom-HTML proposals re-show the
+    // preview snapshot the seller evaluated (kept loaded by the hook above); if it never loaded
+    // (say, the card was hydrated as already-acted-on), fall back to the one-line summary.
+    return (
+      <Card>
+        <CardContent className="items-center justify-between gap-3">
+          <div className="min-w-0">
+            <strong className="block break-words">{action.title ?? "Proposed change"}</strong>
+            <span role="status" className={status === "applied" ? "text-sm text-green" : "text-sm text-muted"}>
+              {status === "applied" ? "Applied" : "Dismissed"}
+            </span>
+          </div>
+          <Button className="shrink-0" aria-expanded={isReviewOpen} onClick={() => setIsReviewOpen((open) => !open)}>
+            {isReviewOpen ? "Hide" : "Review"}
           </Button>
-          <Button color="accent" disabled={isPending} onClick={onConfirm}>
-            {isApplying ? "Applying…" : "Confirm"}
-          </Button>
-        </>
-      )}
-    </CardContent>
-  </Card>
-);
+        </CardContent>
+        {isReviewOpen ? (
+          <CardContent className="flex-col items-stretch gap-2">
+            {isHtmlProposal ? (
+              preview.status !== "disabled" ? (
+                // The kept snapshot (or the lazy dismissed-card fetch, including its loading and
+                // error states) — the same rendered surface the seller originally evaluated.
+                <CustomHtmlProposalPreview state={preview} />
+              ) : (
+                // No preview to show — an applied edit hydrated as already-acted-on can't be
+                // re-rendered (its find-snippet no longer matches the changed page).
+                <span className="break-words">{action.summary}</span>
+              )
+            ) : (
+              fieldRows
+            )}
+          </CardContent>
+        ) : null}
+      </Card>
+    );
+  }
+
+  return (
+    // Same solid card treatment as the object cards (Card = rounded border-border + a divider), with the
+    // actions in a divided footer — secondary on the left, primary (Confirm) on the right.
+    <Card>
+      <CardContent className="flex-col items-stretch gap-2">
+        <strong>{action.title ?? "Proposed change"}</strong>
+        {isHtmlProposal ? (
+          // A page edit's fields are literal find/replace HTML — a wall of markup that reads as a
+          // glitch, not a preview. The rendered result IS the review surface, so it replaces the
+          // raw rows entirely.
+          <CustomHtmlProposalPreview state={preview} />
+        ) : (
+          fieldRows
+        )}
+      </CardContent>
+      <CardContent className="justify-end gap-2">
+        <Button disabled={isPending} onClick={onDismiss}>
+          Dismiss
+        </Button>
+        <Button color="accent" disabled={isPending || confirmBlockedOnPreview} onClick={onConfirm}>
+          {isApplying ? "Applying…" : "Confirm"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
 
 export const AgentChat = ({ greeting, suggestions }: Props) => {
   const [messages, setMessages] = React.useState<DisplayMessage[]>([{ role: "assistant", content: greeting }]);
@@ -210,25 +419,14 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     let cancelled = false;
     void fetchLatestAgentConversation()
       .then((conversation) => {
-        if (cancelled || !conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
+        if (cancelled) return;
+        if (!conversation || conversation.messages.length === 0 || hasSentMessageRef.current) return;
         setMessages([
           { role: "assistant", content: greeting },
-          ...conversation.messages.map(
-            (message: ConversationMessage): DisplayMessage => ({
-              role: message.role,
-              content: message.content,
-              ...(message.proposed_action ? { proposedAction: message.proposed_action } : {}),
-              ...(message.objects?.length ? { objects: message.objects } : {}),
-              ...(message.action_status
-                ? { actionStatus: message.action_status }
-                : // A proposal persisted without a status was never confirmed in the session it was
-                  // made. Its context (and the throttle window) is gone, so render it as dismissed
-                  // rather than offering a stale, re-confirmable change after reload.
-                  message.proposed_action
-                  ? { actionStatus: "dismissed" as const }
-                  : {}),
-            }),
-          ),
+          // A proposal persisted without a status was never confirmed in the session it was made.
+          // Its context (and the throttle window) is gone, so render it as dismissed rather than
+          // offering a stale, re-confirmable change after reload.
+          ...conversation.messages.map((message) => toDisplayMessage(message, { staleProposalsDismissed: true })),
         ]);
         setConversationId(conversation.id);
       })
@@ -239,6 +437,68 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       cancelled = true;
     };
   }, []);
+
+  // A streamed turn died before its terminal `done` frame. The turn was tagged with a
+  // client-generated id when it was sent, so ask the server what became of that EXACT turn —
+  // persisted, still generating, failed, or unknown — instead of inferring from the seller's
+  // latest conversation (which another tab or device can change at any moment). Polls for as long
+  // as the server reports the turn in progress: the server allows long silent stretches between
+  // model chunks, so a completed reply can persist well after the stream broke. When the turn is
+  // recovered, replaces the partially-rendered assistant message with the persisted one (including
+  // its proposed-action card and object cards) and adopts the conversation id. Returns whether the
+  // turn was recovered; when it wasn't, the caller falls back to the normal error handling.
+  const recoverInterruptedTurn = async (clientTurnId: string, assistantIndex: number): Promise<boolean> => {
+    const adopt = (turn: Extract<AgentTurnStatus, { status: "persisted" }>) => {
+      setMessages((prev) => {
+        const next = [...prev];
+        // Unlike the mount-time hydration (where a status-less proposal is stale and rendered
+        // dismissed), this proposal was made moments ago in the live session — keep it
+        // confirmable, exactly as it would have been had the stream survived.
+        next[assistantIndex] = toDisplayMessage(turn.message, { staleProposalsDismissed: false });
+        return next;
+      });
+      // Adopting the conversation id matters even mid-conversation, but especially on a fresh
+      // chat: without it the next turn would silently start a brand-new conversation.
+      setConversationId(turn.conversation_id);
+    };
+
+    let consecutiveUnknowns = 0;
+    let consecutiveFetchFailures = 0;
+    for (let poll = 0; poll < TURN_RECOVERY_MAX_POLLS; poll++) {
+      if (poll > 0) await new Promise((resolve) => setTimeout(resolve, TURN_RECOVERY_POLL_INTERVAL_MS));
+      let turn: AgentTurnStatus;
+      try {
+        turn = await fetchAgentTurnStatus(clientTurnId);
+      } catch {
+        // The same flaky network that broke the stream may fail this fetch too — keep trying for
+        // a while before concluding anything.
+        consecutiveFetchFailures += 1;
+        if (consecutiveFetchFailures >= TURN_RECOVERY_MAX_CONSECUTIVE_FETCH_FAILURES) return false;
+        continue;
+      }
+      consecutiveFetchFailures = 0;
+      switch (turn.status) {
+        case "persisted":
+          adopt(turn);
+          return true;
+        case "failed":
+          // The server's verdict: this turn errored and will never persist. Stop immediately.
+          return false;
+        case "in_progress":
+          // The server is still generating — keep waiting, however long it takes; its own
+          // liveness marker (not a client-side deadline) decides when the turn is dead.
+          consecutiveUnknowns = 0;
+          continue;
+        case "unknown":
+          // No stored turn and no liveness marker. Conclusive unless it's a transient blip, so
+          // allow a couple of confirming looks before giving up.
+          consecutiveUnknowns += 1;
+          if (consecutiveUnknowns >= TURN_RECOVERY_MAX_CONSECUTIVE_UNKNOWNS) return false;
+          continue;
+      }
+    }
+    return false;
+  };
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -257,6 +517,9 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     }));
     // The index the streamed assistant reply will occupy: right after the user message we add.
     const assistantIndex = messages.length + 1;
+    // Tag the turn with a unique id before sending so, if the stream breaks, recovery can ask the
+    // server about this exact turn instead of guessing from the seller's latest conversation.
+    const clientTurnId = generateTurnId();
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
     setFollowUps([]);
@@ -295,19 +558,20 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         setIsStreaming(true);
         appendToken(chunk);
       },
-      onReset: () =>
+      onReset: () => {
         // An intermediate tool-use turn streamed preamble text; clear it so the real reply replaces
         // it instead of appending to it.
         setMessages((prev) =>
           prev.map((msg, i) => (i === assistantIndex && msg.role === "assistant" ? { ...msg, content: "" } : msg)),
-        ),
+        );
+      },
       onObjects: (objects) => upsertAssistant({ objects }),
       onProposedAction: (proposedAction) => upsertAssistant({ proposedAction }),
       onSuggestions: (next) => setFollowUps(next),
     };
 
     try {
-      const result = await streamAgentMessage(history, handlers, conversationIdRef.current);
+      const result = await streamAgentMessage(history, handlers, conversationIdRef.current, clientTurnId);
       if (result.conversationId) setConversationId(result.conversationId);
       // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
       // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
@@ -326,15 +590,24 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       });
       setFollowUps(result.suggestions);
     } catch (e) {
-      showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
-      setMessages((prev) => {
-        const next = [...prev];
-        // If nothing streamed, drop in a friendly fallback; otherwise keep what arrived.
-        if (!next[assistantIndex] || next[assistantIndex]?.role !== "assistant") {
-          next[assistantIndex] = { role: "assistant", content: "Sorry, I ran into a problem. Please try again." };
-        }
-        return next;
-      });
+      // A broken stream usually means the server finished (or is still finishing) the turn
+      // without noticing the client stopped receiving — so the truncated text on screen
+      // misrepresents a reply that exists (or will exist) in full server-side. Recover this exact
+      // turn by its id before treating this as a failure. Server-reported errors (`error` events)
+      // skip this: those turns were never saved.
+      const recovered =
+        e instanceof AgentStreamInterruptedError && (await recoverInterruptedTurn(clientTurnId, assistantIndex));
+      if (!recovered) {
+        showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
+        setMessages((prev) => {
+          const next = [...prev];
+          // If nothing streamed, drop in a friendly fallback; otherwise keep what arrived.
+          if (!next[assistantIndex] || next[assistantIndex]?.role !== "assistant") {
+            next[assistantIndex] = { role: "assistant", content: "Sorry, I ran into a problem. Please try again." };
+          }
+          return next;
+        });
+      }
     } finally {
       setIsSending(false);
       setIsStreaming(false);

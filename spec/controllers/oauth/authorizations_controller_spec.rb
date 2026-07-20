@@ -65,6 +65,20 @@ describe Oauth::AuthorizationsController, type: :controller do
   end
 
   describe "POST create" do
+    it "revalidates scopes under the application lock before creating a grant" do
+      application.update!(scopes: "edit_products edit_profile")
+      allow_any_instance_of(OauthApplication).to receive(:with_lock).and_wrap_original do |method, *args, &block|
+        application.update_columns(scopes: "edit_products") if method.receiver.id == application.id
+        method.call(*args, &block)
+      end
+
+      expect do
+        post :create, params: oauth_params.merge(scope: "edit_profile")
+      end.not_to change(Doorkeeper::AccessGrant, :count)
+
+      expect(redirect_query_params["error"]).to eq("invalid_scope")
+    end
+
     it "creates an admin authorization code and redirects with seller and admin codes when admin user opts in" do
       expect do
         post :create, params: oauth_params.merge(admin_scope: "optional", authorize_admin_operations: "1")

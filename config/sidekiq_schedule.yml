@@ -94,10 +94,6 @@ expire_rental_purchases: # Duration: 45sec
   cron: "0 12 * * *" # UTC 12:00
   class: ExpireRentalPurchasesWorker
   description: update rental purchases that have expired in the last one day
-daily_flagged_and_suspended_users: # Duration: 5sec
-  cron: "0 15 * * *" # UTC 15:00
-  class: DailyRefundQueueNotifyWorker
-  description: Suspended users to refund
 delete_old_versions_records_worker: # Duration: 5min
   cron: "30 9 * * *" # UTC 09:30
   class: DeleteOldVersionsRecordsWorker

@@ -315,15 +315,29 @@ describe "chargeback event-date reporting" do
   end
 
   describe "#price_cents_for_chargeback_reporting" do
-    it "nets all effective refunds out of the clawed-back amount" do
-      purchase = create(:purchase, price_cents: 100_00, chargeback_date: cutover + 1.day)
-      create(:refund, purchase:, amount_cents: 40_00)
+    it "nets effective refunds that predate the chargeback out of the clawed-back amount" do
+      purchase = create(:purchase, price_cents: 100_00, chargeback_date: cutover + 30.days)
+      create(:refund, purchase:, amount_cents: 40_00).update_column(:created_at, cutover + 1.day)
       # A reversed-failure refund returned no money, so it must not shrink the clawback.
       reversed = create(:refund, purchase:, amount_cents: 30_00, status: "failed")
       reversed.balance_reversed_on_failure = true
       reversed.save!
+      reversed.update_column(:created_at, cutover + 1.day)
 
       expect(purchase.price_cents_for_chargeback_reporting).to eq(purchase.price_cents - 40_00)
+    end
+
+    it "ignores a refund issued after a dispute win, keeping already-filed legs stable" do
+      # Refunds are blocked while a chargeback stands, but a won dispute makes the purchase
+      # refundable again. Such a refund must not shrink the debit/re-add legs already filed
+      # for the chargeback and won periods — it is relieved by the refund leg of its own
+      # period instead. Netting it here would make regenerated historical reports disagree
+      # with what was filed.
+      purchase = create(:purchase, price_cents: 100_00, chargeback_date: cutover + 1.day, chargeback_reversed: true)
+      create(:dispute, purchase:, state: "won", won_at: cutover + 10.days)
+      create(:refund, purchase:, amount_cents: 40_00).update_column(:created_at, cutover + 20.days)
+
+      expect(purchase.price_cents_for_chargeback_reporting).to eq(purchase.price_cents)
     end
   end
 
@@ -359,7 +373,7 @@ describe "chargeback event-date reporting" do
   describe "Purchase.chargebacks_for_tax_period_reporting" do
     it "selects event-dated chargebacks whose event date falls in the window" do
       in_window = create(:purchase, chargeback_date: cutover + 5.days)
-      before_window = create(:purchase, chargeback_date: cutover + 40.days)
+      after_window = create(:purchase, chargeback_date: cutover + 40.days)
       legacy = create(:purchase, chargeback_date: cutover - 1.day)
       undated_reversal = create(:purchase, chargeback_date: cutover + 5.days, chargeback_reversed: true)
       dated_reversal = create(:purchase, chargeback_date: cutover + 5.days, chargeback_reversed: true)
@@ -370,7 +384,7 @@ describe "chargeback event-date reporting" do
       # The undated reversal emits no debit leg — with no real won_at its re-add leg could
       # never balance it, so it keeps the legacy treatment entirely.
       expect(result).to include(in_window, dated_reversal)
-      expect(result).not_to include(before_window, legacy, undated_reversal)
+      expect(result).not_to include(after_window, legacy, undated_reversal)
     end
   end
 
