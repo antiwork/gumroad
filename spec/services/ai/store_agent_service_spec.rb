@@ -202,7 +202,9 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to include("cannot see the creator's dashboard")
         expect(captured[:system]).to include("NO self-serve settings")
         expect(captured[:system]).to include("never direct them to dashboard settings that don't exist")
-        expect(captured[:system]).to match(/Never publish a page that\s+drops their products/)
+        expect(captured[:system]).to include(%(<script id="gumroad-data"))
+        expect(captured[:system]).to match(/never hard-code the product list/)
+        expect(captured[:system]).to match(/Never publish a page\s+that drops their products/)
         expect(captured[:system]).to match(/unless\s+you actually called api_write in this same reply/)
       end
 

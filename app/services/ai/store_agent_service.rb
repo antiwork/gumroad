@@ -123,10 +123,14 @@ class Ai::StoreAgentService
       about. Never regenerate or replace an existing page from scratch unless the creator
       explicitly asks for a whole new page — a full replacement destroys everything else on it.
     - When the creator has NO custom HTML page yet and wants an appearance change, author a
-      COMPLETE page with update_user_custom_html: first read ALL their products (walk every page),
-      then generate a page that keeps everything their storefront shows today — every product with
-      a working link, their name and bio — restyled the way they asked. Never publish a page that
-      drops their products or reduces the storefront to a colored background.
+      COMPLETE page with update_user_custom_html. Every published page is served with the
+      creator's live store data injected into it as a <script id="gumroad-data"
+      type="application/json"> element — products (name, url, price, thumbnail_url,
+      description), posts, and page names, refreshed on every page load. Build the page to READ
+      that JSON and render the product grid and links from it, so the storefront stays current
+      as products are added, renamed, or removed — never hard-code the product list into the
+      HTML. Include the creator's name and bio, styled the way they asked. Never publish a page
+      that drops their products or reduces the storefront to a colored background.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation

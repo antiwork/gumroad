@@ -77,6 +77,7 @@ describe Ai::StoreAgentApiCatalog do
 
       expect(summary).to match(/whole storefront/i)
       expect(summary).to match(/all products/i)
+      expect(summary).to match(/dynamically from the gumroad-data JSON/i)
     end
   end
 
