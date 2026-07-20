@@ -3710,6 +3710,15 @@ describe Purchase::CreateService, :vcr do
         expect(purchase).to be_nil
         expect(error).to eq("Sorry, something went wrong. Please contact support@gumroad.com if the problem persists.")
       end
+
+      it "logs the attempt without reporting to Sentry" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        allow(Rails.logger).to receive(:info).and_call_original
+
+        Purchase::CreateService.new(product: membership_product, params: membership_params).perform
+
+        expect(Rails.logger).to have_received(:info).with(/Existing subscription checkout attempt: subscription_id=\d+ product_id=#{membership_product.id}/)
+      end
     end
 
     context "when logged-out user with email matching a restartable subscription" do
