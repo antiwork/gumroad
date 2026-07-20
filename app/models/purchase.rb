@@ -2513,13 +2513,14 @@ class Purchase < ApplicationRecord
   def update_json_data_for_mobile
     return @cached_product_updates_data if defined?(@cached_product_updates_data)
 
-    return [] if subscription.present? && !subscription.alive? && link.block_access_after_membership_cancellation?
-
-    all_purchases_of_product = link.sales.for_displaying_installments(email:)
-
-    posts = self.class.product_installments(purchase_ids: all_purchases_of_product.pluck(:id))
-
-    posts.map { |post| post.installment_mobile_json_data(purchase: self) }.compact
+    # Delegate to the batched preloader even for a single purchase. The old inline
+    # implementation serialized each post with per-post queries (url_redirects,
+    # product_files, email_infos — one SELECT per installment), which surfaced as an
+    # N+1 on the mobile url_redirect_attributes endpoint. The preloader produces
+    # byte-identical output (covered by specs in purchase_installments_spec.rb) while
+    # batching those lookups into a bounded number of IN queries.
+    self.class.preload_product_updates_data!([self])
+    @cached_product_updates_data
   end
 
   def self.preload_product_updates_data!(purchases)
