@@ -907,11 +907,30 @@ module StripeMerchantAccountManager
     stripe_account = stripe_event["data"]["object"]
     stripe_previous_attributes = stripe_event["data"]["previous_attributes"] || {}
     raise "Stripe Event #{stripe_event_id} does not contain an 'account' object." if stripe_account["object"] != "account"
-    refresh_payment_method_availability(
-      MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
-                            charge_processor_merchant_id: stripe_account["id"]).alive.charge_processor_alive.last
-    )
+    merchant_account = MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             charge_processor_merchant_id: stripe_account["id"]).alive.charge_processor_alive.last
+    refresh_payment_method_availability(merchant_account)
+    clear_settlement_currency_mismatch_on_currency_change(merchant_account, stripe_previous_attributes)
     handle_stripe_info_requirements(stripe_event_id, stripe_account, stripe_previous_attributes)
+  end
+
+  # Buyer-currency checkout learns that an account settles in a non-USD currency (Stripe
+  # multi-currency settlement) from a rejected FX quote and records it on the merchant
+  # account so later checkouts skip the doomed quote call (issue #6011). Settlement
+  # behavior is driven by the account's currency configuration — default_currency and the
+  # set of external accounts (bank accounts) determine which currencies the account can
+  # settle in — so when account.updated says either changed, forget the learned marker and
+  # let the next eligible checkout probe Stripe again. Clearing is cheap and safe: the
+  # worst case is one extra FX-quote round trip that re-records the mismatch.
+  def self.clear_settlement_currency_mismatch_on_currency_change(merchant_account, stripe_previous_attributes)
+    return if merchant_account.nil?
+    return unless stripe_previous_attributes.key?("default_currency") || stripe_previous_attributes.key?("external_accounts")
+
+    merchant_account.clear_settlement_currency_mismatch!
+  rescue StandardError => e
+    # The rest of the account.updated handling (payment method availability, compliance
+    # info requirements) must not be skipped because this bookkeeping failed.
+    Rails.logger.warn("Failed to clear settlement currency mismatch for merchant account #{merchant_account.id}: #{e.class} #{e.message}")
   end
 
   # A capability or account change on a Stripe Connect (direct-charge) account may mean the
