@@ -188,6 +188,19 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "when the refund policy record is missing despite the flag being enabled" do
+      it "does not build a purchase refund policy and does not raise" do
+        purchase, error = Purchase::CreateService.new(
+          product:,
+          params:,
+          buyer:
+        ).perform
+
+        expect(error).to be_nil
+        expect(purchase.purchase_refund_policy).to be_nil
+      end
+    end
+
     context "when the refund policy has no fine print" do
       let!(:refund_policy) do
         create(:product_refund_policy, fine_print: "", product:, seller: user)

@@ -50,7 +50,10 @@ class Purchase::CreateService < Purchase::BaseService
           title: @product.user.refund_policy.title,
           fine_print: @product.user.refund_policy.fine_print
         )
-      elsif @product.product_refund_policy_enabled?
+      elsif @product.product_refund_policy_enabled? && @product.product_refund_policy.present?
+        # The enabled flag can be out of sync with the underlying record (the
+        # ProductRefundPolicy row may have been deleted or never created), so we only
+        # attach a purchase refund policy when the record actually exists.
         purchase.build_purchase_refund_policy(
           max_refund_period_in_days: @product.product_refund_policy.max_refund_period_in_days,
           title: @product.product_refund_policy.title,
