@@ -9,7 +9,10 @@ class HongKongBankAccount < BankAccount
   BRANCH_CODE_FORMAT_REGEX = /\A[0-9]{3}\z/
   private_constant :BRANCH_CODE_FORMAT_REGEX
 
-  ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{6,12}\z/
+  # Stripe accepts 6-16 digit Hong Kong account numbers (its tokenization error
+  # reads "must be 6-16 digits"); keep our cap aligned so we don't reject
+  # account numbers the processor would take.
+  ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{6,16}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :clearing_code, :bank_number

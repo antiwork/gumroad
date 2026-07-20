@@ -49,6 +49,11 @@ describe ThailandBankAccount do
       expect(build(:thailand_bank_account, account_number: "000123456789")).to be_valid
       expect(build(:thailand_bank_account, account_number: "123456789")).to be_valid
       expect(build(:thailand_bank_account, account_number: "123456789012345")).to be_valid
+      expect(build(:thailand_bank_account, account_number: "12345678901234567")).to be_valid
+
+      th_bank_account = build(:thailand_bank_account, account_number: "123456789012345678")
+      expect(th_bank_account).to_not be_valid
+      expect(th_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
 
       th_bank_account = build(:thailand_bank_account, account_number: "ABCDEFGHIJKL")
       expect(th_bank_account).to_not be_valid
