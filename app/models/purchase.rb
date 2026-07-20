@@ -1866,7 +1866,19 @@ class Purchase < ApplicationRecord
   # purchase. Failed refunds that were NOT auto-reversed still count — the seller
   # is still debited for them until a human resolves the exception.
   def amount_refunded_cents
-    refunds.effective.sum(:amount_cents)
+    # When the refunds association is already loaded (batch serializers like the
+    # mobile purchases endpoints preload it), sum in memory using Refund#effective?
+    # (the documented in-memory mirror of the .effective scope) instead of issuing
+    # a per-purchase SUM query — that per-row SUM is the N+1 Sentry flags on
+    # Api::Mobile::PurchasesController#search. Callers that haven't preloaded
+    # refunds (including every refund-processing write path) fall through to the
+    # DB-backed aggregate, so bulk SQL writes still see fresh state.
+    if association(:refunds).loaded?
+      # .to_i mirrors SQL SUM semantics, which skips NULL amount_cents rows.
+      refunds.select(&:effective?).sum { |refund| refund.amount_cents.to_i }
+    else
+      refunds.effective.sum(:amount_cents)
+    end
   end
 
   def fee_refunded_cents
