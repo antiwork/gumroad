@@ -84,7 +84,11 @@ module User::SocialGoogle
       end
     rescue ActiveRecord::RecordInvalid => e
       logger.error("Error finding or creating user via Google OAuth2: #{e.message}")
-      ErrorNotifier.notify(e)
+      # A rejection from a signup fraud gate (blocked email domain/IP, gmail
+      # variant of a suspended account) is an expected fraud-control outcome —
+      # the visitor sees a generic error — not a bug. Don't page Sentry for it;
+      # anything else is a real validation failure and should alert.
+      ErrorNotifier.notify(e) unless blocked_signup_error?(e)
       nil
     end
 
