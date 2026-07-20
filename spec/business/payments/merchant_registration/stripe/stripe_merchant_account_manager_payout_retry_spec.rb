@@ -197,6 +197,37 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "platform-blocked account stays out of the retry loop" do
+    let(:zip_code) { "94107" }
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new(
+          "Gumroad has blocked payments on this account. If you believe this is in error, please reach out to the platform for assistance.",
+          nil
+        )
+      )
+    end
+
+    it "returns :account_blocked_by_platform without paging Sentry, emailing, or leaving a failure note" do
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+
+      expect(result).to eq(:account_blocked_by_platform)
+      expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+    end
+  end
+
   describe "forcing an address resync on an automated retry" do
     let(:zip_code) { "94107" }
     let!(:business_compliance_info) { create(:user_compliance_info_business, user:) }

@@ -387,12 +387,26 @@ module StripeMerchantAccountManager
     clear_stale_bank_sync_failure_notes(user)
     :synced
   rescue Stripe::InvalidRequestError => e
+    # Stripe returns "Gumroad has blocked payments on this account..." when the connected
+    # account was rejected by Gumroad itself (a platform-level risk block). No bank account
+    # update can succeed until that block is lifted, so this outcome is expected: don't page
+    # Sentry and don't leave a bank-sync failure note that would trigger automated retries.
+    if e.message.to_s.include?("has blocked payments on this account")
+      return :account_blocked_by_platform
+    end
+
     if e.code == "incorrect_account_holder_name"
       ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
       return :invalid_account_holder_name
     end
     record_bank_sync_failure_note(user, e) if notify
-    if e.code == "bank_account_unusable" || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
+    # bank_account_invalid_error? classifies rejections of the seller's bank details themselves
+    # (unknown bank for a BIC/routing code, invalid account number — Stripe flags these via the
+    # error's param/code, e.g. param "bank_account[routing_number]"). These are expected
+    # seller-input errors, same as during account creation: the seller gets emailed and a
+    # retryable payout note is recorded above, so they must not page Sentry. The message-string
+    # checks below cover older rejection shapes that carry no param/code.
+    if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
       ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
       return :invalid_bank_account
     end
