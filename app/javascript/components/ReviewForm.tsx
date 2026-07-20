@@ -132,6 +132,29 @@ export const ReviewForm = React.forwardRef<
     const loggedInUser = useLoggedInUser();
     const { error, readyToUpload, evaporateUploader, s3UploadConfig } = useReviewVideoUploader();
 
+    // Autosave bookkeeping: a monotonically increasing sequence number lets us
+    // ignore responses from superseded autosaves (e.g. the buyer taps 3 stars,
+    // then 5 stars right after — only the latest save should show a toast), the
+    // timeout ref holds the pending debounced save so an explicit submit can
+    // cancel it, and the in-flight ref serializes saves: the next autosave (or
+    // an explicit submit) waits for a save that already left, so responses
+    // can't reach the server out of order and overwrite a newer rating.
+    const autosaveSequence = React.useRef(0);
+    const autosaveTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const autosaveInFlight = React.useRef<Promise<void> | null>(null);
+
+    // Internal handle on the message textarea so we can focus it after a star
+    // tap. The component also forwards a ref to the same element for callers
+    // (e.g. the Reviews page focuses the next form after a submission), so the
+    // two are merged in a callback ref below.
+    const messageInputRef = React.useRef<HTMLTextAreaElement | null>(null);
+    React.useEffect(
+      () => () => {
+        if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
+      },
+      [],
+    );
+
     const uid = React.useId();
     const viewing = formState === "viewing";
     const disabled = isLoading || preview || !!disabledStatus;
@@ -210,13 +233,79 @@ export const ReviewForm = React.forwardRef<
       }
     };
 
+    // A rating alone is a valid review, so save it the moment a star is tapped
+    // instead of making the buyer find the separate "Post review" button (which
+    // can sit below the fold on mobile — buyers tapped stars, saw nothing
+    // happen, and gave up). The save is debounced so tapping around the stars
+    // fires one request, and the form stays open afterwards so the buyer can
+    // still add the written or video review as a follow-up.
+    const autosaveRating = (newRating: number) => {
+      if (preview || disabled || viewing) return;
+
+      if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
+      const sequence = (autosaveSequence.current += 1);
+
+      autosaveTimeout.current = setTimeout(() => {
+        autosaveTimeout.current = null;
+
+        // Serialize autosaves: each save waits for the one that already left
+        // before sending. setProductRating is a plain PUT with no sequence
+        // field, so if two saves raced the server could apply them out of
+        // order and a slow earlier response would overwrite the buyer's final
+        // rating. Chaining guarantees the latest tap is also the last write.
+        const previous = autosaveInFlight.current;
+
+        const save = (async () => {
+          if (previous) await previous.catch(() => undefined);
+          // While waiting for the previous save, this one may have been
+          // superseded by a newer tap or an explicit submit — skip sending a
+          // now-stale rating entirely.
+          if (sequence !== autosaveSequence.current) return;
+
+          try {
+            // Only the rating (and whatever message is already in the box) is
+            // autosaved — video uploads stay behind the explicit submit.
+            await setProductRating({
+              permalink,
+              purchaseId,
+              purchaseEmailDigest: purchaseEmailDigest ?? "",
+              rating: newRating,
+              message: message || null,
+            });
+            if (sequence !== autosaveSequence.current) return;
+            showAlert(message ? "Rating saved!" : "Rating saved! Add a written review to tell others more.", "success");
+          } catch (error) {
+            if (sequence !== autosaveSequence.current) return;
+            assertResponseError(error);
+            showAlert(error.message, "error");
+          }
+        })();
+
+        autosaveInFlight.current = save;
+        void save.finally(() => {
+          if (autosaveInFlight.current === save) autosaveInFlight.current = null;
+        });
+      }, 500);
+    };
+
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (preview || !rating) return;
 
+      // An explicit submit supersedes any pending or in-flight rating autosave:
+      // drop the debounced save, bump the sequence so a late autosave response
+      // can't show a stale toast, and wait for a request that already left so
+      // the server applies this submission last.
+      if (autosaveTimeout.current) {
+        clearTimeout(autosaveTimeout.current);
+        autosaveTimeout.current = null;
+      }
+      autosaveSequence.current += 1;
+
       setIsLoading(true);
 
       try {
+        if (autosaveInFlight.current) await autosaveInFlight.current;
         const content = await generateReviewContentPayload();
 
         const review = await setProductRating({
@@ -281,7 +370,13 @@ export const ReviewForm = React.forwardRef<
         onChange={(evt) => setMessage(evt.target.value)}
         placeholder="Want to leave a written review?"
         disabled={disabled}
-        ref={ref}
+        ref={(element) => {
+          // Merge our internal ref (used to focus the textarea after a star
+          // tap) with the forwarded ref callers pass in.
+          messageInputRef.current = element;
+          if (typeof ref === "function") ref(element);
+          else if (ref) ref.current = element;
+        }}
       />
     );
 
@@ -347,7 +442,21 @@ export const ReviewForm = React.forwardRef<
         {error ? <p className="text-red"> {error} </p> : null}
         <div className="flex grow flex-wrap items-center justify-between gap-2">
           <Label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</Label>
-          <RatingSelector currentRating={rating} onChangeCurrentRating={setRating} disabled={disabled || viewing} />
+          <RatingSelector
+            currentRating={rating}
+            onChangeCurrentRating={(newRating) => {
+              setRating(newRating);
+              autosaveRating(newRating);
+              // Move the buyer straight into the written review: focus the
+              // textarea (which also scrolls it into view when it sits below
+              // the fold). The rating is already autosaved at this point, so
+              // typing is purely an optional next step — nothing is lost if
+              // they stop here. Only applies in text mode; the video recorder
+              // has no text input to focus.
+              if (reviewMode === "text") messageInputRef.current?.focus();
+            }}
+            disabled={disabled || viewing}
+          />
         </div>
 
         {!viewing ? reviewModeRadioButtons : null}

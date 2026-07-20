@@ -62,9 +62,16 @@ class LinksController < ApplicationController
       params[:link][:quantity_enabled] = true
     end
 
-    @product = current_seller.links.build(link_params)
-
-    @product.price_range = params[:link][:price_range]
+    begin
+      # Building the product and setting the price range both assign price_cents,
+      # which raises Link::LinkInvalid when the price exceeds the maximum allowed.
+      # Keep these inside the rescue below so an oversized price shows the user an
+      # error message instead of a 500.
+      @product = current_seller.links.build(link_params)
+      @product.price_range = params[:link][:price_range]
+    rescue Link::LinkInvalid => e
+      return redirect_to new_product_path, alert: e.message, inertia: { errors: { "link.base" => e.message } }
+    end
 
     @product.save_custom_summary(params[:link][:custom_summary]) if params[:link][:custom_summary].present?
     @product.draft = true
@@ -87,7 +94,10 @@ class LinksController < ApplicationController
         generate_product_details_using_ai
       end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid
-      return redirect_to new_product_path, alert: @product.errors.to_hash.transform_values(&:to_sentence).first, inertia: inertia_errors(@product)
+      # `errors.to_hash` maps attribute => [messages]; take the first attribute's
+      # messages joined into a sentence. (Calling `.first` on the hash itself would
+      # return a [key, value] pair, putting an Array into flash[:alert].)
+      return redirect_to new_product_path, alert: @product.errors.to_hash.transform_values(&:to_sentence).values.first, inertia: inertia_errors(@product)
     end
 
     create_user_event("add_product")

@@ -574,6 +574,28 @@ describe Api::V2::LicensesController do
       end
     end
 
+    context "when params contain non-scalar values" do
+      it "returns a 400 error when license_key is not a string" do
+        post :verify, params: { product_permalink: @product.unique_permalink, license_key: { foo: "bar" } }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The 'license_key' parameter must be a string."
+        }.as_json)
+      end
+
+      it "returns a 400 error when product_id is not a string" do
+        post :verify, params: { product_id: { foo: "bar" }, license_key: @purchase.license.serial }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The 'product_id' parameter must be a string."
+        }.as_json)
+      end
+    end
+
     context "when product_id is blank" do
       before do
         create(:product, custom_permalink: @product.unique_permalink)

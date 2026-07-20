@@ -4635,7 +4635,7 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase.process!
 
     assert purchase.errors.present?
-    assert_equal "There is a problem with creator's paypal account, please try again later (your card was not charged).", purchase.errors[:base].first
+    assert_equal "There is a problem with creator's PayPal account, please try again later (your card was not charged).", purchase.errors[:base].first
     assert_equal PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED, purchase.stripe_error_code
   end
 

@@ -285,7 +285,40 @@ describe Checkout::BuyerCurrencyQuote do
       )
       expect(ErrorNotifier).not_to receive(:notify)
 
-      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
+    it "records the mismatch on the merchant account so later checkouts skip the FX-quote call" do
+      allow(StripeFxQuote).to receive(:create).and_raise(
+        StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
+      )
+
+      expect do
+        described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+      end.to change { merchant_account.reload.settlement_currency_mismatch_active? }.from(false).to(true)
+    end
+
+    it "skips the FX-quote round trip entirely while a recorded mismatch is fresh" do
+      merchant_account.record_settlement_currency_mismatch!
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
+    it "still falls back to nil when recording the mismatch itself fails" do
+      # The persistence of the learned marker is best-effort bookkeeping; a failure there
+      # must not turn an expected fallback into a checkout error.
+      allow(StripeFxQuote).to receive(:create).and_raise(
+        StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
+      )
+      allow_any_instance_of(MerchantAccount).to receive(:record_settlement_currency_mismatch!).and_raise("db hiccup")
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end

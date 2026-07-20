@@ -421,6 +421,74 @@ describe UrlRedirect do
 
       expect(url_redirect.video_files_playlist(create(:product_file))[:index_to_play]).to eq(0)
     end
+
+    it "bulk-loads subtitle files and media locations instead of querying once per video" do
+      purchase = create(:purchase, link: product)
+      url_redirect = create(:url_redirect, link: product, purchase:)
+
+      files = [file1, file2, file3, file4]
+      files.each { |file| create(:subtitle_file, product_file: file, language: "English (#{file.id})") }
+
+      consumed_at = Time.current.change(usec: 0)
+      files.first(2).each_with_index do |file, index|
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                product_file_id: file.id, product_id: product.id,
+                                location: index + 1, consumed_at:)
+      end
+
+      subtitle_queries = []
+      media_location_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next unless sql.start_with?("SELECT")
+        subtitle_queries << sql if sql.include?("subtitle_files")
+        media_location_queries << sql if sql.include?("media_locations")
+      end
+
+      playlist = nil
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        playlist = url_redirect.video_files_playlist(file1)[:playlist]
+      end
+
+      expect(subtitle_queries.size).to eq(1)
+      expect(media_location_queries.size).to eq(1)
+
+      expect(playlist.size).to eq(4)
+      playlist_by_external_id = playlist.index_by { |video| video[:external_id] }
+      files.each do |file|
+        expect(playlist_by_external_id[file.external_id][:tracks].sole[:label]).to eq("English (#{file.id})")
+      end
+      files.first(2).each_with_index do |file, index|
+        expect(playlist_by_external_id[file.external_id][:latest_media_location]).to eq(
+          location: index + 1, unit: MediaLocation::Unit::SECONDS, timestamp: consumed_at
+        )
+      end
+      files.last(2).each do |file|
+        expect(playlist_by_external_id[file.external_id][:latest_media_location]).to be_nil
+      end
+    end
+
+    it "keeps resume positions when an installment redirect falls through to the product's files" do
+      purchase = create(:purchase, link: product)
+      installment = create(:installment, link: product)
+      url_redirect = installment.generate_url_redirect_for_purchase(purchase)
+
+      # The installment has no alive files of its own, so alive_product_files serves
+      # the product's files — watch positions recorded on those files must survive.
+      expect(installment.has_files?).to eq(false)
+
+      consumed_at = Time.current.change(usec: 0)
+      create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                              product_file_id: file1.id, product_id: product.id,
+                              location: 42, consumed_at:)
+
+      playlist = url_redirect.video_files_playlist(file1)[:playlist]
+      playlist_by_external_id = playlist.index_by { |video| video[:external_id] }
+
+      expect(playlist_by_external_id[file1.external_id][:latest_media_location]).to eq(
+        location: 42, unit: MediaLocation::Unit::SECONDS, timestamp: consumed_at
+      )
+    end
   end
 
   describe "#html5_video_url_and_guid_for_product_file" do
