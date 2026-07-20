@@ -229,6 +229,49 @@ describe FollowersController, inertia: true do
           expect(inertia.props[:message]).to eq("You are now following #{seller.name_or_username}!")
         end
       end
+
+      # The JSON shape serves the gumroad:follow bridge on custom HTML pages:
+      # the trusted wrapper fetches this endpoint and relays the outcome into
+      # the sandboxed page, where a redirect or an Inertia document would be
+      # useless. The HTML behavior above must stay untouched — the legacy
+      # third-party embed form still posts as a plain form.
+      context "as JSON (custom HTML follow bridge)" do
+        it "creates the follower with embed-form attribution and returns the confirmation message" do
+          post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id }, format: :json
+
+          expect(response).to be_successful
+          expect(response.parsed_body).to eq("success" => true, "message" => "Check your inbox to confirm your follow request.")
+          follower = Follower.last
+          expect(follower.email).to eq("follower@example.com")
+          expect(follower.user).to eq(seller)
+          expect(follower.source).to eq(Follower::From::EMBED_FORM)
+        end
+
+        it "returns the validation message with 422 for an invalid email" do
+          post :from_embed_form, params: { email: "exampleexample.com", seller_id: seller.external_id }, format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to include("Email invalid")
+        end
+
+        it "404s an unknown seller id" do
+          post :from_embed_form, params: { email: "follower@example.com", seller_id: "does-not-exist" }, format: :json
+
+          expect(response).to have_http_status(:not_found)
+        end
+      end
+
+      # The action deliberately branches on request.format.json? instead of
+      # respond_to: formats that never had an explicit branch (feeds, crawlers
+      # sending odd Accept headers) must keep the old always-render/redirect
+      # behavior rather than start raising UnknownFormat.
+      it "keeps the legacy redirect behavior for formats other than HTML and JSON" do
+        post :from_embed_form, params: { email: "exampleexample.com", seller_id: seller.external_id }, format: :xml
+
+        expect(response).to redirect_to(seller.profile_url)
+        expect(flash[:warning]).to include("Email invalid")
+      end
     end
 
     describe "GET cancel" do

@@ -3681,6 +3681,26 @@ describe Purchase, :vcr do
         end
       end
     end
+
+    describe "assign_is_multiseat_license" do
+      it "copies the product's multiseat flag onto the purchase" do
+        @product.update(is_multiseat_license: true)
+        purchase = create(:purchase, link: @product)
+
+        expect(purchase.is_multiseat_license).to eq true
+      end
+
+      it "does not mark a call purchase multiseat even when the product flag is set" do
+        # The editor hides the seat toggle for calls, but the flag can still be set
+        # via the API or predate that gating. A call books one slot per purchase, so
+        # its purchases must never report seats (receipts, pings, license verify).
+        call = create(:call_product, :available_for_a_year, price_cents: 1000, is_licensed: true)
+        call.update_attribute(:is_multiseat_license, true)
+        purchase = create(:call_purchase, link: call)
+
+        expect(purchase.is_multiseat_license).to eq false
+      end
+    end
   end
 
   describe "variant_names_hash" do
@@ -4882,7 +4902,7 @@ describe Purchase, :vcr do
       purchase.process!
 
       expect(purchase.errors.present?).to be(true)
-      expect(purchase.errors[:base].first).to eq("There is a problem with creator's paypal account, please try again later (your card was not charged).")
+      expect(purchase.errors[:base].first).to eq("There is a problem with creator's PayPal account, please try again later (your card was not charged).")
       expect(purchase.stripe_error_code).to eq(PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED)
     end
   end

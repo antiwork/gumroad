@@ -139,10 +139,14 @@ module Purchase::Reportable
 
   # Amounts for the chargeback legs. A dispute claws back whatever part of the charge was not
   # already returned by refunds, so both the negative (chargeback) leg and the positive
-  # (dispute won) leg carry the purchase's amounts net of ALL its effective refunds — refunds
-  # are already relieved by their own reporting path (netted into the sale for pre-cutover
-  # refunds, refund rows for post-cutover ones), and a charged-back purchase cannot be
-  # refunded afterwards, so this set is stable once the chargeback exists.
+  # (dispute won) leg carry the purchase's amounts net of the effective refunds that existed
+  # before the chargeback — refunds are already relieved by their own reporting path (netted
+  # into the sale for pre-cutover refunds, refund rows for post-cutover ones). Only refunds
+  # from before the chargeback are netted because that set can never change afterwards: a
+  # purchase with a live (lost) chargeback cannot be refunded at all, and a refund issued
+  # after a dispute win (which the refund flow does allow) must not rewrite the debit and
+  # re-add legs already filed for past periods — it is relieved by the refund leg of its own
+  # period instead, and the filed legs stay exactly as generated.
   def price_cents_for_chargeback_reporting
     chargeback_reporting_cents(:price_cents, :amount_cents)
   end
@@ -206,15 +210,21 @@ module Purchase::Reportable
     end
 
     # Amounts for the chargeback debit leg and the dispute-won re-add leg: the purchase's
-    # amounts net of ALL its effective refunds, clamped at zero. This is what the dispute
-    # actually claws back — money already returned by a refund is not clawed back again, and
-    # every refund is relieved by its own reporting path (netted into the sale for pre-cutover
-    # refunds, refund rows for post-cutover ones). Netting all refunds here keeps the identity
-    # "sale leg + refund legs + chargeback leg (+ won leg) = money actually kept" regardless
-    # of which side of the refund cutover the purchase or its refunds fall on.
+    # amounts net of the effective refunds created before the chargeback, clamped at zero.
+    # This is what the dispute actually claws back — money already returned by a refund is
+    # not clawed back again, and every refund is relieved by its own reporting path (netted
+    # into the sale for pre-cutover refunds, refund rows for post-cutover ones), so the
+    # identity "sale leg + refund legs + chargeback leg (+ won leg) = money actually kept"
+    # holds regardless of which side of the refund cutover the purchase or its refunds fall.
+    #
+    # The time bound makes the legs immutable once generated. Refunds are blocked while a
+    # chargeback stands, but become possible again after a dispute win — and a refund issued
+    # then must not shrink debit/re-add legs already filed for past periods (it reports
+    # through the refund leg of its own period instead). Bounding by chargeback_date pins
+    # the netted set at the instant the chargeback came into existence.
     def chargeback_reporting_cents(purchase_attribute, refund_attribute)
       gross_cents = self.send(purchase_attribute)
-      refunded_cents = refunds.effective.sum(refund_attribute)
+      refunded_cents = refunds.effective.where("refunds.created_at < ?", chargeback_date).sum(refund_attribute)
       net_cents = gross_cents - refunded_cents
       net_cents.positive? ? net_cents : 0
     end

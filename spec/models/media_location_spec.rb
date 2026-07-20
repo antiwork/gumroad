@@ -71,4 +71,39 @@ describe MediaLocation do
       expect(MediaLocation.max_consumed_at_by_file(purchase_id: purchase.id)).to match_array(expected)
     end
   end
+
+  describe ".max_consumed_at_by_file_for_purchases" do
+    it "returns the most recent record per (purchase, product_file) pair across all given purchases in one query" do
+      product = create(:product)
+      purchase_1 = create(:purchase, link: product)
+      purchase_2 = create(:purchase, link: product)
+      product_files = create_list(:product_file, 2, link: product)
+
+      expected = []
+      expected << create(:media_location, purchase: purchase_1, product_file: product_files[0], consumed_at: 3.days.ago)
+      create(:media_location, purchase: purchase_1, product_file: product_files[0], consumed_at: 7.days.ago)
+      expected << create(:media_location, purchase: purchase_1, product_file: product_files[1], consumed_at: 2.days.ago)
+      expected << create(:media_location, purchase: purchase_2, product_file: product_files[0], consumed_at: 1.day.ago)
+      create(:media_location, purchase: purchase_2, product_file: product_files[0], consumed_at: 4.days.ago)
+      create(:media_location, product_file: product_files[0], consumed_at: 1.hour.ago) # unrelated purchase
+
+      result = MediaLocation.max_consumed_at_by_file_for_purchases(purchase_ids: [purchase_1.id, purchase_2.id])
+      expect(result).to match_array(expected)
+    end
+
+    it "matches max_consumed_at_by_file for each purchase individually" do
+      product = create(:product)
+      purchases = create_list(:purchase, 2, link: product)
+      product_file = create(:product_file, link: product)
+      purchases.each do |purchase|
+        create(:media_location, purchase:, product_file:, consumed_at: 2.days.ago)
+        create(:media_location, purchase:, product_file:, consumed_at: 1.day.ago)
+      end
+
+      batched = MediaLocation.max_consumed_at_by_file_for_purchases(purchase_ids: purchases.map(&:id)).group_by(&:purchase_id)
+      purchases.each do |purchase|
+        expect(batched[purchase.id]).to match_array(MediaLocation.max_consumed_at_by_file(purchase_id: purchase.id))
+      end
+    end
+  end
 end

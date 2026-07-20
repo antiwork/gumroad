@@ -178,12 +178,111 @@ describe UtmLinkTracking, type: :controller do
       expect(response).to be_successful
     end
 
-    it "reports the error and still renders the page when the database uniqueness index is hit" do
+    it "reports the error and still renders the page when the database uniqueness index is hit repeatedly" do
       allow_any_instance_of(UtmLink).to receive(:save!).and_raise(ActiveRecord::RecordNotUnique)
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordNotUnique), anything)
 
       get :action, params: utm_params
 
+      expect(response).to be_successful
+    end
+  end
+
+  context "when two simultaneous first visits race to auto-create the same UTM link" do
+    let(:utm_params) do
+      {
+        utm_source: "facebook",
+        utm_medium: "social",
+        utm_campaign: "summer_sale"
+      }
+    end
+
+    before do
+      allow(controller).to receive(:root_path).and_return("/")
+      request.host = "#{seller.subdomain}"
+      request.path = "/"
+    end
+
+    it "retries once, recovers, and records the visit without reporting an error", :sidekiq_inline do
+      # Simulate losing the race: the first attempt to insert the auto-created link raises
+      # RecordNotUnique (in production this happens when a concurrent request inserted the
+      # same link between our find_or_initialize_by and our insert). The retry re-runs the
+      # lookup and must succeed without surfacing an error.
+      original_save = UtmLink.instance_method(:save!)
+      raised_once = false
+      allow_any_instance_of(UtmLink).to receive(:save!) do |instance, *args|
+        if instance.new_record? && !raised_once
+          raised_once = true
+          raise ActiveRecord::RecordNotUnique
+        end
+        original_save.bind_call(instance, *args)
+      end
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        get :action, params: utm_params
+      end.to change(UtmLinkVisit, :count).by(1)
+
+      expect(response).to be_successful
+      utm_link = UtmLink.alive.find_by!(utm_source: "facebook", utm_medium: "social", utm_campaign: "summer_sale")
+      expect(utm_link.total_clicks).to eq(1)
+      expect(utm_link.utm_link_visits.count).to eq(1)
+    end
+
+    it "retries once and recovers when the loser fails on the uniqueness validation instead of the database index", :sidekiq_inline do
+      # The other timing of the same race: the winning request commits BEFORE the losing
+      # request's uniqueness validation query runs, so the loser fails model validation
+      # (RecordInvalid) rather than the database's unique index (RecordNotUnique). This is
+      # the "A link with similar UTM parameters already exists" error seen in production.
+      # The retry re-runs the lookup, finds the winner's link, and must record the visit
+      # without surfacing an error.
+      original_save = UtmLink.instance_method(:save!)
+      raised_once = false
+      allow_any_instance_of(UtmLink).to receive(:save!) do |instance, *args|
+        if instance.new_record? && !raised_once
+          raised_once = true
+          # Simulate the concurrent request having committed the same link already, which is
+          # what makes the uniqueness validation fail for this (losing) request.
+          create(:utm_link, seller:, utm_source: "facebook", utm_medium: "social", utm_campaign: "summer_sale",
+                            utm_term: nil, utm_content: nil,
+                            target_resource_type: UtmLink.target_resource_types[:profile_page], target_resource_id: nil)
+          instance.errors.add(:target_resource_id, "A link with similar UTM parameters already exists for this destination!")
+          raise ActiveRecord::RecordInvalid.new(instance)
+        end
+        original_save.bind_call(instance, *args)
+      end
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        get :action, params: utm_params
+      end.to change(UtmLinkVisit, :count).by(1)
+
+      expect(response).to be_successful
+      utm_link = UtmLink.alive.find_by!(utm_source: "facebook", utm_medium: "social", utm_campaign: "summer_sale")
+      expect(utm_link.total_clicks).to eq(1)
+      expect(utm_link.utm_link_visits.count).to eq(1)
+    end
+
+    it "reports the error after a single retry when the auto-created link stays invalid" do
+      # If the validation failure isn't a transient race (it repeats on the retry), we must
+      # not loop — report once and let the page render. Counting save attempts is what makes
+      # this spec fail if the retry is removed (old code: 1 attempt) or unbounded (hang): the
+      # fixed code makes exactly 2 attempts — the original save plus one retry.
+      save_attempts = 0
+      allow_any_instance_of(UtmLink).to receive(:save!) do |instance, *args|
+        save_attempts += 1
+        instance.errors.add(:target_resource_id, "A link with similar UTM parameters already exists for this destination!")
+        raise ActiveRecord::RecordInvalid.new(instance)
+      end
+      expect(ErrorNotifier).to receive(:notify).once.with(instance_of(ActiveRecord::RecordInvalid), anything)
+
+      expect do
+        get :action, params: utm_params
+      end.not_to change(UtmLinkVisit, :count)
+
+      expect(save_attempts).to eq(2)
       expect(response).to be_successful
     end
   end

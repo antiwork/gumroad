@@ -515,6 +515,15 @@ class Link < ApplicationRecord
     [NATIVE_TYPE_MEMBERSHIP, NATIVE_TYPE_CALL].exclude?(native_type)
   end
 
+  # Whether buyers should be offered a per-seat quantity for this product's license.
+  # Calls are excluded even when the is_multiseat_license flag is set (which can happen
+  # via the API or data that predates the editor hiding the toggle for calls): a call
+  # books exactly one slot per purchase, so a seat count would conflict with scheduling.
+  # Read this instead of the raw flag anywhere that decides whether to show or apply seats.
+  def multiseat_license_enabled?
+    is_multiseat_license? && native_type != NATIVE_TYPE_CALL
+  end
+
   def eligible_for_installment_plans?
     ProductInstallmentPlan.eligible_for_product?(self)
   end

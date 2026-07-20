@@ -87,6 +87,11 @@ module Gumroad
 
     config.active_job.queue_adapter = :sidekiq
 
+    # Use our subclass of ActionMailer::MailDeliveryJob for `deliver_later`
+    # so transient SMTP timeouts are retried with backoff instead of being
+    # reported to Sentry on every attempt. See app/jobs/mail_delivery_job.rb.
+    config.action_mailer.delivery_job = "MailDeliveryJob"
+
     config.hosts = nil
 
     config.active_storage.queues.purge = :low

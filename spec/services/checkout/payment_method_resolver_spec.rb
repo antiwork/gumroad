@@ -30,9 +30,43 @@ describe Checkout::PaymentMethodResolver do
       it "enables the launched methods on Stripe for a US buyer, gating the rest behind later units" do
         resolution = resolve(buyer_country: "US")
 
-        expect(resolution.payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        expect(resolution.payment_method_types).to eq(%w[card link cashapp])
         # The launched set is always a subset of the eligible policy set.
         expect(resolution.eligible_payment_method_types).to include(*resolution.payment_method_types)
+      end
+
+      it "keeps ACH Direct Debit launch-gated out even for a US buyer — withdrawn platform-wide because its ~4-business-day settlement delays content delivery (gumroad-private#1143)" do
+        expect(resolve(buyer_country: "US").payment_method_types).not_to include("us_bank_account")
+      end
+
+      context "when the seller has opted back into ACH payments from the checkout settings page" do
+        before { seller.update!(ach_payments_enabled: true) }
+
+        it "re-adds ACH Direct Debit for a US buyer" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        end
+
+        it "still drops it for a non-US buyer — the opt-in never bypasses the US region lock" do
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
+        end
+
+        it "still drops it when the buyer country is unknown, failing safe" do
+          expect(resolve(buyer_country: nil).payment_method_types).to eq(%w[card link])
+        end
+
+        it "keeps it on a PPP-discounted US checkout — ACH is region-locked, which the U13 matrix accepts" do
+          expect(resolve(buyer_country: "US", ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
+        end
+
+        it "records ACH Direct Debit in the enabled payment methods" do
+          allow(Rails.logger).to receive(:info)
+
+          resolve(buyer_country: "US")
+
+          expect(Rails.logger).to have_received(:info).with(
+            a_string_matching(/buyer_country="US".*enabled=\["card", "link", "cashapp", "us_bank_account"\]/)
+          )
+        end
       end
 
       it "drops US-locked methods (Cash App/ACH) for a non-US buyer, keeping card and Link" do
@@ -76,10 +110,34 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
         end
 
-        it "keeps them out of live mode — this is a test-mode-only QA surface" do
+        it "keeps them out of live mode without the per-method launch flags" do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
 
           expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
+        end
+
+        it "launches iDEAL in live mode when its per-method launch flag is on, without pulling Bancontact along" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+
+          methods = resolve(cart_product_currency: "eur").payment_method_types
+          expect(methods).to include("ideal")
+          expect(methods).not_to include("bancontact")
+        end
+
+        it "keeps a launched method off carts not priced in its forced currency, even in live mode" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+
+          expect(resolve(cart_product_currency: "usd").payment_method_types).not_to include("ideal")
+        end
+
+        it "still requires the buyer-currency seller flags in live mode with a launch flag on" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          Feature.deactivate_user(:buyer_currency_charging, seller)
+
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal")
         end
 
         it "keeps them out when the seller opted out of buyer-local currency" do
@@ -95,7 +153,7 @@ describe Checkout::PaymentMethodResolver do
 
       context "with a PPP-discounted checkout (U13 method matrix)" do
         it "keeps card and the US-locked methods for a US buyer — verifiable + region-matched" do
-          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
+          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp])
         end
 
         it "resolves card-only for a non-US PPP buyer (region-locked methods already dropped)" do
@@ -103,8 +161,8 @@ describe Checkout::PaymentMethodResolver do
         end
 
         it "gates Link out — no Stripe-owned funding country to verify pre-charge" do
-          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp us_bank_account])
-          expect(resolve(ppp_discounted: false).payment_method_types).to eq(%w[card link cashapp us_bank_account])
+          expect(resolve(ppp_discounted: true).payment_method_types).to eq(%w[card cashapp])
+          expect(resolve(ppp_discounted: false).payment_method_types).to eq(%w[card link cashapp])
         end
 
         it "logs the PPP gate input" do
@@ -192,7 +250,7 @@ describe Checkout::PaymentMethodResolver do
         it "still uses the stale snapshot (checkout never blocks) but enqueues a background re-fetch — the self-heal for webhooks dropped by the worker's until_executed lock" do
           expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).to receive(:perform_async).with(connect_account.id)
 
-          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
         end
       end
 
@@ -204,8 +262,14 @@ describe Checkout::PaymentMethodResolver do
                                   })
         end
 
-        it "offers them to a US buyer without enqueueing a refresh" do
+        it "offers Cash App Pay to a US buyer without enqueueing a refresh — an active ACH capability does not re-add the launch-gated method" do
           expect(RefreshMerchantAccountPaymentMethodAvailabilityWorker).not_to receive(:perform_async)
+
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
+        end
+
+        it "re-adds ACH for a US buyer when the seller has opted in — the account's capability snapshot permits it" do
+          seller.update!(ach_payments_enabled: true)
 
           expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp us_bank_account])
         end
@@ -224,6 +288,12 @@ describe Checkout::PaymentMethodResolver do
         end
 
         it "offers exactly the accepted method to a US buyer" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
+        end
+
+        it "keeps ACH out even for an opted-in seller — the opt-in never overrides the account's capabilities" do
+          seller.update!(ach_payments_enabled: true)
+
           expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card link cashapp])
         end
       end
@@ -293,7 +363,7 @@ describe Checkout::PaymentMethodResolver do
 
         expect(resolution.client_confirm_eligible?).to be(true)
         expect(resolution.stripe_connect_account_id).to be_nil
-        expect(resolution.payment_method_types).to eq(%w[card link cashapp us_bank_account])
+        expect(resolution.payment_method_types).to eq(%w[card link cashapp])
       end
     end
 
@@ -333,7 +403,7 @@ describe Checkout::PaymentMethodResolver do
       resolver.resolve
 
       expect(Rails.logger).to have_received(:info).with(
-        a_string_matching(/buyer_country="US".*enabled=\["card", "link", "cashapp", "us_bank_account"\]/)
+        a_string_matching(/buyer_country="US".*enabled=\["card", "link", "cashapp"\]/)
       )
     end
 

@@ -711,11 +711,12 @@ const BeneficialOwnersSection = ({
                     <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                       <Fieldset>
                         <FieldsetTitle>
-                          <Label htmlFor={`${uid}-first-name-kanji`}>First name (Kanji)</Label>
+                          <Label htmlFor={`${uid}-first-name-kanji`}>First name / 名 (Kanji)</Label>
                         </FieldsetTitle>
                         <Input
                           id={`${uid}-first-name-kanji`}
                           type="text"
+                          placeholder="太郎"
                           required
                           disabled={isFormDisabled}
                           value={formState.first_name_kanji}
@@ -724,11 +725,12 @@ const BeneficialOwnersSection = ({
                       </Fieldset>
                       <Fieldset>
                         <FieldsetTitle>
-                          <Label htmlFor={`${uid}-last-name-kanji`}>Last name (Kanji)</Label>
+                          <Label htmlFor={`${uid}-last-name-kanji`}>Last name / 姓 (Kanji)</Label>
                         </FieldsetTitle>
                         <Input
                           id={`${uid}-last-name-kanji`}
                           type="text"
+                          placeholder="山田"
                           required
                           disabled={isFormDisabled}
                           value={formState.last_name_kanji}
@@ -739,13 +741,13 @@ const BeneficialOwnersSection = ({
                     <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
                       <Fieldset>
                         <FieldsetTitle>
-                          <Label htmlFor={`${uid}-first-name-kana`}>First name (Kana)</Label>
+                          <Label htmlFor={`${uid}-first-name-kana`}>First name / メイ (Kana)</Label>
                         </FieldsetTitle>
                         <Input
                           id={`${uid}-first-name-kana`}
                           type="text"
                           required
-                          placeholder="カタカナ"
+                          placeholder="タロウ"
                           disabled={isFormDisabled}
                           value={formState.first_name_kana}
                           onChange={(event) => updateForm({ first_name_kana: event.target.value })}
@@ -753,13 +755,13 @@ const BeneficialOwnersSection = ({
                       </Fieldset>
                       <Fieldset>
                         <FieldsetTitle>
-                          <Label htmlFor={`${uid}-last-name-kana`}>Last name (Kana)</Label>
+                          <Label htmlFor={`${uid}-last-name-kana`}>Last name / セイ (Kana)</Label>
                         </FieldsetTitle>
                         <Input
                           id={`${uid}-last-name-kana`}
                           type="text"
                           required
-                          placeholder="カタカナ"
+                          placeholder="ヤマダ"
                           disabled={isFormDisabled}
                           value={formState.last_name_kana}
                           onChange={(event) => updateForm({ last_name_kana: event.target.value })}

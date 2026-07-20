@@ -217,6 +217,67 @@ describe Api::Mobile::AgentController do
     end
   end
 
+  describe "GET turn_status" do
+    let(:client_turn_id) { SecureRandom.uuid }
+
+    after { $redis.del(RedisKey.agent_turn_status(@seller.id, client_turn_id)) }
+
+    it "returns the persisted turn with its conversation id and message" do
+      conversation = create(:ai_conversation, seller: @seller)
+      create(
+        :ai_message,
+        ai_conversation: conversation,
+        role: "assistant",
+        content: "Your bio has three lines.",
+        metadata: { "client_turn_id" => client_turn_id },
+      )
+
+      get :turn_status, params: @auth_params.merge(client_turn_id:)
+
+      expect(response.parsed_body).to eq(
+        "success" => true,
+        "status" => "persisted",
+        "conversation_id" => conversation.external_id,
+        "message" => { "role" => "assistant", "content" => "Your bio has three lines." },
+      )
+    end
+
+    it "reads the same liveness markers the streaming endpoint arms" do
+      $redis.set(RedisKey.agent_turn_status(@seller.id, client_turn_id), "in_progress", ex: 60)
+
+      get :turn_status, params: @auth_params.merge(client_turn_id:)
+
+      expect(response.parsed_body).to eq("success" => true, "status" => "in_progress")
+    end
+
+    it "returns unknown when there is no stored turn and no marker" do
+      get :turn_status, params: @auth_params.merge(client_turn_id:)
+
+      expect(response.parsed_body).to eq("success" => true, "status" => "unknown")
+    end
+
+    it "never returns another seller's turn for the same id" do
+      other_conversation = create(:ai_conversation) # different seller
+      create(
+        :ai_message,
+        ai_conversation: other_conversation,
+        role: "assistant",
+        content: "Someone else's reply.",
+        metadata: { "client_turn_id" => client_turn_id },
+      )
+
+      get :turn_status, params: @auth_params.merge(client_turn_id:)
+
+      expect(response.parsed_body).to eq("success" => true, "status" => "unknown")
+    end
+
+    it "rejects a malformed turn id" do
+      get :turn_status, params: @auth_params.merge(client_turn_id: "not-valid!*id")
+
+      expect(response).to have_http_status(:bad_request)
+    end
+  end
+
   describe "conversation persistence" do
     def stub_agent_service(reply: "You have 3 products.", proposed_action: nil)
       service_double = instance_double(Ai::StoreAgentService)

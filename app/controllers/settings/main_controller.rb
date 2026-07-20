@@ -17,7 +17,7 @@ class Settings::MainController < Settings::BaseController
       current_seller.update!(unconfirmed_email: nil)
     end
 
-    if current_seller.account_level_refund_policy_enabled?
+    if current_seller.refund_policy_settings_editable?
       current_seller.refund_policy.update!(
         max_refund_period_in_days: seller_refund_policy_params[:max_refund_period_in_days],
         fine_print: seller_refund_policy_params[:fine_print],

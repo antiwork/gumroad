@@ -37,7 +37,7 @@ import { computeInitialCheckout, type InitialCheckout } from "$app/components/Ch
 import {
   canUseStripePaymentElement,
   computeTip,
-  computeTipForPrice,
+  computeTipsForLines,
   type CheckoutPaymentConfig,
   createReducer,
   getCustomFieldKey,
@@ -193,7 +193,11 @@ const CheckoutIndexPage = () => {
   const [state, dispatch] = reducer;
   const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
     state.surcharges.type === "loaded" ? state.surcharges.result : null,
-    { willSaveCard: state.willSaveCard, paymentMethod: state.paymentMethod },
+    {
+      cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
+      willSaveCard: state.willSaveCard,
+      paymentMethod: state.paymentMethod,
+    },
   );
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
@@ -393,70 +397,94 @@ const CheckoutIndexPage = () => {
         recaptchaResponse: state.status.recaptchaResponse ?? null,
         buyerCurrencyQuote: getCheckoutBuyerCurrencyQuoteToken(
           state.surcharges.type === "loaded" ? state.surcharges.result : null,
-          { willSaveCard: state.willSaveCard, paymentMethod: state.paymentMethod },
+          {
+            cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
+            willSaveCard: state.willSaveCard,
+            paymentMethod: state.paymentMethod,
+          },
         ),
-        lineItems: cartForm.data.cart.items.map((item) => {
-          const discounted = getDiscountedPrice(cartForm.data.cart, item);
+        lineItems: (() => {
+          // Precompute each line's discounted price bases once so the tip can be allocated
+          // across the whole cart in a single pass. The per-line tips must sum exactly to
+          // the tip the buyer selected AND match what loadSurcharges sent for the quote —
+          // the buyer-currency quote token is verified at charge time against the
+          // purchases' line totals, so a different rounding here would fail every
+          // affected charge (see computeTipsForLines).
+          const linePricing = cartForm.data.cart.items.map((item) => {
+            const discounted = getDiscountedPrice(cartForm.data.cart, item);
 
-          const discountedPriceTotal = discounted.price;
-          let discountedPriceToChargeNow = discounted.price;
-          if (item.product.native_type === "commission") {
-            discountedPriceToChargeNow *= COMMISSION_DEPOSIT_PROPORTION;
-          } else if (item.pay_in_installments && item.product.installment_plan) {
-            discountedPriceToChargeNow = calculateFirstInstallmentPaymentPriceCents(
-              discountedPriceTotal,
-              item.product.installment_plan.number_of_installments,
-            );
-          }
-
-          const tipCents =
-            item.pay_in_installments && item.product.installment_plan
-              ? computeTipForPrice(state, discountedPriceTotal, item.product.permalink)
-              : computeTipForPrice(state, discountedPriceToChargeNow, item.product.permalink);
-
-          return {
-            permalink: item.product.permalink,
-            uid: getCartItemUid(item),
-            isMultiBuy: requiresReusablePaymentMethod(state),
-            isPreorder: item.product.is_preorder,
-            isRental: item.rent,
-            perceivedPriceCents: discountedPriceToChargeNow + (tipCents ?? 0),
-            priceCents: item.price * item.quantity + (tipCents ?? 0),
-            tipCents,
-            quantity: item.quantity,
-            priceRangeUnit: null,
-            priceId:
-              item.product.recurrences?.enabled.find(({ recurrence }) => item.recurrence === recurrence)?.id ?? null,
-            perceivedFreeTrialDuration: item.product.free_trial?.duration ?? null,
-            variants: item.option_id ? [item.option_id] : [],
-            callStartTime: item.call_start_time,
-            payInInstallments: item.pay_in_installments,
-            discountCode: discounted.discount?.type === "code" ? discounted.discount.code : null,
-            isPppDiscounted:
-              !!item.product.ppp_details &&
-              !cartForm.data.cart.rejectPppDiscount &&
-              discounted.discount?.type === "ppp" &&
-              item.price !== 0,
-            forceNewSubscription: item.force_new_subscription,
-            acceptedOffer: item.accepted_offer ?? null,
-            bundleProducts: item.product.bundle_products.map((bundleProduct) => ({
-              productId: bundleProduct.product_id,
-              quantity: bundleProduct.quantity,
-              variantId: bundleProduct.variant?.id ?? null,
-              customFields: buildCustomFieldValues(bundleProduct.custom_fields, state.customFieldValues, {
-                permalink: item.product.permalink,
-                bundleProductId: bundleProduct.product_id,
-              }),
+            const discountedPriceTotal = discounted.price;
+            let discountedPriceToChargeNow = discounted.price;
+            if (item.product.native_type === "commission") {
+              discountedPriceToChargeNow *= COMMISSION_DEPOSIT_PROPORTION;
+            } else if (item.pay_in_installments && item.product.installment_plan) {
+              discountedPriceToChargeNow = calculateFirstInstallmentPaymentPriceCents(
+                discountedPriceTotal,
+                item.product.installment_plan.number_of_installments,
+              );
+            }
+            return { item, discounted, discountedPriceTotal, discountedPriceToChargeNow };
+          });
+          const lineTips = computeTipsForLines(
+            state,
+            linePricing.map(({ item, discountedPriceTotal, discountedPriceToChargeNow }) => ({
+              // Installment plans charge the full tip upfront with the first payment, so
+              // their tip share is based on the line's full price rather than today's charge.
+              price:
+                item.pay_in_installments && item.product.installment_plan
+                  ? discountedPriceTotal
+                  : discountedPriceToChargeNow,
+              permalink: item.product.permalink,
             })),
-            recommendedBy: item.recommended_by,
-            recommenderModelName: item.recommender_model_name,
-            affiliateId: item.affiliate_id,
-            customFields: buildCustomFieldValues(item.product.custom_fields, state.customFieldValues, item.product),
-            // TODO: Pass item.url_parameters (Record<string, string>) here after new checkout experience is rolled out
-            urlParameters: JSON.stringify(item.url_parameters),
-            referrer: item.referrer,
-          };
-        }),
+          );
+
+          return linePricing.map(({ item, discounted, discountedPriceToChargeNow }, index) => {
+            const tipCents = lineTips[index] ?? null;
+
+            return {
+              permalink: item.product.permalink,
+              uid: getCartItemUid(item),
+              isMultiBuy: requiresReusablePaymentMethod(state),
+              isPreorder: item.product.is_preorder,
+              isRental: item.rent,
+              perceivedPriceCents: discountedPriceToChargeNow + (tipCents ?? 0),
+              priceCents: item.price * item.quantity + (tipCents ?? 0),
+              tipCents,
+              quantity: item.quantity,
+              priceRangeUnit: null,
+              priceId:
+                item.product.recurrences?.enabled.find(({ recurrence }) => item.recurrence === recurrence)?.id ?? null,
+              perceivedFreeTrialDuration: item.product.free_trial?.duration ?? null,
+              variants: item.option_id ? [item.option_id] : [],
+              callStartTime: item.call_start_time,
+              payInInstallments: item.pay_in_installments,
+              discountCode: discounted.discount?.type === "code" ? discounted.discount.code : null,
+              isPppDiscounted:
+                !!item.product.ppp_details &&
+                !cartForm.data.cart.rejectPppDiscount &&
+                discounted.discount?.type === "ppp" &&
+                item.price !== 0,
+              forceNewSubscription: item.force_new_subscription,
+              acceptedOffer: item.accepted_offer ?? null,
+              bundleProducts: item.product.bundle_products.map((bundleProduct) => ({
+                productId: bundleProduct.product_id,
+                quantity: bundleProduct.quantity,
+                variantId: bundleProduct.variant?.id ?? null,
+                customFields: buildCustomFieldValues(bundleProduct.custom_fields, state.customFieldValues, {
+                  permalink: item.product.permalink,
+                  bundleProductId: bundleProduct.product_id,
+                }),
+              })),
+              recommendedBy: item.recommended_by,
+              recommenderModelName: item.recommender_model_name,
+              affiliateId: item.affiliate_id,
+              customFields: buildCustomFieldValues(item.product.custom_fields, state.customFieldValues, item.product),
+              // TODO: Pass item.url_parameters (Record<string, string>) here after new checkout experience is rolled out
+              urlParameters: JSON.stringify(item.url_parameters),
+              referrer: item.referrer,
+            };
+          });
+        })(),
       };
       const result =
         requestData.paymentMethod.type === "payment-element-client-confirm"

@@ -30,6 +30,17 @@ class MerchantAccount < ApplicationRecord
   # "not yet fetched" and checkout fails safe. Read via
   # StripeConnectPaymentMethodAvailabilityService, which owns the method-type → capability mapping.
   attr_json_data_accessor :stripe_capabilities_snapshot
+  # Learned marker that Stripe rejected an FX quote for this account because the account
+  # settles payments in a non-USD currency (Stripe multi-currency settlement). The stored
+  # `currency` column mirrors Stripe's default_currency, which for these accounts still says
+  # "usd" — only Stripe's answer at quote time reveals the real settlement currency, so the
+  # first rejected quote records it here. While the marker is fresh (see
+  # SETTLEMENT_CURRENCY_MISMATCH_TTL), buyer-currency eligibility skips the doomed FX-quote
+  # round trip on every checkout and falls back to canonical USD immediately. The marker
+  # expires on its own and is cleared by the Stripe account.updated webhook when the
+  # account's currency configuration changes, so accounts that stop settling in another
+  # currency regain presentment without manual intervention. ISO8601 timestamp string.
+  attr_json_data_accessor :settlement_currency_mismatch_noticed_at
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }
@@ -54,6 +65,47 @@ class MerchantAccount < ApplicationRecord
 
   def is_managed_by_gumroad?
     !user_id
+  end
+
+  # How long a learned settlement-currency mismatch (see
+  # settlement_currency_mismatch_noticed_at) suppresses FX-quote attempts. Multi-currency
+  # settlement is an account-level Stripe configuration that rarely changes, so a long TTL
+  # is safe: the only cost of a stale marker is a checkout presented in USD instead of the
+  # buyer's currency, and the account.updated webhook clears it early when the seller's
+  # currency configuration actually changes.
+  SETTLEMENT_CURRENCY_MISMATCH_TTL = 30.days
+
+  # True while a recorded settlement-currency mismatch is fresh — checkout should skip the
+  # FX-quote round trip and fall back to canonical USD immediately.
+  def settlement_currency_mismatch_active?
+    noticed_at_raw = settlement_currency_mismatch_noticed_at
+    return false if noticed_at_raw.blank?
+
+    noticed_at = Time.zone.parse(noticed_at_raw.to_s)
+    return false if noticed_at.nil?
+
+    noticed_at > SETTLEMENT_CURRENCY_MISMATCH_TTL.ago
+  rescue ArgumentError
+    # A malformed timestamp must never break checkout: treat it as no marker.
+    false
+  end
+
+  # Records that Stripe just rejected (or redirected) an FX quote because this account
+  # settles in a non-USD currency. Refreshes the timestamp on every occurrence so the TTL
+  # measures time since the LAST observed mismatch, not the first.
+  def record_settlement_currency_mismatch!
+    self.settlement_currency_mismatch_noticed_at = Time.current.iso8601
+    save!
+  end
+
+  # Forgets a recorded settlement-currency mismatch. Called from the Stripe
+  # account.updated webhook when the account's currency configuration changes, so the next
+  # eligible checkout probes Stripe again instead of waiting out the TTL.
+  def clear_settlement_currency_mismatch!
+    return if settlement_currency_mismatch_noticed_at.blank?
+
+    self.settlement_currency_mismatch_noticed_at = nil
+    save!
   end
 
   def can_accept_charges?

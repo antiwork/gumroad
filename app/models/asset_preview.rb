@@ -46,11 +46,23 @@ class AssetPreview < ApplicationRecord
   end
 
   def display_height
-    width && height && (height.to_i * (display_width.to_i / width.to_f)).to_i
+    # A zero width slips past the `width &&` truthiness check (0 is truthy in
+    # Ruby) — e.g. an oEmbed provider reporting a non-numeric width like
+    # "auto", which `to_i`s to 0. Dividing by 0.0 yields NaN, and NaN.to_i
+    # raises FloatDomainError, which used to crash API responses that
+    # serialize the product's covers. Treat an unusable width as "no
+    # dimensions known" instead.
+    return nil unless width.to_i.positive? && height
+
+    (height.to_i * (display_width.to_i / width.to_f)).to_i
   end
 
   def display_width
-    width && [DEFAULT_DISPLAY_WIDTH, width].min
+    # Same contract as display_height: a missing or non-positive width means
+    # "dimensions unknown", serialized as nil rather than a bogus 0.
+    return nil unless width.to_i.positive?
+
+    [DEFAULT_DISPLAY_WIDTH, width].min
   end
 
   def retina_width
@@ -321,7 +333,12 @@ class AssetPreview < ApplicationRecord
     def height_and_width_presence
       return unless file.attached? && file.analyzed?
 
-      if (file.image? || file.video?) && !(file.blob.metadata&.dig(:height) && file.blob.metadata&.dig(:width))
+      # Dimensions must be present AND positive. ffprobe/vips report width and
+      # height of 0 for files they can identify but not really decode (e.g. a
+      # truncated or mislabeled video), and a 0-width cover later produces NaN
+      # in display-dimension math, so reject it at upload time like a file we
+      # couldn't analyze at all.
+      if (file.image? || file.video?) && !(file.blob.metadata&.dig(:height).to_i.positive? && file.blob.metadata&.dig(:width).to_i.positive?)
         errors.add(:base, "Could not analyze cover. Please check the uploaded file.")
       end
     end

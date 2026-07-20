@@ -3095,6 +3095,216 @@ describe Api::Internal::Admin::UsersController do
     include_examples "checks expected_email for user mutation", :suspend_for_fraud, build_user: -> { create(:compliant_user) }
   end
 
+  describe "POST refund_all_for_fraud" do
+    let!(:gumroad_merchant_account) { create(:merchant_account, user: nil) }
+    let(:user) { create(:compliant_user, email: "seller@example.com", user_risk_state: "suspended_for_fraud") }
+    let(:product) { create(:product, user:) }
+
+    def create_refundable_purchase(overrides = {})
+      create(:purchase, { seller: user, link: product, stripe_transaction_id: "ch_test", stripe_refunded: false }.merge(overrides))
+    end
+
+    def refund_all_params(target = user, overrides = {})
+      {
+        user_id: target.external_id,
+        expected_email: target.email,
+        expected_purchase_count: RefundAllForFraudWorker.refundable_purchases_for(target).count
+      }.merge(overrides)
+    end
+
+    include_examples "admin api authorization required", :post, :refund_all_for_fraud, {
+      user_id: "missing",
+      expected_email: "seller@example.com",
+      expected_purchase_count: 0
+    }
+
+    it "returns 400 when user_id is missing" do
+      post :refund_all_for_fraud, params: { expected_email: user.email, expected_purchase_count: 0 }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: user_id_required_message }.as_json)
+    end
+
+    it "returns 400 when expected_email is missing" do
+      post :refund_all_for_fraud, params: refund_all_params.except(:expected_email)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_email is required" }.as_json)
+    end
+
+    it "returns 400 when expected_purchase_count is missing" do
+      post :refund_all_for_fraud, params: refund_all_params.except(:expected_purchase_count)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_purchase_count is required" }.as_json)
+    end
+
+    it "returns 400 when expected_purchase_count is not a non-negative integer" do
+      post :refund_all_for_fraud, params: refund_all_params(user, expected_purchase_count: "1.5")
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_purchase_count must be a non-negative integer" }.as_json)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :refund_all_for_fraud, params: { user_id: "missing", expected_email: "x@example.com", expected_purchase_count: 0 }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns 422 without enqueuing anything when the seller is not suspended" do
+      compliant_seller = create(:compliant_user)
+
+      expect do
+        post :refund_all_for_fraud, params: refund_all_params(compliant_seller)
+      end.not_to change { RefundAllForFraudWorker.jobs.size }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "User must be suspended to refund all purchases for fraud" }.as_json)
+    end
+
+    it "rejects a flagged (not suspended) seller" do
+      flagged_seller = create(:compliant_user, user_risk_state: "flagged_for_tos_violation")
+
+      expect do
+        post :refund_all_for_fraud, params: refund_all_params(flagged_seller)
+      end.not_to change { RefundAllForFraudWorker.jobs.size }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "ignores the removed force param entirely" do
+      compliant_seller = create(:compliant_user)
+
+      expect do
+        post :refund_all_for_fraud, params: refund_all_params(compliant_seller, force: "true")
+      end.not_to change { RefundAllForFraudWorker.jobs.size }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "returns 409 with the current count when expected_purchase_count is stale" do
+      create_refundable_purchase
+      create_refundable_purchase
+
+      expect do
+        post :refund_all_for_fraud, params: refund_all_params(user, expected_purchase_count: 1)
+      end.not_to change { RefundAllForFraudWorker.jobs.size }
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to eq({
+        success: false,
+        user_id: user.external_id,
+        message: "Expected purchase count does not match the current number of refundable purchases",
+        current: { purchases_to_refund: 2 }
+      }.as_json)
+    end
+
+    it "returns 409 when expected_email does not match" do
+      post :refund_all_for_fraud, params: refund_all_params(user, expected_email: "other@example.com")
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_email does not match the user's current email" }.as_json)
+    end
+
+    it "returns 409 when a bulk refund run is already queued (uniqueness lock)" do
+      create_refundable_purchase
+      allow(RefundAllForFraudWorker).to receive(:perform_async).and_return(nil)
+
+      post :refund_all_for_fraud, params: refund_all_params
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to eq({
+        success: false,
+        user_id: user.external_id,
+        message: "Refund all for fraud is already queued or running",
+        current: { purchases_to_refund: 1 }
+      }.as_json)
+    end
+
+    it "counts only refundable purchases: excludes refunded and charged-back, includes chargeback-reversed" do
+      create_refundable_purchase
+      create_refundable_purchase(stripe_refunded: true)
+      charged_back = create_refundable_purchase
+      charged_back.update_columns(chargeback_date: 1.day.ago)
+      reversed = create_refundable_purchase
+      reversed.update_columns(chargeback_date: 1.day.ago, flags: reversed.flags | Purchase.flag_mapping["flags"][:chargeback_reversed])
+      create(:failed_purchase, seller: user, link: product)
+
+      post :refund_all_for_fraud, params: refund_all_params(user, expected_purchase_count: 2)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("status" => "queued", "purchases_to_refund" => 2)
+    end
+
+    it "queues the bulk refund without buyer blocking by default" do
+      create_refundable_purchase
+
+      expect do
+        post :refund_all_for_fraud, params: refund_all_params
+      end.to change { RefundAllForFraudWorker.jobs.size }.by(1)
+        .and change { AdminApiAuditLog.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        user_id: user.external_id,
+        status: "queued",
+        message: "Refund all for fraud queued",
+        purchases_to_refund: 1,
+        block_buyers: false
+      }.as_json)
+      expect(RefundAllForFraudWorker).to have_enqueued_sidekiq_job(user.id, admin_user.id, false)
+    end
+
+    it "queues with buyer blocking when block_buyers is true" do
+      create_refundable_purchase
+
+      post :refund_all_for_fraud, params: refund_all_params(user, block_buyers: "true")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("status" => "queued", "block_buyers" => true)
+      expect(RefundAllForFraudWorker).to have_enqueued_sidekiq_job(user.id, admin_user.id, true)
+    end
+
+    it "treats non-true block_buyers values (including \"no\") as false" do
+      post :refund_all_for_fraud, params: refund_all_params(user, block_buyers: "no")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("block_buyers" => false)
+      expect(RefundAllForFraudWorker).to have_enqueued_sidekiq_job(user.id, admin_user.id, false)
+    end
+
+    it "records the admin API audit log with block_buyers in the params snapshot" do
+      expect do
+        post :refund_all_for_fraud, params: refund_all_params(user, block_buyers: "true")
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      audit_log = AdminApiAuditLog.last
+      expect(audit_log).to have_attributes(
+        action: "users.refund_all_for_fraud",
+        target_type: "User",
+        target_id: user.id,
+        response_status: 200
+      )
+      expect(audit_log.params_snapshot).to include(
+        "block_buyers" => "true",
+        "expected_email" => "[REDACTED]",
+        "expected_purchase_count" => "0"
+      )
+    end
+
+    include_examples "requires user_id for user mutation",
+                     :refund_all_for_fraud,
+                     extra_params: { expected_email: "seller@example.com", expected_purchase_count: 0 }
+    include_examples "checks expected_email for user mutation",
+                     :refund_all_for_fraud,
+                     build_user: -> { create(:compliant_user, user_risk_state: "suspended_for_fraud") },
+                     extra_params: { expected_purchase_count: 0 }
+  end
+
   describe "POST suspend_for_tos_violation" do
     let(:user) { create(:compliant_user, email: "seller@example.com") }
 

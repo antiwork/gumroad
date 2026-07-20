@@ -114,6 +114,100 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "show product abc123" }])
       end
 
+      # Regression: gumroad-private#1168. list_products is paginated (10 per page) but the agent
+      # could never reach past page one, and the raw next_page_key had to reach the model so it
+      # knows more pages exist. A seller with >10 products would otherwise get silently incomplete
+      # catalog-wide answers.
+      it "passes page_key through to the API and feeds next_page_key back to the model" do
+        expect(api_client).to receive(:get).with("/products", { "page_key" => "key-1" }).and_return(
+          { "success" => true, "products" => [{ "id" => "p11", "name" => "Older Product" }], "next_page_key" => "key-2", "http_status" => 200 },
+        )
+        captured = nil
+        first = true
+        allow(client).to receive(:messages) do |args|
+          captured = captured_tool_result(args) unless first
+          if first
+            first = false
+            tool_result("api_read", { "endpoint" => "list_products", "params" => { "page_key" => "key-1" } })
+          else
+            text_result("Here is the next page.")
+          end
+        end
+
+        service.respond(messages: [{ role: "user", content: "show the rest of my products" }])
+
+        expect(captured).to include("next_page_key" => "key-2")
+      end
+
+      # Regression for the review finding on gumroad-private#1168's fix: the pagination prompt rule
+      # is useless if the tool-iteration cap stops the walk first. With the old cap of 5, a seller
+      # whose list spanned more than ~4 pages got the generic "couldn't finish" fallback on exactly
+      # the "all of X" tasks pagination exists for. This walks 8 pages and still gets a real answer.
+      it "lets the model walk well past five pages before the tool-iteration cap" do
+        pages = 8
+        call_count = 0
+        allow(api_client).to receive(:get) do |_path, _params|
+          call_count += 1
+          key = call_count < pages ? "key-#{call_count}" : nil
+          { "success" => true, "products" => [{ "id" => "p#{call_count}", "name" => "Product #{call_count}" }], "next_page_key" => key, "http_status" => 200 }.compact
+        end
+        turns = 0
+        allow(client).to receive(:messages) do
+          turns += 1
+          if turns <= pages
+            input = turns == 1 ? { "endpoint" => "list_products" } : { "endpoint" => "list_products", "params" => { "page_key" => "key-#{turns - 1}" } }
+            tool_result("api_read", input)
+          else
+            text_result("You have #{pages} pages of products; here's the full list.")
+          end
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "list all my products" }])
+
+        expect(call_count).to eq(pages)
+        expect(result[:reply]).to include("full list")
+        # The reply is the model's real answer, not the iteration-cap fallback.
+        expect(result[:reply]).not_to match(/couldn't finish/i)
+      end
+
+      it "teaches the model to paginate list reads in the system prompt" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("next_page_key")
+        expect(captured[:system]).to include("imply you checked items you did not actually fetch")
+      end
+
+      # Regression for gumroad-private#984: the agent invented dashboard settings screens
+      # ("Settings > Profile pickers") that don't exist, admitted it was "guessing at the UI",
+      # and looped on "confirm the change" without ever staging one. The system prompt must
+      # tell the model what is actually possible: no dashboard visibility, no self-serve
+      # appearance settings, custom HTML is the only appearance surface, a brand-new page must
+      # carry the whole storefront, and "prepared for confirmation" claims require a real
+      # api_write in the same reply.
+      it "teaches the model what is possible: no dashboard visibility, no appearance settings, no phantom confirmations" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("cannot see the creator's dashboard")
+        expect(captured[:system]).to include("NO self-serve settings")
+        expect(captured[:system]).to include("never direct them to dashboard settings that don't exist")
+        expect(captured[:system]).to include(%(<script id="gumroad-data"))
+        expect(captured[:system]).to match(/never hard-code the product list/)
+        expect(captured[:system]).to match(/Never publish a page\s+that drops their products/)
+        expect(captured[:system]).to match(/unless\s+you actually called api_write in this same reply/)
+      end
+
       it "rejects an unknown endpoint id without calling the API" do
         expect(api_client).not_to receive(:get)
         captured = nil
@@ -493,6 +587,31 @@ describe Ai::StoreAgentService do
       expect(suggestions_event).to be_present
       expect(suggestions_event.last[:suggestions]).to eq(["List my products", "Show my sales"])
       expect(result[:suggestions]).to eq(["List my products", "Show my sales"])
+    end
+
+    it "invokes on_reply_complete with the finished turn before trailing events and the suggestions call" do
+      stub_stream_turns(stream: ["Here are your numbers."], result: text_result("Here are your numbers."))
+      order = []
+      allow(client).to receive(:messages) do
+        order << :suggestions_call
+        text_result('["Show my sales"]')
+      end
+
+      completed_turn = nil
+      on_reply_complete = lambda do |turn|
+        order << :reply_complete
+        completed_turn = turn
+      end
+      result = service.respond_streaming(messages: [{ role: "user", content: "how are sales" }], on_reply_complete:) do |event, _payload|
+        order << event unless event == :token
+      end
+
+      # The finished turn reaches the hook before anything else happens — before the extra
+      # suggestions LLM call and before any trailing event is written to the (possibly already
+      # dead) client socket — so callers can persist it no matter what happens afterwards.
+      expect(order).to eq([:reply_complete, :suggestions_call, :suggestions])
+      expect(completed_turn).to eq(reply: "Here are your numbers.", proposed_action: nil, objects: [])
+      expect(result[:suggestions]).to eq(["Show my sales"])
     end
 
     it "emits a proposed action over the stream without mutating" do

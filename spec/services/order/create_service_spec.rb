@@ -163,6 +163,16 @@ describe Order::CreateService, :vcr do
         expect(flows.map(&:stripe_payment_method_type).uniq).to eq(["card"])
       end
 
+      it "builds purchases when the client reports the element's mount currency (not a Purchase attribute)" do
+        params[:payment_details_source] = "payment_element"
+        params[:confirmation_token] = "ctoken_123"
+        params[:payment_element_mount_currency] = "eur"
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        expect(order.reload.purchases.size).to eq(5)
+      end
+
       it "records a wallet payment as a payment request" do
         params[:wallet_type] = "apple_pay"
         params[:payment_details_source] = "payment_element"
