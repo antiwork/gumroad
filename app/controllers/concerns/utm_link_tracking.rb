@@ -5,6 +5,11 @@ module UtmLinkTracking
 
   private
     def track_utm_link_visit
+      # Used by the RecordNotUnique rescue below, which re-runs this method once via
+      # `retry`. `||=` (not plain assignment) so the flag survives the retry re-running
+      # the method body — a plain assignment would reset it and loop forever.
+      retried_after_duplicate_insert ||= false
+
       return unless request.get?
 
       required_params = {
@@ -62,10 +67,22 @@ module UtmLinkTracking
 
         UpdateUtmLinkStatsJob.perform_async(utm_link.id)
       end
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
-      # Analytics tracking must never break the buyer-facing page. A validation failure or a
-      # race between two simultaneous first visits (both trying to auto-create the same link,
-      # colliding on the database's unique index) should be reported and swallowed, not raised.
+    rescue ActiveRecord::RecordNotUnique => e
+      # Two simultaneous first visits with the same UTM parameters can both find no existing
+      # link and both try to auto-create it; the request that loses the race hits the
+      # database's unique index. Since the winning request has committed the link by the time
+      # we get here, retrying once lets this request find that link and still record the
+      # visit. If it fails a second time something else is wrong — report and swallow so the
+      # buyer-facing page still renders (analytics must never break the page).
+      if retried_after_duplicate_insert
+        ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
+      else
+        retried_after_duplicate_insert = true
+        retry
+      end
+    rescue ActiveRecord::RecordInvalid => e
+      # Analytics tracking must never break the buyer-facing page. A validation failure
+      # should be reported and swallowed, not raised.
       ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
     end
 

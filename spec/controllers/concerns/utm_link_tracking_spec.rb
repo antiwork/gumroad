@@ -178,13 +178,56 @@ describe UtmLinkTracking, type: :controller do
       expect(response).to be_successful
     end
 
-    it "reports the error and still renders the page when the database uniqueness index is hit" do
+    it "reports the error and still renders the page when the database uniqueness index is hit repeatedly" do
       allow_any_instance_of(UtmLink).to receive(:save!).and_raise(ActiveRecord::RecordNotUnique)
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordNotUnique), anything)
 
       get :action, params: utm_params
 
       expect(response).to be_successful
+    end
+  end
+
+  context "when two simultaneous first visits race to auto-create the same UTM link" do
+    let(:utm_params) do
+      {
+        utm_source: "facebook",
+        utm_medium: "social",
+        utm_campaign: "summer_sale"
+      }
+    end
+
+    before do
+      allow(controller).to receive(:root_path).and_return("/")
+      request.host = "#{seller.subdomain}"
+      request.path = "/"
+    end
+
+    it "retries once, recovers, and records the visit without reporting an error", :sidekiq_inline do
+      # Simulate losing the race: the first attempt to insert the auto-created link raises
+      # RecordNotUnique (in production this happens when a concurrent request inserted the
+      # same link between our find_or_initialize_by and our insert). The retry re-runs the
+      # lookup and must succeed without surfacing an error.
+      original_save = UtmLink.instance_method(:save!)
+      raised_once = false
+      allow_any_instance_of(UtmLink).to receive(:save!) do |instance, *args|
+        if instance.new_record? && !raised_once
+          raised_once = true
+          raise ActiveRecord::RecordNotUnique
+        end
+        original_save.bind_call(instance, *args)
+      end
+
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        get :action, params: utm_params
+      end.to change(UtmLinkVisit, :count).by(1)
+
+      expect(response).to be_successful
+      utm_link = UtmLink.alive.find_by!(utm_source: "facebook", utm_medium: "social", utm_campaign: "summer_sale")
+      expect(utm_link.total_clicks).to eq(1)
+      expect(utm_link.utm_link_visits.count).to eq(1)
     end
   end
 
