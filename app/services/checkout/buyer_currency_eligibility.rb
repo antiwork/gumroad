@@ -96,7 +96,16 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   def self.usd_settling_merchant_account?(merchant_account)
-    merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
+    return false unless merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
+
+    # The stored currency answers the wrong question for accounts with Stripe
+    # multi-currency settlement enabled: it mirrors Stripe's default_currency ("usd"),
+    # but the payment intent's settlement currency can still differ per intent. Stripe's
+    # rejection of an FX quote is the only reliable signal, and once observed it is
+    # recorded on the merchant account — while that marker is fresh, skip the doomed
+    # FX-quote round trip (up to 2s of checkout latency, on every visit) and fall back
+    # to canonical USD immediately.
+    !merchant_account.settlement_currency_mismatch_active?
   end
 
   def self.stripe_test_mode?

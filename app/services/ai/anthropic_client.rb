@@ -26,9 +26,10 @@ class Ai::AnthropicClient
   class Error < StandardError; end
 
   # A failure that is safe and worthwhile to retry: the upstream was momentarily overloaded, rate
-  # limited, returned a 5xx, or the network dropped. Distinct from Error so callers (and our own
-  # retry loop) never retry a real bug like a malformed tool call. `retry_after` carries the
-  # server's own back-off hint (the Retry-After header on a 429) in seconds, when it sent one.
+  # limited, returned a 5xx, the network dropped, or a streamed tool call arrived with its JSON
+  # cut off. Distinct from Error so callers (and our own retry loop) never retry a deterministic
+  # failure like a rejected request. `retry_after` carries the server's own back-off hint (the
+  # Retry-After header on a 429) in seconds, when it sent one.
   class TransientError < Error
     attr_reader :retry_after
 
@@ -405,15 +406,22 @@ class Ai::AnthropicClient
 
     # Turn the accumulated streamed blocks into the same tool_use shape #parse_message returns. A
     # tool_use block with no input fragments is a no-arg call; malformed non-empty input must fail the
-    # turn instead of dispatching a lossy {} tool call — with two exceptions where half-written JSON
-    # is expected rather than the model misbehaving:
+    # turn instead of dispatching a lossy {} tool call — with one exception where half-written JSON
+    # is expected rather than a failure:
     #   - stop_reason == "max_tokens": the token cap cut the call off mid-arguments. Drop the block
     #     and let the caller see the stop_reason so it can respond honestly instead of erroring out.
+    # Every other unparseable tool call raises TransientError so #stream_messages re-requests the
+    # turn (when nothing has reached the caller yet):
     #   - stop_reason is nil: a complete Anthropic stream always delivers a stop_reason (via
     #     message_delta) before it ends, so its absence means the connection dropped mid-stream and
-    #     the tool call's JSON was cut off by the disconnect. That is a network failure, not a bad
-    #     tool call, so raise TransientError — the retry loop in #stream_messages re-requests the
-    #     turn when nothing has reached the caller yet, exactly as it does for other dropped streams.
+    #     the tool call's JSON was cut off by the disconnect — a network failure.
+    #   - stop_reason present but the JSON still doesn't parse: this used to be treated as a
+    #     deterministic model bug and raised a plain (non-retryable) Error, but production traffic
+    #     now flows through OpenRouter's Anthropic-compatible gateway, which can lose or cut off
+    #     input_json_delta fragments while still delivering the closing stop_reason — so a
+    #     "completed" turn no longer proves the tool call arrived intact. A fresh request almost
+    #     always succeeds; a genuinely misbehaving model just exhausts the (small) retry budget and
+    #     surfaces the same "unreadable tool call" message.
     def assemble_tool_uses(blocks, stop_reason: nil)
       truncated = stop_reason == "max_tokens"
       blocks.keys.sort.filter_map do |index|
@@ -425,8 +433,9 @@ class Ai::AnthropicClient
         rescue Error
           next if truncated
           raise TransientError, "Anthropic stream ended mid-tool-call for #{block[:name].presence || "unknown tool"}." if stop_reason.nil?
-          # A completed turn produced unparseable tool arguments: a real error.
-          raise
+          # The turn claims to be complete, yet the tool call's JSON is unreadable — most likely the
+          # gateway dropped part of it in transit. Retryable: a re-request regenerates the call.
+          raise TransientError, "Anthropic produced an unreadable tool call for #{block[:name].presence || "unknown tool"}."
         end
         { id: block[:id], name: block[:name], input: }
       end

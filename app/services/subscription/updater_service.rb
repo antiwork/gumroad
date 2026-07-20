@@ -141,7 +141,7 @@ class Subscription::UpdaterService
         if is_resubscribing &&
           !subscription.link.user.supports_card?(subscription.user&.credit_card&.as_json) &&
           !subscription.link.user.supports_card?(subscription.credit_card.as_json)
-          raise Subscription::UpdateFailed, "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+          raise Subscription::UpdateFailed, "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
         end
 
         if !apply_plan_change_immediately?

@@ -74,8 +74,15 @@ class ScheduledPayout < ApplicationRecord
           user
         )
 
-        if payment.blank?
+        if payment.blank? || payment.failed?
+          # Real failures (validation errors from Payouts.create_payment, or a payment that
+          # failed during preparation) should still raise so the rescue below resets the
+          # scheduled payout to "pending" and it is retried.
           raise "Payout failed: #{payment_errors.join(", ")}" if payment_errors.present?
+
+          if payment&.failed?
+            raise "Payout failed: #{payment.errors.full_messages.first || "Payment failed during preparation"}"
+          end
 
           # The user has no payable balance, so there is nothing to pay out. Retrying won't
           # help: the daily ExecuteScheduledPayoutsJob would pick this record up again every

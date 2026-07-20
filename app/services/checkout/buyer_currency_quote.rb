@@ -195,6 +195,15 @@ class Checkout::BuyerCurrencyQuote
       stripe_fx_quote_expires_at: quote.expires_at,
       line_allocations: line_allocations_for(presentment_total_cents)
     )
+  rescue StripeFxQuote::SettlementCurrencyMismatch => e
+    # Expected condition, not a defect: the connected account settles in a non-USD
+    # currency (Stripe multi-currency settlement) even though our stored
+    # merchant_account.currency said USD. Fall back to the canonical USD checkout
+    # quietly — no Sentry notification. Record the mismatch on the merchant account so
+    # subsequent checkouts skip the doomed FX-quote round trip entirely (issue #6011).
+    record_settlement_currency_mismatch(merchant_account)
+    Rails.logger.info("Buyer currency quote fallback (settlement currency mismatch): #{e.message}")
+    nil
   rescue StandardError => e
     ErrorNotifier.notify(e, context: {
                            product_ids: line_items.map { _1.product&.id },
@@ -206,6 +215,15 @@ class Checkout::BuyerCurrencyQuote
   end
 
   private
+    # Persists the learned mismatch (issue #6011). A persistence failure here must never
+    # break the checkout that is already falling back — worst case the next checkout pays
+    # the FX-quote latency again.
+    def record_settlement_currency_mismatch(merchant_account)
+      merchant_account&.record_settlement_currency_mismatch!
+    rescue StandardError => e
+      Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
+    end
+
     # Splits the locked presentment total across the cart lines with the SAME shared
     # largest-remainder code the charge later uses to persist purchase presentment rows
     # (Charge::PresentmentAllocator). The browser renders these amounts verbatim instead of

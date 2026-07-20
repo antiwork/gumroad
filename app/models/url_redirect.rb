@@ -218,16 +218,36 @@ class UrlRedirect < ApplicationRecord
   def video_files_playlist(initial_product_file)
     video_files_playlist = { playlist: [], index_to_play: 0 }
 
-    alive_product_files.each do |product_file|
-      next unless product_file.streamable?
+    streamable_files = alive_product_files.select(&:streamable?)
+    return video_files_playlist if streamable_files.empty?
 
+    # Building the playlist needs each video's subtitle tracks and the viewer's
+    # last-watched position. Loading those inside the per-file loop issues one
+    # subtitle_files query and one media_locations query per video (the N+1
+    # Sentry flags on UrlRedirectsController#stream), so bulk-load both up
+    # front: one query for all subtitle files, one for all media locations.
+    ActiveRecord::Associations::Preloader.new(records: streamable_files, associations: :alive_subtitle_files).call
+    # This deliberately doesn't reuse latest_media_locations_by_product_file_id: that
+    # lookup returns nothing whenever the url_redirect belongs to an installment, but an
+    # installment redirect whose installment has no alive files serves the PRODUCT's
+    # files (see alive_product_files), and those videos do record watch positions. The
+    # eligibility that matters is the file's, checked per file in the loop below —
+    # matching the guard ProductFile#latest_media_location_for applied before this
+    # bulk lookup replaced it.
+    media_locations_by_file =
+      purchase.present? ? MediaLocation.max_consumed_at_by_file(purchase_id: purchase.id).index_by(&:product_file_id) : {}
+
+    streamable_files.each do |product_file|
       video_url, guid = html5_video_url_and_guid_for_product_file(product_file)
       video_data = { sources: [hls_playlist_or_smil_xml_path(product_file), video_url] }
       video_data[:guid] = guid
       video_data[:title] = product_file.name_displayable
       video_data[:tracks] = product_file.subtitle_files_urls
       video_data[:external_id] = product_file.try(:external_id)
-      video_data[:latest_media_location] = product_file.latest_media_location_for(purchase)
+      video_data[:latest_media_location] =
+        if product_file.link_id.present? && product_file.installment_id.nil?
+          media_locations_by_file[product_file.id].as_json
+        end
       video_data[:content_length] = product_file.content_length
 
       video_files_playlist[:playlist] << video_data
@@ -292,6 +312,26 @@ class UrlRedirect < ApplicationRecord
   end
 
   # Mobile specific methods
+
+  # Set by .preload_latest_media_locations! so that serializing many url redirects
+  # in one request (mobile purchases list/search) reads media locations from a
+  # single batched query instead of one max_consumed_at_by_file query per purchase.
+  attr_writer :cached_latest_media_locations_by_product_file_id
+
+  # Batch-loads the per-file latest media locations for all the given url redirects
+  # in one query and caches them on each instance, so the per-instance
+  # latest_media_locations_by_product_file_id call below doesn't hit the database.
+  def self.preload_latest_media_locations!(url_redirects)
+    eligible = url_redirects.select { |ur| ur.purchase_id.present? && ur.installment_id.nil? }
+    return if eligible.empty?
+
+    by_purchase = MediaLocation.max_consumed_at_by_file_for_purchases(purchase_ids: eligible.map(&:purchase_id).uniq)
+                               .group_by(&:purchase_id)
+    eligible.each do |url_redirect|
+      locations = by_purchase[url_redirect.purchase_id] || []
+      url_redirect.cached_latest_media_locations_by_product_file_id = locations.index_by(&:product_file_id)
+    end
+  end
 
   def product_file_json_data_for_mobile
     media_locations_by_file = latest_media_locations_by_product_file_id
@@ -385,6 +425,7 @@ class UrlRedirect < ApplicationRecord
     end
 
     def latest_media_locations_by_product_file_id
+      return @cached_latest_media_locations_by_product_file_id if defined?(@cached_latest_media_locations_by_product_file_id)
       return {} if purchase.nil? || installment.present?
 
       MediaLocation.max_consumed_at_by_file(purchase_id: purchase.id).index_by(&:product_file_id)

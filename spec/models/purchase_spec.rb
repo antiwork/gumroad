@@ -4902,7 +4902,7 @@ describe Purchase, :vcr do
       purchase.process!
 
       expect(purchase.errors.present?).to be(true)
-      expect(purchase.errors[:base].first).to eq("There is a problem with creator's paypal account, please try again later (your card was not charged).")
+      expect(purchase.errors[:base].first).to eq("There is a problem with creator's PayPal account, please try again later (your card was not charged).")
       expect(purchase.stripe_error_code).to eq(PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED)
     end
   end
