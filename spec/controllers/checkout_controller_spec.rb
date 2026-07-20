@@ -652,6 +652,8 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "returns an error when params are invalid" do
+        allow(ErrorNotifier).to receive(:notify)
+
         expect do
           patch :update, params: {
             cart: {
@@ -669,9 +671,14 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        # Validation failures other than the known quantity/price out-of-range shape are
+        # unexpected and must still be reported.
+        expect(ErrorNotifier).to have_received(:notify)
       end
 
       it "returns an error when an item quantity exceeds the integer column limit" do
+        allow(ErrorNotifier).to receive(:notify)
+
         expect do
           patch :update, params: {
             cart: {
@@ -691,9 +698,14 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        # An out-of-range quantity is expected buyer-supplied bad input already surfaced to the
+        # buyer via the alert above — it must not page Sentry on every occurrence.
+        expect(ErrorNotifier).not_to have_received(:notify)
       end
 
       it "returns an error when an item price exceeds the bigint column limit" do
+        allow(ErrorNotifier).to receive(:notify)
+
         expect do
           patch :update, params: {
             cart: {
@@ -713,6 +725,8 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        # Same reasoning as the quantity spec above: expected bad input, no Sentry report.
+        expect(ErrorNotifier).not_to have_received(:notify)
       end
 
       it "returns an error when cart contains more than allowed number of cart products" do

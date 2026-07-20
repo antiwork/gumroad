@@ -85,12 +85,29 @@ class CheckoutController < ApplicationController
 
     redirect_to checkout_path, status: :see_other
   rescue ActiveRecord::RecordInvalid, ActiveRecord::Deadlocked => e
-    ErrorNotifier.notify(e)
+    # Buyers occasionally submit absurd quantities or prices (for example by mashing digits)
+    # that exceed the database column limits. Those are rejected by CartProduct's numericality
+    # validations and the buyer already sees the alert below, so they are expected bad input
+    # rather than an application bug — don't report each one to Sentry. Anything else (other
+    # validation failures, deadlocks) still notifies as before.
+    ErrorNotifier.notify(e) unless cart_product_out_of_range_error?(e)
     Rails.logger.error(e.full_message) if Rails.env.development?
     redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
   end
 
   private
+    # True when the exception is a CartProduct validation failure that includes a
+    # quantity or price above its column limit (see CartProduct::MAX_QUANTITY /
+    # CartProduct::MAX_PRICE) — the known, expected shape of buyer-supplied bad input.
+    def cart_product_out_of_range_error?(exception)
+      return false unless exception.is_a?(ActiveRecord::RecordInvalid)
+
+      record = exception.record
+      return false unless record.is_a?(CartProduct)
+
+      [:quantity, :price].any? { |attribute| record.errors.of_kind?(attribute, :less_than_or_equal_to) }
+    end
+
     def process_cart_id_param
       return if params[:cart_id].blank?
 
