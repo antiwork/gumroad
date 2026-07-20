@@ -28,12 +28,15 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert worker.jobs.none? { |j| j["args"] == args }, "expected #{worker} not to be enqueued with #{args.inspect}"
   end
 
-  # Mailers are delivered with deliver_later, which enqueues an
-  # ActionMailer::MailDeliveryJob; assert on the enqueued job (mailer, method,
-  # and the method's args) rather than on ActionMailer::Base.deliveries.
+  # Mailers are delivered with deliver_later, which enqueues the app's
+  # configured delivery job (MailDeliveryJob, a subclass of
+  # ActionMailer::MailDeliveryJob — see config/application.rb); assert on the
+  # enqueued job (mailer, method, and the method's args) rather than on
+  # ActionMailer::Base.deliveries. Match by ancestry, not by exact class name,
+  # so this helper keeps working if the delivery job class changes again.
   def mail_enqueued?(mailer, method, args:)
     enqueued_jobs.any? do |job|
-      job[:job].to_s == "ActionMailer::MailDeliveryJob" &&
+      job[:job].respond_to?(:ancestors) && job[:job] <= ActionMailer::MailDeliveryJob &&
         job[:args][0] == mailer.name && job[:args][1] == method.to_s &&
         job[:args][3].is_a?(Hash) && job[:args][3]["args"] == args
     end
