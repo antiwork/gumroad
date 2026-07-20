@@ -132,6 +132,22 @@ export const ReviewForm = React.forwardRef<
     const loggedInUser = useLoggedInUser();
     const { error, readyToUpload, evaporateUploader, s3UploadConfig } = useReviewVideoUploader();
 
+    // Autosave bookkeeping: a monotonically increasing sequence number lets us
+    // ignore responses from superseded autosaves (e.g. the buyer taps 3 stars,
+    // then 5 stars right after — only the latest save should show a toast), the
+    // timeout ref holds the pending debounced save so an explicit submit can
+    // cancel it, and the in-flight ref lets an explicit submit wait for a save
+    // that already left so its response can't overwrite the submission.
+    const autosaveSequence = React.useRef(0);
+    const autosaveTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const autosaveInFlight = React.useRef<Promise<void> | null>(null);
+    React.useEffect(
+      () => () => {
+        if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
+      },
+      [],
+    );
+
     const uid = React.useId();
     const viewing = formState === "viewing";
     const disabled = isLoading || preview || !!disabledStatus;
@@ -210,13 +226,66 @@ export const ReviewForm = React.forwardRef<
       }
     };
 
+    // A rating alone is a valid review, so save it the moment a star is tapped
+    // instead of making the buyer find the separate "Post review" button (which
+    // can sit below the fold on mobile — buyers tapped stars, saw nothing
+    // happen, and gave up). The save is debounced so tapping around the stars
+    // fires one request, and the form stays open afterwards so the buyer can
+    // still add the written or video review as a follow-up.
+    const autosaveRating = (newRating: number) => {
+      if (preview || disabled || viewing) return;
+
+      if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
+      const sequence = (autosaveSequence.current += 1);
+
+      autosaveTimeout.current = setTimeout(() => {
+        autosaveTimeout.current = null;
+
+        const save = (async () => {
+          try {
+            // Only the rating (and whatever message is already in the box) is
+            // autosaved — video uploads stay behind the explicit submit.
+            await setProductRating({
+              permalink,
+              purchaseId,
+              purchaseEmailDigest: purchaseEmailDigest ?? "",
+              rating: newRating,
+              message: message || null,
+            });
+            if (sequence !== autosaveSequence.current) return;
+            showAlert(message ? "Rating saved!" : "Rating saved! Add a written review to tell others more.", "success");
+          } catch (error) {
+            if (sequence !== autosaveSequence.current) return;
+            assertResponseError(error);
+            showAlert(error.message, "error");
+          }
+        })();
+
+        autosaveInFlight.current = save;
+        void save.finally(() => {
+          if (autosaveInFlight.current === save) autosaveInFlight.current = null;
+        });
+      }, 500);
+    };
+
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (preview || !rating) return;
 
+      // An explicit submit supersedes any pending or in-flight rating autosave:
+      // drop the debounced save, bump the sequence so a late autosave response
+      // can't show a stale toast, and wait for a request that already left so
+      // the server applies this submission last.
+      if (autosaveTimeout.current) {
+        clearTimeout(autosaveTimeout.current);
+        autosaveTimeout.current = null;
+      }
+      autosaveSequence.current += 1;
+
       setIsLoading(true);
 
       try {
+        if (autosaveInFlight.current) await autosaveInFlight.current;
         const content = await generateReviewContentPayload();
 
         const review = await setProductRating({
@@ -347,7 +416,14 @@ export const ReviewForm = React.forwardRef<
         {error ? <p className="text-red"> {error} </p> : null}
         <div className="flex grow flex-wrap items-center justify-between gap-2">
           <Label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</Label>
-          <RatingSelector currentRating={rating} onChangeCurrentRating={setRating} disabled={disabled || viewing} />
+          <RatingSelector
+            currentRating={rating}
+            onChangeCurrentRating={(newRating) => {
+              setRating(newRating);
+              autosaveRating(newRating);
+            }}
+            disabled={disabled || viewing}
+          />
         </div>
 
         {!viewing ? reviewModeRadioButtons : null}
