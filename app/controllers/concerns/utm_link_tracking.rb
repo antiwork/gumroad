@@ -5,7 +5,7 @@ module UtmLinkTracking
 
   private
     def track_utm_link_visit
-      # Used by the RecordNotUnique rescue below, which re-runs this method once via
+      # Used by the duplicate-link rescue below, which re-runs this method once via
       # `retry`. `||=` (not plain assignment) so the flag survives the retry re-running
       # the method body — a plain assignment would reset it and loop forever.
       retried_after_duplicate_insert ||= false
@@ -67,22 +67,34 @@ module UtmLinkTracking
 
         UpdateUtmLinkStatsJob.perform_async(utm_link.id)
       end
-    rescue ActiveRecord::RecordNotUnique => e
+    rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
       # Two simultaneous first visits with the same UTM parameters can both find no existing
-      # link and both try to auto-create it; the request that loses the race hits the
-      # database's unique index. Since the winning request has committed the link by the time
-      # we get here, retrying once lets this request find that link and still record the
-      # visit. If it fails a second time something else is wrong — report and swallow so the
-      # buyer-facing page still renders (analytics must never break the page).
-      if retried_after_duplicate_insert
-        ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
-      else
+      # link and both try to auto-create it. The request that loses the race fails in one of
+      # two ways, depending on when the winner commits relative to the loser's save:
+      #
+      #   - ActiveRecord::RecordNotUnique — the winner commits after the loser's uniqueness
+      #     validation query ran, so the loser passes validation and then hits the database's
+      #     unique index on insert.
+      #   - ActiveRecord::RecordInvalid — the winner commits before the loser's uniqueness
+      #     validation query runs, so the loser's UtmLink#utm_fields_are_unique_per_target_resource
+      #     validation sees the winner's row and fails with "A link with similar UTM parameters
+      #     already exists".
+      #
+      # In both cases the winning request has committed the link by the time we get here, so
+      # retrying once lets this request find that link and still record the visit. For
+      # RecordInvalid we only retry when the failing record is the auto-created UtmLink itself
+      # (a new record) — validation failures on other records in this block aren't races and
+      # retrying wouldn't help. If any failure repeats after the retry, something else is
+      # wrong — report and swallow so the buyer-facing page still renders (analytics must
+      # never break the page).
+      race_recoverable = e.is_a?(ActiveRecord::RecordNotUnique) ||
+        (e.record.is_a?(UtmLink) && e.record.new_record?)
+
+      if race_recoverable && !retried_after_duplicate_insert
         retried_after_duplicate_insert = true
         retry
       end
-    rescue ActiveRecord::RecordInvalid => e
-      # Analytics tracking must never break the buyer-facing page. A validation failure
-      # should be reported and swallowed, not raised.
+
       ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
     end
 
