@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
 module PreviewBoxHelpers
+  # The preview sidebar no longer renders a visible "Preview" heading (the browser-style
+  # PreviewChrome bar identifies it instead), so locate the region by its aria-label.
   def in_preview(&block)
-    scroll_to find("aside", text: "Preview")
-    within_section "Preview", section_element: :aside do
+    preview = find("aside[aria-label='Preview']")
+    scroll_to preview
+    within preview do
       block.call
     end
   end

@@ -47,7 +47,6 @@ import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -218,7 +217,6 @@ export const Checkout = ({
   // sheets (getChargeTodayPrice) so the sheet total always matches the "Payment today" row.
   const futureInstallmentsWithoutTipsTotal = getFutureInstallmentsTotal(state);
 
-  const isDesktop = useIsAboveBreakpoint("lg");
   const displayTipSelector = isTippingEnabled(state);
   const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
     state.surcharges.type === "loaded" ? state.surcharges.result : null,
@@ -243,18 +241,20 @@ export const Checkout = ({
   );
 
   return (
-    <div className="mx-auto w-full max-w-400">
+    <div className="@container mx-auto w-full max-w-400">
       <PageHeader
-        className="border-none pb-0 md:px-16 md:pb-0 lg:mb-2"
+        className="border-none pb-0 md:px-16 md:pb-0 @[64rem]:mb-2"
         title="Checkout"
         actions={
-          isDesktop ? <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton> : null
+          <NavigationButton className="hidden @[64rem]:inline-flex" href={cart.returnUrl ?? discoverUrl}>
+            Continue shopping
+          </NavigationButton>
         }
         showTitleOnMobile
       />
       {isOpenTuple(cart.items, 1) ? (
         <div className="grid gap-8 p-4 md:p-8 md:px-16">
-          <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[2fr_minmax(26rem,1fr)]">
+          <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 @[64rem]:grid-cols-[2fr_minmax(26rem,1fr)]">
             <div className="grid gap-6">
               <CartItemList>
                 {cart.items.map((item, index) => (
@@ -440,7 +440,9 @@ export const Checkout = ({
               ) : null}
             </div>
             <PaymentForm />
-            {!isDesktop && <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton>}
+            <NavigationButton className="@[64rem]:hidden" href={cart.returnUrl ?? discoverUrl}>
+              Continue shopping
+            </NavigationButton>
           </div>
         </div>
       ) : (
@@ -714,6 +716,7 @@ const CartItemComponent = ({
           <CartItemActions>
             {(item.product.rental && !item.product.rental.rent_only) ||
             item.product.is_quantity_enabled ||
+            item.product.is_multiseat_license ||
             item.product.recurrences ||
             item.product.options.length > 0 ||
             item.product.installment_plan ||

@@ -103,11 +103,12 @@ const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[])
 
 export type AnalyticsProps = {
   products: Product[];
+  seller_time_zone: string;
   country_codes: Record<string, string>;
   state_names: Record<string, string>;
 };
 
-const Analytics = ({ products: initialProducts, country_codes, state_names }: AnalyticsProps) => {
+const Analytics = ({ products: initialProducts, seller_time_zone, country_codes, state_names }: AnalyticsProps) => {
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
@@ -203,6 +204,7 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
                 startDate={mainData.startDate}
                 endDate={mainData.endDate}
                 aggregateBy={aggregateBy}
+                sellerTimeZone={seller_time_zone}
               />
               <ReferrersTable data={mainData.referrerTotal} />
             </>

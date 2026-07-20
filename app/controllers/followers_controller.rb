@@ -52,11 +52,7 @@ class FollowersController < ApplicationController
         return redirect_to custom_domain_subscribe_path, alert: "Sorry, something went wrong." if follower.nil?
         return redirect_to custom_domain_subscribe_path, alert: follower.errors.full_messages.to_sentence if follower.errors.present?
 
-        message = follower.confirmed? ?
-          "You are now following #{follower.user.name_or_username}!" :
-          "Check your inbox to confirm your follow request."
-
-        redirect_to custom_domain_subscribe_path, notice: message, status: :see_other
+        redirect_to custom_domain_subscribe_path, notice: follow_confirmation_message(follower), status: :see_other
       end
       format.json do
         if follower.nil?
@@ -68,11 +64,7 @@ class FollowersController < ApplicationController
           return
         end
 
-        message = follower.confirmed? ?
-          "You are now following #{follower.user.name_or_username}!" :
-          "Check your inbox to confirm your follow request."
-
-        render json: { success: true, message: }
+        render json: { success: true, message: follow_confirmation_message(follower) }
       end
     end
   end
@@ -81,20 +73,30 @@ class FollowersController < ApplicationController
     redirect_to @user.profile_url, allow_other_host: true
   end
 
+  # JSON serves the gumroad:follow bridge on custom HTML pages, where the
+  # trusted wrapper fetches this endpoint and relays the outcome into the
+  # sandboxed page — a redirect would be invisible there. Every other format
+  # keeps the pre-existing render/redirect behavior (a plain `if` rather than
+  # respond_to, so formats that never had an explicit branch don't start
+  # raising UnknownFormat). Both formats 404 on the same predicate: a seller
+  # that doesn't resolve to a public profile.
   def from_embed_form
     @follower = create_follower(params, source: Follower::From::EMBED_FORM)
 
     if @follower.nil? || @follower.errors.present?
       message = @follower&.errors&.full_messages&.to_sentence || "Something went wrong. Please try to follow the creator again."
-      flash[:warning] = message
       user = User.find_by_external_id(params[:seller_id])
+      if request.format.json?
+        return e404_json unless user.try(:username)
+        return render json: { success: false, message: }, status: :unprocessable_entity
+      end
+      flash[:warning] = message
       e404 unless user.try(:username)
       return redirect_to user.profile_url, allow_other_host: true
     end
 
-    message = @follower.confirmed? ?
-      "You are now following #{@follower.user.name_or_username}!" :
-      "Check your inbox to confirm your follow request."
+    message = follow_confirmation_message(@follower)
+    return render json: { success: true, message: } if request.format.json?
     render inertia: "Followers/FromEmbedForm", props: { success: true, message: }
   end
 
@@ -130,6 +132,15 @@ class FollowersController < ApplicationController
   end
 
   private
+    # One home for the visitor-facing outcome copy, shared by #create and
+    # #from_embed_form so the subscribe page, the third-party embed form, and
+    # the custom-page follow bridge can never drift apart.
+    def follow_confirmation_message(follower)
+      follower.confirmed? ?
+        "You are now following #{follower.user.name_or_username}!" :
+        "Check your inbox to confirm your follow request."
+    end
+
     def create_follower(params, source: nil)
       followed_user = User.find_by_external_id(params[:seller_id])
 

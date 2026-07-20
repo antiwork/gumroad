@@ -91,6 +91,42 @@ export const executeAgentAction = async (
   return { message: json.message, object: json.object ?? null };
 };
 
+// The write endpoints whose proposal cards show a rendered page preview: their body params are
+// literal HTML (a find/replace pair, or the whole page), so the generic label/value rows would
+// render a wall of markup.
+const CUSTOM_HTML_PROPOSAL_ENDPOINTS = ["edit_user_custom_html", "update_user_custom_html"];
+
+// The catalog endpoint id a proposed api_write targets (the server stages proposals as
+// { endpoint, path_params, params }), or null when the payload doesn't carry one.
+export const proposedActionEndpoint = (action: ProposedAction): string | null =>
+  typeof action.params.endpoint === "string" ? action.params.endpoint : null;
+
+export const isCustomHtmlProposal = (action: ProposedAction): boolean => {
+  const endpoint = proposedActionEndpoint(action);
+  return endpoint !== null && CUSTOM_HTML_PROPOSAL_ENDPOINTS.includes(endpoint);
+};
+
+type CustomHtmlPreviewResponse = { success: true; html: string } | { success: false; error: string };
+
+// Fetch the sandboxed document showing the seller's page as it would look after the proposed
+// custom-HTML change, for the confirmation card's preview iframe. The server computes the change
+// the same way confirming would apply it, so the preview and the eventual result can't disagree.
+export const fetchCustomHtmlProposalPreview = async (action: ProposedAction): Promise<string> => {
+  const body = action.params.params;
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_agent_custom_html_preview_path(),
+    data: {
+      endpoint: proposedActionEndpoint(action),
+      ...(typeof body === "object" && body !== null ? body : {}),
+    },
+  });
+  const json = typia.assert<CustomHtmlPreviewResponse>(await response.json());
+  if (!json.success) throw new ResponseError(json.error);
+  return json.html;
+};
+
 // One persisted message of a stored conversation, as returned by the conversations endpoint. The
 // server keeps each turn's structured extras (proposed-action card, object cards, applied status)
 // so the chat re-renders history exactly as it looked live.

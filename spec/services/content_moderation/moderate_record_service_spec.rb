@@ -140,6 +140,56 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       end
     end
 
+    it "opts the prompt strategy into spam corroboration" do
+      described_class.check(product, :product)
+
+      expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+        .with(hash_including(corroborate_spam_flags: true))
+    end
+
+    context "when the prompt strategy downgrades an uncorroborated spam flag" do
+      before do
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: ContentModeration::Strategies::PromptStrategy::Result.new(
+                            status: "compliant",
+                            reasoning: [],
+                            audit_reasoning: ["spam (uncorroborated, 1/3 samples flagged): repetitive CTAs"]
+                          ))
+        )
+      end
+
+      it "passes but records the downgraded flag in a non-blocking note" do
+        ContentModerationAdminCommentJob.clear
+
+        result = described_class.check(product, :product)
+
+        expect(result.passed).to eq(true)
+        expect(result.reasons).to eq([])
+        expect(ContentModerationAdminCommentJob.jobs.size).to eq(1)
+        user_id, content = ContentModerationAdminCommentJob.jobs.last["args"]
+        expect(user_id).to eq(seller.id)
+        expect(content).to include("flagged but did not block")
+        expect(content).to include("spam (uncorroborated, 1/3 samples flagged): repetitive CTAs")
+      end
+
+      it "still blocks and leaves both notes when another strategy flags" do
+        ContentModerationAdminCommentJob.clear
+        allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["OpenAI moderation flagged: sexual"]))
+        )
+
+        result = described_class.check(product, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["OpenAI moderation flagged: sexual"])
+        contents = ContentModerationAdminCommentJob.jobs.map { |j| j["args"].second }
+        expect(contents).to include(a_string_including("blocked publish of"))
+        expect(contents).to include(a_string_including("flagged but did not block"))
+      end
+    end
+
     context "when all strategies return compliant" do
       it "returns passed: true without enqueuing a comment" do
         ContentModerationAdminCommentJob.clear

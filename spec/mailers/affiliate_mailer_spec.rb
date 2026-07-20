@@ -233,6 +233,28 @@ describe AffiliateMailer do
       end
     end
 
+    context "when the affiliate has been deleted before the job runs" do
+      it "does not send an email" do
+        direct_affiliate = create(:direct_affiliate, seller:)
+        deleted_id = direct_affiliate.id
+        direct_affiliate.destroy!
+
+        mail = AffiliateMailer.direct_affiliate_invitation(deleted_id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+    end
+
+    context "when the affiliate has no live products" do
+      it "does not send an email" do
+        direct_affiliate = create(:direct_affiliate, seller:)
+        create(:product_affiliate, product:, affiliate: direct_affiliate)
+        product.mark_deleted!
+
+        mail = AffiliateMailer.direct_affiliate_invitation(direct_affiliate.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+    end
+
     context "when prevent_sending_invitation_email_to_seller param is true" do
       it "doesn't send the email to seller" do
         direct_affiliate = create(:direct_affiliate, seller:, products: [product])

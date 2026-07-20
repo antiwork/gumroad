@@ -77,7 +77,7 @@ class CheckoutPresenter
         thumbnail_url: product.thumbnail&.alive&.url,
         native_type: product.native_type,
         is_preorder: product.is_in_preorder_state,
-        is_multiseat_license: product.is_multiseat_license?,
+        is_multiseat_license: product.multiseat_license_enabled?,
         is_quantity_enabled: product.quantity_enabled,
         quantity_remaining: product.remaining_for_sale_count,
         free_trial: product.free_trial_enabled ? {
@@ -353,7 +353,7 @@ class CheckoutPresenter
           number_of_installments: product.installment_plan.number_of_installments,
           recurrence: product.installment_plan.recurrence,
         } : nil,
-        is_multiseat_license: product.is_tiered_membership && product.is_multiseat_license,
+        is_multiseat_license: product.multiseat_license_enabled?,
         shippable_country_codes: product.is_physical ? product.shipping_destinations.alive.flat_map { |shipping_destination| shipping_destination.country_or_countries.keys } : [],
       }
     end

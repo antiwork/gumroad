@@ -1756,16 +1756,36 @@ describe "PurchaseRefunds", :vcr do
     let(:purchase) { create(:purchase) }
 
     it "calls refund_for_fraud! and block_buyer!" do
-      expect(purchase).to receive(:refund_for_fraud!).with(admin.id).and_return(true)
+      expect(purchase).to receive(:refund_for_fraud!).with(admin.id, skip_already_refunded: false).and_return(true)
       expect(purchase).to receive(:block_buyer!).with(blocking_user_id: admin.id)
       purchase.refund_for_fraud_and_block_buyer!(admin.id)
     end
 
     it "does not block the buyer if the refund fails" do
-      expect(purchase).to receive(:refund_for_fraud!).with(admin.id).and_return(false)
+      expect(purchase).to receive(:refund_for_fraud!).with(admin.id, skip_already_refunded: false).and_return(false)
       expect(purchase).not_to receive(:block_buyer!)
 
       expect(purchase.refund_for_fraud_and_block_buyer!(admin.id)).to be(false)
+    end
+
+    # Uses the real refund primitives (unstubbed) so the nil already-refunded path
+    # is exercised end to end: refund_and_save! returns nil when there is nothing
+    # left to refund, and with skip_already_refunded: true the purchase is skipped
+    # without blocking the buyer or touching its subscription.
+    it "skips an already-refunded purchase without blocking the buyer when skip_already_refunded is true" do
+      already_refunded = create(:purchase, stripe_refunded: true)
+
+      expect(already_refunded).not_to receive(:block_buyer!)
+      expect do
+        expect(already_refunded.refund_for_fraud_and_block_buyer!(admin.id, skip_already_refunded: true)).to be_nil
+      end.not_to change { BlockedObject.count }
+    end
+
+    it "keeps the legacy nil-as-truthy behavior for already-refunded purchases when skip_already_refunded is not set" do
+      already_refunded = create(:purchase, stripe_refunded: true)
+
+      expect(already_refunded).to receive(:block_buyer!).with(blocking_user_id: admin.id)
+      already_refunded.refund_for_fraud_and_block_buyer!(admin.id)
     end
   end
 

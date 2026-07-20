@@ -11,6 +11,16 @@ class JapanBankAccount < BankAccount
   BRANCH_CODE_FORMAT_REGEX = /\A[0-9]{3}\z/
   private_constant :BRANCH_CODE_FORMAT_REGEX
 
+  # The 4-digit minimum is intentionally looser than Stripe's documented
+  # "must be 7-8 digits" tokenization error. Real Japanese (Zengin) account
+  # numbers can be shorter than 7 digits, and Stripe accepts them in practice:
+  # a July 2026 production audit found 55 live accounts with sub-7-digit
+  # numbers, all successfully verified by Stripe and several with recent
+  # completed payouts. Tightening the minimum to 7 was tried and reverted
+  # (gumroad#5990 → reverted in gumroad#5993) because it would have broken
+  # re-validation for those working sellers. Do not "fix" this to match the
+  # Stripe docs without first auditing how many stored accounts the stricter
+  # rule would reject. See antiwork/gumroad-private#1180 for the full history.
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{4,8}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 

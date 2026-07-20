@@ -345,6 +345,65 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
   end
 
+  # Refunds every refundable sale of a suspended seller for fraud, asynchronously.
+  #
+  # Two distinct fraud scenarios are supported:
+  # - Default (no block_buyers param): the SELLER is the fraudster and their buyers
+  #   are victims — every purchase is refunded for fraud, but buyers are NOT blocked.
+  # - block_buyers: true — the buyers are the fraudsters (self-purchase / card-testing
+  #   ring), so each buyer is additionally blocked platform-wide (email, card
+  #   fingerprint, browser GUID, IP) via refund_for_fraud_and_block_buyer!.
+  #
+  # A confirmation handshake is required (mirroring refund_balance): expected_email
+  # and expected_purchase_count must match current values or the request 409s. The
+  # seller must already be suspended — there is no override; suspension is one call
+  # away in this same controller. Validation enqueues a uniqueness-locked
+  # RefundAllForFraudWorker (409 if a run is already queued), which fans out one
+  # retried per-purchase job and leaves a Comment on the seller with the queued count.
+  def refund_all_for_fraud
+    return render_internal_admin_user_id_required if params[:user_id].blank?
+    return render json: { success: false, message: "expected_email is required" }, status: :bad_request if params[:expected_email].blank?
+
+    expected_purchase_count = parse_non_negative_integer_param(:expected_purchase_count)
+    return if performed?
+
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    unless user.suspended?
+      return render json: { success: false, message: "User must be suspended to refund all purchases for fraud" }, status: :unprocessable_entity
+    end
+
+    purchases_to_refund = RefundAllForFraudWorker.refundable_purchases_for(user).count
+    if purchases_to_refund != expected_purchase_count
+      payload = {
+        success: false,
+        message: "Expected purchase count does not match the current number of refundable purchases",
+        current: { purchases_to_refund: }
+      }
+      return render json: internal_admin_user_success_payload(user, payload), status: :conflict
+    end
+
+    record_admin_write(action: "users.refund_all_for_fraud", target: user) do
+      job_id = RefundAllForFraudWorker.perform_async(user.id, current_admin_actor_id, block_buyers_param?)
+      if job_id.blank?
+        payload = {
+          success: false,
+          message: "Refund all for fraud is already queued or running",
+          current: { purchases_to_refund: }
+        }
+        return render json: internal_admin_user_success_payload(user, payload), status: :conflict
+      end
+
+      render json: internal_admin_user_success_payload(user, {
+                                                         status: "queued",
+                                                         message: "Refund all for fraud queued",
+                                                         purchases_to_refund:,
+                                                         block_buyers: block_buyers_param?,
+                                                       })
+    end
+  end
+
   def refund_balance
     return render_internal_admin_user_id_required if params[:user_id].blank?
     return render json: { success: false, message: "expected_email is required" }, status: :bad_request if params[:expected_email].blank?
@@ -752,6 +811,14 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def suspension_status(user)
       Admin::UserRiskStatePresenter.new(user).props[:status]
+    end
+
+    # Reads the block_buyers param for refund_all_for_fraud as a strict boolean.
+    # Only "true"/"1"/true opt in to buyer blocking — anything else (including
+    # "no", which ActiveModel::Type::Boolean would cast to true) stays false, so
+    # a mistyped value can never platform-block a seller's buyers by accident.
+    def block_buyers_param?
+      params[:block_buyers].to_s.downcase.in?(%w[true 1])
     end
 
     def last_status_changed_at(user)

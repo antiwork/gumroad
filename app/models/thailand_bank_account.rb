@@ -6,7 +6,10 @@ class ThailandBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /\A[0-9]{3}\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
-  ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{6,15}\z/
+  # Stripe accepts 6-17 digit Thai account numbers (verified by live token
+  # probes at the boundary); keep our cap aligned so we don't reject account
+  # numbers the processor would take.
+  ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{6,17}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number

@@ -30,7 +30,14 @@ class Ai::StoreAgentService
   # network timeouts on real (slow but working) generations, so this is deliberately generous — the
   # client fails fast on connect problems and retries transient failures on its own.
   REQUEST_TIMEOUT_IN_SECONDS = 120
-  MAX_TOOL_ITERATIONS = 5
+  # Upper bound on model turns per reply (each turn may run one or more tools). This has to leave
+  # room for pagination: list endpoints return 10 items per page and the system prompt tells the
+  # model to walk EVERY page for "all of X" tasks, so each page fetch consumes one turn and the
+  # final answer needs one more. The previous cap of 5 meant a seller with more than ~40 products
+  # hit the generic "couldn't finish" fallback on exactly the catalog-wide tasks the pagination
+  # rule exists for. 25 turns covers catalogs of roughly 240 items while still bounding the cost
+  # of a runaway tool loop; past that the honest cap reply below is the correct outcome.
+  MAX_TOOL_ITERATIONS = 25
   MAX_MESSAGE_LENGTH = 2_000
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
   # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a
@@ -95,12 +102,39 @@ class Ai::StoreAgentService
     - Only ever act on the current creator's own store. You cannot access other creators' data; the
       API enforces this and an endpoint the creator's role can't use will simply fail.
     - Always use api_read to get real ids and live numbers before acting. Never invent ids.
+    - List endpoints are PAGINATED (usually 10 items per page). When a read result includes a
+      next_page_key, more items exist: call the same endpoint again with page_key set to that value,
+      and keep going until the response has no next_page_key. Any task covering "all" of something
+      (all products, all sales, the whole catalog) requires walking every page first. Never state or
+      imply you checked items you did not actually fetch — if you can't or didn't fetch a page, say so.
     - Never claim a change has already been made. After api_write, tell the creator you've prepared it
       and it's ready for them to confirm.
+    - You cannot see the creator's dashboard. Never invent or describe dashboard screens, settings
+      pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
+      If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
+      directions.
+    - Store appearance (colors, fonts, look and feel) has NO self-serve settings in the dashboard —
+      there is no "fonts and colors" screen, no color picker under Settings or Edit profile. The
+      only way to change how a store looks is a custom HTML page, authored and edited through your
+      tools. When the creator asks for an appearance change (like "change my accent color"), do it
+      with the custom HTML endpoints — never direct them to dashboard settings that don't exist.
     - When the creator already has a custom HTML page and asks for a change to it, ALWAYS read the
       current page first and use the targeted edit endpoint to change only the part they asked
       about. Never regenerate or replace an existing page from scratch unless the creator
       explicitly asks for a whole new page — a full replacement destroys everything else on it.
+    - When the creator has NO custom HTML page yet and wants an appearance change, author a
+      COMPLETE page with update_user_custom_html. Every published page is served with the
+      creator's live store data injected into it as a <script id="gumroad-data"
+      type="application/json"> element — products (name, url, price, thumbnail_url,
+      description), posts, and page names, refreshed on every page load. Build the page to READ
+      that JSON and render the product grid and links from it, so the storefront stays current
+      as products are added, renamed, or removed — never hard-code the product list into the
+      HTML. Include the creator's name and bio, styled the way they asked. Never publish a page
+      that drops their products or reduces the storefront to a colored background.
+    - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
+      you actually called api_write in this same reply. If the creator agrees to go ahead and
+      nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation
+      again.
     - Custom HTML pages only display images hosted by Gumroad — external file
       urls are blocked by the page's security policy and render broken. When the creator wants
       their image (logo, photo, banner) on a page, first upload it with

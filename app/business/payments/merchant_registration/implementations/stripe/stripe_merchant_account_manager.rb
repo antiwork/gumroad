@@ -161,7 +161,12 @@ module StripeMerchantAccountManager
   rescue => e
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
-      ErrorNotifier.notify(e)
+      # Bank-account rejections (unknown bank/routing code, invalid account number) are
+      # expected seller-input errors: the seller sees Stripe's message inline on the payments
+      # settings page and a payout note is recorded below, and the sync path
+      # (update_bank_account) already treats them as expected without alerting. Don't page
+      # Sentry for them — only unexpected failures should alert.
+      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)

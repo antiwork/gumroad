@@ -370,6 +370,16 @@ class Order::PreparePaymentIntentService
         currency: presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY,
         stripe_fx_quote_id: presentment&.stripe_fx_quote_id
       )
+    rescue ChargeProcessorCardError => e
+      # The seller-proceeds guard is an expected buyer-facing rejection, not a generic prepare
+      # failure. Preserve its message and Stripe-style error code before the caller marks the
+      # purchase failed, matching the server-confirm card-error path.
+      purchases_to_charge.each do |purchase|
+        purchase.stripe_error_code = e.error_code if purchase.stripe_error_code.blank?
+        purchase.stripe_transaction_id = e.charge_id if purchase.stripe_transaction_id.blank?
+        purchase.errors.add(:base, PurchaseErrorCode.customer_error_message(e.message))
+      end
+      nil
     rescue ChargeProcessorError => e
       Rails.logger.error("Error preparing client-confirm PaymentIntent for order #{order.id} charge #{charge.external_id}: #{e.class} => #{e.message} => #{e.backtrace&.first(15)&.join("\n")}")
       # Stamp the failure details on the purchases now, before the caller's generic

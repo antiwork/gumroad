@@ -35,6 +35,12 @@ describe AnalyticsPresenter do
       )
       expect(presenter.page_props[:state_names].first).to eq("Alabama")
       expect(presenter.page_props[:state_names].last).to eq("Other")
+      expect(presenter.page_props[:seller_time_zone]).to eq("America/Los_Angeles")
+    end
+
+    it "returns the seller's own time zone as an IANA identifier" do
+      seller.update!(timezone: "Eastern Time (US & Canada)")
+      expect(presenter.page_props[:seller_time_zone]).to eq("America/New_York")
     end
   end
 end

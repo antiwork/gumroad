@@ -46,6 +46,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
+import { CollapsibleDescription } from "$app/components/Product/CollapsibleDescription";
 import {
   applySelection,
   buyerLocalContextFor,
@@ -513,13 +514,15 @@ export const Product = ({
           </section>
         ) : null}
         <section className="border-t border-border p-6">
-          {pageLoaded ? (
-            <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
-              <EditorContent className="rich-text" editor={descriptionEditor} />
-            </PublicFilesSettingsContext.Provider>
-          ) : (
-            <div className="rich-text" dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }} />
-          )}
+          <CollapsibleDescription>
+            {pageLoaded ? (
+              <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
+                <EditorContent className="rich-text" editor={descriptionEditor} />
+              </PublicFilesSettingsContext.Provider>
+            ) : (
+              <div className="rich-text" dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }} />
+            )}
+          </CollapsibleDescription>
         </section>
       </section>
       <section>

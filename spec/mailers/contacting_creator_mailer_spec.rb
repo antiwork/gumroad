@@ -2037,6 +2037,7 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "Hey #{seller.name_or_username},"
       expect(mail.body.encoded).to include seller.refund_policy.title
       expect(mail.body.encoded).to include "high rate of chargebacks"
+      expect(mail.body.encoded).to include "reply to this email with the specific steps"
     end
 
     it "does not send when the seller's account is not active" do

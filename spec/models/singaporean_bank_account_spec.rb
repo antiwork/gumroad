@@ -57,12 +57,14 @@ describe SingaporeanBankAccount do
     it "allows records that match the required account number regex" do
       expect(build(:singaporean_bank_account, account_number: "000123456")).to be_valid
       expect(build(:singaporean_bank_account, account_number: "1234567890")).to be_valid
+      expect(build(:singaporean_bank_account, account_number: "8937040044053201300000")).to be_valid
+      expect(build(:singaporean_bank_account, account_number: "1234567890123456789012345678901")).to be_valid
 
       sg_bank_account = build(:singaporean_bank_account, account_number: "ABCDEFGHI")
       expect(sg_bank_account).to_not be_valid
       expect(sg_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
 
-      sg_bank_account = build(:singaporean_bank_account, account_number: "8937040044053201300000")
+      sg_bank_account = build(:singaporean_bank_account, account_number: "12345678901234567890123456789012")
       expect(sg_bank_account).to_not be_valid
       expect(sg_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
 

@@ -51,6 +51,13 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
     BalanceTransaction.where(credit_id: credit_ids).delete_all
     Credit.where(id: credit_ids).delete_all
     Refund.where(id: refund_ids).delete_all
+    Event.where(purchase_id: purchase_ids).delete_all
+    charge_ids = ChargePurchase.where(purchase_id: purchase_ids).pluck(:charge_id)
+    ChargePurchase.where(purchase_id: purchase_ids).delete_all
+    order_ids = Charge.where(id: charge_ids).pluck(:order_id)
+    OrderPurchase.where(purchase_id: purchase_ids).delete_all
+    Charge.where(id: charge_ids).delete_all
+    Order.where(id: order_ids).delete_all
     Balance.where(user: @seller).each { |balance| BalanceTransaction.where(balance:).delete_all }
     Purchase.where(id: purchase_ids).each do |purchase|
       purchase.update_columns(purchase_success_balance_id: nil, purchase_refund_balance_id: nil)
@@ -64,9 +71,9 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
     LowBalanceFraudCheckWorker.jobs.clear
   end
 
-  def create_failed_candidate_refund!(amount_cents:, processor_refund_id:)
+  def create_failed_candidate_refund!(amount_cents:, processor_refund_id:, purchase: @purchase)
     refund = create(:refund,
-                    purchase: @purchase,
+                    purchase: purchase,
                     # The factory default creates a brand-new refunding user. This file
                     # runs outside the test transaction, so that user would outlive the
                     # example and pollute later specs (users table is shared); reuse the
@@ -253,5 +260,127 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
     expect(@purchase.stripe_refunded?).to eq(false)
     expect(@purchase.stripe_partially_refunded?).to eq(true)
     expect(@purchase.amount_refundable_cents).to eq(1400)
+  end
+
+  # Combined-charge version of the lock-cycle scenario. A charge refund updates every
+  # purchase in the charge plus the shared seller balance inside one transaction; before
+  # the id-ordered lock pre-pass in Charge#refund_and_save! its acquisition order was
+  # purchase₁ → balance → purchase₂, so a sibling failed-refund reversal holding
+  # purchase₂ and waiting for the balance completed a deadlock cycle.
+  it "does not create a lock cycle between a combined-charge refund and a sibling reversal" do
+    purchase_two = create(:purchase_with_balance,
+                          link: @product,
+                          seller: @seller,
+                          merchant_account: @merchant_account,
+                          price_cents: 2000,
+                          total_transaction_cents: 2000)
+    # Reuse the shared merchant account and seller for the charge's associations:
+    # this file runs without a wrapping transaction, so factory-fresh users and
+    # merchant accounts would outlive the example (and the merchant-account id
+    # sequence collides with rows left by earlier examples in the same file).
+    charge = create(:charge,
+                    order: create(:order, purchaser: @seller),
+                    seller: @seller,
+                    merchant_account: @merchant_account,
+                    purchases: [@purchase, purchase_two])
+    # Real combined-charge purchases carry this flag from Order::CreateService; the
+    # per-purchase refund path relies on it to send Stripe a per-purchase amount
+    # instead of refunding the whole multi-purchase charge.
+    [@purchase, purchase_two].each { _1.update!(is_part_of_combined_charge: true) }
+
+    failed_refund = create_failed_candidate_refund!(amount_cents: 500,
+                                                    processor_refund_id: "re_race_combined_sibling",
+                                                    purchase: purchase_two)
+    purchase_two.update!(stripe_partially_refunded: true)
+
+    # Refunding the seller's own sale keeps the path free of team-member checks;
+    # the balance-sufficiency guard is not what this example proves.
+    allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(100_00)
+    allow(ChargeProcessor).to receive(:refund!) do |*, **kwargs|
+      stripe_refund = Struct.new(:status, :id).new("succeeded", "re_combined_#{SecureRandom.hex(4)}")
+      charge_refund = ChargeRefund.new
+      charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      charge_refund.id = stripe_refund.id
+      # Echo the requested per-purchase amount back, the way Stripe refunds exactly
+      # what was asked (purchase_two asks for 1500: its refundable remainder next to
+      # the pending 500 failed refund).
+      charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -kwargs.fetch(:amount_cents))
+      charge_refund.instance_variable_set(:@refund, stripe_refund)
+      charge_refund
+    end
+
+    payout_has_balance_lock = Queue.new
+    release_payout = Queue.new
+    charge_refund_locked_purchases = Queue.new
+    reversal_worker_started = Queue.new
+    reversal_has_purchase_lock = Queue.new
+
+    locked_by_charge_refund = []
+    allow_any_instance_of(Purchase).to receive(:lock!).and_wrap_original do |method, *args|
+      result = method.call(*args)
+      purchase_id = method.receiver.id
+      case Thread.current[:refund_concurrency_role]
+      when :charge_refund
+        locked_by_charge_refund << purchase_id
+        # Fires once the charge refund holds BOTH purchase rows; with the up-front
+        # id-ordered pre-pass this happens before any balance work.
+        charge_refund_locked_purchases << true if (locked_by_charge_refund.uniq - [@purchase.id, purchase_two.id]).empty? && locked_by_charge_refund.uniq.size == 2
+      when :reversal
+        reversal_has_purchase_lock << true if purchase_id == purchase_two.id
+      end
+      result
+    end
+
+    shared_balance_id = Balance.where(user: @seller).order(:id).last.id
+    threads = []
+    reversal_overtook_charge_refund = nil
+    begin
+      threads << start_worker(:payout) do
+        Balance.find(shared_balance_id).with_lock do
+          payout_has_balance_lock << true
+          release_payout.pop
+        end
+      end
+      wait_for(payout_has_balance_lock)
+
+      threads << start_worker(:charge_refund) do
+        raise "Charge refund failed" unless Charge.find(charge.id).refund_and_save!(@seller.id)
+      end
+      # The charge refund must be holding both purchase rows (and therefore blocked
+      # on the payout-held balance) before the sibling reversal starts.
+      wait_for(charge_refund_locked_purchases)
+
+      threads << start_worker(:reversal) do
+        reversal_worker_started << true
+        described_class.new(refund: Refund.find(failed_refund.id)).perform
+      end
+      wait_for(reversal_worker_started)
+      reversal_overtook_charge_refund = received_within?(reversal_has_purchase_lock)
+    ensure
+      release_payout << true
+      join_workers(*threads)
+    end
+
+    # The reversal queued behind the charge refund's purchase lock instead of
+    # slipping between the per-purchase refunds and closing the deadlock cycle.
+    expect(reversal_overtook_charge_refund).to eq(false)
+
+    failed_transactions = BalanceTransaction.where(refund_id: failed_refund.id)
+    expect(failed_transactions.count).to eq(2)
+    expect(failed_transactions.sum(:issued_amount_net_cents)).to eq(0)
+    expect(failed_refund.reload.balance_reversed_on_failure).to eq(true)
+
+    # The first purchase was fully refunded by the charge refund.
+    @purchase.reload
+    expect(@purchase.stripe_refunded?).to eq(true)
+    expect(@purchase.amount_refundable_cents).to eq(0)
+
+    # purchase_two's charge refund covered the 1500 that was refundable next to the
+    # then-pending 500 failed refund. Once the reversal excluded that 500 from the
+    # effective sums and recomputed the flags, 500 became refundable again.
+    purchase_two.reload
+    expect(purchase_two.stripe_refunded?).to eq(false)
+    expect(purchase_two.stripe_partially_refunded?).to eq(true)
+    expect(purchase_two.amount_refundable_cents).to eq(500)
   end
 end
