@@ -148,7 +148,7 @@ class Subscription::UpdaterService
           stored_cards = [subscription.user&.credit_card, subscription.credit_card].compact
           if stored_cards.any? && stored_cards.none? { |card| subscription.link.user.supports_card?(card.as_json) }
             error_message = if stored_cards.any? { |card| card.charge_processor_id == PaypalChargeProcessor.charge_processor_id }
-              "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+              "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
             else
               "The payment method saved on this membership is no longer supported by the creator. Please use a different payment method (your card was not charged)."
             end

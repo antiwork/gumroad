@@ -249,7 +249,7 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(result[:success]).to eq false
-            expect(result[:error_message]).to eq "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+            expect(result[:error_message]).to eq "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
             expect(@subscription.reload).not_to be_alive
           end
 
