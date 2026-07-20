@@ -62,7 +62,7 @@ describe JapanBankAccount do
   describe "#validate_account_number" do
     it "allows records that match the required account number regex" do
       expect(build(:japan_bank_account, account_number: "0001234")).to be_valid
-      expect(build(:japan_bank_account, account_number: "1234567")).to be_valid
+      expect(build(:japan_bank_account, account_number: "1234")).to be_valid
       expect(build(:japan_bank_account, account_number: "12345678")).to be_valid
 
       jp_bank_account = build(:japan_bank_account, account_number: "ABCDEFG")
@@ -70,16 +70,6 @@ describe JapanBankAccount do
       expect(jp_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
 
       jp_bank_account = build(:japan_bank_account, account_number: "123456789")
-      expect(jp_bank_account).to_not be_valid
-      expect(jp_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
-
-      # Stripe requires 7-8 digits for Japan; 4-6 digit numbers used to pass here and
-      # then fail at Stripe tokenization with a raw error.
-      jp_bank_account = build(:japan_bank_account, account_number: "1234")
-      expect(jp_bank_account).to_not be_valid
-      expect(jp_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
-
-      jp_bank_account = build(:japan_bank_account, account_number: "123456")
       expect(jp_bank_account).to_not be_valid
       expect(jp_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
 

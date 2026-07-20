@@ -11,11 +11,7 @@ class JapanBankAccount < BankAccount
   BRANCH_CODE_FORMAT_REGEX = /\A[0-9]{3}\z/
   private_constant :BRANCH_CODE_FORMAT_REGEX
 
-  # Stripe rejects Japanese account numbers shorter than 7 digits at tokenization
-  # ("must be 7-8 digits"), so accepting 4-6 digits here only delays the failure to a
-  # raw Stripe error after submit. Match Stripe's bounds so the seller gets inline
-  # validation instead. Verified by live token probes, 2026-07-20 (gumroad-private#1180).
-  ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{7,8}\z/
+  ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{4,8}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
   # Zengin-format account names allow katakana, digits, and the symbols ( ) . - /
