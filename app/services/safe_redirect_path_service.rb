@@ -27,6 +27,11 @@ class SafeRedirectPathService
 
     def relative_path
       _path = url.path.gsub(/^\/+/, "/")
+      # A host-relative path must start with "/" — otherwise Rails' redirect_to
+      # concatenates it directly onto the request host (e.g. "dashboard" becomes
+      # "https://gumroad.comdashboard"), which raises UnsafeRedirectError. Paths
+      # that are only a query string (e.g. "?query=param") are left as-is.
+      _path = "/#{_path}" unless _path.empty? || _path.start_with?("/")
       [_path, url.query].compact.join("?")
     end
 
