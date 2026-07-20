@@ -21,6 +21,7 @@ class RedisKey
     def followers_import_limit = "followers_import:limit"
     def force_product_id_timestamp = "force_product_id_timestamp"
     def api_v2_sales_deprecated_pagination_query_timeout = "api_v2_sales_deprecated_pagination_query_timeout"
+    def api_v2_sales_page_key_query_timeout = "api_v2_sales_page_key_query_timeout"
     def free_purchases_watch_hours = "free_purchases_watch_hours"
     def max_allowed_free_purchases_of_same_product = "max_allowed_free_purchases_of_same_product"
     def ai_request_throttle(user_id) = "ai_request_throttle:#{user_id}"

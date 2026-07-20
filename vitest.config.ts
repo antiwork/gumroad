@@ -10,7 +10,11 @@ export default defineConfig({
   // typia.assert<T>() runs its real generated validator instead of throwing at runtime.
   plugins: [UnpluginTypia({ cache: true })],
   resolve: {
-    alias: { $app: path.resolve(rootPath, "app/javascript") },
+    // Mirror the vite.config.ts aliases components under test import from.
+    alias: {
+      $app: path.resolve(rootPath, "app/javascript"),
+      $assets: path.resolve(rootPath, "public"),
+    },
   },
   test: {
     include: ["app/javascript/**/*.test.{ts,tsx}"],

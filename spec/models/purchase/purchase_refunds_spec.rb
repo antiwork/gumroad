@@ -2401,5 +2401,31 @@ describe "PurchaseRefunds", :vcr do
       expect(purchase.tax_refunded_cents).to eq(30)
       expect(purchase.gumroad_tax_refunded_cents).to eq(80)
     end
+
+    it "returns the same amount_refunded_cents from preloaded refunds without a SUM query" do
+      create_partial_refund(status: "succeeded")
+      create_partial_refund(status: "failed", reversed: true)
+      create_partial_refund(status: "failed")
+
+      db_backed = Purchase.find(purchase.id).amount_refunded_cents
+
+      preloaded = Purchase.find(purchase.id)
+      preloaded.refunds.load
+
+      sum_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        sum_queries << sql if sql.include?("SUM(`refunds`")
+      end
+      in_memory = nil
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        in_memory = preloaded.amount_refunded_cents
+      end
+
+      expect(in_memory).to eq(db_backed)
+      expect(in_memory).to eq(10_00)
+      expect(sum_queries).to be_empty,
+                             "Expected no refund SUM queries when refunds are preloaded, got:\n#{sum_queries.join("\n")}"
+    end
   end
 end

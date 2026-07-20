@@ -66,7 +66,7 @@ describe("SalesChart projection overlay", () => {
     vi.useRealTimers();
   });
 
-  it("renders the dashed projection line and dot with finite coordinates for a daily range ending today", () => {
+  it("renders the dotted projection tick with finite coordinates for a daily range ending today", () => {
     // Fix "now" to mid-afternoon so the projection guardrails (first hour of the day,
     // completed day) don't suppress the overlay.
     vi.useFakeTimers();
@@ -74,20 +74,19 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart();
 
-    const projectionLine = container.querySelector("[data-testid='chart-projection-line']");
-    const projectedDot = container.querySelector("[data-testid='chart-projected-dot']");
-    expect(projectionLine).not.toBeNull();
-    expect(projectedDot).not.toBeNull();
-    expect(projectionLine?.getAttribute("stroke-dasharray")).toBe("4 4");
+    const projectedTick = container.querySelector("[data-testid='chart-projected-tick']");
+    expect(projectedTick).not.toBeNull();
+    expect(projectedTick?.getAttribute("stroke-dasharray")).toBe("2 2");
 
     for (const attribute of ["x1", "x2", "y1", "y2"]) {
-      expect(Number.isFinite(Number(projectionLine?.getAttribute(attribute)))).toBe(true);
+      expect(Number.isFinite(Number(projectedTick?.getAttribute(attribute)))).toBe(true);
     }
-    for (const attribute of ["cx", "cy"]) {
-      expect(Number.isFinite(Number(projectedDot?.getAttribute(attribute)))).toBe(true);
-    }
-    // The dashed extension starts at today's actual total and goes UP to the projection.
-    expect(Number(projectionLine?.getAttribute("y2"))).toBeLessThan(Number(projectionLine?.getAttribute("y1")));
+    // The tick is horizontal (constant y) and has real width along x.
+    expect(Number(projectedTick?.getAttribute("y1"))).toBe(Number(projectedTick?.getAttribute("y2")));
+    expect(Number(projectedTick?.getAttribute("x2"))).toBeGreaterThan(Number(projectedTick?.getAttribute("x1")));
+    // The old vertical connector line and circle cap are gone.
+    expect(container.querySelector("[data-testid='chart-projection-line']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
 
     expectNoNaNAttributes(container);
   });
@@ -98,8 +97,7 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart({ aggregateBy: "monthly" });
 
-    expect(container.querySelector("[data-testid='chart-projection-line']")).toBeNull();
-    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
     expectNoNaNAttributes(container);
   });
 
@@ -109,8 +107,7 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart({ endDate: "Jul 10" });
 
-    expect(container.querySelector("[data-testid='chart-projection-line']")).toBeNull();
-    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
     expectNoNaNAttributes(container);
   });
 });

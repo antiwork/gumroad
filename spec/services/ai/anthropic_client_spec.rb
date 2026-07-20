@@ -405,7 +405,38 @@ describe Ai::AnthropicClient do
       expect(result.stop_reason).to eq("tool_use")
     end
 
-    it "raises an error for malformed streamed tool_use input on a completed turn" do
+    it "retries when a completed turn delivers unreadable tool_use input, and succeeds on the re-request" do
+      # Production traffic flows through OpenRouter's gateway, which can drop input_json_delta
+      # fragments while still delivering the closing stop_reason — the turn looks complete but the
+      # tool call's JSON is cut off mid-object. That's transport corruption, not the model
+      # misbehaving, so the client should re-request the turn instead of failing it.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+        ["content_block_stop", { index: 0 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      complete = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product"}' } }],
+        ["content_block_stop", { index: 0 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .to_return({ status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" } },
+                   { status: 200, body: complete, headers: { "Content-Type" => "text/event-stream" } })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(result.tool_uses).to eq([{ id: "toolu_x", name: "api_write", input: { "endpoint" => "update_product" } }])
+      expect(client).to have_received(:sleep).once
+    end
+
+    it "surfaces the unreadable-tool-call error once retries are exhausted on a completed turn" do
+      # If every attempt produces unparseable tool arguments, it's not transient after all — the
+      # caller still gets the honest "unreadable tool call" failure rather than a lossy {} dispatch.
+      allow(client).to receive(:sleep)
       stream = sse(
         ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_read" } }],
         ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{not json" } }],
@@ -415,7 +446,29 @@ describe Ai::AnthropicClient do
       stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
 
       expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::TransientError, /unreadable tool call/i)
+      expect(a_request(:post, url)).to have_been_made.times(3)
+    end
+
+    it "does not retry a corrupted tool call once text has already streamed to the caller" do
+      # Tool-use turns often stream preamble text before the tool_use block. Once any delta has
+      # reached the caller, a retry would replay the reply from the start on the seller's screen,
+      # so the corruption surfaces immediately instead — exactly one request, no retry.
+      allow(client).to receive(:sleep)
+      stream = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "Let me update that…" } }],
+        ["content_block_start", { index: 1, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+        ["content_block_stop", { index: 1 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_t| } }
         .to raise_error(described_class::Error, /unreadable tool call/i)
+      expect(a_request(:post, url)).to have_been_made.times(1)
+      expect(client).not_to have_received(:sleep)
     end
 
     it "retries when the stream drops mid-tool-call, leaving cut-off JSON and no stop_reason" do

@@ -213,6 +213,34 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "returns a 400 error when the page_key query times out" do
+        allow(WithMaxExecutionTime).to receive(:timeout_queries).and_raise(WithMaxExecutionTime::QueryTimeoutError)
+
+        get :index, params: @params
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Query timed out. Try narrowing your date range with 'after'/'before' or filtering by product_id."
+        }.as_json)
+      end
+
+      it "runs the page_key query inside a query timeout guard" do
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 15).and_call_original
+
+        get :index, params: @params
+        expect(response.code).to eq "200"
+      end
+
+      it "uses the Redis-configured timeout for the page_key query when set" do
+        $redis.set(RedisKey.api_v2_sales_page_key_query_timeout, 42)
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 42).and_call_original
+
+        get :index, params: @params
+        expect(response.code).to eq "200"
+      ensure
+        $redis.del(RedisKey.api_v2_sales_page_key_query_timeout)
+      end
+
       it "returns a 400 error if date format is incorrect" do
         @params.merge!(after: "394293")
         get :index, params: @params

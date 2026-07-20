@@ -250,7 +250,13 @@ describe Charge::CreateService, :vcr do
         seller: seller_1,
         merchant_account:,
         currency: Currency::CAD,
-        canonical_total_cents: amount_cents
+        canonical_total_cents: amount_cents,
+        canonical_line_items: [
+          {
+            permalink: product_1.unique_permalink,
+            total_cents: purchase.total_transaction_cents,
+          },
+        ]
       ).and_return(locked_quote)
       allow_any_instance_of(Charge::PresentmentOrchestrator).to receive(:perform).and_return(presentment_result)
 
@@ -285,6 +291,106 @@ describe Charge::CreateService, :vcr do
                                 off_session: false,
                                 statement_description: seller_1.name_or_username,
                                 params: { buyer_currency_quote: "locked-token" }).perform
+    end
+
+    it "prices one PaymentIntent at the locked cart total and snapshots per-purchase presentments for a multi-item single-seller cart" do
+      # check_merchant_account_is_linked lets quote creation resolve the seller's Stripe
+      # Connect account (User#merchant_account only returns connect accounts for
+      # migration-enabled sellers), so the quote and the charge use the same account.
+      seller = create(:user, disable_buyer_local_currency: false, check_merchant_account_is_linked: true)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      order = create(:order)
+      products = [3_34, 6_67].map { create(:product, user: seller, price_cents: _1) }
+      purchases = products.map do |product|
+        purchase = create(:purchase,
+                          link: product,
+                          seller:,
+                          merchant_account:,
+                          purchase_state: "in_progress",
+                          price_cents: product.price_cents,
+                          total_transaction_cents: product.price_cents,
+                          ip_address: "203.0.113.1")
+        order.purchases << purchase
+        purchase
+      end
+      stripe_chargeable = instance_double(StripeChargeablePaymentMethod)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp", get_chargeable_for: stripe_chargeable)
+
+      # A real locked quote for the whole cart: 10.01 USD at the 0.8 rate rounds to
+      # 12.51 CAD — a total no proportional split of the two items hits exactly, so the
+      # per-purchase snapshots must reconcile through largest-remainder allocation.
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_multi", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
+      quote_line_items = products.map do |product|
+        Checkout::BuyerCurrencyQuote::LineItem.new(
+          permalink: product.unique_permalink,
+          product:,
+          price_cents: product.price_cents,
+          tip_cents: 0,
+          seller_tax_cents: 0,
+          gumroad_tax_cents: 0,
+          shipping_cents: 0
+        )
+      end
+      quote = Checkout::BuyerCurrencyQuote.create(line_items: quote_line_items, canonical_total_cents: 10_01, ip: "203.0.113.1")
+      expect(quote).to be_present
+      # The same allocation the browser displayed ([417, 834] — the largest-remainder split
+      # of the locked 12.51 CAD) must be what the charge persists below.
+      expect(quote.line_allocations.map(&:presentment_total_cents)).to eq([4_17, 8_34])
+
+      captured_intent_args = nil
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*args, **kwargs|
+        captured_intent_args = { positional: args, keyword: kwargs }
+        # The snapshots must exist before the intent is created so receipts and
+        # accounting can read them even if confirmation outcomes are ambiguous.
+        charge_presentment = ChargePresentment.sole
+        expect(charge_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                      presentment_total_cents: 12_51,
+                                                      stripe_fx_quote_id: "fxq_multi")
+        purchase_presentments = purchases.map { _1.reload.purchase_presentment }
+        expect(purchase_presentments.map(&:charge_presentment).uniq).to eq([charge_presentment])
+        # Identical to the quote's line allocations the checkout displayed — the receipt
+        # can never show a different cent than the cart did.
+        expect(purchase_presentments.map(&:presentment_total_cents)).to eq([4_17, 8_34])
+        expect(purchase_presentments.sum(&:presentment_total_cents)).to eq(12_51)
+        nil
+      end
+
+      Charge::CreateService.new(order:,
+                                seller:,
+                                merchant_account:,
+                                chargeable:,
+                                purchases:,
+                                amount_cents: 10_01,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller.name_or_username,
+                                params: { buyer_currency_quote: quote.token }).perform
+
+      expect(captured_intent_args).to be_present
+      expect(captured_intent_args[:positional][2]).to eq(10_01)
+      expect(captured_intent_args[:keyword]).to include(
+        processor_amount_cents: 12_51,
+        processor_currency: Currency::CAD,
+        stripe_fx_quote_id: "fxq_multi"
+      )
+      expect(captured_intent_args[:keyword][:idempotency_key]).to match(/\Abuyer-currency-charge-.+-fxq_multi\z/)
+      purchases.each do |purchase|
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors[:base]).to be_empty
+      end
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+      end
     end
 
     {

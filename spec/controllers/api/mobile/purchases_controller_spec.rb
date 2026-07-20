@@ -776,6 +776,67 @@ describe Api::Mobile::PurchasesController do
                                         "Expected zero per-row SELECTs for creator avatars, got:\n#{per_row_avatar_queries.join("\n")}"
     end
 
+    it "does not issue per-purchase refund SUM queries" do
+      purchases = create_list(:purchase, 3, purchaser: @purchaser, seller: @user, link: create(:product, user: @user))
+      # A real partial refund so the in-memory sum path has rows to aggregate and
+      # amount_refundable_in_currency reflects it in the response below.
+      create(:refund, purchase: purchases.first, amount_cents: 50)
+
+      per_purchase_refund_sums = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next unless sql.start_with?("SELECT")
+        next unless sql.include?("SUM(`refunds`")
+        next unless sql.match?(/`refunds`\.`purchase_id` = \d+/)
+
+        per_purchase_refund_sums << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :search, params: @params
+      end
+
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:purchases].size).to eq(3)
+      expect(per_purchase_refund_sums).to be_empty,
+                                          "Expected zero per-purchase refund SUM queries, got:\n#{per_purchase_refund_sums.join("\n")}"
+    end
+
+    it "does not issue per-purchase media location queries" do
+      product = create(:product, user: @user)
+      product_file = create(:product_file, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
+      purchases = create_list(:purchase, 3, purchaser: @purchaser, seller: @user, link: product)
+      # Give each purchase a url_redirect + consumed media location so the
+      # per-purchase max_consumed_at_by_file pattern below is reachable.
+      purchases.each do |purchase|
+        url_redirect = create(:url_redirect, purchase:, link: product)
+        create(:media_location, purchase_id: purchase.id, product_id: product.id, product_file_id: product_file.id,
+                                url_redirect_id: url_redirect.id, consumed_at: 1.day.ago)
+      end
+
+      per_purchase_media_location_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next unless sql.start_with?("SELECT")
+        next unless sql.include?("`media_locations`")
+        # The batched preloader queries with purchase_id IN (...); the N+1 shape
+        # queries one purchase_id at a time.
+        next unless sql.match?(/`purchase_id` = \d+/)
+
+        per_purchase_media_location_queries << sql
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :search, params: @params
+      end
+
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:purchases].size).to eq(3)
+      expect(response.parsed_body[:purchases].flat_map { |p| p[:file_data] }.compact.filter_map { |f| f[:latest_media_location] }.size).to eq(3)
+      expect(per_purchase_media_location_queries).to be_empty,
+                                                     "Expected zero per-purchase media_locations queries, got:\n#{per_purchase_media_location_queries.join("\n")}"
+    end
+
     describe "ordering" do
       it "returns purchases sorted by the requested order" do
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, name: "money money money cash"))
