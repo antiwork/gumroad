@@ -81,4 +81,30 @@ describe StripeFxQuote do
       described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_test")
     end.to raise_error(StripeFxQuote::SettlementCurrencyMismatch, /settles in eur, expected usd/)
   end
+
+  it "maps Stripe's request-time settlement-currency rejection to SettlementCurrencyMismatch" do
+    # Some connected accounts settle in a non-USD currency; Stripe then rejects the quote
+    # request itself instead of returning a mismatched quote (seen in production as
+    # ChargeProcessorInvalidRequestError). Callers rescue SettlementCurrencyMismatch to
+    # fall back to the canonical USD path, so this rejection must map to the same error.
+    stripe_error = Stripe::InvalidRequestError.new(
+      "The FX Quote's to_currency: \"usd\" must match the payment intent's settlement currency: \"cad\".",
+      nil,
+      http_status: 400
+    )
+    allow(Stripe).to receive(:raw_request).and_raise(stripe_error)
+
+    expect do
+      described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_test")
+    end.to raise_error(StripeFxQuote::SettlementCurrencyMismatch, /must match the payment intent's settlement currency/)
+  end
+
+  it "re-raises other invalid-request errors unchanged" do
+    stripe_error = Stripe::InvalidRequestError.new("No such account: acct_missing", nil, http_status: 400)
+    allow(Stripe).to receive(:raw_request).and_raise(stripe_error)
+
+    expect do
+      described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_missing")
+    end.to raise_error(ChargeProcessorInvalidRequestError)
+  end
 end

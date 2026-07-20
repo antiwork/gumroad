@@ -88,11 +88,13 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
           :preorder,
           :url_redirect,
           :product_review,
+          :refunds,
           { link: { user: { avatar_attachment: :blob } } },
           { subscription: { true_original_purchase: :product_review } }
         ]
       ).call
       Purchase.preload_product_updates_data!(purchases_array)
+      UrlRedirect.preload_latest_media_locations!(purchases_array.filter_map(&:url_redirect))
       purchases_array.map(&:json_data_for_mobile)
     end
 

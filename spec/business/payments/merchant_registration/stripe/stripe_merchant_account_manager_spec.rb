@@ -10037,6 +10037,46 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
 
+      describe ".clear_settlement_currency_mismatch_on_currency_change" do
+        let(:merchant_account) { create(:merchant_account, charge_processor_merchant_id: "acct_settlement_mismatch_test") }
+
+        before { merchant_account.record_settlement_currency_mismatch! }
+
+        it "clears a recorded settlement-currency mismatch when the account's default currency changed" do
+          described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "default_currency" => "cad" })
+
+          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+        end
+
+        it "clears a recorded settlement-currency mismatch when the account's external accounts changed" do
+          # Adding or removing a bank account changes which currencies the account can
+          # settle in, so the learned marker must be re-probed.
+          described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "external_accounts" => { "data" => [] } })
+
+          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+        end
+
+        it "keeps the marker when the update touched unrelated attributes" do
+          described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "capabilities" => { "p24_payments" => "pending" } })
+
+          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(true)
+        end
+
+        it "does nothing when no merchant account matched the event" do
+          expect do
+            described_class.clear_settlement_currency_mismatch_on_currency_change(nil, { "default_currency" => "cad" })
+          end.not_to raise_error
+        end
+
+        it "does not let a persistence failure escape into the rest of the webhook handling" do
+          allow(merchant_account).to receive(:clear_settlement_currency_mismatch!).and_raise("db hiccup")
+
+          expect do
+            described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "default_currency" => "cad" })
+          end.not_to raise_error
+        end
+      end
+
       describe "for a merchant account that was not fully set up in Stripe" do
         let(:merchant_account) { create(:merchant_account, charge_processor_alive_at: nil) }
         let(:stripe_event) do

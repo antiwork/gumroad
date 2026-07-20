@@ -3,7 +3,7 @@
 class PaypalPayoutProcessor
   # We would split up the payment into chunks of at most this size, only when necessary, in order to get around the MassPay API limitations.
   # See perform_payment_in_split_mode. This is a hack that should be replaced with a proper split payout mechanism that supports a single Balance being
-  # split into separate Payments, since a single day's balance could be larger than the paypal payout limit.
+  # split into separate Payments, since a single day's balance could be larger than the PayPal payout limit.
   MAX_SPLIT_PAYMENT_BY_CENTS = 20_000_00 # $20,000 since that's the maximum the MassPay API accepts as per PayPal support
   SPLIT_PAYMENT_TXN_ID = "split payment; see split_payments_info"
   SPLIT_PAYMENT_UNIQUE_ID_PREFIX = "SPLIT_"
@@ -22,8 +22,8 @@ class PaypalPayoutProcessor
   # the user by checking that the user has provided us with the
   # information we need to be able to payout with this processor.
   #
-  # This payout processor can payout any user who has provided a paypal address,
-  # but will also opt to not payout users who have previous paypal payouts that were incomplete
+  # This payout processor can payout any user who has provided a PayPal address,
+  # but will also opt to not payout users who have previous PayPal payouts that were incomplete
   # or if they've provided a bank account because it's possibe for users to have both
   # a payment address and a bank account and we prefer bank payouts.
   def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
@@ -155,9 +155,9 @@ class PaypalPayoutProcessor
       payment_index += 1
     end
 
-    Rails.logger.info("Paypal payouts: posting #{LogRedactor.redact(mass_pay_params)} to #{PAYPAL_ENDPOINT} for user IDs #{user_ids}")
+    Rails.logger.info("PayPal payouts: posting #{LogRedactor.redact(mass_pay_params)} to #{PAYPAL_ENDPOINT} for user IDs #{user_ids}")
     paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: mass_pay_params)
-    Rails.logger.info("Paypal payouts: received #{paypal_response} from #{PAYPAL_ENDPOINT} for user IDs #{user_ids}")
+    Rails.logger.info("PayPal payouts: received #{paypal_response} from #{PAYPAL_ENDPOINT} for user IDs #{user_ids}")
 
     parsed_paypal_response = Rack::Utils.parse_nested_query(paypal_response)
     ack_status = parsed_paypal_response["ACK"]
@@ -168,7 +168,7 @@ class PaypalPayoutProcessor
     payments.each(&:mark_failed!) unless transaction_succeeded
 
     errors = errors_for_parsed_paypal_response(parsed_paypal_response) if ack_status != "Success"
-    Rails.logger.info("Paypal Payouts: Payout errors for user IDs #{user_ids}: #{errors.inspect}") if errors.present?
+    Rails.logger.info("PayPal payouts: Payout errors for user IDs #{user_ids}: #{errors.inspect}") if errors.present?
   end
 
   # Public: Sends the money in `split_payment_by_cents(payment.user)` increments.
@@ -185,15 +185,15 @@ class PaypalPayoutProcessor
       split_payment_amount_cents = [remaining_amount_cents, split_payment_cents].min
 
       params = paypal_auth_params
-      split_payment_unique_id = "#{SPLIT_PAYMENT_UNIQUE_ID_PREFIX}#{payment.id}-#{payout_number}" # According to paypal this field has a 30 byte limit.
+      split_payment_unique_id = "#{SPLIT_PAYMENT_UNIQUE_ID_PREFIX}#{payment.id}-#{payout_number}" # According to PayPal this field has a 30 byte limit.
       params["L_EMAIL0"] = payment.payment_address
       params["L_AMT0"] = split_payment_amount_cents / 100.0
       params["L_UNIQUEID0"] = split_payment_unique_id
       params["L_NOTE0"] = note_for_paypal_payment(payment)
 
-      Rails.logger.info("Paypal payouts: posting #{LogRedactor.redact(params)} to #{PAYPAL_ENDPOINT} for user ID #{payment.user.id}")
+      Rails.logger.info("PayPal payouts: posting #{LogRedactor.redact(params)} to #{PAYPAL_ENDPOINT} for user ID #{payment.user.id}")
       paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: params)
-      Rails.logger.info("Paypal payouts: received #{paypal_response} from #{PAYPAL_ENDPOINT} for user ID #{payment.user.id}")
+      Rails.logger.info("PayPal payouts: received #{paypal_response} from #{PAYPAL_ENDPOINT} for user ID #{payment.user.id}")
       paid_so_far_amount_cents += split_payment_amount_cents
 
       parsed_paypal_response = Rack::Utils.parse_nested_query(paypal_response)
@@ -220,7 +220,7 @@ class PaypalPayoutProcessor
   end
 
   def self.handle_paypal_event(paypal_event)
-    Rails.logger.info("Paypal payouts: received IPN #{LogRedactor.redact(paypal_event)}")
+    Rails.logger.info("PayPal payouts: received IPN #{LogRedactor.redact(paypal_event)}")
     # https://developer.paypal.com/docs/api-basics/notifications/ipn/IPNandPDTVariables/#payment-information-variables
 
     payments_data = []
@@ -272,7 +272,7 @@ class PaypalPayoutProcessor
   def self.handle_paypal_event_for_non_split_payment(payment_unique_id, paypal_event)
     payment = Payment.find_by(id: payment_unique_id)
     if payment.nil?
-      Rails.logger.warn "Paypal payouts: unique_id #{payment_unique_id} didn't correspond to a payment ID"
+      Rails.logger.warn "PayPal payouts: unique_id #{payment_unique_id} didn't correspond to a payment ID"
       return
     end
 
@@ -283,9 +283,9 @@ class PaypalPayoutProcessor
       payment.processor_fee_cents = 100 * paypal_event["mc_fee"].to_f if paypal_event["mc_fee"]
       payment.save!
       new_payment_state = paypal_event["status"].try(:downcase)
-      # Paypal is sending incorrect payment status ('Pending') in the IPN callback for some of the payments where the
-      # actual status is either 'Unclaimed' or 'Completed'. Until the issue is resolved at Paypal, we get the actual
-      # status using another API call to Paypal.
+      # PayPal is sending incorrect payment status ('Pending') in the IPN callback for some of the payments where the
+      # actual status is either 'Unclaimed' or 'Completed'. Until the issue is resolved at PayPal, we get the actual
+      # status using another API call to PayPal.
       # Ref: https://github.com/gumroad/web/issues/9474
       if new_payment_state == "pending"
         new_payment_state = get_latest_payment_state_from_paypal(payment.amount_cents,
@@ -311,7 +311,7 @@ class PaypalPayoutProcessor
     payment_id, split_payment_number = payment_id_and_split_payment_number.split("-").map(&:to_i)
     payment = Payment.find_by(id: payment_id)
     if payment.nil?
-      Rails.logger.warn "Paypal payouts: unique_id #{payment_unique_id} didn't correspond to a payment ID"
+      Rails.logger.warn "PayPal payouts: unique_id #{payment_unique_id} didn't correspond to a payment ID"
       return
     end
 
@@ -325,9 +325,9 @@ class PaypalPayoutProcessor
       payment.processor_fee_cents += 100 * paypal_event["mc_fee"].to_f if paypal_event["mc_fee"]
       payment.save!
 
-      # Paypal is sending incorrect payment status ('Pending') in the IPN callback for some of the payments where the
-      # actual status is either 'Unclaimed' or 'Completed'. Until the issue is resolved at Paypal, we get the actual
-      # status using another API call to Paypal.
+      # PayPal is sending incorrect payment status ('Pending') in the IPN callback for some of the payments where the
+      # actual status is either 'Unclaimed' or 'Completed'. Until the issue is resolved at PayPal, we get the actual
+      # status using another API call to PayPal.
       # Ref: https://github.com/gumroad/web/issues/9474
       UpdatePayoutStatusWorker.perform_in(5.minutes, payment.id) if split_payment_info["state"] == "pending"
 

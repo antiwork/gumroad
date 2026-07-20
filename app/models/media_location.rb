@@ -18,6 +18,25 @@ class MediaLocation < ApplicationRecord
     where(purchase_id:).joins(join_sql)
   }
 
+  # Batched variant of max_consumed_at_by_file for serializing many purchases in one
+  # request (e.g. the mobile purchases list/search endpoints). Returns, in a single
+  # query, the most-recently-consumed media location per (purchase, product file)
+  # pair across all the given purchases — callers group the result by purchase_id.
+  # Without this, each purchase issues its own max_consumed_at_by_file query, which
+  # is the N+1 Sentry flags on Api::Mobile::PurchasesController.
+  scope :max_consumed_at_by_file_for_purchases, lambda { |purchase_ids:|
+    subquery = MediaLocation.select("purchase_id, product_file_id, MAX(consumed_at) AS max_consumed_at")
+                            .where(purchase_id: purchase_ids)
+                            .group(:purchase_id, :product_file_id)
+    join_sql = <<-SQL.squish
+      INNER JOIN (#{subquery.to_sql}) AS max_ml
+      ON media_locations.purchase_id = max_ml.purchase_id
+      AND media_locations.product_file_id = max_ml.product_file_id
+      AND media_locations.consumed_at = max_ml.max_consumed_at
+    SQL
+    where(purchase_id: purchase_ids).joins(join_sql)
+  }
+
   before_create :add_unit
 
   validate :file_is_consumable

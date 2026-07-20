@@ -166,6 +166,7 @@ class StripePayoutProcessor
   # Returns an array of errors.
   def self.prepare_payment_and_set_amount(payment, balances)
     failed = false
+    failure_reason = nil
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(payment.user, balances)
 
     if merchant_account.nil?
@@ -249,7 +250,12 @@ class StripePayoutProcessor
   rescue Stripe::InvalidRequestError => e
     failed = true
     payment.error_message = e.message.to_s.truncate(1000)
-    ErrorNotifier.notify(e)
+    failure_reason = stripe_invalid_request_error_failure_reason(e)
+    # A known account-state failure (missing capabilities, outstanding requirements, etc.) is not an
+    # unexpected error — the failure reason drives the "cannot pay" email to the creator, and
+    # reporting each occurrence to Sentry only creates noise. Only truly unexpected
+    # InvalidRequestErrors get reported.
+    ErrorNotifier.notify(e) if failure_reason.nil?
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError => e
     failed = true
@@ -265,7 +271,7 @@ class StripePayoutProcessor
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
   ensure
-    payment.mark_failed! if failed
+    payment.mark_failed!(failure_reason) if failed
   end
 
   # Aborts the payout cycle when Gumroad's recorded view of `balances_held_by_stripe` exceeds the
@@ -443,6 +449,11 @@ class StripePayoutProcessor
 
     case error.message.to_s
     when /Cannot create live transfers/, /Cannot create payouts/
+      Payment::FailureReason::CANNOT_PAY
+    when /needs to have at least one of the following capabilities enabled/
+      # The connected account has outstanding verification/compliance requirements, so Stripe has
+      # disabled its `transfers` capability. Funds cannot be sent until the creator resolves the
+      # requirements in their account settings — same creator action as "Cannot create payouts".
       Payment::FailureReason::CANNOT_PAY
     when /Debit card transfers are only supported for amounts less/
       Payment::FailureReason::DEBIT_CARD_LIMIT

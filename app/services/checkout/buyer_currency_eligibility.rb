@@ -96,7 +96,16 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   def self.usd_settling_merchant_account?(merchant_account)
-    merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
+    return false unless merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
+
+    # The stored currency answers the wrong question for accounts with Stripe
+    # multi-currency settlement enabled: it mirrors Stripe's default_currency ("usd"),
+    # but the payment intent's settlement currency can still differ per intent. Stripe's
+    # rejection of an FX quote is the only reliable signal, and once observed it is
+    # recorded on the merchant account — while that marker is fresh, skip the doomed
+    # FX-quote round trip (up to 2s of checkout latency, on every visit) and fall back
+    # to canonical USD immediately.
+    !merchant_account.settlement_currency_mismatch_active?
   end
 
   def self.stripe_test_mode?
@@ -122,14 +131,31 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:wallet_payment_request) if wallet_type.present?
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
-    return fallback(:multi_item_checkout) unless purchases.one?
+    return fallback(:no_purchases) if purchases.empty?
+    # This service sees the purchases of ONE charge (the order pipeline groups purchases
+    # into one charge per seller before charging), so an order spanning several sellers
+    # spans several charges — but the quote the buyer confirmed locked the whole cart
+    # total for a single PaymentIntent. Splitting one locked quote across several intents
+    # is Open Question 9 on issue #5419, so those orders fall back (and fail closed in
+    # Charge::CreateService when a quote token is present).
+    return fallback(:multi_seller_checkout) if multi_seller_order?
     return fallback(:missing_stripe_chargeable) if chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
-    purchase = purchases.first
-    return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
-    return fallback(:unsupported_product_currency) unless purchase.link.price_currency_type.to_s.downcase == Currency::USD
+    # The verified quote locked the cart total, so every purchase on the charge must
+    # individually support presentment — one unsupported item invalidates the whole cart.
+    # The gates here must mirror BuyerCurrencyQuote#quotable_product?: the quote token
+    # binds only seller, currency, and total (not product ids), so a stale token issued
+    # for a supported cart could otherwise be replayed against an unsupported product
+    # whose charged amount differs from the locked total.
+    purchases.each do |purchase|
+      return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
+      return fallback(:unsupported_product_type) if unquotable_product?(purchase.link)
+      return fallback(:unsupported_product_currency) unless purchase.link.price_currency_type.to_s.downcase == Currency::USD
+    end
 
-    buyer_currency = buyer_currency_for_ip(purchase.ip_address)
+    # All purchases in an order come from the same checkout request, so any purchase's IP
+    # identifies the buyer's location.
+    buyer_currency = buyer_currency_for_ip(purchases.first.ip_address)
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
     return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
@@ -244,6 +270,13 @@ class Checkout::BuyerCurrencyEligibility
       params[:wallet_type]
     end
 
+    # True when the order's purchases span more than one seller — i.e. the order produces
+    # more than one prospective charge. Checked against the whole order, not just this
+    # charge's purchases (which are single-seller by construction).
+    def multi_seller_order?
+      order.present? && order.purchases.map(&:seller_id).uniq.many?
+    end
+
     # Commission deposits and installment payments charge less than the locked cart total
     # (issue #5419 excludes both from Phase 1), so they must fall back even when a valid
     # quote token reaches the charge path.
@@ -251,5 +284,18 @@ class Checkout::BuyerCurrencyEligibility
       purchase.is_commission_deposit_purchase? ||
         purchase.is_installment_payment? ||
         purchase.link.native_type == Link::NATIVE_TYPE_COMMISSION
+    end
+
+    # Charge-time mirror of the product-shape gates BuyerCurrencyQuote#quotable_product?
+    # applies at quote time. Preorders, subscriptions, free trials, and products offering
+    # an installment plan all charge an amount that can differ from the locked cart total
+    # (nothing now, a first period, $0, or a first installment), so a quote replayed
+    # against them must fall back instead of being honored. Only the card-mode #decision
+    # uses this — the method-forced lane (iDEAL/Bancontact) has no locked cart quote.
+    def unquotable_product?(product)
+      product.is_in_preorder_state? ||
+        product.is_recurring_billing? ||
+        product.free_trial_enabled? ||
+        product.installment_plan.present?
     end
 end

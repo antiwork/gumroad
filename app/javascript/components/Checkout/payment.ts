@@ -14,6 +14,7 @@ import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
+import { getCheckoutBuyerCurrencyDisplay } from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -39,9 +40,9 @@ const STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50;
 export type PaymentElementConfig = {
   stripe_elements_mode: StripeElementsModeForCheckout;
   currency: "usd";
-  // True when the server chose the buyer-currency presentment lane (a single USD-priced
-  // one-time item from a seller in the buyer-currency rollout, for a buyer seeing local-currency
-  // prices). The element then mounts in the currency of the FX quote from the surcharge
+  // True when the server chose the buyer-currency presentment lane (a cart of USD-priced
+  // one-time items from a single seller in the buyer-currency rollout, for a buyer seeing
+  // local-currency prices). The element then mounts in the currency of the FX quote from the surcharge
   // response — the same quote whose signed token prices the charge — so the payment sheet and
   // the charged amount always come from one source. Without a usable quote (expired, errored,
   // or the buyer opted to save the card, which forces the canonical USD charge path) the
@@ -374,13 +375,14 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
   if (state.surcharges.type !== "loaded") return null;
 
-  const quote = state.surcharges.result.buyer_currency_quote;
-  // Mirrors the display/token gate (getCheckoutBuyerCurrencyDisplay): saving a card or
-  // selecting a non-card payment method (PayPal) charges canonically, so the element must
-  // not present local currency the buyer won't be charged.
-  if (!quote || state.willSaveCard || state.paymentMethod !== "card") return null;
+  const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
+    cartPermalinks: state.products.map((product) => product.permalink),
+    willSaveCard: state.willSaveCard,
+    paymentMethod: state.paymentMethod,
+  });
+  if (!display) return null;
 
-  return { currency: quote.currency, amountCents: quote.presentment_total_cents };
+  return { currency: display.currencyCode, amountCents: display.presentmentTotalCents };
 }
 
 // The currency the server-confirm Payment Element should mount in, or null while it cannot be
@@ -463,6 +465,58 @@ export function computeTipForPrice(state: State, price: number, permalink: strin
   return Math.round((state.tip.percentage / 100) * price);
 }
 
+// Computes each cart line's tip so the per-line integers sum exactly to the tip the buyer
+// selected. `computeTipForPrice` rounds each line independently, which can overshoot for a
+// fixed tip: two equal items with a 1-cent fixed tip each round to 1 cent, sending 2 cents
+// of tip in total even though `computeTip(state)` is 1 cent. Fixed tips are instead split
+// with a largest-remainder allocation (floor every line's exact proportional share, then
+// hand the leftover cents to the lines with the largest fractional parts). Every consumer
+// that builds per-line money for the server (the surcharge quote request and the order's
+// line items) must use this same function, because the buyer-currency quote token is
+// verified at charge time by comparing the quote's line totals against the purchases' —
+// two call sites rounding differently would make every affected charge fail verification.
+export function computeTipsForLines(
+  state: State,
+  lines: { price: number; permalink: string | undefined }[],
+): (number | null)[] {
+  if (!isTippingEnabled(state)) return lines.map(() => null);
+  if (state.tip.type === "fixed") {
+    const totalPriceCents = getTotalPriceFromProducts(state);
+    if (totalPriceCents === 0) {
+      return lines.map((line) => computeTipForFreeCart(state, line.permalink));
+    }
+    return allocateFixedTipCents(state.tip.amount ?? 0, lines, totalPriceCents);
+  }
+  const percentage = state.tip.percentage;
+  return lines.map((line) => Math.round((percentage / 100) * line.price));
+}
+
+function allocateFixedTipCents(tipAmountCents: number, lines: { price: number }[], totalPriceCents: number): number[] {
+  if (tipAmountCents <= 0 || totalPriceCents <= 0) return lines.map(() => 0);
+
+  const exactShares = lines.map((line) => (tipAmountCents * line.price) / totalPriceCents);
+  const allocations = exactShares.map((share) => Math.floor(share));
+  let remainderCents = tipAmountCents - allocations.reduce((sum, cents) => sum + cents, 0);
+  // Hand the leftover cents to the lines that were floored the furthest below their exact
+  // share, breaking ties by cart position so the allocation is deterministic. Each line
+  // receives at most one extra cent (i.e. never more than the ceiling of its exact share):
+  // when a line's price basis is smaller than its entry in the cart total (a commission
+  // charging only its deposit today, a free-trial line about to be zeroed by the caller),
+  // the shares intentionally sum to less than the full tip, and the leftover must stay
+  // uncollected rather than being piled onto other lines beyond what the buyer's
+  // proportional split says they owe.
+  const linesByFractionDesc = exactShares
+    .map((share, index) => ({ fraction: share - Math.floor(share), index }))
+    .filter(({ fraction }) => fraction > 0)
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+  for (const { index } of linesByFractionDesc) {
+    if (remainderCents <= 0) break;
+    allocations[index] = (allocations[index] ?? 0) + 1;
+    remainderCents -= 1;
+  }
+  return allocations;
+}
+
 function computeTipForFreeCart(state: State, permalink?: string): number {
   if (state.tip.type !== "fixed" || !state.tip.amount) return 0;
   // TODO (techdebt): Replace lodash `groupBy` with https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/groupBy
@@ -521,19 +575,27 @@ export const getErrors = (state: State) => (state.status.type === "input" ? stat
 
 export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
   const isGift = state.gift !== null;
+  // Allocate the tip across cart lines in one pass so the per-line integers sum to the
+  // tip the buyer selected — rounding each line independently can send more total tip
+  // than the buyer chose (see computeTipsForLines).
+  const lineTips = computeTipsForLines(
+    state,
+    state.products.map((item) => ({ price: item.price, permalink: item.permalink })),
+  );
 
   return getSurcharges(
     {
-      products: state.products.map((item) => ({
-        permalink: item.permalink,
-        quantity: item.quantity,
-        price:
-          item.hasFreeTrial && !isGift
-            ? 0
-            : Math.round(item.price + (computeTipForPrice(state, item.price, item.permalink) ?? 0)),
-        subscription_id: item.subscription_id,
-        recommended_by: item.recommended_by,
-      })),
+      products: state.products.map((item, index) => {
+        const tipCents = item.hasFreeTrial && !isGift ? 0 : (lineTips[index] ?? 0);
+        return {
+          permalink: item.permalink,
+          quantity: item.quantity,
+          price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + tipCents),
+          tip_cents: tipCents,
+          subscription_id: item.subscription_id,
+          recommended_by: item.recommended_by,
+        };
+      }),
       country: state.country,
       state: state.state,
       vat_id: state.vatId,
