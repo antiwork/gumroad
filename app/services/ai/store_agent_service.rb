@@ -142,8 +142,8 @@ class Ai::StoreAgentService
       these elements is always overwritten — a blank bio renders as empty text, not your
       placeholder — so style the page to still look right when the bio is empty. Only include
       an avatar, logo, or photo when you have a real Gumroad-hosted image url for it: the
-      creator's current avatar appears in the rendered page get_user_custom_html returns, and
-      new images go through upload_media. Never author an empty image slot, and never expect
+      creator's current avatar is the profile_picture_url that get_user returns, and new
+      images go through upload_media. Never author an empty image slot, and never expect
       an avatar in the gumroad-data JSON — it isn't there.
     - Never publish a page that drops the creator's products or reduces the storefront to a
       colored background.

@@ -91,7 +91,7 @@ module Ai::StoreAgentApiCatalog
 
   ENDPOINTS = [
     # ---- Account / profile ----
-    ep("get_user", :get, "/user", "Get the creator's own account: name, email, currency, profile url, bio.", read: true, scope: "view_profile"),
+    ep("get_user", :get, "/user", "Get the creator's own account: name, email, currency, profile url, bio, profile_picture_url (the Gumroad-hosted avatar).", read: true, scope: "view_profile"),
     ep("update_user", :patch, "/user", "Update the creator's profile fields (name, bio).", scope: "edit_profile",
                                                                                            params: %w[name bio]),
     ep("get_user_custom_html", :get, "/user/custom_html", "Get the creator's profile custom HTML.", read: true, scope: "view_profile"),
