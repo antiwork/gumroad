@@ -49,7 +49,7 @@ class CustomDomain < ApplicationRecord
   def validate_domain_format
     # LetsEncrypt allows only valid hostnames when generating SSL certificates
     # Ref: https://github.com/letsencrypt/boulder/pull/1437#issuecomment-533533967
-    if domain.blank? || !domain.match?(/\A[a-zA-Z0-9\-.]+[^.]\z/) || !PublicSuffix.valid?(domain) || ip_address?(domain)
+    if domain.blank? || !domain.match?(/\A[a-zA-Z0-9\-.]+[^.]\z/) || empty_label?(domain) || !PublicSuffix.valid?(domain) || ip_address?(domain)
       errors.add(:base, "#{domain} is not a valid domain name.")
     end
   end
@@ -137,5 +137,14 @@ class CustomDomain < ApplicationRecord
       true
     rescue IPAddr::InvalidAddressError
       false
+    end
+
+    # Hostnames like "example..com" contain an empty label (the part between
+    # two consecutive dots). PublicSuffix accepts them, but they are not real
+    # hostnames — Let's Encrypt rejects them ("Domain name can not have two
+    # dots in a row"), so a record carrying one can never get an SSL
+    # certificate and would keep failing certificate generation forever.
+    def empty_label?(domain)
+      domain.include?("..")
     end
 end

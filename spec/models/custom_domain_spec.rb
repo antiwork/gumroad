@@ -20,7 +20,8 @@ describe CustomDomain do
       before do
         @invalid_domains = [nil, "", "test_store.example.com", "http:www.example.com", "www.example.com/test",
                             "example", "example.", "example.com.", "example domain.com", "example@example.com",
-                            "example.com.", "127.0.0.1", "2001:db8:3333:4444:5555:6666:7777:8888"]
+                            "example.com.", "example..com", "sub.example...com",
+                            "127.0.0.1", "2001:db8:3333:4444:5555:6666:7777:8888"]
       end
 
       it "throws an ActiveRecord::RecordInvalid error" do
