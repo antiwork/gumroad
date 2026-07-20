@@ -458,7 +458,7 @@ export const ProductTab = () => {
                     <Switch
                       checked={!product.hide_kindle_and_read_buttons}
                       onChange={(e) => updateProduct({ hide_kindle_and_read_buttons: !e.target.checked })}
-                      label={'Show "Send to Kindle" and "Read" buttons for readable files on the download page'}
+                      label='Show "Send to Kindle" and "Read" buttons for readable files on the download page'
                     />
                   ) : null}
                   <Switch
