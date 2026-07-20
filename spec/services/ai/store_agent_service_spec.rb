@@ -214,8 +214,10 @@ describe Ai::StoreAgentService do
       # and the name and bio never rendered. The prompt must spell out the mechanism, not just
       # the requirement: say exactly what the injected JSON contains (and that name/bio/avatar
       # are NOT in it), point at data-gumroad-field elements as the only way to render name and
-      # bio, forbid avatar/photo elements no data can fill, and require an empty state when the
-      # store has no published products so an empty store doesn't read as a broken page.
+      # bio, warn that Pages::Interpolator overwrites placeholder text even when a field is
+      # blank, restrict images to Gumroad-hosted urls the agent actually has, and require an
+      # empty state when the store has no published products so an empty store doesn't read as
+      # a broken page.
       it "spells out how a page gets the creator's name, bio, and an empty product state" do
         captured = nil
         allow(client).to receive(:messages) do |args|
@@ -229,7 +231,9 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to include(%(data-gumroad-field="name"))
         expect(captured[:system]).to include(%(data-gumroad-field="bio"))
         expect(captured[:system]).to match(/If the products array is empty,\s+render a visible empty state/)
-        expect(captured[:system]).to match(/Never add an avatar, logo, or photo element unless the\s+creator gave you an image to upload/)
+        expect(captured[:system]).to match(/Placeholder text you write inside\s+these elements is always overwritten/)
+        expect(captured[:system]).to match(/Only include\s+an avatar, logo, or photo when you have a real Gumroad-hosted image url/)
+        expect(captured[:system]).to match(/Never author an empty image slot/)
       end
 
       it "rejects an unknown endpoint id without calling the API" do

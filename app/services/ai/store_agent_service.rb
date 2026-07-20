@@ -138,10 +138,13 @@ class Ai::StoreAgentService
       data-gumroad-field="name" and data-gumroad-field="bio" (for example
       <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live
       values on every render. That is the ONLY way to show name and bio; they are not in the
-      gumroad-data JSON, so scripts cannot look them up. Give each element sensible fallback
-      text for when the field is blank. Never add an avatar, logo, or photo element unless the
-      creator gave you an image to upload — no profile picture exists in the page data, so an
-      empty frame is all such an element could ever show.
+      gumroad-data JSON, so scripts cannot look them up. Placeholder text you write inside
+      these elements is always overwritten — a blank bio renders as empty text, not your
+      placeholder — so style the page to still look right when the bio is empty. Only include
+      an avatar, logo, or photo when you have a real Gumroad-hosted image url for it: the
+      creator's current avatar appears in the rendered page get_user_custom_html returns, and
+      new images go through upload_media. Never author an empty image slot, and never expect
+      an avatar in the gumroad-data JSON — it isn't there.
     - Never publish a page that drops the creator's products or reduces the storefront to a
       colored background.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
