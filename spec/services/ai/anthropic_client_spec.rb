@@ -446,8 +446,29 @@ describe Ai::AnthropicClient do
       stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
 
       expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) }
-        .to raise_error(described_class::Error, /unreadable tool call/i)
+        .to raise_error(described_class::TransientError, /unreadable tool call/i)
       expect(a_request(:post, url)).to have_been_made.times(3)
+    end
+
+    it "does not retry a corrupted tool call once text has already streamed to the caller" do
+      # Tool-use turns often stream preamble text before the tool_use block. Once any delta has
+      # reached the caller, a retry would replay the reply from the start on the seller's screen,
+      # so the corruption surfaces immediately instead — exactly one request, no retry.
+      allow(client).to receive(:sleep)
+      stream = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "Let me update that…" } }],
+        ["content_block_start", { index: 1, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+        ["content_block_stop", { index: 1 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_t| } }
+        .to raise_error(described_class::Error, /unreadable tool call/i)
+      expect(a_request(:post, url)).to have_been_made.times(1)
+      expect(client).not_to have_received(:sleep)
     end
 
     it "retries when the stream drops mid-tool-call, leaving cut-off JSON and no stop_reason" do
