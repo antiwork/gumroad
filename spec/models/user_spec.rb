@@ -3777,6 +3777,30 @@ describe User, :vcr do
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
         expect(user.eligible_to_send_emails?).to eq(false)
       end
+
+      context "when an admin has unlocked email sending before the first completed payout" do
+        before do
+          user.update!(email_sending_unlocked_by_admin: true)
+        end
+
+        it "returns true when the user has minimum required sales but no completed payout" do
+          allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+          expect(user.eligible_to_send_emails?).to eq(true)
+        end
+
+        it "still returns false when the user has not made minimum required sales" do
+          allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+
+        it "still returns false when the user is suspended" do
+          admin_user = create(:admin_user)
+          allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+          user.flag_for_fraud(author_id: admin_user.id)
+          user.suspend_for_fraud(author_id: admin_user.id)
+          expect(user.eligible_to_send_emails?).to eq(false)
+        end
+      end
     end
   end
 

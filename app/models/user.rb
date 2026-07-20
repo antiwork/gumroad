@@ -314,6 +314,7 @@ class User < ApplicationRecord
             53 => :refund_policy_enforced, # Set automatically when a seller's dispute rate is too high; forces a buyer-friendly refund policy. See Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!
             54 => :disable_review_reminders, # Seller setting: when enabled, buyers of this seller's products don't receive review reminder emails.
             55 => :ach_payments_enabled, # Seller opt-in (checkout settings page): offers ACH Direct Debit (us_bank_account) at checkout. Off by default — ACH settles in ~4 business days and content only delivers on settlement, which surprises buyers of time-sensitive digital products (gumroad-private#1143).
+            56 => :email_sending_unlocked_by_admin, # Admin-granted exception: lets a credible seller send emails before their first completed payout (e.g. first payout stuck in transit). Only waives the completed-payout half of eligible_to_send_emails? — the $100 minimum sales requirement still applies. Set via the admin user page; setting it records an audit comment on the user (gumroad-private#1192).
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -1086,6 +1087,11 @@ class User < ApplicationRecord
     return true if is_team_member?
     return false if suspended?
     return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
+
+    # An admin can waive the completed-payout requirement for a credible
+    # seller (e.g. their first payout is stuck in transit through no fault of
+    # their own). The $100 minimum sales check above still applies.
+    return true if email_sending_unlocked_by_admin?
 
     has_completed_payouts?
   end

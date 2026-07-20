@@ -88,6 +88,7 @@ export type User = {
   has_in_progress_scheduled_payout: boolean;
   active_watched_user: ActiveWatchedUser | null;
   disable_paypal_sales: boolean;
+  email_sending_unlocked_by_admin: boolean;
   flagged_for_fraud: boolean;
   flagged_for_tos_violation: boolean;
   on_probation: boolean;

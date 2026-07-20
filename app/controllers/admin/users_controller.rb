@@ -109,6 +109,27 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: true }
   end
 
+  # Admin-granted exception for a credible seller whose first payout hasn't
+  # completed (e.g. stuck in transit): waives the completed-payout half of
+  # User#eligible_to_send_emails? so they can email their audience. The $100
+  # minimum sales requirement still applies. Leaves an audit comment on the
+  # user recording who granted the unlock and why (gumroad-private#1192).
+  def unlock_email_sending
+    reason = (params.dig(:unlock_email_sending, :reason) || params[:reason]).presence
+    @user.update!(email_sending_unlocked_by_admin: true)
+    content = "Email sending unlocked by #{current_user.username} on #{Time.current.strftime('%B %-d, %Y')}"
+    content += "\nReason: #{reason}" if reason
+    @user.comments.create!(
+      author_id: current_user.id,
+      author_name: current_user.name,
+      comment_type: Comment::COMMENT_TYPE_EMAIL_SENDING_UNLOCKED,
+      content:
+    )
+    render json: { success: true, message: "Email sending unlocked." }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
   def invalidate_active_sessions
     @user.invalidate_active_sessions!
 

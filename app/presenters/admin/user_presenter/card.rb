@@ -38,6 +38,7 @@ class Admin::UserPresenter::Card
       custom_fee_per_thousand: user.custom_fee_per_thousand,
       unpaid_balance_cents: user.unpaid_balance_cents,
       disable_paypal_sales: user.disable_paypal_sales,
+      email_sending_unlocked_by_admin: user.email_sending_unlocked_by_admin?,
       has_in_progress_scheduled_payout: user.scheduled_payouts.in_progress.exists?,
       active_watched_user: active_watched_user_props,
 

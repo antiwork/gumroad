@@ -57,6 +57,7 @@ namespace :admin do
       post :invalidate_active_sessions
       post :disable_paypal_sales
       post :mark_compliant
+      post :unlock_email_sending
       post :suspend_for_fraud
       post :schedule_payout
       post :suspend_for_tos_violation

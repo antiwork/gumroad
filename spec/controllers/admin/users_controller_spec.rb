@@ -267,6 +267,44 @@ describe Admin::UsersController, type: :controller, inertia: true do
     end
   end
 
+  describe "POST #unlock_email_sending" do
+    let(:user) { create(:user) }
+
+    it "sets the email sending unlock flag on the user" do
+      expect(user.email_sending_unlocked_by_admin?).to be false
+
+      post :unlock_email_sending, params: { external_id: user.external_id, unlock_email_sending: { reason: "First payout stuck in transit; approved exception." } }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be true
+      expect(user.reload.email_sending_unlocked_by_admin?).to be true
+    end
+
+    it "creates an audit comment recording who unlocked email sending and why" do
+      freeze_time do
+        expect do
+          post :unlock_email_sending, params: { external_id: user.external_id, unlock_email_sending: { reason: "First payout stuck in transit; approved exception." } }
+        end.to change(user.comments, :count).by(1)
+
+        comment = user.comments.last
+        expect(comment).to have_attributes(
+          comment_type: Comment::COMMENT_TYPE_EMAIL_SENDING_UNLOCKED,
+          author: @admin_user
+        )
+        expect(comment.content).to include("Email sending unlocked by #{@admin_user.username} on #{Time.current.strftime('%B %-d, %Y')}")
+        expect(comment.content).to include("First payout stuck in transit; approved exception.")
+      end
+    end
+
+    it "creates an audit comment even when no reason is provided" do
+      expect do
+        post :unlock_email_sending, params: { external_id: user.external_id }
+      end.to change(user.comments, :count).by(1)
+
+      expect(user.reload.email_sending_unlocked_by_admin?).to be true
+    end
+  end
+
   describe "POST #set_custom_fee" do
     let(:user) { create(:user) }
 

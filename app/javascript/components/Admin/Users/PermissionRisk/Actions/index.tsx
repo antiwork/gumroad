@@ -3,6 +3,7 @@ import React from "react";
 import DisablePaypalSalesAction from "$app/components/Admin/Users/PermissionRisk/Actions/DisablePaypalSalesAction";
 import MarkCompliantAction from "$app/components/Admin/Users/PermissionRisk/Actions/MarkCompliantAction";
 import RefundBalanceAction from "$app/components/Admin/Users/PermissionRisk/Actions/RefundBalanceAction";
+import UnlockEmailSendingAction from "$app/components/Admin/Users/PermissionRisk/Actions/UnlockEmailSendingAction";
 import FlagForFraud from "$app/components/Admin/Users/PermissionRisk/FlagForFraud";
 import type { User } from "$app/components/Admin/Users/User";
 
@@ -15,6 +16,7 @@ const AdminUserPermissionRiskActions = ({ user }: AdminUserPermissionRiskActions
     <MarkCompliantAction user={user} />
     <RefundBalanceAction user={user} />
     <DisablePaypalSalesAction user={user} />
+    <UnlockEmailSendingAction user={user} />
     <FlagForFraud user={user} />
   </div>
 );
