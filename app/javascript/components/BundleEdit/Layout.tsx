@@ -92,12 +92,22 @@ export const BundleEditLayout = ({
         ? "Please wait..."
         : undefined;
 
+  // Pin the seller's storefront palette onto the preview only when they actually customized
+  // their background. The default white profile follows the dashboard's own color scheme
+  // instead, so a dark-mode dashboard doesn't frame a glaring white pane — the preview goes
+  // dark with the rest of the editor. The accent stays pinned either way: it works on both
+  // schemes and is the part of the seller's branding worth previewing.
+  const hasCustomBackground = currentSeller != null && currentSeller.profileBackgroundColor.toLowerCase() !== "#ffffff";
   const profileColors = currentSeller
     ? {
         "--accent": hexToRgb(currentSeller.profileHighlightColor),
         "--contrast-accent": hexToRgb(getContrastColor(currentSeller.profileHighlightColor)),
-        "--filled": hexToRgb(currentSeller.profileBackgroundColor),
-        "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
+        ...(hasCustomBackground
+          ? {
+              "--filled": hexToRgb(currentSeller.profileBackgroundColor),
+              "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
+            }
+          : {}),
       }
     : {};
 
