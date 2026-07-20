@@ -141,6 +141,12 @@ export const ReviewForm = React.forwardRef<
     const autosaveSequence = React.useRef(0);
     const autosaveTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const autosaveInFlight = React.useRef<Promise<void> | null>(null);
+
+    // Internal handle on the message textarea so we can focus it after a star
+    // tap. The component also forwards a ref to the same element for callers
+    // (e.g. the Reviews page focuses the next form after a submission), so the
+    // two are merged in a callback ref below.
+    const messageInputRef = React.useRef<HTMLTextAreaElement | null>(null);
     React.useEffect(
       () => () => {
         if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
@@ -350,7 +356,13 @@ export const ReviewForm = React.forwardRef<
         onChange={(evt) => setMessage(evt.target.value)}
         placeholder="Want to leave a written review?"
         disabled={disabled}
-        ref={ref}
+        ref={(element) => {
+          // Merge our internal ref (used to focus the textarea after a star
+          // tap) with the forwarded ref callers pass in.
+          messageInputRef.current = element;
+          if (typeof ref === "function") ref(element);
+          else if (ref) ref.current = element;
+        }}
       />
     );
 
@@ -421,6 +433,13 @@ export const ReviewForm = React.forwardRef<
             onChangeCurrentRating={(newRating) => {
               setRating(newRating);
               autosaveRating(newRating);
+              // Move the buyer straight into the written review: focus the
+              // textarea (which also scrolls it into view when it sits below
+              // the fold). The rating is already autosaved at this point, so
+              // typing is purely an optional next step — nothing is lost if
+              // they stop here. Only applies in text mode; the video recorder
+              // has no text input to focus.
+              if (reviewMode === "text") messageInputRef.current?.focus();
             }}
             disabled={disabled || viewing}
           />
