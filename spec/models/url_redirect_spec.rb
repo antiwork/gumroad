@@ -467,6 +467,28 @@ describe UrlRedirect do
         expect(playlist_by_external_id[file.external_id][:latest_media_location]).to be_nil
       end
     end
+
+    it "keeps resume positions when an installment redirect falls through to the product's files" do
+      purchase = create(:purchase, link: product)
+      installment = create(:installment, link: product)
+      url_redirect = installment.generate_url_redirect_for_purchase(purchase)
+
+      # The installment has no alive files of its own, so alive_product_files serves
+      # the product's files — watch positions recorded on those files must survive.
+      expect(installment.has_files?).to eq(false)
+
+      consumed_at = Time.current.change(usec: 0)
+      create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                              product_file_id: file1.id, product_id: product.id,
+                              location: 42, consumed_at:)
+
+      playlist = url_redirect.video_files_playlist(file1)[:playlist]
+      playlist_by_external_id = playlist.index_by { |video| video[:external_id] }
+
+      expect(playlist_by_external_id[file1.external_id][:latest_media_location]).to eq(
+        location: 42, unit: MediaLocation::Unit::SECONDS, timestamp: consumed_at
+      )
+    end
   end
 
   describe "#html5_video_url_and_guid_for_product_file" do
