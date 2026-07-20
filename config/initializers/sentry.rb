@@ -27,7 +27,7 @@ Sentry.init do |config|
   # lib/one_off/backfill.rb`) have real file paths in their backtraces and are
   # still reported, as is everything from the web/Sidekiq processes.
   config.before_send = lambda do |event, hint|
-    exception = hint[:exception]
+    exception = hint && hint[:exception]
     if event.tags[:source] == "runner" &&
        exception.respond_to?(:backtrace) &&
        exception.backtrace&.any? { |frame| frame.start_with?("stdin:") }

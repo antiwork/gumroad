@@ -57,6 +57,12 @@ describe "Sentry configuration" do
       expect(before_send.call(event, {})).to eq(event)
     end
 
+    it "keeps events when the hint itself is nil" do
+      event = build_event(tags: { source: "runner" })
+
+      expect(before_send.call(event, nil)).to eq(event)
+    end
+
     it "keeps events when the exception has no backtrace" do
       event = build_event(tags: { source: "runner" })
 
