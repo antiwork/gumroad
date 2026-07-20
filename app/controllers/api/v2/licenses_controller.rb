@@ -105,6 +105,13 @@ class Api::V2::LicensesController < Api::V2::BaseController
     end
 
     def clean_params
+      %i[license_key product_id product_permalink id link_id].each do |key|
+        next if params[key].blank?
+        next if params[key].is_a?(String)
+
+        return render json: { success: false, message: "The '#{key}' parameter must be a string." }, status: :bad_request
+      end
+
       # `link_id` and `id` are legacy ways to pass in the product's permalink, no longer documented but used in the wild
       # The order of these parameters matters to properly support legacy requests!
       params[:product_permalink] = params[:id].presence || params[:link_id].presence || params[:product_permalink].presence

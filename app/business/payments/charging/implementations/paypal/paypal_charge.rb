@@ -51,9 +51,9 @@ class PaypalCharge < BaseProcessorCharge
       self.card_visual = order_details["payer"]["email_address"]
       self.card_country = order_details["payer"]["address"]["country_code"]
       self.card_type = CardType::PAYPAL
-      # Don't create flow of funds for paypal charge as we don't use anything from it except for gumroad amount's currency
+      # Don't create flow of funds for PayPal charge as we don't use anything from it except for gumroad amount's currency
       # for affiliate balance creation, but as now gumroad amount's currency can be non-usd, we can't use it as affiliate balance
-      # needs to be in usd always, so we'll simply generate a simple flow of funds for purchases via paypal for that purpose.
+      # needs to be in usd always, so we'll simply generate a simple flow of funds for purchases via PayPal for that purpose.
       # Keeping the method body for now in case we need it later for some reason and for debugging.
       # self.flow_of_funds = build_flow_of_funds(capture_details) if capture_details.present?
     end
@@ -82,7 +82,7 @@ class PaypalCharge < BaseProcessorCharge
         cents: capture_details["seller_receivable_breakdown"]["net_amount"]["value"])
 
       # These amounts are not actually used right now as we don't need to create balance-transactions for seller
-      # in case of paypal native txns. Only the currency from gumroad_amount (which is always USD) is used
+      # in case of PayPal native txns. Only the currency from gumroad_amount (which is always USD) is used
       # to create affiliate balance-transactions.
       FlowOfFunds.new(
         issued_amount:,

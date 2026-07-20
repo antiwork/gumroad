@@ -46,6 +46,7 @@ class UserPagesController < ApplicationController
         <body>
           #{interpolated}
           #{custom_html_navigation_bridge_script(allowed_hostnames: page_store_hostnames)}
+          #{FOLLOW_BRIDGE_SCRIPT}
         </body>
       </html>
     HTML
@@ -117,6 +118,7 @@ class UserPagesController < ApplicationController
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             #{page_meta_head}
+            <meta name="csrf-token" content="#{CsrfTokenInjector::TOKEN_PLACEHOLDER}">
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
           </head>
           <body>
@@ -142,6 +144,7 @@ class UserPagesController < ApplicationController
                 });
               })();
             </script>
+            #{custom_html_follow_wrapper_script(seller_external_id: @user.external_id, nonce:)}
             #{live_reload}
           </body>
         </html>

@@ -263,13 +263,18 @@ class Payouts
       processor_fee_cents: 0,
       payout_period_end_date: date,
       payout_type:,
-      # TODO: Refactor paypal to be a type of bank account rather than being a field on user.
+      # TODO: Refactor PayPal to be a type of bank account rather than being a field on user.
       payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
       bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
     )
     payment.save!
     payment_errors = payout_processor.prepare_payment_and_set_amount(payment, balances)
-    payment.mark_processing!
+    # The payout processor can mark the payment as failed while preparing it (for example when
+    # no valid merchant account exists, or a balance's holding currency does not match the payout
+    # destination). A failed payment cannot transition to processing, so only mark it processing
+    # when preparation left it in a payable state — otherwise return the failed payment along
+    # with the preparation errors and let the caller handle it.
+    payment.mark_processing! unless payment.failed?
     [payment, payment_errors]
   end
 

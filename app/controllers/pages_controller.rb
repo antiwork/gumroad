@@ -160,6 +160,11 @@ class PagesController < Sellers::BaseController
         </head>
         <body>
           #{interpolated}
+          <!-- The editor preview has no trusted wrapper listening, so a follow
+               can't complete here — but without the bridge a data-gumroad-follow
+               form would native-submit and navigate the preview frame away,
+               which reads as "the form is broken" while iterating. -->
+          #{FOLLOW_BRIDGE_SCRIPT}
         </body>
       </html>
     HTML

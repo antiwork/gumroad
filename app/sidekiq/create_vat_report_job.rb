@@ -62,9 +62,11 @@ class CreateVatReportJob
           # refunded this quarter must still reduce this quarter's VAT due. The purchase-side
           # filters mirror the two queries above so we only ever subtract VAT that was (or would
           # have been) reported in the first place: settled purchases whose sale is (or will be)
-          # in the report — including event-dated chargebacks, whose refunds reduce what the
-          # chargeback leg claws back rather than vanishing with the sale. A purchase dropped by
-          # a legacy chargeback never contributes VAT, so its refunds must not be subtracted.
+          # in the report — including event-dated chargebacks: their pre-chargeback refunds
+          # also shrink what the chargeback leg claws back, and a refund issued after a dispute
+          # win is relieved here alone (the already-filed chargeback legs never change). A
+          # purchase dropped by a legacy chargeback never contributes VAT, so its refunds must
+          # not be subtracted.
           # Only effective refunds count: a refund that terminally failed after acceptance and
           # had its balance debits reversed never actually returned money to the buyer, so it
           # must not reduce the VAT due (see Refund.effective for the full semantics).
@@ -80,8 +82,10 @@ class CreateVatReportJob
           # has always held the processor's dispute-formalized event timestamp, so no backfill
           # is needed (see Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER for the cutover
           # contract; pre-cutover chargebacks keep the legacy exclusion above). Amounts are net
-          # of the purchase's refunds — money already returned by a refund is not clawed back
-          # again and was already relieved by the refund's own reporting path.
+          # of the refunds that existed before the chargeback — money already returned by a
+          # refund is not clawed back again and was already relieved by the refund's own
+          # reporting path. Later refunds (possible again after a dispute win) never rewrite
+          # these legs; they report through the refund leg of their own period.
           vat_chargebacks_on_date = zip_tax_rate.purchases
                                                   .where("purchase_state != 'failed'")
                                                   .where("stripe_transaction_id IS NOT NULL")

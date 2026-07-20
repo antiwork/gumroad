@@ -175,6 +175,16 @@ describe Purchase::PingNotification, :vcr do
         end
       end
 
+      context "when the purchased product is licensed but not a subscription" do
+        it "includes the 'is_multiseat_license' key" do
+          product = create(:product, is_licensed: true, is_multiseat_license: true)
+          purchase = create(:purchase, link: product, license: create(:license))
+          params = purchase.payload_for_ping_notification(resource_name: ResourceSubscription::SALE_RESOURCE_NAME)
+          expect(params.has_key?(:is_multiseat_license)).to eq true
+          expect(params[:is_multiseat_license]).to eq true
+        end
+      end
+
       context "when the purchased product is not licensed" do
         it "does not include the 'is_multiseat_license' key" do
           product = create(:membership_product, is_licensed: false)

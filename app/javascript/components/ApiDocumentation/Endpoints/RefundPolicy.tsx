@@ -53,7 +53,7 @@ export const UpdateRefundPolicy = () => (
   <ApiEndpoint
     method="put"
     path="/refund_policy"
-    description="Update the account-level refund policy. Requires the edit_products scope. Updates are rejected when the account-level policy is not in effect for the seller."
+    description="Update the account-level refund policy. Requires the edit_products scope. Updates are rejected when the account-level policy is not in effect for the seller; in that case, set product-level policies via the refund_period and refund_fine_print parameters on POST /v2/products and PUT /v2/products/:id."
   >
     <ApiParameters>
       <ApiParameter name="refund_period" description='Required. One of "none", "7", "14", "30", or "183".' />

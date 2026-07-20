@@ -3080,6 +3080,30 @@ describe LinksController, :vcr, inertia: true do
         expect(link.display_product_reviews).to be(true)
       end
 
+      context "when the price exceeds the maximum allowed" do
+        it "redirects with an error instead of raising when price_cents is too large" do
+          too_large = BasePrice::Shared::MAX_PRICE_CENTS + 1
+
+          expect do
+            post :create, params: { link: { price_cents: too_large, name: "expensive" } }
+          end.not_to change { seller.links.count }
+
+          expect(response).to redirect_to(new_product_path)
+          expect(flash[:alert]).to eq("Sorry, the price entered is too large.")
+        end
+
+        it "redirects with an error instead of raising when price_range is too large" do
+          too_large_range = ((BasePrice::Shared::MAX_PRICE_CENTS / 100) + 1).to_s
+
+          expect do
+            post :create, params: { link: { name: "expensive", price_range: too_large_range } }
+          end.not_to change { seller.links.count }
+
+          expect(response).to redirect_to(new_product_path)
+          expect(flash[:alert]).to eq("Sorry, the price entered is too large.")
+        end
+      end
+
       it "ignores is_in_preorder_state param" do
         params = { price_cents: 100, name: "preorder", is_in_preorder_state: true, release_at: 1.year.from_now.iso8601 }
         post :create, params: { link: params }
@@ -4028,6 +4052,34 @@ describe LinksController, :vcr, inertia: true do
           expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to_not be_empty
           expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to_not be_empty
           expect(html_doc.css("meta[property='product:price:amount'][content='1000.0']")).to_not be_empty
+          expect(html_doc.css("meta[property='product:price:currency'][content='USD']")).to_not be_empty
+        end
+
+        it "renders the page without price meta tags when the product has no live price" do
+          product = create(:product, user: @user)
+          # A persisted product with no alive Price record returns nil from
+          # Link#price_cents (see Product::Prices#buy_price_cents) — this used to
+          # crash set_product_page_meta with `undefined method '/' for nil`.
+          product.prices.alive.each(&:mark_deleted!)
+          expect(product.reload.price_cents).to be_nil
+
+          get :show, params: { id: product.unique_permalink }
+
+          expect(response).to be_successful
+          html_doc = Nokogiri::HTML(response.body)
+          expect(html_doc.css("meta[property='product:price:amount']")).to be_empty
+          expect(html_doc.css("meta[property='product:price:currency']")).to be_empty
+          expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to be_present
+        end
+
+        it "keeps the price meta tags for a free (zero-priced) product" do
+          product = create(:product, user: @user, price_cents: 0)
+
+          get :show, params: { id: product.unique_permalink }
+
+          expect(response).to be_successful
+          html_doc = Nokogiri::HTML(response.body)
+          expect(html_doc.css("meta[property='product:price:amount'][content='0.0']")).to_not be_empty
           expect(html_doc.css("meta[property='product:price:currency'][content='USD']")).to_not be_empty
         end
 

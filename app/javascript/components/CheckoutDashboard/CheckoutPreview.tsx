@@ -6,7 +6,7 @@ import { Checkout } from "$app/components/Checkout";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { StateContext as PaymentStateContext, createReducer } from "$app/components/Checkout/payment";
 import { Preview } from "$app/components/Preview";
-import { PreviewSidebar } from "$app/components/PreviewSidebar";
+import { PreviewChrome, PreviewSidebar } from "$app/components/PreviewSidebar";
 
 export const CheckoutPreview = ({
   children,
@@ -86,20 +86,24 @@ export const CheckoutPreview = ({
 
   return (
     <PreviewSidebar>
-      <Preview scaleFactor={0.4} style={{ border: "var(--border)" }}>
-        <PaymentStateContext.Provider value={paymentState}>
-          <Checkout
-            discoverUrl=""
-            cart={{
-              items: [cartItem],
-              discountCodes: [],
-            }}
-            updateCart={() => {}}
-            recommendedProducts={recommendedProduct ? [recommendedProduct] : []}
-          />
-          {children}
-        </PaymentStateContext.Provider>
-      </Preview>
+      {/* This is a synthetic sample cart, so there is no public URL that shows this exact
+          preview. Showing /checkout here would point to the seller's persisted cart instead. */}
+      <PreviewChrome title="Checkout preview">
+        <Preview scaleFactor={0.4}>
+          <PaymentStateContext.Provider value={paymentState}>
+            <Checkout
+              discoverUrl=""
+              cart={{
+                items: [cartItem],
+                discountCodes: [],
+              }}
+              updateCart={() => {}}
+              recommendedProducts={recommendedProduct ? [recommendedProduct] : []}
+            />
+            {children}
+          </PaymentStateContext.Provider>
+        </Preview>
+      </PreviewChrome>
     </PreviewSidebar>
   );
 };

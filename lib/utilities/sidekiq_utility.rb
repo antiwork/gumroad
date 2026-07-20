@@ -38,7 +38,18 @@ class SidekiqUtility
           break
         end
 
-        asg_client.record_lifecycle_action_heartbeat(lifecycle_params)
+        begin
+          asg_client.record_lifecycle_action_heartbeat(lifecycle_params)
+        rescue Aws::AutoScaling::Errors::ValidationError => e
+          # The lifecycle action disappears when its heartbeat timeout expires
+          # (AWS then proceeds with termination on its own) or when it was
+          # already completed. There is nothing left to keep alive, so stop
+          # waiting and move on to termination.
+          raise unless e.message.include?("No active Lifecycle Action found")
+
+          Rails.logger.info("[SidekiqUtility] Lifecycle action no longer active while sending heartbeat. Proceeding with instance termination. (#{e.message})")
+          break
+        end
         sleep 60
       end
     end
@@ -49,6 +60,14 @@ class SidekiqUtility
 
     def proceed_with_instance_termination
       asg_client.complete_lifecycle_action(lifecycle_params.merge(lifecycle_action_result: "CONTINUE"))
+    rescue Aws::AutoScaling::Errors::ValidationError => e
+      # If the lifecycle action already completed or its heartbeat timeout
+      # expired, AWS has moved on and the instance is terminating anyway —
+      # the outcome we wanted. Any other validation error (for example a
+      # misconfigured hook or auto scaling group name) should still raise.
+      raise unless e.message.include?("No active Lifecycle Action found")
+
+      Rails.logger.info("[SidekiqUtility] Lifecycle action already completed or expired; nothing to do. (#{e.message})")
     end
 
     def instance_id

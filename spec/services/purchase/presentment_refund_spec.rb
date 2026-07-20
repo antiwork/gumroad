@@ -178,7 +178,10 @@ describe Purchase::PresentmentRefund do
                                             presentment_tip_cents: 0,
                                             presentment_seller_tax_cents: 0,
                                             presentment_gumroad_tax_cents: 0,
-                                            presentment_total_cents: 101)
+                                            presentment_total_cents: 101,
+                                            # The factory default (135) would exceed this small total and
+                                            # fail the gumroad-amount capacity validation.
+                                            presentment_gumroad_amount_cents: 10)
       purchase.association(:purchase_presentment).reset
 
       first = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 50)
@@ -233,7 +236,10 @@ describe Purchase::PresentmentRefund do
              presentment_seller_tax_cents: 0,
              presentment_gumroad_tax_cents: 0,
              presentment_shipping_cents: 0,
-             presentment_total_cents: 90)
+             presentment_total_cents: 90,
+             # The factory default (135) would exceed this small total and fail the
+             # gumroad-amount capacity validation.
+             presentment_gumroad_amount_cents: 9)
     end
 
     def record_failed_full_refund!(reversed:)

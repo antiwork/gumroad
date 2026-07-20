@@ -10,8 +10,7 @@
 #     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
 #   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Card and
 #     Link are always launched (Link is inline and auto-enables with the Payment Element itself); the
-#     US-locked first-launch methods (Cash App Pay, ACH Direct Debit) join for US buyers via the GeoIP
-#     gate below.
+#     US-locked first-launch method (Cash App Pay) joins for US buyers via the GeoIP gate below.
 #
 # Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
 # Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
@@ -32,11 +31,26 @@ class Checkout::PaymentMethodResolver
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
   # element flags themselves since Stripe's dashboard payment-method settings are the emergency
-  # kill switch, per-seller Flipper adds no useful lever); plus the US-locked first-launch methods
-  # (region-gated below) — Cash App Pay (redirect; confirms via the #5664 return page) and ACH Direct
-  # Debit (delayed-notification; settles via the PaymentIntent webhook lifecycle). The EUR methods
-  # (iDEAL/Bancontact/SEPA) stay gated until buyer-currency FX lands.
-  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card link cashapp us_bank_account].freeze
+  # kill switch, per-seller Flipper adds no useful lever); plus Cash App Pay (US-locked, region-gated
+  # below; redirect — confirms via the #5664 return page). The EUR forced-currency methods
+  # (iDEAL/Bancontact) launch per-method via LOCAL_METHOD_LAUNCH_FEATURES on
+  # Checkout::BuyerCurrencyEligibility — see forced_currency_methods below; SEPA stays
+  # unwired until its own launch. ACH Direct Debit (us_bank_account) was launched and
+  # then withdrawn platform-wide: it settles in ~4 business days and content only delivers on
+  # settlement, which doesn't fit digital products (gumroad-private#1143). Its webhook settlement
+  # lifecycle stays wired so in-flight ACH purchases still complete. Sellers who want it anyway
+  # (e.g. large-ticket sales where card limits bite) can opt back in per seller — see
+  # SELLER_OPT_IN_PAYMENT_METHOD_TYPES below.
+  LAUNCHED_PAYMENT_METHOD_TYPES = %w[card link cashapp].freeze
+  # Methods a seller can re-enable for their own checkouts from the checkout settings page
+  # (User#ach_payments_enabled?). They join the launched set only for that seller's carts and then
+  # flow through every downstream gate unchanged: the US region gate (ACH debits a US bank
+  # account), the PPP matrix, and the per-account capability intersection for direct-charge
+  # sellers. Opting in can therefore never widen the set past what the buyer/account could
+  # actually complete. Both the presenter and PreparePaymentIntentService resolve through this
+  # same class with the same seller, so the Payment Element and the deferred intent stay in sync
+  # (the handshake note above).
+  SELLER_OPT_IN_PAYMENT_METHOD_TYPES = %w[us_bank_account].freeze
   LINK_PAYMENT_METHOD_TYPE = "link"
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
@@ -70,10 +84,10 @@ class Checkout::PaymentMethodResolver
   end
 
   # cart_product_currency: the ISO code (lowercase, e.g. "eur") the cart's single item is priced
-  # in, or nil for multi-item carts / unknown. Only consulted by the test-mode forced-currency
+  # in, or nil for multi-item carts / unknown. Only consulted by the forced-currency
   # gate below: a forced-currency method (iDEAL/Bancontact) is offered only when the cart is
   # priced in exactly the currency that method forces, because that is the only shape where the
-  # Payment Element mounts in that currency (StripePaymentPresenter#method_forced_qa_shape?) and
+  # Payment Element mounts in that currency (StripePaymentPresenter#method_forced_shape?) and
   # the deferred intent can be created in it. Offering the methods on any other cart puts EUR-only
   # entries on a USD element/intent, which Stripe rejects outright (no element mounts at all).
   def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false, cart_product_currency: nil)
@@ -138,7 +152,8 @@ class Checkout::PaymentMethodResolver
     # What Stripe actually receives, built in two conceptually separate passes:
     #
     #   1. OUR policy decisions — launch gating, the US region gate on Cash App Pay/ACH (US-GeoIP
-    #      buyers only; unknown country fails safe), the test-mode forced-currency QA methods, and
+    #      buyers only; unknown country fails safe), the forced-currency local methods (per-method
+    #      launch flags in live mode, unrestricted in test mode for QA), and
     #      the PPP verifiability matrix. These express what Gumroad is willing to offer this buyer
     #      on this cart.
     #   2. A final intersection with what the charged ACCOUNT can accept. On a direct-charge
@@ -152,10 +167,23 @@ class Checkout::PaymentMethodResolver
     # Card always survives, and Link (inline, not US-locked) is unaffected by the region gate.
     def launched_method_set(eligible)
       launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
-      launched += forced_currency_test_mode_methods(eligible)
+      launched += seller_opt_in_methods(eligible)
+      launched += forced_currency_methods(eligible)
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched & account_supported_methods(launched)
+    end
+
+    # ACH Direct Debit is withdrawn from the default launched set (delayed ~4-business-day
+    # settlement, gumroad-private#1143) but a seller can opt back in from the checkout settings
+    # page. Added BEFORE the US region gate / PPP matrix / account-capability intersection so the
+    # opt-in is subject to all of them — it re-adds the method only where it could already have
+    # been offered pre-withdrawal. Only single-seller carts reach a non-Lane-A eligible set, so
+    # `sellers.one?` is belt-and-braces rather than a real branch.
+    def seller_opt_in_methods(eligible)
+      return [] unless sellers.one? && sellers.first&.ach_payments_enabled?
+
+      eligible & SELLER_OPT_IN_PAYMENT_METHOD_TYPES
     end
 
     # The methods (from our policy-resolved set) that the account the PaymentIntent will be created
@@ -207,23 +235,30 @@ class Checkout::PaymentMethodResolver
       Rails.logger.error("Failed to enqueue payment method availability refresh for merchant account #{connect_account.id}: #{e.class} => #{e.message}")
     end
 
-    # The EUR forced-currency methods (iDEAL/Bancontact) are not launched: they can only be offered
-    # once buyer-currency presentment carries them, and the public launch is the #5362 cohort with
-    # its own approval gate. But the presentment machinery needs real manual QA before that launch,
-    # so surface them when ALL of these hold: the seller has the internal buyer-currency flags on,
-    # Stripe is in test mode (preview apps / staging), and the cart's single item is priced in the
-    # currency the method forces. The last condition mirrors the presenter's
-    # method_forced_qa_shape? gate: only that cart shape mounts the Payment Element in the forced
-    # currency, and a forced-currency method listed on a USD element/intent makes Stripe reject the
-    # whole element session (no payment form renders at all — this broke flag-on sellers' plain USD
-    # checkouts before the gate was added). Production sellers run live-mode Stripe keys, so this
-    # branch can never add methods to a real checkout.
-    def forced_currency_test_mode_methods(eligible)
-      return [] unless Checkout::BuyerCurrencyEligibility.stripe_test_mode?
+    # The EUR forced-currency methods (iDEAL/Bancontact) surface in two situations:
+    #
+    #   QA (Stripe test mode): the seller has the internal buyer-currency flags on and the
+    #   cart's single item is priced in the currency the method forces. This is the
+    #   pre-launch manual QA surface on preview apps/staging.
+    #
+    #   Production (live mode): additionally, the method's own per-method launch flag
+    #   (Checkout::BuyerCurrencyEligibility::LOCAL_METHOD_LAUNCH_FEATURES) must be active
+    #   for the seller — the #5362 Phase 4 ramp lever, one flag per method so iDEAL can
+    #   ramp and roll back independently of the rest of the cohort.
+    #
+    # In both modes the cart-shape condition mirrors the presenter's method_forced_shape?
+    # gate: only a single item priced in the forced currency mounts the Payment Element in
+    # that currency, and a forced-currency method listed on a USD element/intent makes
+    # Stripe reject the whole element session (no payment form renders at all — this broke
+    # flag-on sellers' plain USD checkouts before the gate was added).
+    def forced_currency_methods(eligible)
       return [] unless sellers.one? && Checkout::BuyerCurrencyEligibility.seller_enabled?(sellers.first)
 
       (eligible & Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.keys).select do |method|
-        Checkout::BuyerCurrencyEligibility.forced_currency_for(method) == cart_product_currency
+        next false unless Checkout::BuyerCurrencyEligibility.forced_currency_for(method) == cart_product_currency
+
+        Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
+          Checkout::BuyerCurrencyEligibility.local_method_launched?(method, sellers.first)
       end
     end
 

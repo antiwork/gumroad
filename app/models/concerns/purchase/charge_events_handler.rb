@@ -16,15 +16,19 @@ module Purchase::ChargeEventsHandler
     ChargeEvent::TYPE_REFUND_FAILED,
   ].freeze
 
-  # The refund-family event types, used to scope the missing-chargeable alert below. A
-  # refund event from the Connect webhook endpoint can belong to the seller's own
-  # (non-Gumroad) Stripe activity, so a miss there is routine and stays quiet. On the
-  # platform endpoint every refund belongs to a Gumroad charge, so a miss is alerted on —
-  # especially TYPE_REFUND_FAILED, where dropping the event would mean a buyer was never
-  # made whole and nobody heard about it.
-  REFUND_EVENT_TYPES = [
+  # The event types whose builders carry `stripe_connect_account_id` in extras, used to
+  # scope the missing-chargeable alert below. An event arriving via the Connect webhook
+  # endpoint can belong to the seller's own (non-Gumroad) Stripe activity — their own
+  # store's refunds and disputes — so a missing chargeable there is routine and stays
+  # quiet. On the platform endpoint every such event belongs to a Gumroad charge, so a
+  # miss is alerted on — especially TYPE_REFUND_FAILED, where dropping the event would
+  # mean a buyer was never made whole and nobody heard about it.
+  CONNECT_SCOPED_EVENT_TYPES = [
     ChargeEvent::TYPE_CHARGE_REFUND_UPDATED,
     ChargeEvent::TYPE_REFUND_FAILED,
+    ChargeEvent::TYPE_DISPUTE_FORMALIZED,
+    ChargeEvent::TYPE_DISPUTE_WON,
+    ChargeEvent::TYPE_DISPUTE_LOST,
   ].freeze
 
   class_methods do
@@ -34,9 +38,9 @@ module Purchase::ChargeEventsHandler
       chargeable = Charge::Chargeable.find_by_stripe_event(event)
 
       if chargeable.nil?
-        sellers_own_refund = REFUND_EVENT_TYPES.include?(event.type) &&
+        sellers_own_event = CONNECT_SCOPED_EVENT_TYPES.include?(event.type) &&
           event.extras.try(:[], :stripe_connect_account_id).present?
-        if ACTIONABLE_EVENT_TYPES_WITHOUT_CHARGEABLE.include?(event.type) && !sellers_own_refund
+        if ACTIONABLE_EVENT_TYPES_WITHOUT_CHARGEABLE.include?(event.type) && !sellers_own_event
           ErrorNotifier.notify("Could not find a Chargeable on Gumroad for Stripe Charge ID: #{event.charge_id}, " \
                     "charge reference: #{event.charge_reference} for event id: #{event.charge_event_id}.")
         end

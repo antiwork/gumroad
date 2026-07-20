@@ -737,6 +737,34 @@ describe User, :vcr do
     end
   end
 
+  describe "#refund_policy_settings_editable?" do
+    let(:user) { create(:user) }
+
+    it "returns true when account-level refund policies are enabled" do
+      expect(user.refund_policy_settings_editable?).to be true
+    end
+
+    it "returns false when a refund policy is enforced on the account, even with account-level refund policies enabled" do
+      user.update!(refund_policy_enforced: true)
+
+      expect(user.refund_policy_settings_editable?).to be false
+    end
+
+    context "with seller_refund_policy_disabled_for_all" do
+      before { Feature.activate(:seller_refund_policy_disabled_for_all) }
+
+      it "returns false when no refund policy is enforced" do
+        expect(user.refund_policy_settings_editable?).to be false
+      end
+
+      it "returns false when a refund policy is enforced on the account" do
+        user.update!(refund_policy_enabled: false, refund_policy_enforced: true)
+
+        expect(user.refund_policy_settings_editable?).to be false
+      end
+    end
+  end
+
   describe "#paypal_payout_email" do
     let(:user) { create(:user, payment_address: "payme@example.com") }
 

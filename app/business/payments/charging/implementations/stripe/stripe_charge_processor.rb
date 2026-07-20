@@ -329,6 +329,10 @@ class StripeChargeProcessor
           raise "Merchant Account #{merchant_account.external_id} assigned to user #{merchant_account.user.external_id} "\
               "but has no Charge Processor Merchant ID."
         end
+        # Stripe caps a direct charge's application fee at the collected amount, so an exactly
+        # zero seller balance is valid. It does reject an application fee above the charge, which
+        # is the negative-proceeds case we must stop before submitting the PaymentIntent.
+        StripeIntentChargeRouting.validate_seller_proceeds!(merchant_account:, amount_cents: charge_amount_cents, amount_for_gumroad_cents: charge_gumroad_amount_cents, currency: charge_currency, reference:)
         params[:application_fee_amount] = charge_gumroad_amount_cents
         payment_intent = Stripe::PaymentIntent.create(params, stripe_options.merge(stripe_account: merchant_account.charge_processor_merchant_id))
       elsif merchant_account.user
@@ -336,9 +340,16 @@ class StripeChargeProcessor
           raise "Merchant Account #{merchant_account.external_id} assigned to user #{merchant_account.user.external_id} "\
               "but has no Charge Processor Merchant ID."
         end
+        # On very small totals our fixed fee components can meet or exceed the whole charge,
+        # making this seller transfer amount zero or negative. Stripe deterministically rejects
+        # that with `parameter_invalid_integer` on `transfer_data[amount]` BEFORE the card
+        # attaches, which buyers saw as an unexplained "temporary problem" error. Fail fast with
+        # a clear buyer-facing error instead of submitting a request we know Stripe will refuse.
+        seller_transfer_amount_cents = charge_amount_cents - charge_gumroad_amount_cents
+        StripeIntentChargeRouting.validate_seller_proceeds!(merchant_account:, amount_cents: charge_amount_cents, amount_for_gumroad_cents: charge_gumroad_amount_cents, currency: charge_currency, reference:)
         params[:transfer_data] = {
           destination: merchant_account.charge_processor_merchant_id,
-          amount: charge_amount_cents - charge_gumroad_amount_cents
+          amount: seller_transfer_amount_cents
         }
         payment_intent = stripe_options.present? ? Stripe::PaymentIntent.create(params, stripe_options) : Stripe::PaymentIntent.create(params)
       else
@@ -828,7 +839,15 @@ class StripeChargeProcessor
       event.comment = stripe_event["type"]
       event.extras = {
         charge_processor_dispute_id: stripe_dispute["id"],
-        reason: stripe_dispute["reason"].presence
+        reason: stripe_dispute["reason"].presence,
+        # Carried so the missing-chargeable alert in Purchase::ChargeEventsHandler can tell a
+        # dispute on a connected account's own (non-Gumroad) charge apart from a dispute on a
+        # Gumroad charge. The refund event builder below has set this since #5420; disputes
+        # were left out, which kept Sentry GUMROAD-2 firing ~58/day for sellers' own disputes.
+        # The helper filters out Gumroad's own platform account id — storing it here would
+        # make the handler treat a genuine platform dispute miss as seller-owned and stay
+        # quiet (same reasoning as the refund builder below).
+        stripe_connect_account_id: connected_account_id_for_event(stripe_event)
       }
 
       stripe_charge = if stripe_connect_account_id.present? && stripe_connect_account_id != Stripe::Account.retrieve.id
@@ -902,7 +921,7 @@ class StripeChargeProcessor
         # IS the platform through the Gumroad path, where every refund belongs to a Gumroad
         # charge and a miss must alert. Storing the platform id would make the handler treat
         # such a miss as seller-owned activity and suppress the alert.
-        stripe_connect_account_id: connected_account_id_for_refund_event(stripe_event),
+        stripe_connect_account_id: connected_account_id_for_event(stripe_event),
       }
       # A refund that fails after Stripe accepted it (asynchronous bank-transfer refunds —
       # iDEAL, Bancontact, ACH — can be returned by the buyer's bank days later) needs its
@@ -1015,14 +1034,15 @@ class StripeChargeProcessor
     error_code
   end
 
-  # Returns the connected Stripe account id a refund event was delivered for, or nil when the
+  # Returns the connected Stripe account id a webhook event was delivered for, or nil when the
   # event actually belongs to Gumroad's own platform account. StripeEventHandler treats an
   # account id equal to STRIPE_PLATFORM_ACCOUNT_ID the same as no account id at all (both are
-  # routed through the Gumroad path), so the refund event's extras must mirror that: only a
-  # genuinely connected account id means "this refund could be the seller's own non-Gumroad
-  # Stripe activity". Storing the platform id here would make the missing-chargeable alert in
-  # Purchase::ChargeEventsHandler wrongly suppress platform refund failures.
-  def self.connected_account_id_for_refund_event(stripe_event)
+  # routed through the Gumroad path), so the event's extras must mirror that: only a
+  # genuinely connected account id means "this refund or dispute could be the seller's own
+  # non-Gumroad Stripe activity". Storing the platform id here would make the
+  # missing-chargeable alert in Purchase::ChargeEventsHandler wrongly suppress platform
+  # refund/dispute failures.
+  def self.connected_account_id_for_event(stripe_event)
     account_id = stripe_event["user_id"].presence || stripe_event["account"].presence
     return if account_id.blank? || account_id == STRIPE_PLATFORM_ACCOUNT_ID
 

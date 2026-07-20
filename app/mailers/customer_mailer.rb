@@ -10,7 +10,18 @@ class CustomerMailer < ApplicationMailer
   layout "layouts/email", except: :send_to_kindle
 
   def grouped_receipt(purchase_ids)
-    @chargeables = Purchase.where(id: purchase_ids).includes(charge: [:order, :seller]).map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }.uniq
+    # Callers can pass ids of purchases in any state (e.g. the email-reassignment flow
+    # moves failed purchases too). A failed purchase that belongs to a Charge resolves
+    # to a Charge with no successful purchases, and the receipt template crashes with
+    # "undefined method 'external_id' for nil" when it can't find a purchase to render.
+    # Only successful purchases get receipts, so filter here.
+    @chargeables = Purchase.where(id: purchase_ids)
+      .all_success_states_including_test
+      .includes(charge: [:order, :seller])
+      .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
+      .uniq
+    return if @chargeables.empty?
+
     last_chargeable = @chargeables.last
 
     mail(
