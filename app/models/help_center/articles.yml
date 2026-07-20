@@ -472,7 +472,7 @@
 - id: 282
   slug: "282-how-do-purchases-work-for-my-customers"
   title: "How Gumroad works for customers"
-  description: "In this article: Buying on Gumroad without an account Receipts and Invoices VAT for your customers Credit and Debit card payments Paypal payments Making a test "
+  description: "In this article: Buying on Gumroad without an account Receipts and Invoices VAT for your customers Credit and Debit card payments PayPal payments Making a test "
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 283
   slug: "283-fraudulent-purchases"

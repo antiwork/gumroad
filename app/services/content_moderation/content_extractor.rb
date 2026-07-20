@@ -81,11 +81,21 @@ class ContentModeration::ContentExtractor
     end
 
     def product_image_urls(product)
+      # Always use the ORIGINAL file URLs here, never display variants. The
+      # default `url` styles trigger synchronous variant generation
+      # (`file.variant(...).processed`), and this extractor runs inside the
+      # product's save transaction (the content-moderation validation fires
+      # during publish). Attaching a freshly generated variant inside a
+      # transaction defers its upload to after_commit, by which point the
+      # image-processing tempfile has been deleted — the upload then crashes
+      # with Errno::ENOENT after the product row has already committed.
+      # Moderation only needs the image contents, so the originals are both
+      # safe and cheaper.
       cover_image_urls = product.display_asset_previews.joins(file_attachment: :blob)
                                 .where(active_storage_blobs: { content_type: PERMITTED_IMAGE_TYPES })
-                                .map(&:url)
+                                .map { |preview| preview.url(style: :original) }
 
-      thumbnail_image_urls = product.thumbnail.present? ? [product.thumbnail.url] : []
+      thumbnail_image_urls = product.thumbnail.present? ? [product.thumbnail.url(variant: :original)] : []
 
       product_description_image_urls = Nokogiri::HTML(product.link.description).css("img").filter_map { |img| img["src"] }
 

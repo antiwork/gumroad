@@ -74,9 +74,11 @@ class ScheduledPayout < ApplicationRecord
           user
         )
 
-        if payment.blank?
+        if payment.blank? || payment.failed?
           error_detail = if payment_errors.present?
             payment_errors.join(", ")
+          elsif payment&.failed?
+            payment.errors.full_messages.first || "Payment failed during preparation"
           else
             "No payable balance available"
           end

@@ -32,7 +32,7 @@ class PaypalChargeProcessor
     parent_txn_id = paypal_event["parent_txn_id"]
 
     # Only process dispute won events if the original payment status tells us the payment is in the completed state.
-    # Paypal tells us the original reversal (created at dispute creation) was cancelled just before telling us we lost the dispute,
+    # PayPal tells us the original reversal (created at dispute creation) was cancelled just before telling us we lost the dispute,
     # so we check the payment status of the main transaction to know what the cancelled reversal message is really telling us.
     return if event_type == ChargeEvent::TYPE_DISPUTE_WON && PaypalChargeProcessor.new.get_charge(parent_txn_id).paypal_payment_status != PaypalApiPaymentStatus::COMPLETED
 
@@ -58,7 +58,7 @@ class PaypalChargeProcessor
   end
 
   # Events like PAYMENT.CAPTURE.REFUNDED, PAYMENT.CAPTURE.COMPLETED are just
-  # acknowledgements from Paypal. We get all the information in events(handled
+  # acknowledgements from PayPal. We get all the information in events(handled
   # in the method below) hence, we don't do anything on these events.
   def self.handle_order_events(event_info)
     # Use the master DB to ensure we're looking at the latest version and have the latest state.
@@ -130,7 +130,7 @@ class PaypalChargeProcessor
   private_class_method :handle_payment_capture_refunded_event
 
   def self.refund_purchase(capture_id:, usd_amount_cents: nil, processor_refund: nil, skip_if_capture_shared: false)
-    raise ArgumentError, "No paypal transaction id found in refund webhook" if capture_id.blank?
+    raise ArgumentError, "No PayPal transaction id found in refund webhook" if capture_id.blank?
 
     purchase = Purchase.find_by(stripe_transaction_id: capture_id)
     return unless purchase&.successful?
@@ -485,7 +485,7 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response) && api_response.result.id.present?
       api_response.result.id
     else
-      error_message = PaypalChargeProcessor.build_error_message("Failed paypal create order: ", api_response.result.details&.first&.description)
+      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal create order: ", api_response.result.details&.first&.description)
       raise determine_create_order_error(api_response), error_message
     end
   end
@@ -506,7 +506,7 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response) && api_response.result.id.present?
       api_response.result
     else
-      error_message = PaypalChargeProcessor.build_error_message("Failed paypal capture order: ", api_response.result.details[0].description)
+      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal capture order: ", api_response.result.details[0].description)
       raise determine_capture_order_error(api_response), error_message
     end
   end
@@ -569,7 +569,7 @@ class PaypalChargeProcessor
     api_response = paypal_rest_api.update_invoice_id(order_id:, invoice_id:)
 
     unless paypal_rest_api.successful_response?(api_response)
-      error_message = PaypalChargeProcessor.build_error_message("Failed paypal update order: ",
+      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal update order: ",
                                                                 api_response.result.details&.first&.description)
       raise determine_update_order_error(api_response), error_message
     end
