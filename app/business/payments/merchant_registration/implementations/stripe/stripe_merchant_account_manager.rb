@@ -948,7 +948,18 @@ module StripeMerchantAccountManager
   # worst case is one extra FX-quote round trip that re-records the mismatch.
   def self.clear_settlement_currency_mismatch_on_currency_change(merchant_account, stripe_previous_attributes)
     return if merchant_account.nil?
-    return unless stripe_previous_attributes.key?("default_currency") || stripe_previous_attributes.key?("external_accounts")
+
+    # In production the webhook handler passes a Stripe::StripeObject here, not a Hash, and
+    # StripeObject (stripe-ruby 12.x) does not respond to `key?` — calling it raised a
+    # NoMethodError on every account.updated event and left learned mismatch markers
+    # permanently uncleared (gumroad-private#933, 2026-07-20). Normalize to a Hash first;
+    # StripeObject#to_hash yields symbol keys while raw webhook payloads use string keys, so
+    # check both.
+    previous_attributes = stripe_previous_attributes.respond_to?(:to_hash) ? stripe_previous_attributes.to_hash : stripe_previous_attributes
+    currency_config_changed = %w[default_currency external_accounts].any? do |attribute|
+      previous_attributes.key?(attribute) || previous_attributes.key?(attribute.to_sym)
+    end
+    return unless currency_config_changed
 
     merchant_account.clear_settlement_currency_mismatch!
   rescue StandardError => e
