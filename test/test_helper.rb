@@ -102,6 +102,15 @@ module ActiveSupport
     # writes are gated on `:log_email_events`, otherwise the observer
     # silently no-ops and `assert_difference { EmailEvent.count }` fails.
     setup do
+      # Flipper is Redis-backed (config/initializers/feature_toggle.rb) and Redis is
+      # NOT rolled back with the test transaction, so a feature a test toggles — or any
+      # other Redis state (e.g. RedisKey.gumroad_day_date) — would leak into later tests
+      # and change behavior (e.g. silently waiving a Gumroad fee). spec_helper flushes
+      # both Redis DBs before each example; mirror that here, and BEFORE re-activating the
+      # global features below so every test starts from the same known feature set.
+      $redis.flushdb
+      Sidekiq.redis(&:flushdb)
+
       %i[
         store_discover_searches
         log_email_events

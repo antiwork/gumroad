@@ -20,7 +20,8 @@ describe CustomDomain do
       before do
         @invalid_domains = [nil, "", "test_store.example.com", "http:www.example.com", "www.example.com/test",
                             "example", "example.", "example.com.", "example domain.com", "example@example.com",
-                            "example.com.", "127.0.0.1", "2001:db8:3333:4444:5555:6666:7777:8888"]
+                            "example.com.", "example..com", "sub.example...com", "-example.com", "example-.com",
+                            "sub.-example.com", "127.0.0.1", "2001:db8:3333:4444:5555:6666:7777:8888"]
       end
 
       it "throws an ActiveRecord::RecordInvalid error" do
@@ -30,6 +31,19 @@ describe CustomDomain do
           expect { domain.save! }.to raise_error(ActiveRecord::RecordInvalid)
           expect(domain.errors[:base].first).to eq("#{invalid_domain} is not a valid domain name.")
         end
+      end
+    end
+
+    context "with a persisted record whose domain fails the current validation" do
+      it "still allows soft-deleting the record" do
+        # Rows saved before a validation existed can carry domains that fail
+        # it now. Deleting such a record must not raise — deletion is exactly
+        # how a seller or admin removes the broken domain.
+        domain = build(:custom_domain, domain: "example..com")
+        domain.save(validate: false)
+
+        expect { domain.mark_deleted! }.not_to raise_error
+        expect(domain.reload.deleted?).to eq(true)
       end
     end
   end
