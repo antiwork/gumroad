@@ -346,6 +346,9 @@ const StripePaymentElementProvider = ({
                   borderColor,
                   boxShadow: "none",
                   borderRadius: "4px",
+                  // Match the flat PayPal row appended below the element (p-4 in
+                  // FlatPayPalRow), so every payment-method row has the same height.
+                  padding: "1rem",
                 },
               }
             : {

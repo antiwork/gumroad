@@ -1510,7 +1510,9 @@ const FlatPayPalRow = () => {
       aria-checked={selected}
       disabled={disabled}
       className={classNames(
-        "flex w-full cursor-pointer items-center gap-3 rounded border p-4 text-left all-unset",
+        // all-unset resets box-sizing to content-box, which would make w-full + padding + border
+        // overflow the parent — box-border restores the border-box sizing every other row uses.
+        "box-border flex w-full cursor-pointer items-center gap-3 rounded border p-4 text-left all-unset",
         selected ? "border-accent" : "border-border",
         disabled && "cursor-not-allowed opacity-50",
       )}
