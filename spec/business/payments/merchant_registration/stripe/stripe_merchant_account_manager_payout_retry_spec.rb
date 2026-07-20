@@ -92,6 +92,54 @@ describe StripeMerchantAccountManager do
       end
     end
 
+    context "when Stripe rejects the phone number" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            '"+15550001" is not a valid phone number', nil
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry (expected seller-input error) and re-raises" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "does not record a bank sync failure payout note" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+      end
+    end
+
+    context "when Stripe rejects a phone param without the message shape" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "Invalid value provided", "individual[phone]"
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+    end
+
     context "when Stripe rejects the external account with a card error" do
       before do
         allow(Stripe::Account).to receive(:create).and_raise(

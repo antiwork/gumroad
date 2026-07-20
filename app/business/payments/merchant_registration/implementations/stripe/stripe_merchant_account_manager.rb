@@ -161,12 +161,13 @@ module StripeMerchantAccountManager
   rescue => e
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
-      # Bank-account rejections (unknown bank/routing code, invalid account number) are
-      # expected seller-input errors: the seller sees Stripe's message inline on the payments
-      # settings page and a payout note is recorded below, and the sync path
-      # (update_bank_account) already treats them as expected without alerting. Don't page
-      # Sentry for them — only unexpected failures should alert.
-      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e)
+      # Bank-account rejections (unknown bank/routing code, invalid account number) and
+      # phone-number rejections are expected seller-input errors: the seller sees Stripe's
+      # message inline on the payments settings page (a payout note is also recorded below
+      # for bank rejections), and the sync path (update_bank_account) already treats bank
+      # rejections as expected without alerting. Don't page Sentry for them — only
+      # unexpected failures should alert.
+      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || phone_number_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
@@ -452,6 +453,23 @@ module StripeMerchantAccountManager
     end
 
     postal_code
+  end
+
+  # Stripe validates the phone numbers we pass on account creation (individual phone,
+  # business support phone) and rejects malformed ones with an InvalidRequestError like
+  # `"+9203661015" is not a valid phone number`. The client-side formatter only normalizes
+  # to E.164 — it doesn't verify the number is real — so these are expected seller-input
+  # errors: the seller sees Stripe's message inline on the payments settings page and can
+  # correct the number themselves. Stripe doesn't always populate `code`/`param` on this
+  # rejection, so match on the message.
+  private_class_method
+  def self.phone_number_invalid_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    return true if param.split("[").last.to_s.delete("]").in?(%w[phone support_phone])
+
+    error.message.to_s.match?(/is not a valid phone number/i)
   end
 
   private_class_method
