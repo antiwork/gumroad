@@ -157,17 +157,8 @@ export const Layout = ({
       ? {
           "--accent": hexToRgb(currentSeller.profileHighlightColor),
           "--contrast-accent": hexToRgb(getContrastColor(currentSeller.profileHighlightColor)),
-          // Pin the seller's storefront palette onto the preview only when they actually
-          // customized their background. The default white profile follows the dashboard's own
-          // color scheme instead, so a dark-mode dashboard doesn't frame a glaring white pane —
-          // the preview goes dark with the rest of the editor. The accent stays pinned either
-          // way: it works on both schemes and is the branding worth previewing.
-          ...(currentSeller.profileBackgroundColor.toLowerCase() !== "#ffffff"
-            ? {
-                "--filled": hexToRgb(currentSeller.profileBackgroundColor),
-                "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
-              }
-            : {}),
+          "--filled": hexToRgb(currentSeller.profileBackgroundColor),
+          "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
         }
       : {};
 
