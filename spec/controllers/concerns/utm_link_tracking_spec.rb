@@ -267,8 +267,12 @@ describe UtmLinkTracking, type: :controller do
 
     it "reports the error after a single retry when the auto-created link stays invalid" do
       # If the validation failure isn't a transient race (it repeats on the retry), we must
-      # not loop — report once and let the page render.
+      # not loop — report once and let the page render. Counting save attempts is what makes
+      # this spec fail if the retry is removed (old code: 1 attempt) or unbounded (hang): the
+      # fixed code makes exactly 2 attempts — the original save plus one retry.
+      save_attempts = 0
       allow_any_instance_of(UtmLink).to receive(:save!) do |instance, *args|
+        save_attempts += 1
         instance.errors.add(:target_resource_id, "A link with similar UTM parameters already exists for this destination!")
         raise ActiveRecord::RecordInvalid.new(instance)
       end
@@ -278,6 +282,7 @@ describe UtmLinkTracking, type: :controller do
         get :action, params: utm_params
       end.not_to change(UtmLinkVisit, :count)
 
+      expect(save_attempts).to eq(2)
       expect(response).to be_successful
     end
   end

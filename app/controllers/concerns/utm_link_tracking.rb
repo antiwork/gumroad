@@ -80,7 +80,15 @@ module UtmLinkTracking
       #     validation sees the winner's row and fails with "A link with similar UTM parameters
       #     already exists".
       #
-      # In both cases the winning request has committed the link by the time we get here, so
+      # There is a third outcome this rescue cannot recover: MySQL unique indexes treat NULL
+      # values as non-conflicting, and this index includes nullable columns (utm_term,
+      # utm_content, target_resource_id), so two racers can BOTH insert successfully and leave
+      # duplicate alive rows. After that, every visit fails the uniqueness validation on the
+      # persisted link's save below — new_record? is false, so we correctly don't retry
+      # (retrying would fail identically) and just report. Cleaning up such duplicates needs a
+      # separate dedup pass; see https://github.com/antiwork/gumroad/issues/5989.
+      #
+      # In both recoverable cases the winning request has committed the link by the time we get here, so
       # retrying once lets this request find that link and still record the visit. For
       # RecordInvalid we only retry when the failing record is the auto-created UtmLink itself
       # (a new record) — validation failures on other records in this block aren't races and
