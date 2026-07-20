@@ -116,15 +116,21 @@ class Admin::UsersController < Admin::BaseController
   # user recording who granted the unlock and why (gumroad-private#1192).
   def unlock_email_sending
     reason = (params.dig(:unlock_email_sending, :reason) || params[:reason]).presence
-    @user.update!(email_sending_unlocked_by_admin: true)
     content = "Email sending unlocked by #{current_user.username} on #{Time.current.strftime('%B %-d, %Y')}"
     content += "\nReason: #{reason}" if reason
-    @user.comments.create!(
-      author_id: current_user.id,
-      author_name: current_user.name,
-      comment_type: Comment::COMMENT_TYPE_EMAIL_SENDING_UNLOCKED,
-      content:
-    )
+    # The unlock and its audit comment must succeed or fail together: if the
+    # comment can't be saved (e.g. the reason exceeds the comment length limit),
+    # the transaction rolls the flag back so the override is never active
+    # without a record of who granted it and why.
+    ActiveRecord::Base.transaction do
+      @user.update!(email_sending_unlocked_by_admin: true)
+      @user.comments.create!(
+        author_id: current_user.id,
+        author_name: current_user.name,
+        comment_type: Comment::COMMENT_TYPE_EMAIL_SENDING_UNLOCKED,
+        content:
+      )
+    end
     render json: { success: true, message: "Email sending unlocked." }
   rescue => e
     render json: { success: false, message: e.message }

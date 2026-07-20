@@ -303,6 +303,20 @@ describe Admin::UsersController, type: :controller, inertia: true do
 
       expect(user.reload.email_sending_unlocked_by_admin?).to be true
     end
+
+    it "rolls back the unlock flag when the audit comment cannot be created" do
+      # A reason longer than Comment's content length limit makes the audit
+      # comment invalid; the whole action must fail so the override is never
+      # active without its audit trail.
+      overlong_reason = "a" * 10_001
+
+      expect do
+        post :unlock_email_sending, params: { external_id: user.external_id, unlock_email_sending: { reason: overlong_reason } }
+      end.not_to change(user.comments, :count)
+
+      expect(response.parsed_body["success"]).to be false
+      expect(user.reload.email_sending_unlocked_by_admin?).to be false
+    end
   end
 
   describe "POST #set_custom_fee" do
