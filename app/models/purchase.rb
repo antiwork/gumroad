@@ -3858,7 +3858,7 @@ class Purchase < ApplicationRecord
       nil
     rescue ChargeProcessorPayeeAccountRestrictedError => e
       logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
-      errors.add :base, "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+      errors.add :base, "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
       self.stripe_error_code = PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED
       nil
     rescue ChargeProcessorPayerCancelledBillingAgreementError => e
@@ -3872,7 +3872,7 @@ class Purchase < ApplicationRecord
       self.stripe_error_code = PurchaseErrorCode::PAYPAL_PAYER_ACCOUNT_DECLINED_PAYMENT
       nil
     rescue ChargeProcessorUnsupportedPaymentTypeError => e
-      logger.info "Charge processor error: Unsupported paypal payment method selected"
+      logger.info "Charge processor error: Unsupported PayPal payment method selected"
       errors.add :base, "We weren't able to charge your PayPal account. Please select another method of payment."
       self.stripe_error_code = e.error_code
       self.stripe_transaction_id = e.charge_id

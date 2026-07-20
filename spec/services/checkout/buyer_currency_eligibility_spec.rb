@@ -84,6 +84,23 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
+  it "falls back without an FX-quote round trip when a settlement-currency mismatch was recorded for the account" do
+    # The stored currency still says usd for accounts with Stripe multi-currency
+    # settlement — the recorded marker from a previously rejected FX quote is what tells
+    # checkout the quote call is doomed (issue #6011).
+    merchant_account.record_settlement_currency_mismatch!
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
+  end
+
+  it "regains eligibility once a recorded settlement-currency mismatch expires" do
+    merchant_account.update!(settlement_currency_mismatch_noticed_at: (MerchantAccount::SETTLEMENT_CURRENCY_MISMATCH_TTL + 1.day).ago.iso8601)
+
+    expect(decision).to be_eligible
+    expect(decision.fallback_reason).to be_nil
+  end
+
   it "falls back for commission deposit purchases even when a quote token is present" do
     seller.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
     purchase.update!(link: create(:commission_product, user: seller), is_commission_deposit_purchase: true)

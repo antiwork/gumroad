@@ -171,6 +171,37 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "bank directory rejection during a bank account sync" do
+    let(:zip_code) { "94107" }
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new(
+          "We couldn't find the bank for that BIC", "bank_account[routing_number]"
+        )
+      )
+    end
+
+    it "treats the rejection as an expected seller-input error without paging Sentry" do
+      allow(ErrorNotifier).to receive(:notify)
+
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+
+      expect(result).to eq(:invalid_bank_account)
+      expect(ErrorNotifier).not_to have_received(:notify)
+      expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+    end
+  end
+
   describe "account holder name rejection stays out of the retry loop" do
     let(:zip_code) { "94107" }
 

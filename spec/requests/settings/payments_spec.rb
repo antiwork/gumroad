@@ -31,7 +31,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       visit settings_payments_path
 
-      expect(page).to have_link("Connect with Paypal")
+      expect(page).to have_link("Connect with PayPal")
     end
 
     it "does not show the Paypal Connect section if country is not supported" do
@@ -41,14 +41,14 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       visit settings_payments_path
 
-      expect(page).not_to have_link("Connect with Paypal")
+      expect(page).not_to have_link("Connect with PayPal")
     end
 
     it "keeps the PayPal Connect button enabled and does not show the notification when user has payment_address set up" do
       create(:user_compliance_info, user:)
       visit settings_payments_path
       expect(page).not_to have_alert(text: "You must set up credit card purchases above before enabling customers to pay with PayPal.")
-      expect(page).not_to have_link(text: "Connect with Paypal", inert: true)
+      expect(page).not_to have_link(text: "Connect with PayPal", inert: true)
     end
 
     it "keeps the PayPal Connect button enabled even when user does not have either bank account or payment address set up" do
@@ -56,7 +56,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       create(:user_compliance_info, user: creator)
       login_as creator
       visit settings_payments_path
-      expect(page).to have_link(text: "Connect with Paypal", inert: false)
+      expect(page).to have_link(text: "Connect with PayPal", inert: false)
     end
 
     it "keeps the PayPal Connect button enabled when user has stripe account connected" do
@@ -69,7 +69,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(creator.has_stripe_account_connected?).to be true
       login_as creator
       visit settings_payments_path
-      expect(page).to have_link(text: "Connect with Paypal", inert: false)
+      expect(page).to have_link(text: "Connect with PayPal", inert: false)
     end
 
     it "keeps the PayPal Connect button enabled when user has bank account connected" do
@@ -79,7 +79,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       login_as creator
       visit settings_payments_path
-      expect(page).to have_link(text: "Connect with Paypal", inert: false)
+      expect(page).to have_link(text: "Connect with PayPal", inert: false)
     end
 
     it "keeps the PayPal Connect button enabled when user has debit card connected" do
@@ -89,7 +89,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       login_as creator
       visit settings_payments_path
-      expect(page).to have_link(text: "Connect with Paypal", inert: false)
+      expect(page).to have_link(text: "Connect with PayPal", inert: false)
     end
 
     it "keeps the PayPal Connect button disabled and shows the eligibility requirements when the user is not eligible" do
@@ -97,7 +97,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(false)
 
       visit settings_payments_path
-      expect(page).to have_link(text: "Connect with Paypal", inert: true)
+      expect(page).to have_link(text: "Connect with PayPal", inert: true)
       expect(page).to have_text("You must meet the following requirements in order to connect a PayPal account:")
       expect(page).to have_text("Your account must be marked as compliant")
       expect(page).to have_text("You must have earned at least $100")
@@ -109,10 +109,10 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       include_context "with switching account to user as admin for seller"
 
-      it "does not show the Connect with Paypal button link" do
+      it "does not show the Connect with PayPal button link" do
         visit settings_payments_path
 
-        expect(page).not_to have_link("Connect with Paypal")
+        expect(page).not_to have_link("Connect with PayPal")
       end
     end
   end

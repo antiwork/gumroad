@@ -411,6 +411,52 @@ describe Payouts do
     end
   end
 
+  describe ".create_payment" do
+    let(:payout_date) { Date.today - 1 }
+    let(:user) { create(:user) }
+
+    before do
+      create(:ach_account, user:)
+      create(:balance, user:, date: payout_date - 1, amount_cents: 10_00)
+    end
+
+    it "marks the payment as processing when preparation succeeds" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances|
+        payment.currency = Currency::USD
+        payment.amount_cents = balances.sum(&:holding_amount_cents)
+        []
+      end
+
+      payment, payment_errors = described_class.create_payment(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      expect(payment.state).to eq("processing")
+      expect(payment_errors).to eq([])
+    end
+
+    it "does not attempt to mark the payment as processing when the processor failed it during preparation" do
+      # The Stripe payout processor marks the payment as failed inside prepare_payment_and_set_amount
+      # when, for example, the user has no valid merchant account or a balance's holding currency does
+      # not match the payout destination. Attempting to mark such a payment as processing raises
+      # StateMachines::InvalidTransition (failed → processing is not a valid transition).
+      error_message = "Cannot process payout: no valid merchant account found for user."
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, _balances|
+        payment.currency = Currency::USD
+        payment.amount_cents = 0
+        payment.mark_failed!
+        [error_message]
+      end
+
+      expect do
+        payment, payment_errors = described_class.create_payment(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+        expect(payment.state).to eq("failed")
+        expect(payment_errors).to eq([error_message])
+      end.not_to raise_error
+    end
+  end
+
   describe ".create_payments_for_balances_up_to_date_for_bank_account_types" do
     let(:payout_date) { Date.today - 1 }
     let(:payout_processor_type) { PayoutProcessorType::STRIPE }
