@@ -161,12 +161,14 @@ module StripeMerchantAccountManager
   rescue => e
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
-      # Bank-account rejections (unknown bank/routing code, invalid account number) are
-      # expected seller-input errors: the seller sees Stripe's message inline on the payments
-      # settings page and a payout note is recorded below, and the sync path
-      # (update_bank_account) already treats them as expected without alerting. Don't page
-      # Sentry for them — only unexpected failures should alert.
-      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e)
+      # Bank-account rejections (unknown bank/routing code, invalid account number) and
+      # Japanese address rejections (town/postal-code mismatches Stripe validates against
+      # its JP postal directory) are expected seller-input errors: the seller sees Stripe's
+      # message inline on the payments settings page and can correct the input themselves
+      # (a payout note is also recorded below for bank rejections), and the sync path
+      # (update_bank_account) already treats bank rejections as expected without alerting.
+      # Don't page Sentry for them — only unexpected failures should alert.
+      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || jp_address_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
@@ -441,6 +443,21 @@ module StripeMerchantAccountManager
   private_class_method
   def self.postal_code_invalid_error?(error)
     error.is_a?(Stripe::InvalidRequestError) && error.respond_to?(:code) && error.code == "postal_code_invalid"
+  end
+
+  # For Japanese accounts Stripe validates the kanji/kana address against its JP postal
+  # directory and rejects mismatches (e.g. street details typed into the town field, or a
+  # town that doesn't exist under the given postal code) with an InvalidRequestError like
+  # `Invalid address for Japan. We cannot find an address with town of X for postal_code Y.`
+  # We don't have that directory to pre-validate against, so these are expected seller-input
+  # errors: the seller sees Stripe's message inline on the payments settings page and can
+  # correct the address themselves. Stripe doesn't populate `code` on this rejection, so
+  # match on the message.
+  private_class_method
+  def self.jp_address_invalid_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    error.message.to_s.match?(/invalid address for japan|cannot find an address with town of/i)
   end
 
   # Luxembourg postal codes are four digits, but residents habitually write them with the
