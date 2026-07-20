@@ -16,6 +16,7 @@ import { ToggleSettingRow } from "$app/components/SettingRow";
 import { ProductLevelSupportEmailsForm } from "$app/components/Settings/AdvancedPage/ProductLevelSupportEmailsForm";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
+import { Alert } from "$app/components/ui/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
@@ -68,7 +69,8 @@ type MainPageProps = {
     show_nsfw_products: boolean;
     disable_affiliate_requests: boolean;
     seller_refund_policy: {
-      enabled: boolean;
+      editable: boolean;
+      refund_policy_enforced: boolean;
       allowed_refund_periods_in_days: { key: number; value: string }[];
       max_refund_period_in_days: number;
       fine_print_enabled: boolean;
@@ -345,82 +347,96 @@ export default function MainPage() {
             />
           )}
         </FormSection>
-        {props.user.seller_refund_policy.enabled ? (
-          <FormSection
-            header={
-              <>
-                <h2>Refund policy</h2>
-                <div>Choose how refunds will be handled for your products.</div>
-              </>
-            }
-          >
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor="max-refund-period-in-days">Refund period</Label>
-              </FieldsetTitle>
-              <Select
-                id="max-refund-period-in-days"
-                value={form.data.user.seller_refund_policy.max_refund_period_in_days}
-                disabled={isFormDisabled}
-                onChange={(e) =>
-                  updateUserSettings({
-                    seller_refund_policy: {
-                      ...form.data.user.seller_refund_policy,
-                      max_refund_period_in_days: Number(e.target.value),
-                    },
-                  })
-                }
-              >
-                {form.data.user.seller_refund_policy.allowed_refund_periods_in_days.map(({ key, value }) => (
-                  <option key={key} value={key}>
-                    {value}
-                  </option>
-                ))}
-              </Select>
-            </Fieldset>
-            <Fieldset>
-              <ToggleSettingRow
-                value={
-                  form.data.user.seller_refund_policy.fine_print_enabled
-                    ? form.data.user.seller_refund_policy.max_refund_period_in_days > 0
-                    : false
-                }
-                onChange={(value) =>
-                  updateUserSettings({
-                    seller_refund_policy: {
-                      ...form.data.user.seller_refund_policy,
-                      fine_print_enabled: value,
-                    },
-                  })
-                }
-                disabled={isFormDisabled || form.data.user.seller_refund_policy.max_refund_period_in_days === 0}
-                label="Add a fine print to your refund policy"
-                dropdown={
-                  <Fieldset>
-                    <FieldsetTitle>
-                      <Label htmlFor="seller-refund-policy-fine-print">Fine print</Label>
-                    </FieldsetTitle>
-                    <Textarea
-                      id="seller-refund-policy-fine-print"
-                      maxLength={3000}
-                      rows={10}
-                      value={form.data.user.seller_refund_policy.fine_print || ""}
-                      disabled={isFormDisabled}
-                      onChange={(e) =>
-                        updateUserSettings({
-                          seller_refund_policy: {
-                            ...form.data.user.seller_refund_policy,
-                            fine_print: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </Fieldset>
-                }
-              />
-            </Fieldset>
-          </FormSection>
-        ) : null}
+        <FormSection
+          header={
+            <>
+              <h2>Refund policy</h2>
+              <div>Choose how refunds will be handled for your products.</div>
+            </>
+          }
+        >
+          {props.user.seller_refund_policy.refund_policy_enforced ? (
+            <Alert variant="info" role="status">
+              Due to a high rate of chargebacks, a refund policy is currently enforced on your entire account and can't
+              be edited here. To request a change, contact us with the specific steps you've taken to reduce disputes
+              and we'll apply the update for you.
+            </Alert>
+          ) : !props.user.seller_refund_policy.editable ? (
+            <Alert variant="info" role="status">
+              Account-level refund policies are currently managed by Gumroad and can't be edited here. Refunds are
+              handled per product instead — you can set a refund policy on each product in the product editor.
+            </Alert>
+          ) : null}
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor="max-refund-period-in-days">Refund period</Label>
+            </FieldsetTitle>
+            <Select
+              id="max-refund-period-in-days"
+              value={form.data.user.seller_refund_policy.max_refund_period_in_days}
+              disabled={isFormDisabled || !props.user.seller_refund_policy.editable}
+              onChange={(e) =>
+                updateUserSettings({
+                  seller_refund_policy: {
+                    ...form.data.user.seller_refund_policy,
+                    max_refund_period_in_days: Number(e.target.value),
+                  },
+                })
+              }
+            >
+              {form.data.user.seller_refund_policy.allowed_refund_periods_in_days.map(({ key, value }) => (
+                <option key={key} value={key}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+          </Fieldset>
+          <Fieldset>
+            <ToggleSettingRow
+              value={
+                form.data.user.seller_refund_policy.fine_print_enabled
+                  ? form.data.user.seller_refund_policy.max_refund_period_in_days > 0
+                  : false
+              }
+              onChange={(value) =>
+                updateUserSettings({
+                  seller_refund_policy: {
+                    ...form.data.user.seller_refund_policy,
+                    fine_print_enabled: value,
+                  },
+                })
+              }
+              disabled={
+                isFormDisabled ||
+                !props.user.seller_refund_policy.editable ||
+                form.data.user.seller_refund_policy.max_refund_period_in_days === 0
+              }
+              label="Add a fine print to your refund policy"
+              dropdown={
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor="seller-refund-policy-fine-print">Fine print</Label>
+                  </FieldsetTitle>
+                  <Textarea
+                    id="seller-refund-policy-fine-print"
+                    maxLength={3000}
+                    rows={10}
+                    value={form.data.user.seller_refund_policy.fine_print || ""}
+                    disabled={isFormDisabled || !props.user.seller_refund_policy.editable}
+                    onChange={(e) =>
+                      updateUserSettings({
+                        seller_refund_policy: {
+                          ...form.data.user.seller_refund_policy,
+                          fine_print: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Fieldset>
+              }
+            />
+          </Fieldset>
+        </FormSection>
         <FormSection header={<h2>Local</h2>}>
           <Fieldset>
             <FieldsetTitle>

@@ -1,16 +1,23 @@
 import * as React from "react";
 
 import { Layout } from "$app/components/ProductEdit/Layout";
-import { ReceiptPreview } from "$app/components/ProductEdit/ReceiptPreview";
+import { ReceiptPreview, useReceiptPreview } from "$app/components/ProductEdit/ReceiptPreview";
 import { CustomReceiptTextInput } from "$app/components/ProductEdit/ReceiptTab/CustomReceiptTextInput";
 import { CustomViewContentButtonTextInput } from "$app/components/ProductEdit/ReceiptTab/CustomViewContentButtonTextInput";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 
 export const ReceiptTab = () => {
   const { product, updateProduct } = useProductEditContext();
+  const { subject, html } = useReceiptPreview();
 
   return (
-    <Layout preview={<ReceiptPreview />} previewScaleFactor={1} showBorder={false} showNavigationButton={false}>
+    <Layout
+      preview={<ReceiptPreview html={html} />}
+      receiptSubject={subject}
+      previewScaleFactor={1}
+      showBorder={false}
+      showNavigationButton={false}
+    >
       <div className="squished">
         <form>
           <section className="grid gap-8 p-4! md:p-8!">

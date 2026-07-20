@@ -686,5 +686,30 @@ describe ProductPresenter::ProductProps do
         expect(props[:audio_previews_enabled]).to be(true)
       end
     end
+
+    context "multi-seat license on a non-membership product" do
+      let(:product) { create(:product, native_type: Link::NATIVE_TYPE_COURSE, is_licensed: true, is_multiseat_license: true) }
+
+      it "exposes is_multiseat_license" do
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product]
+
+        expect(props[:is_multiseat_license]).to be(true)
+      end
+    end
+
+    context "multi-seat license flag set on a call product" do
+      let(:product) { create(:call_product, is_licensed: true) }
+
+      it "does not expose is_multiseat_license even when the flag is set" do
+        # The editor hides the toggle for calls, but the flag can still be set via
+        # the API or predate the editor gating. The buyer UI must never render the
+        # Seats picker for a call.
+        product.update_attribute(:is_multiseat_license, true)
+
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product]
+
+        expect(props[:is_multiseat_license]).to be(false)
+      end
+    end
   end
 end

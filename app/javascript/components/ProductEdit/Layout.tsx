@@ -12,7 +12,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Preview } from "$app/components/Preview";
-import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
@@ -127,6 +127,7 @@ export const Layout = ({
   previewScaleFactor = 0.4,
   showBorder = true,
   showNavigationButton = true,
+  receiptSubject = null,
 }: {
   children: React.ReactNode;
   preview?: React.ReactNode;
@@ -135,8 +136,12 @@ export const Layout = ({
   previewScaleFactor?: number;
   showBorder?: boolean;
   showNavigationButton?: boolean;
+  // The receipt's subject as rendered by the server preview endpoint (same response as the
+  // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
+  receiptSubject?: string | null;
 }) => {
-  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
+  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType, receiptEmailFrom } =
+    useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
@@ -323,71 +328,86 @@ export const Layout = ({
       {preview ? (
         <WithPreviewSidebar className="flex-1">
           {children}
-          <PreviewSidebar
-            {...(showNavigationButton && {
-              previewLink: (props) => (
-                <NavigationButton
-                  // Icon size is only a default: the preview sidebar/sheet overrides it via
-                  // props (the mobile sheet asks for a full-size button with a text label).
-                  size="icon"
-                  {...props}
-                  disabled={isBusy}
-                  href={url}
-                  onClick={(evt) => {
-                    evt.preventDefault();
-                    // Open the tab NOW, while we still have the user's click activation, then
-                    // point it at the product page once the save finishes. Calling window.open
-                    // after the await instead gets popup-blocked on iOS Safari (the async gap
-                    // consumes the transient activation), which matters because the mobile
-                    // preview sheet is this button's main audience.
-                    const previewWindow = window.open("about:blank", "_blank");
-                    void save().then(() => {
-                      if (previewWindow) previewWindow.location.href = url;
-                      else window.open(url, "_blank");
-                    });
-                  }}
-                />
-              ),
-            })}
-          >
-            <Preview
-              scaleFactor={previewScaleFactor}
-              style={
-                showBorder
-                  ? {
-                      border: "var(--border)",
-                      borderRadius: "var(--border-radius-2)",
-                      fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
-                      ...profileColors,
-                      "--primary": "var(--color)",
-                      "--body-bg": "rgb(var(--filled))",
-                      "--contrast-primary": "var(--filled)",
-                      "--contrast-filled": "var(--color)",
-                      "--color-body": "var(--body-bg)",
-                      "--color-background": "rgb(var(--filled))",
-                      "--color-foreground": "rgb(var(--color))",
-                      "--color-border": "rgb(var(--color) / var(--border-alpha))",
-                      "--color-accent": "rgb(var(--accent))",
-                      "--color-accent-foreground": "rgb(var(--contrast-accent))",
-                      "--color-primary": "rgb(var(--primary))",
-                      "--color-primary-foreground": "rgb(var(--contrast-primary))",
-                      "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
-                      "--color-muted": "rgb(var(--color) / var(--gray-3))",
-                      backgroundColor: "rgb(var(--filled))",
-                      color: "rgb(var(--color))",
-                    }
-                  : {}
-              }
+          <PreviewSidebar>
+            <PreviewChrome
+              {...(tab === "receipt"
+                ? {
+                    // The Receipt tab previews an EMAIL, so the chrome shows email-client
+                    // headers instead of browser chrome. Both values are honest: the From
+                    // line comes from the server's mailer config (CustomerMailer#receipt),
+                    // and the subject comes from the SAME preview response as the rendered
+                    // body (ReceiptPresenter#mail_subject), so the two can never disagree.
+                    variant: "email" as const,
+                    from: receiptEmailFrom,
+                    subject: receiptSubject ?? undefined,
+                  }
+                : {
+                    title: product.name || "Untitled",
+                    // Tabs without a live page to open (showNavigationButton=false) show the
+                    // title alone, with no address line or arrow.
+                    url: showNavigationButton ? url : undefined,
+                    link: showNavigationButton
+                      ? (props) => (
+                          <NavigationButton
+                            {...props}
+                            disabled={isBusy}
+                            href={url}
+                            onClick={(evt) => {
+                              evt.preventDefault();
+                              // Open the tab NOW, while we still have the user's click activation, then
+                              // point it at the product page once the save finishes. Calling window.open
+                              // after the await instead gets popup-blocked on iOS Safari (the async gap
+                              // consumes the transient activation), which matters because the mobile
+                              // preview pane is this button's main audience.
+                              const previewWindow = window.open("about:blank", "_blank");
+                              void save().then(() => {
+                                if (previewWindow) previewWindow.location.href = url;
+                                else window.open(url, "_blank");
+                              });
+                            }}
+                          />
+                        )
+                      : undefined,
+                  })}
             >
-              {fontUrl ? (
-                <>
-                  <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
-                  <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-                  <link rel="stylesheet" href={fontUrl} />
-                </>
-              ) : null}
-              {preview}
-            </Preview>
+              <Preview
+                scaleFactor={previewScaleFactor}
+                style={
+                  showBorder
+                    ? {
+                        fontFamily:
+                          currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+                        ...profileColors,
+                        "--primary": "var(--color)",
+                        "--body-bg": "rgb(var(--filled))",
+                        "--contrast-primary": "var(--filled)",
+                        "--contrast-filled": "var(--color)",
+                        "--color-body": "var(--body-bg)",
+                        "--color-background": "rgb(var(--filled))",
+                        "--color-foreground": "rgb(var(--color))",
+                        "--color-border": "rgb(var(--color) / var(--border-alpha))",
+                        "--color-accent": "rgb(var(--accent))",
+                        "--color-accent-foreground": "rgb(var(--contrast-accent))",
+                        "--color-primary": "rgb(var(--primary))",
+                        "--color-primary-foreground": "rgb(var(--contrast-primary))",
+                        "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
+                        "--color-muted": "rgb(var(--color) / var(--gray-3))",
+                        backgroundColor: "rgb(var(--filled))",
+                        color: "rgb(var(--color))",
+                      }
+                    : {}
+                }
+              >
+                {fontUrl ? (
+                  <>
+                    <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+                    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                    <link rel="stylesheet" href={fontUrl} />
+                  </>
+                ) : null}
+                {preview}
+              </Preview>
+            </PreviewChrome>
           </PreviewSidebar>
         </WithPreviewSidebar>
       ) : (

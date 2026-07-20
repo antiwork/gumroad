@@ -331,6 +331,7 @@ Rails.application.routes.draw do
         end
         get "/agent/meta", to: "agent#meta"
         get "/agent/conversations/latest", to: "agent#latest_conversation"
+        get "/agent/turns/:client_turn_id", to: "agent#turn_status"
         post "/agent/messages", to: "agent#create"
         post "/agent/messages/stream", to: "agent_streams#create"
         post "/agent/actions", to: "agent#execute"
@@ -403,6 +404,7 @@ Rails.application.routes.draw do
               post :suspend_for_fraud
               post :suspend_for_tos_violation
               post :flag_for_tos_violation
+              post :refund_all_for_fraud
               post :refund_balance
               post :add_credit
               post :watch
@@ -540,7 +542,10 @@ Rails.application.routes.draw do
     # followers
     resources :followers, only: [:index, :destroy]
 
-    post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form
+    # format: false — the Rack::Attack throttles for this endpoint match the
+    # literal path, so a routable "/follow_from_embed_form.json" would slip
+    # past every rate limit. Clients negotiate JSON via the Accept header.
+    post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form, format: false
     post "/follow", to: "followers#create", as: :follow_user
     get "/follow/:id/cancel", to: "followers#cancel", as: :cancel_follow
     get "/follow/:id/confirm", to: "followers#confirm", as: :confirm_follow
@@ -1151,6 +1156,8 @@ Rails.application.routes.draw do
         post "/agent/messages/stream", to: "agent_message_streams#create", as: :agent_messages_stream
         post "/agent/actions", to: "agent_messages#execute", as: :agent_actions
         get "/agent/conversations/latest", to: "agent_conversations#latest", as: :agent_conversations_latest
+        get "/agent/turns/:client_turn_id", to: "agent_conversations#turn_status", as: :agent_turn_status
+        post "/agent/custom_html_preview", to: "agent_custom_html_previews#create", as: :agent_custom_html_preview
       end
     end
 
@@ -1350,6 +1357,14 @@ Rails.application.routes.draw do
         get "/:id/confirm", to: "followers#confirm"
       end
     end
+    # The gumroad:follow bridge on custom HTML pages fetches this relative to
+    # the wrapper page, which is served on the seller's subdomain or custom
+    # domain — hosts this block routes, not GumroadDomainConstraint (where the
+    # canonical route lives). Rack::Attack throttles match on the request path,
+    # so the /follow_from_embed_form limits apply here identically. format:
+    # false for the same reason as the canonical route: a ".json" suffix would
+    # change the path and slip past those throttles.
+    post "/follow_from_embed_form", to: "followers#from_embed_form", format: false
 
     resources :consumption_analytics, only: [:create], format: :json
     resources :media_locations, only: [:create], format: :json

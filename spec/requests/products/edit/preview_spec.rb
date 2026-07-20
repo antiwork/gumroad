@@ -23,7 +23,7 @@ describe("Product Edit Previews", type: :system, js: true) do
     fill_in("Summary", with: "This should be saved automatically")
 
     new_window = window_opened_by do
-      click_on "Preview"
+      click_on "Open in new tab"
     end
     within_window new_window do
       expect(page).to have_content "This should be saved automatically"

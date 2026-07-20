@@ -268,6 +268,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
       <AbandonedCartProductsProvider value={abandonedCartProductsContextValue}>
         <Layout
           title={workflow.name}
+          emailFrom={context.email_from}
           navigation={<EditPageNavigation workflowExternalId={workflow.external_id} />}
           actions={
             <>

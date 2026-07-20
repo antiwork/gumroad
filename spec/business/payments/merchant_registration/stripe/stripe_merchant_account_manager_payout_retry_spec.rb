@@ -80,6 +80,16 @@ describe StripeMerchantAccountManager do
 
         expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
       end
+
+      it "does not report the rejection to Sentry (expected seller-input error)" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
     end
 
     context "when Stripe rejects the external account with a card error" do

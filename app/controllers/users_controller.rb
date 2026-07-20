@@ -46,6 +46,7 @@ class UsersController < ApplicationController
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
       live_fields: params[:preview].present? && current_seller_owns_profile?,
       navigation_bridge: custom_html_navigation_bridge_script(allowed_hostnames: profile_store_hostnames(@user)),
+      follow_bridge: FOLLOW_BRIDGE_SCRIPT,
     ).html_safe, layout: false
   end
 
@@ -243,26 +244,6 @@ class UsersController < ApplicationController
       hostnames.compact.uniq
     end
 
-    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "")
-      <<~HTML
-        <!doctype html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            #{SANDBOX_COMPAT_SCRIPT}
-            #{self.class.pages_tailwind_inline}
-          </head>
-          <body>
-            <script id="gumroad-data" type="application/json">#{data_json}</script>
-            #{custom_html}
-            #{navigation_bridge}
-            #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
-          </body>
-        </html>
-      HTML
-    end
-
     # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin —
     # no access to gumroad.com cookies or the parent DOM. We also omit
     # `allow-top-navigation` so the seller's HTML can never navigate the
@@ -300,6 +281,7 @@ class UsersController < ApplicationController
             <meta property="og:url" content="#{canonical}">
             #{og_image_tag}
             #{profile_custom_html_analytics_head(user)}
+            <meta name="csrf-token" content="#{CsrfTokenInjector::TOKEN_PLACEHOLDER}">
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
           </head>
           <body>
@@ -329,6 +311,7 @@ class UsersController < ApplicationController
                 });
               })();
             </script>
+            #{custom_html_follow_wrapper_script(seller_external_id: user.external_id, nonce:)}
             #{live_reload}
           </body>
         </html>

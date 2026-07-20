@@ -94,6 +94,24 @@ describe StripeDeferredPaymentIntent do
       expect(captured_params.last[:opts]).not_to have_key(:stripe_account)
     end
 
+    it "fails before creating a client-confirmed intent when a destination transfer would be zero" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_managed")
+
+      expect(Stripe::PaymentIntent).not_to receive(:create)
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Charge rejected before Stripe submit: seller proceeds would be non-positive",
+        hash_including(reference:, charge_amount_cents: 100, gumroad_amount_cents: 100, seller_amount_cents: 0, currency: "usd")
+      )
+
+      expect do
+        described_class.create(merchant_account:, amount_cents: 100, amount_for_gumroad_cents: 100,
+                               reference:, description: "x", idempotency_key:, payment_method_types: ["card"], currency: "usd")
+      end.to raise_error(ChargeProcessorCardError) do |error|
+        expect(error.error_code).to eq(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE)
+      end
+    end
+
     it "routes a connected direct-charge account through an application fee on that account" do
       seller = create(:user)
       merchant_account = create(:merchant_account_stripe_connect, user: seller)

@@ -40,7 +40,9 @@ describe UruguayBankAccount do
     it "allows 1 to 18 digits" do
       expect(build(:uruguay_bank_account, account_number: "1")).to be_valid
       expect(build(:uruguay_bank_account, account_number: "123456789101")).to be_valid
-      expect(build(:uruguay_bank_account, account_number: "1234567891011")).not_to be_valid
+      # BROU issues 14-digit account numbers (gumroad-private#1179)
+      expect(build(:uruguay_bank_account, account_number: "12345678910111")).to be_valid
+      expect(build(:uruguay_bank_account, account_number: "123456789101112")).not_to be_valid
       expect(build(:uruguay_bank_account, account_number: "abc")).not_to be_valid
     end
   end

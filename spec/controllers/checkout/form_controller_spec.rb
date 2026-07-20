@@ -52,12 +52,13 @@ describe Checkout::FormController do
     it "updates the seller's checkout form" do
       expect do
         put :update, params: {
-          user: { display_offer_code_field: true, recommendation_type: User::RecommendationType::NO_RECOMMENDATIONS, tipping_enabled: true },
+          user: { display_offer_code_field: true, recommendation_type: User::RecommendationType::NO_RECOMMENDATIONS, tipping_enabled: true, ach_payments_enabled: true },
           custom_fields: [{ id: nil, type: "text", name: "Field", required: true, global: true }]
         }
         seller.reload
       end.to change { seller.display_offer_code_field }.from(false).to(true)
       .and change { seller.tipping_enabled? }.from(false).to(true)
+      .and change { seller.ach_payments_enabled? }.from(false).to(true)
       .and change { seller.recommendation_type }.from(User::RecommendationType::OWN_PRODUCTS).to(User::RecommendationType::NO_RECOMMENDATIONS)
       expect(seller.custom_fields.count).to eq 1
       field = seller.custom_fields.last

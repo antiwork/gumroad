@@ -28,7 +28,9 @@ export const ProfileLandingPagePreview = ({
       sandbox="allow-scripts allow-forms allow-popups"
       referrerPolicy="no-referrer"
       onLoad={postFields}
-      className="h-[75vh] min-h-150 w-full rounded border border-border bg-white"
+      // No border of its own: this preview renders inside the shared PreviewChrome frame,
+      // which already draws the border and rounded corners.
+      className="h-[75vh] min-h-150 w-full bg-white"
     />
   );
 };
