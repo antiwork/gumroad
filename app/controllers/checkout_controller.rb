@@ -96,16 +96,18 @@ class CheckoutController < ApplicationController
   end
 
   private
-    # True when the exception is a CartProduct validation failure that includes a
+    # True when the exception is a CartProduct validation failure caused ONLY by a
     # quantity or price above its column limit (see CartProduct::MAX_QUANTITY /
     # CartProduct::MAX_PRICE) — the known, expected shape of buyer-supplied bad input.
+    # If the record has any other validation error alongside the out-of-range one,
+    # that's unexpected and must still be reported, so we don't suppress it.
     def cart_product_out_of_range_error?(exception)
       return false unless exception.is_a?(ActiveRecord::RecordInvalid)
 
       record = exception.record
       return false unless record.is_a?(CartProduct)
 
-      [:quantity, :price].any? { |attribute| record.errors.of_kind?(attribute, :less_than_or_equal_to) }
+      record.errors.any? && record.errors.all? { |error| error.attribute.in?([:quantity, :price]) && error.type == :less_than_or_equal_to }
     end
 
     def process_cart_id_param
