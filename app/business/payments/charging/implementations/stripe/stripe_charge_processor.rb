@@ -839,7 +839,12 @@ class StripeChargeProcessor
       event.comment = stripe_event["type"]
       event.extras = {
         charge_processor_dispute_id: stripe_dispute["id"],
-        reason: stripe_dispute["reason"].presence
+        reason: stripe_dispute["reason"].presence,
+        # Carried so the missing-chargeable alert in Purchase::ChargeEventsHandler can tell a
+        # dispute on a connected account's own (non-Gumroad) charge apart from a dispute on a
+        # Gumroad charge. The refund event builder below has set this since #5420; disputes
+        # were left out, which kept Sentry GUMROAD-2 firing ~58/day for sellers' own disputes.
+        stripe_connect_account_id: stripe_connect_account_id.presence
       }
 
       stripe_charge = if stripe_connect_account_id.present? && stripe_connect_account_id != Stripe::Account.retrieve.id
