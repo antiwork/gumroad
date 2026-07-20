@@ -400,13 +400,7 @@ module StripeMerchantAccountManager
       return :invalid_account_holder_name
     end
     record_bank_sync_failure_note(user, e) if notify
-    # bank_account_invalid_error? classifies rejections of the seller's bank details themselves
-    # (unknown bank for a BIC/routing code, invalid account number — Stripe flags these via the
-    # error's param/code, e.g. param "bank_account[routing_number]"). These are expected
-    # seller-input errors, same as during account creation: the seller gets emailed and a
-    # retryable payout note is recorded above, so they must not page Sentry. The message-string
-    # checks below cover older rejection shapes that carry no param/code.
-    if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
+    if e.code == "bank_account_unusable" || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
       ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
       return :invalid_bank_account
     end
