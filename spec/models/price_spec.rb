@@ -51,9 +51,14 @@ describe Price do
     it "excludes deleted prices" do
       product = create(:product)
       live_price = product.default_price
-      create(:price, link: product, deleted_at: Time.current)
+      deleted_price = create(:price, link: product, deleted_at: Time.current)
 
-      expect(Price.alive).to match_array([live_price])
+      # Scope the assertion to this product's prices: other specs that skip
+      # transactional rollback (e.g. concurrency specs) can leave stray live
+      # Price rows behind, and a bare Price.alive check flakes on them.
+      alive_prices = Price.alive.where(link: product)
+      expect(alive_prices).to match_array([live_price])
+      expect(alive_prices).not_to include(deleted_price)
     end
   end
 

@@ -64,6 +64,10 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
     end
     Balance.where(user: @seller).delete_all
     Purchase.where(id: purchase_ids).delete_all
+    # Link#destroy soft-deletes the product but leaves its Price rows with
+    # deleted_at: nil, which pollutes global scopes (e.g. Price.alive) for
+    # specs that run later on the same CI node. Hard-delete them here.
+    Price.where(link_id: @product.id).delete_all
     @product.destroy
     @seller.destroy
     @merchant_account.destroy! if @created_merchant_account
