@@ -2142,8 +2142,21 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         )
       end
 
-      it "redirects back to settings with an alert instead of raising" do
+      it "redirects back to settings without alerting Sentry (rejected accounts are an expected terminal state)" do
         stub_stripe_account_retrieve(disabled_reason: "rejected.listed")
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        get :remediation
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(flash[:alert]).to be_nil
+      end
+
+      it "notifies Sentry and shows the support alert for InvalidRequestErrors that are not the rejected-account-link error" do
+        allow(Stripe::AccountLink).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("This account cannot be onboarded.", nil)
+        )
+        stub_stripe_account_retrieve(disabled_reason: nil)
         expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::InvalidRequestError), context: { user_id: user.id })
 
         get :remediation
@@ -2188,16 +2201,16 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(merchant_account.reload.stripe_disabled_reason).to be_nil
       end
 
-      it "still redirects when Stripe::Account.retrieve itself raises" do
+      it "still redirects quietly when Stripe::Account.retrieve itself raises" do
         allow(Stripe::Account).to receive(:retrieve).with("acct_rejected").and_raise(
           Stripe::APIConnectionError.new("Stripe is down")
         )
-        expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::InvalidRequestError), context: { user_id: user.id })
+        expect(ErrorNotifier).not_to receive(:notify)
 
         get :remediation
 
         expect(response).to redirect_to(settings_payments_path)
-        expect(flash[:alert]).to eq("We couldn't open the verification page. Please contact support.")
+        expect(flash[:alert]).to be_nil
         expect(merchant_account.reload.stripe_disabled_reason).to be_nil
       end
     end

@@ -210,6 +210,17 @@ class Settings::PaymentsController < Settings::BaseController
                                            }).url, allow_other_host: true
   rescue Stripe::StripeError => e
     sync_stripe_disabled_reason(current_seller.stripe_account) if e.is_a?(Stripe::InvalidRequestError) && current_seller.stripe_account.stripe_disabled_reason.blank?
+
+    # Stripe refuses to create account links for rejected accounts. That's an
+    # expected terminal state, not a bug: the Payments page already shows a
+    # rejection banner explaining what happened (and the sync above ensures the
+    # banner has the disabled reason). So for this specific error we skip the
+    # Sentry alert and the "contact support" flash — the seller just lands back
+    # on the page with the explanation.
+    if rejected_account_link_error?(e)
+      redirect_to settings_payments_path and return
+    end
+
     ErrorNotifier.notify(e, context: { user_id: current_seller.id })
     redirect_to settings_payments_path, alert: "We couldn't open the verification page. Please contact support."
   end
@@ -302,6 +313,16 @@ class Settings::PaymentsController < Settings::BaseController
       disabled_reason = stripe_account["requirements"]["disabled_reason"]
       merchant_account.update!(stripe_disabled_reason: disabled_reason) if disabled_reason.present?
     rescue Stripe::StripeError, ActiveRecord::ActiveRecordError
+    end
+
+    # Matches Stripe's error for trying to create an account link on a rejected
+    # account ("An account link cannot be created for this account because the
+    # account has been rejected."). Stripe has no error code for this case, so
+    # we have to match on the message text.
+    def rejected_account_link_error?(error)
+      error.is_a?(Stripe::InvalidRequestError) &&
+        error.message.to_s.include?("account link cannot be created") &&
+        error.message.to_s.include?("rejected")
     end
 
     def stripe_account_has_open_requirements?(merchant_account)
