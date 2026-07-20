@@ -64,9 +64,13 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
     end
     Balance.where(user: @seller).delete_all
     Purchase.where(id: purchase_ids).delete_all
-    # Link#destroy soft-deletes the product but leaves its Price rows with
-    # deleted_at: nil, which pollutes global scopes (e.g. Price.alive) for
-    # specs that run later on the same CI node. Hard-delete them here.
+    # Successful purchases also create a UrlRedirect each (via
+    # create_artifacts_and_send_receipt!), which nothing above removes.
+    UrlRedirect.where(purchase_id: purchase_ids).delete_all
+    # Destroying the product doesn't cascade to its prices (has_many :prices
+    # has no dependent: option), so the Price rows would survive with
+    # deleted_at: nil and pollute global scopes (e.g. Price.alive) for specs
+    # that run later on the same CI node. Hard-delete them here.
     Price.where(link_id: @product.id).delete_all
     @product.destroy
     @seller.destroy
