@@ -140,7 +140,7 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
       {props.variant === "email" ? (
         // Email headers read left-to-right like an email client, not centered like a browser
         // tab, and there is no open-in-new-tab arrow — an email has no URL to open.
-        <div className="flex flex-col gap-0.5 border-b border-border bg-body px-4 py-2 text-sm">
+        <div className="flex flex-col gap-0.5 border-b border-border bg-body px-4 py-2 text-sm select-none">
           <div className="flex min-w-0 gap-2">
             <span className="shrink-0 text-muted">From</span>
             <span className="truncate">{props.from}</span>
@@ -153,7 +153,7 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
           ) : null}
         </div>
       ) : (
-        <div className="relative flex flex-col items-center gap-1 border-b border-border bg-body px-10 py-2">
+        <div className="relative flex flex-col items-center gap-1 border-b border-border bg-body px-10 py-2 select-none">
           <div className="w-full truncate text-center text-sm font-medium">{props.title}</div>
           {props.url ? (
             // The URL sits in a quiet inset address field (like a browser's address bar at

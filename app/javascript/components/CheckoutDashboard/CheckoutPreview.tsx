@@ -5,7 +5,6 @@ import { CardProduct } from "$app/parsers/product";
 import { Checkout } from "$app/components/Checkout";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { StateContext as PaymentStateContext, createReducer } from "$app/components/Checkout/payment";
-import { useAppDomain } from "$app/components/DomainSettings";
 import { Preview } from "$app/components/Preview";
 import { PreviewChrome, PreviewSidebar } from "$app/components/PreviewSidebar";
 
@@ -85,16 +84,11 @@ export const CheckoutPreview = ({
     [cartItem],
   );
 
-  const appDomain = useAppDomain();
-  const checkoutUrl = Routes.checkout_url({ host: appDomain });
-
   return (
     <PreviewSidebar>
-      {/* The chrome shows the checkout URL as identity, but deliberately has no
-          open-in-new-tab arrow: the pane renders a synthetic sample cart that only exists
-          here, while /checkout would load the seller's own persisted cart — a different
-          page than the preview shows. */}
-      <PreviewChrome title="Checkout" url={checkoutUrl}>
+      {/* This is a synthetic sample cart, so there is no public URL that shows this exact
+          preview. Showing /checkout here would point to the seller's persisted cart instead. */}
+      <PreviewChrome title="Checkout preview">
         <Preview scaleFactor={0.4}>
           <PaymentStateContext.Provider value={paymentState}>
             <Checkout
