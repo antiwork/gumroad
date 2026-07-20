@@ -299,4 +299,96 @@ describe CreateUsStatesSalesSummaryReportJob do
                                    ])
     end
   end
+
+  describe "chargeback period attribution" do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/us-states-summary-chargeback-attribution-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER }
+    let(:event_month_start) { (cutover + 1.month).beginning_of_month }
+    let(:won_month_start) { (cutover + 3.months).beginning_of_month }
+
+    before do
+      product = create(:product, price_cents: 100_00, native_type: "digital")
+
+      # Sold before the event month; dispute formalized in the event month; a second
+      # purchase's dispute won in a later month.
+      travel_to(cutover.beginning_of_day - 20.days) do
+        @chargedback_purchase = create(:purchase, link: product, price_cents: 100_00, total_transaction_cents: 110_10,
+                                                  gumroad_tax_cents: 10_10, country: "United States", zip_code: "98121") # Washington
+        @won_purchase = create(:purchase, link: product, price_cents: 100_00, total_transaction_cents: 110_10,
+                                          gumroad_tax_cents: 10_10, country: "United States", zip_code: "98121")
+        # A legacy chargeback: dispute formalized before the cutover — no legs anywhere.
+        @legacy_purchase = create(:purchase, link: product, price_cents: 100_00, total_transaction_cents: 110_10,
+                                             gumroad_tax_cents: 10_10, country: "United States", zip_code: "98121")
+      end
+
+      @legacy_purchase.update!(chargeback_date: cutover.beginning_of_day - 10.days)
+      @chargedback_purchase.update!(chargeback_date: event_month_start + 5.days)
+      @won_purchase.update!(chargeback_date: event_month_start + 6.days)
+
+      travel_to(won_month_start + 2.days) do
+        @won_purchase.update!(chargeback_reversed: true)
+        create(:dispute, purchase: @won_purchase, state: "won", won_at: Time.current)
+      end
+
+      # A same-month sale so the event month has a positive base to subtract from.
+      travel_to(event_month_start + 3.days) do
+        create(:purchase, link: product, price_cents: 100_00, total_transaction_cents: 110_10,
+                          gumroad_tax_cents: 10_10, country: "United States", zip_code: "98184") # Washington
+      end
+    end
+
+    def read_report(month, year)
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+      described_class.new.perform(["WA"], month, year)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      CSV.read(temp_file)
+    ensure
+      temp_file&.close(true)
+    end
+
+    it "keeps event-dated chargebacks' orders in the sale month and drops only the legacy one" do
+      sale_month = cutover - 20.days
+      actual_payload = read_report(sale_month.month, sale_month.year)
+
+      # The two event-dated chargebacks keep their orders at gross (their clawbacks land in
+      # later months); only the legacy chargeback stays excluded, as filed.
+      expect(actual_payload).to eq([
+                                     ["State", "GMV", "Number of orders", "Sales tax collected"],
+                                     ["Washington", "220.20", "2", "20.20"]
+                                   ])
+    end
+
+    it "subtracts chargebacks in the month the dispute was formalized without touching the order count" do
+      actual_payload = read_report(event_month_start.month, event_month_start.year)
+
+      # One order this month (110.10, 10.10) minus the two disputes formalized this month
+      # (110.10 + 10.10 each). Order count stays 1 — the charged-back orders belong to their
+      # own sale month.
+      expect(actual_payload).to eq([
+                                     ["State", "GMV", "Number of orders", "Sales tax collected"],
+                                     ["Washington", "-110.10", "1", "-10.10"]
+                                   ])
+    end
+
+    it "adds a won dispute back in the month of won_at" do
+      actual_payload = read_report(won_month_start.month, won_month_start.year)
+
+      expect(actual_payload).to eq([
+                                     ["State", "GMV", "Number of orders", "Sales tax collected"],
+                                     ["Washington", "110.10", "0", "10.10"]
+                                   ])
+    end
+  end
 end
