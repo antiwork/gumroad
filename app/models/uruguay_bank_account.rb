@@ -4,7 +4,10 @@ class UruguayBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "UY"
 
   BANK_CODE_FORMAT_REGEX = /^\d{3}$/
-  ACCOUNT_NUMBER_FORMAT_REGEX = /^\d{1,12}$/
+  # BROU (Banco República, Uruguay's largest bank) issues 14-digit account
+  # numbers (9-digit customer account + 5-digit sub-account); Stripe tokenizes
+  # them fine (verified live 2026-07-20, gumroad-private#1179), so allow up to 14.
+  ACCOUNT_NUMBER_FORMAT_REGEX = /^\d{1,14}$/
   private_constant :BANK_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
