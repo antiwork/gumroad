@@ -174,6 +174,47 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "throttles with params-based discriminators when the request body is malformed multipart" do
+    # Scanners POST `Content-Type: multipart/form-data` with an empty body and no
+    # Content-Length. Parsing that body raises Rack::Multipart::EmptyContentError,
+    # and any throttle block that touches req.params would previously crash the
+    # middleware with a 500 instead of letting the request through to the app.
+    def malformed_multipart_request(path)
+      env = Rack::MockRequest.env_for(
+        path,
+        method: "POST",
+        "CONTENT_TYPE" => "multipart/form-data; boundary=AaB03x",
+        "HTTP_CF_CONNECTING_IP" => "203.0.113.90",
+        input: ""
+      )
+      # No Content-Length header — this is what makes the multipart parser raise
+      # EmptyContentError instead of skipping the body.
+      env.delete("CONTENT_LENGTH")
+      Rack::Attack::Request.new(env)
+    end
+
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "does not raise for a params-keyed throttle path (/follow)" do
+      expect do
+        Rack::Attack.configuration.throttled?(malformed_multipart_request("/follow"))
+      end.not_to raise_error
+    end
+
+    it "does not raise for the login throttle path (/login.json)" do
+      expect do
+        Rack::Attack.configuration.throttled?(malformed_multipart_request("/login.json"))
+      end.not_to raise_error
+    end
+
+    it "does not raise for the sales API pagination throttle path (/api/v2/sales)" do
+      expect do
+        Rack::Attack.configuration.throttled?(malformed_multipart_request("/api/v2/sales"))
+      end.not_to raise_error
+    end
+  end
+
   describe "POST /oauth/device/code issuance throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

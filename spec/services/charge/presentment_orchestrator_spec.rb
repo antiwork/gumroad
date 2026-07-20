@@ -80,6 +80,46 @@ describe Charge::PresentmentOrchestrator do
                                                                     presentment_gumroad_amount_cents: 3_75)
   end
 
+  it "persists one charge presentment and per-purchase presentments whose totals sum exactly to the locked total" do
+    purchases = [3_34, 3_33, 3_34].map do |total_transaction_cents|
+      create(:purchase,
+             link: create(:product, user: seller, price_cents: total_transaction_cents),
+             seller:,
+             merchant_account:,
+             price_cents: total_transaction_cents,
+             total_transaction_cents:)
+    end
+    # 10.01 USD at the 0.8 locked rate is 1251.25 CAD cents; the persisted quote total is
+    # the rounded 12.51, which no proportional split of the three items hits exactly —
+    # the largest-remainder allocation must still account for every cent.
+    locked_quote.canonical_total_cents = 10_01
+    locked_quote.presentment_total_cents = 12_51
+
+    result = described_class.new(charge:,
+                                 merchant_account:,
+                                 purchases:,
+                                 amount_cents: 10_01,
+                                 gumroad_amount_cents: 3_00,
+                                 eligibility_decision:,
+                                 locked_quote:).perform
+
+    expect(result).to have_attributes(processor_amount_cents: 12_51,
+                                      processor_currency: Currency::CAD,
+                                      processor_gumroad_amount_cents: 3_75,
+                                      stripe_fx_quote_id: "fxq_locked")
+
+    expect(ChargePresentment.count).to eq(1)
+    expect(charge.reload.charge_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                                presentment_total_cents: 12_51,
+                                                                presentment_gumroad_amount_cents: 3_75)
+
+    purchase_presentments = purchases.map { _1.reload.purchase_presentment }
+    expect(purchase_presentments).to all(have_attributes(charge_presentment: charge.charge_presentment,
+                                                         presentment_currency: Currency::CAD))
+    expect(purchase_presentments.sum(&:presentment_total_cents)).to eq(12_51)
+    expect(purchase_presentments.sum(&:presentment_gumroad_amount_cents)).to eq(3_75)
+  end
+
   it "falls back without leaving partial presentment records when persistence fails" do
     allow(ErrorNotifier).to receive(:notify)
     allow_any_instance_of(Charge::PresentmentAllocator).to receive(:allocations).and_raise("allocation failed")

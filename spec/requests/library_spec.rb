@@ -335,6 +335,19 @@ describe("Library Scenario", type: :system, js: true) do
       expect(page).to have_product_card(@c.link)
     end
 
+    it("allows the purchaser to search the library by creator name") do
+      searched_creator = create(:named_user, name: "Wombat Workshop")
+      wombat_purchase = create(:purchase, link: create(:product, user: searched_creator, name: "Standalone Asset"), purchaser: @user)
+      Link.import(refresh: true, force: true)
+
+      visit("/library")
+      search_field = find_field("Search products")
+      search_field.fill_in with: "Wombat"
+      search_field.native.send_keys(:enter)
+      expect(page).to have_product_card(count: 1)
+      expect(page).to have_product_card(wombat_purchase.link)
+    end
+
     it "allows the purchaser to filter products by creator" do
       @another_creator = create(:user, username: nil, name: "Another user")
       create(:product, user: @another_creator, name: "Another Creator's Product C")
@@ -418,29 +431,32 @@ describe("Library Scenario", type: :system, js: true) do
       expect(find(".creator")).to_not have_text("Show more")
     end
 
-    it "sort the creator list by number of products" do
-      creator_with_3_products = create(:named_user, name: "User 2")
-      create(:purchase, link: create(:product, user: creator_with_3_products), purchaser: @user)
-      create(:purchase, link: create(:product, user: creator_with_3_products), purchaser: @user)
-      create(:purchase, link: create(:product, user: creator_with_3_products), purchaser: @user)
+    it "sorts the creator list alphabetically by name" do
+      # Give the alphabetically-later creators MORE products than the earlier ones, so
+      # this spec fails if the list ever goes back to sorting by product count.
+      creator_named_zed = create(:named_user, name: "Zed")
+      create(:purchase, link: create(:product, user: creator_named_zed), purchaser: @user)
+      create(:purchase, link: create(:product, user: creator_named_zed), purchaser: @user)
+      create(:purchase, link: create(:product, user: creator_named_zed), purchaser: @user)
+      create(:purchase, link: create(:product, user: creator_named_zed), purchaser: @user)
+      create(:purchase, link: create(:product, user: creator_named_zed), purchaser: @user)
 
-      creator_with_5_products = create(:named_user, name: "User 3")
-      create(:purchase, link: create(:product, user: creator_with_5_products), purchaser: @user)
-      create(:purchase, link: create(:product, user: creator_with_5_products), purchaser: @user)
-      create(:purchase, link: create(:product, user: creator_with_5_products), purchaser: @user)
-      create(:purchase, link: create(:product, user: creator_with_5_products), purchaser: @user)
-      create(:purchase, link: create(:product, user: creator_with_5_products), purchaser: @user)
+      creator_named_mia = create(:named_user, name: "Mia")
+      create(:purchase, link: create(:product, user: creator_named_mia), purchaser: @user)
+      create(:purchase, link: create(:product, user: creator_named_mia), purchaser: @user)
+      create(:purchase, link: create(:product, user: creator_named_mia), purchaser: @user)
 
-      creator_with_1_product = create(:named_user, name: "User 4")
-      create(:purchase, link: create(:product, user: creator_with_1_product), purchaser: @user)
+      creator_named_bob = create(:named_user, name: "Bob")
+      create(:purchase, link: create(:product, user: creator_named_bob), purchaser: @user)
 
       Link.import(refresh: true, force: true)
       visit "/library"
 
+      # @creator is "A user" — alphabetical order is A user, Bob, Mia, Zed regardless of counts
       expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(2)", text: @creator.name, visible: false)
-      expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(3)", text: creator_with_5_products.name, visible: false)
-      expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(4)", text: creator_with_3_products.name, visible: false)
-      expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(5)", text: creator_with_1_product.name, visible: false)
+      expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(3)", text: creator_named_bob.name, visible: false)
+      expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(4)", text: creator_named_mia.name, visible: false)
+      expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(5)", text: creator_named_zed.name, visible: false)
     end
 
     it "updates creator counts when toggling archived filter" do

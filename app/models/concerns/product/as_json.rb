@@ -142,6 +142,7 @@ module Product::AsJson
       unless slim
         json.merge!(
           "custom_html" => custom_html,
+          "refund_policy" => product_refund_policy_api_json,
           "rich_content" => rich_content_json,
           "has_same_rich_content_for_all_variants" => has_same_rich_content_for_all_variants?,
           "main_section_index" => main_section_index || 0,
@@ -181,6 +182,27 @@ module Product::AsJson
       end
 
       json
+    end
+
+    # Product-level refund policy override state, exposed on show/create/update
+    # responses. When the override is off the product inherits the account-level
+    # policy, reported as refund_period "inherit".
+    def product_refund_policy_api_json
+      if product_refund_policy_enabled? && product_refund_policy.present?
+        {
+          "refund_period" => product_refund_policy.max_refund_period_in_days.zero? ? "none" : product_refund_policy.max_refund_period_in_days.to_s,
+          "title" => product_refund_policy.title,
+          "fine_print" => product_refund_policy.fine_print,
+          "inherited" => false,
+        }
+      else
+        {
+          "refund_period" => "inherit",
+          "title" => nil,
+          "fine_print" => nil,
+          "inherited" => true,
+        }
+      end
     end
 
     def compute_ppp_prices(price_cents, factors, currency)

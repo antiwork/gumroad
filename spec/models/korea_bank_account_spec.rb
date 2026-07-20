@@ -53,6 +53,11 @@ describe KoreaBankAccount do
       expect(build(:korea_bank_account, account_number: "00123456789")).to be_valid
       expect(build(:korea_bank_account, account_number: "0000123456789")).to be_valid
       expect(build(:korea_bank_account, account_number: "000000123456789")).to be_valid
+      expect(build(:korea_bank_account, account_number: "1234567890123456")).to be_valid
+
+      kr_bank_account = build(:korea_bank_account, account_number: "12345678901234567")
+      expect(kr_bank_account).to_not be_valid
+      expect(kr_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
 
       kr_bank_account = build(:korea_bank_account, account_number: "ABCDEFGHIJKL")
       expect(kr_bank_account).to_not be_valid

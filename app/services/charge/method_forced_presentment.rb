@@ -83,6 +83,12 @@ class Charge::MethodForcedPresentment
     else
       quoted_result(decision)
     end
+  rescue StripeFxQuote::SettlementCurrencyMismatch => e
+    # Expected condition, not a defect: the connected account settles in a non-USD
+    # currency (Stripe multi-currency settlement) even though our stored
+    # merchant_account.currency said USD. Fall back to the canonical USD intent quietly.
+    Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id} (settlement currency mismatch): #{e.message}")
+    nil
   rescue StandardError => e
     ErrorNotifier.notify(e, context: {
                            charge_id: charge.id,
@@ -147,7 +153,11 @@ class Charge::MethodForcedPresentment
       # Mirror Charge::PresentmentAllocator's canonical decomposition: price is what
       # remains of the total after the separately-tracked components.
       price_cents = [presentment_total_cents - tip_cents - seller_tax_cents - gumroad_tax_cents - shipping_cents, 0].max
-      presentment_gumroad_amount_cents = usd_cents_to_currency(currency, gumroad_amount_cents, rate)
+      # The Gumroad share is converted independently of the listed-price-based total, so
+      # adverse double-rounding (e.g. a ~100% Gumroad cut) could put it a cent above the
+      # purchase total and fail PurchasePresentment's gumroad-amount validation — which
+      # would degrade this lane to an unconfirmable USD intent. Cap it at the total.
+      presentment_gumroad_amount_cents = [usd_cents_to_currency(currency, gumroad_amount_cents, rate), presentment_total_cents].min
 
       allocation = Charge::PresentmentAllocator::Allocation.new(
         purchase:,

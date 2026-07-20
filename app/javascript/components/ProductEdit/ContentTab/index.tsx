@@ -97,6 +97,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
+import { resolveCopiedFileEmbeds } from "./resolveCopiedFileEmbeds";
 import { NodeVisibilityProvider } from "./useNodeVisibility";
 
 declare global {
@@ -310,21 +311,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
-    const newFiles: FileEntry[] = [];
-    fragment.querySelectorAll("file-embed[url]").forEach((node) => {
-      const file = existingFiles.find(
-        (file) => file.id === node.getAttribute("id") || file.url === node.getAttribute("url"),
-      );
-      if (file) {
-        node.setAttribute("id", file.id);
-        if (node.hasAttribute("url")) {
-          newFiles.push(file);
-          node.removeAttribute("url");
-        }
-      } else {
-        node.remove();
-      }
-    });
+    const newFiles: FileEntry[] = resolveCopiedFileEmbeds(fragment, filesById, existingFiles);
     if (newFiles.length > 0) {
       updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
     }
@@ -1224,7 +1211,9 @@ export const ContentTab = () => {
 
   const licenseInfo = {
     licenseKey: "6F0E4C97-B72A4E69-A11BF6C4-AF6517E7",
-    isMultiSeatLicense: product.native_type === "membership" ? product.is_multiseat_license : null,
+    // Seat-based licensing applies wherever a purchase quantity makes sense. Calls schedule
+    // one slot per purchase, so a seat count would conflict with the booking flow.
+    isMultiSeatLicense: product.native_type === "call" ? null : product.is_multiseat_license,
     seats: product.is_multiseat_license ? 5 : null,
     onIsMultiSeatLicenseChange: (value: boolean) => updateProduct({ is_multiseat_license: value }),
     productId: id,

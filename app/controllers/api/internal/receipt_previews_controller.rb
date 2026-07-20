@@ -15,21 +15,30 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
 
     unless purchase_preview.valid?
       error_message = purchase_preview.errors.full_messages.join(", ")
-      return render html: "Error: #{error_message}", status: :unprocessable_entity
+      return render json: { error: error_message }, status: :unprocessable_entity
     end
+
+    receipt_presenter = ReceiptPresenter.new(purchase_preview, for_email: false)
 
     rendered_html = ApplicationController.renderer.render(
       template: "customer_mailer/receipt",
       layout: "email",
       assigns: {
         chargeable: purchase_preview,
-        receipt_presenter: ReceiptPresenter.new(purchase_preview, for_email: false)
+        receipt_presenter:
       }
     )
 
     premailer = Premailer::Rails::CustomizedPremailer.new(rendered_html)
 
-    render html: premailer.to_inline_css.html_safe, layout: false
+    # The subject rides along with the body so the preview chrome shows the SAME state the
+    # rendered receipt reflects (including unsaved edits applied above). Computing the subject
+    # client-side from form state instead would let the two disagree — the body comes from
+    # this response while the subject would come from unsaved client state.
+    render json: {
+      subject: receipt_presenter.mail_subject,
+      html: premailer.to_inline_css
+    }
   end
 
   private

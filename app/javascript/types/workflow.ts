@@ -99,5 +99,6 @@ export type WorkflowFormContext = {
   s3_url: string;
   user_id: string;
   gumroad_address: string;
+  email_from: string;
   eligible_for_abandoned_cart_workflows: boolean;
 };

@@ -217,6 +217,33 @@ export const PRODUCT_LIST_FIELDS: FieldDefinition[] = [
 
 export const PRODUCT_FIELDS: FieldDefinition[] = [
   ...SHARED_PRODUCT_FIELDS,
+  {
+    name: "refund_policy",
+    type: "object",
+    description: "Product-level refund policy override state",
+    children: [
+      {
+        name: "refund_period",
+        type: "string",
+        description: '"inherit" when the product uses the account default; otherwise "none", "7", "14", "30", or "183"',
+      },
+      {
+        name: "title",
+        type: "string | null",
+        description: "Display title derived from the refund period; null when inherited",
+      },
+      {
+        name: "fine_print",
+        type: "string | null",
+        description: "Fine print of the product-level policy; null when inherited",
+      },
+      {
+        name: "inherited",
+        type: "boolean",
+        description: "Whether the product inherits the account-level refund policy",
+      },
+    ],
+  },
   { name: "rich_content", type: "array", description: "Product-level rich content pages" },
   {
     name: "has_same_rich_content_for_all_variants",

@@ -91,6 +91,30 @@ describe SidekiqUtility do
 
       @sidekiq_utility.send(:proceed_with_instance_termination)
     end
+
+    context "when the lifecycle action is no longer active" do
+      before do
+        error = Aws::AutoScaling::Errors::ValidationError.new(nil, "No active Lifecycle Action found with instance ID i-abc123 and HookName sample_hook_name")
+        allow(@asg_double).to receive(:complete_lifecycle_action).and_raise(error)
+      end
+
+      it "logs and does not raise" do
+        expect(Rails.logger).to receive(:info).with(a_string_including("Lifecycle action already completed or expired"))
+
+        expect { @sidekiq_utility.send(:proceed_with_instance_termination) }.not_to raise_error
+      end
+    end
+
+    context "when a different validation error is raised" do
+      before do
+        error = Aws::AutoScaling::Errors::ValidationError.new(nil, "1 validation error detected: Value at 'lifecycleHookName' failed to satisfy constraint")
+        allow(@asg_double).to receive(:complete_lifecycle_action).and_raise(error)
+      end
+
+      it "re-raises the error" do
+        expect { @sidekiq_utility.send(:proceed_with_instance_termination) }.to raise_error(Aws::AutoScaling::Errors::ValidationError)
+      end
+    end
   end
 
   describe "#timeout_exceeded?" do
@@ -145,6 +169,28 @@ describe SidekiqUtility do
         expect(@asg_double).not_to receive(:record_lifecycle_action_heartbeat)
 
         @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
+      end
+    end
+
+    context "when the lifecycle action is no longer active" do
+      before do
+        allow(@sidekiq_utility).to receive(:timeout_exceeded?).and_return(false)
+        allow(Rails.logger).to receive(:info)
+      end
+
+      it "logs, stops heartbeating, and does not raise" do
+        # If the Auto Scaling group has already abandoned or completed the
+        # lifecycle action (its heartbeat timeout expired), further heartbeats
+        # fail with a ValidationError. The instance is on its way out, so we
+        # stop waiting instead of crashing.
+        expect(@asg_double).to receive(:record_lifecycle_action_heartbeat)
+          .once
+          .and_raise(Aws::AutoScaling::Errors::ValidationError.new(nil, "No active Lifecycle Action found"))
+        expect(Rails.logger).to receive(:info).with(a_string_including("Lifecycle action no longer active while sending heartbeat"))
+
+        expect do
+          @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
+        end.not_to raise_error
       end
     end
 

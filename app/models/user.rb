@@ -313,6 +313,7 @@ class User < ApplicationRecord
             52 => :disable_affiliate_requests,
             53 => :refund_policy_enforced, # Set automatically when a seller's dispute rate is too high; forces a buyer-friendly refund policy. See Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!
             54 => :disable_review_reminders, # Seller setting: when enabled, buyers of this seller's products don't receive review reminder emails.
+            55 => :ach_payments_enabled, # Seller opt-in (checkout settings page): offers ACH Direct Debit (us_bank_account) at checkout. Off by default — ACH settles in ~4 business days and content only delivers on settlement, which surprises buyers of time-sensitive digital products (gumroad-private#1143).
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -1101,6 +1102,19 @@ class User < ApplicationRecord
     return false if account_level_refund_policy_delayed?
 
     refund_policy_enabled?
+  end
+
+  # Whether the seller can edit the account-level refund policy section in Settings.
+  # The section always renders; when this is false the UI shows the controls disabled
+  # with a note explaining why. Two things make it read-only:
+  # - Account-level refund policies are switched off (account_level_refund_policy_enabled?
+  #   is false), in which case refunds are handled per product instead.
+  # - A refund policy has been enforced on the whole account because of a high dispute
+  #   rate (see Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!).
+  #   While enforced, the seller cannot change the policy themselves — they have to
+  #   contact us with the remediation steps they've taken, and we apply any update.
+  def refund_policy_settings_editable?
+    !refund_policy_enforced? && account_level_refund_policy_enabled?
   end
 
   def has_all_eligible_refund_policies_as_no_refunds?

@@ -99,6 +99,40 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:unsupported_product_type)
   end
 
+  it "falls back for recurring-billing products even when a quote token matched seller, currency, and total" do
+    # The quote token binds only seller, currency, and total — not product ids — so the
+    # charge path must reject the same product shapes the quote refuses to lock.
+    membership = create(:membership_product, user: seller, price_currency_type: Currency::USD)
+    purchase.update!(link: membership)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
+  it "falls back for products in a preorder state" do
+    product.update!(is_in_preorder_state: true)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
+  it "falls back for free-trial products" do
+    free_trial_product = create(:membership_product, :with_free_trial_enabled, user: seller, price_currency_type: Currency::USD)
+    purchase.update!(link: free_trial_product)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
+  it "falls back for products offering an installment plan" do
+    installment_product = create(:product, user: seller, price_cents: 9_00, price_currency_type: Currency::USD)
+    create(:product_installment_plan, link: installment_product, number_of_installments: 3)
+    purchase.update!(link: installment_product.reload)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+  end
+
   it "falls back for buyer currencies Gumroad stores in different minor units than Stripe charges" do
     allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
 
@@ -141,11 +175,61 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(save_card_decision.fallback_reason).to eq(:future_charge_setup)
   end
 
-  it "falls back for multi-item checkouts" do
-    purchases << create(:purchase, link: product, seller:, merchant_account:, purchase_state: "in_progress")
+  it "allows multi-item checkouts when all purchases come from one seller" do
+    second_purchase = create(:purchase,
+                             link: create(:product, user: seller, price_currency_type: Currency::USD),
+                             seller:,
+                             merchant_account:,
+                             purchase_state: "in_progress",
+                             ip_address: "203.0.113.1")
+    purchases << second_purchase
+    order.purchases << purchase
+    order.purchases << second_purchase
+
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.fallback_reason).to be_nil
+  end
+
+  it "falls back for orders spanning multiple sellers" do
+    # ChargeService creates one charge per seller, so this service only ever sees one
+    # seller's purchases — the multi-seller signal lives on the order.
+    other_seller = create(:user)
+    other_seller_purchase = create(:purchase,
+                                   link: create(:product, user: other_seller),
+                                   seller: other_seller,
+                                   purchase_state: "in_progress")
+    order.purchases << purchase
+    order.purchases << other_seller_purchase
 
     expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:multi_item_checkout)
+    expect(decision.fallback_reason).to eq(:multi_seller_checkout)
+  end
+
+  it "falls back when any purchase on the charge fails a product gate" do
+    purchases << create(:purchase,
+                        link: create(:product, user: seller, price_currency_type: Currency::EUR),
+                        seller:,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        ip_address: "203.0.113.1")
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_currency)
+  end
+
+  it "falls back when any purchase on the charge is an installment payment" do
+    second_purchase = create(:purchase,
+                             link: create(:product, user: seller, price_currency_type: Currency::USD),
+                             seller:,
+                             merchant_account:,
+                             purchase_state: "in_progress",
+                             ip_address: "203.0.113.1")
+    second_purchase.update!(is_installment_payment: true)
+    purchases << second_purchase
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
   end
 
   it "falls back for seller-managed destination-charge models" do
@@ -262,11 +346,71 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(forced_decision.fallback_reason).to eq(:feature_disabled)
     end
 
-    it "withholds the method in live mode" do
+    it "withholds the method in live mode when its launch flag is off" do
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
 
       expect(forced_decision).not_to be_eligible
-      expect(forced_decision.fallback_reason).to eq(:live_mode)
+      expect(forced_decision.fallback_reason).to eq(:method_not_launched)
+    end
+
+    it "allows the method in live mode when its per-method launch flag is on" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+    end
+
+    it "does not let one method's launch flag launch a sibling method in live mode" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+
+      bancontact_decision = described_class.new(order:,
+                                                seller:,
+                                                merchant_account:,
+                                                chargeable:,
+                                                purchases:,
+                                                params:,
+                                                setup_future_charges:,
+                                                off_session:).method_forced_decision(payment_method: "bancontact")
+
+      expect(bancontact_decision).not_to be_eligible
+      expect(bancontact_decision.fallback_reason).to eq(:method_not_launched)
+    end
+
+    it "allows a card token from a forced-currency element in live mode when a method forcing that currency is launched" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      card_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params:,
+                                          setup_future_charges:,
+                                          off_session:).method_forced_decision(payment_method: "card", forced_currency: Currency::EUR)
+
+      expect(card_decision).to be_eligible
+      expect(card_decision.currency).to eq(Currency::EUR)
+    end
+
+    it "withholds a card token from a forced-currency element in live mode when no method forcing that currency is launched" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      card_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params:,
+                                          setup_future_charges:,
+                                          off_session:).method_forced_decision(payment_method: "card", forced_currency: Currency::EUR)
+
+      expect(card_decision).not_to be_eligible
+      expect(card_decision.fallback_reason).to eq(:method_not_launched)
     end
 
     it "withholds the method for non-Stripe merchant accounts" do

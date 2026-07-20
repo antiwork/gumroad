@@ -19,6 +19,28 @@ module AgentConversationPersistence
   # longer replayed or hydrated.
   HISTORY_MAX_MESSAGES = 100
 
+  # The streaming clients tag each turn with a self-generated id (a UUID) so that, when the SSE
+  # connection breaks mid-turn, they can ask "did MY turn persist?" by exact id instead of
+  # guessing from the seller's latest conversation (which another tab or device can change at any
+  # moment). The id is opaque to the server — it only has to be unique per turn — but its shape is
+  # validated so arbitrary client strings don't end up in Redis keys or stored metadata.
+  CLIENT_TURN_ID_FORMAT = /\A[0-9a-fA-F-]{1,64}\z/
+  # TTL of the Redis "this turn is being generated right now" marker. The marker is re-armed on
+  # every stream write, and the model client tolerates up to 120 seconds of silence between chunks
+  # (Ai::StoreAgentService::REQUEST_TIMEOUT_IN_SECONDS) — so the TTL must comfortably outlast that
+  # silence plus the trailing persistence + follow-up-suggestions work. If the marker expires it
+  # means the server stopped working on the turn without recording an outcome (the process died),
+  # and a recovering client should stop waiting.
+  AGENT_TURN_IN_PROGRESS_TTL = 180.seconds
+  # TTL of the Redis "this turn failed / will never persist" marker. Only needs to outlive a
+  # recovering client's polling window; it exists so the client can stop waiting immediately
+  # instead of polling an in-progress marker down to expiry.
+  AGENT_TURN_FAILED_TTL = 10.minutes
+  # Recovery lookups only ever happen minutes after the turn was sent, so the by-id search is
+  # bounded to recent messages — this keeps the metadata scan from walking a seller's entire
+  # chat history.
+  AGENT_TURN_LOOKUP_WINDOW = 1.hour
+
   private
     # Returns the seller's conversation for params[:conversation_id], or nil when the param is
     # absent. A present-but-unknown id (including another seller's conversation) raises
@@ -62,12 +84,13 @@ module AgentConversationPersistence
     # transaction, a failure between the user-message insert and the assistant-message insert would
     # strand a half-written turn: `latest` would hydrate a user message with no reply, and a resumed
     # turn would silently replay that stray message to the model. Returns the conversation so
-    # callers can hand its external id back to the client.
-    def persist_agent_turn!(conversation, new_user_message, result, fallback_first_message:)
+    # callers can hand its external id back to the client. `client_turn_id` (streaming turns only)
+    # is stored on the assistant message so a client whose stream broke can find this exact turn.
+    def persist_agent_turn!(conversation, new_user_message, result, fallback_first_message:, client_turn_id: nil)
       AiConversation.transaction do
         conversation ||= create_agent_conversation!(new_user_message || fallback_first_message)
         record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
-        record_agent_assistant_message!(conversation, result)
+        record_agent_assistant_message!(conversation, result, client_turn_id:)
         conversation
       end
     end
@@ -87,12 +110,67 @@ module AgentConversationPersistence
 
     # Persists the assistant's turn. The proposed action and looked-up objects ride along in
     # `metadata` so a reloaded conversation re-renders its confirmation card / object cards.
-    def record_agent_assistant_message!(conversation, result)
+    # `client_turn_id` (when the turn came from a streaming endpoint) also rides along so the turn
+    # is findable by the exact id the client generated, independent of which conversation is
+    # currently the seller's latest.
+    def record_agent_assistant_message!(conversation, result, client_turn_id: nil)
       metadata = {
         proposed_action: result[:proposed_action],
         objects: result[:objects].presence,
+        client_turn_id:,
       }.compact
       conversation.ai_messages.create!(role: "assistant", content: result[:reply].to_s, metadata: metadata.presence)
+    end
+
+    # The client-generated id tagging this streamed turn, or nil when absent or malformed. The
+    # format check keeps arbitrary client strings out of Redis keys and stored metadata; a
+    # malformed id just means the turn isn't recoverable by id, never an error.
+    def agent_client_turn_id
+      turn_id = params[:client_turn_id].to_s
+      turn_id if turn_id.match?(CLIENT_TURN_ID_FORMAT)
+    end
+
+    # ── Turn liveness markers ─────────────────────────────────────────────────────────────────
+    # A client whose SSE stream broke can't tell "the server is still generating my turn" apart
+    # from "my turn is gone" by looking at stored rows alone — the turn only becomes a row once
+    # the reply completes. These Redis markers fill that gap: the streaming endpoints arm
+    # `in_progress` when the turn starts and re-arm it on every stream write (the marker outlives
+    # the model's max 120s silence between chunks), and record `failed` when the turn aborts or
+    # can't be persisted. The turn-status endpoint reads them to tell a recovering client whether
+    # to keep waiting.
+
+    def mark_agent_turn_in_progress!(client_turn_id)
+      return if client_turn_id.blank?
+
+      $redis.set(RedisKey.agent_turn_status(current_seller.id, client_turn_id), "in_progress", ex: AGENT_TURN_IN_PROGRESS_TTL.to_i)
+    end
+
+    def mark_agent_turn_failed!(client_turn_id)
+      return if client_turn_id.blank?
+
+      $redis.set(RedisKey.agent_turn_status(current_seller.id, client_turn_id), "failed", ex: AGENT_TURN_FAILED_TTL.to_i)
+    end
+
+    def agent_turn_marker(client_turn_id)
+      return nil if client_turn_id.blank?
+
+      $redis.get(RedisKey.agent_turn_status(current_seller.id, client_turn_id))
+    end
+
+    # The seller's persisted assistant message carrying this client turn id, or nil. Scoped to the
+    # seller (a foreign turn id can never read another seller's turn) and to recent messages —
+    # recovery happens minutes after the turn, so the window keeps the metadata scan bounded.
+    def find_agent_turn_message(client_turn_id)
+      return nil if client_turn_id.blank?
+
+      AiMessage
+        .joins(:ai_conversation)
+        .where(ai_conversations: { seller_id: current_seller.id, deleted_at: nil })
+        .where("ai_messages.created_at >= ?", AGENT_TURN_LOOKUP_WINDOW.ago)
+        .role_assistant
+        .where("ai_messages.metadata->>'$.client_turn_id' = ?", client_turn_id)
+        .order(created_at: :desc, id: :desc)
+        .first
     end
 
     # After a seller confirms a proposed change, mark the proposing assistant message as applied
@@ -138,17 +216,22 @@ module AgentConversationPersistence
       {
         id: conversation.external_id,
         title: conversation.title,
-        messages: conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map do |message|
-          metadata = message.metadata || {}
-          {
-            role: message.role,
-            content: message.content,
-            proposed_action: metadata["proposed_action"],
-            objects: metadata["objects"],
-            action_status: metadata["action_status"],
-          }.compact
-        end,
+        messages: conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map { |message| agent_message_props(message) },
       }
+    end
+
+    # One message in the shape the chat clients hydrate from — shared by the conversation resume
+    # payload above and the turn-status endpoint (which returns a single recovered turn), so the
+    # two can't drift on how persisted extras come back to life.
+    def agent_message_props(message)
+      metadata = message.metadata || {}
+      {
+        role: message.role,
+        content: message.content,
+        proposed_action: metadata["proposed_action"],
+        objects: metadata["objects"],
+        action_status: metadata["action_status"],
+      }.compact
     end
 
     # Recursively string-keys hashes and stringifies scalar leaves so the executed request params

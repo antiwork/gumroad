@@ -54,5 +54,17 @@ describe("Product Edit Receipt Tab", type: :system, js: true) do
         expect(page).to have_text("Thank you for your purchase, we hope you enjoy it!")
       end
     end
+
+    it "shows the server-rendered mail subject in the email chrome", :js do
+      visit "#{edit_link_path(product.unique_permalink)}/receipt"
+
+      in_preview do
+        # The subject comes from the same Rails preview response as the rendered body
+        # (ReceiptPresenter::MailSubject via the receipt preview endpoint), so it must match
+        # what the real receipt email would use for this product.
+        expect(page).to have_text("Subject")
+        expect(page).to have_text("You bought #{product.name}!")
+      end
+    end
   end
 end
