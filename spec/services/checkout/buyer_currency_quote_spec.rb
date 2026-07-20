@@ -125,6 +125,20 @@ describe Checkout::BuyerCurrencyQuote do
       # $10.00 at 0.00694 USD per JPY is 1440.92 yen, in whole yen — not 1/100-yen units.
       expect(result).to have_attributes(currency: Currency::JPY, presentment_total_cents: 1441)
     end
+
+    it "falls back to nil without notifying Sentry when the account settles in a non-USD currency" do
+      # Production case: Stripe rejects the quote request for accounts with multi-currency
+      # settlement ("The FX Quote's to_currency ... must match the payment intent's
+      # settlement currency"). This is expected, not a defect — no error notification.
+      allow(StripeFxQuote).to receive(:create).and_raise(
+        StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
+      )
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      result = described_class.create(products: [product], canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
   end
 
   describe ".verify!" do

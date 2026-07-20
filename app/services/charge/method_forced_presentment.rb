@@ -83,6 +83,12 @@ class Charge::MethodForcedPresentment
     else
       quoted_result(decision)
     end
+  rescue StripeFxQuote::SettlementCurrencyMismatch => e
+    # Expected condition, not a defect: the connected account settles in a non-USD
+    # currency (Stripe multi-currency settlement) even though our stored
+    # merchant_account.currency said USD. Fall back to the canonical USD intent quietly.
+    Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id} (settlement currency mismatch): #{e.message}")
+    nil
   rescue StandardError => e
     ErrorNotifier.notify(e, context: {
                            charge_id: charge.id,

@@ -5,8 +5,17 @@ class StripeFxQuote
 
   # Stripe can settle in a currency the connected account enabled through multi-currency
   # settlement rather than the requested one, and the stored merchant_account.currency can
-  # be stale — so the quote response is the only trustworthy settlement-currency source.
+  # be stale — so Stripe's own answer is the only trustworthy settlement-currency source.
+  # Stripe signals the mismatch two ways: by returning a quote whose to_currency differs
+  # from the requested one, or by rejecting the quote creation outright with an
+  # InvalidRequestError whose message matches SETTLEMENT_MISMATCH_MESSAGE. Both are mapped
+  # to this error so callers can treat them as one expected "fall back to USD" condition.
   SettlementCurrencyMismatch = Class.new(StandardError)
+
+  # Stripe's request-time rejection when the account's settlement currency differs from
+  # the requested to_currency, e.g.:
+  #   The FX Quote's to_currency: "usd" must match the payment intent's settlement currency: "cad".
+  SETTLEMENT_MISMATCH_MESSAGE = /must match the payment intent's settlement currency/i
 
   API_VERSION = "2025-07-30.preview"
   LOCK_DURATION = "hour"
@@ -40,6 +49,14 @@ class StripeFxQuote
     end
 
     build_quote(response.data, from_currency: from_currency.to_s.downcase, to_currency: to_currency.to_s.downcase)
+  rescue ChargeProcessorInvalidRequestError => e
+    # Some connected accounts settle in a non-USD currency (multi-currency settlement),
+    # and Stripe rejects the quote request itself instead of returning a mismatched quote.
+    # That's the same expected condition build_quote catches, not a code defect — surface
+    # it as SettlementCurrencyMismatch so callers fall back to the canonical USD path
+    # without paging anyone.
+    raise SettlementCurrencyMismatch, e.message if e.message.to_s.match?(SETTLEMENT_MISMATCH_MESSAGE)
+    raise
   end
 
   private

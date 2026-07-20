@@ -253,5 +253,17 @@ describe Charge::MethodForcedPresentment do
       expect(charge.reload.charge_presentment).to be_nil
       expect(ErrorNotifier).to have_received(:notify).with(instance_of(RuntimeError), context: hash_including(charge_id: charge.id))
     end
+
+    it "falls back to nil without notifying Sentry when the account settles in a non-USD currency" do
+      # Expected condition (Stripe multi-currency settlement), not a defect — the intent
+      # is prepared in USD as before, and no error notification is sent.
+      allow(StripeFxQuote).to receive(:create).and_raise(
+        StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
+      )
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect(result).to be_nil
+      expect(charge.reload.charge_presentment).to be_nil
+    end
   end
 end

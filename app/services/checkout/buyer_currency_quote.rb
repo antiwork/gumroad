@@ -112,6 +112,13 @@ class Checkout::BuyerCurrencyQuote
       stripe_fx_quote_id: quote.id,
       stripe_fx_quote_expires_at: quote.expires_at
     )
+  rescue StripeFxQuote::SettlementCurrencyMismatch => e
+    # Expected condition, not a defect: the connected account settles in a non-USD
+    # currency (Stripe multi-currency settlement) even though our stored
+    # merchant_account.currency said USD. Fall back to the canonical USD checkout
+    # quietly — no Sentry notification.
+    Rails.logger.info("Buyer currency quote fallback (settlement currency mismatch): #{e.message}")
+    nil
   rescue StandardError => e
     ErrorNotifier.notify(e, context: {
                            product_ids: products.map(&:id),
