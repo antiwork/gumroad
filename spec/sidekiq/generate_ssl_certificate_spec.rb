@@ -58,13 +58,30 @@ describe GenerateSslCertificate do
             end.not_to raise_error
 
             job = described_class.jobs.sole
-            expect(job["args"]).to eq([@custom_domain.id])
+            expect(job["args"]).to eq([@custom_domain.id, 1])
 
             delay = job["at"] - Time.current.to_f
             # At least until the reset time (05:14:17 = 857s away), at most
             # reset time + the 3-hour jitter window.
             expect(delay).to be >= 857
             expect(delay).to be <= 857 + 3.hours.to_i
+          end
+        end
+
+        it "increments the reschedule count on each reschedule" do
+          described_class.new.perform(@custom_domain.id, 3)
+
+          job = described_class.jobs.sole
+          expect(job["args"]).to eq([@custom_domain.id, 4])
+        end
+
+        context "when the reschedule cap has been reached" do
+          it "lets the error propagate so Sidekiq retries (and eventually alerts)" do
+            expect do
+              described_class.new.perform(@custom_domain.id, described_class::RATE_LIMIT_MAX_RESCHEDULES)
+            end.to raise_error(Acme::Client::Error::RateLimited)
+
+            expect(described_class.jobs).to be_empty
           end
         end
 
@@ -86,6 +103,12 @@ describe GenerateSslCertificate do
         context "when the reset time is already in the past" do
           it "reschedules with only the jitter delay" do
             travel_to(Time.utc(2026, 7, 20, 6, 0, 0)) do
+              # With a past reset time the base delay is 0, so a jitter of 0
+              # would call perform_in(0, ...), which Sidekiq's fake mode
+              # enqueues without an "at" timestamp. Pin the jitter to keep the
+              # assertion deterministic.
+              allow_any_instance_of(described_class).to receive(:rand).and_return(1)
+
               expect do
                 described_class.new.perform(@custom_domain.id)
               end.not_to raise_error

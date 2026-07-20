@@ -12,6 +12,16 @@ class GenerateSslCertificate
   # rescheduled jobs across the next window keeps them from all firing at the
   # same instant and immediately tripping the limit again.
   RATE_LIMIT_MAX_JITTER = 3.hours
+  # How many times a job may reschedule itself for rate limits before giving
+  # up and letting the error propagate (so Sidekiq's retries run out and the
+  # exhausted-retries alert below fires). Let's Encrypt raises RateLimited for
+  # per-domain limits too (e.g. 5 certificates per exact set of hostnames per
+  # week), and a domain stuck on one of those would otherwise reschedule
+  # forever without ever alerting — the exact silent-outage class #488 exists
+  # to catch. Ten reschedules comfortably outlasts any account-wide backlog
+  # (3-hour windows) while capping a stuck domain at roughly a week of
+  # rescheduling before it alerts.
+  RATE_LIMIT_MAX_RESCHEDULES = 10
 
   # #488: surface silently-stuck SSL renewals. Once retries are exhausted the
   # ACME order has failed and `ssl_certificate_issued_at` stays NULL with no
@@ -29,7 +39,7 @@ class GenerateSslCertificate
     )
   end
 
-  def perform(id)
+  def perform(id, rate_limit_reschedules = 0)
     if SslCertificates::Generate.supported_environment?
       custom_domain = CustomDomain.find(id)
       return if custom_domain.deleted? # The domain was deleted after this job was enqueued
@@ -37,14 +47,25 @@ class GenerateSslCertificate
       begin
         SslCertificates::Generate.new(custom_domain).process
       rescue Acme::Client::Error::RateLimited => e
-        # The Let's Encrypt account-wide order limit was hit. This says nothing
-        # about this particular domain, and Sidekiq's 5 retries all happen
-        # within ~10 minutes — far inside the 3-hour rate-limit window — so
-        # letting the error retry normally guarantees the job exhausts its
-        # retries and fires the "SSL certificate not provisioned" alert for a
-        # perfectly healthy domain. Reschedule for after the limit resets
-        # instead; real per-domain failures still retry and alert as before.
-        self.class.perform_in(rate_limit_retry_delay(e), id)
+        # A Let's Encrypt rate limit was hit — usually the account-wide order
+        # limit (which says nothing about this particular domain). Sidekiq's
+        # 5 retries all happen within ~10 minutes — far inside the 3-hour
+        # rate-limit window — so letting the error retry normally guarantees
+        # the job exhausts its retries and fires the "SSL certificate not
+        # provisioned" alert for a perfectly healthy domain. Reschedule for
+        # after the limit resets instead. Because RateLimited also covers
+        # per-domain limits (which can persist for a week), the reschedules
+        # are capped: once the cap is hit the error propagates so the normal
+        # retry/alert path takes over. Other failures retry and alert as
+        # before.
+        raise if rate_limit_reschedules >= RATE_LIMIT_MAX_RESCHEDULES
+
+        delay = rate_limit_retry_delay(e)
+        Rails.logger.info(
+          "GenerateSslCertificate rate-limited for #{custom_domain.domain} (custom_domain_id=#{id}): " \
+          "rescheduling in #{delay}s (reschedule #{rate_limit_reschedules + 1}/#{RATE_LIMIT_MAX_RESCHEDULES}) — #{e.message}"
+        )
+        self.class.perform_in(delay, id, rate_limit_reschedules + 1)
       end
     end
   end
