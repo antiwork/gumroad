@@ -200,6 +200,31 @@ describe User::SocialGoogle do
         expect { User.query_google(@user, @data) }.to change { @user.reload.email }.from("spongebob@example.com").to(@data["info"]["email"])
       end
 
+      context "when the new email from Google already belongs to a different account" do
+        before do
+          @user = create(:user, email: "old-address@example.com", google_uid: @data["uid"])
+          @other_user = create(:user, email: @data["info"]["email"])
+        end
+
+        it "keeps the user's existing email instead of failing the save" do
+          expect { User.query_google(@user, @data) }.not_to change { @user.reload.email }
+        end
+
+        it "does not raise or report to Sentry" do
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          expect { User.query_google(@user, @data) }.not_to raise_error
+        end
+
+        it "still lets the user sign in via find_or_create_for_google_oauth2" do
+          result = User.find_or_create_for_google_oauth2(@data)
+
+          expect(result).to eq(@user)
+          expect(result.reload.email).to eq("old-address@example.com")
+          expect(@other_user.reload.email).to eq(@data["info"]["email"])
+        end
+      end
+
       context "when the email already exists in a different case" do
         before do
           @user = create(:user, email: @data["info"]["email"].upcase)
