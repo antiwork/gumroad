@@ -391,5 +391,35 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
       expect(order_kwargs[:amount_dollars]).to eq(@purchase.price_cents / 100.0)
       expect(order_kwargs[:sales_tax_dollars]).to eq(@purchase.gumroad_tax_cents / 100.0)
     end
+
+    it "dates the re-add by the canonical reversal date when several dispute rows exist" do
+      # Two dispute rows with different won_at values. The canonical reporting date is the
+      # latest won_at (chargeback_reversal_reporting_date), so the run for the EARLIER row's
+      # day must emit nothing — otherwise that day's push would carry a transaction_date
+      # outside its own filing window — and the canonical day's run emits the one leg.
+      event_day = cutover + 5
+      early_won_day = cutover + 40
+      late_won_day = cutover + 41
+      early_won_at = early_won_day.to_time(:utc).change(hour: 12)
+      late_won_at = late_won_day.to_time(:utc).change(hour: 10)
+      @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12), chargeback_reversed: true)
+      create(:dispute, purchase: @purchase, state: "won", won_at: early_won_at)
+      create(:dispute, purchase: @purchase, state: "won", won_at: late_won_at)
+
+      order_calls = []
+      allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction) do |_instance, **kwargs|
+        order_calls << kwargs
+        {}
+      end
+      allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction).and_return({})
+
+      described_class.new.perform(early_won_day.iso8601)
+      expect(order_calls).to be_empty
+
+      described_class.new.perform(late_won_day.iso8601)
+      expect(order_calls.size).to eq(1)
+      expect(order_calls.first[:transaction_id]).to eq("#{@purchase.external_id}-chargeback-reversal")
+      expect(order_calls.first[:transaction_date]).to eq(late_won_at.iso8601)
+    end
   end
 end

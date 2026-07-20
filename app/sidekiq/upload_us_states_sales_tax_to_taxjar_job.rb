@@ -128,7 +128,13 @@ class UploadUsStatesSalesTaxToTaxjarJob
 
       purchase_ids.each do |id|
         purchase = Purchase.find(id)
-        totals = uploader.upload_chargeback_reversal(purchase:, subdivision:)
+        # The window is re-passed so the uploader only emits the leg when the purchase's
+        # canonical reversal date actually falls on this day (a purchase with several dispute
+        # rows can be selected by a non-canonical row's won_at — see the uploader).
+        totals = uploader.upload_chargeback_reversal(
+          purchase:, subdivision:,
+          starts_at: day.beginning_of_day, ends_at: day.end_of_day
+        )
         uploaded_reversal_count += 1 if totals
       end
     end

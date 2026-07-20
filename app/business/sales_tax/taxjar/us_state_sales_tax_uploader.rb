@@ -296,12 +296,22 @@ class UsStateSalesTaxUploader
   # Purchase.chargebacks_for_tax_period_reporting). Pushed as a fresh order transaction with
   # a suffixed id: TaxJar has no "un-refund", so the win re-enters the money as a new order
   # in the period of the win.
-  def upload_chargeback_reversal(purchase:, subdivision:)
+  #
+  # starts_at/ends_at is the same window the caller selected the purchase with
+  # (Purchase.chargeback_reversals_for_tax_period_reporting). The selection matches when ANY
+  # of the purchase's dispute rows records a won_at inside the window, but the transaction is
+  # dated by the single canonical chargeback_reversal_reporting_date — with several dispute
+  # rows those can disagree, and pushing here would date the leg outside the window it was
+  # selected for (wrong filing period). So the leg is only emitted by the run whose window
+  # contains the canonical date; runs that matched via a non-canonical dispute row emit
+  # nothing, and the canonical day's run pushes the one correctly dated transaction.
+  def upload_chargeback_reversal(purchase:, subdivision:, starts_at:, ends_at:)
     zip_code = resolve_zip_code(purchase:, subdivision:)
     return unless zip_code
 
     won_at = purchase.chargeback_reversal_reporting_date
     return unless won_at
+    return unless won_at.between?(starts_at, ends_at)
 
     amount_dollars = purchase.price_cents_for_chargeback_reporting / 100.0
     sales_tax_dollars = purchase.gumroad_tax_cents_for_chargeback_reporting / 100.0
