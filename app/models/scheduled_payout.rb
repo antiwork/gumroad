@@ -75,12 +75,15 @@ class ScheduledPayout < ApplicationRecord
         )
 
         if payment.blank?
-          error_detail = if payment_errors.present?
-            payment_errors.join(", ")
-          else
-            "No payable balance available"
-          end
-          raise "Payout failed: #{error_detail}"
+          raise "Payout failed: #{payment_errors.join(", ")}" if payment_errors.present?
+
+          # The user has no payable balance, so there is nothing to pay out. Retrying won't
+          # help: the daily ExecuteScheduledPayoutsJob would pick this record up again every
+          # day and fail the same way forever (raising resets the status to "pending" below).
+          # Instead, flag the scheduled payout so an admin reviews it once and cancels it or
+          # issues the payout manually if the balance situation changes.
+          update!(status: "flagged", executed_at: nil)
+          return :flagged
         end
 
         if StripePayoutProcessor.cross_border_payout?(payment)
