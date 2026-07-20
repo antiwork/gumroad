@@ -24,7 +24,11 @@ class ProfileSectionsPresenter
 
     props = {
       currency_code: pundit_user.user&.currency_type || Currency::USD,
-      show_ratings_filter: seller.links.alive.any?(&:display_product_reviews?),
+      # Use the flag scope + `exists?` so this runs as `SELECT 1 ... LIMIT 1` in SQL.
+      # The previous `.any?(&:display_product_reviews?)` loaded the seller's entire
+      # alive catalog (full rows) into Ruby just to compute this one boolean, which
+      # took multiple seconds for large-catalog sellers.
+      show_ratings_filter: seller.links.alive.display_product_reviews.exists?,
       creator_profile: ProfilePresenter.new(seller:, pundit_user:).creator_profile,
       sections: cached_sections.map do |props|
         section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:, editing:)
