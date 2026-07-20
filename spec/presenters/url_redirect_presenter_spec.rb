@@ -79,6 +79,20 @@ describe UrlRedirectPresenter do
                                                                  }])
     end
 
+    it "nulls kindle_data and read_url when the seller has hidden the Kindle and Read buttons" do
+      product = create(:product, hide_kindle_and_read_buttons: true)
+      create(:readable_document, link: product, display_name: "Readable PDF")
+      purchase = create(:purchase, link: product)
+      url_redirect = create(:url_redirect, purchase:)
+      user = create(:user)
+      instance = described_class.new(url_redirect:, logged_in_user: user)
+
+      file_item = instance.download_attributes[:content_items].sole
+      expect(file_item[:kindle_data]).to be_nil
+      expect(file_item[:read_url]).to be_nil
+      expect(file_item[:download_url]).to be_present
+    end
+
     it "omits empty folders" do
       product = create(:product)
 
@@ -192,6 +206,13 @@ describe UrlRedirectPresenter do
         )
       }]
       expect(instance.download_page_with_content_props).to eq(@props)
+    end
+
+    it "omits the creator byline when the seller has hidden it for the product" do
+      @product.update!(hide_download_page_byline: true)
+      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+
+      expect(instance.download_page_with_content_props[:creator]).to be_nil
     end
 
     it "includes 'custom_receipt' in props" do

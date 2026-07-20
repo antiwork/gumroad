@@ -117,6 +117,9 @@ export type Product = {
   can_enable_quantity: boolean;
   should_show_sales_count: boolean;
   hide_sold_out_variants: boolean;
+  gifting_disabled: boolean;
+  hide_kindle_and_read_buttons: boolean;
+  hide_download_page_byline: boolean;
   is_epublication: boolean;
   product_refund_policy_enabled: boolean;
   refund_policy: RefundPolicy;

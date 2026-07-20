@@ -40,6 +40,9 @@ class Link < ApplicationRecord
             31 => :created_via_cli,
             32 => :DEPRECATED_moderated_by_iffy,
             33 => :hide_sold_out_variants,
+            34 => :gifting_disabled,
+            35 => :hide_kindle_and_read_buttons,
+            36 => :hide_download_page_byline,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -737,7 +740,10 @@ class Link < ApplicationRecord
   end
 
   def can_gift?
-    !is_in_preorder_state
+    # Gifting is off for pre-orders (the gift flow assumes an immediately chargeable
+    # purchase) and for products whose seller has explicitly disabled the checkout
+    # gift option (gumroad-private#1191).
+    !is_in_preorder_state && !gifting_disabled?
   end
 
   def time_fields

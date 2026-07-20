@@ -137,6 +137,9 @@ class ProductPresenter
         can_enable_quantity: product.can_enable_quantity?,
         should_show_sales_count: product.should_show_sales_count,
         hide_sold_out_variants: product.hide_sold_out_variants?,
+        gifting_disabled: product.gifting_disabled?,
+        hide_kindle_and_read_buttons: product.hide_kindle_and_read_buttons?,
+        hide_download_page_byline: product.hide_download_page_byline?,
         is_epublication: product.is_epublication?,
         product_refund_policy_enabled: product.product_refund_policy_enabled?,
         refund_policy: {
