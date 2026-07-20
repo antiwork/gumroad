@@ -8,6 +8,7 @@ import {
 } from "@stripe/stripe-js";
 import * as React from "react";
 
+import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
 import { getCheckoutStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
@@ -172,6 +173,12 @@ const PaymentElementControllerInput = ({
   const stripe = useStripe();
   const elements = useElements();
   const [ready, setReady] = React.useState(false);
+  // Which payment-method row the buyer currently has selected inside the element ("card",
+  // "apple_pay", "google_pay", ...), reported by the element's change event. State (not a ref)
+  // because it drives the fields option below, which must reach the mounted element via
+  // element.update() when the selection flips between card and wallet.
+  const [selectedType, setSelectedType] = React.useState("card");
+  const walletTypeSelected = isWalletPaymentElementType(selectedType);
 
   React.useEffect(() => {
     onReady(stripe && elements && ready ? { stripe, elements } : null);
@@ -202,20 +209,34 @@ const PaymentElementControllerInput = ({
         // rule in StripePaymentElementProvider — the exact pre-flag behavior.
         layout: walletsEnabled ? { type: "accordion", radios: false, spacedAccordionItems: true } : { type: "tabs" },
         ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
+        // Checkout collects billing details in its own form, so for card payments every field is
+        // pinned to "never" and tokenization passes the form's values explicitly (see
+        // paymentElementBillingDetails in card_payment_method_data.ts). Wallet selections flip
+        // the whole block to "auto": the wallet sheet supplies the buyer's verified billing
+        // details and tokenization deliberately passes no override — but Stripe's client-side
+        // validation rejects createPaymentMethod/createConfirmationToken with an
+        // IntegrationError ("You specified "never" for fields.billing_details.name … but did
+        // not pass params.billing_details.name") whenever a field is "never" and no param is
+        // passed, wallets included. "auto" removes that requirement and lets the wallet's own
+        // details flow onto the PaymentMethod. The switch reaches the mounted element through
+        // react-stripe-js's option diffing (element.update) as soon as the change event reports
+        // a wallet row selection — before tokenization, which only starts from the pay click.
         fields: {
-          billingDetails: {
-            name: "never",
-            email: "never",
-            phone: "never",
-            address: {
-              country: "never",
-              postalCode: "never",
-              state: "never",
-              city: "never",
-              line1: "never",
-              line2: "never",
-            },
-          },
+          billingDetails: walletTypeSelected
+            ? "auto"
+            : {
+                name: "never",
+                email: "never",
+                phone: "never",
+                address: {
+                  country: "never",
+                  postalCode: "never",
+                  state: "never",
+                  city: "never",
+                  line1: "never",
+                  line2: "never",
+                },
+              },
         },
         wallets: paymentElementWallets(stripeLinkEnabled, walletsEnabled),
         // The recurring declaration attaches to the PaymentElement's own options (that's where
@@ -228,7 +249,10 @@ const PaymentElementControllerInput = ({
       }}
       onReady={() => setReady(true)}
       onFocus={onTouched}
-      {...(onChange ? { onChange } : {})}
+      onChange={(event) => {
+        setSelectedType(event.value.type);
+        onChange?.(event);
+      }}
     />
   );
 };

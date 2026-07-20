@@ -130,11 +130,13 @@ export const preparePaymentElementPaymentMethodData = async (
     return { status: "error", stripe_error: submitResult.error };
   }
 
-  // The Payment Element mounts with every billingDetails field set to "never" (checkout collects
-  // them itself), which normally REQUIRES us to supply billing_details here. Wallet submissions
-  // are the exception: the wallet sheet collects the buyer's verified billing details itself and
-  // Stripe attaches them to the PaymentMethod, so we must not clobber them with the checkout
-  // form's values (the form may hold a stale/geo-guessed country the wallet buyer never saw).
+  // For card payments the Payment Element pins every billingDetails field to "never" (checkout
+  // collects them itself), which REQUIRES us to supply billing_details here. Wallet submissions
+  // are the exception: the element flips its fields to "auto" while a wallet row is selected
+  // (see PaymentElementInput.tsx), the wallet sheet collects the buyer's verified billing
+  // details, and Stripe attaches them to the PaymentMethod — so we must not clobber them with
+  // the checkout form's values (the form may hold a stale/geo-guessed country the wallet buyer
+  // never saw), and passing no params is valid because no field is "never" at that point.
   const paymentMethodResult = await cardData.stripe.createPaymentMethod({
     elements: cardData.elements,
     ...(cardData.walletSelected
