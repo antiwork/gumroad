@@ -136,8 +136,9 @@ export const ReviewForm = React.forwardRef<
     // ignore responses from superseded autosaves (e.g. the buyer taps 3 stars,
     // then 5 stars right after — only the latest save should show a toast), the
     // timeout ref holds the pending debounced save so an explicit submit can
-    // cancel it, and the in-flight ref lets an explicit submit wait for a save
-    // that already left so its response can't overwrite the submission.
+    // cancel it, and the in-flight ref serializes saves: the next autosave (or
+    // an explicit submit) waits for a save that already left, so responses
+    // can't reach the server out of order and overwrite a newer rating.
     const autosaveSequence = React.useRef(0);
     const autosaveTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const autosaveInFlight = React.useRef<Promise<void> | null>(null);
@@ -247,7 +248,20 @@ export const ReviewForm = React.forwardRef<
       autosaveTimeout.current = setTimeout(() => {
         autosaveTimeout.current = null;
 
+        // Serialize autosaves: each save waits for the one that already left
+        // before sending. setProductRating is a plain PUT with no sequence
+        // field, so if two saves raced the server could apply them out of
+        // order and a slow earlier response would overwrite the buyer's final
+        // rating. Chaining guarantees the latest tap is also the last write.
+        const previous = autosaveInFlight.current;
+
         const save = (async () => {
+          if (previous) await previous.catch(() => undefined);
+          // While waiting for the previous save, this one may have been
+          // superseded by a newer tap or an explicit submit — skip sending a
+          // now-stale rating entirely.
+          if (sequence !== autosaveSequence.current) return;
+
           try {
             // Only the rating (and whatever message is already in the box) is
             // autosaved — video uploads stay behind the explicit submit.
