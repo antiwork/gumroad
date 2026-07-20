@@ -4231,8 +4231,11 @@ class PurchaseTest < ActiveSupport::TestCase
     file = File.open(Rails.root.join("spec", "support", "fixtures", "smaller.png"))
 
     s3_object = mock("s3_object")
-    s3_object.stubs(:put)
-    s3_object.stubs(:content_length).returns(file.size)
+    # The method's contract is "write the passed file to S3, return the object". Assert the
+    # write actually happens with the file as the body. (The RSpec original verified this via a
+    # real gumroad-specs round-trip + a content_length read; the Minitest CI job has no S3, so
+    # pin the write with a mock expectation — stubbing :put would let a deleted put() pass.)
+    s3_object.expects(:put).with(body: file)
     s3_bucket_double = mock("s3_bucket")
     s3_bucket_double.expects(:object).returns(s3_object)
     s3_resource_double = mock("s3_resource")
@@ -4241,7 +4244,6 @@ class PurchaseTest < ActiveSupport::TestCase
 
     result = purchase.upload_invoice_pdf(file)
     assert_same s3_object, result
-    assert_equal file.size, result.content_length
   end
 
   # ---- #unsubscribe_buyer ----
@@ -5617,6 +5619,7 @@ class PurchaseTest < ActiveSupport::TestCase
       assert_equal 3_00, flow_of_funds.gumroad_amount.cents
       assert_equal 37_50, flow_of_funds.merchant_account_gross_amount.cents
       assert_equal 33_75, flow_of_funds.merchant_account_net_amount.cents
+      assert_combined_charge_currencies(flow_of_funds)
 
       flow_of_funds = purchase3.build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
       assert_equal 50_00, flow_of_funds.issued_amount.cents
@@ -5624,6 +5627,7 @@ class PurchaseTest < ActiveSupport::TestCase
       assert_equal 5_00, flow_of_funds.gumroad_amount.cents
       assert_equal 62_50, flow_of_funds.merchant_account_gross_amount.cents
       assert_equal 56_25, flow_of_funds.merchant_account_net_amount.cents
+      assert_combined_charge_currencies(flow_of_funds)
     end
   end
 
@@ -5645,6 +5649,7 @@ class PurchaseTest < ActiveSupport::TestCase
       assert_equal(-2_00, flow_of_funds.gumroad_amount.cents)
       assert_equal(-25_00, flow_of_funds.merchant_account_gross_amount.cents)
       assert_equal(-22_50, flow_of_funds.merchant_account_net_amount.cents)
+      assert_combined_charge_currencies(flow_of_funds)
 
       flow_of_funds = purchase2.build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
       assert_equal(-30_00, flow_of_funds.issued_amount.cents)
@@ -5652,6 +5657,7 @@ class PurchaseTest < ActiveSupport::TestCase
       assert_equal(-3_00, flow_of_funds.gumroad_amount.cents)
       assert_equal(-37_50, flow_of_funds.merchant_account_gross_amount.cents)
       assert_equal(-33_75, flow_of_funds.merchant_account_net_amount.cents)
+      assert_combined_charge_currencies(flow_of_funds)
 
       flow_of_funds = purchase3.build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
       assert_equal(-50_00, flow_of_funds.issued_amount.cents)
@@ -5659,6 +5665,7 @@ class PurchaseTest < ActiveSupport::TestCase
       assert_equal(-5_00, flow_of_funds.gumroad_amount.cents)
       assert_equal(-62_50, flow_of_funds.merchant_account_gross_amount.cents)
       assert_equal(-56_25, flow_of_funds.merchant_account_net_amount.cents)
+      assert_combined_charge_currencies(flow_of_funds)
     end
   end
 
@@ -5684,6 +5691,7 @@ class PurchaseTest < ActiveSupport::TestCase
       assert_equal(-8_00, flow_of_funds.gumroad_amount.cents)
       assert_equal(-23_44, flow_of_funds.merchant_account_gross_amount.cents)
       assert_equal(-15_00, flow_of_funds.merchant_account_net_amount.cents)
+      assert_combined_charge_currencies(flow_of_funds)
 
       flow_of_funds = purchase2.build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
       assert_equal(-30_00, flow_of_funds.issued_amount.cents)
@@ -5692,6 +5700,7 @@ class PurchaseTest < ActiveSupport::TestCase
       # Largest-remainder split: the three purchases' gross shares sum to exactly -125_00.
       assert_equal(-52_73, flow_of_funds.merchant_account_gross_amount.cents)
       assert_equal(-33_75, flow_of_funds.merchant_account_net_amount.cents)
+      assert_combined_charge_currencies(flow_of_funds)
 
       flow_of_funds = purchase3.build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
       assert_equal(-50_00, flow_of_funds.issued_amount.cents)
@@ -5699,6 +5708,7 @@ class PurchaseTest < ActiveSupport::TestCase
       assert_equal(-25_00, flow_of_funds.gumroad_amount.cents)
       assert_equal(-48_83, flow_of_funds.merchant_account_gross_amount.cents)
       assert_equal(-31_25, flow_of_funds.merchant_account_net_amount.cents)
+      assert_combined_charge_currencies(flow_of_funds)
     end
   end
 
@@ -7937,6 +7947,17 @@ class PurchaseTest < ActiveSupport::TestCase
     def create_shipping_purchase(**attrs)
       create_purchase(link: create_product(require_shipping: true), full_name: "Full Name", street_address: "123 Gum Rd",
                       country: "United States", state: "NY", city: "New York", zip_code: "10025", **attrs)
+    end
+
+    # Every per-purchase flow-of-funds carries the same currencies as the combined charge
+    # (issued/gumroad in USD, settled/gross/net in CAD) — build_flow_of_funds_from_combined_charge
+    # copies each Amount's currency verbatim. Assert them on every purchase in every split test.
+    def assert_combined_charge_currencies(flow_of_funds)
+      assert_equal Currency::USD, flow_of_funds.issued_amount.currency
+      assert_equal Currency::CAD, flow_of_funds.settled_amount.currency
+      assert_equal Currency::USD, flow_of_funds.gumroad_amount.currency
+      assert_equal Currency::CAD, flow_of_funds.merchant_account_gross_amount.currency
+      assert_equal Currency::CAD, flow_of_funds.merchant_account_net_amount.currency
     end
 
     def build_flow_of_funds_charge
