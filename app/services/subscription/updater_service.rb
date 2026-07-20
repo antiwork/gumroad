@@ -134,14 +134,26 @@ class Subscription::UpdaterService
           subscription.subscription_plan_changes.alive.update_all(deleted_at: Time.current)
         end
 
-        # Do not allow restarting a subscription unless
-        # the card used for charging the subscription is supported by the product creator.
-        # It's possible that the creator has disconnected their PayPal account,
-        # and if the subscription is using PayPal as the payment method, future charges will fail.
-        if is_resubscribing &&
-          !subscription.link.user.supports_card?(subscription.user&.credit_card&.as_json) &&
-          !subscription.link.user.supports_card?(subscription.credit_card.as_json)
-          raise Subscription::UpdateFailed, "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+        # Do not allow restarting a subscription when a stored payment method is
+        # no longer supported by the product creator. It's possible that the creator
+        # has disconnected their PayPal account, and if the subscription is using
+        # PayPal as the payment method, future charges will fail.
+        #
+        # This gate only applies when a stored card actually exists. Subscriptions
+        # without a stored card (e.g. free memberships) have nothing to reject, and
+        # a new payment method supplied at checkout has already been validated and
+        # associated with the subscription above, so it is covered by the
+        # `subscription.credit_card` check here.
+        if is_resubscribing
+          stored_cards = [subscription.user&.credit_card, subscription.credit_card].compact
+          if stored_cards.any? && stored_cards.none? { |card| subscription.link.user.supports_card?(card.as_json) }
+            error_message = if stored_cards.any? { |card| card.charge_processor_id == PaypalChargeProcessor.charge_processor_id }
+              "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+            else
+              "The payment method saved on this membership is no longer supported by the creator. Please use a different payment method (your card was not charged)."
+            end
+            raise Subscription::UpdateFailed, error_message
+          end
         end
 
         if !apply_plan_change_immediately?
