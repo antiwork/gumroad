@@ -28,12 +28,10 @@ Sentry.init do |config|
   # still reported, as is everything from the web/Sidekiq processes.
   config.before_send = lambda do |event, hint|
     exception = hint && hint[:exception]
-    if event.tags[:source] == "runner" &&
-       exception.respond_to?(:backtrace) &&
-       exception.backtrace&.any? { |frame| frame.start_with?("stdin:") }
-      next nil
-    end
+    stdin_runner_error = event.tags[:source] == "runner" &&
+      exception.respond_to?(:backtrace) &&
+      exception.backtrace&.any? { |frame| frame.start_with?("stdin:") }
 
-    event
+    stdin_runner_error ? nil : event
   end
 end
