@@ -29,8 +29,8 @@ class MerchantRegistrationMailer < ApplicationMailer
 
   def paypal_account_updated(user_id)
     @user = User.find(user_id)
-    @subject = "Your Paypal Connect account was updated."
-    @body = "Your Paypal Connect account was updated.\n\nPlease verify the new payout address to confirm the changes for your <a href=\"#{settings_payments_url}\">payment settings</a>"
+    @subject = "Your PayPal Connect account was updated."
+    @body = "Your PayPal Connect account was updated.\n\nPlease verify the new payout address to confirm the changes for your <a href=\"#{settings_payments_url}\">payment settings</a>"
     mail(subject: @subject, from: NOREPLY_EMAIL_WITH_NAME, to: @user.email)
   end
 

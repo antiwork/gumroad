@@ -124,7 +124,7 @@ class Charge::CreateService
   rescue ChargeProcessorPayeeAccountRestrictedError => e
     logger.error "Charge processor error: #{e.message} in charge: #{charge.external_id}"
     purchases.each do |purchase|
-      purchase.errors.add :base, "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+      purchase.errors.add :base, "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
       purchase.stripe_error_code = PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED
     end
     nil
@@ -143,7 +143,7 @@ class Charge::CreateService
     end
     nil
   rescue ChargeProcessorUnsupportedPaymentTypeError => e
-    logger.info "Charge processor error: Unsupported paypal payment method selected"
+    logger.info "Charge processor error: Unsupported PayPal payment method selected"
     purchases.each do |purchase|
       purchase.errors.add :base, "We weren't able to charge your PayPal account. Please select another method of payment."
       purchase.stripe_error_code = e.error_code

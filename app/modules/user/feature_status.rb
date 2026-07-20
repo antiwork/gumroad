@@ -60,10 +60,10 @@ class User
       # PayPal sales have been disabled for this creator by admin (mostly due to high chargeback rate)
       return false if disable_paypal_sales?
 
-      # Paypal Connect is not enabled, fallback to old Paypal mode
+      # PayPal Connect is not enabled, fallback to old PayPal mode
       return Feature.inactive?(:disable_braintree_sales, self) unless paypal_connect_enabled?
 
-      # If Paypal Connect is supported, check if user has connected a Merchant Account
+      # If PayPal Connect is supported, check if user has connected a Merchant Account
       merchant_accounts.alive.charge_processor_alive.paypal.exists?
     end
 
