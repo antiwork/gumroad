@@ -12,7 +12,7 @@ class PaypalEventHandler
   end
 
   def schedule_paypal_event_processing
-    Rails.logger.info("Paypal event: received IPN/Webhook #{paypal_event}")
+    Rails.logger.info("PayPal event: received IPN/Webhook #{paypal_event}")
 
     case paypal_event["event_type"]
     when *PaypalEventType::ORDER_API_EVENTS, *PaypalEventType::MERCHANT_ACCOUNT_EVENTS

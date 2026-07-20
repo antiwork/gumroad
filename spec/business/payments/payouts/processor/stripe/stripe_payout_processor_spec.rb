@@ -272,6 +272,76 @@ describe StripePayoutProcessor, :vcr do
     end
   end
 
+  describe "prepare_payment_and_set_amount error handling" do
+    let(:user) { create(:user) }
+    let(:merchant_account) do
+      create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                currency: Currency::USD, country: "US")
+    end
+    let(:gumroad_balance) do
+      create(:balance, user:, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                       currency: Currency::USD, amount_cents: 100_00,
+                       holding_currency: Currency::USD, holding_amount_cents: 100_00,
+                       state: "processing")
+    end
+    let(:payment) do
+      payment = create(:payment, user:, currency: nil, amount_cents: nil, processor: PayoutProcessorType::STRIPE)
+      payment.balances << gumroad_balance
+      payment
+    end
+
+    before do
+      allow(described_class).to receive(:get_payout_details)
+        .and_return([merchant_account, [gumroad_balance], []])
+    end
+
+    context "when the internal transfer fails because the account lacks required capabilities" do
+      let(:capabilities_error) do
+        Stripe::InvalidRequestError.new(
+          "Your destination account needs to have at least one of the following capabilities enabled: transfers, crypto_transfers, legacy_payments",
+          nil
+        )
+      end
+
+      before do
+        allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_raise(capabilities_error)
+      end
+
+      it "marks the payment as failed with a CANNOT_PAY failure reason" do
+        errors = described_class.prepare_payment_and_set_amount(payment, [gumroad_balance])
+
+        expect(errors.first).to include("needs to have at least one of the following capabilities enabled")
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.failure_reason).to eq(Payment::FailureReason::CANNOT_PAY)
+        expect(payment.error_message).to include("capabilities enabled")
+      end
+
+      it "does not report the known account-state error to the error tracker" do
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        described_class.prepare_payment_and_set_amount(payment, [gumroad_balance])
+      end
+    end
+
+    context "when the internal transfer fails with an unexpected InvalidRequestError" do
+      let(:unexpected_error) { Stripe::InvalidRequestError.new("No such destination: acct_gone", nil) }
+
+      before do
+        allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_raise(unexpected_error)
+      end
+
+      it "reports the error to the error tracker and marks the payment failed without a failure reason" do
+        expect(ErrorNotifier).to receive(:notify).with(unexpected_error)
+
+        errors = described_class.prepare_payment_and_set_amount(payment, [gumroad_balance])
+
+        expect(errors.first).to include("No such destination")
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.failure_reason).to be_nil
+      end
+    end
+  end
+
   describe "destination_balance_drift_error" do
     let(:user) { create(:user) }
     let(:payment) { create(:payment, user:, currency: nil, amount_cents: nil) }

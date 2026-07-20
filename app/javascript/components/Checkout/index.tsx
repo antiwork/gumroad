@@ -54,7 +54,9 @@ import { WithTooltip } from "$app/components/WithTooltip";
 import {
   type CheckoutBuyerCurrencyDisplay,
   formatCheckoutPrice,
+  formatPresentmentCents,
   getCheckoutBuyerCurrencyDisplay,
+  getCheckoutPresentmentAmounts,
   toBuyerCurrencyCents,
   toCanonicalCents,
 } from "./buyerCurrencyDisplay";
@@ -218,7 +220,24 @@ export const Checkout = ({
   const displayTipSelector = isTippingEnabled(state);
   const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
     state.surcharges.type === "loaded" ? state.surcharges.result : null,
-    { willSaveCard: state.willSaveCard, paymentMethod: state.paymentMethod },
+    {
+      cartPermalinks: cart.items.map((item) => item.product.permalink),
+      willSaveCard: state.willSaveCard,
+      paymentMethod: state.paymentMethod,
+    },
+  );
+  // The buyer-currency amounts every row of the table renders from, so the visible numbers
+  // sum exactly to the locked total the buyer is charged. An unusable allocation makes
+  // buyerCurrencyDisplay null above, keeping every row and the submitted token canonical.
+  const presentmentAmounts = getCheckoutPresentmentAmounts(
+    buyerCurrencyDisplay,
+    cart.items.map((item) => ({
+      permalink: item.product.permalink,
+      discountCents: convertToUSD(
+        item,
+        hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity - getDiscountedPrice(cart, item).price,
+      ),
+    })),
   );
 
   return (
@@ -238,13 +257,14 @@ export const Checkout = ({
           <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 @[64rem]:grid-cols-[2fr_minmax(26rem,1fr)]">
             <div className="grid gap-6">
               <CartItemList>
-                {cart.items.map((item) => (
+                {cart.items.map((item, index) => (
                   <CartItemComponent
                     key={`${item.product.permalink}${item.option_id ? `_${item.option_id}` : ""}`}
                     item={item}
                     cart={cart}
                     isGift={isGift}
                     buyerCurrencyDisplay={buyerCurrencyDisplay}
+                    presentmentPriceCents={presentmentAmounts?.linePriceCents[index] ?? null}
                     updateCart={updateCart}
                   />
                 ))}
@@ -257,13 +277,23 @@ export const Checkout = ({
               <CartItemList>
                 {displayTipSelector ? (
                   <div className="p-4 sm:p-5">
-                    <TipSelector buyerCurrencyDisplay={buyerCurrencyDisplay} />
+                    <TipSelector
+                      buyerCurrencyDisplay={buyerCurrencyDisplay}
+                      presentmentTipCents={presentmentAmounts?.tipCents ?? null}
+                    />
                   </div>
                 ) : null}
                 <div className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}>
                   {state.surcharges.type === "loaded" ? (
                     <>
-                      <CartPriceItem title="Subtotal" price={formatCheckoutPrice(subtotal, buyerCurrencyDisplay)} />
+                      <CartPriceItem
+                        title="Subtotal"
+                        price={
+                          presentmentAmounts && buyerCurrencyDisplay
+                            ? formatPresentmentCents(presentmentAmounts.subtotalCents, buyerCurrencyDisplay)
+                            : formatCheckoutPrice(subtotal, buyerCurrencyDisplay)
+                        }
+                      />
                       {state.surcharges.result.tax_included_cents ? (
                         <CartPriceItem
                           title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
@@ -273,13 +303,21 @@ export const Checkout = ({
                       {state.surcharges.result.tax_cents ? (
                         <CartPriceItem
                           title={nameOfSalesTaxForCountry(state.country)}
-                          price={formatCheckoutPrice(state.surcharges.result.tax_cents, buyerCurrencyDisplay)}
+                          price={
+                            presentmentAmounts && buyerCurrencyDisplay
+                              ? formatPresentmentCents(presentmentAmounts.taxCents, buyerCurrencyDisplay)
+                              : formatCheckoutPrice(state.surcharges.result.tax_cents, buyerCurrencyDisplay)
+                          }
                         />
                       ) : null}
                       {state.surcharges.result.shipping_rate_cents ? (
                         <CartPriceItem
                           title="Shipping rate"
-                          price={formatCheckoutPrice(state.surcharges.result.shipping_rate_cents, buyerCurrencyDisplay)}
+                          price={
+                            presentmentAmounts && buyerCurrencyDisplay
+                              ? formatPresentmentCents(presentmentAmounts.shippingCents, buyerCurrencyDisplay)
+                              : formatCheckoutPrice(state.surcharges.result.shipping_rate_cents, buyerCurrencyDisplay)
+                          }
                         />
                       ) : null}
                     </>
@@ -320,7 +358,13 @@ export const Checkout = ({
                           </Pill>
                         ))}
                       </h4>
-                      {discount > 0 ? <div>{formatCheckoutPrice(-discount, buyerCurrencyDisplay)}</div> : null}
+                      {discount > 0 ? (
+                        <div>
+                          {presentmentAmounts && buyerCurrencyDisplay
+                            ? formatPresentmentCents(-presentmentAmounts.discountCents, buyerCurrencyDisplay)
+                            : formatCheckoutPrice(-discount, buyerCurrencyDisplay)}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
@@ -349,7 +393,11 @@ export const Checkout = ({
                     <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
                       <CartPriceItem
                         title="Total"
-                        price={formatCheckoutPrice(total, buyerCurrencyDisplay)}
+                        price={
+                          presentmentAmounts && buyerCurrencyDisplay
+                            ? formatPresentmentCents(presentmentAmounts.totalCents, buyerCurrencyDisplay)
+                            : formatCheckoutPrice(total, buyerCurrencyDisplay)
+                        }
                         variant="large"
                       />
                     </footer>
@@ -413,7 +461,13 @@ export const Checkout = ({
   );
 };
 
-const TipSelector = ({ buyerCurrencyDisplay }: { buyerCurrencyDisplay?: CheckoutBuyerCurrencyDisplay | null }) => {
+const TipSelector = ({
+  buyerCurrencyDisplay,
+  presentmentTipCents,
+}: {
+  buyerCurrencyDisplay?: CheckoutBuyerCurrencyDisplay | null;
+  presentmentTipCents?: number | null;
+}) => {
   const [state, dispatch] = useState();
   const errors = getErrors(state);
   const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
@@ -435,7 +489,11 @@ const TipSelector = ({ buyerCurrencyDisplay }: { buyerCurrencyDisplay?: Checkout
     <div className="@container flex flex-col gap-2 sm:gap-3">
       <CartPriceItem
         title="Add a tip?"
-        price={formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay)}
+        price={
+          presentmentTipCents != null && buyerCurrencyDisplay
+            ? formatPresentmentCents(presentmentTipCents, buyerCurrencyDisplay)
+            : formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay)
+        }
         variant="tip"
       />
       <div className="grid grid-cols-1 gap-4 @[52rem]:grid-cols-5">
@@ -533,12 +591,18 @@ const CartItemComponent = ({
   updateCart,
   isGift,
   buyerCurrencyDisplay,
+  presentmentPriceCents,
 }: {
   item: CartItemProps;
   cart: CartState;
   updateCart: (update: Partial<CartState>) => void;
   isGift: boolean;
   buyerCurrencyDisplay?: CheckoutBuyerCurrencyDisplay | null;
+  // This line's share of the locked buyer-currency total, allocated by the server. When
+  // present it is displayed verbatim so the line matches both the checkout total and the
+  // amount later persisted for the receipt; converting the USD price here instead can be a
+  // cent off from both.
+  presentmentPriceCents?: number | null;
 }) => {
   const [editPopoverOpen, setEditPopoverOpen] = React.useState(false);
   const [selection, setSelection] = React.useState<PriceSelection>({
@@ -712,7 +776,9 @@ const CartItemComponent = ({
           down to one letter per line. */}
       <CartItemEnd className="max-w-1/2 text-right">
         <span className="current-price text-base font-bold sm:text-lg" aria-label="Price">
-          {formatCheckoutPrice(convertToUSD(item, price), buyerCurrencyDisplay)}
+          {presentmentPriceCents != null && buyerCurrencyDisplay
+            ? formatPresentmentCents(presentmentPriceCents, buyerCurrencyDisplay)
+            : formatCheckoutPrice(convertToUSD(item, price), buyerCurrencyDisplay)}
         </span>
         {hasFreeTrial(item, isGift) && item.product.free_trial ? (
           <>

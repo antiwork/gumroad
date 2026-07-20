@@ -43,4 +43,19 @@ describe PurchasePresentment do
     expect(presentment).not_to be_valid
     expect(presentment.errors).to include(:presentment_total_cents)
   end
+
+  it "rejects a Gumroad amount larger than the presentment total" do
+    presentment = build(:purchase_presentment, presentment_gumroad_amount_cents: 13_51)
+
+    expect(presentment).not_to be_valid
+    expect(presentment.errors).to include(:presentment_gumroad_amount_cents)
+  end
+
+  it "allows a Gumroad amount equal to the presentment total" do
+    # A purchase where the seller nets nothing (Gumroad's cut is the whole amount) is a
+    # legitimate boundary, not a violation.
+    presentment = build(:purchase_presentment, presentment_gumroad_amount_cents: 13_50)
+
+    expect(presentment).to be_valid
+  end
 end

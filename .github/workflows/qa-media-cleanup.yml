@@ -1,0 +1,45 @@
+name: Clean up qa-media
+
+# PR review evidence (qa-media/) is only needed while a PR is open. Anything present on
+# main got there by merging, so its PR is done and the files are dead weight in the
+# repo. PR bodies keep working: branch-pinned raw URLs die with branch deletion anyway,
+# and commit-pinned URLs read the blob from history, which this cleanup never touches.
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Mondays 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete merged PR evidence
+        id: clean
+        run: |
+          FILES=$(find qa-media -type f ! -name README.md | sort)
+          if [ -z "$FILES" ]; then
+            echo "nothing to clean"; echo "dirty=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          COUNT=$(echo "$FILES" | wc -l | tr -d ' ')
+          SIZE=$(du -sh qa-media | cut -f1)
+          echo "$FILES" | xargs git rm -q
+          echo "dirty=true" >> "$GITHUB_OUTPUT"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+      - name: Open cleanup PR
+        if: steps.clean.outputs.dirty == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/qa-media-cleanup
+          title: "Remove qa-media evidence for merged PRs"
+          commit-message: "Remove qa-media evidence for merged PRs"
+          body: |
+            Weekly automated cleanup: deletes ${{ steps.clean.outputs.count }} qa-media file(s) (${{ steps.clean.outputs.size }}) whose PRs have merged — evidence on main is by definition from finished PRs. Blobs stay in git history, so commit-pinned raw URLs in old PR bodies keep rendering.
+
+            🤖 Automated by the qa-media-cleanup workflow.
+          delete-branch: true

@@ -775,6 +775,18 @@ describe("Library Scenario", type: :system, js: true) do
         expect(page).not_to have_link("Discover products", href: discover_url(host: DISCOVER_DOMAIN))
       end
 
+      it "saves the rating as soon as a star is tapped, before Post review is clicked" do
+        login_as user
+        visit reviews_path
+
+        within "[role='listitem']", text: "Product 1" do
+          choose "3 stars"
+        end
+
+        expect(page).to have_alert(text: "Rating saved! Add a written review to tell others more.")
+        expect(purchase1.reload.product_review.rating).to eq(3)
+      end
+
       it "shows review forms for purchases awaiting review" do
         login_as user
         visit library_path

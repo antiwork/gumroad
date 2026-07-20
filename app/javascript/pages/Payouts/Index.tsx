@@ -413,7 +413,7 @@ const PeriodPaypalAccount = ({
   paypalAccount: PaypalAccount;
 }) => (
   <h4>
-    {isCurrentPeriod ? "Will be sent to Paypal account:" : "Sent to Paypal account:"}{" "}
+    {isCurrentPeriod ? "Will be sent to PayPal account:" : "Sent to PayPal account:"}{" "}
     <span>{paypalAccount.paypal_address}</span>
   </h4>
 );

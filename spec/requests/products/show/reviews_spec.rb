@@ -73,6 +73,26 @@ describe("Product page reviews", js: true, type: :system) do
     expect(page).to have_text("Your rating:")
   end
 
+  it "saves the rating as soon as a star is selected, without requiring the Post review button" do
+    purchaser = create(:user)
+    purchase = create(:purchase, link: product, purchaser:)
+    login_as(purchaser)
+
+    visit product.long_url
+
+    expect(page).to have_text("Liked it? Give it a rating:")
+    choose "4 stars"
+
+    expect(page).to have_alert(text: "Rating saved! Add a written review to tell others more.")
+    expect(purchase.reload.original_product_review.rating).to eq(4)
+
+    # The form stays open so a written review can still be added and posted.
+    fill_in "Want to leave a written review?", with: "Great product"
+    click_on "Post review"
+    expect(page).to have_alert(text: "Review submitted successfully!")
+    expect(purchase.reload.original_product_review.message).to eq("Great product")
+  end
+
   it "displays all the rating stars, without clipping, when a user who has already purchased the product views the page in a tablet-sized viewport", :tablet_view do
     purchaser = create(:user)
     create(:purchase, link: product, purchaser:)
