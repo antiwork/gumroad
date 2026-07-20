@@ -161,12 +161,13 @@ module StripeMerchantAccountManager
   rescue => e
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
-      # Bank-account rejections (unknown bank/routing code, invalid account number) are
+      # Bank-account rejections (unknown bank/routing code, invalid account number) and
+      # tax-ID rejections (placeholder values like 123456789 that Stripe disallows) are
       # expected seller-input errors: the seller sees Stripe's message inline on the payments
-      # settings page and a payout note is recorded below, and the sync path
-      # (update_bank_account) already treats them as expected without alerting. Don't page
-      # Sentry for them — only unexpected failures should alert.
-      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e)
+      # settings page (a payout note is also recorded below for bank rejections), and the
+      # sync path (update_bank_account) already treats bank rejections as expected without
+      # alerting. Don't page Sentry for them — only unexpected failures should alert.
+      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
@@ -452,6 +453,26 @@ module StripeMerchantAccountManager
     end
 
     postal_code
+  end
+
+  # Stripe validates the tax IDs we pass on account creation (individual `id_number`,
+  # business `tax_id`) and rejects obviously-fake values with an InvalidRequestError like
+  # `Invalid Tax ID. 123456789 is not an allowed value.` — placeholder numbers (all-same
+  # digits, sequential digits) are on Stripe's denylist. We don't pre-validate against that
+  # denylist, so these are expected seller-input errors: the seller sees Stripe's message
+  # inline on the payments settings page and can correct the tax ID themselves. Stripe
+  # doesn't always populate `code`/`param` on this rejection, so also match on the message.
+  private_class_method
+  def self.tax_id_invalid_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    code = error.respond_to?(:code) ? error.code : nil
+    return true if code == "tax_id_invalid"
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    return true if param.split("[").last.to_s.delete("]").in?(%w[id_number tax_id])
+
+    error.message.to_s.match?(/invalid tax id/i)
   end
 
   private_class_method
