@@ -115,11 +115,18 @@ class CreateUsStatesSalesSummaryReportJob
           tax_collected_cents -= totals[:tax_chargeback_cents]
         end
 
-        # Won disputes add their money back in the month of won_at.
+        # Won disputes add their money back in the month of won_at. The month window is
+        # re-passed so the uploader only emits the leg when the purchase's canonical
+        # reversal date actually falls inside this month (a purchase with several dispute
+        # rows can be selected by a non-canonical row's won_at — see the uploader).
         reversal_ids.each do |id|
           purchase = Purchase.find(id)
 
-          totals = uploader.upload_chargeback_reversal(purchase:, subdivision:)
+          totals = uploader.upload_chargeback_reversal(
+            purchase:, subdivision:,
+            starts_at: Date.new(year, month).beginning_of_month.beginning_of_day,
+            ends_at: Date.new(year, month).end_of_month.end_of_day
+          )
           next unless totals
 
           gmv_cents += totals[:total_reversal_cents]
