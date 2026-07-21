@@ -99,6 +99,32 @@ describe RetryTransientEmailFailureJob do
       expect(retry_record.retry_in_flight).to eq(false)
     end
 
+    it "still un-counts the failed attempt when a newer claim re-took the row before the rollback" do
+      retry_record # force lazy creation now — creating the unconfirmed user enqueues its own confirmation email
+      suppression_manager = instance_double(EmailSuppressionManager)
+      allow(EmailSuppressionManager).to receive(:new).and_return(suppression_manager)
+      # Simulate a delayed provider failure event re-claiming the row in the
+      # window between this job's claim (attempts incremented, flag cleared)
+      # and the rescue's rollback: the claim is back to true when the
+      # rollback runs. The rollback must still give the failed attempt back —
+      # otherwise repeated failures could exhaust MAX_ATTEMPTS with fewer
+      # emails actually sent.
+      allow(suppression_manager).to receive(:remove_from_lists) do
+        TransientEmailFailureRetry.where(id: retry_record.id).update_all(retry_in_flight: true)
+        raise StandardError, "suppression API unavailable"
+      end
+
+      expect do
+        expect do
+          described_class.new.perform(retry_record.id)
+        end.to raise_error(StandardError, "suppression API unavailable")
+      end.not_to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+
+      retry_record.reload
+      expect(retry_record.attempts).to eq(0)
+      expect(retry_record.retry_in_flight).to eq(true)
+    end
+
     it "does not resend when no in-flight claim exists (e.g. a Sidekiq re-run after a completed attempt)" do
       retry_record.update!(retry_in_flight: false, attempts: 1)
 

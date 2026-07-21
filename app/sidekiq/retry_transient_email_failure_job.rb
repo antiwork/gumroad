@@ -63,22 +63,31 @@ class RetryTransientEmailFailureJob
         user.send_confirmation_instructions
       rescue => e
         # The attempt was recorded but nothing was sent (e.g. the SendGrid
-        # suppression API errored). Un-record it — restore the in-flight claim
-        # and give the attempt back — then re-raise so Sidekiq's own retry
+        # suppression API errored). Un-record it — give the attempt back and
+        # restore the in-flight claim — then re-raise so Sidekiq's own retry
         # re-runs this job and the claim guard above lets it through. Without
         # this, the Sidekiq re-run would match zero rows on the guard and
         # exit, permanently losing the attempt with no email sent.
         #
-        # The restore is guarded on retry_in_flight = false so that if a
-        # fresh provider failure event re-claimed the row in the meantime
-        # (scheduling its own job), we don't clobber that claim; the Sidekiq
-        # re-run of THIS job then simply consumes that newer claim.
+        # The rollback is deliberately unguarded. A fresh provider failure
+        # event can re-claim the row (retry_in_flight back to true) in the
+        # window between our claim above and this rescue; a rollback guarded
+        # on retry_in_flight = false would then match zero rows, leaving the
+        # failed attempt counted forever — enough of those and the attempt
+        # cap is exhausted without that many emails actually sent. Instead:
+        # the decrement is always correct because it exactly undoes the
+        # increment this job just made, and setting retry_in_flight = true is
+        # idempotent when a newer claim already holds the row (true stays
+        # true) and restorative when it doesn't. Whichever job runs next —
+        # the Sidekiq re-run of this one or the newer scheduled retry —
+        # consumes the single claim; the other sees no claim and skips, so
+        # exactly one send is counted per successful attempt.
         #
         # If Sidekiq's retries are exhausted with the claim restored, the
         # claim dangles until CLAIM_EXPIRY, after which the next failure
         # event for this address releases it and scheduling resumes.
         TransientEmailFailureRetry
-          .where(id: retry_record.id, retry_in_flight: false)
+          .where(id: retry_record.id)
           .update_all(["attempts = attempts - 1, retry_in_flight = true, updated_at = ?", Time.current])
         raise e
       end
