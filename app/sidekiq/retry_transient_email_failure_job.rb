@@ -54,6 +54,10 @@ class RetryTransientEmailFailureJob
         return
       end
       retry_record.reload
+      # The attempts value our increment produced. Used below to make the
+      # failure rollback a compare-and-swap: it only fires while OUR
+      # increment is the latest unrevoked change to the counter.
+      claimed_attempts = retry_record.attempts
 
       begin
         # Unsuppress before re-sending, or SendGrid silently drops the send.
@@ -69,25 +73,36 @@ class RetryTransientEmailFailureJob
         # this, the Sidekiq re-run would match zero rows on the guard and
         # exit, permanently losing the attempt with no email sent.
         #
-        # The rollback is deliberately unguarded. A fresh provider failure
-        # event can re-claim the row (retry_in_flight back to true) in the
-        # window between our claim above and this rescue; a rollback guarded
-        # on retry_in_flight = false would then match zero rows, leaving the
-        # failed attempt counted forever — enough of those and the attempt
-        # cap is exhausted without that many emails actually sent. Instead:
-        # the decrement is always correct because it exactly undoes the
-        # increment this job just made, and setting retry_in_flight = true is
-        # idempotent when a newer claim already holds the row (true stays
-        # true) and restorative when it doesn't. Whichever job runs next —
-        # the Sidekiq re-run of this one or the newer scheduled retry —
-        # consumes the single claim; the other sees no claim and skips, so
-        # exactly one send is counted per successful attempt.
+        # The rollback is a compare-and-swap keyed on the attempts value our
+        # own increment produced. That value uniquely fingerprints "our
+        # increment is the latest unrevoked change": any newer job that
+        # consumed a replacement claim pushed the counter higher, and the
+        # counter only comes back down when that job's own rollback undoes
+        # its own increment. Two races this has to survive:
+        #
+        # 1. A fresh provider failure event re-claims the row (sets
+        #    retry_in_flight back to true, counter unchanged) between our
+        #    claim and this rescue. The guard still matches — the decrement
+        #    correctly un-records our failed attempt, and setting
+        #    retry_in_flight = true is a no-op on the already-true flag. The
+        #    newer scheduled retry (or our Sidekiq re-run, whichever wins the
+        #    claim) performs the one send.
+        #
+        # 2. That newer scheduled retry has ALREADY consumed the replacement
+        #    claim and is mid-send (counter is ours + 1, flag false). The
+        #    guard matches zero rows and we deliberately do nothing — an
+        #    unguarded rollback here would decrement the newer job's attempt
+        #    and recreate a claim that our Sidekiq re-run could consume,
+        #    sending a duplicate confirmation. The cost of skipping is that
+        #    our failed attempt stays counted (a one-off over-count in a
+        #    narrow double-race window), which is the safe direction: it can
+        #    only end retries one attempt early, never double-send.
         #
         # If Sidekiq's retries are exhausted with the claim restored, the
         # claim dangles until CLAIM_EXPIRY, after which the next failure
         # event for this address releases it and scheduling resumes.
         TransientEmailFailureRetry
-          .where(id: retry_record.id)
+          .where(id: retry_record.id, attempts: claimed_attempts)
           .update_all(["attempts = attempts - 1, retry_in_flight = true, updated_at = ?", Time.current])
         raise e
       end
