@@ -305,12 +305,16 @@ if (result.status !== 0) process.exit(result.status ?? 1);
 // of inlining it into every response. For that link to be cacheable forever
 // (and safe across deploys), publish a copy whose filename carries a content
 // hash, plus a manifest the Rails side reads to know the current filename.
-// public/pages/ is synced to the asset CDN with immutable cache headers at
-// deploy time; public/pages-tailwind.css stays as the un-fingerprinted
-// fallback for checkouts that predate the manifest.
+// public/assets/pages/ is synced to the asset CDN with immutable cache
+// headers at deploy time; public/pages-tailwind.css stays as the
+// un-fingerprinted fallback for checkouts that predate the manifest.
+// The assets/ prefix is deliberate: it's the bucket prefix the deploy's
+// S3 credentials are already authorized to write (a top-level pages/
+// prefix was tried first and failed the production asset sync with
+// AccessDenied, breaking the deploy).
 const css = readFileSync(outputPath);
 const digest = createHash("sha256").update(css).digest("hex").slice(0, 12);
-const fingerprintedDir = resolve(root, "public/pages");
+const fingerprintedDir = resolve(root, "public/assets/pages");
 const fingerprintedName = `pages-tailwind-${digest}.css`;
 // Drop stale hashes locally so the directory only ever holds the current
 // build. The CDN sync doesn't delete, so previously deployed hashes keep
@@ -320,5 +324,5 @@ mkdirSync(fingerprintedDir, { recursive: true });
 copyFileSync(outputPath, resolve(fingerprintedDir, fingerprintedName));
 writeFileSync(
   resolve(root, "public/pages-tailwind-manifest.json"),
-  `${JSON.stringify({ "pages-tailwind.css": `pages/${fingerprintedName}` })}\n`,
+  `${JSON.stringify({ "pages-tailwind.css": `assets/pages/${fingerprintedName}` })}\n`,
 );

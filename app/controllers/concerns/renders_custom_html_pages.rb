@@ -260,17 +260,17 @@ module RendersCustomHtmlPages
 
     private
       # The manifest maps the logical stylesheet name to its current
-      # fingerprinted path (e.g. "pages/pages-tailwind-<sha>.css"). Both are
-      # written by scripts/build_pages_tailwind.mjs. The path is only trusted
-      # if it looks like a build output and the file is actually present on
-      # disk — the same tree that gets synced to the asset host — so we never
-      # emit a <link> to a stylesheet that wasn't built.
+      # fingerprinted path (e.g. "assets/pages/pages-tailwind-<sha>.css").
+      # Both are written by scripts/build_pages_tailwind.mjs. The path is only
+      # trusted if it looks like a build output and the file is actually
+      # present on disk — the same tree that gets synced to the asset host —
+      # so we never emit a <link> to a stylesheet that wasn't built.
       def pages_tailwind_asset_path
         manifest_path = Rails.root.join("public/pages-tailwind-manifest.json")
         return nil unless File.exist?(manifest_path)
 
         asset_path = JSON.parse(File.read(manifest_path))["pages-tailwind.css"]
-        return nil unless asset_path.is_a?(String) && asset_path.match?(%r{\Apages/pages-tailwind-\h+\.css\z})
+        return nil unless asset_path.is_a?(String) && asset_path.match?(%r{\Aassets/pages/pages-tailwind-\h+\.css\z})
         return nil unless File.exist?(Rails.root.join("public", asset_path))
 
         asset_path

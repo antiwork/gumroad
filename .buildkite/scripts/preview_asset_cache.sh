@@ -195,7 +195,7 @@ preview_asset_cache_save() {
   # gzip -1: node_modules dominates the tarball and compresses slowly at the
   # default level; speed matters more than a few percent of S3 storage.
   if ! docker run --rm --entrypoint="" "$image" \
-    bash -c 'set -o pipefail; cd /app && paths=""; for p in node_modules public/vite public/js public/pages-tailwind.css public/pages public/pages-tailwind-manifest.json; do [ -e "$p" ] && paths="$paths $p"; done; tar -cf - $paths | gzip -1' \
+    bash -c 'set -o pipefail; cd /app && paths=""; for p in node_modules public/vite public/js public/pages-tailwind.css public/assets/pages public/pages-tailwind-manifest.json; do [ -e "$p" ] && paths="$paths $p"; done; tar -cf - $paths | gzip -1' \
     > "$PREVIEW_ASSET_CACHE_TARBALL"; then
     preview_asset_cache_logger "Failed to extract assets from $image; skipping cache save"
     rm -f "$PREVIEW_ASSET_CACHE_TARBALL"

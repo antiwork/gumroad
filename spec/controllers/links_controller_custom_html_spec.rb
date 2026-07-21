@@ -253,7 +253,7 @@ describe LinksController, :vcr, type: :controller do
   describe ".pages_tailwind_head" do
     let(:manifest_path) { Rails.root.join("public/pages-tailwind-manifest.json") }
     let(:css_path) { Rails.root.join("public/pages-tailwind.css") }
-    let(:fingerprinted_path) { Rails.root.join("public", "pages/pages-tailwind-0123456789ab.css") }
+    let(:fingerprinted_path) { Rails.root.join("public", "assets/pages/pages-tailwind-0123456789ab.css") }
 
     before do
       described_class.remove_instance_variable(:@pages_tailwind_head) if described_class.instance_variable_defined?(:@pages_tailwind_head)
@@ -267,11 +267,11 @@ describe LinksController, :vcr, type: :controller do
 
     it "links to the fingerprinted stylesheet on the asset host when the manifest and file exist" do
       allow(File).to receive(:exist?).with(manifest_path).and_return(true)
-      allow(File).to receive(:read).with(manifest_path).and_return({ "pages-tailwind.css" => "pages/pages-tailwind-0123456789ab.css" }.to_json)
+      allow(File).to receive(:read).with(manifest_path).and_return({ "pages-tailwind.css" => "assets/pages/pages-tailwind-0123456789ab.css" }.to_json)
       allow(File).to receive(:exist?).with(fingerprinted_path).and_return(true)
 
       expect(described_class.pages_tailwind_head).to eq(
-        %(<link rel="stylesheet" href="#{RendersCustomHtmlPages::PAGES_TAILWIND_ASSET_HOST}/pages/pages-tailwind-0123456789ab.css">)
+        %(<link rel="stylesheet" href="#{RendersCustomHtmlPages::PAGES_TAILWIND_ASSET_HOST}/assets/pages/pages-tailwind-0123456789ab.css">)
       )
     end
 
@@ -285,7 +285,7 @@ describe LinksController, :vcr, type: :controller do
 
     it "falls back to inlining when the manifest points at a file that is not on disk" do
       allow(File).to receive(:exist?).with(manifest_path).and_return(true)
-      allow(File).to receive(:read).with(manifest_path).and_return({ "pages-tailwind.css" => "pages/pages-tailwind-0123456789ab.css" }.to_json)
+      allow(File).to receive(:read).with(manifest_path).and_return({ "pages-tailwind.css" => "assets/pages/pages-tailwind-0123456789ab.css" }.to_json)
       allow(File).to receive(:exist?).with(fingerprinted_path).and_return(false)
       allow(File).to receive(:exist?).with(css_path).and_return(true)
       allow(File).to receive(:read).with(css_path).and_return(".hero{display:block}")
