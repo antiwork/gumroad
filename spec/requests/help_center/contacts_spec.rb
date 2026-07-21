@@ -110,15 +110,19 @@ describe "Help Center contact form", type: :request do
   end
 
   describe "rate limiting" do
-    it "throttles POST /help/contact by IP" do
-      throttled = Rack::Attack::Request.new(
+    def contact_request(path)
+      Rack::Attack::Request.new(
         Rack::MockRequest.env_for(
-          "/help/contact",
+          path,
           method: "POST",
           params: valid_params,
           "HTTP_CF_CONNECTING_IP" => "203.0.113.77"
         )
       )
+    end
+
+    it "throttles POST /help/contact by IP" do
+      throttled = contact_request("/help/contact")
 
       Rack::Attack.cache.store.flushdb
       Rack::Attack.reset!
@@ -128,6 +132,24 @@ describe "Help Center contact form", type: :request do
           expect(Rack::Attack.configuration.throttled?(throttled)).to be(false), "request #{i + 1} unexpectedly throttled"
         end
         expect(Rack::Attack.configuration.throttled?(throttled)).to be(true)
+      end
+    ensure
+      Rack::Attack.cache.store.flushdb
+      Rack::Attack.reset!
+    end
+
+    it "counts format-suffixed paths against the same limit" do
+      # The route accepts any format suffix (`/help/contact.xml`, ...), so the
+      # throttle must both match those paths and share one counter across them —
+      # otherwise each suffix would hand an attacker a fresh budget.
+      Rack::Attack.cache.store.flushdb
+      Rack::Attack.reset!
+
+      travel_to(Time.current) do
+        expect(Rack::Attack.configuration.throttled?(contact_request("/help/contact"))).to be(false)
+        expect(Rack::Attack.configuration.throttled?(contact_request("/help/contact.xml"))).to be(false)
+        expect(Rack::Attack.configuration.throttled?(contact_request("/help/contact.txt"))).to be(false)
+        expect(Rack::Attack.configuration.throttled?(contact_request("/help/contact.json"))).to be(true)
       end
     ensure
       Rack::Attack.cache.store.flushdb
