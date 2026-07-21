@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class PaypalController < ApplicationController
+  include AuditsPayoutSettingsChanges
+
   before_action :authenticate_user!, only: [:connect, :disconnect]
   before_action :validate_paypal_connect_allowed, only: %i[connect]
   before_action :validate_paypal_disconnect_allowed, only: %i[disconnect]
@@ -79,7 +81,10 @@ class PaypalController < ApplicationController
   def disconnect
     authorize [:settings, :payments, current_seller], :paypal_connect?
 
-    render json: { success: PaypalMerchantAccountManager.new.disconnect(user: current_seller) }
+    success = PaypalMerchantAccountManager.new.disconnect(user: current_seller)
+    log_payout_settings_update_by_non_owner("PayPal account disconnected") if success
+
+    render json: { success: }
   end
 
   private

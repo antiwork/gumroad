@@ -2,6 +2,7 @@
 
 class Settings::PaymentsController < Settings::BaseController
   include ActionView::Helpers::SanitizeHelper
+  include AuditsPayoutSettingsChanges
 
   before_action :authorize
 
@@ -86,17 +87,31 @@ class Settings::PaymentsController < Settings::BaseController
 
     return unless update_payout_method
 
+    # Log the audit note as soon as the payout method has actually changed —
+    # not only at the end of the action — so a later validation failure
+    # (compliance info, payout threshold) can't leave a completed payout
+    # method change without an attribution record.
+    log_payout_settings_update_by_non_owner if is_changing_payout_method
+
     return unless update_user_compliance_info
+
+    log_payout_settings_update_by_non_owner if params[:user].present?
 
     if params[:payout_threshold_cents].present? && params[:payout_threshold_cents].to_i < current_seller.minimum_payout_threshold_cents
       return redirect_with_error("Your payout threshold must be greater than the minimum payout amount")
     end
 
-    unless current_seller.update(
-      params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :disable_buyer_local_currency)
-    )
+    payout_preference_params = params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :disable_buyer_local_currency)
+    unless current_seller.update(payout_preference_params)
       return redirect_with_error(current_seller.errors.full_messages.first)
     end
+
+    # Log right after the settings write succeeds — not at the end of the
+    # action — so a later Stripe merchant-account failure can't leave a
+    # completed change unattributed, and only when a payout preference was
+    # actually submitted, so a request that changed nothing here doesn't
+    # record a false audit entry.
+    log_payout_settings_update_by_non_owner if payout_preference_params.to_h.any?
 
     # Once the user has submitted all their information, and a bank account record was created for them,
     # we can create a stripe merchant account for them if they don't already have one.
@@ -120,8 +135,6 @@ class Settings::PaymentsController < Settings::BaseController
       flash[:notice] = "Thanks! You're all set."
     end
 
-    log_payout_settings_update_by_non_owner
-
     redirect_to settings_payments_path, status: :see_other
   end
 
@@ -139,6 +152,8 @@ class Settings::PaymentsController < Settings::BaseController
         current_seller.save!
       end
     end
+
+    log_payout_settings_update_by_non_owner("Compliance country set")
   end
 
   def opt_in_to_au_backtax_collection
@@ -151,6 +166,7 @@ class Settings::PaymentsController < Settings::BaseController
                              jurisdiction: BacktaxAgreement::Jurisdictions::AUSTRALIA,
                              signature: params["signature"])
 
+    log_payout_settings_update_by_non_owner("Australia backtax collection agreement signed")
 
     render json: { success: true }
   end
@@ -169,6 +185,8 @@ class Settings::PaymentsController < Settings::BaseController
       meta:,
       send_email_confirmation_notification: false
     )
+
+    log_payout_settings_update_by_non_owner("PayPal account connection updated")
 
     redirect_to settings_payments_path, notice: message
   end
@@ -231,7 +249,11 @@ class Settings::PaymentsController < Settings::BaseController
       # We'll get a account.updated webhook event and mark these requests as provided there as well,
       # but doing it here instead of waiting on the webhook, so that the respective compliance request notice is removed
       # from the page immediately.
-      current_seller.user_compliance_info_requests.requested.each(&:mark_provided!)
+      pending_requests = current_seller.user_compliance_info_requests.requested
+      if pending_requests.exists?
+        pending_requests.each(&:mark_provided!)
+        log_payout_settings_update_by_non_owner("Stripe remediation information submitted")
+      end
     end
 
     nothing_open_on_stripe = hard_requirements_clear &&
@@ -291,22 +313,6 @@ class Settings::PaymentsController < Settings::BaseController
 
     def redirect_with_error(error_message)
       redirect_to settings_payments_path, inertia: { errors: { base: [error_message] } }
-    end
-
-    # Payout settings are the top target for account-takeover monetization
-    # (redirecting a seller's earnings to an attacker's bank account). Now that
-    # team members with the admin role can change these settings — not just the
-    # account owner — we leave an audit note on the seller account whenever the
-    # person making the change is not the owner, so support and risk teams can
-    # see exactly who changed payout details and when.
-    def log_payout_settings_update_by_non_owner
-      return if logged_in_user == current_seller
-
-      current_seller.comments.create!(
-        author_id: logged_in_user.id,
-        comment_type: Comment::COMMENT_TYPE_NOTE,
-        content: "Payout settings updated by team admin #{logged_in_user.email}"
-      )
     end
 
     def authorize

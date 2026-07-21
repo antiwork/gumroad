@@ -2021,6 +2021,23 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(comment.content).to eq("Payout settings updated by team admin #{user_with_role_for_seller.email}")
       end
 
+      it "does not create an audit comment when the update is rejected" do
+        expect do
+          put :update, params: { payout_threshold_cents: seller.minimum_payout_threshold_cents - 1 }
+        end.not_to change { seller.reload.comments.count }
+      end
+
+      it "does not fail the request when the audit comment cannot be written" do
+        allow_any_instance_of(Comment).to receive(:save!).and_raise(ActiveRecord::RecordInvalid)
+        expect(ErrorNotifier).to receive(:notify)
+
+        expect do
+          put :update, params: { payout_threshold_cents: 20_000 }
+        end.to change { seller.reload.payout_threshold_cents.to_i }.to(20_000)
+
+        expect(response).to redirect_to(settings_payments_path)
+      end
+
       it "allows removing the saved debit card and logs an audit comment" do
         seller.update!(credit_card: create(:credit_card))
         allow_any_instance_of(User).to receive(:requires_credit_card?).and_return(false)
