@@ -402,7 +402,7 @@
 - id: 247
   slug: "247-what-your-customers-see"
   title: "The Gumroad Library"
-  description: "In this article: Navigating your Library Archiving or deleting products What is the Gumroad app? FAQs When your customers purchase a product on Gumroad, it will"
+  description: "In this article: Navigating your Library Archiving or deleting products Reading PDFs and EPUBs in the browser What is the Gumroad app? FAQs When your customers purchase a product on Gumroad, it will"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 248
   slug: "248-delete-a-product"
