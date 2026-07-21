@@ -110,6 +110,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       include_context "with switching account to user as admin for seller"
 
       it "shows the PayPal connect section requirements like the owner sees" do
+        create(:user_compliance_info, user: seller)
+        allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(false)
+
         visit settings_payments_path
 
         # Team admins can now manage payout settings, so they see the same
