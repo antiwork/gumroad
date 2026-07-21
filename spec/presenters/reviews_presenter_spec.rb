@@ -40,6 +40,7 @@ describe ReviewsPresenter do
                 permalink: reviews.first.link.unique_permalink,
                 thumbnail_url: thumbnail.url,
                 native_type: "digital",
+                is_bundle: false,
                 available: true,
                 seller: {
                   name: "Seller",
@@ -57,6 +58,7 @@ describe ReviewsPresenter do
                 permalink: reviews.second.link.unique_permalink,
                 thumbnail_url: nil,
                 native_type: "digital",
+                is_bundle: false,
                 available: true,
                 seller: {
                   name: "Seller",
@@ -74,6 +76,7 @@ describe ReviewsPresenter do
                 permalink: reviews.third.link.unique_permalink,
                 thumbnail_url: nil,
                 native_type: "digital",
+                is_bundle: false,
                 available: true,
                 seller: {
                   name: "Seller",
@@ -92,6 +95,7 @@ describe ReviewsPresenter do
                 permalink: product2.unique_permalink,
                 thumbnail_url: nil,
                 native_type: "digital",
+                is_bundle: false,
                 available: true,
                 seller: {
                   name: "Seller",
@@ -108,6 +112,7 @@ describe ReviewsPresenter do
                 permalink: product1.unique_permalink,
                 thumbnail_url: thumbnail1.url,
                 native_type: "digital",
+                is_bundle: false,
                 available: true,
                 seller: {
                   name: "Seller",

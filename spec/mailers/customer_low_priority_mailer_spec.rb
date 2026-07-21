@@ -585,21 +585,22 @@ describe CustomerLowPriorityMailer do
     context "bundle purchase" do
       before { purchase.update!(is_bundle_purchase: true) }
 
-      context "when the buyer has an account" do
-        before { purchase.update!(purchaser: create(:user)) }
-
-        it "links to the reviews page, which resolves the purchase after login" do
-          mail = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
-          expect(mail.body.encoded).to have_link("Leave a review", href: reviews_url)
-        end
-      end
-
-      context "when the purchase is a guest purchase" do
+      shared_examples "links to the product page with the purchase credentials" do
         it "links to the bundle's product page with the purchase credentials for the review form" do
           mail = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
           expected_url = "#{purchase.link.long_url}?#{{ purchase_id: purchase.external_id, purchase_email_digest: purchase.email_digest }.to_query}"
           expect(mail.body.encoded).to have_link("Leave a review", href: expected_url)
         end
+      end
+
+      context "when the buyer has an account" do
+        before { purchase.update!(purchaser: create(:user)) }
+
+        include_examples "links to the product page with the purchase credentials"
+      end
+
+      context "when the purchase is a guest purchase" do
+        include_examples "links to the product page with the purchase credentials"
       end
     end
 

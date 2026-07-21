@@ -350,18 +350,12 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
     # For a bundle, the reminder is about reviewing the bundle itself. The bundle's
     # download page can't be used here because it redirects to the library, which has
-    # no review UI. When the buyer has an account, link to the reviews page: it resolves
-    # their reviewable purchases server-side after login, so the link keeps working even
-    # when the email is opened outside an authenticated session. Guest purchases have no
-    # account to log into, so link to the bundle's product page with the purchase's
-    # external id and email digest appended — the page verifies the digest server-side
-    # and then shows the review form, so the link works in any browser without a session.
+    # no review UI. Link every bundle buyer (account-backed or guest) to the bundle's
+    # product page with the purchase's external id and email digest appended: the page
+    # verifies the digest server-side and shows the review form directly, so the link
+    # works in any browser without a session and without a login wall.
     @review_url = if @purchase.is_bundle_purchase?
-      if @purchase.purchaser.present?
-        reviews_url
-      else
-        "#{@purchase.link.long_url}?#{{ purchase_id: @purchase.external_id, purchase_email_digest: @purchase.email_digest }.to_query}"
-      end
+      "#{@purchase.link.long_url}?#{{ purchase_id: @purchase.external_id, purchase_email_digest: @purchase.email_digest }.to_query}"
     else
       @purchase.url_redirect&.download_page_url || @purchase.link.long_url
     end

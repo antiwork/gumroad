@@ -11,17 +11,19 @@ module Product::ReviewStat
     }
   end
 
-  # Bundle "wrapper" purchases are excluded from reviews by design (see
-  # Purchase::Reviews), so a bundle's own product_review_stat never accumulates
-  # ratings — buyers review the individual products inside the bundle instead.
-  # This aggregates those bundled products' review stats (weighted by review
-  # count) so the bundle's product page can show the social proof its contents
-  # have earned. Display-layer only: the bundle's own review stat row is never
-  # written to.
+  # A bundle's product page shows one combined rating summary: the bundle's own
+  # reviews (buyers can review the bundle itself) plus the reviews earned by the
+  # products inside it. Merging both means a new bundle review visibly updates
+  # the page's star summary and histogram, while the bundle still benefits from
+  # the social proof its contents have earned on their own pages. The per-star
+  # counts are summed, so the math is a review-count-weighted average.
+  # Display-layer only: the bundle's own review stat row is never written to by
+  # this method (it accumulates normally as bundle reviews come in).
   def bundle_rating_stats
     return rating_stats unless is_bundle
 
     counts = Hash.new(0)
+    rating_counts.each { |rating, count| counts[rating] += count.to_i }
     bundle_products.alive.includes(product: :product_review_stat).each do |bundle_product|
       product = bundle_product.product
       next unless product.display_product_reviews?

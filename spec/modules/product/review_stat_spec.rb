@@ -279,6 +279,18 @@ describe Product::ReviewStat do
         expect(stats[:percentages].sum).to eq(100)
       end
 
+      it "includes reviews of the bundle itself alongside the bundled products' reviews" do
+        create(:product_review, purchase: create(:purchase, link: @first_bundled_product), rating: 5)
+        create(:product_review, purchase: create(:purchase, link: @second_bundled_product), rating: 1)
+        create(:product_review, purchase: create(:purchase, link: @bundle, is_bundle_purchase: true), rating: 3)
+
+        stats = @bundle.reload.bundle_rating_stats
+        expect(stats[:count]).to eq(3)
+        expect(stats[:average]).to eq(3.0) # (5 + 1 + 3) / 3
+        expect(stats[:percentages]).to eq([33, 0, 33, 0, 34])
+        expect(stats[:percentages].sum).to eq(100)
+      end
+
       it "excludes bundled products that hide reviews" do
         create(:product_review, purchase: create(:purchase, link: @first_bundled_product), rating: 5)
         create(:product_review, purchase: create(:purchase, link: @second_bundled_product), rating: 1)
