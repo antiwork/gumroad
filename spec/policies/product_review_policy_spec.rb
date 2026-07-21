@@ -19,60 +19,29 @@ describe ProductReviewPolicy do
   end
 
   permissions :index? do
-    context "reviews_page feature flag is disabled" do
-      it "denies access to owner" do
-        seller_context = SellerContext.new(user: seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
-
-      it "denies access to accountant" do
-        seller_context = SellerContext.new(user: accountant_for_seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
-
-      it "denies access to admin" do
-        seller_context = SellerContext.new(user: admin_for_seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
-
-      it "denies access to marketing" do
-        seller_context = SellerContext.new(user: marketing_for_seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
-
-      it "denies access to support" do
-        seller_context = SellerContext.new(user: support_for_seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
+    it "grants access to owner" do
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).to permit(seller_context)
     end
 
-    context "reviews_page feature flag is enabled" do
-      before { Feature.activate_user(:reviews_page, seller) }
+    it "denies access to accountant" do
+      seller_context = SellerContext.new(user: accountant_for_seller, seller:)
+      expect(subject).to_not permit(seller_context)
+    end
 
-      it "grants access to owner" do
-        seller_context = SellerContext.new(user: seller, seller:)
-        expect(subject).to permit(seller_context)
-      end
+    it "denies access to admin" do
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to_not permit(seller_context)
+    end
 
-      it "denies access to accountant" do
-        seller_context = SellerContext.new(user: accountant_for_seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
+    it "denies access to marketing" do
+      seller_context = SellerContext.new(user: marketing_for_seller, seller:)
+      expect(subject).to_not permit(seller_context)
+    end
 
-      it "denies access to admin" do
-        seller_context = SellerContext.new(user: admin_for_seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
-
-      it "denies access to marketing" do
-        seller_context = SellerContext.new(user: marketing_for_seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
-
-      it "denies access to support" do
-        seller_context = SellerContext.new(user: support_for_seller, seller:)
-        expect(subject).to_not permit(seller_context)
-      end
+    it "denies access to support" do
+      seller_context = SellerContext.new(user: support_for_seller, seller:)
+      expect(subject).to_not permit(seller_context)
     end
   end
 end

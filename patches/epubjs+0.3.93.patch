@@ -1,0 +1,509 @@
+diff --git a/node_modules/epubjs/src/archive.js b/node_modules/epubjs/src/archive.js
+index 15b3835..ce9f142 100644
+--- a/node_modules/epubjs/src/archive.js
++++ b/node_modules/epubjs/src/archive.js
+@@ -4,6 +4,108 @@ import mime from "./utils/mime";
+ import Path from "./utils/path";
+ import JSZip from "jszip/dist/jszip";
+ 
++export const MAX_EPUB_ARCHIVE_BYTES = 32 * 1024 * 1024;
++export const MAX_EPUB_EXPANDED_BYTES = 64 * 1024 * 1024;
++export const MAX_EPUB_ENTRY_BYTES = 16 * 1024 * 1024;
++export const MAX_EPUB_ENTRY_COUNT = 10000;
++
++function inputByteLength(input, isBase64) {
++	if (typeof input === "string") {
++		return isBase64 ? Math.ceil(input.length * 0.75) : input.length;
++	}
++	if (input && Number.isFinite(input.byteLength)) return input.byteLength;
++	if (input && Number.isFinite(input.size)) return input.size;
++	if (input && Number.isFinite(input.length)) return input.length;
++	return null;
++}
++
++function getArchiveBytes(input, isBase64) {
++	if (typeof input === "string") {
++		if (isBase64) throw new Error("Base64 EPUB archives are not supported");
++		return input;
++	}
++	if (input instanceof ArrayBuffer) return new Uint8Array(input);
++	if (ArrayBuffer.isView(input)) return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
++	throw new Error("EPUB archive has an unsupported input type");
++}
++
++function byteAt(bytes, offset) {
++	return typeof bytes === "string" ? bytes.charCodeAt(offset) : bytes[offset];
++}
++
++function readUint16(bytes, offset) {
++	return byteAt(bytes, offset) | byteAt(bytes, offset + 1) << 8;
++}
++
++function readUint32(bytes, offset) {
++	return (byteAt(bytes, offset) | byteAt(bytes, offset + 1) << 8 |
++		byteAt(bytes, offset + 2) << 16 | byteAt(bytes, offset + 3) << 24) >>> 0;
++}
++
++function hasSignature(bytes, offset, signature) {
++	return offset >= 0 && offset + 4 <= bytes.length && readUint32(bytes, offset) === signature;
++}
++
++function findEndOfCentralDirectory(bytes) {
++	const minimumOffset = Math.max(0, bytes.length - 22 - 0xffff);
++	for (let offset = bytes.length - 22; offset >= minimumOffset; offset--) {
++		if (hasSignature(bytes, offset, 0x06054b50) && offset + 22 + readUint16(bytes, offset + 20) === bytes.length) {
++			return offset;
++		}
++	}
++	return -1;
++}
++
++function countCentralDirectoryEntries(input, isBase64) {
++	let bytes = getArchiveBytes(input, isBase64);
++	let endOffset = findEndOfCentralDirectory(bytes);
++	if (endOffset === -1) throw new Error("EPUB has an invalid ZIP directory");
++
++	let declaredEntryCount = readUint16(bytes, endOffset + 10);
++	let directorySize = readUint32(bytes, endOffset + 12);
++	let directoryOffset = readUint32(bytes, endOffset + 16);
++	if (declaredEntryCount === 0xffff || directorySize === 0xffffffff || directoryOffset === 0xffffffff) {
++		throw new Error("ZIP64 EPUB archives are not supported");
++	}
++
++	// JSZip applies any prepended-byte adjustment to the declared offset. The
++	// physical central directory therefore ends exactly where EOCD begins.
++	let offset = endOffset - directorySize;
++	if (offset < 0) throw new Error("EPUB has an invalid ZIP directory");
++
++	let count = 0;
++	while (hasSignature(bytes, offset, 0x02014b50)) {
++		if (offset + 46 > endOffset) throw new Error("EPUB has an invalid ZIP directory");
++		count += 1;
++		if (count > MAX_EPUB_ENTRY_COUNT) return count;
++		let fileNameBytes = readUint16(bytes, offset + 28);
++		let extraBytes = readUint16(bytes, offset + 30);
++		let commentBytes = readUint16(bytes, offset + 32);
++		offset += 46 + fileNameBytes + extraBytes + commentBytes;
++		if (offset > endOffset) throw new Error("EPUB has an invalid ZIP directory");
++	}
++	return count;
++}
++
++function joinUint8Arrays(chunks, totalBytes) {
++	let joined = new Uint8Array(totalBytes);
++	let offset = 0;
++	chunks.forEach(function(chunk) {
++		joined.set(chunk, offset);
++		offset += chunk.byteLength;
++	});
++	return joined;
++}
++
++function encodeBase64(bytes) {
++	let binary = "";
++	const chunkSize = 0x8000;
++	for (let offset = 0; offset < bytes.length; offset += chunkSize) {
++		binary += String.fromCharCode.apply(null, bytes.subarray(offset, offset + chunkSize));
++	}
++	return window.btoa(binary);
++}
++
+ /**
+  * Handles Unzipping a requesting files from an Epub Archive
+  * @class
+@@ -13,6 +115,11 @@ class Archive {
+ 	constructor() {
+ 		this.zip = undefined;
+ 		this.urlCache = {};
++		this.destroyed = false;
++		this.expandedBytes = 0;
++		this.maxEntryBytes = MAX_EPUB_ENTRY_BYTES;
++		this.maxExpandedBytes = MAX_EPUB_EXPANDED_BYTES;
++		this.activeEntryReads = [];
+ 
+ 		this.checkRequirements();
+ 
+@@ -38,6 +145,19 @@ class Archive {
+ 	 * @return {Promise} zipfile
+ 	 */
+ 	open(input, isBase64){
++		let archiveBytes = inputByteLength(input, isBase64);
++		if (!Number.isSafeInteger(archiveBytes) || archiveBytes <= 0 || archiveBytes > MAX_EPUB_ARCHIVE_BYTES) {
++			return Promise.reject(new Error("EPUB archive exceeds the reader memory limit"));
++		}
++		let entryCount;
++		try {
++			entryCount = countCentralDirectoryEntries(input, isBase64);
++		} catch (error) {
++			return Promise.reject(error);
++		}
++		if (entryCount > MAX_EPUB_ENTRY_COUNT) {
++			return Promise.reject(new Error("EPUB contains too many ZIP entries"));
++		}
+ 		return this.zip.loadAsync(input, {"base64": isBase64});
+ 	}
+ 
+@@ -50,10 +170,72 @@ class Archive {
+ 	openUrl(zipUrl, isBase64){
+ 		return request(zipUrl, "binary")
+ 			.then(function(data){
+-				return this.zip.loadAsync(data, {"base64": isBase64});
++				return this.open(data, isBase64);
+ 			}.bind(this));
+ 	}
+ 
++	/**
++	 * Inflate one entry while enforcing limits against the bytes JSZip actually
++	 * emits. ZIP directory sizes are untrusted and cannot be a safety boundary.
++	 * @private
++	 * @param {object} entry
++	 * @return {Promise<{chunks: Uint8Array[], totalBytes: number}>}
++	 */
++	readEntry(entry) {
++		if (this.destroyed) return Promise.reject(new Error("EPUB archive was closed"));
++
++		let stream = entry.internalStream("uint8array");
++		return new Promise(function(resolve, reject) {
++			let chunks = [];
++			let entryBytes = 0;
++			let settled = false;
++			let activeRead;
++			let removeActiveRead = function() {
++				let index = this.activeEntryReads.indexOf(activeRead);
++				if (index !== -1) this.activeEntryReads.splice(index, 1);
++			}.bind(this);
++			let fail = function(error) {
++				if (settled) return;
++				settled = true;
++				stream.pause();
++				chunks = [];
++				removeActiveRead();
++				reject(error);
++			};
++			activeRead = {cancel: fail};
++			this.activeEntryReads.push(activeRead);
++
++			stream
++				.on("data", function(chunk) {
++					if (settled) return;
++					let chunkBytes = chunk && chunk.byteLength;
++					if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 0) {
++						fail(new Error("EPUB produced an invalid ZIP chunk"));
++						return;
++					}
++					if (entryBytes + chunkBytes > this.maxEntryBytes) {
++						fail(new Error("EPUB contains an oversized ZIP entry"));
++						return;
++					}
++					if (this.expandedBytes + chunkBytes > this.maxExpandedBytes) {
++						fail(new Error("EPUB expands beyond the reader memory limit"));
++						return;
++					}
++					entryBytes += chunkBytes;
++					this.expandedBytes += chunkBytes;
++					chunks.push(chunk);
++				}.bind(this))
++				.on("error", fail)
++				.on("end", function() {
++					if (settled) return;
++					settled = true;
++					removeActiveRead();
++					resolve({chunks: chunks, totalBytes: entryBytes});
++				})
++				.resume();
++		}.bind(this));
++	}
++
+ 	/**
+ 	 * Request a url from the archive
+ 	 * @param  {string} url  a url to request from the archive
+@@ -80,7 +262,9 @@ class Archive {
+ 			response.then(function (r) {
+ 				let result = this.handleResponse(r, type);
+ 				deferred.resolve(result);
+-			}.bind(this));
++			}.bind(this), function (error) {
++				deferred.reject(error);
++			});
+ 		} else {
+ 			deferred.reject({
+ 				message : "File not found in the epub: " + url,
+@@ -133,8 +317,8 @@ class Archive {
+ 
+ 		if(entry) {
+ 			mimeType = mimeType || mime.lookup(entry.name);
+-			return entry.async("uint8array").then(function(uint8array) {
+-				return new Blob([uint8array], {type : mimeType});
++			return this.readEntry(entry).then(function(result) {
++				return new Blob(result.chunks, {type : mimeType});
+ 			});
+ 		}
+ 	}
+@@ -150,8 +334,8 @@ class Archive {
+ 		var entry = this.zip.file(decodededUrl);
+ 
+ 		if(entry) {
+-			return entry.async("string").then(function(text) {
+-				return text;
++			return this.readEntry(entry).then(function(result) {
++				return new TextDecoder("utf-8").decode(joinUint8Arrays(result.chunks, result.totalBytes));
+ 			});
+ 		}
+ 	}
+@@ -168,8 +352,9 @@ class Archive {
+ 
+ 		if(entry) {
+ 			mimeType = mimeType || mime.lookup(entry.name);
+-			return entry.async("base64").then(function(data) {
+-				return "data:" + mimeType + ";base64," + data;
++			return this.readEntry(entry).then(function(result) {
++				let bytes = joinUint8Arrays(result.chunks, result.totalBytes);
++				return "data:" + mimeType + ";base64," + encodeBase64(bytes);
+ 			});
+ 		}
+ 	}
+@@ -198,10 +383,14 @@ class Archive {
+ 			if (response) {
+ 				response.then(function(tempUrl) {
+ 
+-					this.urlCache[url] = tempUrl;
++					if (!this.destroyed) {
++						this.urlCache[url] = tempUrl;
++					}
+ 					deferred.resolve(tempUrl);
+ 
+-				}.bind(this));
++				}.bind(this), function (error) {
++					deferred.reject(error);
++				});
+ 
+ 			}
+ 
+@@ -213,10 +402,16 @@ class Archive {
+ 				response.then(function(blob) {
+ 
+ 					tempUrl = _URL.createObjectURL(blob);
+-					this.urlCache[url] = tempUrl;
++					if (this.destroyed) {
++						_URL.revokeObjectURL(tempUrl);
++					} else {
++						this.urlCache[url] = tempUrl;
++					}
+ 					deferred.resolve(tempUrl);
+ 
+-				}.bind(this));
++				}.bind(this), function (error) {
++					deferred.reject(error);
++				});
+ 
+ 			}
+ 		}
+@@ -244,11 +439,17 @@ class Archive {
+ 
+ 	destroy() {
+ 		var _URL = window.URL || window.webkitURL || window.mozURL;
++		this.destroyed = true;
++		let closeError = new Error("EPUB archive was closed");
++		this.activeEntryReads.slice().forEach(function(activeRead) {
++			activeRead.cancel(closeError);
++		});
+ 		for (let fromCache in this.urlCache) {
+-			_URL.revokeObjectURL(fromCache);
++			_URL.revokeObjectURL(this.urlCache[fromCache]);
+ 		}
+ 		this.zip = undefined;
+ 		this.urlCache = {};
++		this.activeEntryReads = [];
+ 	}
+ }
+ 
+diff --git a/node_modules/epubjs/src/managers/default/index.js b/node_modules/epubjs/src/managers/default/index.js
+index 2812d87..4ec1de8 100644
+--- a/node_modules/epubjs/src/managers/default/index.js
++++ b/node_modules/epubjs/src/managers/default/index.js
+@@ -309,6 +309,7 @@ class DefaultViewManager {
+ 
+ 			}.bind(this), (err) => {
+ 				displaying.reject(err);
++				return Promise.reject(err);
+ 			})
+ 			.then(function(){
+ 				return this.handleNextPrePaginated(forceRight, section, this.add);
+@@ -319,7 +320,9 @@ class DefaultViewManager {
+ 
+ 				displaying.resolve();
+ 
+-			}.bind(this));
++			}.bind(this), (err) => {
++				displaying.reject(err);
++			});
+ 		// .then(function(){
+ 		// 	return this.hooks.display.trigger(view);
+ 		// }.bind(this))
+@@ -519,7 +522,7 @@ class DefaultViewManager {
+ 				.then(function(){
+ 					return this.handleNextPrePaginated(forceRight, next, this.append);
+ 				}.bind(this), (err) => {
+-					return err;
++					return Promise.reject(err);
+ 				})
+ 				.then(function(){
+ 
+@@ -618,7 +621,7 @@ class DefaultViewManager {
+ 						}
+ 					}
+ 				}.bind(this), (err) => {
+-					return err;
++					return Promise.reject(err);
+ 				})
+ 				.then(function(){
+ 					if(this.isPaginated && this.settings.axis === "horizontal") {
+diff --git a/node_modules/epubjs/src/rendition.js b/node_modules/epubjs/src/rendition.js
+index 14a21b4..85b8a45 100644
+--- a/node_modules/epubjs/src/rendition.js
++++ b/node_modules/epubjs/src/rendition.js
+@@ -319,20 +319,28 @@ class Rendition {
+ 		if (!this.book) {
+ 			return;
+ 		}
+-		var isCfiString = this.epubcfi.isCfiString(target);
+ 		var displaying = new defer();
+ 		var displayed = displaying.promise;
++		var isCfiString;
+ 		var section;
+ 		var moveTo;
+ 
+ 		this.displaying = displaying;
+ 
+-		// Check if this is a book percentage
+-		if (this.book.locations.length() && isFloat(target)) {
+-			target = this.book.locations.cfiFromPercentage(parseFloat(target));
+-		}
++		try {
++			isCfiString = this.epubcfi.isCfiString(target);
++			// Check if this is a book percentage
++			if (this.book.locations.length() && isFloat(target)) {
++				target = this.book.locations.cfiFromPercentage(parseFloat(target));
++			}
+ 
+-		section = this.book.spine.get(target);
++			section = this.book.spine.get(target);
++		} catch (err) {
++			displaying.reject(err);
++			this.displaying = undefined;
++			this.emit(EVENTS.RENDITION.DISPLAY_ERROR, err);
++			return displayed;
++		}
+ 
+ 		if(!section){
+ 			displaying.reject(new Error("No Section Found"));
+@@ -353,6 +361,8 @@ class Rendition {
+ 				this.emit(EVENTS.RENDITION.DISPLAYED, section);
+ 				this.reportLocation();
+ 			}, (err) => {
++				displaying.reject(err);
++				this.displaying = undefined;
+ 				/**
+ 				 * Emit that has been an error displaying
+ 				 * @event displayError
+diff --git a/node_modules/epubjs/src/resources.js b/node_modules/epubjs/src/resources.js
+index b5d77f8..606463d 100644
+--- a/node_modules/epubjs/src/resources.js
++++ b/node_modules/epubjs/src/resources.js
+@@ -5,6 +5,13 @@ import mime from "./utils/mime";
+ import Path from "./utils/path";
+ import path from "path-webpack";
+ 
++const cssImportPattern = /@import\s+([^;]+);?/giu;
++const cssUrlPattern = /url\(\s*(["']?)(.*?)\1\s*\)/giu;
++const isIsolatedResource = (value) => /^(?:blob:|data:|#)/iu.test(value.trim().replace(/^url\(\s*/iu, "").replace(/^["']|["']?\s*\).*$/gu, ""));
++const removeUnresolvedCssResources = (css) => css
++	.replace(cssImportPattern, (rule, url) => isIsolatedResource(url) ? rule : "")
++	.replace(cssUrlPattern, (rule, quote, url) => isIsolatedResource(url) ? rule : 'url("")');
++
+ /**
+  * Handle Package Resources
+  * @class
+@@ -16,6 +23,8 @@ import path from "path-webpack";
+  */
+ class Resources {
+ 	constructor(manifest, options) {
++		this.destroyed = false;
++		this.createdUrls = new Set();
+ 		this.settings = {
+ 			replacements: (options && options.replacements) || "base64",
+ 			archive: (options && options.archive),
+@@ -124,7 +133,13 @@ class Resources {
+ 					});
+ 			} else {
+ 				return this.settings.request(url, 'blob').then((blob) => {
+-					return createBlobUrl(blob, mimeType);
++					var blobUrl = createBlobUrl(blob, mimeType);
++					if (this.destroyed) {
++						URL.revokeObjectURL(blobUrl);
++					} else {
++						this.createdUrls.add(blobUrl);
++					}
++					return blobUrl;
+ 				})
+ 			}
+ 		}
+@@ -153,9 +168,13 @@ class Resources {
+ 
+ 		return Promise.all(replacements)
+ 			.then( (replacementUrls) => {
+-				this.replacementUrls = replacementUrls.filter((url) => {
+-					return (typeof(url) === "string");
+-				});
++				if (this.destroyed) {
++					return replacementUrls;
++				}
++				// Keep each replacement at the same index as its manifest URL.
++				// A corrupt asset is left unresolved instead of shifting every
++				// later replacement onto the wrong file.
++				this.replacementUrls = replacementUrls;
+ 				return replacementUrls;
+ 			});
+ 	}
+@@ -174,6 +193,9 @@ class Resources {
+ 		this.cssUrls.forEach(function(href) {
+ 			var replacement = this.createCssFile(href, archive, resolver)
+ 				.then(function (replacementUrl) {
++					if (this.destroyed) {
++						return;
++					}
+ 					// switch the url in the replacementUrls
+ 					var indexInUrls = this.urls.indexOf(href);
+ 					if (indexInUrls > -1) {
+@@ -229,14 +251,19 @@ class Resources {
+ 		}
+ 
+ 		return textResponse.then( (text) => {
++			if (this.destroyed) {
++				return;
++			}
+ 			// Replacements in the css text
+ 			text = substitute(text, relUrls, this.replacementUrls);
++			text = removeUnresolvedCssResources(text);
+ 
+ 			// Get the new url
+ 			if (this.settings.replacements === "base64") {
+ 				newUrl = createBase64Url(text, "text/css");
+ 			} else {
+ 				newUrl = createBlobUrl(text, "text/css");
++				this.createdUrls.add(newUrl);
+ 			}
+ 
+ 			return newUrl;
+@@ -304,6 +331,11 @@ class Resources {
+ 	}
+ 
+ 	destroy() {
++		this.destroyed = true;
++		this.createdUrls.forEach((url) => {
++			URL.revokeObjectURL(url);
++		});
++		this.createdUrls.clear();
+ 		this.settings = undefined;
+ 		this.manifest = undefined;
+ 		this.resources = undefined;

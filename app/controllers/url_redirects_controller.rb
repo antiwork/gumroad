@@ -52,13 +52,26 @@ class UrlRedirectsController < ApplicationController
   def read
     product = @url_redirect.referenced_link
     @product_file = @url_redirect.product_file(params[:product_file_id])
-    @product_file = product.product_files.alive.find(&:readable?) if product.present? && @product_file.nil?
-    e404 unless @product_file&.readable?
+    @product_file = product.product_files.alive.find(&:browser_readable?) if product.present? && @product_file.nil?
+    e404 unless @product_file&.browser_readable?
 
     s3_retrievable = @product_file
     title = @product_file.with_product_files_owner.name
     set_meta_tag(title:)
     read_url = signed_download_url_for_s3_key_and_filename(s3_retrievable.s3_key, s3_retrievable.s3_filename, cache_group: "read")
+
+    if s3_retrievable.epub?
+      asset_sources = [Rails.application.config.asset_host].compact_blank
+      override_content_security_policy_directives(
+        child_src: ["'self'", "data:", "blob:"],
+        font_src: ["'self'", "data:", "blob:", *asset_sources],
+        frame_src: ["'self'", "data:", "blob:"],
+        img_src: ["'self'", "data:", "blob:"],
+        media_src: ["'self'", "data:", "blob:"],
+        object_src: ["'self'", "data:", "blob:"],
+        style_src: ["'self'", "'unsafe-inline'", "blob:", *asset_sources]
+      )
+    end
 
     trigger_files_lifecycle_events
 
@@ -478,11 +491,11 @@ class UrlRedirectsController < ApplicationController
     def latest_media_locations_data
       return {} if @url_redirect.purchase.nil? || @url_redirect.installment.present?
 
-      product_files = @url_redirect.alive_product_files.select(:id)
+      product_files = @url_redirect.alive_product_files.select(:id, :filetype, :filegroup, :pagelength)
       media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
 
       product_files.each_with_object({}) do |product_file, hash|
-        hash[product_file.external_id] = media_locations_by_file[product_file.id].as_json
+        hash[product_file.external_id] = product_file.media_location_for_download_page(media_locations_by_file[product_file.id])
       end
     end
 

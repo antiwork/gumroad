@@ -245,13 +245,14 @@ describe ScheduledPayout do
         expect(scheduled_payout.reload.status).to eq("pending")
       end
 
-      it "raises if no payment is created" do
+      it "flags the payout for review when no payable balance is available" do
         allow(Payouts).to receive(:create_payment)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
           .and_return([nil, nil])
 
-        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: No payable balance available/)
-        expect(scheduled_payout.reload.status).to eq("pending")
+        expect(scheduled_payout.execute!).to eq(:flagged)
+        expect(scheduled_payout.reload.status).to eq("flagged")
+        expect(scheduled_payout.executed_at).to be_nil
       end
 
       it "raises without processing when the payment failed during preparation" do

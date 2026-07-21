@@ -107,6 +107,11 @@ class ContentModeration::ModerateRecordService
     attr_reader :record, :entity_type
 
     def moderation_enabled?
+      # The :content_moderation flag is fully enabled in production and is kept ONLY as an
+      # operational kill switch (disable it to turn off automated moderation globally, e.g. if the
+      # classifier misbehaves). It was deliberately excluded from the rollout-flag cleanup in
+      # gumroad-private#1208 and should be removed once we're confident we never need to disable
+      # moderation globally. Do not treat it as a rollout gate.
       Feature.active?(:content_moderation)
     end
 

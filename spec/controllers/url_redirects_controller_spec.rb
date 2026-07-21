@@ -2236,8 +2236,9 @@ describe UrlRedirectsController, inertia: true do
         video = create(:streamable_video)
         audio = create(:listenable_audio)
         readable_document = create(:readable_document)
+        epub = create(:epub_product_file, pagelength: 13)
         non_readable_document = create(:non_readable_document)
-        product.product_files = [video, audio, readable_document, non_readable_document]
+        product.product_files = [video, audio, readable_document, epub, non_readable_document]
         product.save!
         purchase = create(:purchase, link: product)
         url_redirect = create(:url_redirect, link: product, purchase:)
@@ -2248,6 +2249,9 @@ describe UrlRedirectsController, inertia: true do
         readable_document_consumption_timestamp = Time.current.change(usec: 0) + 5.minutes
         create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id, platform: Platform::ANDROID,
                                 product_file_id: readable_document.id, product_id: url_redirect.referenced_link.id, location: 3, consumed_at: readable_document_consumption_timestamp)
+        epub_consumption_timestamp = Time.current.change(usec: 0) + 10.minutes
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id, platform: Platform::ANDROID,
+                                product_file_id: epub.id, product_id: url_redirect.referenced_link.id, location: 13, consumed_at: epub_consumption_timestamp)
 
         request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
         get :download_page, params: { id: url_redirect.token }
@@ -2257,6 +2261,7 @@ describe UrlRedirectsController, inertia: true do
           video.external_id => nil,
           audio.external_id => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
           readable_document.external_id => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
+          epub.external_id => { "location" => 99, "timestamp" => epub_consumption_timestamp.as_json, "unit" => "percentage" },
           non_readable_document.external_id => nil
         )
       end

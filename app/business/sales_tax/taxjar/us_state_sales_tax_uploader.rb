@@ -43,7 +43,7 @@ class UsStateSalesTaxUploader
     subdivisions = subdivisions_for(subdivision_codes)
 
     scope = Purchase.successful
-      .not_chargedback_or_chargedback_reversed
+      .not_chargedback_for_tax_reporting
       .where.not(stripe_transaction_id: nil)
       .where("purchases.created_at BETWEEN ? AND ?", starts_at, ends_at)
       .where("(country = 'United States') OR ((country IS NULL OR country = 'United States') AND ip_country = 'United States')")
@@ -79,7 +79,7 @@ class UsStateSalesTaxUploader
     subdivisions = subdivisions_for(subdivision_codes)
 
     rows = Refund.joins(:purchase)
-      .merge(Purchase.successful.not_chargedback_or_chargedback_reversed)
+      .merge(Purchase.successful.not_chargedback_for_tax_reporting)
       .where.not(purchases: { stripe_transaction_id: nil })
       .where("refunds.created_at BETWEEN ? AND ?", starts_at, ends_at)
       .where("refunds.status IS NULL OR refunds.status NOT IN ('failed', 'canceled')")
@@ -87,6 +87,45 @@ class UsStateSalesTaxUploader
       .where(purchases: { charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids] })
       .where("refunds.created_at >= :cutover", cutover: REFUND_REPORTING_CUTOVER.beginning_of_day)
       .pluck("refunds.id", "purchases.zip_code", "purchases.ip_address")
+
+    group_ids_by_state(rows, subdivisions)
+  end
+
+  # Shared US purchase-side filters for the chargeback legs, mirroring the order-leg
+  # selection above (minus its purchase-date window — chargeback legs are windowed by the
+  # dispute event date instead).
+  def self.us_purchase_filters(scope)
+    scope
+      .merge(Purchase.successful)
+      .where.not(stripe_transaction_id: nil)
+      .where("(country = 'United States') OR ((country IS NULL OR country = 'United States') AND ip_country = 'United States')")
+      .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
+  end
+  private_class_method :us_purchase_filters
+
+  # Groups purchase ids whose chargeback (debit) leg lands in [starts_at, ends_at] by
+  # subdivision code — event-dated chargebacks (post-cutover, see
+  # Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER) windowed by the dispute event date
+  # (purchases.chargeback_date, which has always held the processor's dispute-formalized
+  # timestamp). Pre-cutover chargebacks keep the legacy treatment: excluded from the order
+  # upload entirely, no chargeback transaction — so already-filed periods re-push as filed.
+  def self.grouped_chargeback_purchase_ids_by_state(subdivision_codes:, starts_at:, ends_at:)
+    subdivisions = subdivisions_for(subdivision_codes)
+
+    rows = us_purchase_filters(Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at))
+      .pluck(:id, :zip_code, :ip_address)
+
+    group_ids_by_state(rows, subdivisions)
+  end
+
+  # Groups purchase ids whose chargeback-reversal (dispute won) leg lands in
+  # [starts_at, ends_at] by subdivision code. Only real Dispute rows date reversals (see the
+  # scope); callers re-check the resolved won_at per purchase before pushing.
+  def self.grouped_chargeback_reversal_purchase_ids_by_state(subdivision_codes:, starts_at:, ends_at:)
+    subdivisions = subdivisions_for(subdivision_codes)
+
+    rows = us_purchase_filters(Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at))
+      .pluck(:id, :zip_code, :ip_address)
 
     group_ids_by_state(rows, subdivisions)
   end
@@ -210,6 +249,94 @@ class UsStateSalesTaxUploader
       # total_transaction_cents basis of the order leg's gmv_cents.
       total_refunded_cents: refund.total_transaction_cents.to_i,
       tax_refunded_cents: refund.gumroad_tax_cents.to_i
+    }
+  end
+
+  # Creates the TaxJar refund transaction for a chargeback, dated by the dispute event date
+  # (purchases.chargeback_date) so the clawed-back tax is credited in the period the dispute
+  # was formalized — not silently deleted from the purchase's (possibly already-filed) period.
+  # Amounts are the purchase's *_for_chargeback_reporting values: net of its refunds, since
+  # each refund already got (or will get) its own refund transaction and the dispute only
+  # claws back what refunds didn't return. ZIP resolution reuses the purchase's, exactly like
+  # upload_refund.
+  def upload_chargeback(purchase:, subdivision:)
+    zip_code = resolve_zip_code(purchase:, subdivision:)
+    return unless zip_code
+
+    amount_dollars = purchase.price_cents_for_chargeback_reporting / 100.0
+    sales_tax_dollars = purchase.gumroad_tax_cents_for_chargeback_reporting / 100.0
+    return if amount_dollars.zero? && sales_tax_dollars.zero?
+
+    if @push_to_taxjar
+      transaction_id = "#{purchase.external_id}-chargeback"
+      with_taxjar_error_handling(transaction_id:) do
+        @taxjar_api.create_refund_transaction(
+          transaction_id:,
+          transaction_reference_id: purchase.external_id,
+          transaction_date: purchase.chargeback_date.iso8601,
+          destination: destination_for(subdivision:, zip_code:),
+          quantity: purchase.quantity,
+          product_tax_code: Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
+          amount_dollars:,
+          sales_tax_dollars:,
+          unit_price_dollars: amount_dollars / purchase.quantity
+        )
+      end
+    end
+
+    {
+      total_chargeback_cents: purchase.total_cents_for_chargeback_reporting,
+      tax_chargeback_cents: purchase.gumroad_tax_cents_for_chargeback_reporting
+    }
+  end
+
+  # Creates the TaxJar order transaction that re-adds a won dispute's money, dated by the
+  # Dispute row's won_at (real dispute rows only — reversal dates are never synthesized; a
+  # reversed chargeback without one never gets a chargeback transaction either, see
+  # Purchase.chargebacks_for_tax_period_reporting). Pushed as a fresh order transaction with
+  # a suffixed id: TaxJar has no "un-refund", so the win re-enters the money as a new order
+  # in the period of the win.
+  #
+  # starts_at/ends_at is the same window the caller selected the purchase with
+  # (Purchase.chargeback_reversals_for_tax_period_reporting). The selection matches when ANY
+  # of the purchase's dispute rows records a won_at inside the window, but the transaction is
+  # dated by the single canonical chargeback_reversal_reporting_date — with several dispute
+  # rows those can disagree, and pushing here would date the leg outside the window it was
+  # selected for (wrong filing period). So the leg is only emitted by the run whose window
+  # contains the canonical date; runs that matched via a non-canonical dispute row emit
+  # nothing, and the canonical day's run pushes the one correctly dated transaction.
+  def upload_chargeback_reversal(purchase:, subdivision:, starts_at:, ends_at:)
+    zip_code = resolve_zip_code(purchase:, subdivision:)
+    return unless zip_code
+
+    won_at = purchase.chargeback_reversal_reporting_date
+    return unless won_at
+    return unless won_at.between?(starts_at, ends_at)
+
+    amount_dollars = purchase.price_cents_for_chargeback_reporting / 100.0
+    sales_tax_dollars = purchase.gumroad_tax_cents_for_chargeback_reporting / 100.0
+    return if amount_dollars.zero? && sales_tax_dollars.zero?
+
+    if @push_to_taxjar
+      transaction_id = "#{purchase.external_id}-chargeback-reversal"
+      with_taxjar_error_handling(transaction_id:) do
+        @taxjar_api.create_order_transaction(
+          transaction_id:,
+          transaction_date: won_at.iso8601,
+          destination: destination_for(subdivision:, zip_code:),
+          quantity: purchase.quantity,
+          product_tax_code: Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
+          amount_dollars:,
+          shipping_dollars: 0,
+          sales_tax_dollars:,
+          unit_price_dollars: amount_dollars / purchase.quantity
+        )
+      end
+    end
+
+    {
+      total_reversal_cents: purchase.total_cents_for_chargeback_reporting,
+      tax_reversal_cents: purchase.gumroad_tax_cents_for_chargeback_reporting
     }
   end
 

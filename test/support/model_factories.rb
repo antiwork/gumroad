@@ -901,8 +901,10 @@ module ModelFactories
     create_product_file(link:, url: "#{S3_BASE_URL}specs/doc-#{unique_suffix}.pdf", filetype: "pdf", filegroup: "document", **attrs)
   end
 
+  # A document that cannot be read in the browser. EPUBs became readable when the
+  # in-browser EPUB reader shipped, so a plain text file plays that role now.
   def create_non_readable_document(link: nil, **attrs)
-    create_product_file(link:, url: "#{S3_BASE_URL}specs/doc-#{unique_suffix}.epub", filetype: "epub", filegroup: "epub_document", **attrs)
+    create_product_file(link:, url: "#{S3_BASE_URL}specs/doc-#{unique_suffix}.txt", filetype: "txt", filegroup: "document", **attrs)
   end
 
   def create_streamable_video(link: nil, **attrs)

@@ -985,9 +985,8 @@ describe User, :vcr do
         include_examples "user is not deactivated"
       end
 
-      context "when user has negative balances and the feature delete_account_forfeit_balance is active" do
+      context "when user has negative balances" do
         before do
-          Feature.activate_user :delete_account_forfeit_balance, @user
           create(:balance, user: @user, amount_cents: -50)
         end
 
@@ -3973,7 +3972,6 @@ describe User, :vcr do
     let(:user) { create(:user) }
 
     before do
-      Feature.activate_user(:ai_product_generation, user)
       user.confirm
       allow(user).to receive(:sales_cents_total).and_return(15_000)
     end
@@ -3996,12 +3994,6 @@ describe User, :vcr do
     end
 
     it "returns false when user has no completed payments or successful sales" do
-      expect(user.eligible_for_ai_product_generation?).to eq(false)
-    end
-
-    it "returns false when feature flag is inactive" do
-      Feature.deactivate_user(:ai_product_generation, user)
-      create(:payment_completed, user:)
       expect(user.eligible_for_ai_product_generation?).to eq(false)
     end
 

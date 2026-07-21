@@ -75,6 +75,203 @@ describe ProductFile do
     end
   end
 
+  describe "#readable?" do
+    it "returns true for PDF files" do
+      expect(build(:readable_document).readable?).to eq(true)
+    end
+
+    it "returns true for EPUB files" do
+      expect(build(:epub_product_file).readable?).to eq(true)
+    end
+
+    it "returns false for other file types" do
+      expect(build(:non_readable_document).readable?).to eq(false)
+      expect(build(:streamable_video).readable?).to eq(false)
+      expect(build(:listenable_audio).readable?).to eq(false)
+      expect(build(:external_link).readable?).to eq(false)
+    end
+  end
+
+  describe "#browser_readable?" do
+    it "allows PDFs and EPUBs with a missing or bounded size" do
+      expect(build(:readable_document, size: nil).browser_readable?).to eq(true)
+      expect(build(:epub_product_file, size: nil).browser_readable?).to eq(true)
+      expect(build(:epub_product_file, size: ProductFile::MAX_EPUB_READER_ARCHIVE_SIZE).browser_readable?).to eq(true)
+    end
+
+    it "keeps known oversized EPUBs download-only" do
+      product_file = build(:epub_product_file, size: ProductFile::MAX_EPUB_READER_ARCHIVE_SIZE + 1)
+
+      expect(product_file.browser_readable?).to eq(false)
+      expect(product_file.readable?).to eq(true)
+    end
+  end
+
+  describe "#content_length" do
+    it "uses 100 for EPUB percentage progress" do
+      expect(build(:epub_product_file, pagelength: 12).content_length).to eq(100)
+    end
+  end
+
+  describe "#media_location_for_download_page" do
+    it "keeps a native EPUB location in the final section below completion" do
+      product_file = build(:epub_product_file, pagelength: 13)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 13,
+        unit: MediaLocation::Unit::PAGE_NUMBER,
+        consumed_at: Time.current
+      )
+
+      expect(product_file.media_location_for_download_page(media_location)).to include(
+        location: 99,
+        unit: MediaLocation::Unit::PERCENTAGE
+      )
+      expect(product_file.media_location_for_download_page(media_location)).not_to have_key(:cfi)
+    end
+
+    it "does not mark the penultimate native EPUB page complete" do
+      product_file = build(:epub_product_file, pagelength: 200)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 199,
+        unit: MediaLocation::Unit::PAGE_NUMBER,
+        consumed_at: Time.current
+      )
+
+      expect(product_file.media_location_for_download_page(media_location)).to include(
+        location: 99,
+        unit: MediaLocation::Unit::PERCENTAGE
+      )
+    end
+
+    it "suppresses legacy EPUB progress when there is no section count" do
+      product_file = build(:epub_product_file, pagelength: nil)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 5,
+        unit: MediaLocation::Unit::PAGE_NUMBER,
+        consumed_at: Time.current
+      )
+
+      expect(product_file.media_location_for_download_page(media_location)).to be_nil
+    end
+
+    it "normalizes progress from the fields selected by the download-page poll" do
+      product_file = create(:epub_product_file, pagelength: 13)
+      selected_file = ProductFile.select(:id, :filetype, :filegroup, :pagelength).find(product_file.id)
+      media_location = MediaLocation.new(
+        product_file: selected_file,
+        location: 4,
+        unit: MediaLocation::Unit::PAGE_NUMBER,
+        consumed_at: Time.current
+      )
+
+      expect(selected_file.media_location_for_download_page(media_location)).to include(
+        location: 30,
+        unit: MediaLocation::Unit::PERCENTAGE
+      )
+    end
+  end
+
+  describe "#epub_location_for_mobile" do
+    it "provides the exact spine section and completion separately" do
+      product_file = build(:epub_product_file, pagelength: 13)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 75,
+        unit: MediaLocation::Unit::PERCENTAGE,
+        epub_cfi: "epubcfi(/6/8!/4/2/1:0)",
+        consumed_at: Time.current
+      )
+
+      expect(product_file.epub_location_for_mobile(media_location)).to include(
+        cfi: media_location.epub_cfi,
+        percentage: 75,
+        page_number: 4,
+        completed: false
+      )
+      media_location.location = 100
+      expect(product_file.epub_location_for_mobile(media_location)).to include(completed: true)
+    end
+
+    it "keeps a partial one-section locator valid and incomplete" do
+      product_file = build(:epub_product_file, pagelength: 1)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 50,
+        unit: MediaLocation::Unit::PERCENTAGE,
+        epub_cfi: "epubcfi(/6/2!/4/2/1:0)",
+        consumed_at: Time.current
+      )
+
+      expect(product_file.epub_location_for_mobile(media_location)).to include(page_number: 1, completed: false)
+    end
+  end
+
+  describe "#media_location_for_mobile" do
+    it "derives the legacy page from the CFI and reserves completion for 100 percent" do
+      product_file = build(:epub_product_file, pagelength: 13)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 75,
+        unit: MediaLocation::Unit::PERCENTAGE,
+        epub_cfi: "epubcfi(/6/8!/4/2/1:0)",
+        consumed_at: Time.current
+      )
+
+      expect(product_file.media_location_for_mobile(media_location)).to include(location: 4)
+      media_location.epub_cfi = "epubcfi(/6/26!/4/2/1:0)"
+      media_location.location = 99
+      expect(product_file.media_location_for_mobile(media_location)).to include(location: 12)
+      media_location.epub_cfi = "epubcfi(/6/24!/4/2/1:0)"
+      media_location.location = 100
+      expect(product_file.media_location_for_mobile(media_location)).to include(location: 13)
+    end
+
+    it "omits an incomplete one-section legacy sentinel" do
+      product_file = build(:epub_product_file, pagelength: 1)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 50,
+        unit: MediaLocation::Unit::PERCENTAGE,
+        epub_cfi: "epubcfi(/6/2!/4/2/1:0)",
+        consumed_at: Time.current
+      )
+
+      expect(product_file.media_location_for_mobile(media_location)).to be_nil
+    end
+  end
+
+  describe "#media_location_compatible?" do
+    it "rejects an EPUB percentage after the file is replaced with a PDF" do
+      product_file = build(:readable_document)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 42,
+        unit: MediaLocation::Unit::PERCENTAGE,
+        epub_cfi: "epubcfi(/6/4!/4/2/8:0)",
+        consumed_at: Time.current
+      )
+
+      expect(product_file.media_location_compatible?(media_location)).to be(false)
+      expect(product_file.media_location_for_download_page(media_location)).to be_nil
+    end
+
+    it "rejects stale percentage progress after replacement with a non-consumable file" do
+      product_file = build(:non_readable_document)
+      media_location = MediaLocation.new(
+        product_file:,
+        location: 42,
+        unit: MediaLocation::Unit::PERCENTAGE,
+        epub_cfi: "epubcfi(/6/4!/4/2/8:0)",
+        consumed_at: Time.current
+      )
+
+      expect(product_file.media_location_compatible?(media_location)).to be(false)
+    end
+  end
+
   describe "#must_be_pdf_stamped?" do
     it "returns false for a non-pdf file" do
       product_file = create(:non_readable_document)

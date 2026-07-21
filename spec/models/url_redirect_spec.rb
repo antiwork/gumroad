@@ -267,7 +267,7 @@ describe UrlRedirect do
         product.product_files << create(
           :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/a1a5b8c8c38749e2b3cb27099a817517/original/Alice&#39;s Adventures in Wonderland.pdf"
         )
-        purchase = create(:purchase, link: product, purchaser: create(:user))
+        purchase = create(:free_purchase, link: product, purchaser: create(:user))
         url_redirect = create(:url_redirect, link: product, purchase:)
 
         product_json = url_redirect.product_json_data
@@ -287,7 +287,7 @@ describe UrlRedirect do
         product = create(:product)
         files = create_list(:readable_document, 5, link: product)
         product.product_files = files
-        purchase = create(:purchase, link: product, purchaser: create(:user))
+        purchase = create(:free_purchase, link: product, purchaser: create(:user))
         url_redirect = create(:url_redirect, link: product, purchase:)
 
         consumed_at = Time.current.change(usec: 0)
@@ -318,6 +318,77 @@ describe UrlRedirect do
         files.last(2).each do |file|
           expect(locations_by_file_id[file.external_id][:latest_media_location]).to be_nil
         end
+      end
+
+      it "uses the newest web CFI instead of older native progress" do
+        product = create(:product)
+        epub = create(:epub_product_file, link: product, pagelength: 13)
+        purchase = create(:free_purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+        mobile_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                                  product_file_id: epub.id, product_id: product.id,
+                                                  platform: Platform::ANDROID, location: 4, consumed_at: 2.hours.ago)
+        web_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                               product_file_id: epub.id, product_id: product.id, platform: Platform::WEB,
+                                               location: 75, epub_cfi: "epubcfi(/6/8!/4/2/1:0)", consumed_at: 1.hour.ago)
+
+        file_data = url_redirect.product_file_json_data_for_mobile.sole
+
+        expect(file_data[:content_length]).to eq(13)
+        expect(file_data[:latest_media_location]).to eq(
+          location: 4,
+          unit: MediaLocation::Unit::PAGE_NUMBER,
+          timestamp: web_location.consumed_at
+        )
+        expect(file_data[:latest_media_location][:timestamp]).to be > mobile_location.consumed_at
+        expect(file_data[:latest_epub_location]).to eq(
+          cfi: web_location.epub_cfi,
+          percentage: 75,
+          page_number: 4,
+          completed: false,
+          timestamp: web_location.consumed_at
+        )
+      end
+
+      it "derives legacy mobile progress from the latest web CFI" do
+        product = create(:product)
+        epub = create(:epub_product_file, link: product, pagelength: 13)
+        purchase = create(:free_purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+        web_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                               product_file_id: epub.id, product_id: product.id, platform: Platform::WEB,
+                                               location: 75, epub_cfi: "epubcfi(/6/8!/4/2/1:0)")
+
+        file_data = url_redirect.product_file_json_data_for_mobile.sole
+
+        expect(file_data[:latest_media_location]).to eq(
+          location: 4,
+          unit: MediaLocation::Unit::PAGE_NUMBER,
+          timestamp: web_location.consumed_at
+        )
+        expect(file_data[:latest_epub_location]).to include(page_number: 4, percentage: 75, completed: false)
+      end
+
+      it "drops EPUB percentage progress after the file is replaced with a PDF" do
+        product = create(:product)
+        file = create(:epub_product_file, link: product, pagelength: 13)
+        purchase = create(:free_purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                product_file_id: file.id, product_id: product.id, platform: Platform::WEB,
+                                location: 75, epub_cfi: "epubcfi(/6/8!/4/2/1:0)")
+        file.update!(
+          url: "#{S3_BASE_URL}specs/billion-dollar-company-chapter-0.pdf",
+          filetype: "pdf",
+          filegroup: "document"
+        )
+        file.reload
+
+        file_data = url_redirect.product_file_json_data_for_mobile.sole
+
+        expect(file.latest_media_location_for(purchase)).to be_nil
+        expect(file_data[:latest_media_location]).to be_nil
+        expect(file_data[:latest_epub_location]).to be_nil
       end
     end
   end

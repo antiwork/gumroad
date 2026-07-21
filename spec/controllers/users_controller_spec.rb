@@ -596,18 +596,16 @@ describe UsersController do
             expect(user.credit_card_id).to be(nil)
           end
 
-          it "deactivates the user account only if balance amount is 0" do
-            create(:balance, user:, amount_cents: 10)
-            create(:balance, user:, amount_cents: 11, date: 1.day.ago)
-            post :deactivate
-            expect(response.parsed_body["success"]).to eq(false)
-            expect(user.reload.deleted_at).to be(nil)
+          it "forfeits a positive balance and blocks deletion on a negative balance" do
+            stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id) # For negative credits
 
             create(:balance, user:, amount_cents: -30, date: 2.days.ago)
             post :deactivate
             expect(response.parsed_body["success"]).to eq(false)
             expect(user.reload.deleted_at).to be(nil)
 
+            create(:balance, user:, amount_cents: 10)
+            create(:balance, user:, amount_cents: 11, date: 1.day.ago)
             create(:balance, user:, amount_cents: 9, date: 3.days.ago)
             post :deactivate
             expect(response.parsed_body["success"]).to eq(true)
@@ -657,29 +655,13 @@ describe UsersController do
         context "when the user has unpaid balances" do
           before :each do
             @balance = create(:balance, user:, amount_cents: 656)
+            stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id) # For negative credits
           end
 
-          context "when feature delete_account_forfeit_balance is active" do
-            before do
-              stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id) # For negative credits
-              Feature.activate_user(:delete_account_forfeit_balance, user)
-            end
-
-            it "succeeds" do
-              post :deactivate
-              expect(user.reload.deleted_at).to_not be(nil)
-              expect(@balance.reload.state).to eq("forfeited")
-            end
-          end
-
-          context "when feature delete_account_forfeit_balance is inactive" do
-            it "fails" do
-              post :deactivate
-              expect(response.parsed_body["success"]).to be(false)
-              expect(user.reload.deleted_at).to be(nil)
-              expect(user.unpaid_balance_cents).to eq(656)
-              expect(@balance.reload.state).to eq("unpaid")
-            end
+          it "forfeits the balance and succeeds" do
+            post :deactivate
+            expect(user.reload.deleted_at).to_not be(nil)
+            expect(@balance.reload.state).to eq("forfeited")
           end
         end
       end

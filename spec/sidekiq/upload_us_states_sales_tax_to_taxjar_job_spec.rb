@@ -290,4 +290,136 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
       expect(order_kwargs[:amount_dollars]).to eq((@purchase_wa.price_cents + @purchase_wa.shipping_cents) / 100.0)
     end
   end
+
+  describe "uploading a day's chargebacks (post-cutover)" do
+    let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER }
+
+    before do
+      travel_to((cutover - 30).to_time(:utc).change(hour: 12)) do
+        product = create(:product, price_cents: 100_00, native_type: "digital")
+        @purchase = create(:purchase, link: product, country: "United States", zip_code: "98121") # Washington
+      end
+    end
+
+    it "pushes a chargeback as a refund transaction dated by the dispute event date" do
+      event_day = cutover + 5
+      @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12))
+
+      refund_kwargs = nil
+      allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction) do |_instance, **kwargs|
+        refund_kwargs = kwargs
+        {}
+      end
+
+      described_class.new.perform(event_day.iso8601)
+
+      expect(refund_kwargs[:transaction_id]).to eq("#{@purchase.external_id}-chargeback")
+      expect(refund_kwargs[:transaction_reference_id]).to eq(@purchase.external_id)
+      expect(refund_kwargs[:transaction_date]).to eq(@purchase.chargeback_date.iso8601)
+      expect(refund_kwargs[:amount_dollars]).to eq(@purchase.price_cents / 100.0)
+      expect(refund_kwargs[:sales_tax_dollars]).to eq(@purchase.gumroad_tax_cents / 100.0)
+
+      # The charged-back purchase's order upload keeps reporting its sale on the purchase
+      # day — the chargeback transaction above is what backs it out, so dropping the order
+      # (the legacy behavior) would subtract the money twice.
+      order_kwargs = nil
+      allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction) do |_instance, **kwargs|
+        order_kwargs = kwargs
+        {}
+      end
+      described_class.new.perform((cutover - 30).iso8601)
+      expect(order_kwargs[:transaction_id]).to eq(@purchase.external_id)
+    end
+
+    it "nets the purchase's refunds out of the chargeback amounts" do
+      travel_to((cutover - 20).to_time(:utc).change(hour: 12)) do
+        create(:refund, purchase: @purchase, amount_cents: 40_00)
+      end
+      event_day = cutover + 5
+      @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12))
+
+      refund_kwargs = nil
+      allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction) do |_instance, **kwargs|
+        refund_kwargs = kwargs
+        {}
+      end
+
+      described_class.new.perform(event_day.iso8601)
+
+      # The refund already relieved 40.00 through its own path; the dispute claws back only
+      # the remaining 60.00.
+      expect(refund_kwargs[:transaction_id]).to eq("#{@purchase.external_id}-chargeback")
+      expect(refund_kwargs[:amount_dollars]).to eq(60.0)
+    end
+
+    it "does not push legs for pre-cutover chargebacks" do
+      event_day = cutover - 5
+      @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12))
+      expect_any_instance_of(TaxjarApi).not_to receive(:create_refund_transaction)
+      allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction).and_return({})
+
+      described_class.new.perform(event_day.iso8601)
+    end
+
+    it "does not push legs for a reversed chargeback with no dispute row dating the win" do
+      event_day = cutover + 5
+      @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12), chargeback_reversed: true)
+      expect_any_instance_of(TaxjarApi).not_to receive(:create_refund_transaction)
+      expect_any_instance_of(TaxjarApi).not_to receive(:create_order_transaction)
+
+      described_class.new.perform(event_day.iso8601)
+    end
+
+    it "pushes a won dispute as a re-add order transaction dated by the dispute's won_at" do
+      event_day = cutover + 5
+      won_day = cutover + 40
+      won_at = won_day.to_time(:utc).change(hour: 12)
+      @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12), chargeback_reversed: true)
+      create(:dispute, purchase: @purchase, state: "won", won_at:)
+
+      order_kwargs = nil
+      allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction) do |_instance, **kwargs|
+        order_kwargs = kwargs
+        {}
+      end
+      allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction).and_return({})
+
+      described_class.new.perform(won_day.iso8601)
+
+      expect(order_kwargs[:transaction_id]).to eq("#{@purchase.external_id}-chargeback-reversal")
+      expect(order_kwargs[:transaction_date]).to eq(won_at.iso8601)
+      expect(order_kwargs[:amount_dollars]).to eq(@purchase.price_cents / 100.0)
+      expect(order_kwargs[:sales_tax_dollars]).to eq(@purchase.gumroad_tax_cents / 100.0)
+    end
+
+    it "dates the re-add by the canonical reversal date when several dispute rows exist" do
+      # Two dispute rows with different won_at values. The canonical reporting date is the
+      # latest won_at (chargeback_reversal_reporting_date), so the run for the EARLIER row's
+      # day must emit nothing — otherwise that day's push would carry a transaction_date
+      # outside its own filing window — and the canonical day's run emits the one leg.
+      event_day = cutover + 5
+      early_won_day = cutover + 40
+      late_won_day = cutover + 41
+      early_won_at = early_won_day.to_time(:utc).change(hour: 12)
+      late_won_at = late_won_day.to_time(:utc).change(hour: 10)
+      @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12), chargeback_reversed: true)
+      create(:dispute, purchase: @purchase, state: "won", won_at: early_won_at)
+      create(:dispute, purchase: @purchase, state: "won", won_at: late_won_at)
+
+      order_calls = []
+      allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction) do |_instance, **kwargs|
+        order_calls << kwargs
+        {}
+      end
+      allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction).and_return({})
+
+      described_class.new.perform(early_won_day.iso8601)
+      expect(order_calls).to be_empty
+
+      described_class.new.perform(late_won_day.iso8601)
+      expect(order_calls.size).to eq(1)
+      expect(order_calls.first[:transaction_id]).to eq("#{@purchase.external_id}-chargeback-reversal")
+      expect(order_calls.first[:transaction_date]).to eq(late_won_at.iso8601)
+    end
+  end
 end

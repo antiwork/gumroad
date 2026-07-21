@@ -241,6 +241,68 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
     end
 
+    describe "chargeback event-date attribution" do
+      let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day }
+
+      before do
+        # Sold in the month before the cutover month; charged back post-cutover; dispute won
+        # two months after the event. Each event must land in its own month's report.
+        @sale_time = (cutover - 1.month).beginning_of_month + 14.days
+        @event_time = cutover + 5.days
+        @won_time = cutover + 2.months
+
+        travel_to(@sale_time) do
+          product = create(:product, price_cents: 100_00, native_type: "digital")
+
+          @chargedback_purchase = create_taxed_purchase(product, country: "Germany", gumroad_tax_cents: 19_00)
+
+          # A legacy chargeback (event before the cutover): keeps the historical drop.
+          @legacy_chargedback_purchase = create_taxed_purchase(product, country: "Germany", gumroad_tax_cents: 19_00)
+        end
+
+        @legacy_chargedback_purchase.update!(chargeback_date: cutover - 10.days)
+        @chargedback_purchase.update!(chargeback_date: @event_time)
+
+        travel_to(@won_time) do
+          @chargedback_purchase.update!(chargeback_reversed: true)
+          create(:dispute, purchase: @chargedback_purchase, state: "won", won_at: Time.current)
+        end
+      end
+
+      it "keeps the event-dated chargeback's sale in the purchase month and drops only the legacy one" do
+        described_class.new.perform(@sale_time.month, @sale_time.year)
+        payload = read_csv_from_s3
+
+        de_row = payload.find { |row| row[0] == "Germany" }
+        expect(de_row).to be_present
+        # Only the event-dated purchase's gross remains; the legacy one stays dropped as filed.
+        expect(de_row[2]).to eq("119.00")
+        expect(de_row[3]).to eq("1")
+        expect(de_row[4]).to eq("19.00")
+      end
+
+      it "subtracts the chargeback in the month the dispute was formalized" do
+        described_class.new.perform(@event_time.month, @event_time.year)
+        payload = read_csv_from_s3
+
+        de_row = payload.find { |row| row[0] == "Germany" }
+        expect(de_row).to be_present
+        expect(de_row[2]).to eq("-119.00")
+        expect(de_row[3]).to eq("0") # order counts are untouched — the order still happened
+        expect(de_row[4]).to eq("-19.00")
+      end
+
+      it "adds the won dispute back in the month of won_at" do
+        described_class.new.perform(@won_time.month, @won_time.year)
+        payload = read_csv_from_s3
+
+        de_row = payload.find { |row| row[0] == "Germany" }
+        expect(de_row).to be_present
+        expect(de_row[2]).to eq("119.00")
+        expect(de_row[4]).to eq("19.00")
+      end
+    end
+
     describe "failed refund handling" do
       before do
         travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do

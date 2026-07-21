@@ -6,6 +6,7 @@ class ProductFile < ApplicationRecord
 
   SUPPORTED_THUMBNAIL_IMAGE_CONTENT_TYPES = /jpeg|gif|png|jpg/i
   MAXIMUM_THUMBNAIL_FILE_SIZE = 5.megabytes
+  MAX_EPUB_READER_ARCHIVE_SIZE = 32.megabytes
 
   has_paper_trail
 
@@ -170,8 +171,17 @@ class ProductFile < ApplicationRecord
     safe_signed_download_url(s3_key, s3_filename, is_video: streamable?)
   end
 
+  # Files that can be read in the browser's built-in reader (the /read page).
+  # PDFs are rendered with pdf.js and EPUBs with epub.js.
   def readable?
-    pdf?
+    pdf? || epub?
+  end
+
+  # Keep the normal download available when a known EPUB is too large for the
+  # in-browser reader. A missing size is allowed because the client enforces
+  # the limit against bytes streamed from storage.
+  def browser_readable?
+    pdf? || (epub? && (size.nil? || size <= MAX_EPUB_READER_ARCHIVE_SIZE))
   end
 
   def stream_only?
@@ -295,12 +305,83 @@ class ProductFile < ApplicationRecord
   def latest_media_location_for(purchase)
     return nil if link.nil? || installment.present? || purchase.nil?
     latest_media_location = media_locations.where(purchase_id: purchase.id).order("consumed_at").last
+    return unless media_location_compatible?(latest_media_location)
 
     latest_media_location.as_json
   end
 
+  def media_location_for_download_page(media_location)
+    return unless media_location_compatible?(media_location)
+
+    location_json = media_location.as_json(include_epub_cfi: false)
+    return location_json unless epub? && media_location.unit == MediaLocation::Unit::PAGE_NUMBER
+    return unless pagelength.to_i.positive?
+
+    location_json.merge(
+      # A page-number row only proves that the reader entered a spine section.
+      # The final section can contain several spreads, so only CFI-aware web
+      # writes based on epub.js's `atEnd` signal may report 100% completion.
+      location: (media_location.location.fdiv(pagelength) * 100).floor.clamp(0, 99),
+      unit: MediaLocation::Unit::PERCENTAGE
+    )
+  end
+
+  def epub_location_for_mobile(media_location)
+    return unless epub? && media_location&.unit == MediaLocation::Unit::PERCENTAGE && pagelength.to_i.positive?
+
+    spine_step = media_location.epub_cfi&.match(/\Aepubcfi\(\/\d+(?:\[[^\]\r\n]*\])?\/(\d+)/)&.captures&.first&.to_i
+    return unless spine_step&.even?
+
+    page_number = spine_step / 2
+    return unless page_number.between?(1, pagelength)
+
+    {
+      cfi: media_location.epub_cfi,
+      percentage: media_location.location,
+      page_number:,
+      completed: media_location.location == 100,
+      timestamp: media_location.consumed_at
+    }
+  end
+
+  def media_location_for_mobile(media_location)
+    return unless media_location_compatible?(media_location)
+    return media_location.as_json(include_epub_cfi: false) unless epub? && media_location.unit == MediaLocation::Unit::PERCENTAGE
+
+    epub_location = epub_location_for_mobile(media_location)
+    return unless epub_location
+
+    page_number = epub_location[:completed] ? pagelength : epub_location[:page_number]
+    unless epub_location[:completed]
+      return if pagelength == 1
+      page_number -= 1 if page_number == pagelength
+    end
+    {
+      location: page_number,
+      unit: MediaLocation::Unit::PAGE_NUMBER,
+      timestamp: media_location.consumed_at
+    }
+  end
+
+  def media_location_compatible?(media_location)
+    return false if media_location.nil?
+
+    if listenable? || streamable?
+      media_location.unit == MediaLocation::Unit::SECONDS
+    elsif epub?
+      [MediaLocation::Unit::PAGE_NUMBER, MediaLocation::Unit::PERCENTAGE].include?(media_location.unit)
+    elsif readable?
+      media_location.unit == MediaLocation::Unit::PAGE_NUMBER
+    else
+      false
+    end
+  end
+
   def content_length
-    (listenable? || streamable?) ? duration : pagelength
+    return duration if listenable? || streamable?
+    return 100 if epub?
+
+    pagelength
   end
 
   def external_folder_id

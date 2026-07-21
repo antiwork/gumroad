@@ -31,9 +31,15 @@ class CreateGlobalSalesTaxSummaryReportJob
     end_date = Date.new(year, month).end_of_month.end_of_day
 
     aggregation = Hash.new { |h, k| h[k] = { gmv_cents: 0, order_count: 0, tax_collected_cents: 0 } }
+    # Sales leg. not_chargedback_for_tax_reporting keeps, on top of the reversed (won)
+    # chargebacks the old scope kept, event-dated chargebacks (see
+    # Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER): their sale stays counted in the
+    # purchase's own month while the clawback is subtracted by the chargeback legs below.
+    # Chargebacks lost before the chargeback reporting cutover keep the legacy drop so
+    # historical months regenerate as filed.
     base_scope = Purchase.successful
       .not_fully_refunded_for_tax_reporting
-      .not_chargedback_or_chargedback_reversed
+      .not_chargedback_for_tax_reporting
       .where.not(stripe_transaction_id: nil)
       .where("gumroad_tax_cents > 0")
       .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
@@ -78,6 +84,28 @@ class CreateGlobalSalesTaxSummaryReportJob
     Rails.logger.info(
       "#{self.class.name}: refund_leg_complete " \
       "month=#{month} year=#{year} refunds=#{refund_count} elapsed_seconds=#{elapsed_seconds(refund_leg_started_at)}"
+    )
+
+    # Chargeback legs: disputes formalized during the reported month subtract in this month
+    # (dated by purchases.chargeback_date — the processor's dispute-formalized timestamp, so
+    # no backfill), and disputes won during the month add back in this month (dated by the
+    # Dispute row's won_at; real dispute rows only). Only event-dated chargebacks appear —
+    # see Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER; earlier chargebacks keep the
+    # legacy exclusion from the sales leg, so already-filed months regenerate as filed.
+    #
+    # Wrapped in the same max-execution-time guard as the sales aggregation above: these
+    # legs are keyed on purchases.chargeback_date, which has no dedicated index (the only
+    # chargeback_date index is the seller_id-led composite, unusable without a seller
+    # filter), so each query scans purchases. The guard bounds a runaway scan the same way
+    # it does for the sales leg, which this job already relies on to avoid the whole-month
+    # aggregation timing out.
+    chargeback_leg_started_at = monotonic_seconds
+    chargeback_count = WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
+      apply_chargeback_legs(aggregation, start_date, end_date)
+    end
+    Rails.logger.info(
+      "#{self.class.name}: chargeback_leg_complete " \
+      "month=#{month} year=#{year} chargeback_legs=#{chargeback_count} elapsed_seconds=#{elapsed_seconds(chargeback_leg_started_at)}"
     )
 
     write_and_upload_csv(aggregation, month, year)
@@ -369,7 +397,7 @@ class CreateGlobalSalesTaxSummaryReportJob
         .joins(:purchase)
         .merge(
           Purchase.successful
-            .not_chargedback_or_chargedback_reversed
+            .not_chargedback_for_tax_reporting
             .where.not(purchases: { stripe_transaction_id: nil })
             .where("purchases.gumroad_tax_cents > 0")
             .where(purchases: { charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids] })
@@ -398,6 +426,65 @@ class CreateGlobalSalesTaxSummaryReportJob
         end
 
       refund_count
+    end
+
+    # Subtracts chargebacks whose dispute was formalized in [starts_at, ends_at] and adds back
+    # disputes won inside the window, bucketed by the buyer location of the ORIGINAL purchase
+    # (resolved with the same rules as the refund leg). Amounts are net of each purchase's
+    # refunds (see Purchase::Reportable#total_cents_for_chargeback_reporting) — money already
+    # returned by a refund was relieved by the refund's own path and is not clawed back again.
+    # Order counts are left untouched — the order still happened. Returns the number of legs
+    # applied.
+    def apply_chargeback_legs(aggregation, starts_at, ends_at)
+      leg_count = 0
+
+      chargeback_purchase_filters(Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at))
+        .find_each do |purchase|
+          apply_chargeback_leg(aggregation, purchase, -1)
+          leg_count += 1
+        end
+
+      chargeback_purchase_filters(Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at))
+        .find_each do |purchase|
+          won_at = purchase.chargeback_reversal_reporting_date
+          next unless won_at&.between?(starts_at, ends_at)
+
+          apply_chargeback_leg(aggregation, purchase, 1)
+          leg_count += 1
+        end
+
+      leg_count
+    end
+
+    # The sales leg's purchase filters minus its date window — a chargeback leg belongs to
+    # the month of the dispute event (or the win), but must only appear when the purchase's
+    # sale was (or would have been) counted by this report.
+    def chargeback_purchase_filters(scope)
+      scope
+        .successful
+        .where.not(stripe_transaction_id: nil)
+        .where("purchases.gumroad_tax_cents > 0")
+        .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
+    end
+
+    def apply_chargeback_leg(aggregation, purchase, sign)
+      country_name = resolve_country_name(purchase.country.presence || purchase.ip_country.presence)
+
+      state_code = case country_name
+                   when "United States"
+                     UsZipCodes.identify_state_code(purchase.zip_code) ||
+                       GeoIp.lookup(purchase.ip_address)&.region_name || ""
+                   when "Canada"
+                     resolve_canada_province(purchase.state, purchase.ip_state)
+                   when "India"
+                     resolve_india_state(purchase.ip_state)
+                   else
+                     ""
+      end
+
+      bucket = aggregation[[country_name, state_code]]
+      bucket[:gmv_cents] += sign * purchase.total_cents_for_chargeback_reporting
+      bucket[:tax_collected_cents] += sign * purchase.gumroad_tax_cents_for_chargeback_reporting
     end
 
     def net_cents(gross_cents, refunded_cents)

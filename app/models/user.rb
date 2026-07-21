@@ -1194,7 +1194,6 @@ class User < ApplicationRecord
   end
 
   def eligible_for_ai_product_generation?
-    return false unless Feature.active?(:ai_product_generation, self)
     return true if Rails.env.development?
     return false unless confirmed?
     return false if suspended?

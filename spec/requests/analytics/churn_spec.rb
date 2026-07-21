@@ -7,10 +7,6 @@ require "shared_examples/creator_dashboard_page"
 describe "Churn analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, type: :system do
   let(:seller) { create(:user, timezone: "UTC", created_at: Date.new(2023, 1, 1)) }
 
-  before do
-    Feature.activate_user(:churn_analytics_enabled, seller)
-  end
-
   include_context "with switching account to user as admin for seller"
 
   def create_subscription_purchase(

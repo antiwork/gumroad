@@ -7,7 +7,9 @@ describe Api::Mobile::MediaLocationsController do
     before do
       @user = create(:user)
       @purchaser = create(:user)
-      @url_redirect = create(:readable_url_redirect, link: create(:product, user: @user), purchase: create(:purchase, purchaser: @purchaser))
+      product = create(:product, user: @user)
+      purchase = create(:free_purchase, purchaser: @purchaser, link: product)
+      @url_redirect = create(:readable_url_redirect, link: product, purchase:)
       @purchase = @url_redirect.purchase
       @product = @url_redirect.referenced_link
       @product_file = @product.product_files.first
@@ -38,6 +40,26 @@ describe Api::Mobile::MediaLocationsController do
       expect(media_location.location).to eq(media_location_params[:location])
       expect(media_location.unit).to eq MediaLocation::Unit::PAGE_NUMBER
       expect(media_location.consumed_at).to eq(media_location_params[:consumed_at])
+    end
+
+    it "keeps legacy page progress for an EPUB write without a CFI" do
+      product_file = create(:epub_product_file, link: @product)
+      media_location_params = {
+        product_file_id: product_file.external_id,
+        url_redirect_id: @url_redirect.external_id,
+        purchase_id: @purchase.external_id,
+        platform: "android",
+        consumed_at: "2015-09-09T17:26:50PDT",
+        location: 4,
+      }
+
+      post :create, params: @mobile_post_params.merge(media_location_params)
+
+      expect(response.parsed_body["success"]).to be(true)
+      media_location = MediaLocation.last
+      expect(media_location.location).to eq(4)
+      expect(media_location.unit).to eq(MediaLocation::Unit::PAGE_NUMBER)
+      expect(media_location.epub_cfi).to be_nil
     end
 
     it "fails to create consumption event if access token is invalid" do

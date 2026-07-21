@@ -3280,10 +3280,14 @@ describe LinksController, :vcr, inertia: true do
         end
 
         before do
-          Feature.activate_user(:ai_product_generation, seller)
+          # AI generation on create is gated by the same policy as the dedicated
+          # generation endpoints; make the seller pass the eligibility checks.
+          seller.confirm
+          allow_any_instance_of(User).to receive(:sales_cents_total).and_return(15_000)
+          create(:payment_completed, user: seller)
         end
 
-        it "calls AI service when ai_prompt is present and feature is active" do
+        it "calls AI service when ai_prompt is present" do
           service_double = instance_double(Ai::ProductDetailsGeneratorService)
           allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
           allow(service_double).to receive(:generate_cover_image).and_return({ image_data: "fake_image_data" })
@@ -3315,17 +3319,6 @@ describe LinksController, :vcr, inertia: true do
           expect(link.rich_contents.last.description).to eq([{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Thank you for reading this course" }] }])
         end
 
-        it "does not call AI service when feature is inactive" do
-          Feature.deactivate_user(:ai_product_generation, seller)
-
-          service_double = instance_double(Ai::ProductDetailsGeneratorService)
-          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
-          expect(service_double).not_to receive(:generate_cover_image)
-          expect(service_double).not_to receive(:generate_rich_content_pages)
-
-          post :create, params: { link: params }
-        end
-
         it "does not call AI service when ai_prompt is blank" do
           service_double = instance_double(Ai::ProductDetailsGeneratorService)
           allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
@@ -3333,6 +3326,23 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
           post :create, params: { link: { price_cents: 100, name: "Regular Product" } }
+        end
+
+        it "does not call AI service when the seller is not eligible for AI product generation" do
+          # An ineligible seller can still send ai_prompt directly (it is a plain request
+          # param), so the controller must not run AI generation for them. The product
+          # itself is still created normally.
+          allow_any_instance_of(User).to receive(:sales_cents_total).and_return(0)
+
+          service_double = instance_double(Ai::ProductDetailsGeneratorService)
+          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
+          expect(service_double).not_to receive(:generate_cover_image)
+          expect(service_double).not_to receive(:generate_rich_content_pages)
+
+          post :create, params: { link: params }
+
+          expect(response).to redirect_to(edit_link_path(Link.last))
+          expect(Link.last.name).to eq("UX design mastery using Figma")
         end
       end
     end
