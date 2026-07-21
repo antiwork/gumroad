@@ -3,9 +3,8 @@ import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { ContactSupportModal, SUPPORT_EMAIL } from "$app/components/Support/ContactSupportModal";
 import { PageHeader } from "$app/components/ui/PageHeader";
-
-const SUPPORT_EMAIL = "mailto:support@gumroad.com";
 
 type HelpCenterLayoutProps = {
   children: React.ReactNode;
@@ -13,25 +12,33 @@ type HelpCenterLayoutProps = {
 };
 
 function HelpCenterHeader({ showSearchButton = false }: { showSearchButton?: boolean | undefined }) {
-  const renderActions = () => {
-    if (showSearchButton) {
-      return (
+  const [contactOpen, setContactOpen] = React.useState(false);
+
+  const renderActions = () => (
+    <div className="flex gap-2">
+      {showSearchButton ? (
         <Button asChild>
           <Link href={Routes.help_center_root_path()} aria-label="Search" title="Search">
             <Search className="size-5" />
           </Link>
         </Button>
-      );
-    }
-
-    return (
-      <Button color="accent" asChild>
-        <a href={SUPPORT_EMAIL}>Email support</a>
+      ) : (
+        <Button asChild>
+          <a href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
+        </Button>
+      )}
+      <Button color="accent" onClick={() => setContactOpen(true)}>
+        Contact support
       </Button>
-    );
-  };
+    </div>
+  );
 
-  return <PageHeader title="Help Center" actions={renderActions()} />;
+  return (
+    <>
+      <PageHeader title="Help Center" actions={renderActions()} />
+      <ContactSupportModal open={contactOpen} onClose={() => setContactOpen(false)} />
+    </>
+  );
 }
 
 export function HelpCenterLayout({ children, showSearchButton }: HelpCenterLayoutProps) {
