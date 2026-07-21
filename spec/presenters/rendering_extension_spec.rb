@@ -142,7 +142,7 @@ describe "RenderingExtension" do
                     index: false,
                   },
                   churn: {
-                    show: false,
+                    show: true,
                   },
                   page: {
                     index: true,
