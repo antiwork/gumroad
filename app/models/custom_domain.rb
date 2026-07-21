@@ -15,7 +15,11 @@ class CustomDomain < ApplicationRecord
 
   validate :user_or_product_present
   validate :validate_domain_uniqueness
-  validate :validate_domain_format
+  # Skipped for soft-deleted records: rows saved before this validation
+  # existed may carry domains that fail it, and deleting such a record
+  # (mark_deleted! runs save!) must not raise — deletion is exactly how a
+  # seller or admin removes a broken domain.
+  validate :validate_domain_format, unless: :deleted?
   validate :validate_domain_is_allowed
 
   before_save :reset_ssl_certificate_issued_at, if: :domain_changed?
@@ -49,7 +53,7 @@ class CustomDomain < ApplicationRecord
   def validate_domain_format
     # LetsEncrypt allows only valid hostnames when generating SSL certificates
     # Ref: https://github.com/letsencrypt/boulder/pull/1437#issuecomment-533533967
-    if domain.blank? || !domain.match?(/\A[a-zA-Z0-9\-.]+[^.]\z/) || !PublicSuffix.valid?(domain) || ip_address?(domain)
+    if domain.blank? || !domain.match?(/\A[a-zA-Z0-9\-.]+[^.]\z/) || malformed_label?(domain) || !PublicSuffix.valid?(domain) || ip_address?(domain)
       errors.add(:base, "#{domain} is not a valid domain name.")
     end
   end
@@ -137,5 +141,16 @@ class CustomDomain < ApplicationRecord
       true
     rescue IPAddr::InvalidAddressError
       false
+    end
+
+    # Hostnames like "example..com" contain an empty label (the part between
+    # two consecutive dots), and ones like "-example.com" / "example-.com"
+    # have a label starting or ending with a hyphen. PublicSuffix accepts
+    # both, but they are not real hostnames — Let's Encrypt rejects them
+    # (Acme::Client::Error::RejectedIdentifier), so a record carrying one
+    # can never get an SSL certificate and would keep failing certificate
+    # generation forever.
+    def malformed_label?(domain)
+      domain.split(".", -1).any? { |label| label.empty? || label.start_with?("-") || label.end_with?("-") }
     end
 end
