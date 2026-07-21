@@ -160,43 +160,22 @@ class AssetPreview < ApplicationRecord
     begin
       # with_lock reloads the record, so the deleted flag below reflects what
       # is in the database right now. Locking the asset_previews row alone is
-      # not enough, though: a cover replacement writes to the
-      # active_storage_attachments row without ever touching this record's
+      # not quite enough, though: a write to the cover's attachment lands in
+      # the active_storage_attachments table without touching this record's
       # lock. So we also take a row lock on the attachment itself — any
-      attached_resized_copy = false
-      begin
-        # with_lock reloads the record, so the deleted/attachment state and blob
-        # id below reflect what is in the database right now, and no concurrent
-        # replacement can interleave with the attach. Concurrent writes to the
-        attached_resized_copy = false
-        # with_lock reloads the record, so the deleted/attachment state and blob
-        # id below reflect what is in the database right now. Cover "replacement"
-        # in this app always means creating a NEW asset_previews row and soft-
-        # deleting the old one (mark_deleted!, an update on this same row), so
-        # taking this row's lock is enough to serialize against replacement and
-        # deletion — nothing re-attaches a different blob to an existing row.
-        begin
-          with_lock do
-            if !deleted? && file.attached? && file.blob.id == source_blob_id
-              file.attach(resized_blob)
-              attached_resized_copy = true
-            end
-          end
-        rescue StandardError
-          # The attach did not commit (with_lock wraps it in a transaction that
-          # rolled back), so the resized copy we already uploaded is an orphan.
-          # Clean it up before letting the worker retry, otherwise every failed
-          # attempt would leave another unattached blob in storage.
-          resized_blob.purge_later
-          raise
+      # concurrent update or delete of that attachment blocks until this
+      # transaction commits. That closes the window where a change could land
+      # between the blob check and the attach. (Today, "replacing" a cover
+      # actually creates a NEW asset_previews row and soft-deletes the old one
+      # via mark_deleted! — an update on this row, serialized by with_lock —
+      # so the attachment lock is defense in depth for any future path that
+      # re-attaches on an existing row.)
+      with_lock do
+        attachment = ActiveStorage::Attachment.lock.find_by(record: self, name: "file")
+        if !deleted? && attachment&.blob_id == source_blob_id
+          file.attach(resized_blob)
+          attached_resized_copy = true
         end
-      rescue StandardError
-        # The resized copy was already uploaded to storage above. If taking the
-        # lock or attaching fails, schedule that upload for deletion before
-        # letting the error propagate (Sidekiq will retry the whole job) —
-        # otherwise every failed attempt leaves an orphaned blob behind.
-        resized_blob.purge_later
-        raise
       end
     ensure
       # Two ways we can end up here without having attached the resized copy:
