@@ -21,14 +21,25 @@ class IsbnValidator < ActiveModel::EachValidator
 
   private
     def validate_with_isbn10(isbn)
-      check_digit = isbn[-1] == "X" ? 10 : isbn[-1].to_i
+      # Reject anything that isn't 9 digits followed by a digit or "X"/"x"
+      # check character before running the checksum. Without this guard,
+      # String#to_i coerces letters/punctuation to 0, so an all-letter string
+      # sums to 0 and 0 % 11 == 0 makes garbage like "helloworld" pass.
+      return false unless isbn.match?(/\A\d{9}[\dXx]\z/)
+
+      check_digit = isbn[-1].casecmp?("X") ? 10 : isbn[-1].to_i
       sum = isbn[0...-1].chars.each_with_index.sum { |d, i| (i + 1) * d.to_i }
       sum % 11 == check_digit
     end
 
     def validate_with_isbn13(isbn)
+      # ISBN-13 is strictly 13 digits. Same reason as above: without this
+      # guard, non-digit characters coerce to 0 and the all-zero sum is a
+      # multiple of 10, so strings like "AAAAAAAAAAAAA" would pass.
+      return false unless isbn.match?(/\A\d{13}\z/)
+
       digits = isbn.chars.map(&:to_i)
-      sum = digits.each_with_index.sum { |d, i| i.even? ? d : 3 * d }  # 100
+      sum = digits.each_with_index.sum { |d, i| i.even? ? d : 3 * d }
       sum.multiple_of?(10)
     end
 end
