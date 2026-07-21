@@ -1,11 +1,22 @@
 declare module "epubjs/src/archive" {
+  export const MAX_EPUB_ARCHIVE_BYTES: number;
+  export const MAX_EPUB_ENTRY_COUNT: number;
+  export const MAX_EPUB_ENTRY_BYTES: number;
+  export const MAX_EPUB_EXPANDED_BYTES: number;
+
   export default class Archive {
     createUrl(path: string): Promise<string>;
     destroy(): void;
     getBlob(path: string): Promise<Blob>;
     getText(path: string): Promise<string>;
+    maxEntryBytes: number;
+    maxExpandedBytes: number;
+    open(input: ArrayBuffer | ArrayBufferView | { byteLength: number } | string, isBase64?: boolean): Promise<unknown>;
     request(path: string, type?: string): Promise<unknown>;
     urlCache: Record<string, string>;
+    zip: {
+      loadAsync(input: unknown, options?: { base64?: boolean }): Promise<unknown>;
+    };
   }
 }
 

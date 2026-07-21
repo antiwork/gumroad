@@ -92,6 +92,21 @@ describe ProductFile do
     end
   end
 
+  describe "#browser_readable?" do
+    it "allows PDFs and EPUBs with a missing or bounded size" do
+      expect(build(:readable_document, size: nil).browser_readable?).to eq(true)
+      expect(build(:epub_product_file, size: nil).browser_readable?).to eq(true)
+      expect(build(:epub_product_file, size: ProductFile::MAX_EPUB_READER_ARCHIVE_SIZE).browser_readable?).to eq(true)
+    end
+
+    it "keeps known oversized EPUBs download-only" do
+      product_file = build(:epub_product_file, size: ProductFile::MAX_EPUB_READER_ARCHIVE_SIZE + 1)
+
+      expect(product_file.browser_readable?).to eq(false)
+      expect(product_file.readable?).to eq(true)
+    end
+  end
+
   describe "#content_length" do
     it "uses 100 for EPUB percentage progress" do
       expect(build(:epub_product_file, pagelength: 12).content_length).to eq(100)

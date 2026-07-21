@@ -43,6 +43,53 @@ type Props = {
   file_type: "pdf" | "epub";
 };
 
+export const MAX_EPUB_ARCHIVE_BYTES = 32 * 1024 * 1024;
+
+export const downloadEpubArchive = async (
+  url: string,
+  signal: AbortSignal,
+  maxBytes = MAX_EPUB_ARCHIVE_BYTES,
+): Promise<ArrayBuffer> => {
+  const response = await fetch(url, { signal });
+  if (!response.ok || !response.body) throw new Error("EPUB download failed");
+
+  const contentLength = response.headers.get("content-length");
+  const declaredBytes = Number(contentLength);
+  if (contentLength == null || !Number.isSafeInteger(declaredBytes) || declaredBytes <= 0) {
+    await response.body.cancel();
+    throw new Error("EPUB download size is unavailable");
+  }
+  if (declaredBytes > maxBytes) {
+    await response.body.cancel();
+    throw new Error("EPUB archive exceeds the reader memory limit");
+  }
+
+  const reader = response.body.getReader();
+  const archive = new Uint8Array(declaredBytes);
+  let totalBytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (totalBytes + value.byteLength > maxBytes) {
+        await reader.cancel();
+        throw new Error("EPUB archive exceeds the reader memory limit");
+      }
+      if (totalBytes + value.byteLength > declaredBytes) {
+        await reader.cancel();
+        throw new Error("EPUB download size did not match storage metadata");
+      }
+      archive.set(value, totalBytes);
+      totalBytes += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (totalBytes !== declaredBytes) throw new Error("EPUB download was incomplete");
+  return archive.buffer;
+};
+
 const getCurrentEpubLocation = (rendition: Rendition): EpubLocation | null => {
   // epub.js types this as always present, but it is undefined until the first
   // relocation event for some books and rendering modes.
@@ -343,6 +390,7 @@ const EpubReader = ({
   const renditionRef = React.useRef<Rendition | null>(null);
   const cleanupReaderRef = React.useRef<() => void>(() => undefined);
   const themeRef = React.useRef<EpubThemeName>("light");
+  const linearSectionIndexesRef = React.useRef<number[]>([]);
 
   const handleReaderError = React.useCallback(() => {
     cleanupReaderRef.current();
@@ -388,8 +436,10 @@ const EpubReader = ({
   const goToSection = (newSectionNumber: number) => {
     if (!renditionRef.current || sectionCount === 0) return;
     const clamped = Math.max(1, Math.min(newSectionNumber, sectionCount));
-    // epub.js accepts a 0-based spine index as a display target.
-    void displayEpubLocation(renditionRef.current, clamped - 1).catch(handleReaderError);
+    const spineIndex = linearSectionIndexesRef.current[clamped - 1];
+    if (spineIndex == null) return;
+    // epub.js accepts a raw 0-based spine index as a display target.
+    void displayEpubLocation(renditionRef.current, spineIndex).catch(handleReaderError);
   };
 
   const updateFontSize = (size: number) => {
@@ -409,6 +459,7 @@ const EpubReader = ({
   React.useEffect(() => {
     let book: Book | null = null;
     let cancelled = false;
+    const archiveDownloadController = new AbortController();
     const isCancelled = () => cancelled;
     const destroyBook = () => {
       const openedBook = book;
@@ -417,12 +468,16 @@ const EpubReader = ({
     };
     const cleanupReader = () => {
       cancelled = true;
+      archiveDownloadController.abort();
       renditionRef.current = null;
       destroyBook();
     };
     cleanupReaderRef.current = cleanupReader;
     const handlePageHide = (event: PageTransitionEvent) => {
-      if (!event.persisted) destroyBook();
+      if (!event.persisted) {
+        archiveDownloadController.abort();
+        destroyBook();
+      }
     };
 
     // React runs the returned cleanup for Inertia transitions. A full browser
@@ -435,14 +490,18 @@ const EpubReader = ({
       if (!container) return;
 
       try {
+        // ProductFile#size is seller-writeable and may be missing, so enforce
+        // the compressed limit against the bytes received from storage.
+        const archive = await downloadEpubArchive(url, archiveDownloadController.signal);
+        if (isCancelled()) return;
         const ePub = (await import("epubjs")).default;
         if (isCancelled()) return;
 
-        // Open the signed URL explicitly as an archive. Query parameters make
-        // extension-based detection treat it as an unpacked book directory.
-        const openedBook = ePub({ openAs: "epub" });
+        // Passing the bounded buffer also avoids a second, unbounded XHR inside
+        // epub.js. Its patched archive stream bounds actual inflated bytes.
+        const openedBook = ePub();
         book = openedBook;
-        await openedBook.open(url, "epub");
+        await openedBook.open(archive);
         if (isCancelled()) {
           // The request can finish after an Inertia transition and create new
           // archive blob URLs after the first cleanup. Destroy again once the
@@ -473,7 +532,8 @@ const EpubReader = ({
           linearSectionIndexes.push(...Array.from({ length: totalSections }, (_, index) => index));
         }
         const linearSectionCount = linearSectionIndexes.length;
-        setSectionCount(totalSections);
+        linearSectionIndexesRef.current = linearSectionIndexes;
+        setSectionCount(linearSectionCount);
 
         const rendition = openedBook.renderTo(container, { width: "100%", height: "100%" });
         renditionRef.current = rendition;
@@ -501,7 +561,8 @@ const EpubReader = ({
         const persistEpubLocation = (location: EpubLocation) => {
           if (cancelled) return;
           lastRelocatedLocation = location;
-          setSectionNumber(location.start.index + 1);
+          const linearSectionIndex = getLinearSectionRank(location.start.index, linearSectionIndexes);
+          setSectionNumber(linearSectionIndex + 1);
           if (isFallbackSettlementPending) {
             const fallbackResumeCfi = pendingFallbackResumeCfi;
             isFallbackSettlementPending = false;
@@ -516,7 +577,6 @@ const EpubReader = ({
           if (isInitialFallbackSuppressed && location.start.cfi === suppressedInitialCfi) return;
           isInitialFallbackSuppressed = false;
           suppressedInitialCfi = null;
-          const linearSectionIndex = getLinearSectionRank(location.start.index, linearSectionIndexes);
           persistLocation(getEpubProgress(location, linearSectionIndex, linearSectionCount), location.start.cfi);
         };
         rendition.on("relocated", persistEpubLocation);
@@ -583,6 +643,7 @@ const EpubReader = ({
 
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
+      linearSectionIndexesRef.current = [];
       cleanupReader();
       if (cleanupReaderRef.current === cleanupReader) cleanupReaderRef.current = () => undefined;
     };
@@ -590,6 +651,15 @@ const EpubReader = ({
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target;
+      if (
+        e.defaultPrevented ||
+        (target instanceof Element &&
+          target.closest(
+            "a, button, input, select, textarea, [contenteditable='true'], [role='button'], [role='radio'], [role='slider']",
+          ))
+      )
+        return;
       if (e.key === "ArrowLeft") turnPage("previous");
       else if (e.key === "ArrowRight") turnPage("next");
     };

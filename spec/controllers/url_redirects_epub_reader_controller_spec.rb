@@ -26,4 +26,17 @@ describe UrlRedirectsController, inertia: true do
       expect(csp[directive]).to eq(["'self'", "data:", "blob:"])
     end
   end
+
+  it "redirects a known oversized EPUB to the library instead of mounting the reader" do
+    buyer = create(:user)
+    product = create(:product)
+    epub = create(:epub_product_file, link: product, size: ProductFile::MAX_EPUB_READER_ARCHIVE_SIZE + 1)
+    purchase = create(:free_purchase, link: product, purchaser: buyer, email: buyer.email)
+    url_redirect = create(:url_redirect, link: product, purchase:)
+    sign_in buyer
+
+    get :read, params: { id: url_redirect.token, product_file_id: epub.external_id }
+
+    expect(response).to redirect_to(library_path)
+  end
 end

@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 // epub.js does not publish declarations for its internal cleanup classes. We
 // import them here so patch-package regressions exercise the code we ship.
-import Archive from "epubjs/src/archive";
+import Archive, { MAX_EPUB_ARCHIVE_BYTES, MAX_EPUB_ENTRY_COUNT } from "epubjs/src/archive";
 import DefaultViewManager from "epubjs/src/managers/default";
 import Rendition from "epubjs/src/rendition";
 import Resources from "epubjs/src/resources";
 import Queue from "epubjs/src/utils/queue";
+import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("epub.js resource cleanup patch", () => {
@@ -45,6 +46,61 @@ describe("epub.js resource cleanup patch", () => {
     vi.spyOn(archive, "getBlob").mockRejectedValue(error);
 
     await expect(archive.createUrl("/cover.png")).rejects.toBe(error);
+  });
+
+  it("rejects a compressed archive above the reader memory limit", async () => {
+    const archive = new Archive();
+    const loadAsync = vi.spyOn(archive.zip, "loadAsync");
+
+    await expect(archive.open({ byteLength: MAX_EPUB_ARCHIVE_BYTES + 1 })).rejects.toThrow(
+      "EPUB archive exceeds the reader memory limit",
+    );
+    expect(loadAsync).not.toHaveBeenCalled();
+  });
+
+  it("rejects excessive entry counts before JSZip parses them", async () => {
+    const archive = new Archive();
+    const loadAsync = vi.spyOn(archive.zip, "loadAsync");
+    const entryCount = MAX_EPUB_ENTRY_COUNT + 1;
+    const directoryBytes = entryCount * 46;
+    const input = new Uint8Array(directoryBytes + 22);
+    const view = new DataView(input.buffer);
+    for (let offset = 0; offset < directoryBytes; offset += 46) view.setUint32(offset, 0x02014b50, true);
+    view.setUint32(directoryBytes, 0x06054b50, true);
+    view.setUint16(directoryBytes + 8, entryCount, true);
+    view.setUint16(directoryBytes + 10, entryCount, true);
+    view.setUint32(directoryBytes + 12, directoryBytes, true);
+
+    await expect(archive.open(input)).rejects.toThrow("EPUB contains too many ZIP entries");
+    expect(loadAsync).not.toHaveBeenCalled();
+  });
+
+  it("does not count central-directory signatures stored inside a file", async () => {
+    const signaturePayload = "PK\u0001\u0002".repeat(MAX_EPUB_ENTRY_COUNT + 1);
+    const input = await new JSZip()
+      .file("nested-signatures.bin", signaturePayload, { compression: "STORE" })
+      .generateAsync({ type: "uint8array" });
+
+    await expect(new Archive().open(input)).resolves.toBeDefined();
+  });
+
+  it("bounds each entry by bytes emitted during inflation", async () => {
+    const input = await new JSZip().file("chapter.xhtml", "four").generateAsync({ type: "uint8array" });
+    const archive = new Archive();
+    archive.maxEntryBytes = 3;
+    await archive.open(input);
+
+    await expect(archive.getText("/chapter.xhtml")).rejects.toThrow("EPUB contains an oversized ZIP entry");
+  });
+
+  it("bounds aggregate bytes emitted across inflated entries", async () => {
+    const input = await new JSZip().file("one.txt", "12").file("two.txt", "34").generateAsync({ type: "uint8array" });
+    const archive = new Archive();
+    archive.maxExpandedBytes = 3;
+    await archive.open(input);
+
+    await expect(archive.getText("/one.txt")).resolves.toBe("12");
+    await expect(archive.getText("/two.txt")).rejects.toThrow("EPUB expands beyond the reader memory limit");
   });
 
   it("preserves replacement indexes when one archive asset fails", async () => {

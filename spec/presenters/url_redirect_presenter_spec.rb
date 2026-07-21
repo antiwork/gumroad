@@ -115,6 +115,22 @@ describe UrlRedirectPresenter do
       expect(content_items.length).to eq(1)
       expect(content_items.first[:thumbnail_url]).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{file.thumbnail_variant.key}")
     end
+
+    it "keeps a known oversized EPUB download-only while allowing an unknown size" do
+      product = create(:product)
+      unknown_size = create(:epub_product_file, link: product, size: nil)
+      oversized = create(:epub_product_file, link: product, size: ProductFile::MAX_EPUB_READER_ARCHIVE_SIZE + 1)
+      purchase = create(:purchase, link: product)
+      url_redirect = create(:url_redirect, purchase:)
+
+      content_items = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).download_attributes[:content_items]
+      unknown_size_props = content_items.find { _1[:id] == unknown_size.external_id }
+      oversized_props = content_items.find { _1[:id] == oversized.external_id }
+
+      expect(unknown_size_props&.fetch(:read_url)).to eq(url_redirect_read_for_product_file_path(url_redirect.token, unknown_size.external_id))
+      expect(oversized_props&.fetch(:read_url)).to be_nil
+      expect(oversized_props&.fetch(:download_url)).to be_present
+    end
   end
 
   describe "#download_page_with_content_props" do

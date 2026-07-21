@@ -92,9 +92,18 @@ export const getEpubThemeRules = (
   },
 });
 
+const isSettableStyle = (value: unknown): value is Pick<CSSStyleDeclaration, "setProperty"> => {
+  if (typeof value !== "object" || value === null) return false;
+  const setProperty: unknown = Reflect.get(value, "setProperty");
+  return typeof setProperty === "function";
+};
+
 const setImportantStyle = (element: Element, property: string, value: string) => {
-  if (!(element instanceof HTMLElement || element instanceof SVGElement)) return;
-  element.style.setProperty(property, value, "important");
+  // EPUB contents live in a separate iframe realm, so parent-window
+  // HTMLElement/SVGElement instanceof checks reject their elements.
+  const style: unknown = Reflect.get(element, "style");
+  if (!isSettableStyle(style)) return;
+  style.setProperty(property, value, "important");
 };
 
 export const applyEpubThemeToDocument = (document: Document, theme: EpubTheme) => {

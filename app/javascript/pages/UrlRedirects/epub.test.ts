@@ -110,6 +110,26 @@ describe("getEpubThemeRules", () => {
     expect(chapter.style.getPropertyValue("background-color")).toBe("transparent");
     expect(chapter.style.getPropertyPriority("background-color")).toBe("important");
   });
+
+  it("overrides authored colors in an iframe document", () => {
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const iframeDocument = iframe.contentDocument;
+    if (!iframeDocument) throw new Error("Expected an iframe document");
+    iframeDocument.body.innerHTML = `<p id="chapter" style="color: black !important">Text</p>`;
+
+    applyEpubThemeToDocument(iframeDocument, {
+      background: "#121212",
+      color: "#e6e6e6",
+      link: "#8ab4ff",
+      surface: "#242424",
+    });
+
+    const chapter = iframeDocument.querySelector<HTMLElement>("#chapter");
+    expect(chapter?.style.getPropertyValue("color")).toBe("inherit");
+    expect(chapter?.style.getPropertyPriority("color")).toBe("important");
+    iframe.remove();
+  });
 });
 
 describe("getEpubContentDocuments", () => {

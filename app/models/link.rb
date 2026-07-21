@@ -508,6 +508,8 @@ class Link < ApplicationRecord
     has_filetype?("pdf") || has_filetype?("epub")
   end
 
+  alias_method :browser_readable?, :readable?
+
   def can_enable_rentals?
     streamable? && !is_in_preorder_state && !is_recurring_billing
   end

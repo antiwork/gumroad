@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Read, { canResumePdfFromLocation } from "./Read";
+import Read, { canResumePdfFromLocation, downloadEpubArchive } from "./Read";
 
 const mocks = vi.hoisted(() => ({
   createEpub: vi.fn(),
@@ -106,6 +106,10 @@ describe("EPUB reader lifecycle", () => {
   let harness: ReturnType<typeof buildEpubHarness>;
 
   beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response(new Uint8Array([1, 2, 3]), { headers: { "content-length": "3" } }))),
+    );
     harness = buildEpubHarness();
     mocks.createEpub.mockReturnValue(harness.book);
     mocks.usePage.mockReturnValue({ props: readerProps() });
@@ -115,12 +119,14 @@ describe("EPUB reader lifecycle", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("resumes from the server CFI and persists visible reading progress", async () => {
     render(<Read />);
 
     await waitFor(() => expect(harness.rendition.display).toHaveBeenCalledWith("epubcfi(/6/10!/4/2/1:0)"));
+    expect(harness.book.open).toHaveBeenCalledWith(expect.any(ArrayBuffer));
     expect(harness.book.spine.hooks.serialize.register).toHaveBeenCalledWith(expect.any(Function));
     expect(harness.book.locations.generate).not.toHaveBeenCalled();
     expect(mocks.trackMediaLocationChanged).not.toHaveBeenCalled();
@@ -157,6 +163,23 @@ describe("EPUB reader lifecycle", () => {
     await waitFor(() => expect(harness.rendition.display).toHaveBeenCalled());
     expect(screen.queryByText("One moment while we prepare your reading experience")).toBeNull();
     expect(harness.book.locations.generate).not.toHaveBeenCalled();
+  });
+
+  it("aborts an EPUB download when streamed bytes exceed the limit", async () => {
+    const cancel = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.enqueue(new Uint8Array([3, 4]));
+      },
+      cancel,
+    });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(stream, { headers: { "content-length": "3" } }));
+
+    await expect(
+      downloadEpubArchive("https://files.example.test/large.epub", new AbortController().signal, 3),
+    ).rejects.toThrow("EPUB archive exceeds the reader memory limit");
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("waits for packaged resource replacement before rendering", async () => {
@@ -274,6 +297,10 @@ describe("EPUB reader lifecycle", () => {
     render(<Read />);
 
     await waitFor(() => expect(harness.rendition.display).toHaveBeenCalled());
+    expect(screen.getByText("1 of 2")).toBeDefined();
+    fireEvent.change(screen.getByLabelText("Section"), { target: { value: "2" } });
+    await waitFor(() => expect(harness.rendition.display).toHaveBeenCalledWith(3));
+
     harness.location.start.cfi = "epubcfi(/6/8!/4/2/1:0)";
     harness.location.start.index = 3;
     act(() => harness.emit("relocated", harness.location));
@@ -297,6 +324,17 @@ describe("EPUB reader lifecycle", () => {
     fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
 
     expect(harness.rendition.themes.select).toHaveBeenLastCalledWith("dark");
+  });
+
+  it("does not turn pages when a reader control handles an arrow key", async () => {
+    render(<Read />);
+    await waitFor(() => expect(harness.rendition.display).toHaveBeenCalled());
+
+    fireEvent.keyDown(screen.getByLabelText("Section"), { key: "ArrowRight" });
+    expect(harness.rendition.next).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(harness.rendition.next).toHaveBeenCalledOnce();
   });
 
   it("shows a recovery error when epub.js emits displayerror and leaves display pending", async () => {

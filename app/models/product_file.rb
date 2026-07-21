@@ -6,6 +6,7 @@ class ProductFile < ApplicationRecord
 
   SUPPORTED_THUMBNAIL_IMAGE_CONTENT_TYPES = /jpeg|gif|png|jpg/i
   MAXIMUM_THUMBNAIL_FILE_SIZE = 5.megabytes
+  MAX_EPUB_READER_ARCHIVE_SIZE = 32.megabytes
 
   has_paper_trail
 
@@ -174,6 +175,13 @@ class ProductFile < ApplicationRecord
   # PDFs are rendered with pdf.js and EPUBs with epub.js.
   def readable?
     pdf? || epub?
+  end
+
+  # Keep the normal download available when a known EPUB is too large for the
+  # in-browser reader. A missing size is allowed because the client enforces
+  # the limit against bytes streamed from storage.
+  def browser_readable?
+    pdf? || (epub? && (size.nil? || size <= MAX_EPUB_READER_ARCHIVE_SIZE))
   end
 
   def stream_only?

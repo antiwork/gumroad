@@ -52,8 +52,8 @@ class UrlRedirectsController < ApplicationController
   def read
     product = @url_redirect.referenced_link
     @product_file = @url_redirect.product_file(params[:product_file_id])
-    @product_file = product.product_files.alive.find(&:readable?) if product.present? && @product_file.nil?
-    e404 unless @product_file&.readable?
+    @product_file = product.product_files.alive.find(&:browser_readable?) if product.present? && @product_file.nil?
+    e404 unless @product_file&.browser_readable?
 
     s3_retrievable = @product_file
     title = @product_file.with_product_files_owner.name
