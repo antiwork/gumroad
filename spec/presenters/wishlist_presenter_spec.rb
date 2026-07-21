@@ -317,14 +317,6 @@ describe WishlistPresenter do
         expect(described_class.new(wishlist:).public_props(request: nil, pundit_user:)[:following]).to eq(true)
       end
     end
-
-    context "when the follow feature flag is disabled" do
-      before { Feature.deactivate(:follow_wishlists) }
-
-      it "cannot be followed" do
-        expect(described_class.new(wishlist:).public_props(request: nil, pundit_user:)[:can_follow]).to eq(false)
-      end
-    end
   end
 
   describe "#public_items" do

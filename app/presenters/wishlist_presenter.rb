@@ -67,7 +67,7 @@ class WishlistPresenter
         avatar_url: wishlist.user.avatar_url,
       } : nil,
       following: pundit_user&.seller ? wishlist.followed_by?(pundit_user.seller) : false,
-      can_follow: Feature.active?(:follow_wishlists, pundit_user&.seller) && pundit_user&.seller != wishlist.user,
+      can_follow: pundit_user&.seller != wishlist.user,
       can_edit: pundit_user&.user ? Pundit.policy!(pundit_user, wishlist).update? : false,
       discover_opted_out: pundit_user&.user && Pundit.policy!(pundit_user, wishlist).update? ? wishlist.discover_opted_out? : nil,
       checkout_enabled: wishlist.alive_wishlist_products.available_to_buy.any?,
@@ -106,7 +106,7 @@ class WishlistPresenter
       product_count: wishlist.alive_wishlist_products.size,
       follower_count: wishlist.follower_count,
       following:,
-      can_follow: Feature.active?(:follow_wishlists, pundit_user&.seller) && pundit_user&.seller != wishlist.user,
+      can_follow: pundit_user&.seller != wishlist.user,
     }
   end
 

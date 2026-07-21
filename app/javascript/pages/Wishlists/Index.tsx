@@ -24,12 +24,10 @@ export type Wishlist = {
 
 type Props = {
   wishlists: Wishlist[];
-  reviews_page_enabled: boolean;
-  following_wishlists_enabled: boolean;
 };
 
 export default function WishlistsPage() {
-  const { wishlists, reviews_page_enabled, following_wishlists_enabled } = typia.assert<Props>(usePage().props);
+  const { wishlists } = typia.assert<Props>(usePage().props);
   const [deletingWishlist, setConfirmingDeleteWishlist] = React.useState<Wishlist | null>(null);
 
   const deleteForm = useForm({});
@@ -53,11 +51,7 @@ export default function WishlistsPage() {
   };
 
   return (
-    <Layout
-      selectedTab="wishlists"
-      reviewsPageEnabled={reviews_page_enabled}
-      followingWishlistsEnabled={following_wishlists_enabled}
-    >
+    <Layout selectedTab="wishlists">
       <section className="space-y-4 p-4 md:p-8">
         {wishlists.length > 0 ? (
           <Table>
