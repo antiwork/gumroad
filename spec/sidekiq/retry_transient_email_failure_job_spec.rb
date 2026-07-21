@@ -71,6 +71,34 @@ describe RetryTransientEmailFailureJob do
       end.to have_enqueued_mail(UserSignupMailer, :confirmation_instructions).with { |mail_record, *| expect(mail_record).to eq(confirmed_user) }
     end
 
+    it "restores the in-flight claim and re-raises when the resend fails, so a Sidekiq re-run can retry it" do
+      retry_record # force lazy creation now — creating the unconfirmed user enqueues its own confirmation email
+      suppression_manager = instance_double(EmailSuppressionManager)
+      allow(EmailSuppressionManager).to receive(:new).and_return(suppression_manager)
+      allow(suppression_manager).to receive(:remove_from_lists).and_raise(StandardError.new("suppression API unavailable"))
+
+      expect do
+        expect do
+          described_class.new.perform(retry_record.id)
+        end.to raise_error(StandardError, "suppression API unavailable")
+      end.not_to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+
+      retry_record.reload
+      expect(retry_record.attempts).to eq(0)
+      expect(retry_record.retry_in_flight).to eq(true)
+
+      # The restored claim lets the Sidekiq re-run of this job through the
+      # claim guard and complete the send.
+      allow(suppression_manager).to receive(:remove_from_lists).and_return({})
+      expect do
+        described_class.new.perform(retry_record.id)
+      end.to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+
+      retry_record.reload
+      expect(retry_record.attempts).to eq(1)
+      expect(retry_record.retry_in_flight).to eq(false)
+    end
+
     it "does not resend when no in-flight claim exists (e.g. a Sidekiq re-run after a completed attempt)" do
       retry_record.update!(retry_in_flight: false, attempts: 1)
 

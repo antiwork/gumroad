@@ -45,11 +45,7 @@ class RetryTransientEmailFailureJob
       # the in-flight flag. This makes the resend at-most-once per scheduled
       # retry: if this job crashes after sending and Sidekiq re-runs it, the
       # guard matches zero rows and we don't send a duplicate. The atomic
-      # increment also means concurrent runs can never lose a count. The
-      # trade-off (crash between this update and the send means that attempt
-      # sends nothing) is the safe direction — the provider posts a fresh
-      # failure event for a genuinely undelivered email, which schedules the
-      # next attempt.
+      # increment also means concurrent runs can never lose a count.
       claimed = TransientEmailFailureRetry
         .where(id: retry_record.id, retry_in_flight: true)
         .update_all(["attempts = attempts + 1, retry_in_flight = false, updated_at = ?", Time.current])
@@ -59,11 +55,33 @@ class RetryTransientEmailFailureJob
       end
       retry_record.reload
 
-      # Unsuppress before re-sending, or SendGrid silently drops the send.
-      # Only the deliverability lists — never spam_reports or unsubscribes.
-      EmailSuppressionManager.new(retry_record.email).remove_from_lists([:bounces, :blocks])
+      begin
+        # Unsuppress before re-sending, or SendGrid silently drops the send.
+        # Only the deliverability lists — never spam_reports or unsubscribes.
+        EmailSuppressionManager.new(retry_record.email).remove_from_lists([:bounces, :blocks])
 
-      user.send_confirmation_instructions
+        user.send_confirmation_instructions
+      rescue => e
+        # The attempt was recorded but nothing was sent (e.g. the SendGrid
+        # suppression API errored). Un-record it — restore the in-flight claim
+        # and give the attempt back — then re-raise so Sidekiq's own retry
+        # re-runs this job and the claim guard above lets it through. Without
+        # this, the Sidekiq re-run would match zero rows on the guard and
+        # exit, permanently losing the attempt with no email sent.
+        #
+        # The restore is guarded on retry_in_flight = false so that if a
+        # fresh provider failure event re-claimed the row in the meantime
+        # (scheduling its own job), we don't clobber that claim; the Sidekiq
+        # re-run of THIS job then simply consumes that newer claim.
+        #
+        # If Sidekiq's retries are exhausted with the claim restored, the
+        # claim dangles until CLAIM_EXPIRY, after which the next failure
+        # event for this address releases it and scheduling resumes.
+        TransientEmailFailureRetry
+          .where(id: retry_record.id, retry_in_flight: false)
+          .update_all(["attempts = attempts - 1, retry_in_flight = true, updated_at = ?", Time.current])
+        raise e
+      end
 
       log("re-sent signup confirmation to #{retry_record.email} (attempt #{retry_record.attempts}/#{TransientEmailFailureRetry::MAX_ATTEMPTS}, last failure: #{retry_record.last_reason.inspect})")
     end
