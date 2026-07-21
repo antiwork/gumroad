@@ -95,6 +95,36 @@ const ProjectedTickDot = ({ key, cx, cy, value }: { key: string; cx?: number; cy
   );
 };
 
+// Draws a faint accent-colored bar from the axis baseline up to the projected
+// end-of-day total, behind today's actual bar (same x position and width). The actual
+// day's numbers visibly climb toward the projection as the day progresses. Rendered as
+// a custom bar shape so we control the fill opacity and round only the top corners,
+// matching the real bars.
+const ProjectedVolumeBar = ({ x, y, width, height }: { x?: number; y?: number; width?: number; height?: number }) => {
+  if (
+    x == null ||
+    y == null ||
+    width == null ||
+    height == null ||
+    ![x, y, width, height].every(Number.isFinite) ||
+    width <= 0 ||
+    height <= 0
+  )
+    return <g />;
+  const radius = Math.min(4, width / 2, height);
+  return (
+    <path
+      d={`M ${x},${y + height} L ${x},${y + radius} Q ${x},${y} ${x + radius},${y} L ${x + width - radius},${y} Q ${
+        x + width
+      },${y} ${x + width},${y + radius} L ${x + width},${y + height} Z`}
+      fill="rgb(var(--accent))"
+      fillOpacity={0.2}
+      pointerEvents="none"
+      data-testid="chart-projected-bar"
+    />
+  );
+};
+
 const ChartTooltip = ({ data: { views, sales, totals, title, projectedTotals } }: { data: DataPoint }) => (
   <>
     <div>
@@ -241,6 +271,22 @@ export const SalesChart = ({
           })
         }
       />
+      {/* Hidden second x-axis for the projected-volume bar. Bar groups are laid out
+          per axis, so putting the projection bar on its own axis lets it occupy the
+          full band — the same x position and width as the actual stacked bar —
+          instead of being placed side by side with it. */}
+      {projection ? <XAxis xAxisId="projection" dataKey="label" hide /> : null}
+      {/* Rendered before the actual bars so it paints behind them: a faint accent bar
+          rising to the projected end-of-day total, which today's numbers climb toward. */}
+      {projection ? (
+        <Bar
+          dataKey="projectedTotals"
+          xAxisId="projection"
+          yAxisId="totals"
+          shape={ProjectedVolumeBar}
+          isAnimationActive={false}
+        />
+      ) : null}
       <Bar dataKey="sales" stackId="stack" className="fill-current" data-testid="chart-bar" />
       <Bar dataKey="viewsWithoutSales" stackId="stack" radius={[4, 4, 0, 0]} data-testid="chart-bar">
         {dataPoints.map((_, index) => (

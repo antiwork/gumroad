@@ -116,6 +116,51 @@ describe("SalesChart projection overlay", () => {
     expect(Number(projectedTick?.getAttribute("y1"))).toBeLessThan(Number(lastDot?.getAttribute("cy")));
   });
 
+  it("renders one faint projection bar behind today's actual bar, same x span, topping out at the tick", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-16T20:00:00Z"));
+
+    const { container } = renderChart();
+
+    // The projection bar only carries a value on today's point, so exactly one renders.
+    const bars = container.querySelectorAll("[data-testid='chart-projected-bar']");
+    expect(bars.length).toBe(1);
+    const projectedBar = bars[0];
+
+    // Its horizontal span must match today's actual sales bar (same x position and
+    // width) — Sahil's spec: the faint bar sits directly behind the real one so the
+    // day's numbers visibly climb toward the projection.
+    const actualBars = container.querySelectorAll("path[data-testid='chart-bar']");
+    expect(actualBars.length).toBeGreaterThan(0);
+    let todaysBar: Element | null = null;
+    let maxX = -Infinity;
+    for (const bar of actualBars) {
+      const barX = Number(bar.getAttribute("x"));
+      if (barX > maxX) {
+        maxX = barX;
+        todaysBar = bar;
+      }
+    }
+    expect(todaysBar).not.toBeNull();
+    const pathXValues = [...(projectedBar?.getAttribute("d") ?? "").matchAll(/[ML] ([\d.]+),/gu)].map((match) =>
+      Number(match[1]),
+    );
+    expect(pathXValues.length).toBeGreaterThan(0);
+    expect(Math.min(...pathXValues)).toBeCloseTo(Number(todaysBar?.getAttribute("x")), 5);
+    expect(Math.max(...pathXValues)).toBeCloseTo(
+      Number(todaysBar?.getAttribute("x")) + Number(todaysBar?.getAttribute("width")),
+      5,
+    );
+
+    // Its top must sit at the projected total — the same y as the dotted tick — so the
+    // bar visually rises exactly to the projection marker.
+    const projectedTick = container.querySelector("[data-testid='chart-projected-tick']");
+    const pathYValues = [...(projectedBar?.getAttribute("d") ?? "").matchAll(/,([\d.]+)/gu)].map((match) =>
+      Number(match[1]),
+    );
+    expect(Math.min(...pathYValues)).toBeCloseTo(Number(projectedTick?.getAttribute("y1")), 5);
+  });
+
   it("does not render the projection overlay on the monthly view", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-16T20:00:00Z"));
@@ -123,6 +168,7 @@ describe("SalesChart projection overlay", () => {
     const { container } = renderChart({ aggregateBy: "monthly" });
 
     expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-bar']")).toBeNull();
     expectNoNaNAttributes(container);
   });
 
@@ -133,6 +179,7 @@ describe("SalesChart projection overlay", () => {
     const { container } = renderChart({ endDate: "Jul 10" });
 
     expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-bar']")).toBeNull();
     expectNoNaNAttributes(container);
   });
 });
