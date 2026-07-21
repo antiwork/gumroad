@@ -1090,8 +1090,10 @@ class User < ApplicationRecord
     # Verified creators are trusted enough to email their audience even before
     # their first payout completes (payouts can sit in transit for weeks when a
     # bank abroad delays crediting the transfer). Admins toggle `verified` from
-    # the admin user page.
-    verified? || has_completed_payouts?
+    # the admin user page. The bypass does not apply while the account is
+    # flagged for fraud or a terms-of-service violation — an unresolved risk
+    # review must be cleared before verification unlocks early email access.
+    (verified? && !flagged?) || has_completed_payouts?
   end
 
   LAST_ALLOWED_TIME_FOR_PRODUCT_LEVEL_REFUND_POLICY = Time.new(2025, 3, 31).end_of_day
