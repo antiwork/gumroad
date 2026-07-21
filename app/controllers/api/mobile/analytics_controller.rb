@@ -28,13 +28,28 @@ class Api::Mobile::AnalyticsController < Api::Mobile::BaseController
   end
 
   def by_date
-    service = CreatorAnalytics::CachingProxy.new(current_resource_owner)
-    options = {
-      group_by: params.fetch(:group_by, "day"),
-      days_without_years: true
-    }
-    data = service.data_for_dates(@start_date, @end_date, by: :date, options:)
-    render json: data
+    if params[:group_by] == "hour"
+      return render json: { error: "Invalid date range." }, status: :bad_request if @end_date < @start_date
+      if (@end_date - @start_date).to_i > CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS
+        return render json: { error: "Date range cannot exceed #{CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS} days for the hourly interval." }, status: :bad_request
+      end
+
+      # Hourly data bypasses CreatorAnalytics::CachingProxy, which only stores
+      # day-keyed data; the range is at most 7 days so the live query is cheap.
+      hourly = CreatorAnalytics::Web.new(user: current_resource_owner, dates: (@start_date..@end_date).to_a, interval: "hour").by_date
+      data = { dates: hourly[:dates_and_months].map { _1[:date] }, by_date: hourly[:by_date] }
+    else
+      service = CreatorAnalytics::CachingProxy.new(current_resource_owner)
+      options = {
+        group_by: params.fetch(:group_by, "day"),
+        days_without_years: true
+      }
+      data = service.data_for_dates(@start_date, @end_date, by: :date, options:)
+    end
+    # IANA time zone identifier (e.g. "America/Los_Angeles") used by the mobile sales
+    # chart to compute how much of the seller's current day has elapsed when projecting
+    # today's end-of-day sales total.
+    render json: data.merge(seller_time_zone: current_resource_owner.timezone_id)
   end
 
   def by_state
