@@ -137,13 +137,23 @@ class AssetPreview < ApplicationRecord
   def resize_oversized_image!
     return unless oversized_image?
 
+    original_blob = file.blob
     resized = file.variant(resize_to_limit: [MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION]).processed
+
+    # Resizing a huge original can take a while (it runs from a low-priority
+    # background job), so the cover may have been replaced in the meantime.
+    # Re-check that the attachment still points at the blob we resized —
+    # otherwise attaching our resized copy of the OLD image would silently
+    # overwrite the seller's newer cover.
+    reload
+    return if deleted?
+    return unless file.attached? && file.blob&.id == original_blob.id
 
     resized.blob.open do |tempfile|
       file.attach(
         io: tempfile,
-        filename: file.filename,
-        content_type: file.content_type
+        filename: original_blob.filename,
+        content_type: original_blob.content_type
       )
     end
     file.analyze

@@ -179,5 +179,44 @@ describe AssetPreview do
 
       expect(preview.reload.file.blob.id).to eq(original_blob_id)
     end
+
+    it "does not overwrite a cover that was replaced while the resize was processing" do
+      preview = create(:asset_preview)
+      preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+
+      # Simulate the cover being swapped out mid-resize: right after the
+      # variant is generated (the slow step), another request attaches a new
+      # file to the same record.
+      allow(preview.file).to receive(:variant).and_wrap_original do |original, *args|
+        result = original.call(*args)
+        AssetPreview.find(preview.id).file.attach(
+          io: File.open(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")),
+          filename: "replacement.jpg",
+          content_type: "image/jpeg"
+        )
+        result
+      end
+
+      preview.resize_oversized_image!
+      preview.reload
+
+      expect(preview.file.filename.to_s).to eq("replacement.jpg")
+    end
+
+    it "does nothing when the record was deleted while the resize was processing" do
+      preview = create(:asset_preview)
+      preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+      original_blob_id = preview.file.blob.id
+
+      allow(preview.file).to receive(:variant).and_wrap_original do |original, *args|
+        result = original.call(*args)
+        AssetPreview.find(preview.id).mark_deleted!
+        result
+      end
+
+      preview.resize_oversized_image!
+
+      expect(preview.reload.file.blob.id).to eq(original_blob_id)
+    end
   end
 end
