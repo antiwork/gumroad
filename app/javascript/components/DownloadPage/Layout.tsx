@@ -43,7 +43,6 @@ export type LayoutProps = {
   token: string;
   redirect_id: string;
   add_to_library_option: AddToLibraryOption;
-  installment: { name: string } | null;
   purchase: {
     id: string;
     bundle_purchase_id: string | null;
@@ -54,7 +53,6 @@ export type LayoutProps = {
     product_permalink: string | null;
     product_name: string | null;
     variant_id: string | null;
-    variant_name: string | null;
     product_long_url: string | null;
     created_at: string;
     allows_review: boolean;
@@ -80,7 +78,6 @@ export const Layout = ({
   content_unavailability_reason_code,
   is_mobile_app_web_view,
   purchase,
-  installment,
   terms_page_url,
   add_to_library_option,
   headerActions,
@@ -226,19 +223,6 @@ export const Layout = ({
         </>
       ) : null}
       {purchase?.call ? <CallDetails call={purchase.call} /> : null}
-      <EntityInfo
-        entityName={
-          purchase
-            ? purchase.product_name
-              ? purchase.variant_name
-                ? `${purchase.product_name} - ${purchase.variant_name}`
-                : purchase.product_name
-              : null
-            : installment
-              ? installment.name
-              : null
-        }
-      />
     </>
   );
 
@@ -330,13 +314,6 @@ const CallDetails = ({ call }: { call: Call }) => {
     </Card>
   );
 };
-
-export const EntityInfo = ({ entityName }: { entityName: string | null }) =>
-  entityName ? (
-    <Card>
-      <CardContent>{entityName}</CardContent>
-    </Card>
-  ) : null;
 
 const PurchaseDeleteButton = ({
   purchase_id,

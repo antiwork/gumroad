@@ -29,7 +29,6 @@ function ConfirmPage() {
     token,
     redirect_id,
     add_to_library_option,
-    installment,
     purchase,
     authenticity_token,
   } = typia.assert<PageProps>(usePage().props);
@@ -43,7 +42,6 @@ function ConfirmPage() {
         token={token}
         redirect_id={redirect_id}
         add_to_library_option={add_to_library_option}
-        installment={installment}
         purchase={purchase}
       >
         <EmailConfirmation confirmation_info={confirmation_info} authenticity_token={authenticity_token} />

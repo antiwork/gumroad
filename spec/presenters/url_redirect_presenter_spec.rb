@@ -146,7 +146,6 @@ describe UrlRedirectPresenter do
         redirect_id: @url_redirect.external_id,
         product_has_third_party_analytics: false,
         seller_analytics: nil,
-        installment: nil,
         purchase: {
           id: @purchase.external_id,
           bundle_purchase_id: @purchase.bundle_purchase.external_id,
@@ -158,7 +157,6 @@ describe UrlRedirectPresenter do
           product_id: @product.external_id,
           product_name: @product.name,
           variant_id: nil,
-          variant_name: nil,
           product_permalink: @product.unique_permalink,
           allows_review: true,
           product_available: true,
@@ -575,7 +573,6 @@ describe UrlRedirectPresenter do
         terms_page_url: HomePageLinkService.terms,
         token: @url_redirect.token,
         redirect_id: @url_redirect.external_id,
-        installment: nil,
         purchase: {
           id: @purchase.external_id,
           bundle_purchase_id: nil,
@@ -586,7 +583,6 @@ describe UrlRedirectPresenter do
           product_id: @product.external_id,
           product_name: @product.name,
           variant_id: nil,
-          variant_name: nil,
           product_permalink: @product.unique_permalink,
           product_long_url: @product.long_url,
           allows_review: true,
@@ -656,12 +652,12 @@ describe UrlRedirectPresenter do
       expect(props[:purchase]).to include(email: nil)
     end
 
-    it "includes 'installment' and no 'creator' in props" do
+    it "does not include 'installment' or 'creator' in props" do
       url_redirect = create(:installment_url_redirect, installment: create(:workflow_installment, name: "Thank you for the purchase!", link: nil, seller: @user, product_files: [create(:product_file)]))
 
       props = described_class.new(url_redirect:, logged_in_user: @user).download_page_without_content_props
 
-      expect(props[:installment]).to eq(name: "Thank you for the purchase!")
+      expect(props).not_to have_key(:installment)
       expect(props).not_to have_key(:creator)
     end
 

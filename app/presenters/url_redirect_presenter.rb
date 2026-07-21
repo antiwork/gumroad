@@ -12,14 +12,13 @@ class UrlRedirectPresenter
     email_confirmation_required: "email_confirmation_required",
   }.freeze
 
-  attr_reader :url_redirect, :logged_in_user, :product, :purchase, :installment
+  attr_reader :url_redirect, :logged_in_user, :product, :purchase
 
   def initialize(url_redirect:, logged_in_user: nil)
     @url_redirect = url_redirect
     @logged_in_user = logged_in_user
     @product = url_redirect.referenced_link
     @purchase = url_redirect.purchase
-    @installment = url_redirect.installment
   end
 
   def download_attributes
@@ -92,9 +91,6 @@ class UrlRedirectPresenter
         terms_page_url: HomePageLinkService.terms,
         token: url_redirect.token,
         redirect_id: url_redirect.external_id,
-        installment: url_redirect.with_product_files.is_a?(Installment) ? {
-          name: installment.name,
-        } : nil,
         purchase: purchase.present? ? {
           id: purchase.external_id,
           bundle_purchase_id: purchase.is_bundle_product_purchase? ? purchase.bundle_purchase.external_id : nil,
@@ -106,7 +102,6 @@ class UrlRedirectPresenter
           product_id: purchase.link&.external_id,
           product_name: purchase.link&.name,
           variant_id: url_redirect.with_product_files&.is_a?(BaseVariant) ? url_redirect.with_product_files.external_id : nil,
-          variant_name: purchase.variant_names&.join(", "),
           product_long_url: purchase.link&.long_url,
           allows_review: purchase.allows_review?,
           product_available: !purchase.link&.deleted?,

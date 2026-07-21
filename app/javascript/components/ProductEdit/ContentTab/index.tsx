@@ -47,7 +47,6 @@ import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
-import { EntityInfo } from "$app/components/DownloadPage/Layout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -974,9 +973,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         </Details>
                       </CardContent>
                     </Card>
-                    <EntityInfo
-                      entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
-                    />
                   </>
                 ) : null}
               </div>
