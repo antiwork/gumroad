@@ -33,7 +33,7 @@ class ProductPresenter::ProductProps
         quantity_remaining: product.remaining_for_sale_count,
         long_url: product.long_url,
         is_sales_limited: product.max_purchase_count?,
-        ratings: product.display_product_reviews? ? product.rating_stats : nil,
+        ratings: product.display_product_reviews? ? product.bundle_rating_stats : nil,
         custom_button_text_option: product.custom_button_text_option,
         is_compliance_blocked: product.compliance_blocked(request.remote_ip),
         is_published: !product.draft && product.alive?,

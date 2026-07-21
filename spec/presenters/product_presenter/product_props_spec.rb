@@ -511,6 +511,21 @@ describe ProductPresenter::ProductProps do
         )
       end
 
+      it "aggregates the bundled products' ratings for the bundle's own ratings prop" do
+        first_bundled_product = bundle.bundle_products.in_order.first.product
+        second_bundled_product = bundle.bundle_products.in_order.second.product
+        create(:product_review, purchase: create(:purchase, link: first_bundled_product), rating: 5)
+        create(:product_review, purchase: create(:purchase, link: second_bundled_product), rating: 3)
+        bundle.reload
+
+        props = described_class.new(product: bundle).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+        expect(props[:product][:ratings]).to eq(
+          count: 2,
+          average: 4.0,
+          percentages: [0, 0, 50, 0, 50],
+        )
+      end
+
       it "does not issue per-row queries for bundle product card associations" do
         3.times do |i|
           extra = create(:product, user: seller)
