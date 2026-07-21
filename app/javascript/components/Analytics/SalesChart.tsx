@@ -64,15 +64,20 @@ type DataPoint = {
   projectedTotals?: number;
 };
 
-// Draws the projected end-of-day marker: a faint accent-colored bar from the axis
-// baseline up to the projected total, behind today's actual bar (same x position and
-// width). The actual day's numbers visibly climb toward the projection as the day
-// progresses. (Earlier versions drew a dashed connector line with a circle cap, then
-// a small dotted tick — seller feedback found both too visually busy, and the tick
-// rendered mispositioned on mobile Safari; see
-// https://github.com/antiwork/gumroad/issues/6048.) Rendered as a custom bar shape so
-// we control the fill opacity and round only the top corners, matching the real bars.
-const ProjectedVolumeBar = ({ x, y, width, height }: { x?: number; y?: number; width?: number; height?: number }) => {
+// Draws the projected end-of-day marker: a single semi-transparent circle at the
+// projected total, centered above today's data point. So on a partial day there are two
+// dots at today's x position — the solid dot on the totals line (booked so far) and this
+// faint one above it (projected end of day). Earlier treatments — a dashed connector
+// line, a dotted tick, and a shaded background bar — were all rejected by seller
+// feedback (the bar read as a count bar because bars in this chart mean views/sales,
+// not money; see https://github.com/antiwork/gumroad/issues/6048 and follow-ups).
+// Rendered as a custom shape on an invisible bar series so the circle inherits the
+// bar band's geometry — the y Recharts hands us is the projected value's pixel and the
+// band center is exactly today's x at any viewport width, which fixes the mobile drift
+// the old `Customized` overlay suffered from.
+const ProjectedDot = ({ x, y, width, height }: { x?: number; y?: number; width?: number; height?: number }) => {
+  // Recharts invokes the shape for every data point in the series; only today's point
+  // carries a projected value (a positive bar height) — skip the rest.
   if (
     x == null ||
     y == null ||
@@ -83,16 +88,16 @@ const ProjectedVolumeBar = ({ x, y, width, height }: { x?: number; y?: number; w
     height <= 0
   )
     return <g />;
-  const radius = Math.min(4, width / 2, height);
   return (
-    <path
-      d={`M ${x},${y + height} L ${x},${y + radius} Q ${x},${y} ${x + radius},${y} L ${x + width - radius},${y} Q ${
-        x + width
-      },${y} ${x + width},${y + radius} L ${x + width},${y + height} Z`}
+    <circle
+      cx={x + width / 2}
+      cy={y}
+      r={4}
       fill="rgb(var(--accent))"
-      fillOpacity={0.2}
+      fillOpacity={0.5}
+      stroke="none"
       pointerEvents="none"
-      data-testid="chart-projected-bar"
+      data-testid="chart-projected-dot"
     />
   );
 };
@@ -173,8 +178,8 @@ export const SalesChart = ({
   // When the range ends today (the backend labels the seller's current day — evaluated
   // in the seller's time zone — as "Today"), overlay a projected end-of-day total above
   // today's point: current total extrapolated by the fraction of the seller's day
-  // elapsed. Rendered as a dashed, semi-transparent extension so it clearly reads as an
-  // estimate, not booked revenue.
+  // elapsed. Rendered as a faint circle so it clearly reads as an estimate, not booked
+  // revenue.
   const lastDataPoint = dataPoints[dataPoints.length - 1];
   const projection = React.useMemo(() => {
     if (aggregateBy !== "daily" || endDate !== "Today" || !sellerTimeZone || !lastDataPoint) return null;
@@ -243,19 +248,20 @@ export const SalesChart = ({
           })
         }
       />
-      {/* Hidden second x-axis for the projected-volume bar. Bar groups are laid out
-          per axis, so putting the projection bar on its own axis lets it occupy the
-          full band — the same x position and width as the actual stacked bar —
+      {/* Hidden second x-axis for the projected-dot series. Bar groups are laid out
+          per axis, so putting the projection series on its own axis lets it occupy the
+          full band — centered on the same x position as the actual stacked bar —
           instead of being placed side by side with it. */}
       {projection ? <XAxis xAxisId="projection" dataKey="label" hide /> : null}
-      {/* Rendered before the actual bars so it paints behind them: a faint accent bar
-          rising to the projected end-of-day total, which today's numbers climb toward. */}
+      {/* An invisible bar series whose custom shape draws only the projected-total
+          circle; using a bar (not a Line/Customized overlay) keeps the marker anchored
+          to today's band center at any viewport width. */}
       {projection ? (
         <Bar
           dataKey="projectedTotals"
           xAxisId="projection"
           yAxisId="totals"
-          shape={ProjectedVolumeBar}
+          shape={ProjectedDot}
           isAnimationActive={false}
         />
       ) : null}
