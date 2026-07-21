@@ -70,4 +70,114 @@ describe AssetPreview do
       expect(preview.errors[:base]).to include("Could not analyze cover. Please check the uploaded file.")
     end
   end
+
+  describe "image file size validation" do
+    it "rejects an image cover larger than the size limit" do
+      preview = build(:asset_preview)
+      preview.file.attach(
+        Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "kFDzu.png"), "image/png")
+      )
+      preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE + 1)
+
+      expect(preview).not_to be_valid
+      expect(preview.errors[:base]).to include("Cover images must be smaller than 50 MB. Please resize or compress the image and try again.")
+    end
+
+    it "accepts an image cover at the size limit" do
+      preview = build(:asset_preview)
+      preview.file.attach(
+        Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "kFDzu.png"), "image/png")
+      )
+      preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE)
+      AssetPreviewAnalysisStub.analyze(preview.file)
+
+      expect(preview).to be_valid
+    end
+
+    it "does not apply the image size limit to video covers" do
+      preview = build(:asset_preview_mov, attach: true)
+      preview.file.attach(
+        Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "thing.mov"), "video/quicktime")
+      )
+      preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE + 1)
+      AssetPreviewAnalysisStub.analyze(preview.file)
+
+      expect(preview).to be_valid
+    end
+  end
+
+  describe "#oversized_image?" do
+    it "is true when either dimension exceeds the maximum" do
+      preview = create(:asset_preview)
+      preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1, "height" => 500))
+
+      expect(preview.oversized_image?).to be(true)
+    end
+
+    it "is false for an image within the limit" do
+      preview = create(:asset_preview)
+
+      expect(preview.oversized_image?).to be(false)
+    end
+
+    it "is false for GIFs, which skip post-processing to preserve animation" do
+      preview = create(:asset_preview_gif)
+      preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+
+      expect(preview.oversized_image?).to be(false)
+    end
+
+    it "is false for video covers" do
+      preview = create(:asset_preview_mov)
+      preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+
+      expect(preview.oversized_image?).to be(false)
+    end
+  end
+
+  describe "oversized image resize enqueueing" do
+    it "enqueues a resize when an oversized image cover is created" do
+      preview = build(:asset_preview, attach: false)
+      preview.file.attach(
+        Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "kFDzu.png"), "image/png")
+      )
+      preview.file.blob.update!(metadata: { "identified" => true, "width" => AssetPreview::MAX_IMAGE_DIMENSION + 1, "height" => 500, "analyzed" => true })
+      preview.save!
+
+      expect(ResizeOversizedAssetPreviewWorker).to have_enqueued_sidekiq_job(preview.id)
+    end
+
+    it "does not enqueue a resize for a normal-size cover" do
+      preview = create(:asset_preview)
+
+      expect(ResizeOversizedAssetPreviewWorker).not_to have_enqueued_sidekiq_job(preview.id)
+    end
+  end
+
+  describe "#resize_oversized_image!" do
+    it "replaces the file with a copy resized within the dimension limit" do
+      preview = create(:asset_preview)
+      # The fixture is 1633x512; pretend analysis found it oversized so the
+      # resize path runs, then let the real variant processing + re-analysis
+      # restore truthful metadata for the replacement file.
+      preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+      original_blob_id = preview.file.blob.id
+
+      preview.resize_oversized_image!
+      preview.reload
+
+      expect(preview.file.blob.id).not_to eq(original_blob_id)
+      expect(preview.width).to be <= AssetPreview::MAX_IMAGE_DIMENSION
+      expect(preview.height).to be <= AssetPreview::MAX_IMAGE_DIMENSION
+    end
+
+    it "does nothing when the image is not oversized" do
+      preview = create(:asset_preview)
+      original_blob_id = preview.file.blob.id
+
+      preview.resize_oversized_image!
+
+      expect(preview.reload.file.blob.id).to eq(original_blob_id)
+    end
+  end
 end
