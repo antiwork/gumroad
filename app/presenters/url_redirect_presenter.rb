@@ -258,7 +258,13 @@ class UrlRedirectPresenter
             language: subtitle_file.language,
             file_size: subtitle_file.size,
             download_url: url_redirect_download_subtitle_file_path(url_redirect.token, file.external_id, subtitle_file.external_id),
-            signed_url: file.signed_download_url_for_s3_key_and_filename(subtitle_file.s3_key, subtitle_file.s3_filename, is_video: true)
+            signed_url: file.signed_download_url_for_s3_key_and_filename(subtitle_file.s3_key, subtitle_file.s3_filename, is_video: true),
+            # What the video player should load as the caption track: the
+            # serve-time SRT→VTT conversion endpoint, which returns WebVTT with
+            # explicit centered cue positioning so iOS Safari's native caption
+            # renderer doesn't pin the cues to the right edge of the video.
+            # See https://github.com/antiwork/gumroad/issues/6043
+            vtt_url: url_redirect_subtitle_file_vtt_path(url_redirect.token, file.external_id, subtitle_file.external_id)
           }
         end,
         pdf_stamp_enabled: file.pdf_stamp_enabled?,

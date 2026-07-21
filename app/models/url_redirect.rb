@@ -242,7 +242,21 @@ class UrlRedirect < ApplicationRecord
       video_data = { sources: [hls_playlist_or_smil_xml_path(product_file), video_url] }
       video_data[:guid] = guid
       video_data[:title] = product_file.name_displayable
-      video_data[:tracks] = product_file.subtitle_files_urls
+      # Caption tracks point at our own serve-time SRT→VTT conversion endpoint
+      # (subtitle_file_vtt) instead of a signed S3 URL to the raw uploaded file.
+      # iOS Safari renders side-loaded captions with WebKit's native renderer no
+      # matter how the player is configured, and misplaces cues that lack
+      # explicit VTT position settings at the right edge of the video — see the
+      # controller action and https://github.com/antiwork/gumroad/issues/6043.
+      # Reads the preloaded alive_subtitle_files association (not
+      # subtitle_files.alive) to keep this loop free of per-file queries.
+      video_data[:tracks] = product_file.alive_subtitle_files.map do |subtitle_file|
+        {
+          file: Rails.application.routes.url_helpers.url_redirect_subtitle_file_vtt_path(token, product_file.external_id, subtitle_file.external_id),
+          label: subtitle_file.language,
+          kind: "captions"
+        }
+      end
       video_data[:external_id] = product_file.try(:external_id)
       video_data[:latest_media_location] =
         if product_file.link_id.present? && product_file.installment_id.nil?

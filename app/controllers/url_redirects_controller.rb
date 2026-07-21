@@ -8,17 +8,17 @@ class UrlRedirectsController < ApplicationController
   layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page, :confirm_page, :read, :stream, :download_page]
 
   before_action :fetch_url_redirect, except: %i[
-    show stream download_subtitle_file read download_archive download_product_files
+    show stream download_subtitle_file subtitle_file_vtt read download_archive download_product_files
   ]
   before_action :redirect_to_custom_domain_if_needed, only: :download_page
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
-                                             hls_playlist download_subtitle_file read
+                                             hls_playlist download_subtitle_file subtitle_file_vtt read
                                              download_archive download_product_files
                                              save_last_content_page]
   before_action :hide_layouts, only: %i[
-    show download_product_files smil hls_playlist download_subtitle_file
+    show download_product_files smil hls_playlist download_subtitle_file subtitle_file_vtt
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
@@ -153,6 +153,36 @@ class UrlRedirectsController < ApplicationController
     (subtitle_file = product_file.subtitle_files.alive.find_by_external_id(params[:subtitle_file_id])) || e404
 
     redirect_to @url_redirect.signed_video_url(subtitle_file), allow_other_host: true
+  end
+
+  # Serves a subtitle file to the video player as WebVTT with explicit cue
+  # positioning, converting from the seller's stored file (usually .srt) on the
+  # fly. The player can't be given the raw stored file: on iOS, Safari always
+  # renders side-loaded captions with WebKit's native renderer (JW Player's
+  # renderCaptionsNatively option is ignored there), and WebKit places cues that
+  # carry no explicit position settings at the right edge of the video instead
+  # of centered at the bottom. Serving VTT with "align:center position:50%" on
+  # every cue is the only fix that works regardless of the player's renderer.
+  # Serve-time conversion also covers every already-uploaded seller file with no
+  # backfill. See https://github.com/antiwork/gumroad/issues/6043
+  def subtitle_file_vtt
+    (product_file = @url_redirect.product_file(params[:product_file_id])) || e404
+    (subtitle_file = product_file.subtitle_files.alive.find_by_external_id(params[:subtitle_file_id])) || e404
+
+    # The converted output only changes when the stored file changes, and a
+    # SubtitleFile's S3 object is never overwritten in place (re-uploads create
+    # new records/keys), so cache on the record itself. Every buyer streaming
+    # the same video shares one S3 fetch + conversion.
+    vtt = Rails.cache.fetch("subtitle_file_vtt/#{subtitle_file.cache_key_with_version}", expires_in: 1.day) do
+      SubtitleToVttService.new(subtitle_file.s3_object.get.body.read).perform
+    end
+
+    expires_in 1.hour, public: false
+    render plain: vtt, content_type: "text/vtt"
+  rescue Aws::S3::Errors::ServiceError
+    # The stored file went missing or S3 hiccuped — the player treats a 404 as
+    # "no captions" instead of surfacing an error to the buyer.
+    e404
   end
 
   def smil

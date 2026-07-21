@@ -1056,13 +1056,6 @@ describe ProductFile do
       end
     end
 
-    describe "#subtitle_files_urls" do
-      it "excludes subtitle files whose S3 object does not exist" do
-        result = product_file.subtitle_files_urls
-        expect(result).to eq([{ file: english_srt_url, label: "English", kind: "captions" }])
-      end
-    end
-
     describe "#subtitle_files_for_mobile" do
       it "excludes subtitle files whose S3 object does not exist" do
         result = product_file.subtitle_files_for_mobile

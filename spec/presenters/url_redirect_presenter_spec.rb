@@ -65,6 +65,7 @@ describe UrlRedirectPresenter do
                                                                      file_size: subtitle_file.size,
                                                                      download_url: url_redirect_download_subtitle_file_path(url_redirect.token, file.external_id, subtitle_file.external_id),
                                                                      signed_url: file.signed_download_url_for_s3_key_and_filename(subtitle_file.s3_key, subtitle_file.s3_display_name, is_video: true),
+                                                                     vtt_url: url_redirect_subtitle_file_vtt_path(url_redirect.token, file.external_id, subtitle_file.external_id),
                                                                    ],
                                                                    download_url: url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }),
                                                                    stream_url: url_redirect_stream_page_for_product_file_path(url_redirect.token, file.external_id),

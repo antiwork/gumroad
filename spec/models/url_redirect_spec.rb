@@ -456,7 +456,12 @@ describe UrlRedirect do
       expect(playlist.size).to eq(4)
       playlist_by_external_id = playlist.index_by { |video| video[:external_id] }
       files.each do |file|
-        expect(playlist_by_external_id[file.external_id][:tracks].sole[:label]).to eq("English (#{file.id})")
+        subtitle_file = file.alive_subtitle_files.sole
+        track = playlist_by_external_id[file.external_id][:tracks].sole
+        expect(track[:label]).to eq("English (#{file.id})")
+        expect(track[:file]).to eq(
+          Rails.application.routes.url_helpers.url_redirect_subtitle_file_vtt_path(url_redirect.token, file.external_id, subtitle_file.external_id)
+        )
       end
       files.first(2).each_with_index do |file, index|
         expect(playlist_by_external_id[file.external_id][:latest_media_location]).to eq(

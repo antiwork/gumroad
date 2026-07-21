@@ -244,21 +244,6 @@ class ProductFile < ApplicationRecord
     s3_display_name
   end
 
-  def subtitle_files_urls
-    # Reads the alive_subtitle_files association (rather than subtitle_files.alive)
-    # so callers that serialize many files at once — the stream-page playlist in
-    # UrlRedirect#video_files_playlist — can preload it and avoid a query per file.
-    alive_subtitle_files.filter_map do |file|
-      signed = safe_signed_download_url(file.s3_key, file.s3_filename, is_video: true)
-      next if signed.nil?
-      {
-        file: signed,
-        label: file.language,
-        kind: "captions"
-      }
-    end
-  end
-
   def subtitle_files_for_mobile
     subtitle_files.alive.filter_map do |file|
       signed = safe_signed_download_url(file.s3_key, file.s3_filename, is_video: true)
