@@ -3279,11 +3279,7 @@ describe LinksController, :vcr, inertia: true do
           }
         end
 
-        before do
-          Feature.activate_user(:ai_product_generation, seller)
-        end
-
-        it "calls AI service when ai_prompt is present and feature is active" do
+        it "calls AI service when ai_prompt is present" do
           service_double = instance_double(Ai::ProductDetailsGeneratorService)
           allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
           allow(service_double).to receive(:generate_cover_image).and_return({ image_data: "fake_image_data" })
@@ -3313,17 +3309,6 @@ describe LinksController, :vcr, inertia: true do
           expect(link.rich_contents.first.description).to eq([{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Welcome to the course" }] }])
           expect(link.rich_contents.last.title).to eq("Conclusion")
           expect(link.rich_contents.last.description).to eq([{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Thank you for reading this course" }] }])
-        end
-
-        it "does not call AI service when feature is inactive" do
-          Feature.deactivate_user(:ai_product_generation, seller)
-
-          service_double = instance_double(Ai::ProductDetailsGeneratorService)
-          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
-          expect(service_double).not_to receive(:generate_cover_image)
-          expect(service_double).not_to receive(:generate_rich_content_pages)
-
-          post :create, params: { link: params }
         end
 
         it "does not call AI service when ai_prompt is blank" do

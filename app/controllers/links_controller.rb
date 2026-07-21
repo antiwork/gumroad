@@ -85,7 +85,7 @@ class LinksController < ApplicationController
     @product.is_bundle = @product.native_type == Link::NATIVE_TYPE_BUNDLE
     @product.json_data[:custom_button_text_option] = "donate_prompt" if @product.native_type == Link::NATIVE_TYPE_COFFEE
 
-    ai_generated = params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
+    ai_generated = params[:link][:ai_prompt].present?
 
     begin
       @product.save!

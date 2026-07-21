@@ -3972,7 +3972,6 @@ describe User, :vcr do
     let(:user) { create(:user) }
 
     before do
-      Feature.activate_user(:ai_product_generation, user)
       user.confirm
       allow(user).to receive(:sales_cents_total).and_return(15_000)
     end
@@ -3995,12 +3994,6 @@ describe User, :vcr do
     end
 
     it "returns false when user has no completed payments or successful sales" do
-      expect(user.eligible_for_ai_product_generation?).to eq(false)
-    end
-
-    it "returns false when feature flag is inactive" do
-      Feature.deactivate_user(:ai_product_generation, user)
-      create(:payment_completed, user:)
       expect(user.eligible_for_ai_product_generation?).to eq(false)
     end
 
