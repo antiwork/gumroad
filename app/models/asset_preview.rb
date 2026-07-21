@@ -137,15 +137,33 @@ class AssetPreview < ApplicationRecord
   def resize_oversized_image!
     return unless oversized_image?
 
+    # Remember which blob we are resizing. Resizing a huge original can take
+    # a while (that slowness is the whole reason this runs in a background
+    # job), and the cover can be replaced or deleted in the meantime. Without
+    # this check the job would attach its resized copy of the OLD image,
+    # silently clobbering the seller's newer cover.
+    source_blob_id = file.blob.id
+
     resized = file.variant(resize_to_limit: [MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION]).processed
 
+    attached_resized_copy = false
     resized.blob.open do |tempfile|
-      file.attach(
-        io: tempfile,
-        filename: file.filename,
-        content_type: file.content_type
-      )
+      # with_lock reloads the record, so the deleted/attachment state and
+      # blob id below reflect what is in the database right now, and no
+      # concurrent replacement can interleave with the attach.
+      with_lock do
+        next if deleted? || !file.attached? || file.blob.id != source_blob_id
+
+        file.attach(
+          io: tempfile,
+          filename: file.filename,
+          content_type: file.content_type
+        )
+        attached_resized_copy = true
+      end
     end
+    return unless attached_resized_copy
+
     file.analyze
 
     # Product page JSON caches the cover URLs and dimensions, so bust it now
