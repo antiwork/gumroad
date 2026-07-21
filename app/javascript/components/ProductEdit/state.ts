@@ -198,6 +198,7 @@ export const ProductEditContext = React.createContext<{
   saving: boolean;
   save: () => Promise<void>;
   googleClientId: string;
+  googleCalendarEnabled: boolean;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
@@ -233,6 +234,7 @@ export type FileEntry = {
   file_size: null | number;
   is_pdf: boolean;
   pdf_stamp_enabled: boolean;
+  hide_kindle_and_read_buttons: boolean;
   is_streamable: boolean;
   stream_only: boolean;
   is_transcoding_in_progress: boolean;

@@ -240,13 +240,13 @@ class UrlRedirectPresenter
         id: file.external_id,
         download_url: url_redirect.is_file_downloadable?(file) ? url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }) : nil,
         stream_url: file.streamable? ? url_redirect_stream_page_for_product_file_path(url_redirect.token, file.external_id) : nil,
-        kindle_data: file.can_send_to_kindle? ?
+        kindle_data: file.can_send_to_kindle? && !file.try(:hide_kindle_and_read_buttons?) ?
                        { email: logged_in_user&.kindle_email, icon_url: ActionController::Base.helpers.image_path("white-15.png") } :
                        nil,
         latest_media_location: media_locations_by_file[file.id].as_json,
         content_length: file.content_length,
         isbn: file.isbn,
-        read_url: file.readable? ? (
+        read_url: file.readable? && !file.try(:hide_kindle_and_read_buttons?) ? (
           file.is_a?(Link) ? url_redirect_read_url(url_redirect.token) : file.is_a?(ProductFile) ? url_redirect_read_for_product_file_path(url_redirect.token, file.external_id) : nil
         ) : nil,
         external_link_url: file.external_link? ? file.url : nil,
