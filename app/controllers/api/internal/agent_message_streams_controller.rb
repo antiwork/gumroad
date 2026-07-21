@@ -116,10 +116,12 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
 
           begin
             write_lock.synchronize { response.stream.write(": heartbeat\n\n") }
-          rescue IOError, ActionController::Live::ClientDisconnected
+          rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
             # The client is gone — stop writing to the dead socket, but keep the marker refreshes
             # going. The request thread's own next write surfaces the disconnect through its
-            # existing handling.
+            # existing handling. SystemCallError is included because a dead socket can surface as
+            # Errno::EPIPE / Errno::ECONNRESET rather than the wrapped ClientDisconnected, and an
+            # uncaught error here would kill the whole heartbeat thread, refreshes included.
             socket_alive = false
           end
         end
