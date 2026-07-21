@@ -40,6 +40,7 @@ class Settings::PaymentsController < Settings::BaseController
     if updated_country_code.present? && updated_country_code != compliance_info.legal_entity_country_code
       begin
         UpdateUserCountry.new(new_country_code: updated_country_code, user: current_seller).process
+        log_payout_settings_update_by_non_owner
         flash[:notice] = "Your country has been updated!"
         return redirect_to settings_payments_path, status: :see_other
       rescue UpdateUserCountry::PayoutInProcessingError
@@ -119,6 +120,8 @@ class Settings::PaymentsController < Settings::BaseController
       flash[:notice] = "Thanks! You're all set."
     end
 
+    log_payout_settings_update_by_non_owner
+
     redirect_to settings_payments_path, status: :see_other
   end
 
@@ -172,6 +175,7 @@ class Settings::PaymentsController < Settings::BaseController
 
   def remove_credit_card
     if current_seller.remove_credit_card
+      log_payout_settings_update_by_non_owner
       head :no_content
     else
       render json: { error: current_seller.errors.full_messages.join(",") }, status: :bad_request
@@ -287,6 +291,22 @@ class Settings::PaymentsController < Settings::BaseController
 
     def redirect_with_error(error_message)
       redirect_to settings_payments_path, inertia: { errors: { base: [error_message] } }
+    end
+
+    # Payout settings are the top target for account-takeover monetization
+    # (redirecting a seller's earnings to an attacker's bank account). Now that
+    # team members with the admin role can change these settings — not just the
+    # account owner — we leave an audit note on the seller account whenever the
+    # person making the change is not the owner, so support and risk teams can
+    # see exactly who changed payout details and when.
+    def log_payout_settings_update_by_non_owner
+      return if logged_in_user == current_seller
+
+      current_seller.comments.create!(
+        author_id: logged_in_user.id,
+        comment_type: Comment::COMMENT_TYPE_NOTE,
+        content: "Payout settings updated by team admin #{logged_in_user.email}"
+      )
     end
 
     def authorize

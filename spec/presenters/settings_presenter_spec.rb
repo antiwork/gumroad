@@ -1220,7 +1220,19 @@ describe SettingsPresenter do
         create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
       end
 
-      it "exposes false so the section is hidden from team admins who lack :update? on payments" do
+      it "exposes true because team admins can now manage payout settings, including beneficial owners" do
+        expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(true)
+      end
+    end
+
+    context "when the logged-in user is a support team member for the seller" do
+      let(:user) { create(:user) }
+
+      before do
+        create(:team_membership, user:, seller:, role: TeamMembership::ROLE_SUPPORT)
+      end
+
+      it "exposes false so the section is hidden from roles without :update? on payments" do
         expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(false)
       end
     end

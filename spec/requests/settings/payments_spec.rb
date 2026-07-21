@@ -109,10 +109,13 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       include_context "with switching account to user as admin for seller"
 
-      it "does not show the Connect with PayPal button link" do
+      it "shows the PayPal connect section requirements like the owner sees" do
         visit settings_payments_path
 
-        expect(page).not_to have_link("Connect with PayPal")
+        # Team admins can now manage payout settings, so they see the same
+        # PayPal connect section as the owner (gated on the seller's own
+        # eligibility requirements, not on the viewer's role).
+        expect(page).to have_text("You must meet the following requirements in order to connect a PayPal account:")
       end
     end
   end
@@ -6338,10 +6341,10 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       include_context "with switching account to user as admin for seller"
 
-      it "disables the form" do
+      it "keeps the form enabled for team admins" do
         visit settings_payments_path
-        expect(page).to have_field("First name", disabled: true)
-        expect(page).not_to have_button("Update settings")
+        expect(page).to have_field("First name", disabled: false)
+        expect(page).to have_button("Update settings")
       end
     end
   end
