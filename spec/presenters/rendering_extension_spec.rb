@@ -38,7 +38,6 @@ describe "RenderingExtension" do
             feature_flags: {
               require_email_typo_acknowledgment: false,
               disable_stripe_signup: false,
-              career_pages: false
             }
           }
         )
@@ -162,7 +161,6 @@ describe "RenderingExtension" do
               feature_flags: {
                 require_email_typo_acknowledgment: false,
                 disable_stripe_signup: false,
-                career_pages: false
               }
             }
           )
