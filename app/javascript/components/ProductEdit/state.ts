@@ -198,7 +198,6 @@ export const ProductEditContext = React.createContext<{
   saving: boolean;
   save: () => Promise<void>;
   googleClientId: string;
-  googleCalendarEnabled: boolean;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;

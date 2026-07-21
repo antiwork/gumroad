@@ -492,7 +492,6 @@ describe ProductPresenter do
           aws_key: AWS_ACCESS_KEY,
           available_countries:,
           google_client_id: "524830719781-6h0t2d14kpj9j76utctvs3udl0embkpi.apps.googleusercontent.com",
-          google_calendar_enabled: false,
           seller_refund_policy_enabled: true,
           seller_refund_policy: {
             title: "30-day money back guarantee",
@@ -756,7 +755,6 @@ describe ProductPresenter do
             aws_key: AWS_ACCESS_KEY,
             available_countries:,
             google_client_id: "524830719781-6h0t2d14kpj9j76utctvs3udl0embkpi.apps.googleusercontent.com",
-            google_calendar_enabled: false,
             seller_refund_policy_enabled: true,
             seller_refund_policy: {
               title: "30-day money back guarantee",
@@ -974,7 +972,6 @@ describe ProductPresenter do
             aws_key: AWS_ACCESS_KEY,
             available_countries:,
             google_client_id: "524830719781-6h0t2d14kpj9j76utctvs3udl0embkpi.apps.googleusercontent.com",
-            google_calendar_enabled: false,
             seller_refund_policy_enabled: true,
             seller_refund_policy: {
               title: "30-day money back guarantee",

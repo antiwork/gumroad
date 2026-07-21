@@ -78,7 +78,6 @@ type Props = {
   s3_url: string;
   available_countries: ShippingCountry[];
   google_client_id: string;
-  google_calendar_enabled: boolean;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
@@ -118,7 +117,6 @@ const createContextValue = (props: Props) => ({
   saving: false,
   save: async () => {},
   googleClientId: props.google_client_id,
-  googleCalendarEnabled: props.google_calendar_enabled,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,

@@ -273,7 +273,6 @@ class ProductPresenter
       aws_key: AWS_ACCESS_KEY,
       available_countries: ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } },
       google_client_id: GlobalConfig.get("GOOGLE_CLIENT_ID"),
-      google_calendar_enabled: Feature.active?(:google_calendar_link, product.user),
       seller_refund_policy_enabled: product.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
         title: product.user.refund_policy.title,
