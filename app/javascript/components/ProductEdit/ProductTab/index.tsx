@@ -60,7 +60,6 @@ export const ProductTab = () => {
     setCurrencyType,
     isPhysical,
     customDomainVerificationStatus,
-    googleCalendarEnabled,
     seller_refund_policy_enabled,
     cancellationDiscountsEnabled,
     priceCheckerEnabled,
@@ -244,7 +243,7 @@ export const ProductTab = () => {
                       })
                     }
                   />
-                  {product.native_type === "call" && googleCalendarEnabled ? (
+                  {product.native_type === "call" ? (
                     <GoogleCalendarIntegrationEditor
                       integration={product.integrations.google_calendar}
                       onChange={(newIntegration) =>

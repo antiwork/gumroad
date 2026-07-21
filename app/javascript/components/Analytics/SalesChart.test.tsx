@@ -66,7 +66,7 @@ describe("SalesChart projection overlay", () => {
     vi.useRealTimers();
   });
 
-  it("renders the dotted projection tick with finite coordinates for a daily range ending today", () => {
+  it("renders one faint projected-total circle centered above today's bar, above today's booked total", () => {
     // Fix "now" to mid-afternoon so the projection guardrails (first hour of the day,
     // completed day) don't suppress the overlay.
     vi.useFakeTimers();
@@ -74,19 +74,43 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart();
 
-    const projectedTick = container.querySelector("[data-testid='chart-projected-tick']");
-    expect(projectedTick).not.toBeNull();
-    expect(projectedTick?.getAttribute("stroke-dasharray")).toBe("2 2");
+    // The projection series only carries a value on today's point, so exactly one
+    // circle renders.
+    const projectedDots = container.querySelectorAll("[data-testid='chart-projected-dot']");
+    expect(projectedDots.length).toBe(1);
+    const projectedDot = projectedDots[0];
 
-    for (const attribute of ["x1", "x2", "y1", "y2"]) {
-      expect(Number.isFinite(Number(projectedTick?.getAttribute(attribute)))).toBe(true);
+    // The circle must be horizontally centered on today's actual sales bar, so it sits
+    // directly above today's data point at any viewport width (the anchoring guarantee
+    // from #6048 — the old Customized overlay drifted left on mobile).
+    const actualBars = container.querySelectorAll("path[data-testid='chart-bar']");
+    expect(actualBars.length).toBeGreaterThan(0);
+    let todaysBar: Element | null = null;
+    let maxX = -Infinity;
+    for (const bar of actualBars) {
+      const barX = Number(bar.getAttribute("x"));
+      if (barX > maxX) {
+        maxX = barX;
+        todaysBar = bar;
+      }
     }
-    // The tick is horizontal (constant y) and has real width along x.
-    expect(Number(projectedTick?.getAttribute("y1"))).toBe(Number(projectedTick?.getAttribute("y2")));
-    expect(Number(projectedTick?.getAttribute("x2"))).toBeGreaterThan(Number(projectedTick?.getAttribute("x1")));
-    // The old vertical connector line and circle cap are gone.
+    expect(todaysBar).not.toBeNull();
+    const expectedCenterX = Number(todaysBar?.getAttribute("x")) + Number(todaysBar?.getAttribute("width")) / 2;
+    expect(Number(projectedDot?.getAttribute("cx"))).toBeCloseTo(expectedCenterX, 5);
+
+    // The projected circle must sit above today's actual total on the money axis (a
+    // projection is always higher than the booked total) — so there are two dots for
+    // the partial day: the line's solid dot and this faint one above it.
+    const dots = container.querySelectorAll("[data-testid='chart-dot']");
+    const lastDot = dots[dots.length - 1];
+    expect(lastDot).toBeDefined();
+    expect(Number(projectedDot?.getAttribute("cy"))).toBeLessThan(Number(lastDot?.getAttribute("cy")));
+
+    // The earlier marker treatments are gone: no dotted tick, no vertical connector
+    // line, no shaded background bar (bars in this chart mean counts, not money).
+    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
     expect(container.querySelector("[data-testid='chart-projection-line']")).toBeNull();
-    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-bar']")).toBeNull();
 
     expectNoNaNAttributes(container);
   });
@@ -97,7 +121,7 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart({ aggregateBy: "monthly" });
 
-    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
     expectNoNaNAttributes(container);
   });
 
@@ -107,7 +131,7 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart({ endDate: "Jul 10" });
 
-    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
     expectNoNaNAttributes(container);
   });
 });

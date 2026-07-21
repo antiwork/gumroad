@@ -185,8 +185,6 @@ type Props = {
   creators: { id: string; name: string }[];
   bundles: { id: string; label: string }[];
   purchase_analytics: Record<string, SellerAnalyticsProps>;
-  reviews_page_enabled: boolean;
-  following_wishlists_enabled: boolean;
 };
 
 type Params = {
@@ -256,8 +254,7 @@ const extractParams = (rawParams: URLSearchParams): Params => ({
 });
 
 export default function LibraryPage() {
-  const { results, creators, bundles, purchase_analytics, reviews_page_enabled, following_wishlists_enabled } =
-    typia.assert<Props>(usePage().props);
+  const { results, creators, bundles, purchase_analytics } = typia.assert<Props>(usePage().props);
 
   const originalLocation = useOriginalLocation();
   const discoverUrl = useDiscoverUrl();
@@ -401,11 +398,7 @@ export default function LibraryPage() {
   const shouldShowFilter = !showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9);
 
   return (
-    <Layout
-      selectedTab="purchases"
-      reviewsPageEnabled={reviews_page_enabled}
-      followingWishlistsEnabled={following_wishlists_enabled}
-    >
+    <Layout selectedTab="purchases">
       <section className="space-y-4 p-4 md:p-8">
         {state.results.length === 0 || showArchivedNotice ? (
           <Placeholder>

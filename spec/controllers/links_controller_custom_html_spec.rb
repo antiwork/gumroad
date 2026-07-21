@@ -181,6 +181,9 @@ describe LinksController, :vcr, type: :controller do
       expect(response.headers["Content-Security-Policy"]).to eq(CUSTOM_HTML_CSP)
       expect(response.headers["Content-Security-Policy"]).to include("sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox")
       expect(response.headers["Content-Security-Policy"]).to include("frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com")
+      # The shared Tailwind build loads from the asset host as an external
+      # stylesheet, so style-src must allow it.
+      expect(response.headers["Content-Security-Policy"]).to include("style-src 'unsafe-inline' #{RendersCustomHtmlPages::PAGES_TAILWIND_ASSET_HOST}")
       expect(response.headers["Content-Security-Policy"]).not_to include("allow-same-origin")
       expect(response.headers["Content-Security-Policy"]).not_to include("allow-top-navigation")
       expect(response.headers["X-Frame-Options"]).to eq("SAMEORIGIN")
@@ -247,24 +250,65 @@ describe LinksController, :vcr, type: :controller do
     end
   end
 
-  describe ".pages_tailwind_inline" do
+  describe ".pages_tailwind_head" do
+    let(:manifest_path) { Rails.root.join("public/pages-tailwind-manifest.json") }
+    let(:css_path) { Rails.root.join("public/pages-tailwind.css") }
+    let(:fingerprinted_path) { Rails.root.join("public", "pages/pages-tailwind-0123456789ab.css") }
+
     before do
-      described_class.remove_instance_variable(:@pages_tailwind_inline) if described_class.instance_variable_defined?(:@pages_tailwind_inline)
+      described_class.remove_instance_variable(:@pages_tailwind_head) if described_class.instance_variable_defined?(:@pages_tailwind_head)
+      allow(File).to receive(:exist?).and_call_original
+      allow(File).to receive(:read).and_call_original
     end
 
     after do
-      described_class.remove_instance_variable(:@pages_tailwind_inline) if described_class.instance_variable_defined?(:@pages_tailwind_inline)
+      described_class.remove_instance_variable(:@pages_tailwind_head) if described_class.instance_variable_defined?(:@pages_tailwind_head)
+    end
+
+    it "links to the fingerprinted stylesheet on the asset host when the manifest and file exist" do
+      allow(File).to receive(:exist?).with(manifest_path).and_return(true)
+      allow(File).to receive(:read).with(manifest_path).and_return({ "pages-tailwind.css" => "pages/pages-tailwind-0123456789ab.css" }.to_json)
+      allow(File).to receive(:exist?).with(fingerprinted_path).and_return(true)
+
+      expect(described_class.pages_tailwind_head).to eq(
+        %(<link rel="stylesheet" href="#{RendersCustomHtmlPages::PAGES_TAILWIND_ASSET_HOST}/pages/pages-tailwind-0123456789ab.css">)
+      )
+    end
+
+    it "falls back to inlining the un-fingerprinted build when the manifest is missing" do
+      allow(File).to receive(:exist?).with(manifest_path).and_return(false)
+      allow(File).to receive(:exist?).with(css_path).and_return(true)
+      allow(File).to receive(:read).with(css_path).and_return(".hero{display:block}")
+
+      expect(described_class.pages_tailwind_head).to eq("<style>.hero{display:block}</style>")
+    end
+
+    it "falls back to inlining when the manifest points at a file that is not on disk" do
+      allow(File).to receive(:exist?).with(manifest_path).and_return(true)
+      allow(File).to receive(:read).with(manifest_path).and_return({ "pages-tailwind.css" => "pages/pages-tailwind-0123456789ab.css" }.to_json)
+      allow(File).to receive(:exist?).with(fingerprinted_path).and_return(false)
+      allow(File).to receive(:exist?).with(css_path).and_return(true)
+      allow(File).to receive(:read).with(css_path).and_return(".hero{display:block}")
+
+      expect(described_class.pages_tailwind_head).to eq("<style>.hero{display:block}</style>")
+    end
+
+    it "ignores a manifest entry that does not look like a build output" do
+      allow(File).to receive(:exist?).with(manifest_path).and_return(true)
+      allow(File).to receive(:read).with(manifest_path).and_return({ "pages-tailwind.css" => "../../etc/passwd" }.to_json)
+      allow(File).to receive(:exist?).with(css_path).and_return(true)
+      allow(File).to receive(:read).with(css_path).and_return(".hero{display:block}")
+
+      expect(described_class.pages_tailwind_head).to eq("<style>.hero{display:block}</style>")
     end
 
     it "does not memoize a missing Tailwind build artifact" do
-      path = Rails.root.join("public/pages-tailwind.css")
-      allow(File).to receive(:exist?).and_call_original
-      allow(File).to receive(:read).and_call_original
-      allow(File).to receive(:exist?).with(path).and_return(false, true)
-      allow(File).to receive(:read).with(path).and_return(".hero{display:block}")
+      allow(File).to receive(:exist?).with(manifest_path).and_return(false)
+      allow(File).to receive(:exist?).with(css_path).and_return(false, true)
+      allow(File).to receive(:read).with(css_path).and_return(".hero{display:block}")
 
-      expect(described_class.pages_tailwind_inline).to eq("")
-      expect(described_class.pages_tailwind_inline).to eq("<style>.hero{display:block}</style>")
+      expect(described_class.pages_tailwind_head).to eq("")
+      expect(described_class.pages_tailwind_head).to eq("<style>.hero{display:block}</style>")
     end
   end
 

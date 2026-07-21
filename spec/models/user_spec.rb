@@ -985,9 +985,8 @@ describe User, :vcr do
         include_examples "user is not deactivated"
       end
 
-      context "when user has negative balances and the feature delete_account_forfeit_balance is active" do
+      context "when user has negative balances" do
         before do
-          Feature.activate_user :delete_account_forfeit_balance, @user
           create(:balance, user: @user, amount_cents: -50)
         end
 
@@ -3770,6 +3769,36 @@ describe User, :vcr do
       it "returns false when user has no completed payment" do
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
         expect(user.eligible_to_send_emails?).to eq(false)
+      end
+
+      it "returns true when user is verified even without a completed payment" do
+        user.update!(verified: true)
+        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        expect(user.eligible_to_send_emails?).to eq(true)
+      end
+
+      it "returns false when user is verified but has not made minimum required sales" do
+        user.update!(verified: true)
+        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+        expect(user.eligible_to_send_emails?).to eq(false)
+      end
+
+      it "returns false when a flagged user is then verified and has no completed payment" do
+        # Flag first, then verify: the state machine blocks flagging an
+        # already-verified user, but nothing stops verifying a flagged one.
+        admin_user = create(:admin_user)
+        user.flag_for_fraud(author_id: admin_user.id)
+        user.update!(verified: true)
+        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        expect(user.eligible_to_send_emails?).to eq(false)
+      end
+
+      it "returns true when user is flagged but has a completed payment and minimum sales" do
+        admin_user = create(:admin_user)
+        user.flag_for_fraud(author_id: admin_user.id)
+        create(:payment_completed, user:)
+        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        expect(user.eligible_to_send_emails?).to eq(true)
       end
 
       it "returns false when user has not made minimum required sales" do

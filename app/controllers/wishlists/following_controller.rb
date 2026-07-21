@@ -3,7 +3,6 @@
 class Wishlists::FollowingController < ApplicationController
   before_action :authenticate_user!
   after_action :verify_authorized
-  before_action { e404 if Feature.inactive?(:follow_wishlists, current_seller) }
 
   layout "inertia"
 
@@ -18,7 +17,6 @@ class Wishlists::FollowingController < ApplicationController
 
     render inertia: "Wishlists/Following/Index", props: {
       wishlists: wishlists_props,
-      reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
     }
   end
 end

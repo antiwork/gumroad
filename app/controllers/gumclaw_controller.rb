@@ -3,7 +3,6 @@
 class GumclawController < ApplicationController
   layout "home"
 
-  before_action { e404 if Feature.inactive?(:career_pages) }
   before_action :set_body_class
   before_action :set_meta_data
 

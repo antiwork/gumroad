@@ -1083,6 +1083,72 @@ describe UrlRedirectsController, inertia: true do
     end
   end
 
+  describe "GET subtitle_file_vtt" do
+    let(:srt_content) do
+      <<~SRT
+        1
+        00:00:01,000 --> 00:00:04,000
+        Hello there!
+      SRT
+    end
+
+    before do
+      @product_file = @product.product_files.last
+      @subtitle_file = create(:subtitle_file, product_file: @product_file)
+
+      s3_body = double("s3 body", read: srt_content)
+      s3_response = double("s3 response", body: s3_body)
+      s3_object = double("s3 object", get: s3_response)
+      allow_any_instance_of(SubtitleFile).to receive(:s3_object).and_return(s3_object)
+    end
+
+    it "serves the stored SRT converted to WebVTT with centered cue settings" do
+      get :subtitle_file_vtt, params: { id: @token, subtitle_file_id: @subtitle_file.external_id,
+                                        product_file_id: @product_file.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.media_type).to eq("text/vtt")
+      expect(response.body).to eq(<<~VTT)
+        WEBVTT
+
+        00:00:01.000 --> 00:00:04.000 align:center position:50%
+        Hello there!
+      VTT
+    end
+
+    it "caches the converted output" do
+      allow(Rails.cache).to receive(:fetch).and_call_original
+      expect(Rails.cache).to receive(:fetch)
+        .with("subtitle_file_vtt/#{@subtitle_file.cache_key_with_version}", expires_in: 1.day)
+        .and_return("WEBVTT\n")
+
+      get :subtitle_file_vtt, params: { id: @token, subtitle_file_id: @subtitle_file.external_id,
+                                        product_file_id: @product_file.external_id }
+
+      expect(response.body).to eq("WEBVTT\n")
+    end
+
+    it "returns 404 when the subtitle file is deleted" do
+      @subtitle_file.mark_deleted
+      @subtitle_file.save!
+
+      expect do
+        get :subtitle_file_vtt, params: { id: @token, subtitle_file_id: @subtitle_file.external_id,
+                                          product_file_id: @product_file.external_id }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "returns 404 when the stored file is missing from S3" do
+      allow_any_instance_of(SubtitleFile).to receive(:s3_object)
+        .and_raise(Aws::S3::Errors::NoSuchKey.new(nil, "no such key"))
+
+      expect do
+        get :subtitle_file_vtt, params: { id: @token, subtitle_file_id: @subtitle_file.external_id,
+                                          product_file_id: @product_file.external_id }
+      end.to raise_error(ActionController::RoutingError)
+    end
+  end
+
   describe "GET 'show'" do
     it "returns http success" do
       get :show, params: { id: @token }
@@ -2170,8 +2236,9 @@ describe UrlRedirectsController, inertia: true do
         video = create(:streamable_video)
         audio = create(:listenable_audio)
         readable_document = create(:readable_document)
+        epub = create(:epub_product_file, pagelength: 13)
         non_readable_document = create(:non_readable_document)
-        product.product_files = [video, audio, readable_document, non_readable_document]
+        product.product_files = [video, audio, readable_document, epub, non_readable_document]
         product.save!
         purchase = create(:purchase, link: product)
         url_redirect = create(:url_redirect, link: product, purchase:)
@@ -2182,6 +2249,9 @@ describe UrlRedirectsController, inertia: true do
         readable_document_consumption_timestamp = Time.current.change(usec: 0) + 5.minutes
         create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id, platform: Platform::ANDROID,
                                 product_file_id: readable_document.id, product_id: url_redirect.referenced_link.id, location: 3, consumed_at: readable_document_consumption_timestamp)
+        epub_consumption_timestamp = Time.current.change(usec: 0) + 10.minutes
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id, platform: Platform::ANDROID,
+                                product_file_id: epub.id, product_id: url_redirect.referenced_link.id, location: 13, consumed_at: epub_consumption_timestamp)
 
         request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
         get :download_page, params: { id: url_redirect.token }
@@ -2191,6 +2261,7 @@ describe UrlRedirectsController, inertia: true do
           video.external_id => nil,
           audio.external_id => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
           readable_document.external_id => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
+          epub.external_id => { "location" => 99, "timestamp" => epub_consumption_timestamp.as_json, "unit" => "percentage" },
           non_readable_document.external_id => nil
         )
       end

@@ -1092,6 +1092,7 @@ Rails.application.routes.draw do
     get "/r/:id/product_files", to: "url_redirects#download_product_files", as: :url_redirect_download_product_files
     get "/zip/:id", to: "url_redirects#download_archive", as: :url_redirect_download_archive
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :url_redirect_download_subtitle_file
+    get "/r/:id/:product_file_id/:subtitle_file_id/captions.vtt", to: "url_redirects#subtitle_file_vtt", as: :url_redirect_subtitle_file_vtt
     get "/s/:id", to: "url_redirects#stream", as: :url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :url_redirect_stream_page_for_product_file
     get "/media_urls/:id", to: "url_redirects#media_urls", as: :url_redirect_media_urls
@@ -1317,6 +1318,7 @@ Rails.application.routes.draw do
     get "/r/:id/product_files", to: "url_redirects#download_product_files", as: :custom_domain_url_redirect_download_product_files
     get "/zip/:id", to: "url_redirects#download_archive", as: :custom_domain_url_redirect_download_archive
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :custom_domain_url_redirect_download_subtitle_file
+    get "/r/:id/:product_file_id/:subtitle_file_id/captions.vtt", to: "url_redirects#subtitle_file_vtt", as: :custom_domain_url_redirect_subtitle_file_vtt
     get "/s/:id", to: "url_redirects#stream", as: :custom_domain_url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :custom_domain_url_redirect_stream_page_for_product_file
 

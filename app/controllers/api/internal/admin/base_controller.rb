@@ -91,13 +91,18 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       nil
     end
 
-    def find_internal_admin_user_for_write_or_render
+    # Write-path user lookup. Defaults to alive users only so mutations can't
+    # silently target soft-deleted accounts. Pass include_deleted: true only for
+    # writes that are safe on deleted accounts (currently just admin comments,
+    # which are an audit trail and don't mutate the user row itself).
+    def find_internal_admin_user_for_write_or_render(include_deleted: false)
       if params[:user_id].blank?
         render_internal_admin_user_id_required
         return
       end
 
-      user = User.alive.find_by(external_id: params[:user_id])
+      scope = include_deleted ? User : User.alive
+      user = scope.find_by(external_id: params[:user_id])
       if user.blank?
         render json: { success: false, message: "User not found" }, status: :not_found
         return

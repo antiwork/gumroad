@@ -644,29 +644,11 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_tab_button("Purchases")
     expect(page).to have_tab_button("Saved")
     expect(page).to have_tab_button("Following")
+    expect(page).to have_tab_button("Reviews")
   end
 
-  context "follow_wishlists feature flag is disabled" do
-    before { Feature.deactivate(:follow_wishlists) }
-
-    it "shows only the wishlists tab" do
-      visit wishlists_path
-      expect(page).to have_tab_button("Wishlists")
-      expect(page).not_to have_tab_button("Following")
-    end
-  end
-
-  context "reviews_page feature flag is disabled" do
-    it "does not show the reviews tab" do
-      visit library_path
-      expect(page).to_not have_link("Reviews")
-    end
-  end
-
-  context "reviews_page feature flag is enabled" do
+  context "reviews page" do
     let(:user) { create(:user) }
-
-    before { Feature.activate_user(:reviews_page, user) }
 
     context "user has reviews" do
       let(:seller) { create(:user, name: "Seller") }

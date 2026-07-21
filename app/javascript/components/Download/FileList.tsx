@@ -50,6 +50,7 @@ export type SubtitleFile = {
   file_size: number | null;
   download_url: string;
   signed_url: string;
+  vtt_url: string;
 };
 
 type LatestMediaLocation = { location: number; timestamp: string };
@@ -630,7 +631,10 @@ const VideoEmbedPreview = ({
         {
           sources: mediaUrls.map((url) => ({ file: url })),
           tracks: file.subtitle_files?.map((subtitleFile) => ({
-            file: subtitleFile.signed_url,
+            // The serve-time SRT→VTT endpoint, not the raw uploaded file — iOS
+            // Safari's native caption renderer needs explicit VTT cue settings
+            // to center captions (https://github.com/antiwork/gumroad/issues/6043).
+            file: subtitleFile.vtt_url,
             label: subtitleFile.language,
             kind: "captions",
           })),

@@ -120,6 +120,13 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
     # the expensive part (the docker commit above) already succeeded, so a
     # transient S3 failure here is logged but never discards the committed
     # image or triggers the full recompile.
+    #
+    # This best-effort failure mode can't leave pages linking to a missing
+    # stylesheet: a cache entry only exists after a full compile whose S3
+    # upload succeeded (the push runs as a fatal step inside `make
+    # build_staging`), so the fingerprinted pages Tailwind CSS named by the
+    # image's manifest is already in the bucket before any image carrying
+    # that manifest can be built from cache.
     logger "Syncing cached assets to S3"
     local container_id
     if container_id=$(docker run -d --entrypoint="bash" --volume /app $WEB_REPO:staging-$WEB_TAG); then

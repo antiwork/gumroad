@@ -58,7 +58,6 @@ type Review = {
 interface Props {
   reviews: Review[];
   purchases: { id: string; email_digest: string; product: Product }[];
-  following_wishlists_enabled: boolean;
 }
 
 let newReviewId = 0;
@@ -132,11 +131,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
   );
 };
 
-export default function ReviewsIndex({
-  reviews: initialReviews,
-  purchases: initialPurchases,
-  following_wishlists_enabled,
-}: Props) {
+export default function ReviewsIndex({ reviews: initialReviews, purchases: initialPurchases }: Props) {
   const discoverUrl = useDiscoverUrl();
 
   const [reviews, setReviews] = React.useState(initialReviews);
@@ -150,7 +145,7 @@ export default function ReviewsIndex({
   }, [purchases.length]);
 
   return (
-    <Layout selectedTab="reviews" followingWishlistsEnabled={following_wishlists_enabled}>
+    <Layout selectedTab="reviews">
       {purchases.length ? (
         <section className="@container space-y-4 p-4 md:p-8">
           <h2>{`${purchases.length} ${purchases.length === 1 ? "product" : "products"} awaiting review`}</h2>

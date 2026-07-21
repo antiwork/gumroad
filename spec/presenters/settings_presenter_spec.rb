@@ -299,7 +299,6 @@ describe SettingsPresenter do
     context "when user has unpaid balances" do
       before do
         @balance = create(:balance, user: seller, state: :unpaid, amount_cents: 25_00)
-        Feature.activate_user(:delete_account_forfeit_balance, seller)
       end
 
       it "returns correct props" do

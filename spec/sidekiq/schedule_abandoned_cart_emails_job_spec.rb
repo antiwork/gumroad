@@ -74,6 +74,20 @@ describe ScheduleAbandonedCartEmailsJob do
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart2.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
         end
+
+        it "schedules the same emails when every cart id crosses a scan batch boundary" do
+          # The abandoned-cart scan walks each day's window in id-ordered keyset batches
+          # (gumroad-private#1198). Shrinking the batch size to 1 forces every cart onto its
+          # own batch, proving the batched walk finds exactly the carts the unbatched scan did.
+          stub_const("#{described_class}::SCAN_BATCH_SIZE", 1)
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).exactly(3).times
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart2.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+        end
       end
 
       context "when there are multiple matching abandoned cart workflows for a cart" do
@@ -120,6 +134,23 @@ describe ScheduleAbandonedCartEmailsJob do
           described_class.new.perform
         end.not_to have_enqueued_mail(CustomerMailer, :abandoned_cart)
       end
+    end
+  end
+
+  describe "retries-exhausted alerting" do
+    it "reports to Sentry when retries are exhausted" do
+      # The job failed silently every day for 3.5 months (gumroad-private#1198) because
+      # dead-set failures produced no signal; this locks in the explicit alert.
+      exception = WithMaxExecutionTime::QueryTimeoutError.new("maximum statement execution time exceeded")
+      expect(ErrorNotifier).to receive(:notify).with(
+        a_string_including("ScheduleAbandonedCartEmailsJob exhausted retries"),
+        hash_including(exception_class: "WithMaxExecutionTime::QueryTimeoutError", exception_message: exception.message)
+      )
+
+      described_class.sidekiq_retries_exhausted_block.call(
+        { "class" => described_class.name, "args" => [], "enqueued_at" => Time.current.to_f },
+        exception
+      )
     end
   end
 end

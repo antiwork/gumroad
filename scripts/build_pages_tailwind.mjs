@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -299,3 +300,25 @@ const result = spawnSync(tailwindBin, ["-i", inputPath, "-o", outputPath, "--min
 });
 
 if (result.status !== 0) process.exit(result.status ?? 1);
+
+// The build is ~4.9 MB, so pages link to it as an external stylesheet instead
+// of inlining it into every response. For that link to be cacheable forever
+// (and safe across deploys), publish a copy whose filename carries a content
+// hash, plus a manifest the Rails side reads to know the current filename.
+// public/pages/ is synced to the asset CDN with immutable cache headers at
+// deploy time; public/pages-tailwind.css stays as the un-fingerprinted
+// fallback for checkouts that predate the manifest.
+const css = readFileSync(outputPath);
+const digest = createHash("sha256").update(css).digest("hex").slice(0, 12);
+const fingerprintedDir = resolve(root, "public/pages");
+const fingerprintedName = `pages-tailwind-${digest}.css`;
+// Drop stale hashes locally so the directory only ever holds the current
+// build. The CDN sync doesn't delete, so previously deployed hashes keep
+// resolving for pages served by not-yet-restarted processes during a deploy.
+rmSync(fingerprintedDir, { recursive: true, force: true });
+mkdirSync(fingerprintedDir, { recursive: true });
+copyFileSync(outputPath, resolve(fingerprintedDir, fingerprintedName));
+writeFileSync(
+  resolve(root, "public/pages-tailwind-manifest.json"),
+  `${JSON.stringify({ "pages-tailwind.css": `pages/${fingerprintedName}` })}\n`,
+);

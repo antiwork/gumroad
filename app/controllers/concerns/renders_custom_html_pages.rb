@@ -4,12 +4,20 @@
 # sandboxed, strictly-CSP'd document. Both product landing pages
 # (LinksController) and profile landing pages (UsersController) render the
 # same opaque-origin iframe content, so the CSP, the storage-shim script, and
-# the inlined Tailwind build all live here to stay in lockstep — a drift
+# the shared Tailwind stylesheet all live here to stay in lockstep — a drift
 # between the two surfaces would be a security regression, not a cosmetic one.
 module RendersCustomHtmlPages
   extend ActiveSupport::Concern
 
   PAGE_ASSET_HOSTS = [CDN_S3_PROXY_HOST, PUBLIC_STORAGE_CDN_S3_PROXY_HOST].compact.uniq.join(" ")
+
+  # The kitchen-sink Tailwind build these pages rely on is ~4.9 MB, so it's
+  # served as a fingerprinted file from the shared asset host (the same S3 +
+  # CDN that serves the app's compiled JS/CSS) instead of being inlined into
+  # every response. The host must be allowed in style-src explicitly: this
+  # document's CSP has no 'self' anywhere, so without this entry the
+  # stylesheet <link> would be blocked.
+  PAGES_TAILWIND_ASSET_HOST = "#{PROTOCOL}://#{ASSET_DOMAIN}"
 
   CUSTOM_HTML_CSP = [
     # Sandbox the response itself, not just the wrapper's iframe attribute.
@@ -20,7 +28,7 @@ module RendersCustomHtmlPages
     "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
     "default-src 'none'",
     "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
-    "style-src 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
+    "style-src 'unsafe-inline' #{PAGES_TAILWIND_ASSET_HOST} https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
     "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com",
     "img-src data: blob: #{PAGE_ASSET_HOSTS}",
     # Mirror img-src so the <audio>/<video>/<source> tags the sanitizer
@@ -202,7 +210,7 @@ module RendersCustomHtmlPages
             return;
           }
         }
-        // After load so the inlined stylesheet and any seller scripts have laid the page out —
+        // After load so the Tailwind stylesheet and any seller scripts have laid the page out —
         // scrolling earlier would center on coordinates that then shift.
         window.addEventListener("load", function () { requestAnimationFrame(scrollToChange); });
       })();
@@ -224,14 +232,51 @@ module RendersCustomHtmlPages
   HTML
 
   module ClassMethods
-    # Memoized per process — the file ships with the deployed artifact and
-    # only changes on deploy, which restarts the process.
-    def pages_tailwind_inline
-      path = Rails.root.join("public/pages-tailwind.css")
-      return "" unless File.exist?(path)
+    # The <head> markup that loads the shared Tailwind build for custom pages.
+    # Preferred form is a <link> to the fingerprinted copy on the asset host:
+    # the build is ~4.9 MB, and inlining it (the old behavior) made every
+    # custom page, product landing, and agent preview response carry the full
+    # stylesheet on every view. As an immutable fingerprinted asset it
+    # downloads once per browser and that one cached copy serves every
+    # seller's pages.
+    #
+    # Falls back to inlining public/pages-tailwind.css when the manifest is
+    # missing (a checkout that hasn't rerun `npm run build:pages-tailwind`
+    # since fingerprinting was introduced), and renders nothing when no build
+    # exists at all. Memoized per process — both files ship with the deployed
+    # artifact and only change on deploy, which restarts the process.
+    def pages_tailwind_head
+      return @pages_tailwind_head if @pages_tailwind_head
 
-      @pages_tailwind_inline ||= "<style>#{File.read(path)}</style>"
+      if (asset_path = pages_tailwind_asset_path)
+        @pages_tailwind_head = %(<link rel="stylesheet" href="#{PAGES_TAILWIND_ASSET_HOST}/#{asset_path}">)
+      else
+        css_path = Rails.root.join("public/pages-tailwind.css")
+        return "" unless File.exist?(css_path)
+
+        @pages_tailwind_head = "<style>#{File.read(css_path)}</style>"
+      end
     end
+
+    private
+      # The manifest maps the logical stylesheet name to its current
+      # fingerprinted path (e.g. "pages/pages-tailwind-<sha>.css"). Both are
+      # written by scripts/build_pages_tailwind.mjs. The path is only trusted
+      # if it looks like a build output and the file is actually present on
+      # disk — the same tree that gets synced to the asset host — so we never
+      # emit a <link> to a stylesheet that wasn't built.
+      def pages_tailwind_asset_path
+        manifest_path = Rails.root.join("public/pages-tailwind-manifest.json")
+        return nil unless File.exist?(manifest_path)
+
+        asset_path = JSON.parse(File.read(manifest_path))["pages-tailwind.css"]
+        return nil unless asset_path.is_a?(String) && asset_path.match?(%r{\Apages/pages-tailwind-\h+\.css\z})
+        return nil unless File.exist?(Rails.root.join("public", asset_path))
+
+        asset_path
+      rescue JSON::ParserError
+        nil
+      end
   end
 
   private
@@ -378,7 +423,7 @@ module RendersCustomHtmlPages
             <meta name="viewport" content="width=device-width, initial-scale=1">
             #{meta_csp ? %(<meta http-equiv="Content-Security-Policy" content="#{ERB::Util.h(CUSTOM_HTML_META_CSP)}">) : ""}
             #{SANDBOX_COMPAT_SCRIPT}
-            #{self.class.pages_tailwind_inline}
+            #{self.class.pages_tailwind_head}
           </head>
           <body>
             <script id="gumroad-data" type="application/json">#{data_json}</script>

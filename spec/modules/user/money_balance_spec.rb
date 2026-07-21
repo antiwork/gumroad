@@ -232,27 +232,16 @@ describe User::MoneyBalance do
     end
 
     context "account_closure" do
-      it "returns nil when the delete_account_forfeit_balance feature is inactive" do
-        create(:balance, user: @user, state: :unpaid, amount_cents: 942)
-        expect(@user.formatted_balance_to_forfeit(:account_closure)).to eq(nil)
+      it "returns formatted balance if there's a positive balance" do
+        create(:balance, user: @user, state: :unpaid, amount_cents: 10_00)
+        expect(@user.formatted_balance_to_forfeit(:account_closure)).to eq("$10")
       end
 
-      context "when the delete_account_forfeit_balance feature is active" do
-        before do
-          Feature.activate_user(:delete_account_forfeit_balance, @user)
-        end
+      it "returns nil if there's a zero or negative balance to forfeit" do
+        expect(@user.formatted_balance_to_forfeit(:account_closure)).to eq(nil)
 
-        it "returns formatted balance if there's a positive balance" do
-          create(:balance, user: @user, state: :unpaid, amount_cents: 10_00)
-          expect(@user.formatted_balance_to_forfeit(:account_closure)).to eq("$10")
-        end
-
-        it "returns nil if there's a zero or negative balance to forfeit" do
-          expect(@user.formatted_balance_to_forfeit(:account_closure)).to eq(nil)
-
-          create(:balance, user: @user, state: :unpaid, amount_cents: -233)
-          expect(@user.formatted_balance_to_forfeit(:account_closure)).to eq(nil)
-        end
+        create(:balance, user: @user, state: :unpaid, amount_cents: -233)
+        expect(@user.formatted_balance_to_forfeit(:account_closure)).to eq(nil)
       end
     end
   end
@@ -288,71 +277,40 @@ describe User::MoneyBalance do
     end
 
     context "account_closure" do
-      context "when the delete_account_forfeit_balance feature is not active" do
-        it "does nothing" do
-          create(:balance, user: @user, amount_cents: 255)
-          expect(@user.forfeit_unpaid_balance!(:account_closure)).to eq(nil)
+      it "does nothing if there is no balance to forfeit" do
+        expect(@user.forfeit_unpaid_balance!(:account_closure)).to eq(nil)
 
-          expect(@user.reload.comments.last).to eq(nil)
-        end
+        expect(@user.reload.comments.last).to eq(nil)
       end
 
-      context "when the delete_account_forfeit_balance feature is active" do
-        before do
-          Feature.activate_user(:delete_account_forfeit_balance, @user)
-        end
+      it "marks balances as forfeited and adds a comment" do
+        balance1 = create(:balance, user: @user, amount_cents: 255, date: Date.yesterday)
+        balance2 = create(:balance, user: @user, amount_cents: 635, date: Date.today)
 
-        it "does nothing if there is no balance to forfeit" do
-          expect(@user.forfeit_unpaid_balance!(:account_closure)).to eq(nil)
+        @user.forfeit_unpaid_balance!(:account_closure)
 
-          expect(@user.reload.comments.last).to eq(nil)
-        end
-
-        it "marks balances as forfeited and adds a comment" do
-          balance1 = create(:balance, user: @user, amount_cents: 255, date: Date.yesterday)
-          balance2 = create(:balance, user: @user, amount_cents: 635, date: Date.today)
-
-          @user.forfeit_unpaid_balance!(:account_closure)
-
-          expect(balance1.reload.state).to eq("forfeited")
-          expect(balance2.reload.state).to eq("forfeited")
-          expect(@user.comments.last.comment_type).to eq(Comment::COMMENT_TYPE_BALANCE_FORFEITED)
-          expect(@user.comments.last.content).to eq("Balance of $8.90 has been forfeited. Reason: Account closed. Balance IDs: #{balance1.id}, #{balance2.id}")
-        end
+        expect(balance1.reload.state).to eq("forfeited")
+        expect(balance2.reload.state).to eq("forfeited")
+        expect(@user.comments.last.comment_type).to eq(Comment::COMMENT_TYPE_BALANCE_FORFEITED)
+        expect(@user.comments.last.content).to eq("Balance of $8.90 has been forfeited. Reason: Account closed. Balance IDs: #{balance1.id}, #{balance2.id}")
       end
     end
   end
 
   describe "#validate_account_closure_balances!" do
-    context "when the delete_account_forfeit_balance feature is not active" do
-      it "raises UnpaidBalanceError" do
-        create(:balance, user: @user, state: :unpaid, amount_cents: 942)
-
-        expect { @user.validate_account_closure_balances! }.to raise_error(User::UnpaidBalanceError) do |error|
-          expect(error.amount).to eq("$9.42")
-        end
-      end
+    it "returns nil if there's a zero balance" do
+      expect(@user.validate_account_closure_balances!).to eq(nil)
     end
 
-    context "when the delete_account_forfeit_balance feature is active" do
-      before do
-        Feature.activate_user(:delete_account_forfeit_balance, @user)
+    it "raises User::UnpaidBalanceError if there's non-zero balance to forfeit" do
+      create(:balance, user: @user, state: :unpaid, amount_cents: 10_00, date: Date.yesterday)
+      expect { @user.validate_account_closure_balances! }.to raise_error(User::UnpaidBalanceError) do |error|
+        expect(error.amount).to eq("$10")
       end
 
-      it "returns nil if there's a zero balance" do
-        expect(@user.validate_account_closure_balances!).to eq(nil)
-      end
-
-      it "raises User::UnpaidBalanceError if there's non-zero balance to forfeit" do
-        create(:balance, user: @user, state: :unpaid, amount_cents: 10_00, date: Date.yesterday)
-        expect { @user.validate_account_closure_balances! }.to raise_error(User::UnpaidBalanceError) do |error|
-          expect(error.amount).to eq("$10")
-        end
-
-        create(:balance, user: @user, state: :unpaid, amount_cents: -2333)
-        expect { @user.validate_account_closure_balances! }.to raise_error(User::UnpaidBalanceError) do |error|
-          expect(error.amount).to eq("$-13.33")
-        end
+      create(:balance, user: @user, state: :unpaid, amount_cents: -2333)
+      expect { @user.validate_account_closure_balances! }.to raise_error(User::UnpaidBalanceError) do |error|
+        expect(error.amount).to eq("$-13.33")
       end
     end
   end

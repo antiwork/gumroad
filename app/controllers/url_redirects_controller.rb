@@ -8,17 +8,17 @@ class UrlRedirectsController < ApplicationController
   layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page, :confirm_page, :read, :stream, :download_page]
 
   before_action :fetch_url_redirect, except: %i[
-    show stream download_subtitle_file read download_archive download_product_files
+    show stream download_subtitle_file subtitle_file_vtt read download_archive download_product_files
   ]
   before_action :redirect_to_custom_domain_if_needed, only: :download_page
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
-                                             hls_playlist download_subtitle_file read
+                                             hls_playlist download_subtitle_file subtitle_file_vtt read
                                              download_archive download_product_files
                                              save_last_content_page]
   before_action :hide_layouts, only: %i[
-    show download_product_files smil hls_playlist download_subtitle_file
+    show download_product_files smil hls_playlist download_subtitle_file subtitle_file_vtt
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
@@ -52,13 +52,26 @@ class UrlRedirectsController < ApplicationController
   def read
     product = @url_redirect.referenced_link
     @product_file = @url_redirect.product_file(params[:product_file_id])
-    @product_file = product.product_files.alive.find(&:readable?) if product.present? && @product_file.nil?
-    e404 unless @product_file&.readable?
+    @product_file = product.product_files.alive.find(&:browser_readable?) if product.present? && @product_file.nil?
+    e404 unless @product_file&.browser_readable?
 
     s3_retrievable = @product_file
     title = @product_file.with_product_files_owner.name
     set_meta_tag(title:)
     read_url = signed_download_url_for_s3_key_and_filename(s3_retrievable.s3_key, s3_retrievable.s3_filename, cache_group: "read")
+
+    if s3_retrievable.epub?
+      asset_sources = [Rails.application.config.asset_host].compact_blank
+      override_content_security_policy_directives(
+        child_src: ["'self'", "data:", "blob:"],
+        font_src: ["'self'", "data:", "blob:", *asset_sources],
+        frame_src: ["'self'", "data:", "blob:"],
+        img_src: ["'self'", "data:", "blob:"],
+        media_src: ["'self'", "data:", "blob:"],
+        object_src: ["'self'", "data:", "blob:"],
+        style_src: ["'self'", "'unsafe-inline'", "blob:", *asset_sources]
+      )
+    end
 
     trigger_files_lifecycle_events
 
@@ -153,6 +166,36 @@ class UrlRedirectsController < ApplicationController
     (subtitle_file = product_file.subtitle_files.alive.find_by_external_id(params[:subtitle_file_id])) || e404
 
     redirect_to @url_redirect.signed_video_url(subtitle_file), allow_other_host: true
+  end
+
+  # Serves a subtitle file to the video player as WebVTT with explicit cue
+  # positioning, converting from the seller's stored file (usually .srt) on the
+  # fly. The player can't be given the raw stored file: on iOS, Safari always
+  # renders side-loaded captions with WebKit's native renderer (JW Player's
+  # renderCaptionsNatively option is ignored there), and WebKit places cues that
+  # carry no explicit position settings at the right edge of the video instead
+  # of centered at the bottom. Serving VTT with "align:center position:50%" on
+  # every cue is the only fix that works regardless of the player's renderer.
+  # Serve-time conversion also covers every already-uploaded seller file with no
+  # backfill. See https://github.com/antiwork/gumroad/issues/6043
+  def subtitle_file_vtt
+    (product_file = @url_redirect.product_file(params[:product_file_id])) || e404
+    (subtitle_file = product_file.subtitle_files.alive.find_by_external_id(params[:subtitle_file_id])) || e404
+
+    # The converted output only changes when the stored file changes, and a
+    # SubtitleFile's S3 object is never overwritten in place (re-uploads create
+    # new records/keys), so cache on the record itself. Every buyer streaming
+    # the same video shares one S3 fetch + conversion.
+    vtt = Rails.cache.fetch("subtitle_file_vtt/#{subtitle_file.cache_key_with_version}", expires_in: 1.day) do
+      SubtitleToVttService.new(subtitle_file.s3_object.get.body.read).perform
+    end
+
+    expires_in 1.hour, public: false
+    render plain: vtt, content_type: "text/vtt"
+  rescue Aws::S3::Errors::ServiceError
+    # The stored file went missing or S3 hiccuped — the player treats a 404 as
+    # "no captions" instead of surfacing an error to the buyer.
+    e404
   end
 
   def smil
@@ -448,11 +491,11 @@ class UrlRedirectsController < ApplicationController
     def latest_media_locations_data
       return {} if @url_redirect.purchase.nil? || @url_redirect.installment.present?
 
-      product_files = @url_redirect.alive_product_files.select(:id)
+      product_files = @url_redirect.alive_product_files.select(:id, :filetype, :filegroup, :pagelength)
       media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
 
       product_files.each_with_object({}) do |product_file, hash|
-        hash[product_file.external_id] = media_locations_by_file[product_file.id].as_json
+        hash[product_file.external_id] = product_file.media_location_for_download_page(media_locations_by_file[product_file.id])
       end
     end
 

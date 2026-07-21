@@ -656,7 +656,10 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
 
         it "shows the variant-level rich content" do
           visit("/d/#{@url_redirect.token}")
-          expect(page).to have_text("#{@product.name} - Version 1")
+          # The entity info box ("Product - Variant" card) was removed from the download
+          # page; the product name still renders in the page header.
+          expect(page).to have_text(@product.name)
+          expect(page).to_not have_text("#{@product.name} - Version 1")
           expect(page).to have_text("This is Version 1 content")
           expect(page).to_not have_text("Product-level content")
         end
@@ -676,7 +679,9 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
 
         it "shows the product-level rich content" do
           visit("/d/#{@url_redirect.token}")
-          expect(page).to have_text("#{@product.name} - Version 1")
+          # See above: the entity info box no longer renders on the download page.
+          expect(page).to have_text(@product.name)
+          expect(page).to_not have_text("#{@product.name} - Version 1")
           expect(page).to have_embed(name: @video_file.display_name)
           expect(page).to have_embed(name: @audio_file.display_name)
           expect(page).to have_embed(name: @pdf_file.display_name)

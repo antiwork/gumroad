@@ -29,6 +29,8 @@
 /public/packs
 /public/packs-test
 /public/pages-tailwind.css
+/public/pages-tailwind-manifest.json
+/public/pages/
 /public/vite
 /public/vite-dev
 /public/vite-test
