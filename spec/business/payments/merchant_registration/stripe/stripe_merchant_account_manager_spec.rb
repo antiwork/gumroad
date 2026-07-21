@@ -10056,6 +10056,28 @@ describe StripeMerchantAccountManager, :vcr do
           expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
         end
 
+        it "clears the marker when previous_attributes arrives as a Stripe::StripeObject, the shape the webhook handler actually passes" do
+          # In production the account.updated handler hands this method the event's
+          # previous_attributes as a Stripe::StripeObject (symbol-keyed via to_hash), not a
+          # plain Hash — the original `.key?` call raised NoMethodError on every event and
+          # markers were never cleared (gumroad-private#933, 2026-07-20).
+          previous_attributes = Stripe::StripeObject.construct_from({ default_currency: "usd" })
+
+          expect do
+            described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, previous_attributes)
+          end.not_to raise_error
+
+          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+        end
+
+        it "keeps the marker when a Stripe::StripeObject update touched unrelated attributes" do
+          previous_attributes = Stripe::StripeObject.construct_from({ capabilities: { p24_payments: "pending" } })
+
+          described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, previous_attributes)
+
+          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(true)
+        end
+
         it "keeps the marker when the update touched unrelated attributes" do
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "capabilities" => { "p24_payments" => "pending" } })
 

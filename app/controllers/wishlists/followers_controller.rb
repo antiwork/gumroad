@@ -3,7 +3,6 @@
 class Wishlists::FollowersController < ApplicationController
   before_action :authenticate_user!, except: :unsubscribe
   after_action :verify_authorized, except: :unsubscribe
-  before_action { e404 if Feature.inactive?(:follow_wishlists, current_seller) }
 
   def create
     wishlist = Wishlist.find_by_external_id!(params[:wishlist_id])

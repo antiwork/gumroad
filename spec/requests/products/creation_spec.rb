@@ -389,7 +389,6 @@ describe "Product creation", type: :system, js: true do
 
   describe "AI Product Generation" do
     before do
-      Feature.activate_user(:ai_product_generation, seller)
       allow_any_instance_of(User).to receive(:eligible_for_ai_product_generation?).and_return(true)
     end
 

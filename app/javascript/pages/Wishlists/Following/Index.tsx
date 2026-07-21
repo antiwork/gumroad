@@ -30,11 +30,10 @@ export type Wishlist = {
 
 type Props = {
   wishlists: Wishlist[];
-  reviews_page_enabled: boolean;
 };
 
 export default function WishlistsFollowingPage() {
-  const { wishlists: preloadedWishlists, reviews_page_enabled } = typia.assert<Props>(usePage().props);
+  const { wishlists: preloadedWishlists } = typia.assert<Props>(usePage().props);
 
   const [wishlists, setWishlists] = React.useState<Wishlist[]>(preloadedWishlists);
 
@@ -50,7 +49,7 @@ export default function WishlistsFollowingPage() {
   };
 
   return (
-    <Layout selectedTab="following_wishlists" reviewsPageEnabled={reviews_page_enabled} followingWishlistsEnabled>
+    <Layout selectedTab="following_wishlists">
       <section className="p-4 md:p-8">
         {wishlists.length > 0 ? (
           <Table>

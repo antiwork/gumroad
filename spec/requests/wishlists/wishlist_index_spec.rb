@@ -53,19 +53,8 @@ describe "Wishlist index page", :js, type: :system do
     end
   end
 
-  context "reviews_page feature flag is disabled" do
-    it "does not show the reviews tab" do
-      visit wishlists_path
-      expect(page).to_not have_link("Reviews")
-    end
-  end
-
-  context "reviews_page feature flag is enabled" do
-    before { Feature.activate_user(:reviews_page, wishlist.user) }
-
-    it "shows the reviews tab" do
-      visit wishlists_path
-      expect(page).to have_selector("a[role='tab'][href='#{reviews_path}'][aria-selected='false']", text: "Reviews")
-    end
+  it "shows the reviews tab" do
+    visit wishlists_path
+    expect(page).to have_selector("a[role='tab'][href='#{reviews_path}'][aria-selected='false']", text: "Reviews")
   end
 end

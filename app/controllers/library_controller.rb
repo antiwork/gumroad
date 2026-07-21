@@ -25,8 +25,6 @@ class LibraryController < Sellers::BaseController
       creators: creator_counts,
       bundles:,
       purchase_analytics: purchase_analytics_props,
-      reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
-      following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller),
     }
   end
 

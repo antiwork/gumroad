@@ -31,13 +31,5 @@ describe Wishlists::FollowingController, type: :controller, inertia: true do
       expect(inertia.component).to eq("Wishlists/Following/Index")
       expect(inertia.props[:wishlists]).to contain_exactly(a_hash_including(id: following_wishlist.external_id))
     end
-
-    context "when the feature flag is off" do
-      before { Feature.deactivate(:follow_wishlists) }
-
-      it "returns 404" do
-        expect { get :index }.to raise_error(ActionController::RoutingError, "Not Found")
-      end
-    end
   end
 end

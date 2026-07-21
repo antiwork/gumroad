@@ -9,7 +9,6 @@ describe ReviewsController, type: :controller, inertia: true do
 
   describe "GET index" do
     before do
-      Feature.activate(:reviews_page)
       sign_in(user)
     end
 
@@ -76,8 +75,6 @@ describe ReviewsController, type: :controller, inertia: true do
         name: product_without_review.user.display_name,
         url: product_without_review.user.profile_url
       )
-
-      expect(inertia.props[:following_wishlists_enabled]).to be_in([true, false])
     end
   end
 end
