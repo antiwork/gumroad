@@ -172,7 +172,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     )
   end
 
-  it "returns compliant and notifies Sentry when every image fails but text was moderated successfully" do
+  it "returns compliant and logs a warning (not a summary Sentry report) when every image fails but text was moderated successfully" do
     image_urls = [
       "https://cdn.example.com/bad-1.png",
       "https://cdn.example.com/bad-2.png",
@@ -187,11 +187,44 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
 
     expect(result.status).to eq("compliant")
     expect(result.reasoning).to eq([])
-    expect(ErrorNotifier).to have_received(:notify).with(
+    expect(ErrorNotifier).not_to have_received(:notify).with(
       "ContentModeration::ClassifierStrategy could not moderate any image",
-      image_url_count: 2,
-      skipped_urls: match_array(image_urls),
+      anything,
     )
+    # Retry exhaustion for each image is still reported individually inside #moderate.
+    expect(ErrorNotifier).to have_received(:notify).with(
+      instance_of(Faraday::ServerError),
+      hash_including(input_type: "image_url"),
+    ).twice
+    expect(Rails.logger).to have_received(:warn).with(/could not moderate any image.*text was moderated/)
+  end
+
+  it "logs a warning instead of notifying Sentry when text was moderated and OpenAI rejects every image as unmoderatable" do
+    image_urls = [
+      "https://cdn.example.com/expired-1.png",
+      "https://cdn.example.com/expired-2.png",
+    ]
+    bad_response = instance_double(
+      Faraday::Response,
+      status: 400,
+      body: '{"error":{"code":"invalid_image_url","message":"Error while downloading"}}',
+      headers: {},
+    )
+    bad_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "invalid_image_url" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations) do |parameters:|
+      part = parameters[:input].first
+      raise bad_error if part[:type] == "image_url"
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text: "some clean text", image_urls:).perform
+
+    expect(result.status).to eq("compliant")
+    expect(ErrorNotifier).not_to have_received(:notify)
+    expect(Rails.logger).to have_received(:warn).with(/could not moderate any image.*rejected by OpenAI.*text was moderated/)
   end
 
   it "still flags text-flagged categories when image moderation fails alongside successful text moderation" do

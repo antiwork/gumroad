@@ -271,7 +271,8 @@ module ModelFactories
   # same money math): a successful sale on the platform Stripe account.
   # calculate_fees is an after(:build) hook in the factory, so invoke it
   # explicitly before saving.
-  def build_purchase(link:, seller: :default, purchaser: nil, variant_attributes: nil, chargeable: nil, **attrs)
+  def build_purchase(link: nil, seller: :default, purchaser: nil, variant_attributes: nil, chargeable: nil, **attrs)
+    link ||= create_product # the :purchase factory defaults link to a fresh product
     seller = link.user if seller == :default
     price_cents = attrs.delete(:price_cents) || link.price_cents || 100
     # Mirror the :purchase factory: a $0 sale carries no charge-processor/stripe

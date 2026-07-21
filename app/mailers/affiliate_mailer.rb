@@ -10,12 +10,18 @@ class AffiliateMailer < ApplicationMailer
   COLLABORATOR_MAX_PRODUCTS = 5
 
   def direct_affiliate_invitation(affiliate_id, prevent_sending_invitation_email_to_seller = false)
+    # This email is sent via a delayed job, so the affiliate (or all of its
+    # products) may have been deleted by the time the job runs. Returning
+    # early aborts delivery (ActionMailer produces a NullMail).
     @direct_affiliate = DirectAffiliate.find_by(id: affiliate_id)
+    return if @direct_affiliate.nil?
+
     @seller = @direct_affiliate.seller
     @seller_name = @direct_affiliate.seller.name_or_username
     @products = @direct_affiliate.enabled_products
                                  .sort_by { -_1[:fee_percent] }
     product = @products.first
+    return if product.nil?
     @product_name = @products.one? ? product[:name] : pluralize(@direct_affiliate.products.count, "product")
     @affiliate_percentage_text = if @products.many? && @products.first[:fee_percent] != @products.last[:fee_percent]
       "#{@products.last[:fee_percent]} - #{product[:fee_percent]}%"

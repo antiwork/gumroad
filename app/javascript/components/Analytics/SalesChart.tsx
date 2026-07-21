@@ -75,10 +75,12 @@ type FormattedGraphicalItem = {
   };
 };
 
-// Draws the projected end-of-day overlay: a dashed, semi-transparent vertical line from
-// today's actual total up to the projected total, capped with a dot. Rendered through
-// Recharts' `Customized` so we can reuse the pixel coordinates Recharts already computed
-// for the totals line's last point — `ReferenceLine`'s categorical `segment` resolution
+// Draws the projected end-of-day overlay: a small, semi-transparent dotted horizontal
+// tick at the projected total, aligned with the totals line's last point. (An earlier
+// version drew a vertical dashed connector line capped with a circle; seller feedback
+// found that too visually busy, so it's now just the tick.) Rendered through Recharts'
+// `Customized` so we can reuse the pixel coordinates Recharts already computed for the
+// totals line's last point — `ReferenceLine`'s categorical `segment` resolution
 // produced NaN x-coordinates for this chart (duplicate/empty category labels), so we
 // draw the SVG primitives ourselves from known-good coordinates instead.
 const ProjectionOverlay = ({
@@ -98,27 +100,22 @@ const ProjectionOverlay = ({
   if (typeof x !== "number" || typeof y !== "number") return null;
   const projectedY = scale(projectedTotals);
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(projectedY)) return null;
+  // A short horizontal tick centered on the totals line's last x-coordinate. Dotted +
+  // semi-transparent so it still reads as a projection rather than an actual data point.
+  const tickHalfWidth = 6;
   return (
     <g>
       <line
-        x1={x}
-        x2={x}
-        y1={y}
+        x1={x - tickHalfWidth}
+        x2={x + tickHalfWidth}
+        y1={projectedY}
         y2={projectedY}
         stroke="rgb(var(--accent))"
         strokeOpacity={0.5}
         strokeWidth={2}
-        strokeDasharray="4 4"
-        data-testid="chart-projection-line"
-      />
-      <circle
-        cx={x}
-        cy={projectedY}
-        r={4}
-        fill="rgb(var(--accent))"
-        fillOpacity={0.5}
-        stroke="none"
-        data-testid="chart-projected-dot"
+        strokeDasharray="2 2"
+        strokeLinecap="round"
+        data-testid="chart-projected-tick"
       />
     </g>
   );

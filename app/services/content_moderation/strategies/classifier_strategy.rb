@@ -65,12 +65,28 @@ class ContentModeration::Strategies::ClassifierStrategy
     end
 
     if @image_urls.any? && moderated_count == 0
-      ErrorNotifier.notify(
-        "ContentModeration::ClassifierStrategy could not moderate any image",
-        image_url_count: @image_urls.size,
-        skipped_urls: skipped_urls,
-      )
-      return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON]) unless text_moderated
+      if text_moderated
+        # Every image was rejected by OpenAI (usually an expired signed attachment
+        # URL it could not download — an expected, recurring upstream condition),
+        # but the text still got a full moderation pass. Log it for visibility
+        # instead of paging Sentry: per-image failures that exhaust retries are
+        # already reported individually inside #moderate, and this summary was
+        # producing hundreds of noise events a month with no action to take.
+        Rails.logger.warn(
+          "ContentModeration::ClassifierStrategy could not moderate any image " \
+          "(#{skipped_urls.size}/#{@image_urls.size} rejected by OpenAI); text was moderated, continuing with text-only result"
+        )
+      else
+        # No text and no image could be moderated — the content got zero
+        # evaluation and the seller is blocked with a "try again later" message.
+        # That is worth a Sentry report so we notice if it spikes.
+        ErrorNotifier.notify(
+          "ContentModeration::ClassifierStrategy could not moderate any image",
+          image_url_count: @image_urls.size,
+          skipped_urls: skipped_urls,
+        )
+        return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
+      end
     end
 
     if flagged_categories.any?

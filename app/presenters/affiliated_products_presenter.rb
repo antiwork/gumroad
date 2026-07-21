@@ -50,7 +50,13 @@ class AffiliatedProductsPresenter
       {
         total_revenue: user.affiliate_credits_sum_total,
         total_sales: user.affiliate_credits.count,
-        total_products: affiliated_products.map(&:link_id).uniq.size,
+        # Count distinct products with a single SQL COUNT instead of executing
+        # the full grouped affiliated-products query (which joins against
+        # affiliate_credits and aggregates revenue per product) just to count
+        # unique link ids in Ruby. For affiliates promoting thousands of
+        # products, that unbounded grouped query took multiple seconds and was
+        # the main source of slow requests on this page.
+        total_products: affiliated_products_scope.distinct.count("affiliates_links.link_id"),
         total_affiliated_creators: user.affiliated_creators.count,
       }
     end
@@ -63,6 +69,21 @@ class AffiliatedProductsPresenter
         cookie_expiry_days: GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS,
         affiliate_query_param: Affiliate::SHORT_QUERY_PARAM,
       }
+    end
+
+    # Base relation shared by the paginated product list and the stats count:
+    # the user's live direct/global affiliations joined to their (not deleted,
+    # not banned) products, filtered by the optional search query. It carries
+    # no aggregation, so callers that only need a count don't pay for the
+    # revenue/sales grouping.
+    def affiliated_products_scope
+      scope = ProductAffiliate.
+        joins(:product).
+        joins(:affiliate).
+        where(affiliate_id: Affiliate.direct_or_global_affiliates.alive.where(affiliate_user_id: user.id).pluck(:id)).
+        where(links: { deleted_at: nil, banned_at: nil })
+      scope = scope.where("links.name LIKE :query", query: "%#{query.strip}%") if query
+      scope
     end
 
     def affiliated_products
@@ -103,17 +124,10 @@ class AffiliatedProductsPresenter
       end
       order_by += ", affiliates_links.id ASC"
 
-      @_affiliated_products = ProductAffiliate.
+      @_affiliated_products = affiliated_products_scope.
         joins(affiliate_credits_join).
-        joins(:product).
-        joins(:affiliate).
-        where(affiliate_id: Affiliate.direct_or_global_affiliates.alive.where(affiliate_user_id: user.id).pluck(:id)).
-        where(links: { deleted_at: nil, banned_at: nil }).
         select(select_columns).
         group(group_by).
         order(order_by)
-
-      @_affiliated_products = @_affiliated_products.where("links.name LIKE :query", query: "%#{query.strip}%") if query
-      @_affiliated_products
     end
 end

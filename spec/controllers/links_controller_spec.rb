@@ -3080,6 +3080,30 @@ describe LinksController, :vcr, inertia: true do
         expect(link.display_product_reviews).to be(true)
       end
 
+      context "when the price exceeds the maximum allowed" do
+        it "redirects with an error instead of raising when price_cents is too large" do
+          too_large = BasePrice::Shared::MAX_PRICE_CENTS + 1
+
+          expect do
+            post :create, params: { link: { price_cents: too_large, name: "expensive" } }
+          end.not_to change { seller.links.count }
+
+          expect(response).to redirect_to(new_product_path)
+          expect(flash[:alert]).to eq("Sorry, the price entered is too large.")
+        end
+
+        it "redirects with an error instead of raising when price_range is too large" do
+          too_large_range = ((BasePrice::Shared::MAX_PRICE_CENTS / 100) + 1).to_s
+
+          expect do
+            post :create, params: { link: { name: "expensive", price_range: too_large_range } }
+          end.not_to change { seller.links.count }
+
+          expect(response).to redirect_to(new_product_path)
+          expect(flash[:alert]).to eq("Sorry, the price entered is too large.")
+        end
+      end
+
       it "ignores is_in_preorder_state param" do
         params = { price_cents: 100, name: "preorder", is_in_preorder_state: true, release_at: 1.year.from_now.iso8601 }
         post :create, params: { link: params }

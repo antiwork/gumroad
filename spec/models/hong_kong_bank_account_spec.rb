@@ -58,6 +58,11 @@ describe HongKongBankAccount do
       expect(build(:hong_kong_bank_account, account_number: "000123456")).to be_valid
       expect(build(:hong_kong_bank_account, account_number: "123456789")).to be_valid
       expect(build(:hong_kong_bank_account, account_number: "012345678910")).to be_valid
+      expect(build(:hong_kong_bank_account, account_number: "1234567890123456")).to be_valid
+
+      hk_bank_account = build(:hong_kong_bank_account, account_number: "12345678901234567")
+      expect(hk_bank_account).to_not be_valid
+      expect(hk_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
 
       hk_bank_account = build(:hong_kong_bank_account, account_number: "ABCDEFGHI")
       expect(hk_bank_account).to_not be_valid

@@ -78,17 +78,29 @@ class Api::V2::SalesController < Api::V2::BaseController
       where_page_data = ["created_at <= ? and id < ?", last_purchase_created_at, last_purchase_id]
     end
 
-    paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
-    subquery_filters = ->(query) {
-      query.where(seller_id: current_resource_owner.id).where(where_page_data).order(created_at: :desc, id: :desc).limit(RESULTS_PER_PAGE + 1)
-    }
-    paginated_sales = paginated_sales.for_sales_api_ordered_by_date(subquery_filters)
-    paginated_sales = paginated_sales.preload(*SALES_API_PRELOADS)
-    paginated_sales = paginated_sales.limit(RESULTS_PER_PAGE + 1).to_a
-    has_next_page = paginated_sales.size > RESULTS_PER_PAGE
-    paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
-    additional_response = has_next_page ? pagination_info(paginated_sales.last) : {}
-    success_with_object(:sales, paginated_sales.as_json(version: 2), additional_response)
+    # Guard the main (page_key) pagination path with a query timeout, mirroring the
+    # protection on the deprecated `page` path above. The underlying
+    # `for_sales_api_ordered_by_date` UNION query can run for minutes on very large
+    # accounts with broad filters; without this guard the request runs until
+    # Rack::Timeout kills the worker process at 120s.
+    begin
+      timeout_s = ($redis.get(RedisKey.api_v2_sales_page_key_query_timeout) || 15).to_i
+      WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
+        paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
+        subquery_filters = ->(query) {
+          query.where(seller_id: current_resource_owner.id).where(where_page_data).order(created_at: :desc, id: :desc).limit(RESULTS_PER_PAGE + 1)
+        }
+        paginated_sales = paginated_sales.for_sales_api_ordered_by_date(subquery_filters)
+        paginated_sales = paginated_sales.preload(*SALES_API_PRELOADS)
+        paginated_sales = paginated_sales.limit(RESULTS_PER_PAGE + 1).to_a
+        has_next_page = paginated_sales.size > RESULTS_PER_PAGE
+        paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
+        additional_response = has_next_page ? pagination_info(paginated_sales.last) : {}
+        success_with_object(:sales, paginated_sales.as_json(version: 2), additional_response)
+      end
+    rescue WithMaxExecutionTime::QueryTimeoutError
+      error_400("Query timed out. Try narrowing your date range with 'after'/'before' or filtering by product_id.")
+    end
   end
 
   def show

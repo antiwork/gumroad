@@ -190,6 +190,31 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     end
     let(:bad_request_error) { Faraday::BadRequestError.new("bad request", bad_request_response) }
 
+    it "retries the image-bearing preset text-only when OpenAI cannot download an image, without reporting to Sentry" do
+      call_count = 0
+      image_message_counts = []
+      allow(client).to receive(:chat) do |kwargs|
+        call_count += 1
+        image_message_counts << kwargs[:parameters][:messages].last[:content].count { |part| part[:type] == "image_url" }
+        raise bad_request_error if call_count == 1 # first adult_content attempt, with images
+        json_chat_response(flagged: false, reasoning: "")
+      end
+      allow(ErrorNotifier).to receive(:notify)
+
+      result = described_class.new(
+        text: "moderate me",
+        image_urls: ["https://files.gumroad.com/expired-signed-url.png"]
+      ).perform
+
+      expect(result.status).to eq("compliant")
+      # attempt 1: adult_content with image; attempt 2: text-only retry; attempt 3: spam (always text-only)
+      expect(image_message_counts).to eq([1, 0, 0])
+      expect(ErrorNotifier).not_to have_received(:notify)
+      expect(Rails.logger).to have_received(:warn).with(
+        a_string_including("could not fetch an image on preset:adult_content; retrying text-only")
+      )
+    end
+
     it "treats both presets as compliant and reports each rejection to Sentry" do
       allow(client).to receive(:chat).and_raise(bad_request_error)
       allow(ErrorNotifier).to receive(:notify)
@@ -202,6 +227,8 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
       expect(result.status).to eq("compliant")
       expect(result.reasoning).to eq([])
 
+      # The adult_content preset retried text-only after the image rejection;
+      # since the retry also failed, the report reflects the imageless attempt.
       expect(ErrorNotifier).to have_received(:notify).with(
         "ContentModeration::PromptStrategy OpenAI rejected input",
         hash_including(
@@ -211,7 +238,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
           openai_error_message: a_string_including("Error while downloading"),
           text_length: "moderate me".length,
           image_url_count: 2,
-          image_urls_sent: ["https://files.gumroad.com/bad.psd", "https://cdn.example.com/ok.png"],
+          image_urls_sent: [],
         )
       )
       expect(ErrorNotifier).to have_received(:notify).with(

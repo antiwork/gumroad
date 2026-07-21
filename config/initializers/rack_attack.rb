@@ -53,7 +53,12 @@ class Rack::Attack
   def self.throttle_with_exponential_backoff(name:, requests:, period:, max_level: 5, &block_proc)
     block = Proc.new do |req|
       block_proc.call(req)
-    rescue Rack::QueryParser::InvalidParameterError, TypeError
+    rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+      # Malformed request bodies (bad form encoding, or a multipart POST with an
+      # empty/truncated body) make `req.params` raise. These requests come from
+      # scanners and broken clients, not real users — skip this throttle rule for
+      # them instead of crashing the middleware with a 500. The dedicated
+      # "invalid_params" throttle below still rate-limits these senders.
       nil
     end
 
@@ -206,7 +211,7 @@ class Rack::Attack
         "#{req.remote_ip}:#{Digest::SHA256.hexdigest(request_params["device_code"].to_s)}"
       end
     end
-  rescue Rack::QueryParser::InvalidParameterError, TypeError
+  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
     nil
   end
 
@@ -312,6 +317,8 @@ class Rack::Attack
   # Throttle requests to Sales API with slow pagination
   throttle("/api/v2/sales", limit: 10, period: 1.second) do |req|
     req.remote_ip if req.path.ends_with?("/v2/sales") && req.params["page"].to_i > 10
+  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+    nil
   end
 
   # Throttle POST requests to /login by login param
@@ -327,6 +334,8 @@ class Rack::Attack
       # return the login if present, nil otherwise
       req.params["user"] && req.params["user"]["login"].presence
     end
+  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+    nil
   end
 
   # Throttle POST requests to /:username/affiliate_requests

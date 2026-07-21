@@ -183,6 +183,31 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to include("imply you checked items you did not actually fetch")
       end
 
+      # Regression for gumroad-private#984: the agent invented dashboard settings screens
+      # ("Settings > Profile pickers") that don't exist, admitted it was "guessing at the UI",
+      # and looped on "confirm the change" without ever staging one. The system prompt must
+      # tell the model what is actually possible: no dashboard visibility, no self-serve
+      # appearance settings, custom HTML is the only appearance surface, a brand-new page must
+      # carry the whole storefront, and "prepared for confirmation" claims require a real
+      # api_write in the same reply.
+      it "teaches the model what is possible: no dashboard visibility, no appearance settings, no phantom confirmations" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("cannot see the creator's dashboard")
+        expect(captured[:system]).to include("NO self-serve settings")
+        expect(captured[:system]).to include("never direct them to dashboard settings that don't exist")
+        expect(captured[:system]).to include(%(<script id="gumroad-data"))
+        expect(captured[:system]).to match(/never hard-code the product list/)
+        expect(captured[:system]).to match(/Never publish a page\s+that drops their products/)
+        expect(captured[:system]).to match(/unless\s+you actually called api_write in this same reply/)
+      end
+
       it "rejects an unknown endpoint id without calling the API" do
         expect(api_client).not_to receive(:get)
         captured = nil

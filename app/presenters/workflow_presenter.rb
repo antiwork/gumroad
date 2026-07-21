@@ -3,6 +3,7 @@
 class WorkflowPresenter
   include Rails.application.routes.url_helpers
   include ApplicationHelper
+  include MailerHelper
 
   attr_reader :seller, :workflow
 
@@ -93,6 +94,10 @@ class WorkflowPresenter
       s3_url: s3_bucket_url,
       user_id: user_presenter.user.external_id,
       gumroad_address: GumroadAddress.full,
+      # The sender line workflow emails actually go out with (PostEmailApi builds the same
+      # name + creators-domain address), so the preview's email chrome can show an honest
+      # From value instead of a made-up one.
+      email_from: "#{from_email_address_name(seller.name)} <#{creators_from_email_address(seller.username)}>",
       eligible_for_abandoned_cart_workflows: user_presenter.user.eligible_for_abandoned_cart_workflows?,
     }
   end

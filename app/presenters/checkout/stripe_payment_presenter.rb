@@ -252,8 +252,8 @@ class Checkout::StripePaymentPresenter
         #      forced-currency intent in Order::PreparePaymentIntentService); kicking it back
         #      to CardElement would make the iDEAL/Bancontact tabs unreachable for any tester
         #      whose GeoIP currency differs from the product's.
-        #   2. The buyer-currency card shape (single USD-priced one-time item — the same cart
-        #      shape the eligibility service's card mode accepts), which mounts the
+        #   2. The buyer-currency card shape (one seller's USD-priced one-time items — the
+        #      same cart shape the eligibility service's card mode accepts), which mounts the
         #      server-confirm Payment Element in the buyer's quote currency (see props).
         # Non-flagged sellers never produce a candidate (buyer_presentment_candidate? checks
         # the seller flags), so neither branch changes behavior for unflagged checkouts. The
@@ -270,24 +270,33 @@ class Checkout::StripePaymentPresenter
 
     # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
     # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
-    # a single one-time, USD-priced, non-commission item from a presentment-candidate seller
-    # (candidate? already covers the seller's flags and an active buyer-local
-    # display). Products that offer installments stay on CardElement even when the buyer chooses
-    # a one-time purchase because quote creation cannot see that choice and rejects the product.
+    # one-time, USD-priced, non-commission items that all belong to ONE seller and are each a
+    # presentment candidate (candidate? already covers the seller's flags and an active
+    # buyer-local display). One seller matters because the order pipeline creates one
+    # charge per seller, and the quote locks the cart total for a single PaymentIntent —
+    # multi-seller carts would need that one locked total split across several intents (Open
+    # Question 9 on issue #5419), so they stay on CardElement. Products that offer installments
+    # stay on CardElement even when the buyer chooses a one-time purchase because quote creation
+    # cannot see that choice and rejects the product.
     # Charge-time-only gates (merchant account model, wallet params, GeoIP re-check, quote
     # verification) stay in the eligibility service — when any of them falls back, the charge
     # simply runs canonical USD, which the currency-less card PaymentMethod the server-confirm
     # element mints supports just as well.
     def buyer_currency_presentment_element_shape?(items)
-      return false unless items.one?
+      return false if items.empty?
+      return false unless items.map { _1[:seller] }.uniq.one?
 
-      item = items.first
-      return false unless buyer_currency_presentment_candidate?(item)
-      return false if item[:recurrence].present?
-      return false if item[:pay_in_installments] || item[:offers_installment_plan] || item[:is_preorder] || item[:has_free_trial]
-      return false if item[:native_type] == Link::NATIVE_TYPE_COMMISSION
-
-      item[:product_currency] == Currency::USD
+      # The quote locks the whole cart total, so every item must individually pass the
+      # presentment gates: one unsupported item means the charge path could not honor the
+      # locked total, and the whole cart falls back.
+      items.all? do |item|
+        buyer_currency_presentment_candidate?(item) &&
+          item[:recurrence].blank? &&
+          !item[:pay_in_installments] && !item[:offers_installment_plan] &&
+          !item[:is_preorder] && !item[:has_free_trial] &&
+          item[:native_type] != Link::NATIVE_TYPE_COMMISSION &&
+          item[:product_currency] == Currency::USD
+      end
     end
 
     # The method-forced cart shape, mirroring the gates under which

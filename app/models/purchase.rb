@@ -683,6 +683,73 @@ class Purchase < ApplicationRecord
     where("purchases.chargeback_date IS NULL OR " \
  "(purchases.chargeback_date IS NOT NULL AND purchases.flags & ? != 0)", Purchase.flag_mapping["flags"][:chargeback_reversed])
   }
+  # SQL condition for "this chargeback is reported by event date" — the query-side twin of
+  # Purchase::Reportable#chargeback_event_dated_for_tax_reporting? (keep the two in sync).
+  # True for chargebacks whose dispute event happened on/after the chargeback reporting
+  # cutover, except reversed ones with no Dispute row recording a won_at (directly on the
+  # purchase, or on the purchase's Charge for multi-purchase carts): without a real reversal
+  # date the re-add leg can never be emitted, so those keep the legacy treatment.
+  CHARGEBACK_EVENT_DATED_SQL = <<~SQL.squish
+    purchases.chargeback_date >= :chargeback_cutover
+    AND (
+      purchases.flags & :reversed_bit = 0
+      OR EXISTS (SELECT 1 FROM disputes WHERE disputes.purchase_id = purchases.id AND disputes.won_at IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM disputes INNER JOIN charge_purchases ON charge_purchases.charge_id = disputes.charge_id
+                 WHERE charge_purchases.purchase_id = purchases.id AND disputes.won_at IS NOT NULL)
+    )
+  SQL
+  private_constant :CHARGEBACK_EVENT_DATED_SQL
+
+  def self.chargeback_event_dated_bind_params
+    {
+      chargeback_cutover: Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day,
+      reversed_bit: Purchase.flag_mapping["flags"][:chargeback_reversed]
+    }
+  end
+
+  # The sales-leg chargeback gate for the tax report jobs. Keeps, in addition to everything
+  # not_chargedback_or_chargedback_reversed keeps, purchases whose chargeback is reported by
+  # event date: those sales stay reported in the purchase's own period, and the chargeback is
+  # reported as its own negative leg in the period of chargeback_date (see
+  # Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER). Dropping such a sale would count the
+  # chargeback twice — once by omitting the sale, once by the chargeback leg.
+  # Pre-cutover chargebacks keep the legacy drop so historical reports stay as filed.
+  scope :not_chargedback_for_tax_reporting, lambda {
+    where(
+      "purchases.chargeback_date IS NULL " \
+      "OR purchases.flags & :reversed_bit != 0 " \
+      "OR (#{CHARGEBACK_EVENT_DATED_SQL})",
+      **chargeback_event_dated_bind_params
+    )
+  }
+  # Purchases whose chargeback (debit) leg lands in [starts_at, ends_at]: event-dated
+  # chargebacks (see CHARGEBACK_EVENT_DATED_SQL) whose dispute event date —
+  # purchases.chargeback_date has always held the processor's dispute-formalized timestamp —
+  # falls inside the window.
+  scope :chargebacks_for_tax_period_reporting, lambda { |starts_at, ends_at|
+    where(chargeback_date: starts_at..ends_at)
+      .where(CHARGEBACK_EVENT_DATED_SQL, **chargeback_event_dated_bind_params)
+  }
+  # Purchases whose chargeback-reversal (dispute won) leg lands in [starts_at, ends_at]:
+  # event-dated chargebacks marked reversed, with a Dispute row — linked directly or through
+  # the purchase's Charge (multi-purchase carts) — recording a won_at inside the window.
+  # EXISTS subqueries keep one row per purchase regardless of how many dispute rows match.
+  # Callers emitting per-row output should date the leg with
+  # purchase.chargeback_reversal_reporting_date (which also resolves which dispute row wins
+  # when there are several).
+  scope :chargeback_reversals_for_tax_period_reporting, lambda { |starts_at, ends_at|
+    where("purchases.chargeback_date >= ?", Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day)
+      .where("purchases.flags & ? != 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
+      .where(
+        "EXISTS (SELECT 1 FROM disputes WHERE disputes.purchase_id = purchases.id " \
+        "AND disputes.won_at BETWEEN :starts_at AND :ends_at) " \
+        "OR EXISTS (SELECT 1 FROM disputes INNER JOIN charge_purchases " \
+        "ON charge_purchases.charge_id = disputes.charge_id " \
+        "WHERE charge_purchases.purchase_id = purchases.id " \
+        "AND disputes.won_at BETWEEN :starts_at AND :ends_at)",
+        starts_at:, ends_at:
+      )
+  }
   scope :not_additional_contribution, -> { where("purchases.flags IS NULL OR purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:is_additional_contribution]) }
   scope :for_products, ->(products) { where(link_id: products) if products.present? }
   scope :not_subscription_or_original_purchase, -> {
@@ -1866,7 +1933,19 @@ class Purchase < ApplicationRecord
   # purchase. Failed refunds that were NOT auto-reversed still count — the seller
   # is still debited for them until a human resolves the exception.
   def amount_refunded_cents
-    refunds.effective.sum(:amount_cents)
+    # When the refunds association is already loaded (batch serializers like the
+    # mobile purchases endpoints preload it), sum in memory using Refund#effective?
+    # (the documented in-memory mirror of the .effective scope) instead of issuing
+    # a per-purchase SUM query — that per-row SUM is the N+1 Sentry flags on
+    # Api::Mobile::PurchasesController#search. Callers that haven't preloaded
+    # refunds (including every refund-processing write path) fall through to the
+    # DB-backed aggregate, so bulk SQL writes still see fresh state.
+    if association(:refunds).loaded?
+      # .to_i mirrors SQL SUM semantics, which skips NULL amount_cents rows.
+      refunds.select(&:effective?).sum { |refund| refund.amount_cents.to_i }
+    else
+      refunds.effective.sum(:amount_cents)
+    end
   end
 
   def fee_refunded_cents
@@ -2513,13 +2592,14 @@ class Purchase < ApplicationRecord
   def update_json_data_for_mobile
     return @cached_product_updates_data if defined?(@cached_product_updates_data)
 
-    return [] if subscription.present? && !subscription.alive? && link.block_access_after_membership_cancellation?
-
-    all_purchases_of_product = link.sales.for_displaying_installments(email:)
-
-    posts = self.class.product_installments(purchase_ids: all_purchases_of_product.pluck(:id))
-
-    posts.map { |post| post.installment_mobile_json_data(purchase: self) }.compact
+    # Delegate to the batched preloader even for a single purchase. The old inline
+    # implementation serialized each post with per-post queries (url_redirects,
+    # product_files, email_infos — one SELECT per installment), which surfaced as an
+    # N+1 on the mobile url_redirect_attributes endpoint. The preloader produces
+    # byte-identical output (covered by specs in purchase_installments_spec.rb) while
+    # batching those lookups into a bounded number of IN queries.
+    self.class.preload_product_updates_data!([self])
+    @cached_product_updates_data
   end
 
   def self.preload_product_updates_data!(purchases)
@@ -3845,7 +3925,7 @@ class Purchase < ApplicationRecord
       nil
     rescue ChargeProcessorPayeeAccountRestrictedError => e
       logger.error "Charge processor error: #{e.message} in purchase: #{external_id}"
-      errors.add :base, "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+      errors.add :base, "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
       self.stripe_error_code = PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED
       nil
     rescue ChargeProcessorPayerCancelledBillingAgreementError => e
@@ -3859,7 +3939,7 @@ class Purchase < ApplicationRecord
       self.stripe_error_code = PurchaseErrorCode::PAYPAL_PAYER_ACCOUNT_DECLINED_PAYMENT
       nil
     rescue ChargeProcessorUnsupportedPaymentTypeError => e
-      logger.info "Charge processor error: Unsupported paypal payment method selected"
+      logger.info "Charge processor error: Unsupported PayPal payment method selected"
       errors.add :base, "We weren't able to charge your PayPal account. Please select another method of payment."
       self.stripe_error_code = e.error_code
       self.stripe_transaction_id = e.charge_id

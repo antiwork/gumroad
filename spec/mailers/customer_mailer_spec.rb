@@ -1280,6 +1280,29 @@ describe CustomerMailer do
       expect(mail.subject).to eq("Receipts for Purchases")
     end
 
+    it "skips failed purchases whose charge has no successful purchases" do
+      failed_purchase = create(:failed_purchase, link: product, seller:)
+      charge = create(:charge, seller:)
+      charge.purchases << failed_purchase
+      charge.order.purchases << failed_purchase
+
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id) + [failed_purchase.id])
+      # Rendering the body is what crashed before the fix (the receipt template
+      # dereferences the charge's first successful purchase, which was nil).
+      expect { mail.message.to_s }.not_to raise_error
+      expect(mail.to).to eq([purchases.last.email])
+    end
+
+    it "does not send an email when no purchase is successful" do
+      failed_purchase = create(:failed_purchase, link: product, seller:)
+      charge = create(:charge, seller:)
+      charge.purchases << failed_purchase
+      charge.order.purchases << failed_purchase
+
+      mail = CustomerMailer.grouped_receipt([failed_purchase.id])
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
     it "eager loads charges and orders to avoid N+1 queries" do
       purchases_with_charges = Array.new(3) do
         purchase = create(:purchase, link: product, seller:)

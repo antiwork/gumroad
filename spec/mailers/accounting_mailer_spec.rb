@@ -159,7 +159,7 @@ describe AccountingMailer, :vcr do
     end
 
     it "includes the outstanding balance totals" do
-      expect(@mail.body.encoded).to include "Total Outstanding Balances for Paypal: Active $2.0, Suspended $8.0"
+      expect(@mail.body.encoded).to include "Total Outstanding Balances for PayPal: Active $2.0, Suspended $8.0"
       expect(@mail.body.encoded).to include "Total Outstanding Balances for Stripe(Held by Gumroad): Active $9.0"
       expect(@mail.body.encoded).to include "Total Outstanding Balances for Stripe(Held by Stripe): Active $4.0"
     end

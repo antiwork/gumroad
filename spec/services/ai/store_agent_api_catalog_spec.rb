@@ -71,6 +71,14 @@ describe Ai::StoreAgentApiCatalog do
       expect(summary).to match(/destructive/i)
       expect(summary).to include("edit_user_custom_html")
     end
+
+    it "tells the model a replacement page must carry the whole storefront, not just the requested tweak" do
+      summary = described_class.find("update_user_custom_html").summary
+
+      expect(summary).to match(/whole storefront/i)
+      expect(summary).to match(/all products/i)
+      expect(summary).to match(/dynamically from the gumroad-data JSON/i)
+    end
   end
 
   describe "public media endpoints" do

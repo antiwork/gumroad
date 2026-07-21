@@ -72,6 +72,23 @@ describe SslCertificates::Generate do
       end
     end
 
+    context "when a persisted domain contains an empty label (consecutive dots)" do
+      # Records like "example..com" were saved before the empty-label
+      # validation existed. Let's Encrypt rejects such names outright
+      # (Acme::Client::Error::RejectedIdentifier: "Domain name can not have
+      # two dots in a row"), so ordering a certificate for them can never
+      # succeed — the guard must skip them instead of letting the job fail
+      # and alert forever (Sentry GUMROAD-VW).
+      before do
+        @custom_domain.domain = "domains.example..com"
+        @custom_domain.save(validate: false)
+      end
+
+      it "returns false with an error message" do
+        expect(@obj.send(:can_order_certificates?)).to eq [false, "Invalid domain"]
+      end
+    end
+
     context "when the hourly limit is reached" do
       it "returns false when the hourly rate limit is reached" do
         custom_domains_double = double("custom_domains collection")

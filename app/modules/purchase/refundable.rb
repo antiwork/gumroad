@@ -272,8 +272,8 @@ class Purchase
       # Failed-refund reversals lock the purchase before their refund and balance rows.
       # Use the same order here so a single-purchase refund cannot hold a balance while
       # waiting for a purchase row that a reversal already holds. (Combined-charge
-      # refunds still acquire purchase and balance locks interleaved across purchases
-      # inside Charge#refund_and_save!'s transaction — tracked as a follow-up.)
+      # refunds take all their purchase locks up front in id order — see
+      # Charge#refund_and_save! — so they follow the same purchase-first order.)
       # reload first: reading any json_data-backed attribute on a row whose json_data
       # column is NULL dirties the record in memory, and lock! raises on dirty records.
       # Reloading discards that phantom change; lock! reloads again under FOR UPDATE.
@@ -351,8 +351,15 @@ class Purchase
   end
 
   def refund_partial_purchase!(gross_refund_amount_cents, refunding_user_id, processor_refund_id: nil)
-    partially_refunded_previously = self.stripe_partially_refunded
     ActiveRecord::Base.transaction do
+      # Same purchase-first lock order as refund_purchase!: take the purchase row
+      # lock before touching refund or balance rows, so this path cannot hold a
+      # balance while a failed-refund reversal holds the purchase. reload first
+      # because reading a json_data-backed attribute on a row whose json_data is
+      # NULL dirties the record, and lock! raises on dirty records. Read the
+      # partial-refund flag only after the lock so it reflects committed state.
+      reload.lock!
+      partially_refunded_previously = self.stripe_partially_refunded
       if (gross_amount_refunded_cents + gross_refund_amount_cents) >= total_transaction_cents
         self.stripe_partially_refunded = false
         self.stripe_refunded = true
@@ -415,6 +422,19 @@ class Purchase
       logger.info("Refunding purchase: #{id} completed with ID: #{charge_refund.id}, Flow of Funds: #{charge_refund.flow_of_funds.to_h}")
 
       ActiveRecord::Base.transaction do
+        # Same purchase-first lock order as refund_purchase!: lock the purchase row
+        # before inserting the refund, so this path cannot hold an uncommitted
+        # refunds insert while a failed-refund reversal holds the purchase row and
+        # scans purchase.refunds under FOR UPDATE (an InnoDB deadlock cycle of the
+        # same class as the one fixed for combined charges — see #5918). reload
+        # first because reading a json_data-backed attribute on a row whose
+        # json_data is NULL dirties the record, and lock! raises on dirty records.
+        # Capture the subscription BEFORE reloading: reload clears the association
+        # cache, and callers (e.g. Subscription#charge! right after a VAT refund)
+        # may hold the same in-memory subscription instance and expect to see the
+        # VAT ID we store on it below.
+        subscription_to_update = subscription
+        reload.lock!
         refund = Refund.new(total_transaction_cents: gumroad_tax_refundable_cents,
                             amount_cents: 0,
                             creator_tax_cents: 0,
@@ -436,8 +456,9 @@ class Purchase
         save!
         Credit.create_for_vat_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
 
-        # Store VAT ID on subscription so future recurring charges are automatically VAT-exempt
-        subscription&.update_business_vat_id!(business_vat_id) if business_vat_id.present?
+        # Store VAT ID on subscription so future recurring charges are automatically VAT-exempt.
+        # Use the pre-reload instance: callers may hold it and read business_vat_id in memory.
+        subscription_to_update&.update_business_vat_id!(business_vat_id) if business_vat_id.present?
       end
       true
     rescue ChargeProcessorAlreadyRefundedError => e

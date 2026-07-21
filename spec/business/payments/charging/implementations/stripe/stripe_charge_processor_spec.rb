@@ -2484,6 +2484,23 @@ describe StripeChargeProcessor, :vcr do
         end
       end
 
+      describe ".connected_account_id_for_event" do
+        it "returns the connected account id from user_id or account" do
+          expect(described_class.connected_account_id_for_event("user_id" => "acct_1MExampleConnect")).to eq("acct_1MExampleConnect")
+          expect(described_class.connected_account_id_for_event("account" => "acct_1MExampleConnect")).to eq("acct_1MExampleConnect")
+        end
+
+        it "returns nil when the event carries no account id" do
+          expect(described_class.connected_account_id_for_event({})).to be_nil
+          expect(described_class.connected_account_id_for_event("user_id" => "", "account" => "")).to be_nil
+        end
+
+        it "returns nil for Gumroad's own platform account id so platform alerts are preserved" do
+          expect(described_class.connected_account_id_for_event("user_id" => STRIPE_PLATFORM_ACCOUNT_ID)).to be_nil
+          expect(described_class.connected_account_id_for_event("account" => STRIPE_PLATFORM_ACCOUNT_ID)).to be_nil
+        end
+      end
+
       describe "event payment failed" do
         let(:stripe_event_type) { "payment_intent.payment_failed" }
         let(:purchase_external_id) { "q3jUBQrrGrIId3SjC4VJ0g==" }

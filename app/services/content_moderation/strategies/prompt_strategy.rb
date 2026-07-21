@@ -204,8 +204,8 @@ class ContentModeration::Strategies::PromptStrategy
       [flagged, run]
     end
 
-    def evaluate_preset(preset)
-      messages = build_messages(preset[:rules], skip_images: preset[:skip_images])
+    def evaluate_preset(preset, skip_images: preset[:skip_images])
+      messages = build_messages(preset[:rules], skip_images: skip_images)
 
       response = @client.chat(
         parameters: {
@@ -224,7 +224,22 @@ class ContentModeration::Strategies::PromptStrategy
         reasoning: parsed["reasoning"].to_s,
       }
     rescue Faraday::BadRequestError => e
-      notify_openai_rejection(e, stage: "preset:#{preset[:name]}", images_sent: !preset[:skip_images])
+      # OpenAI regularly fails to download some of our image URLs (signed
+      # attachment URLs on files.gumroad.com are the usual culprit) and
+      # responds 400 with code "invalid_image_url". When that happens, retry
+      # the same preset once without any images so the text still gets
+      # moderated — giving up entirely (the old behavior) meant the content
+      # passed with no evaluation at all. This is an expected, recurring
+      # condition, so it logs a warning instead of paging Sentry.
+      if openai_error_code(e) == "invalid_image_url" && !skip_images
+        Rails.logger.warn(
+          "ContentModeration::PromptStrategy OpenAI could not fetch an image on preset:#{preset[:name]}; " \
+          "retrying text-only (#{openai_error_message(e)[0, 500]})"
+        )
+        return evaluate_preset(preset, skip_images: true)
+      end
+
+      notify_openai_rejection(e, stage: "preset:#{preset[:name]}", images_sent: !skip_images)
       { status: "compliant", reasoning: "" }
     rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Faraday::ParsingError, Net::ReadTimeout => e
       Rails.logger.warn("ContentModeration::PromptStrategy preset timeout on #{preset[:name]}: #{e.class} - #{e.message}")
@@ -268,11 +283,29 @@ class ContentModeration::Strategies::PromptStrategy
       raise
     end
 
-    def notify_openai_rejection(error, stage:, images_sent:)
+    # Digs the machine-readable error code (e.g. "invalid_image_url") out of
+    # an OpenAI 400 response body, or nil when the body isn't shaped that way.
+    def openai_error_code(error)
+      payload = openai_error_payload(error)
+      payload.is_a?(Hash) ? payload["code"] : nil
+    end
+
+    # Human-readable message from an OpenAI 400 body (it names the URL that
+    # failed to download), falling back to the raw body for unexpected shapes.
+    def openai_error_message(error)
+      payload = openai_error_payload(error)
+      payload.is_a?(Hash) ? payload["message"].to_s : error.response&.dig(:body).to_s
+    end
+
+    def openai_error_payload(error)
       body = error.response&.dig(:body)
-      error_payload = body.is_a?(Hash) ? body["error"] : nil
-      error_message = error_payload.is_a?(Hash) ? error_payload["message"].to_s : body.to_s
-      error_code    = error_payload.is_a?(Hash) ? error_payload["code"] : nil
+      body.is_a?(Hash) ? body["error"] : nil
+    end
+
+    def notify_openai_rejection(error, stage:, images_sent:)
+      error_payload = openai_error_payload(error)
+      error_message = openai_error_message(error)
+      error_code    = openai_error_code(error)
       error_param   = error_payload.is_a?(Hash) ? error_payload["param"] : nil
 
       Rails.logger.warn(
