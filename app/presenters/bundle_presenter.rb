@@ -135,7 +135,6 @@ class BundlePresenter
           products: bundle.bundle_products.alive.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).map { self.class.bundle_product(product: _1.product, quantity: _1.quantity, selected_variant_id: _1.variant&.external_id) },
           collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
           public_files: bundle.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
-          audio_previews_enabled: Feature.active?(:audio_previews, bundle.user),
           default_offer_code: default_offer_code ? {
             id: default_offer_code.external_id,
             code: default_offer_code.code,

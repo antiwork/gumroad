@@ -155,7 +155,6 @@ export type Product = {
   default_offer_code_id?: string | null;
   default_offer_code: OfferCode | null;
   public_files: PublicFileWithStatus[];
-  audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
 } & (
   | { native_type: "call"; variants: Duration[] }

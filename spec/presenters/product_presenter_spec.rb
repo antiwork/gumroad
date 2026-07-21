@@ -175,7 +175,6 @@ describe ProductPresenter do
             },
             bundle_products: [],
             public_files: [],
-            audio_previews_enabled: false,
           },
           discount_code: nil,
           purchase: {
@@ -446,7 +445,6 @@ describe ProductPresenter do
             default_offer_code_id: nil,
             default_offer_code: nil,
             public_files: [],
-            audio_previews_enabled: false,
             community_chat_enabled: nil,
           },
           id: product.external_id,
@@ -727,7 +725,6 @@ describe ProductPresenter do
               default_offer_code_id: nil,
               default_offer_code: nil,
               public_files: [],
-              audio_previews_enabled: false,
               community_chat_enabled: nil,
             },
             id: membership.external_id,
@@ -944,7 +941,6 @@ describe ProductPresenter do
               default_offer_code_id: nil,
               default_offer_code: nil,
               public_files: [],
-              audio_previews_enabled: false,
               community_chat_enabled: nil,
             },
             id: new_product.external_id,
@@ -994,8 +990,6 @@ describe ProductPresenter do
       let!(:public_file3) { create(:public_file, :with_audio, deleted_at: 1.day.ago) }
 
       before do
-        Feature.activate_user(:audio_previews, product.user)
-
         public_file1.file.analyze
       end
 
@@ -1003,7 +997,6 @@ describe ProductPresenter do
         props = described_class.new(product:).edit_props[:product]
 
         expect(props[:public_files].sole).to eq(PublicFilePresenter.new(public_file: public_file1).props)
-        expect(props[:audio_previews_enabled]).to be(true)
       end
     end
 

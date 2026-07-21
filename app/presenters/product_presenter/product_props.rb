@@ -77,7 +77,6 @@ class ProductPresenter::ProductProps
         refund_policy: refund_policy_props,
         bundle_products: product.bundle_products.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).alive.map { bundle_product_props(_1, request:, recommended_by:, layout:) },
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
-        audio_previews_enabled: Feature.active?(:audio_previews, product.user),
       },
       discount_code: discount_code_result,
       purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),

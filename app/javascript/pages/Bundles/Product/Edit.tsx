@@ -57,7 +57,6 @@ type ProductPageProps = {
     refund_policy: RefundPolicy;
     display_product_reviews: boolean;
     public_files: PublicFileWithStatus[];
-    audio_previews_enabled: boolean;
     is_published: boolean;
     products: BundleProduct[];
     default_offer_code: OfferCode | null;
@@ -271,7 +270,6 @@ export default function BundlesProductEdit() {
             setImagesUploading={setImagesUploading}
             publicFiles={publicFiles}
             updatePublicFiles={updatePublicFiles}
-            audioPreviewsEnabled={bundle.audio_previews_enabled}
           />
           <CustomPermalinkInput
             value={form.data.custom_permalink}

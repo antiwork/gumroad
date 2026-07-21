@@ -165,7 +165,6 @@ export type Product = {
     variant: string | null;
   }[];
   public_files: PublicFile[];
-  audio_previews_enabled: boolean;
 };
 export type Purchase = {
   id: string;
@@ -321,7 +320,6 @@ export const Product = ({
   const publicFilesSettings = React.useMemo(
     () => ({
       files: product.public_files,
-      audioPreviewsEnabled: product.audio_previews_enabled,
     }),
     [product.public_files],
   );
