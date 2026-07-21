@@ -146,23 +146,34 @@ class AssetPreview < ApplicationRecord
 
     resized = file.variant(resize_to_limit: [MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION]).processed
 
-    attached_resized_copy = false
-    resized.blob.open do |tempfile|
-      # with_lock reloads the record, so the deleted/attachment state and
-      # blob id below reflect what is in the database right now, and no
-      # concurrent replacement can interleave with the attach.
-      with_lock do
-        next if deleted? || !file.attached? || file.blob.id != source_blob_id
+    # Upload the resized copy to storage BEFORE taking the row lock, so the
+    # lock is never held across network I/O.
+    resized_blob = resized.blob.open do |tempfile|
+      ActiveStorage::Blob.create_and_upload!(
+        io: tempfile,
+        filename: file.filename,
+        content_type: file.content_type
+      )
+    end
 
-        file.attach(
-          io: tempfile,
-          filename: file.filename,
-          content_type: file.content_type
-        )
+    attached_resized_copy = false
+    # with_lock reloads the record, so the deleted/attachment state and blob
+    # id below reflect what is in the database right now, and no concurrent
+    # replacement can interleave with the attach.
+    with_lock do
+      if !deleted? && file.attached? && file.blob.id == source_blob_id
+        file.attach(resized_blob)
         attached_resized_copy = true
       end
     end
-    return unless attached_resized_copy
+
+    unless attached_resized_copy
+      # The cover changed (or was deleted) while we were resizing — our
+      # result is stale, so throw it away instead of clobbering the newer
+      # cover.
+      resized_blob.purge
+      return
+    end
 
     file.analyze
 
