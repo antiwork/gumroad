@@ -366,6 +366,30 @@ describe GenerateSalesReportJob do
       expect(row["Price"]).to eq("10000")
       expect(row["Total"]).to eq("12000")
     end
+
+    it "omits a chargeback fully refunded before the dispute, since nothing is left to claw back" do
+      fully_refunded = nil
+      travel_to(@sale_time) do
+        fully_refunded = create(:purchase, link: @chargedback_purchase.link, price_cents: 100_00, fee_cents: 30_00,
+                                           gumroad_tax_cents: 20_00, total_transaction_cents: 120_00,
+                                           country: "United Kingdom")
+        # Refund every amount (price, fee, tax, total) before the chargeback, so the dispute
+        # has nothing left to claw back and every *_for_chargeback_reporting value is zero.
+        create(:refund, purchase: fully_refunded,
+                        amount_cents: fully_refunded.price_cents,
+                        fee_cents: fully_refunded.fee_cents,
+                        gumroad_tax_cents: fully_refunded.gumroad_tax_cents,
+                        creator_tax_cents: fully_refunded.tax_cents,
+                        total_transaction_cents: fully_refunded.total_transaction_cents)
+      end
+      fully_refunded.update!(chargeback_date: @event_time)
+
+      csv = perform_and_parse(@event_time.beginning_of_quarter, @event_time.end_of_quarter)
+
+      ids = csv.map { |row| row["Sale ID"] }
+      expect(ids).to include(@chargedback_purchase.external_id) # a real clawback is still reported
+      expect(ids).not_to include(fully_refunded.external_id)    # zero clawback ⇒ no spurious all-zero row
+    end
   end
 
   describe "#update_job_status_to_completed" do

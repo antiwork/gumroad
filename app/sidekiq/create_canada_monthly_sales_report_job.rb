@@ -115,7 +115,10 @@ class CreateCanadaMonthlySalesReportJob
         # refund was relieved by the refund's own reporting path and is not clawed back again.
         canada_purchase_filters(Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at))
           .find_each do |purchase|
-          temp_file.write(chargeback_row(purchase, purchase.chargeback_date, -1).to_csv)
+          row = chargeback_row(purchase, purchase.chargeback_date, -1)
+          next unless row
+
+          temp_file.write(row.to_csv)
           temp_file.flush
         end
 
@@ -127,7 +130,10 @@ class CreateCanadaMonthlySalesReportJob
           won_at = purchase.chargeback_reversal_reporting_date
           next unless won_at&.between?(starts_at, ends_at)
 
-          temp_file.write(chargeback_row(purchase, won_at, 1).to_csv)
+          row = chargeback_row(purchase, won_at, 1)
+          next unless row
+
+          temp_file.write(row.to_csv)
           temp_file.flush
         end
       end
@@ -165,8 +171,17 @@ class CreateCanadaMonthlySalesReportJob
     # row, dated by the dispute event (or win) and carrying the purchase's amounts net of its
     # refunds (see Purchase::Reportable#price_cents_for_chargeback_reporting), signed.
     def chargeback_row(purchase, event_date, sign)
-      taxjar_info = purchase.purchase_taxjar_info
       gumroad_tax_cents = sign * purchase.gumroad_tax_cents_for_chargeback_reporting
+      price_cents = sign * purchase.price_cents_for_chargeback_reporting
+      fee_cents = sign * purchase.fee_cents_for_chargeback_reporting
+      total_cents = sign * purchase.total_cents_for_chargeback_reporting
+
+      # A purchase fully refunded before its chargeback claws back nothing — every
+      # net-of-refunds amount is zero. Skip the spurious all-zero row (the fees report guards
+      # its fee leg the same way).
+      return if [gumroad_tax_cents, price_cents, fee_cents, total_cents].all?(&:zero?)
+
+      taxjar_info = purchase.purchase_taxjar_info
 
       [
         purchase.external_id,
@@ -180,10 +195,10 @@ class CreateCanadaMonthlySalesReportJob
         taxjar_info&.combined_tax_rate,
         Money.new(gumroad_tax_cents).format(no_cents_if_whole: false, symbol: false),
         Money.new(gumroad_tax_cents).format(no_cents_if_whole: false, symbol: false),
-        Money.new(sign * purchase.price_cents_for_chargeback_reporting).format(no_cents_if_whole: false, symbol: false),
-        Money.new(sign * purchase.fee_cents_for_chargeback_reporting).format(no_cents_if_whole: false, symbol: false),
+        Money.new(price_cents).format(no_cents_if_whole: false, symbol: false),
+        Money.new(fee_cents).format(no_cents_if_whole: false, symbol: false),
         Money.new(0).format(no_cents_if_whole: false, symbol: false),
-        Money.new(sign * purchase.total_cents_for_chargeback_reporting).format(no_cents_if_whole: false, symbol: false),
+        Money.new(total_cents).format(no_cents_if_whole: false, symbol: false),
         purchase.receipt_url
       ]
     end

@@ -92,8 +92,17 @@ class CreateGlobalSalesTaxSummaryReportJob
     # Dispute row's won_at; real dispute rows only). Only event-dated chargebacks appear —
     # see Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER; earlier chargebacks keep the
     # legacy exclusion from the sales leg, so already-filed months regenerate as filed.
+    #
+    # Wrapped in the same max-execution-time guard as the sales aggregation above: these
+    # legs are keyed on purchases.chargeback_date, which has no dedicated index (the only
+    # chargeback_date index is the seller_id-led composite, unusable without a seller
+    # filter), so each query scans purchases. The guard bounds a runaway scan the same way
+    # it does for the sales leg, which this job already relies on to avoid the whole-month
+    # aggregation timing out.
     chargeback_leg_started_at = monotonic_seconds
-    chargeback_count = apply_chargeback_legs(aggregation, start_date, end_date)
+    chargeback_count = WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
+      apply_chargeback_legs(aggregation, start_date, end_date)
+    end
     Rails.logger.info(
       "#{self.class.name}: chargeback_leg_complete " \
       "month=#{month} year=#{year} chargeback_legs=#{chargeback_count} elapsed_seconds=#{elapsed_seconds(chargeback_leg_started_at)}"

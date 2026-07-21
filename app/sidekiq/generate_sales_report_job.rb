@@ -113,7 +113,10 @@ class GenerateSalesReportJob
         chargebacks.find_each do |purchase|
           next if sales_type == DISCOVER_SALES && RecommendationType.is_free_recommendation_type?(purchase.recommended_by)
 
-          temp_file.write(chargeback_row(purchase, purchase.chargeback_date, -1, country_code).to_csv)
+          row = chargeback_row(purchase, purchase.chargeback_date, -1, country_code)
+          next unless row
+
+          temp_file.write(row.to_csv)
           temp_file.flush
         end
 
@@ -132,7 +135,10 @@ class GenerateSalesReportJob
           won_at = purchase.chargeback_reversal_reporting_date
           next unless won_at&.between?(start_time, end_time)
 
-          temp_file.write(chargeback_row(purchase, won_at, 1, country_code).to_csv)
+          row = chargeback_row(purchase, won_at, 1, country_code)
+          next unless row
+
+          temp_file.write(row.to_csv)
           temp_file.flush
         end
       end
@@ -188,14 +194,21 @@ class GenerateSalesReportJob
     # row, dated by the dispute event (or win) and carrying the purchase's amounts net of its
     # refunds (see Purchase::Reportable#price_cents_for_chargeback_reporting), signed.
     def chargeback_row(purchase, event_date, sign, country_code)
+      price_cents = sign * purchase.price_cents_for_chargeback_reporting
+      fee_cents = sign * purchase.fee_cents_for_chargeback_reporting
+      gumroad_tax_cents = sign * purchase.gumroad_tax_cents_for_chargeback_reporting
+      total_cents = sign * purchase.total_cents_for_chargeback_reporting
+
+      # A purchase fully refunded before its chargeback claws back nothing — every
+      # net-of-refunds amount is zero. Skip the spurious all-zero row.
+      return if [price_cents, fee_cents, gumroad_tax_cents, total_cents].all?(&:zero?)
+
       row = [event_date, purchase.external_id,
              purchase.seller.external_id, purchase.seller.form_email&.gsub(/.{0,4}@/, '####@'),
              purchase.seller.user_compliance_infos.last&.legal_entity_country,
              purchase.email&.gsub(/.{0,4}@/, '####@'), purchase.card_visual&.gsub(/.{0,4}@/, '####@'),
-             sign * purchase.price_cents_for_chargeback_reporting,
-             sign * purchase.fee_cents_for_chargeback_reporting,
-             sign * purchase.gumroad_tax_cents_for_chargeback_reporting,
-             0, sign * purchase.total_cents_for_chargeback_reporting,
+             price_cents, fee_cents, gumroad_tax_cents,
+             0, total_cents,
              purchase.purchase_sales_tax_info&.business_vat_id]
 
       if %w(AU SG).include?(country_code)

@@ -79,7 +79,10 @@ class GenerateCanadaSalesReportJob
             country_name, province_name = determine_country_name_and_province_name(purchase)
             next unless country_name == Compliance::Countries::CAN.common_name
 
-            temp_file.write(chargeback_row(purchase, purchase.chargeback_date, -1, country_name, province_name).to_csv)
+            row = chargeback_row(purchase, purchase.chargeback_date, -1, country_name, province_name)
+            next unless row
+
+            temp_file.write(row.to_csv)
             temp_file.flush
           end
 
@@ -96,7 +99,10 @@ class GenerateCanadaSalesReportJob
             country_name, province_name = determine_country_name_and_province_name(purchase)
             next unless country_name == Compliance::Countries::CAN.common_name
 
-            temp_file.write(chargeback_row(purchase, won_at, 1, country_name, province_name).to_csv)
+            row = chargeback_row(purchase, won_at, 1, country_name, province_name)
+            next unless row
+
+            temp_file.write(row.to_csv)
             temp_file.flush
           end
       end
@@ -187,6 +193,14 @@ class GenerateCanadaSalesReportJob
     # refunds (see Purchase::Reportable#price_cents_for_chargeback_reporting), signed.
     def chargeback_row(purchase, event_date, sign, country_name, province_name)
       price_cents = sign * purchase.price_cents_for_chargeback_reporting
+      fee_cents = sign * purchase.fee_cents_for_chargeback_reporting
+      tax_cents = sign * purchase.tax_cents_for_chargeback_reporting
+      gumroad_tax_cents = sign * purchase.gumroad_tax_cents_for_chargeback_reporting
+      total_cents = sign * purchase.total_cents_for_chargeback_reporting
+
+      # A purchase fully refunded before its chargeback claws back nothing — every
+      # net-of-refunds amount is zero. Skip the spurious all-zero row.
+      return if [price_cents, fee_cents, tax_cents, gumroad_tax_cents, total_cents].all?(&:zero?)
 
       [
         event_date,
@@ -209,12 +223,12 @@ class GenerateCanadaSalesReportJob
         purchase.country.presence || purchase.ip_country,
         buyer_province(purchase),
         price_cents,
-        sign * purchase.fee_cents_for_chargeback_reporting,
+        fee_cents,
         purchase.was_product_recommended? ? (price_cents / 10.0).round : 0,
-        sign * purchase.tax_cents_for_chargeback_reporting,
-        sign * purchase.gumroad_tax_cents_for_chargeback_reporting,
+        tax_cents,
+        gumroad_tax_cents,
         0,
-        sign * purchase.total_cents_for_chargeback_reporting
+        total_cents
       ]
     end
 
