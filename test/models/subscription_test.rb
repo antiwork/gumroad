@@ -3558,6 +3558,63 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal 450, @subscription.prorated_discount_price_cents(calculate_as_of:)
   end
 
+  test "#prorated_discount_price_cents does not credit the full plan price when the latest upgrade charge was fully refunded" do
+    prorated_discount_context
+    # A fully refunded purchase stays in the subscription's successful
+    # purchases. If the reversed upgrade charge were still treated as a valid
+    # upgrade, the subscriber would be credited for the full upgraded plan's
+    # value they no longer paid for, making the next charge too low. Instead
+    # the credit falls back to the (reversed) charge's own price.
+    upgrade_succeeded_at = @succeeded_at + @subscription.current_billing_period_seconds / 2
+
+    @purchase.update_flag!(:is_archived_original_subscription_purchase, true, true)
+    create_purchase(
+      link: @subscription.link, subscription: @subscription,
+      is_original_subscription_purchase: true,
+      is_updated_original_subscription_purchase: true,
+      purchase_state: "not_charged", succeeded_at: nil,
+      price_cents: 900
+    )
+    create_purchase(
+      link: @subscription.link, subscription: @subscription,
+      is_upgrade_purchase: true,
+      succeeded_at: upgrade_succeeded_at,
+      price_cents: 750,
+      stripe_refunded: true
+    )
+    @subscription.reload
+
+    # Halfway through the remainder of the period: 50% of the refunded
+    # charge's own $7.50 price = 375, not 50% of the full $9.00 plan (450).
+    calculate_as_of = upgrade_succeeded_at + @subscription.current_billing_period_seconds / 2
+    assert_equal 375, @subscription.prorated_discount_price_cents(calculate_as_of:)
+  end
+
+  test "#prorated_discount_price_cents does not credit the full plan price when the latest upgrade charge was charged back" do
+    prorated_discount_context
+    upgrade_succeeded_at = @succeeded_at + @subscription.current_billing_period_seconds / 2
+
+    @purchase.update_flag!(:is_archived_original_subscription_purchase, true, true)
+    create_purchase(
+      link: @subscription.link, subscription: @subscription,
+      is_original_subscription_purchase: true,
+      is_updated_original_subscription_purchase: true,
+      purchase_state: "not_charged", succeeded_at: nil,
+      price_cents: 900
+    )
+    create_purchase(
+      link: @subscription.link, subscription: @subscription,
+      is_upgrade_purchase: true,
+      succeeded_at: upgrade_succeeded_at,
+      price_cents: 750,
+      chargeback_date: upgrade_succeeded_at + 1.day
+    )
+    @subscription.reload
+
+    calculate_as_of = upgrade_succeeded_at + @subscription.current_billing_period_seconds / 2
+    assert_equal 375, @subscription.prorated_discount_price_cents(calculate_as_of:)
+  end
+
   # --- #current_billing_period_seconds ---------------------------------------
 
   SECONDS_PER_DAY = 24 * 60 * 60

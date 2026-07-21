@@ -725,9 +725,22 @@ class Subscription < ApplicationRecord
   # the subscription's (updated) original purchase reflects the current plan's
   # full price for the period, which is the value the subscriber actually
   # holds — so use that instead.
+  #
+  # One caveat: a purchase stays in `successful_purchases` even after it has
+  # been fully refunded or charged back. If the most recent upgrade charge was
+  # reversed like that, the subscriber no longer holds the upgraded plan's
+  # full value, so crediting them the full price would over-credit them and
+  # make the next charge too low. In that case fall back to the charge's own
+  # holds — so use that instead.
+  #
+  # A fully refunded or charged-back upgrade still appears in
+  # successful_purchases (refunds and chargebacks are tracked on the purchase,
+  # they don't change its state), but the subscriber no longer holds the
+  # upgraded value — so a reversed upgrade must NOT be credited at the new
+  # plan's full price. In that case fall back to the charge's own price.
   def current_period_paid_price_cents
     charge = last_successful_charge
-    if charge.is_upgrade_purchase? && original_purchase.present?
+    if charge.is_upgrade_purchase? && !charge.stripe_refunded? && !charge.chargedback_not_reversed? && original_purchase.present?
       original_purchase.displayed_price_cents
     else
       charge.displayed_price_cents
