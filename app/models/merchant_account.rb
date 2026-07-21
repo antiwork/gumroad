@@ -17,6 +17,7 @@ class MerchantAccount < ApplicationRecord
   attr_json_data_accessor :unclaimed_balance_collection_transfer_id
   attr_json_data_accessor :stripe_disabled_reason
   attr_json_data_accessor :stripe_payouts_pause_email_sent
+  attr_json_data_accessor :stripe_payouts_pause_email_claim_token
   attr_json_data_accessor :stripe_rejection_email_sent
   # For Stripe Connect (direct-charge) accounts: a cached snapshot of the account's Stripe
   # capabilities. Charges for these sellers are created on their account, not Gumroad's platform

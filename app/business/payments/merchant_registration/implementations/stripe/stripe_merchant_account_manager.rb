@@ -21,6 +21,14 @@ module StripeMerchantAccountManager
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
 
+  # How long we wait before emailing a seller that Stripe paused their payouts.
+  # Stripe's periodic re-verification sweeps sometimes disable payouts and
+  # re-enable them minutes later; the internal pause is applied instantly
+  # (money safety), but the email waits out this window so a blip that resolves
+  # itself never alarms the seller. A genuine pause is still notified — just
+  # this much later, which is immaterial next to Stripe review timelines.
+  PAYOUTS_PAUSE_EMAIL_DEBOUNCE_DELAY = 30.minutes
+
   # Stripe intervention categories (the middle segment of an `interv_*`
   # requirement, e.g. `interv_XXX.rejection_appeal.support`) that mean the
   # seller is inside an appeal window. These are actionable: the webhook
@@ -40,7 +48,13 @@ module StripeMerchantAccountManager
   # Stripe re-enables payouts). Action-required is claimed on first notice or on
   # escalation from under-review; under-review only as the first notice. Updates
   # the marker (called inside the user lock) and returns the email type to
-  # enqueue after the lock commits, or nil.
+  # schedule after the lock commits, or nil.
+  #
+  # Each successful claim also rotates stripe_payouts_pause_email_claim_token.
+  # The scheduled StripePayoutsPausedEmailJob carries the token it was created
+  # with and only sends if it still matches, so a job left over from an earlier
+  # pause (or from an under-review notice that has since escalated to
+  # action-required) can never send a stale or duplicate email.
   def self.claim_stripe_payouts_pause_email(merchant_account, pause_email_type)
     case pause_email_type
     when :action_required
@@ -50,7 +64,10 @@ module StripeMerchantAccountManager
     else
       return nil
     end
-    merchant_account.update!(stripe_payouts_pause_email_sent: pause_email_type.to_s)
+    merchant_account.update!(
+      stripe_payouts_pause_email_sent: pause_email_type.to_s,
+      stripe_payouts_pause_email_claim_token: SecureRandom.uuid
+    )
     pause_email_type
   end
   private_class_method :claim_stripe_payouts_pause_email
@@ -1164,7 +1181,7 @@ module StripeMerchantAccountManager
             "Stripe re-enabled payouts on the connected account; payouts remain paused by the creator." :
             "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
         )
-        merchant_account.update!(stripe_payouts_pause_email_sent: nil) if merchant_account.stripe_payouts_pause_email_sent
+        merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil) if merchant_account.stripe_payouts_pause_email_sent
       elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         user.comments.create!(
@@ -1187,10 +1204,18 @@ module StripeMerchantAccountManager
     end
 
     case pause_email_to_send
-    when :action_required
-      MerchantRegistrationMailer.stripe_payouts_disabled(user.id).deliver_later
-    when :under_review
-      MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
+    when :action_required, :under_review
+      # Don't email immediately: schedule a delayed job that re-checks the
+      # account and only sends if payouts are still paused by Stripe, so a
+      # verification blip that auto-resolves inside the window never emails.
+      # The claim token ties the job to this specific pause episode.
+      StripePayoutsPausedEmailJob.perform_in(
+        PAYOUTS_PAUSE_EMAIL_DEBOUNCE_DELAY,
+        user.id,
+        merchant_account.id,
+        pause_email_to_send.to_s,
+        merchant_account.stripe_payouts_pause_email_claim_token
+      )
     end
 
     # A terminally rejected account is final, so don't open new verification
