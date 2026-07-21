@@ -92,7 +92,6 @@ class UrlRedirectPresenter
         terms_page_url: HomePageLinkService.terms,
         token: url_redirect.token,
         redirect_id: url_redirect.external_id,
-        creator:,
         installment: url_redirect.with_product_files.is_a?(Installment) ? {
           name: installment.name,
         } : nil,
@@ -273,15 +272,6 @@ class UrlRedirectPresenter
       return unless logged_in_user == url_redirect.seller && !url_redirect.with_product_files.has_been_transcoded?
 
       { transcode_on_first_sale: product&.transcode_videos_on_purchase.present? }
-    end
-
-    def creator
-      user = product&.user || installment&.seller
-      user&.name || user&.username ? {
-        name: user.name.presence || user.username,
-        profile_url: user.profile_url(recommended_by: "library"),
-        avatar_url: user.avatar_url
-      } : nil
     end
 
     def media_locations_by_file

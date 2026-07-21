@@ -167,7 +167,7 @@ const FileUploadMenu = ({
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
+  const { id, product, updateProduct, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -976,7 +976,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     </Card>
                     <EntityInfo
                       entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
-                      creator={seller}
                     />
                   </>
                 ) : null}
