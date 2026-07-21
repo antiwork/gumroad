@@ -348,8 +348,11 @@ class CustomerLowPriorityMailer < ApplicationMailer
     @unsub_link = user_unsubscribe_review_reminders_url if @purchase.purchaser
     @purchaser_name = @purchase.full_name.presence || @purchase.purchaser&.name&.presence
 
+    # For a bundle, the reminder is about reviewing the bundle itself, and the bundle's
+    # review form lives on its product page. The bundle's download page can't be used
+    # here because it redirects to the library, which has no review UI.
     @review_url = if @purchase.is_bundle_purchase?
-      library_url(bundles: @purchase.link.external_id)
+      @purchase.link.long_url
     else
       @purchase.url_redirect&.download_page_url || @purchase.link.long_url
     end

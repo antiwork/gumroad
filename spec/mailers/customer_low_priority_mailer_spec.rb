@@ -585,9 +585,9 @@ describe CustomerLowPriorityMailer do
     context "bundle purchase" do
       before { purchase.update!(is_bundle_purchase: true) }
 
-      it "uses the library bundle URL" do
+      it "links to the bundle's product page, where the bundle review form lives" do
         mail = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
-        expect(mail.body.encoded).to have_link("Leave a review", href: library_url(bundles: purchase.link.external_id))
+        expect(mail.body.encoded).to have_link("Leave a review", href: purchase.link.long_url)
       end
     end
 

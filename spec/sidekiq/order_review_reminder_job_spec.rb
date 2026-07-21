@@ -59,4 +59,31 @@ describe OrderReviewReminderJob do
         .once
     end
   end
+
+  context "bundle order" do
+    # A bundle checkout creates one order-level purchase for the bundle plus a child
+    # purchase per product inside it. Only the bundle purchase belongs to the order,
+    # so the buyer gets exactly one reminder pointing at the bundle review — not one
+    # reminder per bundled product.
+    let(:bundle_purchase) { create(:purchase, link: create(:product, :bundle)) }
+    let(:bundle_order) { create(:order, purchases: [bundle_purchase]) }
+
+    before do
+      # The top-level before stubs Order.find for the other order; restore real
+      # lookups here so the job loads the bundle order from the database.
+      allow(Order).to receive(:find).and_call_original
+      bundle_purchase.create_artifacts_and_send_receipt!
+    end
+
+    it "enqueues a single purchase review reminder for the bundle purchase" do
+      expect(bundle_purchase.eligible_for_review_reminder?).to eq(true)
+
+      expect do
+        described_class.new.perform(bundle_order.id)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        .with(bundle_purchase.id)
+        .on_queue(:low)
+        .once
+    end
+  end
 end

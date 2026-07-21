@@ -3417,7 +3417,6 @@ class Purchase < ApplicationRecord
   def eligible_for_review_reminder?
     purchase_state.in?(Purchase::COUNTS_REVIEWS_STATES) &&
     (is_original_subscription_purchase? || link.not_is_recurring_billing?) &&
-      not_is_bundle_purchase? &&
       product_review.blank? &&
       !chargedback_not_reversed_or_refunded? &&
       !seller&.disable_review_reminders? &&

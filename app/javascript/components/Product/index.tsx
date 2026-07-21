@@ -799,7 +799,7 @@ const ExistingPurchaseCard = ({
             </li>
           </CardContent>
         )}
-        {!isPreorder && !isBundle && allowRating ? (
+        {!isPreorder && allowRating ? (
           <ReviewForm
             permalink={permalink}
             purchaseId={purchase.id}
