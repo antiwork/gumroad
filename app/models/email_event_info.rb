@@ -20,6 +20,17 @@ class EmailEventInfo
       MailerInfo::EMAIL_PROVIDER_SENDGRID => "bounce",
       MailerInfo::EMAIL_PROVIDER_RESEND => "email.bounced"
     },
+    # SendGrid-only failure events. "blocked" = the receiving server
+    # rejected the message (often transiently); "dropped" = SendGrid didn't
+    # even attempt delivery, usually because the address is already on a
+    # suppression list. Both matter for retrying transient signup-
+    # confirmation failures (see HandleEmailEventInfo::ForSignupConfirmationEmail).
+    blocked: {
+      MailerInfo::EMAIL_PROVIDER_SENDGRID => "blocked"
+    },
+    dropped: {
+      MailerInfo::EMAIL_PROVIDER_SENDGRID => "dropped"
+    },
     delivered: {
       MailerInfo::EMAIL_PROVIDER_SENDGRID => "delivered",
       MailerInfo::EMAIL_PROVIDER_RESEND => "email.delivered"
@@ -42,15 +53,28 @@ class EmailEventInfo
   end
 
   TRACKED_EVENTS = {
-    MailerInfo::EMAIL_PROVIDER_SENDGRID => EVENTS.transform_values { |v| v[MailerInfo::EMAIL_PROVIDER_SENDGRID] },
-    MailerInfo::EMAIL_PROVIDER_RESEND => EVENTS.transform_values { |v| v[MailerInfo::EMAIL_PROVIDER_RESEND] }
+    # `compact` drops event types a provider doesn't emit (e.g. Resend has
+    # no separate blocked/dropped events) so `invert` can't map a missing
+    # provider event name to the wrong type.
+    MailerInfo::EMAIL_PROVIDER_SENDGRID => EVENTS.transform_values { |v| v[MailerInfo::EMAIL_PROVIDER_SENDGRID] }.compact,
+    MailerInfo::EMAIL_PROVIDER_RESEND => EVENTS.transform_values { |v| v[MailerInfo::EMAIL_PROVIDER_RESEND] }.compact
   }.freeze
 
   SUBSCRIPTION_INSTALLMENT_MAILER_METHOD = "subscription_installment"
   ABANDONED_CART_MAILER_METHOD = "abandoned_cart"
   CUSTOMER_MAILER = "CustomerMailer"
+  SIGNUP_CONFIRMATION_MAILER_CLASS = "UserSignupMailer"
+  SIGNUP_CONFIRMATION_MAILER_METHOD = "confirmation_instructions"
 
   attr_reader :mailer_method, :mailer_class, :installment_id, :click_url
+
+  # The SMTP reason string attached to failure events (bounce/blocked/
+  # dropped). Provider subclasses override this where the payload carries
+  # one; nil means "no reason available" and classifies as :unknown
+  # (fail-closed, no retry).
+  def reason
+    nil
+  end
 
   def click_url_as_mongo_key
     @_click_url_as_mongo_key ||= begin
@@ -78,6 +102,11 @@ class EmailEventInfo
   def for_abandoned_cart_email?
     mailer_class == CUSTOMER_MAILER &&
     mailer_method == ABANDONED_CART_MAILER_METHOD
+  end
+
+  def for_signup_confirmation_email?
+    mailer_class == SIGNUP_CONFIRMATION_MAILER_CLASS &&
+    mailer_method == SIGNUP_CONFIRMATION_MAILER_METHOD
   end
 
   private

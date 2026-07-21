@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2620,6 +2620,17 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000001) do
     t.index ["product_file_id"], name: "index_transcoded_videos_on_product_file_id"
     t.index ["streamable_type", "streamable_id"], name: "index_transcoded_videos_on_streamable"
     t.index ["transcoded_video_key"], name: "index_transcoded_videos_on_transcoded_video_key", length: 768
+  end
+
+  create_table "transient_email_failure_retries", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "email", null: false
+    t.string "mail_kind", null: false
+    t.integer "attempts", default: 0, null: false
+    t.boolean "retry_in_flight", default: false, null: false
+    t.text "last_reason"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["email", "mail_kind"], name: "index_transient_email_failure_retries_on_email_and_mail_kind", unique: true
   end
 
   create_table "upsell_purchases", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

@@ -3,7 +3,7 @@
 class SendgridEventInfo < EmailEventInfo
   attr_reader \
     :charge_id, :click_url, :email, :event_json, :installment_id, :mailer_args, :mailer_class_and_method,
-    :mailer_class, :mailer_method, :purchase_id, :type, :created_at
+    :mailer_class, :mailer_method, :purchase_id, :type, :created_at, :reason
 
   def initialize(event_json)
     @event_json = event_json
@@ -11,6 +11,10 @@ class SendgridEventInfo < EmailEventInfo
     @click_url = event_json["url"]
     @installment_id = event_json["installment_id"]
     @type = TRACKED_EVENTS[MailerInfo::EMAIL_PROVIDER_SENDGRID].invert[event_json["event"]]
+    # Failure events (bounce/blocked/dropped) carry the receiving server's
+    # SMTP response here, e.g. "550 5.1.1 user unknown" or "connection timed
+    # out". Used to classify transient vs hard failures.
+    @reason = event_json["reason"]
     @created_at = Time.zone.at(event_json["timestamp"]) if event_json.key?("timestamp")
     if event_json["type"].present? && event_json["identifier"].present?
       initialize_from_type_and_identifier_unique_args(event_json)
