@@ -66,59 +66,11 @@ describe("SalesChart projection overlay", () => {
     vi.useRealTimers();
   });
 
-  it("renders the dotted projection tick with finite coordinates for a daily range ending today", () => {
+  it("renders one faint projection bar behind today's actual bar, same x span, topping out above today's total", () => {
     // Fix "now" to mid-afternoon so the projection guardrails (first hour of the day,
     // completed day) don't suppress the overlay.
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-16T20:00:00Z")); // 4pm in America/New_York
-
-    const { container } = renderChart();
-
-    const projectedTick = container.querySelector("[data-testid='chart-projected-tick']");
-    expect(projectedTick).not.toBeNull();
-    expect(projectedTick?.getAttribute("stroke-dasharray")).toBe("2 2");
-
-    for (const attribute of ["x1", "x2", "y1", "y2"]) {
-      expect(Number.isFinite(Number(projectedTick?.getAttribute(attribute)))).toBe(true);
-    }
-    // The tick is horizontal (constant y) and has real width along x.
-    expect(Number(projectedTick?.getAttribute("y1"))).toBe(Number(projectedTick?.getAttribute("y2")));
-    expect(Number(projectedTick?.getAttribute("x2"))).toBeGreaterThan(Number(projectedTick?.getAttribute("x1")));
-    // The old vertical connector line and circle cap are gone.
-    expect(container.querySelector("[data-testid='chart-projection-line']")).toBeNull();
-    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
-
-    expectNoNaNAttributes(container);
-  });
-
-  it("anchors the tick at today's data point and renders exactly one tick", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-16T20:00:00Z"));
-
-    const { container } = renderChart();
-
-    // The invisible projectedTotals line calls the dot renderer for every data point,
-    // but only today's point carries a value — so exactly one tick may render.
-    const ticks = container.querySelectorAll("[data-testid='chart-projected-tick']");
-    expect(ticks.length).toBe(1);
-    const projectedTick = ticks[0];
-
-    // The tick must be horizontally centered on the totals line's last (today's) dot —
-    // this is the regression from #6048, where a stale coordinate snapshot let the tick
-    // drift left toward the first x-axis label on mobile.
-    const dots = container.querySelectorAll("[data-testid='chart-dot']");
-    const lastDot = dots[dots.length - 1];
-    expect(lastDot).toBeDefined();
-    const tickCenter = (Number(projectedTick?.getAttribute("x1")) + Number(projectedTick?.getAttribute("x2"))) / 2;
-    expect(tickCenter).toBeCloseTo(Number(lastDot?.getAttribute("cx")), 5);
-
-    // And it must sit above today's actual total (a projection is always higher).
-    expect(Number(projectedTick?.getAttribute("y1"))).toBeLessThan(Number(lastDot?.getAttribute("cy")));
-  });
-
-  it("renders one faint projection bar behind today's actual bar, same x span, topping out at the tick", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-16T20:00:00Z"));
 
     const { container } = renderChart();
 
@@ -152,13 +104,24 @@ describe("SalesChart projection overlay", () => {
       5,
     );
 
-    // Its top must sit at the projected total — the same y as the dotted tick — so the
-    // bar visually rises exactly to the projection marker.
-    const projectedTick = container.querySelector("[data-testid='chart-projected-tick']");
+    // Its top must sit above today's actual total on the money axis (a projection is
+    // always higher than the booked total), so the bar visibly rises past the line.
+    const dots = container.querySelectorAll("[data-testid='chart-dot']");
+    const lastDot = dots[dots.length - 1];
+    expect(lastDot).toBeDefined();
     const pathYValues = [...(projectedBar?.getAttribute("d") ?? "").matchAll(/,([\d.]+)/gu)].map((match) =>
       Number(match[1]),
     );
-    expect(Math.min(...pathYValues)).toBeCloseTo(Number(projectedTick?.getAttribute("y1")), 5);
+    expect(pathYValues.length).toBeGreaterThan(0);
+    expect(Math.min(...pathYValues)).toBeLessThan(Number(lastDot?.getAttribute("cy")));
+
+    // The earlier marker treatments are gone: no dotted tick, no vertical connector
+    // line, no circle cap (see #6048 — the tick rendered mispositioned on mobile).
+    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projection-line']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
+
+    expectNoNaNAttributes(container);
   });
 
   it("does not render the projection overlay on the monthly view", () => {
@@ -167,7 +130,6 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart({ aggregateBy: "monthly" });
 
-    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
     expect(container.querySelector("[data-testid='chart-projected-bar']")).toBeNull();
     expectNoNaNAttributes(container);
   });
@@ -178,7 +140,6 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart({ endDate: "Jul 10" });
 
-    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
     expect(container.querySelector("[data-testid='chart-projected-bar']")).toBeNull();
     expectNoNaNAttributes(container);
   });

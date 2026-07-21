@@ -64,42 +64,14 @@ type DataPoint = {
   projectedTotals?: number;
 };
 
-// Draws the projected end-of-day marker: a small, semi-transparent dotted horizontal
-// tick at the projected total, at today's x position. (An earlier version drew a
-// vertical dashed connector line capped with a circle; seller feedback found that too
-// visually busy, so it's now just the tick.) Rendered as the custom `dot` of the
-// invisible "projectedTotals" line, so recharts recomputes the tick's pixel
-// coordinates on every layout pass. (A previous version drew the tick through
-// recharts' `Customized` element using a snapshot of internal chart state, which on
-// mobile Safari could be a stale layout pass — the chart re-measures after the
-// initial render there — leaving the tick oversized and drifted toward the left
-// date label. See https://github.com/antiwork/gumroad/issues/6048.)
-const ProjectedTickDot = ({ key, cx, cy, value }: { key: string; cx?: number; cy?: number; value?: number }) => {
-  // The invisible line calls this for every data point; only today's point carries a
-  // projected value, so everything else renders nothing.
-  if (value == null || cx == null || cy == null || !Number.isFinite(cx) || !Number.isFinite(cy)) return <g key={key} />;
-  const tickHalfWidth = 6;
-  return (
-    <line
-      key={key}
-      x1={cx - tickHalfWidth}
-      x2={cx + tickHalfWidth}
-      y1={cy}
-      y2={cy}
-      stroke="rgb(var(--accent))"
-      strokeOpacity={0.5}
-      strokeWidth={2}
-      strokeDasharray="2 2"
-      data-testid="chart-projected-tick"
-    />
-  );
-};
-
-// Draws a faint accent-colored bar from the axis baseline up to the projected
-// end-of-day total, behind today's actual bar (same x position and width). The actual
-// day's numbers visibly climb toward the projection as the day progresses. Rendered as
-// a custom bar shape so we control the fill opacity and round only the top corners,
-// matching the real bars.
+// Draws the projected end-of-day marker: a faint accent-colored bar from the axis
+// baseline up to the projected total, behind today's actual bar (same x position and
+// width). The actual day's numbers visibly climb toward the projection as the day
+// progresses. (Earlier versions drew a dashed connector line with a circle cap, then
+// a small dotted tick — seller feedback found both too visually busy, and the tick
+// rendered mispositioned on mobile Safari; see
+// https://github.com/antiwork/gumroad/issues/6048.) Rendered as a custom bar shape so
+// we control the fill opacity and round only the top corners, matching the real bars.
 const ProjectedVolumeBar = ({ x, y, width, height }: { x?: number; y?: number; width?: number; height?: number }) => {
   if (
     x == null ||
@@ -294,19 +266,6 @@ export const SalesChart = ({
         ))}
       </Bar>
       <Line {...lineProps(dotRef, dataPoints.length)} dataKey="totals" yAxisId="totals" />
-      {/* Invisible series that carries the projected value: it extends the totals axis
-          domain (so the tick never lands above the plot area) and its custom dot draws
-          the projection tick itself at recharts' freshly-computed coordinates. */}
-      {projection ? (
-        <Line
-          dataKey="projectedTotals"
-          yAxisId="totals"
-          stroke="none"
-          dot={ProjectedTickDot}
-          activeDot={false}
-          isAnimationActive={false}
-        />
-      ) : null}
     </Chart>
   );
 };
