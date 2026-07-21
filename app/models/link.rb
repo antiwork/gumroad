@@ -1248,8 +1248,6 @@ class Link < ApplicationRecord
   end
 
   def support_email_or_default
-    return user.support_or_form_email unless user.product_level_support_emails_enabled?
-
     support_email || user.support_or_form_email
   end
 

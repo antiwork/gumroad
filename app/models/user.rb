@@ -559,8 +559,6 @@ class User < ApplicationRecord
   end
 
   def product_level_support_emails
-    return unless product_level_support_emails_enabled?
-
     products
       .where.not(support_email: nil)
       .pluck(:support_email, :id)

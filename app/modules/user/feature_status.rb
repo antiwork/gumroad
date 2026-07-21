@@ -91,10 +91,6 @@ class User
       is_today_gumroad_day || Feature.active?(:waive_gumroad_fee_on_new_sales, self)
     end
 
-    def product_level_support_emails_enabled?
-      Feature.active?(:product_level_support_emails, self)
-    end
-
     def tax_center_enabled?
       Feature.active?(:tax_center, self) && from_us?
     end

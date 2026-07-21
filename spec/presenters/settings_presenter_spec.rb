@@ -62,8 +62,6 @@ describe SettingsPresenter do
   end
 
   describe "#main_props" do
-    before { Feature.activate(:product_level_support_emails) }
-
     it "returns correct props" do
       expect(presenter.main_props).to eq(
         settings_pages: presenter.pages,
@@ -180,15 +178,6 @@ describe SettingsPresenter do
             product_ids: [product.external_id]
           }
         )
-      end
-    end
-
-    context "when product_level_support_emails feature is disabled" do
-      before { Feature.deactivate(:product_level_support_emails) }
-      before { product.update!(support_email: "support@example.com") }
-
-      it "returns nil for product_level_support_emails" do
-        expect(presenter.main_props[:user][:product_level_support_emails]).to be_nil
       end
     end
 

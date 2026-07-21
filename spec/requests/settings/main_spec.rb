@@ -293,8 +293,6 @@ describe("Main Settings Scenario", type: :system, js: true) do
     let(:email_2) { "support2@example.com" }
     let(:email_3) { "support3@example.com" }
 
-    before { Feature.activate(:product_level_support_emails) }
-
     it "allows adding new support emails" do
       visit settings_main_path
 
@@ -335,16 +333,6 @@ describe("Main Settings Scenario", type: :system, js: true) do
         find(:label, text: "Products").click
         # Product 1 is not available because it already has an email.
         expect(page).to have_combo_box "Products", options: ["Product 2"]
-      end
-    end
-
-    context "when product_level_support_emails feature is disabled" do
-      before { Feature.deactivate(:product_level_support_emails) }
-
-      it "does not show product level support email form" do
-        visit settings_main_path
-
-        expect(page).not_to have_button("Add a product specific email")
       end
     end
   end
