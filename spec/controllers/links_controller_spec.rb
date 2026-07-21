@@ -3862,6 +3862,15 @@ describe LinksController, :vcr, inertia: true do
           expect(response).to be_successful
           expect(inertia.props[:purchase]).to be_nil
         end
+
+        it "recognizes a review-eligible not_charged free trial purchase" do
+          trial_purchase = create(:free_trial_membership_purchase)
+
+          get :show, params: { id: trial_purchase.link.to_param, purchase_id: trial_purchase.external_id, purchase_email_digest: trial_purchase.email_digest }
+
+          expect(response).to be_successful
+          expect(inertia.props[:purchase][:id]).to eq(trial_purchase.external_id)
+        end
       end
 
       describe "meta tags sanitization" do

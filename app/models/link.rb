@@ -1386,10 +1386,17 @@ class Link < ApplicationRecord
     # email for that purchase without requiring them to be signed in. Mirrors the
     # authorization check in ProductReviewsController#set. Uses secure_compare so the
     # digest comparison isn't vulnerable to timing attacks.
+    #
+    # The accepted purchase states must match the review-eligibility states
+    # (Purchase::COUNTS_REVIEWS_STATES, minus not_charged purchases that aren't free
+    # trials) — the reminder email is only sent to purchases that can leave a review,
+    # so any purchase the reminder links here must also be recognized here. Otherwise a
+    # buyer (e.g. on a free-trial "not_charged" purchase) would follow the reminder link
+    # and land on the product page with no review form.
     def purchase_for_email_digest(purchase_id, purchase_email_digest)
       return nil if purchase_id.blank? || purchase_email_digest.blank?
 
-      purchase = sales.successful_gift_or_nongift.not_fully_refunded.not_chargedback.find_by_external_id(purchase_id)
+      purchase = sales.where(purchase_state: Purchase::COUNTS_REVIEWS_STATES).exclude_not_charged_except_free_trial.not_fully_refunded.not_chargedback.find_by_external_id(purchase_id)
       return nil unless purchase&.email_digest.present?
       return nil unless ActiveSupport::SecurityUtils.secure_compare(purchase.email_digest, purchase_email_digest.to_s)
 
