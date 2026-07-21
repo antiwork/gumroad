@@ -33,7 +33,7 @@ const STICK_TO_BOTTOM_THRESHOLD_PX = 200;
 // After a stream breaks, how often to ask the server what became of the turn (identified by the
 // client-generated turn id sent with the stream request), and how long to keep asking. The server
 // tracks the turn's liveness while generating (its model client tolerates up to 120 seconds of
-// silence between chunks, across up to 5 tool iterations), so recovery keeps polling as long as
+// silence between chunks, across up to 25 tool iterations), so recovery keeps polling as long as
 // the server says "in_progress" — a fixed short deadline would abandon turns the server goes on
 // to finish. The hard cap only guards against a marker that never resolves.
 const TURN_RECOVERY_POLL_INTERVAL_MS = 3000;
@@ -45,6 +45,54 @@ const TURN_RECOVERY_MAX_CONSECUTIVE_UNKNOWNS = 2;
 // Consecutive failed status fetches tolerated before giving up — the same flaky network that
 // broke the stream may still be down, so this is more generous than the unknown allowance.
 const TURN_RECOVERY_MAX_CONSECUTIVE_FETCH_FAILURES = 10;
+// When recovery gives up without a server verdict ("inconclusive"), the stream's connection is
+// deliberately left open — the turn may still be generating, and aborting would kill it. These
+// pace the background watch that keeps checking the turn's fate (more slowly than recovery)
+// purely to release that connection once a verdict makes dropping it safe, so abandoned
+// connections don't accumulate for the life of the page.
+const ABANDONED_TURN_WATCH_INTERVAL_MS = 15_000;
+const ABANDONED_TURN_WATCH_MAX_POLLS = 60;
+const ABANDONED_TURN_WATCH_MAX_CONSECUTIVE_UNKNOWNS = 2;
+
+// Cleanup-only watcher for a turn whose recovery ended inconclusively. It never touches the chat
+// — adopting a turn this late would race whatever the seller did next — its only job is to abort
+// the abandoned stream connection once the server records a verdict ("persisted"/"failed"),
+// which is the only evidence that makes the abort safe. When the watch stops WITHOUT a verdict
+// (persistent unknowns, or the poll cap with the turn still in progress) it deliberately does
+// not abort: "unknown" almost always means the server died — and then its end of the socket is
+// already closed, so the browser reclaims the connection without our help — but a server build
+// without heartbeat refreshes can look identical while still generating, and an abort would kill
+// that turn. The remaining truly-held connection (a turn alive past the cap) is bounded by the
+// page's lifetime.
+const watchAbandonedTurn = async (clientTurnId: string, streamAbort: AbortController): Promise<void> => {
+  let consecutiveUnknowns = 0;
+  for (let poll = 0; poll < ABANDONED_TURN_WATCH_MAX_POLLS; poll++) {
+    await new Promise((resolve) => setTimeout(resolve, ABANDONED_TURN_WATCH_INTERVAL_MS));
+    let turn: AgentTurnStatus;
+    try {
+      turn = await fetchAgentTurnStatus(clientTurnId);
+    } catch {
+      // The network may still be down — keep watching until the cap.
+      continue;
+    }
+    switch (turn.status) {
+      case "persisted":
+      case "failed":
+        // Terminal: the turn's outcome is recorded, so dropping the connection can't hurt it.
+        streamAbort.abort();
+        return;
+      case "in_progress":
+        consecutiveUnknowns = 0;
+        continue;
+      case "unknown":
+        // No record, no liveness marker: nothing left to wait for — but not a verdict either,
+        // so stop watching without aborting (see the comment above).
+        consecutiveUnknowns += 1;
+        if (consecutiveUnknowns >= ABANDONED_TURN_WATCH_MAX_CONSECUTIVE_UNKNOWNS) return;
+        continue;
+    }
+  }
+};
 
 // A UUID v4 for tagging a streamed turn. `crypto.randomUUID` only exists in secure contexts
 // (HTTPS or localhost), and the app also runs on plain-HTTP origins (system tests, local dev on
@@ -445,9 +493,18 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   // as the server reports the turn in progress: the server allows long silent stretches between
   // model chunks, so a completed reply can persist well after the stream broke. When the turn is
   // recovered, replaces the partially-rendered assistant message with the persisted one (including
-  // its proposed-action card and object cards) and adopts the conversation id. Returns whether the
-  // turn was recovered; when it wasn't, the caller falls back to the normal error handling.
-  const recoverInterruptedTurn = async (clientTurnId: string, assistantIndex: number): Promise<boolean> => {
+  // its proposed-action card and object cards) and adopts the conversation id.
+  //
+  // The outcome distinguishes how sure we are, because the caller acts on it twice over:
+  //   recovered    -> the persisted turn was adopted; nothing to surface
+  //   failed       -> the server's own verdict: this turn will never persist
+  //   inconclusive -> recovery gave up (unknowns, fetch failures, poll cap) without a server
+  //                   verdict — the turn MAY still be generating
+  // For anything but "recovered" the caller falls back to the normal error handling; but only a
+  // terminal outcome ("recovered"/"failed") makes it safe to tear down the abandoned stream
+  // connection — after "inconclusive", an abort could kill a turn that is still being generated.
+  type RecoveryOutcome = "recovered" | "failed" | "inconclusive";
+  const recoverInterruptedTurn = async (clientTurnId: string, assistantIndex: number): Promise<RecoveryOutcome> => {
     const adopt = (turn: Extract<AgentTurnStatus, { status: "persisted" }>) => {
       setMessages((prev) => {
         const next = [...prev];
@@ -473,31 +530,32 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         // The same flaky network that broke the stream may fail this fetch too — keep trying for
         // a while before concluding anything.
         consecutiveFetchFailures += 1;
-        if (consecutiveFetchFailures >= TURN_RECOVERY_MAX_CONSECUTIVE_FETCH_FAILURES) return false;
+        if (consecutiveFetchFailures >= TURN_RECOVERY_MAX_CONSECUTIVE_FETCH_FAILURES) return "inconclusive";
         continue;
       }
       consecutiveFetchFailures = 0;
       switch (turn.status) {
         case "persisted":
           adopt(turn);
-          return true;
+          return "recovered";
         case "failed":
           // The server's verdict: this turn errored and will never persist. Stop immediately.
-          return false;
+          return "failed";
         case "in_progress":
           // The server is still generating — keep waiting, however long it takes; its own
           // liveness marker (not a client-side deadline) decides when the turn is dead.
           consecutiveUnknowns = 0;
           continue;
         case "unknown":
-          // No stored turn and no liveness marker. Conclusive unless it's a transient blip, so
-          // allow a couple of confirming looks before giving up.
+          // No stored turn and no liveness marker. Normally conclusive, but a Redis blip (or a
+          // server build without heartbeat refreshes) can produce it spuriously — so give up on
+          // waiting, but don't report it as a server verdict.
           consecutiveUnknowns += 1;
-          if (consecutiveUnknowns >= TURN_RECOVERY_MAX_CONSECUTIVE_UNKNOWNS) return false;
+          if (consecutiveUnknowns >= TURN_RECOVERY_MAX_CONSECUTIVE_UNKNOWNS) return "inconclusive";
           continue;
       }
     }
-    return false;
+    return "inconclusive";
   };
 
   const send = async (text: string) => {
@@ -553,6 +611,16 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         return next;
       });
 
+    // Handle for tearing down the stream's connection once the turn's fate is known. It matters
+    // for the stalled-connection case: the stream's inactivity timeout abandons (rather than
+    // cancels) a read that will never resolve, leaving the connection held open — abandoning is
+    // deliberate, since cancelling a connection the server is still writing to would abort and
+    // fail a healthy turn. The abort below fires only on a terminal outcome (the stream resolved
+    // or errored, or recovery reached a server verdict); after an inconclusive recovery the
+    // connection is left alone, because the server may still be generating on it.
+    const streamAbort = new AbortController();
+    let turnSettled = false;
+
     const handlers: AgentStreamHandlers = {
       onToken: (chunk) => {
         setIsStreaming(true);
@@ -571,7 +639,14 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     };
 
     try {
-      const result = await streamAgentMessage(history, handlers, conversationIdRef.current, clientTurnId);
+      const result = await streamAgentMessage(
+        history,
+        handlers,
+        conversationIdRef.current,
+        clientTurnId,
+        streamAbort.signal,
+      );
+      turnSettled = true;
       if (result.conversationId) setConversationId(result.conversationId);
       // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
       // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
@@ -594,9 +669,20 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       // without noticing the client stopped receiving — so the truncated text on screen
       // misrepresents a reply that exists (or will exist) in full server-side. Recover this exact
       // turn by its id before treating this as a failure. Server-reported errors (`error` events)
-      // skip this: those turns were never saved.
-      const recovered =
-        e instanceof AgentStreamInterruptedError && (await recoverInterruptedTurn(clientTurnId, assistantIndex));
+      // skip this: those turns were never saved, and the server already closed the stream, so the
+      // turn counts as settled.
+      let recovered = false;
+      if (e instanceof AgentStreamInterruptedError) {
+        const outcome = await recoverInterruptedTurn(clientTurnId, assistantIndex);
+        recovered = outcome === "recovered";
+        turnSettled = outcome !== "inconclusive";
+        // Recovery couldn't tell what became of the turn, so the `finally` below leaves its
+        // connection open (aborting could kill a turn still being generated). Hand the cleanup to
+        // the background watch, which releases the connection once the turn's fate is known.
+        if (!turnSettled) void watchAbandonedTurn(clientTurnId, streamAbort);
+      } else {
+        turnSettled = true;
+      }
       if (!recovered) {
         showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
         setMessages((prev) => {
@@ -609,6 +695,13 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         });
       }
     } finally {
+      // Tear down whatever the stall timeout abandoned only when the turn's fate is known —
+      // completed, recovered, or a server "failed" verdict. On a cleanly finished stream this is
+      // a no-op; on a stalled one it releases the held connection. After an inconclusive recovery
+      // the connection is deliberately left open: the server may still be generating on it, and
+      // an abort would raise ClientDisconnected there and kill a turn that could yet persist —
+      // the background watch started above releases it later instead.
+      if (turnSettled) streamAbort.abort();
       setIsSending(false);
       setIsStreaming(false);
     }

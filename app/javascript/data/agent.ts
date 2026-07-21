@@ -226,8 +226,20 @@ type DoneData = {
   conversation_id?: string;
 };
 
-// Thrown when the stream dies before its terminal `done` frame — the connection dropped or a
-// frame arrived mangled — as opposed to the server explicitly reporting a failure via an `error`
+// How long to wait for the next stream bytes before treating the connection as dead. The server
+// commits the response immediately and writes a keepalive comment every 15 seconds for as long as
+// the turn is being generated (real events can be minutes apart on tool-heavy turns), so a
+// healthy connection is never silent anywhere near this long. The value also stays above the
+// 120 seconds of model silence the server itself tolerates between chunks, which keeps the
+// timeout safe even against a server build that predates the heartbeats (deploy skew). Erring
+// high is cheap anyway: a timeout that fires on a turn the server is in fact still generating
+// lands in the same turn-status recovery, which keeps waiting while the server reports it in
+// progress.
+const STREAM_INACTIVITY_TIMEOUT_MS = 130_000;
+
+// Thrown when the stream dies before its terminal `done` frame — the connection dropped, a
+// frame arrived mangled, or the connection went silent past the inactivity timeout — as opposed
+// to the server explicitly reporting a failure via an `error`
 // event. The distinction matters to the caller: when the transport breaks, the server usually
 // never notices and finishes the turn anyway (its remaining writes land in dead socket buffers),
 // so the complete reply exists in the stored conversation and the caller can recover it from
@@ -241,22 +253,64 @@ export class AgentStreamInterruptedError extends ResponseError {}
 // `clientTurnId` (a caller-generated UUID) tags the turn server-side so that, after an
 // interruption, the caller can recover this exact turn via fetchAgentTurnStatus instead of
 // guessing from the seller's latest conversation.
+// `abortSignal` lets the caller tear down the underlying connection once the turn has settled.
+// It exists for the stalled-connection case: the inactivity timeout below abandons (rather than
+// cancels) a pending read, so without an abort the connection would be held open indefinitely.
+// The caller should abort only AFTER the turn reaches a terminal state — the stream resolved,
+// errored, or turn-status recovery finished — never while the server may still be generating
+// (aborting then raises ClientDisconnected server-side, which aborts and fails the turn).
 export const streamAgentMessage = async (
   messages: ChatMessage[],
   handlers: AgentStreamHandlers = {},
   conversationId?: string | null,
   clientTurnId?: string | null,
+  abortSignal?: AbortSignal,
 ): Promise<StreamResult> => {
-  const response = await request({
-    method: "POST",
-    accept: "json",
-    url: Routes.internal_agent_messages_stream_path(),
-    data: {
-      messages,
-      ...(conversationId ? { conversation_id: conversationId } : {}),
-      ...(clientTurnId ? { client_turn_id: clientTurnId } : {}),
-    },
-  });
+  // Guards every await on the connection — the initial fetch below and each body read later.
+  // Neither resolves on its own when the connection silently dies: a fetch awaiting response
+  // headers (the server holds them until its first stream write) and a read awaiting more bytes
+  // can both sit pending forever (observed locally: the server logs the request complete, the
+  // trailing frames never surface, and nothing settles — leaving the composer locked with no
+  // error to recover from). The race turns that silence into an interruption, which sends the
+  // caller into turn-status recovery instead of hanging.
+  //
+  // When the clock wins, the pending promise is abandoned rather than cancelled — deliberately.
+  // Cancelling tears the connection down, and if the server is in fact still generating, its next
+  // write raises ClientDisconnected, aborting the turn and marking it failed — a slow-but-healthy
+  // turn would be lost for good. Abandoned, a healthy server finishes and persists the turn, and
+  // recovery adopts it. Releasing the connection is then the caller's job, via `abortSignal`,
+  // once the turn has settled (see the function comment above).
+  const withInactivityTimeout = async <T>(promise: Promise<T>): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new AgentStreamInterruptedError()), STREAM_INACTIVITY_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([promise, timeout]);
+    } catch (e) {
+      // An abandoned promise can still settle later — typically rejecting when the caller aborts
+      // the connection after recovery. Nothing is waiting on it anymore, so swallow that rejection
+      // rather than letting it surface as an unhandled promise rejection.
+      promise.catch(() => {});
+      throw e;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
+  const response = await withInactivityTimeout(
+    request({
+      method: "POST",
+      accept: "json",
+      url: Routes.internal_agent_messages_stream_path(),
+      abortSignal,
+      data: {
+        messages,
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+        ...(clientTurnId ? { client_turn_id: clientTurnId } : {}),
+      },
+    }),
+  );
 
   // request() only rejects 5xx/429, so a 4xx or an HTML response from auth/CSRF/authorization
   // middleware arrives here as a non-stream body. Treat anything that isn't an event-stream as an
@@ -338,7 +392,7 @@ export const streamAgentMessage = async (
 
   try {
     for (;;) {
-      const { value, done: streamDone } = await reader.read();
+      const { value, done: streamDone } = await withInactivityTimeout(reader.read());
       if (streamDone) break;
       buffer += decoder.decode(value, { stream: true });
       // Frames are separated by a blank line. Process every complete frame, keep the remainder.
@@ -349,6 +403,10 @@ export const streamAgentMessage = async (
         if (frame.trim().length > 0) done = handleFrame(frame) ?? done;
         separator = buffer.indexOf("\n\n");
       }
+      // `done` is the terminal frame — the server writes nothing meaningful after it. Return the
+      // assembled turn now rather than draining to EOF, so a connection whose close never reaches
+      // the client can't hold a finished turn hostage until the inactivity timeout.
+      if (done) return done;
     }
     if (buffer.trim().length > 0) done = handleFrame(buffer) ?? done;
   } catch (e) {

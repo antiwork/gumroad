@@ -43,6 +43,13 @@ const sentClientTurnId = () => {
   return call?.[3];
 };
 
+// The abort signal streamAgentMessage was called with. Aborting it is how the chat releases a
+// connection the stream's stall timeout abandoned — allowed only once the turn's fate is known.
+const sentAbortSignal = () => {
+  const call = streamAgentMessage.mock.calls[streamAgentMessage.mock.calls.length - 1];
+  return call?.[4];
+};
+
 const interruptedStream = () =>
   streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
     handlers.onToken?.("Your bio currently has thr");
@@ -107,6 +114,7 @@ describe("AgentChat streamed reply reconciliation", () => {
         expect.anything(),
         "conv1",
         expect.any(String),
+        expect.any(AbortSignal),
       ),
     );
   });
@@ -135,6 +143,8 @@ describe("AgentChat streamed reply reconciliation", () => {
     // the "stale proposal from a previous session" dismissed state hydration uses.
     expect(screen.getByText("Confirm")).toBeTruthy();
     expect(screen.getByText("Dismiss")).toBeTruthy();
+    // The turn is recovered — terminal — so the abandoned connection is released.
+    expect(sentAbortSignal()?.aborted).toBe(true);
   });
 
   it("keeps polling while the server reports the turn in progress, then recovers it", async () => {
@@ -181,6 +191,8 @@ describe("AgentChat streamed reply reconciliation", () => {
     expect(fetchAgentTurnStatus).toHaveBeenCalledTimes(1);
     // The partial text that did stream is kept, exactly as before.
     expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
+    // "failed" is a server verdict, so any connection the stall timeout abandoned is released.
+    expect(sentAbortSignal()?.aborted).toBe(true);
   });
 
   it("gives up after consecutive unknown statuses when the turn was never persisted", async () => {
@@ -200,6 +212,31 @@ describe("AgentChat streamed reply reconciliation", () => {
 
       expect(showAlert).toHaveBeenCalled();
       expect(fetchAgentTurnStatus).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
+      // "unknown" is a give-up, not a server verdict — the turn may still be generating, so the
+      // abandoned connection must NOT be aborted yet (that could kill a turn that would yet
+      // persist).
+      expect(sentAbortSignal()?.aborted).toBe(false);
+
+      // The background watch takes over the cleanup, but "unknown" is still not a verdict — after
+      // its first slow poll the connection must remain untouched.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      expect(sentAbortSignal()?.aborted).toBe(false);
+
+      // Once the server records a verdict (the turn persisted after all), the watch releases the
+      // connection — without adopting the late turn into the chat, which has moved on.
+      fetchAgentTurnStatus.mockResolvedValue({
+        status: "persisted",
+        conversation_id: "conv1",
+        message: { role: "assistant", content: PERSISTED_REPLY },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      expect(sentAbortSignal()?.aborted).toBe(true);
+      expect(screen.queryByText(PERSISTED_REPLY)).toBeNull();
       expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
     } finally {
       vi.useRealTimers();
