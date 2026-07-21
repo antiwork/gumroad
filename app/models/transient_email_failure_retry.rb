@@ -36,4 +36,15 @@ class TransientEmailFailureRetry < ApplicationRecord
   def stale?
     updated_at <= ATTEMPTS_WINDOW.ago
   end
+
+  # A retry claim (retry_in_flight = true) normally lasts at most the longest
+  # backoff delay before the job runs and clears it. If the claim is older
+  # than that (plus generous slack for queue latency), the scheduled job was
+  # lost — e.g. the process died after saving the claim but before enqueuing —
+  # and holding the claim would block retries for this address forever.
+  CLAIM_EXPIRY = BACKOFF_SCHEDULE.last + 6.hours
+
+  def claim_expired?
+    retry_in_flight? && updated_at <= CLAIM_EXPIRY.ago
+  end
 end

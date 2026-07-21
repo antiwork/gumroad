@@ -53,6 +53,29 @@ describe HandleEmailEventInfo::ForSignupConfirmationEmail do
 
         expect(RetryTransientEmailFailureJob.jobs).to be_empty
       end
+
+      it "releases an expired in-flight claim and schedules a retry (lost-job recovery)" do
+        retry_record = TransientEmailFailureRetry.create!(
+          email:, mail_kind: TransientEmailFailureRetry::SIGNUP_CONFIRMATION, attempts: 1, retry_in_flight: true
+        )
+        retry_record.update_column(:updated_at, (TransientEmailFailureRetry::CLAIM_EXPIRY + 1.hour).ago)
+
+        HandleSendgridEventJob.new.perform(sendgrid_params)
+
+        expect(retry_record.reload.retry_in_flight).to eq(true)
+        expect(RetryTransientEmailFailureJob).to have_enqueued_sidekiq_job(retry_record.id).in(2.hours)
+      end
+
+      it "releases the claim and re-raises when enqueuing the retry job fails" do
+        allow(RetryTransientEmailFailureJob).to receive(:perform_in).and_raise(RedisClient::CannotConnectError)
+
+        expect do
+          HandleSendgridEventJob.new.perform(sendgrid_params)
+        end.to raise_error(RedisClient::CannotConnectError)
+
+        retry_record = TransientEmailFailureRetry.last
+        expect(retry_record.retry_in_flight).to eq(false)
+      end
     end
 
     context "when a signup confirmation email is blocked with a transient reason" do

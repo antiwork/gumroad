@@ -71,6 +71,17 @@ describe RetryTransientEmailFailureJob do
       end.to have_enqueued_mail(UserSignupMailer, :confirmation_instructions).with { |mail_record, *| expect(mail_record).to eq(confirmed_user) }
     end
 
+    it "does not resend when no in-flight claim exists (e.g. a Sidekiq re-run after a completed attempt)" do
+      retry_record.update!(retry_in_flight: false, attempts: 1)
+
+      expect(EmailSuppressionManager).not_to receive(:new)
+      expect do
+        described_class.new.perform(retry_record.id)
+      end.not_to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+
+      expect(retry_record.reload.attempts).to eq(1)
+    end
+
     it "does nothing when the retry record no longer exists" do
       expect do
         described_class.new.perform(-1)

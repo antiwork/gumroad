@@ -41,13 +41,30 @@ class RetryTransientEmailFailureJob
         return
       end
 
+      # Record the attempt BEFORE sending, in one atomic UPDATE guarded on
+      # the in-flight flag. This makes the resend at-most-once per scheduled
+      # retry: if this job crashes after sending and Sidekiq re-runs it, the
+      # guard matches zero rows and we don't send a duplicate. The atomic
+      # increment also means concurrent runs can never lose a count. The
+      # trade-off (crash between this update and the send means that attempt
+      # sends nothing) is the safe direction — the provider posts a fresh
+      # failure event for a genuinely undelivered email, which schedules the
+      # next attempt.
+      claimed = TransientEmailFailureRetry
+        .where(id: retry_record.id, retry_in_flight: true)
+        .update_all(["attempts = attempts + 1, retry_in_flight = false, updated_at = ?", Time.current])
+      if claimed.zero?
+        log("skipping resend for #{retry_record.email}: retry already handled (no in-flight claim)")
+        return
+      end
+      retry_record.reload
+
       # Unsuppress before re-sending, or SendGrid silently drops the send.
       # Only the deliverability lists — never spam_reports or unsubscribes.
       EmailSuppressionManager.new(retry_record.email).remove_from_lists([:bounces, :blocks])
 
       user.send_confirmation_instructions
 
-      retry_record.update!(attempts: retry_record.attempts + 1, retry_in_flight: false)
       log("re-sent signup confirmation to #{retry_record.email} (attempt #{retry_record.attempts}/#{TransientEmailFailureRetry::MAX_ATTEMPTS}, last failure: #{retry_record.last_reason.inspect})")
     end
 

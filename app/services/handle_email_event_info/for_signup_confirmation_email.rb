@@ -53,33 +53,58 @@ class HandleEmailEventInfo::ForSignupConfirmationEmail
       return
     end
 
-    retry_record = TransientEmailFailureRetry.find_or_initialize_by(
+    # create_or_find_by! leans on the unique (email, mail_kind) index so two
+    # webhook workers racing on the same address both end up with the same
+    # row instead of one of them raising RecordNotUnique.
+    retry_record = TransientEmailFailureRetry.create_or_find_by!(
       email: email_event_info.email,
       mail_kind: TransientEmailFailureRetry::SIGNUP_CONFIRMATION
     )
 
-    # An old exhausted record shouldn't block retries forever — the cap is
-    # per address per week, not once-ever.
-    retry_record.assign_attributes(attempts: 0, retry_in_flight: false) if retry_record.persisted? && retry_record.stale?
+    delay = nil
+    # The guard-then-claim sequence below must be atomic: without the row
+    # lock, two workers processing duplicate failure events could both see
+    # retry_in_flight = false, both pass the guards, and both schedule a
+    # retry — double-sending the confirmation and over-counting attempts.
+    retry_record.with_lock do
+      # An old exhausted record shouldn't block retries forever — the cap is
+      # per address per week, not once-ever.
+      retry_record.assign_attributes(attempts: 0, retry_in_flight: false) if retry_record.stale?
 
-    if retry_record.retry_in_flight?
-      # A retry is already scheduled; providers can post several failure
-      # events for the same send, and we only want one retry per failure.
-      log("retry already scheduled for #{email_event_info.email}, ignoring duplicate #{email_event_info.type} event")
-      return
+      # A claim can be left dangling if the process died between saving the
+      # claim and enqueuing the job. Claims older than the longest possible
+      # backoff (plus slack) can't correspond to a live scheduled job, so
+      # release them rather than blocking retries for this address forever.
+      retry_record.retry_in_flight = false if retry_record.claim_expired?
+
+      if retry_record.retry_in_flight?
+        # A retry is already scheduled; providers can post several failure
+        # events for the same send, and we only want one retry per failure.
+        log("retry already scheduled for #{email_event_info.email}, ignoring duplicate #{email_event_info.type} event")
+        next
+      end
+
+      if retry_record.attempts_exhausted?
+        log("retries exhausted for #{email_event_info.email} (#{retry_record.attempts} attempts), leaving suppression in place")
+        next
+      end
+
+      delay = retry_record.backoff_delay
+      retry_record.last_reason = email_event_info.reason.to_s.first(1000)
+      retry_record.retry_in_flight = true
+      retry_record.save!
     end
+    return if delay.nil?
 
-    if retry_record.attempts_exhausted?
-      log("retries exhausted for #{email_event_info.email} (#{retry_record.attempts} attempts), leaving suppression in place")
-      return
+    begin
+      RetryTransientEmailFailureJob.perform_in(delay, retry_record.id)
+    rescue => e
+      # The claim was saved but no job exists (e.g. Redis was down). Release
+      # the claim so the webhook retry — or the provider's next failure
+      # event — can schedule the retry instead of treating it as a duplicate.
+      retry_record.update!(retry_in_flight: false)
+      raise e
     end
-
-    delay = retry_record.backoff_delay
-    retry_record.last_reason = email_event_info.reason.to_s.first(1000)
-    retry_record.retry_in_flight = true
-    retry_record.save!
-
-    RetryTransientEmailFailureJob.perform_in(delay, retry_record.id)
     log("scheduled retry ##{retry_record.attempts + 1} in #{delay.inspect} for #{email_event_info.email} (reason: #{retry_record.last_reason.inspect})")
   end
 
