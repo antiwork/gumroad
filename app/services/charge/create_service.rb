@@ -85,19 +85,13 @@ class Charge::CreateService
     yield
   rescue BuyerCurrencyQuoteInvalid => e
     logger.info "Buyer currency quote error: #{e.message} in charge: #{charge.external_id}"
-    purchases.each do |purchase|
-      purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
-      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
-    end
+    mark_purchases_buyer_currency_quote_invalid
     nil
   rescue ChargeProcessorFxQuoteInvalidError => e
     # Stripe drift-invalidates a quote before lock_expires_at when the market rate moves
     # beyond its tolerance; the buyer must re-quote, not be charged a different amount.
     logger.info "Buyer currency quote invalidated by Stripe: #{e.message} in charge: #{charge.external_id}"
-    purchases.each do |purchase|
-      purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
-      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
-    end
+    mark_purchases_buyer_currency_quote_invalid
     nil
   rescue ChargeProcessorInvalidRequestError => e
     # Stripe can reject the settlement-currency mismatch at PaymentIntent create time too,
@@ -112,10 +106,7 @@ class Charge::CreateService
     if e.message.to_s.match?(StripeFxQuote::SETTLEMENT_MISMATCH_MESSAGE)
       record_settlement_currency_mismatch
       logger.info "Buyer currency settlement mismatch at intent create: #{e.message} in charge: #{charge.external_id}"
-      purchases.each do |purchase|
-        purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
-        purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
-      end
+      mark_purchases_buyer_currency_quote_invalid
       return nil
     end
 
@@ -207,6 +198,13 @@ class Charge::CreateService
       PurchaseErrorCode::STRIPE_UNAVAILABLE
     else
       PurchaseErrorCode::PAYPAL_UNAVAILABLE
+    end
+  end
+
+  def mark_purchases_buyer_currency_quote_invalid
+    purchases.each do |purchase|
+      purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     end
   end
 
