@@ -1,0 +1,260 @@
+diff --git a/node_modules/epubjs/src/archive.js b/node_modules/epubjs/src/archive.js
+index 15b3835..ae3bdb7 100644
+--- a/node_modules/epubjs/src/archive.js
++++ b/node_modules/epubjs/src/archive.js
+@@ -13,6 +13,7 @@ class Archive {
+ 	constructor() {
+ 		this.zip = undefined;
+ 		this.urlCache = {};
++		this.destroyed = false;
+ 
+ 		this.checkRequirements();
+ 
+@@ -80,7 +81,9 @@ class Archive {
+ 			response.then(function (r) {
+ 				let result = this.handleResponse(r, type);
+ 				deferred.resolve(result);
+-			}.bind(this));
++			}.bind(this), function (error) {
++				deferred.reject(error);
++			});
+ 		} else {
+ 			deferred.reject({
+ 				message : "File not found in the epub: " + url,
+@@ -198,10 +201,14 @@ class Archive {
+ 			if (response) {
+ 				response.then(function(tempUrl) {
+ 
+-					this.urlCache[url] = tempUrl;
++					if (!this.destroyed) {
++						this.urlCache[url] = tempUrl;
++					}
+ 					deferred.resolve(tempUrl);
+ 
+-				}.bind(this));
++				}.bind(this), function (error) {
++					deferred.reject(error);
++				});
+ 
+ 			}
+ 
+@@ -213,10 +220,16 @@ class Archive {
+ 				response.then(function(blob) {
+ 
+ 					tempUrl = _URL.createObjectURL(blob);
+-					this.urlCache[url] = tempUrl;
++					if (this.destroyed) {
++						_URL.revokeObjectURL(tempUrl);
++					} else {
++						this.urlCache[url] = tempUrl;
++					}
+ 					deferred.resolve(tempUrl);
+ 
+-				}.bind(this));
++				}.bind(this), function (error) {
++					deferred.reject(error);
++				});
+ 
+ 			}
+ 		}
+@@ -244,8 +257,9 @@ class Archive {
+ 
+ 	destroy() {
+ 		var _URL = window.URL || window.webkitURL || window.mozURL;
++		this.destroyed = true;
+ 		for (let fromCache in this.urlCache) {
+-			_URL.revokeObjectURL(fromCache);
++			_URL.revokeObjectURL(this.urlCache[fromCache]);
+ 		}
+ 		this.zip = undefined;
+ 		this.urlCache = {};
+diff --git a/node_modules/epubjs/src/managers/default/index.js b/node_modules/epubjs/src/managers/default/index.js
+index 2812d87..4ec1de8 100644
+--- a/node_modules/epubjs/src/managers/default/index.js
++++ b/node_modules/epubjs/src/managers/default/index.js
+@@ -309,6 +309,7 @@ class DefaultViewManager {
+ 
+ 			}.bind(this), (err) => {
+ 				displaying.reject(err);
++				return Promise.reject(err);
+ 			})
+ 			.then(function(){
+ 				return this.handleNextPrePaginated(forceRight, section, this.add);
+@@ -319,7 +320,9 @@ class DefaultViewManager {
+ 
+ 				displaying.resolve();
+ 
+-			}.bind(this));
++			}.bind(this), (err) => {
++				displaying.reject(err);
++			});
+ 		// .then(function(){
+ 		// 	return this.hooks.display.trigger(view);
+ 		// }.bind(this))
+@@ -519,7 +522,7 @@ class DefaultViewManager {
+ 				.then(function(){
+ 					return this.handleNextPrePaginated(forceRight, next, this.append);
+ 				}.bind(this), (err) => {
+-					return err;
++					return Promise.reject(err);
+ 				})
+ 				.then(function(){
+ 
+@@ -618,7 +621,7 @@ class DefaultViewManager {
+ 						}
+ 					}
+ 				}.bind(this), (err) => {
+-					return err;
++					return Promise.reject(err);
+ 				})
+ 				.then(function(){
+ 					if(this.isPaginated && this.settings.axis === "horizontal") {
+diff --git a/node_modules/epubjs/src/rendition.js b/node_modules/epubjs/src/rendition.js
+index 14a21b4..85b8a45 100644
+--- a/node_modules/epubjs/src/rendition.js
++++ b/node_modules/epubjs/src/rendition.js
+@@ -319,20 +319,28 @@ class Rendition {
+ 		if (!this.book) {
+ 			return;
+ 		}
+-		var isCfiString = this.epubcfi.isCfiString(target);
+ 		var displaying = new defer();
+ 		var displayed = displaying.promise;
++		var isCfiString;
+ 		var section;
+ 		var moveTo;
+ 
+ 		this.displaying = displaying;
+ 
+-		// Check if this is a book percentage
+-		if (this.book.locations.length() && isFloat(target)) {
+-			target = this.book.locations.cfiFromPercentage(parseFloat(target));
+-		}
++		try {
++			isCfiString = this.epubcfi.isCfiString(target);
++			// Check if this is a book percentage
++			if (this.book.locations.length() && isFloat(target)) {
++				target = this.book.locations.cfiFromPercentage(parseFloat(target));
++			}
+ 
+-		section = this.book.spine.get(target);
++			section = this.book.spine.get(target);
++		} catch (err) {
++			displaying.reject(err);
++			this.displaying = undefined;
++			this.emit(EVENTS.RENDITION.DISPLAY_ERROR, err);
++			return displayed;
++		}
+ 
+ 		if(!section){
+ 			displaying.reject(new Error("No Section Found"));
+@@ -353,6 +361,8 @@ class Rendition {
+ 				this.emit(EVENTS.RENDITION.DISPLAYED, section);
+ 				this.reportLocation();
+ 			}, (err) => {
++				displaying.reject(err);
++				this.displaying = undefined;
+ 				/**
+ 				 * Emit that has been an error displaying
+ 				 * @event displayError
+diff --git a/node_modules/epubjs/src/resources.js b/node_modules/epubjs/src/resources.js
+index b5d77f8..606463d 100644
+--- a/node_modules/epubjs/src/resources.js
++++ b/node_modules/epubjs/src/resources.js
+@@ -5,6 +5,13 @@ import mime from "./utils/mime";
+ import Path from "./utils/path";
+ import path from "path-webpack";
+ 
++const cssImportPattern = /@import\s+([^;]+);?/giu;
++const cssUrlPattern = /url\(\s*(["']?)(.*?)\1\s*\)/giu;
++const isIsolatedResource = (value) => /^(?:blob:|data:|#)/iu.test(value.trim().replace(/^url\(\s*/iu, "").replace(/^["']|["']?\s*\).*$/gu, ""));
++const removeUnresolvedCssResources = (css) => css
++	.replace(cssImportPattern, (rule, url) => isIsolatedResource(url) ? rule : "")
++	.replace(cssUrlPattern, (rule, quote, url) => isIsolatedResource(url) ? rule : 'url("")');
++
+ /**
+  * Handle Package Resources
+  * @class
+@@ -16,6 +23,8 @@ import path from "path-webpack";
+  */
+ class Resources {
+ 	constructor(manifest, options) {
++		this.destroyed = false;
++		this.createdUrls = new Set();
+ 		this.settings = {
+ 			replacements: (options && options.replacements) || "base64",
+ 			archive: (options && options.archive),
+@@ -124,7 +133,13 @@ class Resources {
+ 					});
+ 			} else {
+ 				return this.settings.request(url, 'blob').then((blob) => {
+-					return createBlobUrl(blob, mimeType);
++					var blobUrl = createBlobUrl(blob, mimeType);
++					if (this.destroyed) {
++						URL.revokeObjectURL(blobUrl);
++					} else {
++						this.createdUrls.add(blobUrl);
++					}
++					return blobUrl;
+ 				})
+ 			}
+ 		}
+@@ -153,9 +168,13 @@ class Resources {
+ 
+ 		return Promise.all(replacements)
+ 			.then( (replacementUrls) => {
+-				this.replacementUrls = replacementUrls.filter((url) => {
+-					return (typeof(url) === "string");
+-				});
++				if (this.destroyed) {
++					return replacementUrls;
++				}
++				// Keep each replacement at the same index as its manifest URL.
++				// A corrupt asset is left unresolved instead of shifting every
++				// later replacement onto the wrong file.
++				this.replacementUrls = replacementUrls;
+ 				return replacementUrls;
+ 			});
+ 	}
+@@ -174,6 +193,9 @@ class Resources {
+ 		this.cssUrls.forEach(function(href) {
+ 			var replacement = this.createCssFile(href, archive, resolver)
+ 				.then(function (replacementUrl) {
++					if (this.destroyed) {
++						return;
++					}
+ 					// switch the url in the replacementUrls
+ 					var indexInUrls = this.urls.indexOf(href);
+ 					if (indexInUrls > -1) {
+@@ -229,14 +251,19 @@ class Resources {
+ 		}
+ 
+ 		return textResponse.then( (text) => {
++			if (this.destroyed) {
++				return;
++			}
+ 			// Replacements in the css text
+ 			text = substitute(text, relUrls, this.replacementUrls);
++			text = removeUnresolvedCssResources(text);
+ 
+ 			// Get the new url
+ 			if (this.settings.replacements === "base64") {
+ 				newUrl = createBase64Url(text, "text/css");
+ 			} else {
+ 				newUrl = createBlobUrl(text, "text/css");
++				this.createdUrls.add(newUrl);
+ 			}
+ 
+ 			return newUrl;
+@@ -304,6 +331,11 @@ class Resources {
+ 	}
+ 
+ 	destroy() {
++		this.destroyed = true;
++		this.createdUrls.forEach((url) => {
++			URL.revokeObjectURL(url);
++		});
++		this.createdUrls.clear();
+ 		this.settings = undefined;
+ 		this.manifest = undefined;
+ 		this.resources = undefined;

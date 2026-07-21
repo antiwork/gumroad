@@ -232,6 +232,8 @@ class UrlRedirectPresenter
     end
 
     def map_file(file)
+      media_location = media_locations_by_file[file.id]
+
       {
         type: "file",
         file_name: file.name_displayable,
@@ -246,7 +248,7 @@ class UrlRedirectPresenter
         kindle_data: file.can_send_to_kindle? ?
                        { email: logged_in_user&.kindle_email, icon_url: ActionController::Base.helpers.image_path("white-15.png") } :
                        nil,
-        latest_media_location: media_locations_by_file[file.id].as_json,
+        latest_media_location: file.media_location_for_download_page(media_location),
         content_length: file.content_length,
         isbn: file.isbn,
         read_url: file.readable? ? (

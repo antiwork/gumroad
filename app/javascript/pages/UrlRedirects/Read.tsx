@@ -1,11 +1,20 @@
 import { ArrowLeft, ArrowRight, SearchMinus, SearchPlus, X } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
-import type { Rendition, Location as EpubLocation } from "epubjs";
+import type { Book, Rendition, Location as EpubLocation } from "epubjs";
 import type { PDFSinglePageViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import * as React from "react";
 import typia from "typia";
 
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import {
+  applyEpubThemeToDocument,
+  displayEpubLocation,
+  getEpubContentDocuments,
+  getEpubProgress,
+  getEpubThemeRules,
+  getLinearSectionRank,
+  sanitizeSerializedEpubSection,
+} from "$app/pages/UrlRedirects/epub";
 
 import { Button } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -24,16 +33,36 @@ type Props = {
   url_redirect_id: string;
   purchase_id: string | null;
   product_file_id: string;
-  latest_media_location: { location: number; timestamp: string } | null;
+  latest_media_location: {
+    location: number;
+    timestamp: string;
+    cfi?: string | null;
+    unit?: "page_number" | "percentage" | "seconds";
+  } | null;
   title: string;
   file_type: "pdf" | "epub";
 };
 
+const getCurrentEpubLocation = (rendition: Rendition): EpubLocation | null => {
+  // epub.js types this as always present, but it is undefined until the first
+  // relocation event for some books and rendering modes.
+  const location: unknown = Reflect.get(rendition, "location");
+  return typia.is<EpubLocation>(location) ? location : null;
+};
+
 // The reading position we persist in a cookie so an anonymous (or same-browser)
 // reader can pick up where they left off. For PDFs `location` is a page number;
-// for EPUBs it is a 1-based spine section number and `cfi` additionally stores
-// the exact position within that section (an EPUB Canonical Fragment Identifier).
-type StoredMediaLocation = { timestamp?: string | null; location?: number | null; cfi?: string | null };
+// for EPUBs it is progress from 0 through 100 and `cfi` stores the exact
+// position (an EPUB Canonical Fragment Identifier).
+type StoredMediaLocation = {
+  timestamp?: string | null;
+  location?: number | null;
+  cfi?: string | null;
+  unit?: "page_number" | "percentage" | "seconds";
+};
+
+export const canResumePdfFromLocation = (location: StoredMediaLocation) =>
+  location.location != null && (location.unit === "page_number" || (location.unit == null && location.cfi == null));
 
 const getMediaLocationFromCookies = (readId: string): StoredMediaLocation => {
   const cookieValue = document.cookie
@@ -123,7 +152,8 @@ const PdfReader = ({
 
   useRunOnce(() => {
     const resumeFromLastLocation = (pageCount: number) => {
-      const latestMediaLocationFromCookies = getMediaLocationFromCookies(read_id);
+      const storedCookieLocation = getMediaLocationFromCookies(read_id);
+      const latestMediaLocationFromCookies = canResumePdfFromLocation(storedCookieLocation) ? storedCookieLocation : {};
 
       if (
         latest_media_location &&
@@ -284,9 +314,9 @@ const PdfReader = ({
 // own text (inside the epub.js iframe), independently of the app's light/dark
 // mode, because readers often want e.g. a sepia book page in a dark app.
 const epubThemes = {
-  light: { label: "Light", background: "#ffffff", color: "#000000" },
-  sepia: { label: "Sepia", background: "#f4ecd8", color: "#5b4636" },
-  dark: { label: "Dark", background: "#121212", color: "#e6e6e6" },
+  light: { label: "Light", background: "#ffffff", color: "#000000", link: "#146ef5", surface: "#f4f4f0" },
+  sepia: { label: "Sepia", background: "#f4ecd8", color: "#5b4636", link: "#754d24", surface: "#e8dcc0" },
+  dark: { label: "Dark", background: "#121212", color: "#e6e6e6", link: "#8ab4ff", surface: "#242424" },
 } as const;
 type EpubThemeName = keyof typeof epubThemes;
 
@@ -303,37 +333,42 @@ const EpubReader = ({
   latest_media_location,
   title,
 }: Props) => {
-  // EPUBs don't have fixed pages; the closest stable notion of "where am I" that
-  // fits the existing media_locations schema (an integer `location` column) is the
-  // 1-based spine section number — the same unit the backend already stores as
-  // `pagelength` when it analyzes an EPUB upload. The exact position within a
-  // section (a CFI string) is too granular for that column, so we keep it in the
-  // same cookie the PDF reader uses and prefer it when resuming in this browser.
   const [sectionNumber, setSectionNumber] = React.useState(1);
   const [sectionCount, setSectionCount] = React.useState(0);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [readerError, setReaderError] = React.useState(false);
   const [fontSize, setFontSize] = React.useState(100);
   const [theme, setTheme] = React.useState<EpubThemeName>("light");
   const contentRef = React.useRef<HTMLDivElement>(null);
   const renditionRef = React.useRef<Rendition | null>(null);
+  const cleanupReaderRef = React.useRef<() => void>(() => undefined);
+  const themeRef = React.useRef<EpubThemeName>("light");
+
+  const handleReaderError = React.useCallback(() => {
+    cleanupReaderRef.current();
+    renditionRef.current = null;
+    setIsLoading(false);
+    setReaderError(true);
+  }, []);
 
   const persistLocation = React.useCallback(
-    (newSectionNumber: number, cfi: string | null) => {
-      setSectionNumber(newSectionNumber);
+    (progress: number, cfi: string | null) => {
       if (purchase_id) {
         void trackMediaLocationChanged({
           urlRedirectId: url_redirect_id,
           productFileId: product_file_id,
           purchaseId: purchase_id,
-          location: newSectionNumber,
+          location: progress,
+          epubCfi: cfi,
         });
       }
       // CFIs can contain semicolons, which document.cookie treats as attribute
       // separators — URI-encode the value so it round-trips intact.
       document.cookie = `${encodeURIComponent(read_id)}=${encodeURIComponent(
         JSON.stringify({
-          location: newSectionNumber,
+          location: progress,
           cfi,
+          unit: "percentage",
           timestamp: new Date(),
         }),
       )}`;
@@ -341,16 +376,20 @@ const EpubReader = ({
     [purchase_id, url_redirect_id, product_file_id, read_id],
   );
 
-  const turnPage = (direction: "previous" | "next") => {
-    if (!renditionRef.current) return;
-    void (direction === "next" ? renditionRef.current.next() : renditionRef.current.prev());
-  };
+  const turnPage = React.useCallback(
+    (direction: "previous" | "next") => {
+      const rendition = renditionRef.current;
+      if (!rendition) return;
+      void (direction === "next" ? rendition.next() : rendition.prev()).catch(handleReaderError);
+    },
+    [handleReaderError],
+  );
 
   const goToSection = (newSectionNumber: number) => {
     if (!renditionRef.current || sectionCount === 0) return;
     const clamped = Math.max(1, Math.min(newSectionNumber, sectionCount));
     // epub.js accepts a 0-based spine index as a display target.
-    void renditionRef.current.display(clamped - 1);
+    void displayEpubLocation(renditionRef.current, clamped - 1).catch(handleReaderError);
   };
 
   const updateFontSize = (size: number) => {
@@ -359,66 +398,195 @@ const EpubReader = ({
   };
 
   const updateTheme = (name: EpubThemeName) => {
+    themeRef.current = name;
     setTheme(name);
-    renditionRef.current?.themes.select(name);
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    rendition.themes.select(name);
+    for (const document of getEpubContentDocuments(rendition)) applyEpubThemeToDocument(document, epubThemes[name]);
   };
 
-  useRunOnce(() => {
+  React.useEffect(() => {
+    let book: Book | null = null;
+    let cancelled = false;
+    const isCancelled = () => cancelled;
+    const destroyBook = () => {
+      const openedBook = book;
+      book = null;
+      openedBook?.destroy();
+    };
+    const cleanupReader = () => {
+      cancelled = true;
+      renditionRef.current = null;
+      destroyBook();
+    };
+    cleanupReaderRef.current = cleanupReader;
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (!event.persisted) destroyBook();
+    };
+
+    // React runs the returned cleanup for Inertia transitions. A full browser
+    // navigation tears down the document instead, so release epub.js resources
+    // explicitly while the page's blob URL registry is still reachable.
+    window.addEventListener("pagehide", handlePageHide);
+
     const showBook = async () => {
-      if (!contentRef.current) return;
+      const container = contentRef.current;
+      if (!container) return;
 
-      const ePub = (await import("epubjs")).default;
-      // The download URL is signed and carries query parameters, which defeats
-      // epub.js's extension-based type detection (it would treat the URL as an
-      // unpacked book directory and request META-INF/container.xml relative to
-      // it). Explicitly declare the resource as a packaged .epub archive.
-      const book = ePub(url, { openAs: "epub" });
-      const rendition = book.renderTo(contentRef.current, { width: "100%", height: "100%" });
-      renditionRef.current = rendition;
+      try {
+        const ePub = (await import("epubjs")).default;
+        if (isCancelled()) return;
 
-      for (const [name, { background, color }] of Object.entries(epubThemes)) {
-        rendition.themes.register(name, { body: { background, color } });
+        // Open the signed URL explicitly as an archive. Query parameters make
+        // extension-based detection treat it as an unpacked book directory.
+        const openedBook = ePub({ openAs: "epub" });
+        book = openedBook;
+        await openedBook.open(url, "epub");
+        if (isCancelled()) {
+          // The request can finish after an Inertia transition and create new
+          // archive blob URLs after the first cleanup. Destroy again once the
+          // asynchronous open has settled so those late resources are freed.
+          openedBook.destroy();
+          return;
+        }
+        // `open()` returns once the package is unpacked, while `opened` waits
+        // for archive URLs and rewritten stylesheets. Rendering before that
+        // point would make the sanitizer remove valid packaged resources.
+        await openedBook.opened;
+        if (isCancelled()) {
+          openedBook.destroy();
+          return;
+        }
+        // Register after open(), when epub.js has installed its own archive
+        // substitution hook. Sanitization must see the resulting blob/data
+        // URLs or it cannot distinguish packaged files from network paths.
+        openedBook.spine.hooks.serialize.register(sanitizeSerializedEpubSection);
+
+        const spineItems = await openedBook.loaded.spine;
+        const totalSections = spineItems.length;
+        const linearSectionIndexes: number[] = [];
+        openedBook.spine.each((section: { index: number; linear: boolean }) => {
+          if (section.linear) linearSectionIndexes.push(section.index);
+        });
+        if (linearSectionIndexes.length === 0) {
+          linearSectionIndexes.push(...Array.from({ length: totalSections }, (_, index) => index));
+        }
+        const linearSectionCount = linearSectionIndexes.length;
+        setSectionCount(totalSections);
+
+        const rendition = openedBook.renderTo(container, { width: "100%", height: "100%" });
+        renditionRef.current = rendition;
+        let isInitialFallbackSuppressed = true;
+        let suppressedInitialCfi: string | null = null;
+        let lastRelocatedLocation: EpubLocation | null = null;
+        let isFallbackSettlementPending = false;
+        let pendingFallbackResumeCfi: string | null = null;
+
+        for (const [name, epubTheme] of Object.entries(epubThemes)) {
+          rendition.themes.register(name, getEpubThemeRules(name, epubTheme));
+        }
+        const applyCurrentTheme = () => {
+          const currentTheme = themeRef.current;
+          rendition.themes.select(currentTheme);
+          for (const document of getEpubContentDocuments(rendition)) {
+            applyEpubThemeToDocument(document, epubThemes[currentTheme]);
+          }
+        };
+        rendition.on("rendered", applyCurrentTheme);
+        applyCurrentTheme();
+
+        // "relocated" fires for page turns, jumps, and resizes. Persist a real
+        // book-wide percentage for progress UI and the CFI for exact resume.
+        const persistEpubLocation = (location: EpubLocation) => {
+          if (cancelled) return;
+          lastRelocatedLocation = location;
+          setSectionNumber(location.start.index + 1);
+          if (isFallbackSettlementPending) {
+            const fallbackResumeCfi = pendingFallbackResumeCfi;
+            isFallbackSettlementPending = false;
+            isInitialFallbackSuppressed = false;
+            suppressedInitialCfi = null;
+            if (fallbackResumeCfi && !location.atEnd) return;
+          }
+          if (isInitialFallbackSuppressed && suppressedInitialCfi === null) {
+            suppressedInitialCfi = location.start.cfi;
+            return;
+          }
+          if (isInitialFallbackSuppressed && location.start.cfi === suppressedInitialCfi) return;
+          isInitialFallbackSuppressed = false;
+          suppressedInitialCfi = null;
+          const linearSectionIndex = getLinearSectionRank(location.start.index, linearSectionIndexes);
+          persistLocation(getEpubProgress(location, linearSectionIndex, linearSectionCount), location.start.cfi);
+        };
+        rendition.on("relocated", persistEpubLocation);
+        // Key events inside the book iframe do not bubble to the window.
+        rendition.on("keydown", (e: KeyboardEvent) => {
+          if (e.key === "ArrowLeft") turnPage("previous");
+          else if (e.key === "ArrowRight") turnPage("next");
+        });
+
+        const cookieLocation = getMediaLocationFromCookies(read_id);
+        const serverIsFresher =
+          latest_media_location &&
+          (!cookieLocation.timestamp || new Date(latest_media_location.timestamp) > new Date(cookieLocation.timestamp));
+        const resumeLocation = serverIsFresher ? latest_media_location : cookieLocation;
+        const completedPercentage = resumeLocation.unit === "percentage" && resumeLocation.location === 100;
+        const resumeCfi = completedPercentage ? null : resumeLocation.cfi;
+        const legacyLocation = resumeLocation.unit === "page_number" ? resumeLocation.location : null;
+        const legacySection =
+          !resumeCfi &&
+          legacyLocation != null &&
+          Number.isInteger(legacyLocation) &&
+          legacyLocation >= 1 &&
+          legacyLocation <= totalSections
+            ? legacyLocation - 1
+            : null;
+        let fellBackToStart = false;
+
+        try {
+          if (resumeCfi) await displayEpubLocation<string>(rendition, resumeCfi);
+          else if (legacySection != null) await displayEpubLocation<number>(rendition, legacySection);
+          else await displayEpubLocation<string>(rendition);
+        } catch (error) {
+          if (!resumeCfi && legacySection == null) throw error;
+          // A CFI or legacy section may become invalid when a seller replaces
+          // an EPUB. Falling back to the first page keeps it readable.
+          fellBackToStart = true;
+          await displayEpubLocation<string>(rendition);
+        }
+        rendition.on("displayerror", handleReaderError);
+        if (!isCancelled()) setIsLoading(false);
+
+        const settleWithoutContentLocations = () => {
+          const fallbackResumeCfi = fellBackToStart ? null : resumeCfi;
+          const location = lastRelocatedLocation ?? getCurrentEpubLocation(rendition);
+          if (!location) {
+            isFallbackSettlementPending = true;
+            pendingFallbackResumeCfi = fallbackResumeCfi ?? null;
+            return;
+          }
+          isInitialFallbackSuppressed = false;
+          suppressedInitialCfi = null;
+          if (!fallbackResumeCfi || location.atEnd) persistEpubLocation(location);
+        };
+        settleWithoutContentLocations();
+      } catch {
+        if (!cancelled) {
+          cleanupReader();
+          setIsLoading(false);
+          setReaderError(true);
+        }
       }
-      rendition.themes.select("light");
-
-      // "relocated" fires whenever the visible position changes (page turn,
-      // jump, resize). It is the equivalent of the PDF reader's page updates.
-      rendition.on("relocated", (location: EpubLocation) => {
-        persistLocation(location.start.index + 1, location.start.cfi);
-      });
-      // Key events inside the book's iframe don't bubble to the window, so
-      // epub.js re-emits them and we handle arrow keys here as well.
-      rendition.on("keydown", (e: KeyboardEvent) => {
-        if (e.key === "ArrowLeft") turnPage("previous");
-        else if (e.key === "ArrowRight") turnPage("next");
-      });
-
-      const spineItems = await book.loaded.spine;
-      const totalSections = spineItems.length;
-      setSectionCount(totalSections);
-
-      // Resume from wherever the buyer last stopped reading: the cookie (with
-      // its precise CFI) wins if it is fresher than the server-side record,
-      // mirroring how the PDF reader resolves page numbers.
-      const cookieLocation = getMediaLocationFromCookies(read_id);
-      const serverIsFresher =
-        latest_media_location &&
-        (!cookieLocation.timestamp || new Date(latest_media_location.timestamp) > new Date(cookieLocation.timestamp));
-      if (serverIsFresher) {
-        const location = latest_media_location.location;
-        await rendition.display(location > totalSections ? 0 : location - 1);
-      } else if (cookieLocation.cfi) {
-        await rendition.display(cookieLocation.cfi);
-      } else if (cookieLocation.location != null) {
-        const location = cookieLocation.location;
-        await rendition.display(location > totalSections ? 0 : location - 1);
-      } else {
-        await rendition.display();
-      }
-      setIsLoading(false);
     };
     void showBook();
-  });
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      cleanupReader();
+      if (cleanupReaderRef.current === cleanupReader) cleanupReaderRef.current = () => undefined;
+    };
+  }, [handleReaderError, latest_media_location, persistLocation, read_id, turnPage, url]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -430,11 +598,11 @@ const EpubReader = ({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [turnPage]);
 
   return (
     <div style={{ display: "contents" }}>
-      {isLoading ? <ReaderLoadingOverlay /> : null}
+      {readerError ? <ReaderErrorOverlay /> : isLoading ? <ReaderLoadingOverlay /> : null}
       <div role="application" className="scoped-tailwind-preflight flex min-h-screen flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
@@ -561,6 +729,23 @@ const ReaderLoadingOverlay = () => (
     }}
   >
     <h3>One moment while we prepare your reading experience</h3>
+  </div>
+);
+
+const ReaderErrorOverlay = () => (
+  <div
+    role="alert"
+    className="scoped-tailwind-preflight absolute flex size-full flex-col items-center justify-center gap-4 bg-background p-6 text-center"
+    style={{ zIndex: "var(--z-index-tooltip)" }}
+  >
+    <h3>We couldn&apos;t open this EPUB</h3>
+    <p>You can try loading it again or go back to your files.</p>
+    <div className="flex gap-3">
+      <Button onClick={() => history.back()}>Back</Button>
+      <Button color="primary" onClick={() => location.reload()}>
+        Try again
+      </Button>
+    </div>
   </div>
 );
 

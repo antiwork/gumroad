@@ -5,8 +5,10 @@ require "spec_helper"
 describe MediaLocation do
   describe "#create" do
     before do
-      @url_redirect = create(:readable_url_redirect)
-      @product = @url_redirect.referenced_link
+      @product = create(:product)
+      purchase = create(:free_purchase, link: @product)
+      @url_redirect = create(:url_redirect, link: @product, purchase:)
+      create(:readable_document, link: @product)
     end
 
     it "raises error if platform is invalid" do
@@ -36,6 +38,58 @@ describe MediaLocation do
         expect(media_location.unit).to eq MediaLocation::Unit::PAGE_NUMBER
       end
 
+      it "infers percentage units for an EPUB" do
+        epub = create(:epub_product_file, link: @product)
+        media_location = build(:media_location, url_redirect_id: @url_redirect.id, purchase_id: @url_redirect.purchase.id,
+                                                product_file_id: epub.id, product_id: @product.id, location: 42,
+                                                epub_cfi: "epubcfi(/6/4!/4/2/8:0)")
+
+        media_location.save!
+
+        expect(media_location.unit).to eq MediaLocation::Unit::PERCENTAGE
+      end
+
+      it "validates the EPUB CFI shape and storage bound" do
+        epub = create(:epub_product_file, link: @product)
+        media_location = build(:media_location, url_redirect_id: @url_redirect.id, purchase_id: @url_redirect.purchase.id,
+                                                product_file_id: epub.id, product_id: @product.id, location: 42)
+
+        [
+          "not-a-cfi",
+          "epubcfi(foo)",
+          "epubcfi(/6/4!)",
+          "epubcfi(/6/4[#{"^" * 501}]!/4)",
+          "epubcfi(#{"a" * MediaLocation::MAX_EPUB_CFI_LENGTH})",
+        ].each do |epub_cfi|
+          media_location.epub_cfi = epub_cfi
+          expect(media_location).not_to be_valid
+        end
+
+        media_location.epub_cfi = "epubcfi(/6/4[chapter^]one]!/4/2:0)"
+        expect(media_location).to be_valid
+      end
+
+      it "validates EPUB progress as a percentage" do
+        epub = create(:epub_product_file, link: @product)
+        media_location = build(:media_location, url_redirect_id: @url_redirect.id, purchase_id: @url_redirect.purchase.id,
+                                                product_file_id: epub.id, product_id: @product.id, location: -1,
+                                                epub_cfi: "epubcfi(/6/4!/4/2/8:0)")
+
+        expect(media_location).not_to be_valid
+        media_location.location = 101
+        expect(media_location).not_to be_valid
+      end
+
+      it "keeps page-number units for a legacy EPUB location without a CFI" do
+        epub = create(:epub_product_file, link: @product)
+        media_location = build(:media_location, url_redirect_id: @url_redirect.id, purchase_id: @url_redirect.purchase.id,
+                                                product_file_id: epub.id, product_id: @product.id, location: 4)
+
+        media_location.save!
+
+        expect(media_location.unit).to eq MediaLocation::Unit::PAGE_NUMBER
+      end
+
       it "infers correct units for streamable" do
         streamable = create(:streamable_video, link: @product)
         media_location = build(:media_location, url_redirect_id: @url_redirect.id, purchase_id: @url_redirect.purchase.id,
@@ -59,14 +113,20 @@ describe MediaLocation do
   describe ".max_consumed_at_by_file" do
     it "returns the records with the largest consumed_at value for each product_file" do
       product = create(:product)
-      purchase = create(:purchase, link: product)
+      purchase = create(:free_purchase, link: product)
       product_files = create_list(:product_file, 2, link: product)
+      url_redirect = create(:url_redirect, link: product, purchase:)
+      media_location_attributes = { purchase:, product_id: product.id, url_redirect_id: url_redirect.id }
       expected = []
-      expected << create(:media_location, purchase:, product_file: product_files[0], consumed_at: 3.days.ago) # most recent for file
-      create(:media_location, purchase:, product_file: product_files[0], consumed_at: 7.days.ago)
-      create(:media_location, purchase:, product_file: product_files[1], consumed_at: 5.days.ago)
-      expected << create(:media_location, purchase:, product_file: product_files[1], consumed_at: 2.days.ago) # most recent for file
-      create(:media_location, product_file: product_files[0], consumed_at: 1.day.ago) # different purchase
+      expected << create(:media_location, **media_location_attributes, product_file: product_files[0], consumed_at: 3.days.ago) # most recent for file
+      create(:media_location, **media_location_attributes, product_file: product_files[0], consumed_at: 7.days.ago)
+      create(:media_location, **media_location_attributes, product_file: product_files[1], consumed_at: 5.days.ago)
+      expected << create(:media_location, **media_location_attributes, product_file: product_files[1], consumed_at: 2.days.ago) # most recent for file
+
+      other_purchase = create(:free_purchase, link: product)
+      other_url_redirect = create(:url_redirect, link: product, purchase: other_purchase)
+      create(:media_location, purchase: other_purchase, product_id: product.id, url_redirect_id: other_url_redirect.id,
+                              product_file: product_files[0], consumed_at: 1.day.ago)
 
       expect(MediaLocation.max_consumed_at_by_file(purchase_id: purchase.id)).to match_array(expected)
     end

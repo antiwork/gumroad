@@ -5,11 +5,13 @@ export const trackMediaLocationChanged = async ({
   productFileId,
   purchaseId,
   location,
+  epubCfi,
 }: {
   urlRedirectId: string;
   productFileId: string;
   purchaseId: string;
   location: number;
+  epubCfi?: string | null;
 }) => {
   await request({
     method: "POST",
@@ -21,6 +23,7 @@ export const trackMediaLocationChanged = async ({
       product_file_id: productFileId,
       purchase_id: purchaseId,
       location,
+      epub_cfi: epubCfi,
       consumed_at: new Date().toISOString(),
     },
   });
