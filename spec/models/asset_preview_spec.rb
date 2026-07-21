@@ -214,5 +214,31 @@ describe AssetPreview do
 
       expect(preview.reload.file.blob.id).to eq(original_blob_id)
     end
+
+    it "cleans up the uploaded resized copy when the attach raises" do
+      preview = create(:asset_preview)
+      preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+      original_blob_id = preview.file.blob.id
+
+      allow(preview.file).to receive(:attach).and_raise(ActiveRecord::ConnectionTimeoutError)
+
+      uploaded_blob = nil
+      allow(ActiveStorage::Blob).to receive(:create_and_upload!).and_wrap_original do |original, **kwargs|
+        uploaded_blob = original.call(**kwargs)
+      end
+
+      expect do
+        preview.resize_oversized_image!
+      end.to raise_error(ActiveRecord::ConnectionTimeoutError)
+
+      # The worker retry will re-upload, so the copy from this failed attempt
+      # must not be left orphaned in storage.
+      purged_gids = ActiveJob::Base.queue_adapter.enqueued_jobs.filter_map do |job|
+        job["arguments"].first["_aj_globalid"] if job["job_class"] == "ActiveStorage::PurgeJob"
+      end
+      expect(purged_gids).to include(uploaded_blob.to_global_id.to_s)
+
+      expect(preview.reload.file.blob.id).to eq(original_blob_id)
+    end
   end
 end
