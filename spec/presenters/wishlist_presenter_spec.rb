@@ -363,6 +363,15 @@ describe WishlistPresenter do
       expect(second_page[:pagination]).to include(page: 2, prev: 1, next: nil)
     end
 
+    it "returns an empty page instead of raising when the requested page exceeds the total pages" do
+      create(:wishlist_product, wishlist:)
+
+      result = described_class.new(wishlist:).public_items(request:, pundit_user:, page: 2)
+
+      expect(result[:items]).to eq([])
+      expect(result[:pagination]).to include(page: 2, pages: 1, next: nil)
+    end
+
     it "does not issue per-item N+1 queries for variant associations" do
       # Cover both BaseVariant STI subclasses: `Variant` (link via
       # :variant_category delegation) and `Sku` (direct :link belongs_to).
