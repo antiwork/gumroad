@@ -34,45 +34,29 @@ describe("Advanced Settings Scenario", type: :system, js: true) do
         expect(seller.reload.deleted?).to eq(true)
       end
 
-      it "does not allow deletion if there is an unpaid balance pending" do
-        create(:balance, user: seller, amount_cents: 10)
+      it "allows deletion if there is a positive unpaid balance pending" do
+        balance = create(:balance, user: seller, amount_cents: 10)
+
+        visit(settings_advanced_path)
+        click_on "Delete your Gumroad account"
+
+        expect(page).to have_text "You have a balance of $0.10. To delete your account, you will need to forfeit your balance."
+        click_on "Yes, forfeit balance and delete"
+
+        expect_alert_message("Your account has been successfully deleted.")
+        expect(page).to have_current_path(login_path, ignore_query: true)
+        expect(seller.reload.deleted?).to eq(true)
+        expect(balance.reload.state).to eq("forfeited")
+      end
+
+      it "does not allow deletion if there is a negative unpaid balance pending" do
+        create(:balance, user: seller, amount_cents: -10)
         visit(settings_advanced_path)
         click_on "Delete your Gumroad account"
         click_on "Yes, delete my account"
 
-        expect_alert_message("Cannot delete due to an unpaid balance of $0.10.")
+        expect_alert_message("Cannot delete due to an unpaid balance of $-0.10.")
         expect(seller.reload.deleted?).to eq(false)
-      end
-
-      describe "when the feature delete_account_forfeit_balance is active" do
-        before do
-          Feature.activate_user :delete_account_forfeit_balance, seller
-        end
-
-        it "allows deletion if there is a positive unpaid balance pending" do
-          balance = create(:balance, user: seller, amount_cents: 10)
-
-          visit(settings_advanced_path)
-          click_on "Delete your Gumroad account"
-
-          expect(page).to have_text "You have a balance of $0.10. To delete your account, you will need to forfeit your balance."
-          click_on "Yes, forfeit balance and delete"
-
-          expect_alert_message("Your account has been successfully deleted.")
-          expect(page).to have_current_path(login_path, ignore_query: true)
-          expect(seller.reload.deleted?).to eq(true)
-          expect(balance.reload.state).to eq("forfeited")
-        end
-
-        it "does not allow deletion if there is a negative unpaid balance pending" do
-          create(:balance, user: seller, amount_cents: -10)
-          visit(settings_advanced_path)
-          click_on "Delete your Gumroad account"
-          click_on "Yes, delete my account"
-
-          expect_alert_message("Cannot delete due to an unpaid balance of $-0.10.")
-          expect(seller.reload.deleted?).to eq(false)
-        end
       end
     end
 

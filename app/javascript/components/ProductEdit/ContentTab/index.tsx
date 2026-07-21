@@ -47,12 +47,12 @@ import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
-import { EntityInfo } from "$app/components/DownloadPage/Layout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { EpubNudge } from "$app/components/ProductEdit/ContentTab/EpubNudge";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
@@ -167,7 +167,7 @@ const FileUploadMenu = ({
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
+  const { id, product, updateProduct, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -845,6 +845,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             }
           />
         ) : null}
+        <EpubNudge />
         <PageListLayout
           ref={scrollContainerRef}
           className="md:h-auto! md:flex-1"
@@ -976,10 +977,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         </Details>
                       </CardContent>
                     </Card>
-                    <EntityInfo
-                      entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
-                      creator={seller}
-                    />
                   </>
                 ) : null}
               </div>

@@ -30,8 +30,6 @@ describe("Product checkout with upsells", type: :system, js: true) do
       end
 
       expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
-      expect(page).to_not have_text("Upsell product - Untitled 1")
-      expect(page).to have_text("Upsell product - Untitled 2")
 
       purchase = Purchase.last
       expect(purchase.upsell_purchase.upsell).to eq(upsell)
@@ -54,8 +52,6 @@ describe("Product checkout with upsells", type: :system, js: true) do
       end
 
       expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
-      expect(page).to have_text("Upsell product - Untitled 1")
-      expect(page).to_not have_text("Upsell product - Untitled 2")
 
       purchase = Purchase.last
       expect(purchase.upsell_purchase).to be_nil
@@ -549,7 +545,9 @@ describe("Product checkout with upsells", type: :system, js: true) do
         end
 
         expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to #{seller.email}")
-        expect(page).to have_text("Upsell product - Untitled 2")
+        # The download page no longer displays the "product - variant" entity info box,
+        # so verify the upgraded variant on the purchase record instead.
+        expect(Purchase.last.variant_attributes).to eq([upsell_product.alive_variants.second])
       end
     end
   end
