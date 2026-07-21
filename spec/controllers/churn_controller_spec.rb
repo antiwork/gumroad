@@ -11,7 +11,6 @@ describe ChurnController, type: :controller, inertia: true do
 
   before do
     allow(CreatorAnalytics::Churn).to receive(:new).and_return(service)
-    Feature.activate_user(:churn_analytics_enabled, seller)
   end
 
   describe "GET show" do
