@@ -471,22 +471,21 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
 
   const isCompleted =
     latestMediaLocation && latestMediaLocation > 0 && file.duration && latestMediaLocation >= file.duration;
-  const isProcessing = file.duration === null;
 
   return (
     <Row ref={selfRef} className="embed" {...touchAndHoldEventListeners}>
       <WithTooltip tip={showTooltip ? file.file_name : null} position="top">
         <TrackClick
           eventName="play_click"
-          file={isProcessing || showTooltip ? null : file} // Prevent playback when processing or showing tooltip
+          file={showTooltip ? null : file} // Prevent playback when showing tooltip
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
-          contentLength={file.duration || 0}
+          contentLength={file.duration}
         >
           <RowContent asChild>
             <button
-              className={classNames("content all-unset", { "text-muted": isProcessing })}
+              className="content all-unset"
               style={{
                 gridColumn: "3 span",
                 userSelect: "none",
@@ -494,7 +493,6 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
                 WebkitTouchCallout: "none",
                 outline: "none",
               }}
-              disabled={isProcessing}
             >
               <FileRowContent
                 hideIcon
@@ -502,25 +500,20 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
                 name={file.file_name}
                 externalLinkUrl={file.external_link_url}
                 details={
-                  isProcessing ? (
-                    <li>Processing...</li>
-                  ) : (
-                    <>
-                      {file.extension ? <li>{file.extension}</li> : null}
-                      {file.file_size ? <li>{FileUtils.getFullFileSizeString(file.file_size)}</li> : null}
-                      {file.duration ? <li>{humanizedDuration(file.duration)}</li> : null}
-                    </>
-                  )
+                  <>
+                    {file.extension ? <li>{file.extension}</li> : null}
+                    {file.file_size ? <li>{FileUtils.getFullFileSizeString(file.file_size)}</li> : null}
+                    {/* Duration is filled in asynchronously by AnalyzeFileWorker after upload.
+                        Playback never needs it, so we simply omit it until it's available. */}
+                    {file.duration ? <li>{humanizedDuration(file.duration)}</li> : null}
+                  </>
                 }
               />
             </button>
           </RowContent>
         </TrackClick>
       </WithTooltip>
-      <RowActions
-        className={classNames({ "text-muted": isProcessing })}
-        style={{ gridColumn: "4", gap: "var(--spacer-4)", flexWrap: "nowrap" }}
-      >
+      <RowActions style={{ gridColumn: "4", gap: "var(--spacer-4)", flexWrap: "nowrap" }}>
         {file.download_url ? (
           <TrackClick eventName="download_click" file={file}>
             <button aria-label="Download" className="cursor-pointer all-unset">
@@ -530,28 +523,28 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         ) : null}
         <TrackClick
           eventName="play_click"
-          file={isProcessing ? null : file}
+          file={file}
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
-          contentLength={file.duration || 0}
+          contentLength={file.duration}
         >
           {isPlaying ? (
-            <button aria-label="Pause" disabled={isProcessing} className="cursor-pointer all-unset">
+            <button aria-label="Pause" className="cursor-pointer all-unset">
               <PauseCircle
                 className="type-icon size-5"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />
             </button>
           ) : isCompleted ? (
-            <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
+            <button aria-label="Play" className="cursor-pointer all-unset">
               <CheckCircle
                 className="type-icon size-5 text-muted"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />
             </button>
           ) : (
-            <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
+            <button aria-label="Play" className="cursor-pointer all-unset">
               <PlayCircle
                 className="type-icon size-5"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
