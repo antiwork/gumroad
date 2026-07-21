@@ -304,13 +304,17 @@ describe("AgentChat custom-html proposal cards", () => {
 
   it("renders a page preview instead of raw HTML fields", async () => {
     streamTurnWithAction(customHtmlAction);
-    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
 
     render(<AgentChat greeting="Hi" suggestions={[]} />);
     await sendMessage("change my headline");
 
     const iframe = await screen.findByTitle<HTMLIFrameElement>("Preview of your page after this change");
-    expect(iframe.getAttribute("srcdoc")).toContain("<h1>New headline</h1>");
+    // Loaded by URL (never srcdoc) so the staged document's response carries the custom-page CSP
+    // header — inlined via srcdoc it would inherit the dashboard's CSP, which blocks the page's
+    // inline scripts.
+    expect(iframe.getAttribute("src")).toBe("/internal/agent/custom_html_previews/token123");
+    expect(iframe.hasAttribute("srcdoc")).toBe(false);
     // The document renders on an opaque origin, exactly like the live page embed.
     expect(iframe.getAttribute("sandbox")).toBe("allow-scripts allow-forms allow-popups");
     // The raw find/replace rows are gone — the rendered preview is the review surface.
@@ -359,7 +363,7 @@ describe("AgentChat custom-html proposal cards", () => {
 
   it("collapses an applied proposal into a compact card with the details behind Review", async () => {
     streamTurnWithAction(customHtmlAction);
-    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
     executeAgentAction.mockResolvedValue({ message: "Done.", object: null });
 
     render(<AgentChat greeting="Hi" suggestions={[]} />);
@@ -400,7 +404,7 @@ describe("AgentChat custom-html proposal cards", () => {
         },
       ],
     });
-    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
 
     render(<AgentChat greeting="Hi" suggestions={[]} />);
 

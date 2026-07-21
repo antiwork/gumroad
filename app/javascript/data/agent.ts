@@ -106,11 +106,14 @@ export const isCustomHtmlProposal = (action: ProposedAction): boolean => {
   return endpoint !== null && CUSTOM_HTML_PROPOSAL_ENDPOINTS.includes(endpoint);
 };
 
-type CustomHtmlPreviewResponse = { success: true; html: string } | { success: false; error: string };
+type CustomHtmlPreviewResponse = { success: true; preview_url: string } | { success: false; error: string };
 
-// Fetch the sandboxed document showing the seller's page as it would look after the proposed
-// custom-HTML change, for the confirmation card's preview iframe. The server computes the change
-// the same way confirming would apply it, so the preview and the eventual result can't disagree.
+// Fetch the URL of a staged document showing the seller's page as it would look after the
+// proposed custom-HTML change, for the confirmation card's preview iframe. The server computes
+// the change the same way confirming would apply it, so the preview and the eventual result
+// can't disagree. The document is served by URL (not returned inline for srcdoc) so its response
+// can carry the custom-page CSP header — a srcdoc document inherits the dashboard's CSP, which
+// blocks the page's inline scripts and would show script-rendered pages as broken.
 export const fetchCustomHtmlProposalPreview = async (action: ProposedAction): Promise<string> => {
   const body = action.params.params;
   const response = await request({
@@ -124,7 +127,13 @@ export const fetchCustomHtmlProposalPreview = async (action: ProposedAction): Pr
   });
   const json = typia.assert<CustomHtmlPreviewResponse>(await response.json());
   if (!json.success) throw new ResponseError(json.error);
-  return json.html;
+  // The POST staged the document, but the iframe's own GET is a separate request that can still
+  // miss (say, the staged document expired or was evicted). Probe the URL before reporting the
+  // preview loaded — the card enables Confirm on that signal, and it must never enable it while
+  // the iframe is about to render the "preview expired" notice instead of the proposed page.
+  const probe = await request({ method: "HEAD", accept: "html", url: json.preview_url });
+  if (!probe.ok) throw new ResponseError("The preview couldn't be loaded.");
+  return json.preview_url;
 };
 
 // One persisted message of a stored conversation, as returned by the conversations endpoint. The

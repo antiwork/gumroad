@@ -158,17 +158,17 @@ const ObjectList = ({ objects }: { objects: DisplayObject[] }) =>
   ) : null;
 
 // The rendered "what your page will look like" preview state for a custom-HTML proposal card. The
-// server computes the resulting page exactly the way confirming would apply it and returns the
-// same sandboxed document /landing/embed serves. `enabled: false` (a non-page proposal, or a card
-// already acted on) skips the fetch entirely. The state lives here rather than in the preview
-// element because the card gates its Confirm button on it: a proposal whose preview hasn't
-// rendered — still loading, or invalid (say the page changed under it) — shouldn't be
-// confirmable, since the seller would be applying a change they haven't seen (and an invalid one
-// would fail anyway).
+// server computes the resulting page exactly the way confirming would apply it, stages the same
+// sandboxed document /landing/embed serves, and returns a URL the preview iframe loads it from.
+// `enabled: false` (a non-page proposal, or a card already acted on) skips the fetch entirely.
+// The state lives here rather than in the preview element because the card gates its Confirm
+// button on it: a proposal whose preview hasn't rendered — still loading, or invalid (say the
+// page changed under it) — shouldn't be confirmable, since the seller would be applying a change
+// they haven't seen (and an invalid one would fail anyway).
 type CustomHtmlPreviewState =
   | { status: "disabled" }
   | { status: "loading" }
-  | { status: "loaded"; html: string }
+  | { status: "loaded"; url: string }
   | { status: "error"; message: string };
 
 const useCustomHtmlProposalPreview = (action: ProposedAction, enabled: boolean): CustomHtmlPreviewState => {
@@ -189,10 +189,11 @@ const useCustomHtmlProposalPreview = (action: ProposedAction, enabled: boolean):
     const wasEnabled = wasEnabledRef.current;
     wasEnabledRef.current = enabled;
     if (!enabled) {
-      // Keep an already-rendered preview around rather than discarding it: once the seller acts on
-      // the card the hook is disabled, but "Review" on the collapsed card should show the exact
+      // Keep an already-loaded preview URL around rather than discarding it: once the seller acts
+      // on the card the hook is disabled, but "Review" on the collapsed card should show the exact
       // preview they evaluated. Refetching wouldn't work — an applied edit's find-snippet no
-      // longer matches the page — so the loaded snapshot is the only faithful record.
+      // longer matches the page — so the staged document behind this URL is the only faithful
+      // record (the server keeps it for a day; after that Review shows an expired notice).
       setState((current) => (current.status === "loaded" ? current : { status: "disabled" }));
       return;
     }
@@ -203,8 +204,8 @@ const useCustomHtmlProposalPreview = (action: ProposedAction, enabled: boolean):
     let cancelled = false;
     setState({ status: "loading" });
     fetchCustomHtmlProposalPreview(actionRef.current)
-      .then((html) => {
-        if (!cancelled) setState({ status: "loaded", html });
+      .then((url) => {
+        if (!cancelled) setState({ status: "loaded", url });
       })
       .catch((e: unknown) => {
         if (!cancelled)
@@ -221,13 +222,17 @@ const useCustomHtmlProposalPreview = (action: ProposedAction, enabled: boolean):
   return state;
 };
 
-// Renders the preview state produced by useCustomHtmlProposalPreview. The document renders on an
-// opaque origin (no allow-same-origin), just like the live page embed, so the proposed HTML can't
-// reach cookies or the dashboard DOM. Unlike the live page's iframe, the sandbox below
-// deliberately omits allow-popups-to-escape-sandbox (matching ProfileLandingPagePreview): this
-// HTML is a not-yet-confirmed agent proposal shown inside the seller's dashboard, so any popup it
-// opens stays sandboxed rather than getting a full unsandboxed window. Popup escape only changes
-// popup behavior, not how the page itself renders, so preview fidelity is unaffected.
+// Renders the preview state produced by useCustomHtmlProposalPreview. The document is loaded by
+// URL (src, never srcDoc) so its response carries the same CSP header as the live page embed —
+// a srcDoc document would inherit the dashboard's CSP, which blocks the page's inline scripts
+// and shows script-rendered pages (say, a product grid built from the gumroad-data JSON) as
+// broken. It renders on an opaque origin (no allow-same-origin), just like the live page embed,
+// so the proposed HTML can't reach cookies or the dashboard DOM. Unlike the live page's iframe,
+// the sandbox below deliberately omits allow-popups-to-escape-sandbox (matching
+// ProfileLandingPagePreview): this HTML is a not-yet-confirmed agent proposal shown inside the
+// seller's dashboard, so any popup it opens stays sandboxed rather than getting a full
+// unsandboxed window. Popup escape only changes popup behavior, not how the page itself renders,
+// so preview fidelity is unaffected.
 const CustomHtmlProposalPreview = ({ state }: { state: CustomHtmlPreviewState }) => {
   if (state.status === "disabled") return null;
   if (state.status === "loading")
@@ -240,7 +245,7 @@ const CustomHtmlProposalPreview = ({ state }: { state: CustomHtmlPreviewState })
   return (
     <iframe
       title="Preview of your page after this change"
-      srcDoc={state.html}
+      src={state.url}
       sandbox="allow-scripts allow-forms allow-popups"
       referrerPolicy="no-referrer"
       className="h-96 w-full rounded border border-border bg-white"

@@ -39,14 +39,6 @@ module RendersCustomHtmlPages
     "form-action 'self'",
   ].join("; ") + ";"
 
-  # CUSTOM_HTML_CSP for documents delivered without response headers — e.g. the agent's
-  # proposed-change preview, which reaches the browser as an iframe srcdoc. A meta CSP tag can't
-  # carry the `sandbox` directive (browsers ignore it there), so it's stripped; the embedding
-  # iframe's sandbox attribute supplies the sandboxing instead. Everything else applies unchanged,
-  # so a previewed page blocks exactly the resources (external images, fetches, ...) the live page
-  # would block.
-  CUSTOM_HTML_META_CSP = CUSTOM_HTML_CSP.split("; ").reject { |directive| directive.start_with?("sandbox ") }.join("; ")
-
   # Loaded in <head> so it runs before any seller script (without becoming the
   # body's first child). On the opaque origin (allow-scripts, no
   # allow-same-origin) localStorage/sessionStorage/document.cookie throw, so a
@@ -410,18 +402,18 @@ module RendersCustomHtmlPages
     # The full sandboxed document for a profile custom-HTML page. Shared by the live
     # /landing/embed endpoint (UsersController) and the agent's proposed-change preview
     # (Api::Internal::AgentCustomHtmlPreviewsController) so a preview can never drift from what
-    # actually ships. `meta_csp` embeds CUSTOM_HTML_META_CSP for delivery paths that have no
-    # response headers to carry the real CSP (iframe srcdoc). `scroll_to_change` adds the
-    # preview-only script that jumps to the PREVIEW_CHANGED_MARKER comment, so an edit further
-    # down the page opens in view instead of hiding below the fold.
-    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "", follow_bridge: "", meta_csp: false, scroll_to_change: false)
+    # actually ships. Both serve it over HTTP with CUSTOM_HTML_CSP as a response header — never
+    # as an iframe srcdoc, which would inherit the embedding dashboard's CSP and block every
+    # inline script in the page (a meta CSP tag can't undo that: policies only intersect).
+    # `scroll_to_change` adds the preview-only script that jumps to the PREVIEW_CHANGED_MARKER
+    # comment, so an edit further down the page opens in view instead of hiding below the fold.
+    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
       <<~HTML
         <!doctype html>
         <html>
           <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            #{meta_csp ? %(<meta http-equiv="Content-Security-Policy" content="#{ERB::Util.h(CUSTOM_HTML_META_CSP)}">) : ""}
             #{SANDBOX_COMPAT_SCRIPT}
             #{self.class.pages_tailwind_head}
           </head>

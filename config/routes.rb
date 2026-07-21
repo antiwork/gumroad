@@ -1159,6 +1159,10 @@ Rails.application.routes.draw do
         get "/agent/conversations/latest", to: "agent_conversations#latest", as: :agent_conversations_latest
         get "/agent/turns/:client_turn_id", to: "agent_conversations#turn_status", as: :agent_turn_status
         post "/agent/custom_html_preview", to: "agent_custom_html_previews#create", as: :agent_custom_html_preview
+        # Serves a staged preview document by token. This must be a real URL (not JSON consumed
+        # into an iframe srcdoc) so the response can carry the custom-page CSP header — srcdoc
+        # documents inherit the dashboard's CSP, which blocks the page's inline scripts.
+        get "/agent/custom_html_previews/:token", to: "agent_custom_html_previews#show", as: :agent_custom_html_preview_document, defaults: { format: :html }
       end
     end
 
