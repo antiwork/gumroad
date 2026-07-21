@@ -131,6 +131,9 @@ export const fetchCustomHtmlProposalPreview = async (action: ProposedAction): Pr
   // miss (say, the staged document expired or was evicted). Probe the URL before reporting the
   // preview loaded — the card enables Confirm on that signal, and it must never enable it while
   // the iframe is about to render the "preview expired" notice instead of the proposed page.
+  // The probe-then-load window itself is not worth guarding: the token was staged moments ago,
+  // so it sits a full TTL away from expiry and newest in the seller's eviction order — losing it
+  // mid-window would take a burst of further stagings by the same seller within milliseconds.
   const probe = await request({ method: "HEAD", accept: "html", url: json.preview_url });
   if (!probe.ok) throw new ResponseError("The preview couldn't be loaded.");
   return json.preview_url;

@@ -116,8 +116,6 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
     #
     # A per-seller list of staged tokens (newest first) enforces MAX_STAGED_PREVIEWS_PER_SELLER:
     # every stage pushes its token and evicts the documents that fall off the end of the list.
-    # Best-effort on purpose — two concurrent stages can briefly overshoot the cap by one, which
-    # is fine; the cap is a storage bound, not an exact quota.
     def stage_preview_document(document)
       token = SecureRandom.urlsafe_base64(24)
       index_key = RedisKey.agent_custom_html_preview_index(current_seller.id)
@@ -125,9 +123,15 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
       $redis.lpush(index_key, token)
       # The index only needs to outlive the documents it tracks; refresh alongside every stage.
       $redis.expire(index_key, PREVIEW_DOCUMENT_TTL.to_i)
-      evicted = $redis.lrange(index_key, MAX_STAGED_PREVIEWS_PER_SELLER, -1)
+      # Read-what-you-trim atomically (MULTI): if the read and the trim were separate commands, a
+      # concurrent stage's lpush could land between them, shifting the list so the trim drops a
+      # token the read never saw — that document would stay in Redis untracked until its TTL,
+      # quietly weakening the storage cap.
+      evicted, _trimmed = $redis.multi do |transaction|
+        transaction.lrange(index_key, MAX_STAGED_PREVIEWS_PER_SELLER, -1)
+        transaction.ltrim(index_key, 0, MAX_STAGED_PREVIEWS_PER_SELLER - 1)
+      end
       if evicted.any?
-        $redis.ltrim(index_key, 0, MAX_STAGED_PREVIEWS_PER_SELLER - 1)
         $redis.del(*evicted.map { |evicted_token| RedisKey.agent_custom_html_preview(current_seller.id, evicted_token) })
       end
       internal_agent_custom_html_preview_document_path(token)
