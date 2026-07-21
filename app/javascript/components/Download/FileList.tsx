@@ -481,6 +481,11 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           type="audio"
           isPlaying={isPlaying}
           resumeAt={latestMediaLocation || 0}
+          // While duration analysis is pending this sends contentLength: null, which every
+          // native receiver treats as "length unknown": the iOS app's `as? String` cast fails
+          // on null so it keeps content_length nil (sending "0" would instead force every
+          // resume back to 0:00), the Android bridge never reads this field, and the React
+          // Native app types the field as nullable and sources track length from the API.
           contentLength={file.duration}
         >
           <RowContent asChild>
