@@ -910,7 +910,16 @@ class Link < ApplicationRecord
     limit ? combined_codes.first(limit) : combined_codes
   end
 
-  def purchase_info_for_product_page(requested_user, browser_guid)
+  def purchase_info_for_product_page(requested_user, browser_guid, purchase_id: nil, purchase_email_digest: nil)
+    # Review reminder emails for bundles link to this product page with the purchase's
+    # external id and email digest in the URL, because a buyer opening the email may not
+    # be signed in (and may be on a different browser than the one they bought on). The
+    # digest is an HMAC of the purchase id + email, so presenting a matching pair proves
+    # the visitor received the email for that purchase — the same check
+    # ProductReviewsController#set performs before accepting a review.
+    digest_purchase = purchase_for_email_digest(purchase_id, purchase_email_digest)
+    return digest_purchase.purchase_info if digest_purchase
+
     return nil unless requested_user || browser_guid
 
     eligible_purchases = Purchase.none
@@ -1371,6 +1380,22 @@ class Link < ApplicationRecord
     end
 
   private
+    # Looks up a purchase of this product by external id and verifies the caller also
+    # holds that purchase's email digest (an HMAC of purchase id + email). Both values
+    # come from review-reminder email links, so a match proves the visitor received the
+    # email for that purchase without requiring them to be signed in. Mirrors the
+    # authorization check in ProductReviewsController#set. Uses secure_compare so the
+    # digest comparison isn't vulnerable to timing attacks.
+    def purchase_for_email_digest(purchase_id, purchase_email_digest)
+      return nil if purchase_id.blank? || purchase_email_digest.blank?
+
+      purchase = sales.successful_gift_or_nongift.not_fully_refunded.not_chargedback.find_by_external_id(purchase_id)
+      return nil unless purchase&.email_digest.present?
+      return nil unless ActiveSupport::SecurityUtils.secure_compare(purchase.email_digest, purchase_email_digest.to_s)
+
+      purchase
+    end
+
     # When a product is soft-deleted, clear any references to it from
     # SellerProfileFeaturedProductSection.featured_product_id (a JSON column).
     # Without this, the section's cached props would point at a missing product

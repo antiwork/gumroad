@@ -3839,6 +3839,31 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
+      context "with a logged-out buyer arriving from a review reminder email" do
+        let!(:purchase) { create(:purchase, link: product) }
+
+        it "recognizes the purchase when the purchase id and email digest match" do
+          get :show, params: { id: product.to_param, purchase_id: purchase.external_id, purchase_email_digest: purchase.email_digest }
+
+          expect(response).to be_successful
+          expect(inertia.props[:purchase][:id]).to eq(purchase.external_id)
+        end
+
+        it "ignores the purchase when the email digest doesn't match" do
+          get :show, params: { id: product.to_param, purchase_id: purchase.external_id, purchase_email_digest: "wrong-digest" }
+
+          expect(response).to be_successful
+          expect(inertia.props[:purchase]).to be_nil
+        end
+
+        it "ignores the purchase when the email digest is missing" do
+          get :show, params: { id: product.to_param, purchase_id: purchase.external_id }
+
+          expect(response).to be_successful
+          expect(inertia.props[:purchase]).to be_nil
+        end
+      end
+
       describe "meta tags sanitization" do
         it "properly escapes double quote in content" do
           link = create(:product, user: @user, description: 'I like pie."')

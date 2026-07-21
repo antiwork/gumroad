@@ -595,9 +595,10 @@ describe CustomerLowPriorityMailer do
       end
 
       context "when the purchase is a guest purchase" do
-        it "links to the bundle's product page, where the bundle review form lives" do
+        it "links to the bundle's product page with the purchase credentials for the review form" do
           mail = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
-          expect(mail.body.encoded).to have_link("Leave a review", href: purchase.link.long_url)
+          expected_url = "#{purchase.link.long_url}?#{{ purchase_id: purchase.external_id, purchase_email_digest: purchase.email_digest }.to_query}"
+          expect(mail.body.encoded).to have_link("Leave a review", href: expected_url)
         end
       end
     end

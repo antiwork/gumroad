@@ -353,10 +353,15 @@ class CustomerLowPriorityMailer < ApplicationMailer
     # no review UI. When the buyer has an account, link to the reviews page: it resolves
     # their reviewable purchases server-side after login, so the link keeps working even
     # when the email is opened outside an authenticated session. Guest purchases have no
-    # account to log into, so fall back to the bundle's product page, which associates
-    # the purchase via the buyer's browser cookie (same best-effort guests get elsewhere).
+    # account to log into, so link to the bundle's product page with the purchase's
+    # external id and email digest appended — the page verifies the digest server-side
+    # and then shows the review form, so the link works in any browser without a session.
     @review_url = if @purchase.is_bundle_purchase?
-      @purchase.purchaser.present? ? reviews_url : @purchase.link.long_url
+      if @purchase.purchaser.present?
+        reviews_url
+      else
+        "#{@purchase.link.long_url}?#{{ purchase_id: @purchase.external_id, purchase_email_digest: @purchase.email_digest }.to_query}"
+      end
     else
       @purchase.url_redirect&.download_page_url || @purchase.link.long_url
     end
