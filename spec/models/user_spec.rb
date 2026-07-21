@@ -985,9 +985,8 @@ describe User, :vcr do
         include_examples "user is not deactivated"
       end
 
-      context "when user has negative balances and the feature delete_account_forfeit_balance is active" do
+      context "when user has negative balances" do
         before do
-          Feature.activate_user :delete_account_forfeit_balance, @user
           create(:balance, user: @user, amount_cents: -50)
         end
 

@@ -77,16 +77,12 @@ class User
     end
 
     def formatted_balance_to_forfeit(reason)
-      return if reason == :account_closure && Feature.inactive?(:delete_account_forfeit_balance, self)
-
       forfeiter = ForfeitBalanceService.new(user: self, reason:)
 
       forfeiter.balance_amount_formatted if forfeiter.balance_amount_cents_to_forfeit > 0
     end
 
     def forfeit_unpaid_balance!(reason)
-      return if reason == :account_closure && Feature.inactive?(:delete_account_forfeit_balance, self)
-
       ForfeitBalanceService.new(user: self, reason:).process
     end
 
