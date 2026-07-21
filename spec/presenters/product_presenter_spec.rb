@@ -295,7 +295,7 @@ describe ProductPresenter do
     let!(:custom_domain) { create(:custom_domain, :with_product, product:) }
     let(:product_files) do
       product_file = product.product_files.first
-      [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
+      [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
     end
     let(:available_countries) { ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } } }
 
@@ -345,9 +345,6 @@ describe ProductPresenter do
             can_enable_quantity: true,
             should_show_sales_count: true,
             hide_sold_out_variants: false,
-            gifting_disabled: false,
-            hide_kindle_and_read_buttons: false,
-            hide_download_page_byline: false,
             is_epublication: false,
             product_refund_policy_enabled: false,
             section_ids: [profile_section.external_id],
@@ -618,9 +615,6 @@ describe ProductPresenter do
               can_enable_quantity: false,
               should_show_sales_count: false,
               hide_sold_out_variants: false,
-              gifting_disabled: false,
-              hide_kindle_and_read_buttons: false,
-              hide_download_page_byline: false,
               is_epublication: false,
               product_refund_policy_enabled: false,
               refund_policy: {
@@ -884,9 +878,6 @@ describe ProductPresenter do
               can_enable_quantity: true,
               should_show_sales_count: false,
               hide_sold_out_variants: false,
-              gifting_disabled: false,
-              hide_kindle_and_read_buttons: false,
-              hide_download_page_byline: false,
               is_epublication: false,
               product_refund_policy_enabled: false,
               section_ids: [],
@@ -1154,7 +1145,7 @@ describe ProductPresenter do
     let(:presenter) { described_class.new(product: product) }
     let(:product_files) do
       product_file = product.product_files.first
-      [{ attached_product_name: product.name,  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
+      [{ attached_product_name: product.name,  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
     end
 
     it "returns existing files" do

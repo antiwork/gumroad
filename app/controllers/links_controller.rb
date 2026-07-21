@@ -732,7 +732,6 @@ class LinksController < ApplicationController
                                    :is_recurring_billing, :subscription_duration, :json_data,
                                    :is_physical, :skus_enabled, :block_access_after_membership_cancellation, :purchase_type,
                                    :should_include_last_post, :should_show_all_posts, :should_show_sales_count, :duration_in_months,
-                                   :gifting_disabled, :hide_kindle_and_read_buttons, :hide_download_page_byline,
                                    :free_trial_enabled, :free_trial_duration_amount, :free_trial_duration_unit,
                                    :is_adult, :is_epublication, :product_refund_policy_enabled, :seller_refund_policy_enabled,
                                    :refund_policy, :taxonomy_id)

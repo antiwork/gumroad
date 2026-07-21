@@ -3206,8 +3206,10 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal true, build_product(is_recurring_billing: true).can_gift?
   end
 
-  test "can_gift? is false when the seller has disabled gifting for the product" do
-    assert_equal false, build_product(gifting_disabled: true).can_gift?
+  test "can_gift? is false when the seller has disabled gifting at checkout" do
+    product = build_product
+    product.user.gifting_disabled = true
+    assert_equal false, product.can_gift?
   end
 
   # --- #quantity_enabled / #can_enable_quantity? ------------------------------

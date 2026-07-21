@@ -20,6 +20,7 @@ class Checkout::FormPresenter
         recommendation_type: seller.recommendation_type,
         tipping_enabled: seller.tipping_enabled?,
         ach_payments_enabled: seller.ach_payments_enabled?,
+        gifting_disabled: seller.gifting_disabled?,
       },
       cart_item: cart_product.present? ? CheckoutPresenter.new(logged_in_user: nil, ip: nil).checkout_product(cart_product, cart_product.cart_item({}), {}).merge({ quantity: 1, url_parameters: {}, referrer: "" }) : nil,
       custom_fields: seller.custom_fields.not_is_post_purchase.map(&:as_json),

@@ -74,9 +74,6 @@ class LinkPolicy < ApplicationPolicy
       :quantity_enabled,
       :should_show_sales_count,
       :hide_sold_out_variants,
-      :gifting_disabled,
-      :hide_kindle_and_read_buttons,
-      :hide_download_page_byline,
       :custom_button_text_option,
       :custom_summary,
       :custom_view_content_button_text,
@@ -150,7 +147,7 @@ class LinkPolicy < ApplicationPolicy
       tags: [],
       rich_content:,
       files: [:id, :display_name, :description, :folder_id, :size, :position, :url, :isbn,
-              :extension, :stream_only, :pdf_stamp_enabled, :modified, subtitle_files: [:url, :language], thumbnail: [:signed_id]],
+              :extension, :stream_only, :pdf_stamp_enabled, :hide_kindle_and_read_buttons, :modified, subtitle_files: [:url, :language], thumbnail: [:signed_id]],
       call_limitation_info: [:minimum_notice_in_minutes, :maximum_calls_per_day],
       public_files: [:id, :name, status: [:type]],
       cancellation_discount: [

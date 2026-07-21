@@ -167,7 +167,7 @@ const FileUploadMenu = ({
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
+  const { id, product, updateProduct, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -244,6 +244,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         file_size: file.size,
         is_pdf: extension === "PDF",
         pdf_stamp_enabled: false,
+        hide_kindle_and_read_buttons: false,
         is_streamable: FileUtils.isFileExtensionStreamable(extension),
         stream_only: false,
         is_transcoding_in_progress: false,
@@ -446,6 +447,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             file_size: file.bytes,
             is_pdf: extension === "PDF",
             pdf_stamp_enabled: false,
+            hide_kindle_and_read_buttons: false,
             is_streamable: FileUtils.isFileNameStreamable(file.name),
             stream_only: false,
             is_transcoding_in_progress: false,
@@ -976,7 +978,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     </Card>
                     <EntityInfo
                       entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
-                      creator={seller}
                     />
                   </>
                 ) : null}

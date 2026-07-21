@@ -92,7 +92,6 @@ class UrlRedirectPresenter
         terms_page_url: HomePageLinkService.terms,
         token: url_redirect.token,
         redirect_id: url_redirect.external_id,
-        creator:,
         installment: url_redirect.with_product_files.is_a?(Installment) ? {
           name: installment.name,
         } : nil,
@@ -240,13 +239,13 @@ class UrlRedirectPresenter
         id: file.external_id,
         download_url: url_redirect.is_file_downloadable?(file) ? url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }) : nil,
         stream_url: file.streamable? ? url_redirect_stream_page_for_product_file_path(url_redirect.token, file.external_id) : nil,
-        kindle_data: file.can_send_to_kindle? && !hide_kindle_and_read_buttons? ?
+        kindle_data: file.can_send_to_kindle? && !file.try(:hide_kindle_and_read_buttons?) ?
                        { email: logged_in_user&.kindle_email, icon_url: ActionController::Base.helpers.image_path("white-15.png") } :
                        nil,
         latest_media_location: media_locations_by_file[file.id].as_json,
         content_length: file.content_length,
         isbn: file.isbn,
-        read_url: file.readable? && !hide_kindle_and_read_buttons? ? (
+        read_url: file.readable? && !file.try(:hide_kindle_and_read_buttons?) ? (
           file.is_a?(Link) ? url_redirect_read_url(url_redirect.token) : file.is_a?(ProductFile) ? url_redirect_read_for_product_file_path(url_redirect.token, file.external_id) : nil
         ) : nil,
         external_link_url: file.external_link? ? file.url : nil,
@@ -273,26 +272,6 @@ class UrlRedirectPresenter
       return unless logged_in_user == url_redirect.seller && !url_redirect.with_product_files.has_been_transcoded?
 
       { transcode_on_first_sale: product&.transcode_videos_on_purchase.present? }
-    end
-
-    def creator
-      # Sellers can opt out of the "By <creator>" byline on the download/content page
-      # (gumroad-private#1191); installment-only redirects have no product and keep the byline.
-      return nil if product&.hide_download_page_byline?
-
-      user = product&.user || installment&.seller
-      user&.name || user&.username ? {
-        name: user.name.presence || user.username,
-        profile_url: user.profile_url(recommended_by: "library"),
-        avatar_url: user.avatar_url
-      } : nil
-    end
-
-    # Whether the seller opted to hide the "Send to Kindle" and "Read" buttons on the
-    # download page, leaving only "Download" (gumroad-private#1191). Installment-only
-    # redirects have no product, so the buttons keep their default file-type behavior.
-    def hide_kindle_and_read_buttons?
-      product&.hide_kindle_and_read_buttons? || false
     end
 
     def media_locations_by_file

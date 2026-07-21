@@ -79,9 +79,9 @@ describe UrlRedirectPresenter do
                                                                  }])
     end
 
-    it "nulls kindle_data and read_url when the seller has hidden the Kindle and Read buttons" do
-      product = create(:product, hide_kindle_and_read_buttons: true)
-      create(:readable_document, link: product, display_name: "Readable PDF")
+    it "nulls kindle_data and read_url when the seller has hidden the Kindle and Read buttons for the file" do
+      product = create(:product)
+      create(:readable_document, link: product, display_name: "Readable PDF", hide_kindle_and_read_buttons: true)
       purchase = create(:purchase, link: product)
       url_redirect = create(:url_redirect, purchase:)
       user = create(:user)
@@ -158,11 +158,6 @@ describe UrlRedirectPresenter do
         terms_page_url: HomePageLinkService.terms,
         token: @url_redirect.token,
         redirect_id: @url_redirect.external_id,
-        creator: {
-          name: "John Doe",
-          profile_url: @user.profile_url(recommended_by: "library"),
-          avatar_url: @user.avatar_url,
-        },
         product_has_third_party_analytics: false,
         seller_analytics: nil,
         installment: nil,
@@ -208,11 +203,10 @@ describe UrlRedirectPresenter do
       expect(instance.download_page_with_content_props).to eq(@props)
     end
 
-    it "omits the creator byline when the seller has hidden it for the product" do
-      @product.update!(hide_download_page_byline: true)
+    it "does not include a creator byline in props" do
       instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
 
-      expect(instance.download_page_with_content_props[:creator]).to be_nil
+      expect(instance.download_page_with_content_props).not_to have_key(:creator)
     end
 
     it "includes 'custom_receipt' in props" do
@@ -279,16 +273,6 @@ describe UrlRedirectPresenter do
 
       instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
       expect(instance.download_page_with_content_props[:content][:download_all_button]).to be_nil
-    end
-
-    it "includes 'creator' in props" do
-      @user.update!(name: "John Doe")
-      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
-      expect(instance.download_page_with_content_props[:creator]).to eq(
-        name: "John Doe",
-        profile_url: @user.profile_url(recommended_by: "library"),
-        avatar_url: @user.avatar_url,
-      )
     end
 
     it "includes 'membership' in props" do
@@ -602,11 +586,6 @@ describe UrlRedirectPresenter do
 
     it "returns the correct props" do
       expect(described_class.new(url_redirect: @url_redirect, logged_in_user: @user).download_page_without_content_props).to eq(
-        creator: {
-          name: "John Doe",
-          profile_url: @user.profile_url(recommended_by: "library"),
-          avatar_url: @user.avatar_url,
-        },
         terms_page_url: HomePageLinkService.terms,
         token: @url_redirect.token,
         redirect_id: @url_redirect.external_id,
@@ -691,17 +670,13 @@ describe UrlRedirectPresenter do
       expect(props[:purchase]).to include(email: nil)
     end
 
-    it "includes 'installment' and correct 'creator' in props" do
+    it "includes 'installment' and no 'creator' in props" do
       url_redirect = create(:installment_url_redirect, installment: create(:workflow_installment, name: "Thank you for the purchase!", link: nil, seller: @user, product_files: [create(:product_file)]))
 
       props = described_class.new(url_redirect:, logged_in_user: @user).download_page_without_content_props
 
       expect(props[:installment]).to eq(name: "Thank you for the purchase!")
-      expect(props[:creator]).to eq(
-        name: "John Doe",
-        profile_url: @user.profile_url(recommended_by: "library"),
-        avatar_url: @user.avatar_url,
-      )
+      expect(props).not_to have_key(:creator)
     end
 
     context "with completed installment plan" do

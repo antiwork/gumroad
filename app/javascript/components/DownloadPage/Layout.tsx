@@ -15,7 +15,6 @@ import { Modal } from "$app/components/Modal";
 import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
@@ -43,7 +42,6 @@ export type LayoutProps = {
   terms_page_url: string;
   token: string;
   redirect_id: string;
-  creator: { name: string; profile_url: string; avatar_url: string | null } | null;
   add_to_library_option: AddToLibraryOption;
   installment: { name: string } | null;
   purchase: {
@@ -85,7 +83,6 @@ export const Layout = ({
   installment,
   terms_page_url,
   add_to_library_option,
-  creator,
   headerActions,
   pageList,
   children,
@@ -241,7 +238,6 @@ export const Layout = ({
               ? installment.name
               : null
         }
-        creator={creator}
       />
     </>
   );
@@ -335,24 +331,10 @@ const CallDetails = ({ call }: { call: Call }) => {
   );
 };
 
-export const EntityInfo = ({ entityName, creator }: { entityName: string | null; creator: LayoutProps["creator"] }) =>
-  entityName || creator ? (
+export const EntityInfo = ({ entityName }: { entityName: string | null }) =>
+  entityName ? (
     <Card>
-      {entityName ? <CardContent>{entityName}</CardContent> : null}
-      {creator ? (
-        <CardContent>
-          <span style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} className="grow">
-            {creator.avatar_url ? <Avatar src={creator.avatar_url} /> : null}
-
-            <span>
-              By{" "}
-              <a href={creator.profile_url} target="_blank" className="relative" rel="noreferrer">
-                {creator.name}
-              </a>
-            </span>
-          </span>
-        </CardContent>
-      ) : null}
+      <CardContent>{entityName}</CardContent>
     </Card>
   ) : null;
 

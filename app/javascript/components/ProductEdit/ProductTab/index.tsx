@@ -449,23 +449,6 @@ export const ProductTab = () => {
                         : "Publicly show the number of sales on your product page"
                     }
                   />
-                  <Switch
-                    checked={!product.gifting_disabled}
-                    onChange={(e) => updateProduct({ gifting_disabled: !e.target.checked })}
-                    label="Allow customers to give this product as a gift"
-                  />
-                  {product.native_type !== "physical" ? (
-                    <Switch
-                      checked={!product.hide_kindle_and_read_buttons}
-                      onChange={(e) => updateProduct({ hide_kindle_and_read_buttons: !e.target.checked })}
-                      label='Show "Send to Kindle" and "Read" buttons for readable files on the download page'
-                    />
-                  ) : null}
-                  <Switch
-                    checked={!product.hide_download_page_byline}
-                    onChange={(e) => updateProduct({ hide_download_page_byline: !e.target.checked })}
-                    label="Show your name and profile link on the download page"
-                  />
                   {product.native_type !== "physical" ? (
                     <Switch
                       checked={product.is_epublication}

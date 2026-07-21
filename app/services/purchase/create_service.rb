@@ -293,7 +293,7 @@ class Purchase::CreateService < Purchase::BaseService
 
         gift
       else
-        error_message = product.gifting_disabled? ? "The creator has disabled gifting for this product." : "Gifting is not yet enabled for pre-orders."
+        error_message = product.user.gifting_disabled? ? "The creator has disabled gifting for their products." : "Gifting is not yet enabled for pre-orders."
         raise Purchase::PurchaseInvalid, error_message
       end
     end

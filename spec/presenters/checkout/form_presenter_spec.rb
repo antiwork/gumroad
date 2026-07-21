@@ -20,6 +20,7 @@ describe Checkout::FormPresenter do
               recommendation_type: User::RecommendationType::OWN_PRODUCTS,
               tipping_enabled: false,
               ach_payments_enabled: false,
+              gifting_disabled: false,
             },
             cart_item: nil,
             card_product: nil,
@@ -46,6 +47,16 @@ describe Checkout::FormPresenter do
 
       it "returns true for ach_payments_enabled" do
         expect(presenter.form_props[:user][:ach_payments_enabled]).to eq(true)
+      end
+    end
+
+    context "when the seller has disabled gifting" do
+      before do
+        seller.update!(gifting_disabled: true)
+      end
+
+      it "returns true for gifting_disabled" do
+        expect(presenter.form_props[:user][:gifting_disabled]).to eq(true)
       end
     end
 
