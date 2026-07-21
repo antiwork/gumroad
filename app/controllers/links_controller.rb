@@ -85,7 +85,12 @@ class LinksController < ApplicationController
     @product.is_bundle = @product.native_type == Link::NATIVE_TYPE_BUNDLE
     @product.json_data[:custom_button_text_option] = "donate_prompt" if @product.native_type == Link::NATIVE_TYPE_COFFEE
 
-    ai_generated = params[:link][:ai_prompt].present?
+    # Only run AI generation for sellers who pass the same policy that gates the
+    # dedicated generation endpoints (eligibility + team role). The prompt param is
+    # client-supplied, so an ineligible seller could otherwise trigger AI service
+    # work through ordinary product creation. When the policy fails we still create
+    # the product normally — we just skip the AI step.
+    ai_generated = params[:link][:ai_prompt].present? && policy(current_seller).generate_product_details_with_ai?
 
     begin
       @product.save!
