@@ -227,6 +227,19 @@ describe Api::Mobile::AnalyticsController do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("cannot exceed")
     end
+
+    it "rejects hourly requests whose inclusive date count exceeds the hourly bound" do
+      # Explicit dates exactly MAX_HOURLY_DATE_RANGE_DAYS apart cover
+      # MAX_HOURLY_DATE_RANGE_DAYS + 1 inclusive dates, which is over the limit.
+      # Both dates derive from one anchor so the span is exact regardless of the
+      # machine's local time zone.
+      end_date = Date.today
+      start_date = end_date - CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS
+      get :by_date, params: @params.merge(start_date: start_date.to_s, end_date: end_date.to_s, group_by: "hour")
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to include("cannot exceed")
+    end
   end
 
   describe "GET by_state" do

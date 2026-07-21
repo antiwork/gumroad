@@ -30,12 +30,18 @@ class Api::Mobile::AnalyticsController < Api::Mobile::BaseController
   def by_date
     if params[:group_by] == "hour"
       return render json: { error: "Invalid date range." }, status: :bad_request if @end_date < @start_date
-      if (@end_date - @start_date).to_i > CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS
+      # The range is inclusive of both endpoints, so a request covers
+      # (@end_date - @start_date) + 1 dates. Using >= here keeps the number of
+      # dates (and therefore hourly buckets) within the documented maximum —
+      # a plain > would let an 8-date range through (e.g. July 1..July 8).
+      if (@end_date - @start_date).to_i >= CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS
         return render json: { error: "Date range cannot exceed #{CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS} days for the hourly interval." }, status: :bad_request
       end
 
       # Hourly data bypasses CreatorAnalytics::CachingProxy, which only stores
-      # day-keyed data; the range is at most 7 days so the live query is cheap.
+      # day-keyed data; the guard above keeps the inclusive range within
+      # MAX_HOURLY_DATE_RANGE_DAYS dates (at most 168 hourly buckets), so the
+      # live Elasticsearch query is cheap.
       hourly = CreatorAnalytics::Web.new(user: current_resource_owner, dates: (@start_date..@end_date).to_a, interval: "hour").by_date
       data = { dates: hourly[:dates_and_months].map { _1[:date] }, by_date: hourly[:by_date] }
     else
