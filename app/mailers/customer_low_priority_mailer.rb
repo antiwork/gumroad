@@ -348,11 +348,15 @@ class CustomerLowPriorityMailer < ApplicationMailer
     @unsub_link = user_unsubscribe_review_reminders_url if @purchase.purchaser
     @purchaser_name = @purchase.full_name.presence || @purchase.purchaser&.name&.presence
 
-    # For a bundle, the reminder is about reviewing the bundle itself, and the bundle's
-    # review form lives on its product page. The bundle's download page can't be used
-    # here because it redirects to the library, which has no review UI.
+    # For a bundle, the reminder is about reviewing the bundle itself. The bundle's
+    # download page can't be used here because it redirects to the library, which has
+    # no review UI. When the buyer has an account, link to the reviews page: it resolves
+    # their reviewable purchases server-side after login, so the link keeps working even
+    # when the email is opened outside an authenticated session. Guest purchases have no
+    # account to log into, so fall back to the bundle's product page, which associates
+    # the purchase via the buyer's browser cookie (same best-effort guests get elsewhere).
     @review_url = if @purchase.is_bundle_purchase?
-      @purchase.link.long_url
+      @purchase.purchaser.present? ? reviews_url : @purchase.link.long_url
     else
       @purchase.url_redirect&.download_page_url || @purchase.link.long_url
     end
