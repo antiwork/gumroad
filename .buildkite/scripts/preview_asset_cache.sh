@@ -9,7 +9,7 @@
 # preview branch" refreshes.
 #
 # This helper caches the compiled artifacts (node_modules, public/vite,
-# public/js, public/pages-tailwind.css) in S3, keyed on a hash of every input
+# public/js, the pages Tailwind build and its manifest) in S3, keyed on a hash of every input
 # that feeds the compile. On a hit, compile_assets.sh restores the artifacts
 # into a fresh web-image container and commits that as the staging image,
 # skipping npm install / js:export / Vite entirely. On a miss it builds
@@ -195,7 +195,7 @@ preview_asset_cache_save() {
   # gzip -1: node_modules dominates the tarball and compresses slowly at the
   # default level; speed matters more than a few percent of S3 storage.
   if ! docker run --rm --entrypoint="" "$image" \
-    bash -c 'set -o pipefail; cd /app && paths=""; for p in node_modules public/vite public/js public/pages-tailwind.css; do [ -e "$p" ] && paths="$paths $p"; done; tar -cf - $paths | gzip -1' \
+    bash -c 'set -o pipefail; cd /app && paths=""; for p in node_modules public/vite public/js public/pages-tailwind.css public/pages public/pages-tailwind-manifest.json; do [ -e "$p" ] && paths="$paths $p"; done; tar -cf - $paths | gzip -1' \
     > "$PREVIEW_ASSET_CACHE_TARBALL"; then
     preview_asset_cache_logger "Failed to extract assets from $image; skipping cache save"
     rm -f "$PREVIEW_ASSET_CACHE_TARBALL"
