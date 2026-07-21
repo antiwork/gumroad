@@ -44,6 +44,7 @@ type FormData = {
     recommendation_type: RecommendationType;
     tipping_enabled: boolean;
     ach_payments_enabled: boolean;
+    gifting_disabled: boolean;
   };
   custom_fields: CustomFieldWithKey[];
 };
@@ -57,6 +58,7 @@ export type FormPageProps = {
     recommendation_type: RecommendationType;
     tipping_enabled: boolean;
     ach_payments_enabled: boolean;
+    gifting_disabled: boolean;
   };
   cart_item: CartItem | null;
   card_product: CardProduct | null;
@@ -66,7 +68,7 @@ export type FormPageProps = {
 
 const FormPage = ({
   pages,
-  user: { display_offer_code_field, recommendation_type, tipping_enabled, ach_payments_enabled },
+  user: { display_offer_code_field, recommendation_type, tipping_enabled, ach_payments_enabled, gifting_disabled },
   cart_item,
   card_product,
   custom_fields,
@@ -88,6 +90,7 @@ const FormPage = ({
       recommendation_type,
       tipping_enabled,
       ach_payments_enabled,
+      gifting_disabled,
     },
     custom_fields: custom_fields.map(addKey),
   });
@@ -159,6 +162,7 @@ const FormPage = ({
   const recommendationType = form.data.user.recommendation_type;
   const tippingEnabled = form.data.user.tipping_enabled;
   const achPaymentsEnabled = form.data.user.ach_payments_enabled;
+  const giftingDisabled = form.data.user.gifting_disabled;
 
   const productOptions = React.useMemo(
     () => products.filter((product) => !product.archived).map((product) => ({ id: product.id, label: product.name })),
@@ -405,6 +409,16 @@ const FormPage = ({
               checked={tippingEnabled}
               onChange={(e) => updateUserData({ tipping_enabled: e.target.checked })}
               label="Allow customers to add tips to their orders"
+            />
+          </section>
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
+            <header>
+              <h2>Gifting</h2>
+            </header>
+            <Switch
+              checked={!giftingDisabled}
+              onChange={(e) => updateUserData({ gifting_disabled: !e.target.checked })}
+              label="Allow customers to purchase your products as gifts"
             />
           </section>
           <section className="space-y-4 border-b border-border p-4 md:p-8">

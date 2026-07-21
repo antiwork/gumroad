@@ -314,6 +314,7 @@ class User < ApplicationRecord
             53 => :refund_policy_enforced, # Set automatically when a seller's dispute rate is too high; forces a buyer-friendly refund policy. See Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!
             54 => :disable_review_reminders, # Seller setting: when enabled, buyers of this seller's products don't receive review reminder emails.
             55 => :ach_payments_enabled, # Seller opt-in (checkout settings page): offers ACH Direct Debit (us_bank_account) at checkout. Off by default — ACH settles in ~4 business days and content only delivers on settlement, which surprises buyers of time-sensitive digital products (gumroad-private#1143).
+            56 => :gifting_disabled, # Seller opt-out (checkout settings page): removes the "Give as a gift" option at checkout for all of this seller's products (gumroad-private#1191).
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -1087,13 +1088,7 @@ class User < ApplicationRecord
     return false if suspended?
     return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
 
-    # Verified creators are trusted enough to email their audience even before
-    # their first payout completes (payouts can sit in transit for weeks when a
-    # bank abroad delays crediting the transfer). Admins toggle `verified` from
-    # the admin user page. The bypass does not apply while the account is
-    # flagged for fraud or a terms-of-service violation — an unresolved risk
-    # review must be cleared before verification unlocks early email access.
-    (verified? && !flagged?) || has_completed_payouts?
+    has_completed_payouts?
   end
 
   LAST_ALLOWED_TIME_FOR_PRODUCT_LEVEL_REFUND_POLICY = Time.new(2025, 3, 31).end_of_day

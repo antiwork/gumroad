@@ -737,7 +737,10 @@ class Link < ApplicationRecord
   end
 
   def can_gift?
-    !is_in_preorder_state
+    # Gifting is off for pre-orders (the gift flow assumes an immediately chargeable
+    # purchase) and for sellers who have disabled the checkout gift option on their
+    # checkout settings page (gumroad-private#1191).
+    !is_in_preorder_state && !user.gifting_disabled?
   end
 
   def time_fields
