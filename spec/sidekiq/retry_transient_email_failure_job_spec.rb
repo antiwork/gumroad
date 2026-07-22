@@ -344,6 +344,38 @@ describe RetryTransientEmailFailureJob do
         expect(SendPurchaseReceiptJob.jobs).to be_empty
       end
 
+      it "drops already-enqueued receipts from the pending list when a later enqueue in the batch fails, so the re-run doesn't send duplicates" do
+        second_purchase = create(:free_purchase, email: purchase.email)
+        record = TransientEmailFailureRetry.create!(
+          email: purchase.email,
+          mail_kind: TransientEmailFailureRetry::RECEIPT,
+          pending_targets: [
+            { "purchase_id" => purchase.id },
+            { "purchase_id" => second_purchase.id },
+          ],
+          retry_in_flight: true
+        )
+        suppression_manager = instance_double(EmailSuppressionManager, remove_from_lists: {})
+        allow(EmailSuppressionManager).to receive(:new).and_return(suppression_manager)
+        # First receipt enqueues fine; the second raises (e.g. Redis blip).
+        allow_any_instance_of(Purchase).to receive(:resend_receipt).and_wrap_original do |original, *args|
+          raise Redis::CannotConnectError, "connection refused" if original.receiver.id == second_purchase.id
+          original.call(*args)
+        end
+
+        expect do
+          described_class.new.perform(record.id)
+        end.to raise_error(Redis::CannotConnectError)
+
+        record.reload
+        # The claim is restored for the Sidekiq re-run, but the receipt that
+        # WAS enqueued is off the list — only the failed one gets re-tried.
+        expect(record.retry_in_flight).to eq(true)
+        expect(record.attempts).to eq(0)
+        expect(record.pending_targets).to eq([{ "purchase_id" => second_purchase.id }])
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id)
+      end
+
       it "restores the in-flight claim and re-raises when the unsuppress call fails" do
         receipt_retry
         suppression_manager = instance_double(EmailSuppressionManager)

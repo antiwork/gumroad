@@ -91,18 +91,33 @@ class RetryTransientEmailFailureJob
 
       return unless claim_attempt(retry_record)
 
-      with_claim_restore(retry_record) do
-        # Unsuppress before re-sending, or SendGrid silently drops the send.
-        # Only the deliverability lists — never spam_reports or unsubscribes.
-        EmailSuppressionManager.new(retry_record.email).remove_from_lists([:bounces, :blocks])
+      # Tracks which receipts actually got enqueued, so a failure partway
+      # through the batch (say the second enqueue raises after the first
+      # succeeded) doesn't leave already-sent receipts on the pending list —
+      # the restored claim makes the Sidekiq re-run process whatever is still
+      # listed, and re-listing a sent receipt would deliver it twice.
+      sent_targets = []
+      begin
+        with_claim_restore(retry_record) do
+          # Unsuppress before re-sending, or SendGrid silently drops the send.
+          # Only the deliverability lists — never spam_reports or unsubscribes.
+          EmailSuppressionManager.new(retry_record.email).remove_from_lists([:bounces, :blocks])
 
-        deliverable.each do |_target, record|
-          if record.is_a?(Charge)
-            CustomerMailer.receipt(nil, record.id).deliver_later(queue: "critical")
-          else
-            record.resend_receipt
+          deliverable.each do |target, record|
+            if record.is_a?(Charge)
+              CustomerMailer.receipt(nil, record.id).deliver_later(queue: "critical")
+            else
+              record.resend_receipt
+            end
+            sent_targets << target
           end
         end
+      rescue => e
+        # with_claim_restore already gave the attempt back and restored the
+        # in-flight claim; before re-raising for the Sidekiq re-run, drop the
+        # receipts that DID get enqueued so the re-run only sends the rest.
+        remove_targets(retry_record, sent_targets) if sent_targets.any?
+        raise e
       end
 
       # Only now that the sends are enqueued do the processed targets come
