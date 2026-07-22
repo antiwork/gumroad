@@ -48,6 +48,14 @@ describe PostResendApi, :freeze_time do
     end
   end
 
+  describe "text direction" do
+    before { send_default_email }
+
+    it "renders the message container with dir=auto so RTL-language content reads right-to-left" do
+      expect(html_doc(sent_email_content).at_css("div.rich-text")["dir"]).to eq("auto")
+    end
+  end
+
   describe "call to action button" do
     before do
       @post.update!(call_to_action_url: "https://cta.example/", call_to_action_text: "Click here")

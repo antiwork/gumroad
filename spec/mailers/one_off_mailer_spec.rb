@@ -119,6 +119,11 @@ describe OneOffMailer do
       expect(mail.body.encoded).to include(installment.message)
     end
 
+    it "renders the message container with dir=auto so RTL-language content reads right-to-left" do
+      mail = described_class.email_using_installment(email:, installment_external_id:)
+      expect(mail.body.encoded).to include('<div class="rich-text" dir="auto">')
+    end
+
     it "sets reply_to header if provided" do
       mail = described_class.email_using_installment(email:, subject:, installment_external_id:, reply_to:)
       expect(mail.reply_to).to include(ApplicationMailer::NOREPLY_EMAIL)

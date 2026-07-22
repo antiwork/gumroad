@@ -513,12 +513,19 @@ export const Product = ({
         ) : null}
         <section className="border-t border-border p-6">
           <CollapsibleDescription>
+            {/* dir="auto" makes the browser pick text direction per block from the first
+                strong character, so Hebrew/Arabic descriptions read right-to-left while
+                Latin-script content is unaffected (gumroad-private#1244). */}
             {pageLoaded ? (
               <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
-                <EditorContent className="rich-text" editor={descriptionEditor} />
+                <EditorContent className="rich-text" dir="auto" editor={descriptionEditor} />
               </PublicFilesSettingsContext.Provider>
             ) : (
-              <div className="rich-text" dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }} />
+              <div
+                className="rich-text"
+                dir="auto"
+                dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }}
+              />
             )}
           </CollapsibleDescription>
         </section>
