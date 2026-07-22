@@ -3,6 +3,12 @@
   .ProseMirror {
     > * {
       margin-bottom: spacer(4);
+      // Resolve text direction independently for every top-level block from its own
+      // first strong character (the CSS equivalent of per-block dir="auto"). Without
+      // this, a container-level dir="auto" picks ONE direction from the first strong
+      // character of the whole description, so a Hebrew/Arabic paragraph following an
+      // English one would stay left-to-right (gumroad-private#1244).
+      unicode-bidi: plaintext;
     }
   }
 
