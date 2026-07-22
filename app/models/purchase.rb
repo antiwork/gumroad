@@ -2832,15 +2832,23 @@ class Purchase < ApplicationRecord
     # full rows for the few posts the buyer can actually see.
     slim_seller_profile_posts = Installment.profile_only_for_sellers(seller_ids)
                                            .select(:id, :seller_id, :installment_type, :link_id, :base_variant_id, :flags, :published_at, :json_data)
-    visible_seller_profile_post_ids = check_filters.call(slim_seller_profile_posts).map(&:id)
+    candidate_seller_profile_post_ids = check_filters.call(slim_seller_profile_posts).map(&:id)
     # Reload through the same scope so a post mutated between the two queries
     # (unpublished, flipped to send_emails) is dropped rather than reaching the
     # sort below with a nil published_at. index_by + filter_map keeps the
     # scope's row order — the final sort_by is stable only relative to its
     # input order, so reordering here would change tie-breaking among posts
     # with equal timestamps.
-    full_seller_profile_posts_by_id = visible_seller_profile_post_ids.any? ? Installment.profile_only_for_sellers(seller_ids).where(id: visible_seller_profile_post_ids).index_by(&:id) : {}
-    seller_profile_posts = visible_seller_profile_post_ids.filter_map { |id| full_seller_profile_posts_by_id[id] }
+    full_seller_profile_posts_by_id = candidate_seller_profile_post_ids.any? ? Installment.profile_only_for_sellers(seller_ids).where(id: candidate_seller_profile_post_ids).index_by(&:id) : {}
+    reloaded_seller_profile_posts = candidate_seller_profile_post_ids.filter_map { |id| full_seller_profile_posts_by_id[id] }
+    # Re-run the buyer-filter pass on the reloaded rows so the visibility
+    # decision is made against the data we actually return. The slim pass
+    # above is only a candidate pre-filter: if a seller edits a post's buyer
+    # filters between the two queries, deciding from the slim snapshot could
+    # hand a now-restricted post to a buyer who no longer passes its filters.
+    # The reloaded set is small (only posts the buyer could see), so the
+    # second pass is cheap.
+    seller_profile_posts = check_filters.call(reloaded_seller_profile_posts)
     seller_posts = check_filters.call(emailed_seller_posts) + seller_profile_posts
 
     profile_seller_sent_email_posts = installments_with_sent_emails + profile_only_product_posts + profile_only_variant_posts + seller_posts
