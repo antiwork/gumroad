@@ -14,8 +14,11 @@
 # target_amount_cents stays nil; the Wise statement sync can fill them in
 # later by matching transfer IDs.
 #
-# Idempotent: rows are keyed on (authority, period), so re-running skips
-# anything already present.
+# Idempotent: each historical payment is keyed on (authority, period,
+# attempt: 1) — these were the first (and only) payment attempts for their
+# filings — so re-running skips anything already present. The lookup pins
+# attempt 1 explicitly: a row for a LATER attempt of the same filing must
+# not be mistaken for the historical first payment.
 class Onetime::BackfillAprilTaxRemittances
   PERIOD = "2026-Q1"
 
@@ -42,13 +45,18 @@ class Onetime::BackfillAprilTaxRemittances
     APRIL_2026_PAYMENTS.each do |authority, (usd_cents, paid_at)|
       meta = TaxRemittance::KNOWN_AUTHORITIES.fetch(authority)
 
-      existing = TaxRemittance.find_by(authority:, period: PERIOD)
+      # Pin attempt: 1 — the table allows multiple attempts per (authority,
+      # period), and a row for attempt 2+ is NOT the historical first payment
+      # we're backfilling. Without this, an unrelated later attempt would be
+      # counted as "already backfilled" and the real attempt-1 row never written.
+      existing = TaxRemittance.find_by(authority:, period: PERIOD, attempt: 1)
       if existing
-        # A row already occupies this (authority, period) slot. Only treat it
-        # as "already backfilled" when it actually matches the historical
-        # payment we intend to record — a row with a different amount, date,
-        # rail, or status would silently leave wrong data in the system of
-        # record (the unique index blocks us from ever writing the correct row).
+        # A row already occupies this (authority, period, attempt 1) slot.
+        # Only treat it as "already backfilled" when it actually matches the
+        # historical payment we intend to record — a row with a different
+        # amount, date, rail, or status would silently leave wrong data in the
+        # system of record (the unique index blocks us from ever writing the
+        # correct row).
         verify_existing_row!(existing, usd_cents, paid_at, meta)
         @skipped << authority
         next
@@ -62,6 +70,7 @@ class Onetime::BackfillAprilTaxRemittances
           currency: meta[:currency],
           usd_amount_cents: usd_cents,
           rail: "wise",
+          attempt: 1,
           status: "completed",
           paid_at:,
           notes: "Backfilled from QBO GL (manual Wise dashboard payment, April 2026). " \
@@ -73,7 +82,7 @@ class Onetime::BackfillAprilTaxRemittances
         # create!. The unique (authority, period, attempt) index makes that
         # harmless — verify the winner recorded the same payment, then count
         # it as skipped, same as if we had seen it up front.
-        verify_existing_row!(TaxRemittance.find_by!(authority:, period: PERIOD), usd_cents, paid_at, meta)
+        verify_existing_row!(TaxRemittance.find_by!(authority:, period: PERIOD, attempt: 1), usd_cents, paid_at, meta)
         @skipped << authority
       end
     end

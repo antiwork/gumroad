@@ -50,4 +50,21 @@ describe Onetime::BackfillAprilTaxRemittances do
 
     expect { described_class.new.process }.to raise_error(/paid_at/)
   end
+
+  it "does not mistake a later attempt for the historical first payment" do
+    # A failed attempt 2 exists for HMRC's filing (attempt 1 slot open). The
+    # backfill must still create the historical attempt-1 row rather than
+    # treating the unrelated later attempt as already-backfilled.
+    later_attempt = create(:tax_remittance, :failed, attempt: 2)
+
+    service = described_class.new.process
+
+    expect(service.created.size).to eq(7)
+    expect(service.skipped).to be_empty
+
+    hmrc_first = TaxRemittance.find_by!(authority: "HMRC", period: "2026-Q1", attempt: 1)
+    expect(hmrc_first.status).to eq("completed")
+    expect(hmrc_first.usd_amount_cents).to eq(25_333_498)
+    expect(later_attempt.reload.attempt).to eq(2)
+  end
 end
