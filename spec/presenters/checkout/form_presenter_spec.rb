@@ -118,8 +118,18 @@ describe Checkout::FormPresenter do
           expect(owner_presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(true)
         end
 
-        it "does not show the PayPal Connect section to non-owner team members" do
-          expect(presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(false)
+        it "shows the PayPal Connect section to team members with the admin role" do
+          # Team admins can manage payout settings (see #6067), which includes
+          # connecting PayPal on the seller's behalf.
+          expect(presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(true)
+        end
+
+        it "does not show the PayPal Connect section to team members without the admin role" do
+          marketing_user = create(:user)
+          create(:team_membership, user: marketing_user, seller:, role: TeamMembership::ROLE_MARKETING)
+          marketing_presenter = described_class.new(pundit_user: SellerContext.new(user: marketing_user, seller:))
+
+          expect(marketing_presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(false)
         end
 
         it "allows connecting only when the seller has payout information set up" do
@@ -161,7 +171,11 @@ describe Checkout::FormPresenter do
         it "does not call the PayPal API when the section is not shown" do
           expect(PaypalIntegrationRestApi).not_to receive(:new)
 
-          props = presenter.form_props[:paypal_connect]
+          marketing_user = create(:user)
+          create(:team_membership, user: marketing_user, seller:, role: TeamMembership::ROLE_MARKETING)
+          marketing_presenter = described_class.new(pundit_user: SellerContext.new(user: marketing_user, seller:))
+
+          props = marketing_presenter.form_props[:paypal_connect]
           expect(props[:show_paypal_connect]).to eq(false)
           expect(props[:email]).to be_nil
         end
