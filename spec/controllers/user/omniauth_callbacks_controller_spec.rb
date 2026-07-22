@@ -91,7 +91,7 @@ describe User::OmniauthCallbacksController do
         expect(response).to redirect_to settings_payments_url
       end
 
-      it "throws error if creator already has another stripe account connected" do
+      it "does not start a connect flow if the seller already has a Stripe account" do
         user = create(:user)
         stripe_connect_account = create(:merchant_account_stripe_connect, user:, charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d")
         allow(controller).to receive(:current_user).and_return(user)
@@ -99,8 +99,30 @@ describe User::OmniauthCallbacksController do
         expect { post :stripe_connect }.not_to change { MerchantAccount.count }
 
         expect(user.reload.stripe_connect_account).to eq(stripe_connect_account)
-        expect(flash[:alert]).to eq "You already have another Stripe account connected with your Gumroad account."
+        expect(flash[:alert]).to eq "This seller already has another Stripe account connected with Gumroad."
         expect(response).to redirect_to settings_payments_url
+      end
+
+      it "starts a connect flow for the seller when the team admin has a Stripe account" do
+        seller = create(:user)
+        team_admin = create(:user)
+        create(:merchant_account_stripe_connect, user: team_admin)
+        create(:team_membership, user: team_admin, seller:, role: TeamMembership::ROLE_ADMIN)
+        cookies.encrypted[:current_seller_id] = seller.id
+        sign_in team_admin
+        expect(Stripe::Account).to receive(:retrieve).with(stripe_uid).and_return(
+          Stripe::Account.construct_from(id: stripe_uid, country: "US")
+        )
+
+        post :stripe_connect
+
+        expect(flash[:alert]).to be_nil
+        expect(session[:stripe_connect_data]).to eq(
+          "auth_uid" => stripe_uid,
+          "referer" => settings_payments_path,
+          "signup" => false
+        )
+        expect(response).to redirect_to safe_redirect_path(oauth_completions_stripe_path)
       end
     end
 

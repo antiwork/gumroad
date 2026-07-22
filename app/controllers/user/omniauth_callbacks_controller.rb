@@ -61,7 +61,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     Rails.logger.info("Stripe Connect referer: #{referer}, parameters: #{LogRedactor.redact(auth)}")
 
     if current_seller&.stripe_connect_account.present?
-      flash[:alert] = "You already have another Stripe account connected with your Gumroad account."
+      flash[:alert] = "This seller already has another Stripe account connected with Gumroad."
       return safe_redirect_to settings_payments_path
     end
 
