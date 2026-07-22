@@ -156,6 +156,41 @@ describe Checkout::FormPresenter do
           expect(props[:charge_processor_verified]).to eq(true)
           expect(props[:email]).to eq("seller-paypal@example.com")
         end
+
+        it "does not call the PayPal API when the section is not shown" do
+          expect(PaypalIntegrationRestApi).not_to receive(:new)
+
+          props = presenter.form_props[:paypal_connect]
+          expect(props[:show_paypal_connect]).to eq(false)
+          expect(props[:email]).to be_nil
+        end
+
+        context "when the PayPal API raises" do
+          before do
+            allow_any_instance_of(PaypalIntegrationRestApi).to receive(:get_merchant_account_by_merchant_id).and_raise(StandardError, "PayPal is down")
+          end
+
+          it "omits the email and still renders the rest of the props" do
+            expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError))
+
+            props = owner_presenter.form_props[:paypal_connect]
+            expect(props[:email]).to be_nil
+            expect(props[:show_paypal_connect]).to eq(true)
+            expect(props[:charge_processor_merchant_id]).to eq(@paypal_connect_account.charge_processor_merchant_id)
+          end
+        end
+
+        context "when the PayPal API returns an unusable response" do
+          before do
+            allow_any_instance_of(PaypalIntegrationRestApi).to receive(:get_merchant_account_by_merchant_id).and_return(double(parsed_response: nil))
+          end
+
+          it "omits the email without raising" do
+            props = owner_presenter.form_props[:paypal_connect]
+            expect(props[:email]).to be_nil
+            expect(props[:show_paypal_connect]).to eq(true)
+          end
+        end
       end
     end
   end

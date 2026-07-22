@@ -34,16 +34,26 @@ class Checkout::FormPresenter
   private
     def paypal_connect
       seller = pundit_user.seller
+      show_paypal_connect = Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?
       paypal_merchant_account = seller.merchant_accounts.alive.paypal.first
-      if paypal_merchant_account
-        payment_integration_api = PaypalIntegrationRestApi.new(seller, authorization_header: PaypalPartnerRestCredentials.new.auth_token)
-        merchant_account_response = payment_integration_api.get_merchant_account_by_merchant_id(paypal_merchant_account.charge_processor_merchant_id)
-        parsed_response = merchant_account_response.parsed_response
-        paypal_merchant_account_email = parsed_response["primary_email"]
+
+      # The merchant email is optional display data fetched live from PayPal. Only
+      # fetch it when the section will actually render, and never let a PayPal API
+      # failure take down the whole Checkout settings page — worst case the email
+      # is simply omitted from the connected-account card.
+      if show_paypal_connect && paypal_merchant_account
+        begin
+          payment_integration_api = PaypalIntegrationRestApi.new(seller, authorization_header: PaypalPartnerRestCredentials.new.auth_token)
+          merchant_account_response = payment_integration_api.get_merchant_account_by_merchant_id(paypal_merchant_account.charge_processor_merchant_id)
+          paypal_merchant_account_email = merchant_account_response.parsed_response.try(:[], "primary_email")
+        rescue => e
+          Rails.logger.error("Checkout::FormPresenter PayPal merchant account fetch failed for seller #{seller.id}: #{e.class}: #{e.message}")
+          ErrorNotifier.notify(e)
+        end
       end
 
       {
-        show_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?,
+        show_paypal_connect:,
         allow_paypal_connect: seller.paypal_connect_allowed?,
         unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
         email: paypal_merchant_account_email,
