@@ -1255,9 +1255,36 @@ class Purchase < ApplicationRecord
   end
 
   def license_key
-    return nil unless link.is_licensed?
+    return nil unless uses_license_key?
 
     license.try(:serial)
+  end
+
+  # Whether this purchase should have a license key generated and shown in
+  # receipts. Licensing is enabled at the product level (link.is_licensed),
+  # but when a product uses per-variant content, only purchases of variants
+  # whose content embeds a license-key block should emit keys. This lets a
+  # seller offer e.g. a free variant without a license key alongside paid
+  # licensed variants: deleting the license-key block from the free variant's
+  # content stops that variant's buyers from receiving unusable keys.
+  def uses_license_key?
+    link.is_licensed? && variant_content_permits_license_key?
+  end
+
+  # The variant-level half of the license-key check: true unless the product
+  # uses per-variant content AND this purchase's variant(s) have rich content
+  # that lacks an embedded license-key block. Product-level content, physical
+  # products, purchases without a recorded variant, and variants with no rich
+  # content at all keep today's behavior (key allowed whenever the product is
+  # licensed) — suppression only kicks in when the seller has authored content
+  # for the purchased variant and deliberately left the license-key block out.
+  def variant_content_permits_license_key?
+    return true if link.has_product_level_rich_content?
+
+    variant_contents = variant_attributes.flat_map(&:alive_rich_contents)
+    return true if variant_contents.empty?
+
+    variant_contents.any?(&:has_license_key?)
   end
 
   def self.purchase_info(url_redirect, link, purchase = nil)
@@ -1325,7 +1352,7 @@ class Purchase < ApplicationRecord
       end
       json[:quantity] = purchase.quantity
       json[:show_quantity] = purchase.quantity > 1
-      json[:license_key] = purchase.license_key if purchase.license.present?
+      json[:license_key] = purchase.license_key if purchase.license_key.present?
       if purchase.shipment.present?
         json[:shipped] = purchase.shipment.shipped?
         json[:tracking_url] = purchase.shipment.calculated_tracking_url
@@ -1873,7 +1900,7 @@ class Purchase < ApplicationRecord
 
   def create_license!
     return if is_gift_sender_purchase
-    return unless link.is_licensed
+    return unless uses_license_key?
     return if license.present?
 
     license = create_license
