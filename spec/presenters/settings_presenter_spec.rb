@@ -62,8 +62,6 @@ describe SettingsPresenter do
   end
 
   describe "#main_props" do
-    before { Feature.activate(:product_level_support_emails) }
-
     it "returns correct props" do
       expect(presenter.main_props).to eq(
         settings_pages: presenter.pages,
@@ -101,7 +99,8 @@ describe SettingsPresenter do
           disable_affiliate_requests: false,
           product_level_support_emails: [],
           seller_refund_policy: {
-            enabled: true,
+            editable: true,
+            refund_policy_enforced: false,
             allowed_refund_periods_in_days: [
               {
                 key: 0,
@@ -140,6 +139,33 @@ describe SettingsPresenter do
 
         expect(allowed_periods.map { _1[:key] }).to eq([7, 14, 30, 183])
       end
+
+      it "exposes the enforcement so the UI can explain it" do
+        expect(presenter.main_props[:user][:seller_refund_policy][:refund_policy_enforced]).to eq(true)
+      end
+
+      it "marks the refund policy section as not editable while the policy is enforced" do
+        expect(presenter.main_props[:user][:seller_refund_policy][:editable]).to eq(false)
+      end
+
+      context "when the seller_refund_policy_disabled_for_all feature flag is on" do
+        before do
+          Feature.activate(:seller_refund_policy_disabled_for_all)
+          seller.update!(refund_policy_enabled: false)
+        end
+
+        it "keeps the refund policy section not editable" do
+          expect(presenter.main_props[:user][:seller_refund_policy][:editable]).to eq(false)
+        end
+      end
+    end
+
+    context "when the seller_refund_policy_disabled_for_all feature flag is on and no refund policy is enforced" do
+      before { Feature.activate(:seller_refund_policy_disabled_for_all) }
+
+      it "marks the refund policy section as not editable" do
+        expect(presenter.main_props[:user][:seller_refund_policy][:editable]).to eq(false)
+      end
     end
 
     context "when support emails exist" do
@@ -152,15 +178,6 @@ describe SettingsPresenter do
             product_ids: [product.external_id]
           }
         )
-      end
-    end
-
-    context "when product_level_support_emails feature is disabled" do
-      before { Feature.deactivate(:product_level_support_emails) }
-      before { product.update!(support_email: "support@example.com") }
-
-      it "returns nil for product_level_support_emails" do
-        expect(presenter.main_props[:user][:product_level_support_emails]).to be_nil
       end
     end
 
@@ -271,7 +288,6 @@ describe SettingsPresenter do
     context "when user has unpaid balances" do
       before do
         @balance = create(:balance, user: seller, state: :unpaid, amount_cents: 25_00)
-        Feature.activate_user(:delete_account_forfeit_balance, seller)
       end
 
       it "returns correct props" do

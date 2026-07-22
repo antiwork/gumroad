@@ -412,5 +412,114 @@ describe CreateIndiaSalesReportJob do
         temp_file.close(true)
       end
     end
+
+    describe "chargeback event-date attribution" do
+      let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day }
+
+      before do
+        chargeback_product = create(:product, price_cents: 3000)
+
+        # Sold in the month before the cutover month; charged back in the cutover month
+        # (post-cutover event); dispute won two months later. Each event must land in its
+        # own month's report.
+        @sale_month = (cutover - 1.month).beginning_of_month + 14.days
+        @event_time = cutover + 5.days
+        @won_time = cutover + 2.months
+
+        travel_to(@sale_month) do
+          @chargedback_purchase = create(:purchase,
+                                         link: chargeback_product,
+                                         purchaser: chargeback_product.user,
+                                         purchase_state: "in_progress",
+                                         quantity: 1,
+                                         perceived_price_cents: 3000,
+                                         country: "India",
+                                         ip_country: "India",
+                                         ip_state: "MH",
+                                         stripe_transaction_id: "txn_chargeback"
+          )
+          @chargedback_purchase.mark_test_successful!
+          @chargedback_purchase.update!(gumroad_tax_cents: 540)
+
+          # A legacy chargeback (event before the cutover): keeps the historical drop.
+          @legacy_chargedback_purchase = create(:purchase,
+                                                link: chargeback_product,
+                                                purchaser: chargeback_product.user,
+                                                purchase_state: "in_progress",
+                                                quantity: 1,
+                                                perceived_price_cents: 3000,
+                                                country: "India",
+                                                ip_country: "India",
+                                                ip_state: "MH",
+                                                stripe_transaction_id: "txn_legacy_chargeback"
+          )
+          @legacy_chargedback_purchase.mark_test_successful!
+          @legacy_chargedback_purchase.update!(gumroad_tax_cents: 540)
+        end
+
+        @legacy_chargedback_purchase.update!(chargeback_date: cutover - 10.days)
+        @chargedback_purchase.update!(chargeback_date: @event_time)
+
+        travel_to(@won_time) do
+          @chargedback_purchase.update!(chargeback_reversed: true)
+          create(:dispute, purchase: @chargedback_purchase, state: "won", won_at: Time.current)
+        end
+      end
+
+      def generate_report(month, year)
+        s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-cb-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(s3_object)
+
+        described_class.new.perform(month, year)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        s3_object.get(response_target: temp_file)
+        temp_file.rewind
+        CSV.read(temp_file)
+      ensure
+        temp_file&.close(true)
+      end
+
+      it "keeps the event-dated chargeback's sale in the purchase month and drops only the legacy one" do
+        payload = generate_report(@sale_month.month, @sale_month.year)
+
+        sale_rows = payload.select { |row| row[11] == "sale" }
+        expect(sale_rows.map(&:first)).to include(@chargedback_purchase.external_id)
+        expect(sale_rows.map(&:first)).not_to include(@legacy_chargedback_purchase.external_id)
+
+        # No chargeback entries leak into the sale month — the event belongs to a later month.
+        expect(payload.count { |row| row[11] == "chargeback" }).to eq(0)
+      end
+
+      it "reports the chargeback as a negative entry in the month the dispute was formalized" do
+        payload = generate_report(@event_time.month, @event_time.year)
+
+        chargeback_rows = payload.select { |row| row[11] == "chargeback" }
+        expect(chargeback_rows.length).to eq(1)
+
+        row = chargeback_rows.first
+        expect(row[0]).to eq(@chargedback_purchase.external_id)
+        expect(row[1]).to eq(@event_time.strftime("%Y-%m-%d"))
+        expect(row[2]).to eq("MH")
+        expect(row[4]).to eq("-3000")
+        expect(row[5]).to eq("-540")
+
+        # The legacy chargeback emits no entry anywhere (kept as filed).
+        expect(payload.map(&:first)).not_to include(@legacy_chargedback_purchase.external_id)
+      end
+
+      it "reports the won dispute as a positive entry in the month of won_at" do
+        payload = generate_report(@won_time.month, @won_time.year)
+
+        reversal_rows = payload.select { |row| row[11] == "chargeback_reversal" }
+        expect(reversal_rows.length).to eq(1)
+
+        row = reversal_rows.first
+        expect(row[0]).to eq(@chargedback_purchase.external_id)
+        expect(row[1]).to eq(@won_time.strftime("%Y-%m-%d"))
+        expect(row[4]).to eq("3000")
+        expect(row[5]).to eq("540")
+      end
+    end
   end
 end

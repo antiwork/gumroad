@@ -103,12 +103,65 @@ describe CustomerSurchargeController, :vcr do
       expect(quote_props["token"]).to be_present
     end
 
+    it "returns server-owned per-line allocations that sum exactly to the locked total for odd-cent multi-item carts" do
+      # The reviewer's odd-cent case: 334 + 667 cents at 0.8 USD per CAD unit locks
+      # CA$12.51; naive per-line rounding in the browser would render 418 + 834 = 1252.
+      # The response must carry the largest-remainder split [417, 834] in request order,
+      # keyed by permalink, so the checkout renders what persistence will record.
+      second_product = create(:product, user: @user)
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: @product.unique_permalink, price: 334, quantity: 1 },
+          { permalink: second_product.unique_permalink, price: 667, quantity: 1 },
+        ],
+      }, as: :json
+
+      quote_props = response.parsed_body["buyer_currency_quote"]
+      expect(quote_props["presentment_total_cents"]).to eq(1251)
+      expect(quote_props["line_allocations"]).to eq([
+                                                      { "permalink" => @product.unique_permalink, "price_cents" => 417, "tip_cents" => 0, "tax_cents" => 0, "shipping_cents" => 0, "total_cents" => 417 },
+                                                      { "permalink" => second_product.unique_permalink, "price_cents" => 834, "tip_cents" => 0, "tax_cents" => 0, "shipping_cents" => 0, "total_cents" => 834 },
+                                                    ])
+    end
+
+    it "carves the submitted tip share out of each line's price component" do
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 110, tip_cents: 10, quantity: 1 }],
+      }, as: :json
+
+      quote_props = response.parsed_body["buyer_currency_quote"]
+      allocation = quote_props["line_allocations"].sole
+      expect(allocation["price_cents"] + allocation["tip_cents"]).to eq(allocation["total_cents"])
+      expect(allocation["tip_cents"]).to be_positive
+      expect(quote_props["line_allocations"].sum { _1["total_cents"] }).to eq(quote_props["presentment_total_cents"])
+    end
+
     it "returns no quote props for buyer currencies Gumroad stores in different minor units than Stripe charges" do
       allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
 
       post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }] }, as: :json
 
       expect(response.parsed_body["buyer_currency_quote"]).to be_nil
+    end
+
+    it "responds without a quote instead of erroring when a crafted request submits a negative price" do
+      # A negative submitted price flows through SalesTaxCalculation.zero_tax unchanged;
+      # the line-item tip clamp must not raise (clamp with min > max is an ArgumentError)
+      # and the malformed cart must simply get no quote.
+      post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: -100, quantity: 1 }] }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["buyer_currency_quote"]).to be_nil
+    end
+
+    it "responds without a quote instead of erroring when tip_cents is not a scalar" do
+      post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, tip_cents: { x: 1 }, quantity: 1 }] }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      quote_props = response.parsed_body["buyer_currency_quote"]
+      # The malformed tip is treated as zero, so the quote still locks the plain price.
+      expect(quote_props["line_allocations"].sole["tip_cents"]).to eq(0)
     end
   end
 

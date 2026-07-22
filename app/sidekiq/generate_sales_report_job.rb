@@ -25,9 +25,15 @@ class GenerateSalesReportJob
         country_condition = ["(purchases.country = ?) OR ((purchases.country IS NULL OR purchases.country = ?) AND purchases.ip_country = ?)",
                              country.common_name, country.common_name, country.common_name]
 
+        # Sales leg. not_chargedback_for_tax_reporting keeps, on top of the reversed (won)
+        # chargebacks the old scope kept, event-dated chargebacks (see
+        # Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER): their sale stays reported in
+        # the purchase's own period while the clawback is reported by the chargeback leg
+        # below. Chargebacks lost before the chargeback reporting cutover keep the legacy
+        # drop so historical periods regenerate as filed.
         sales = Purchase.successful
                         .not_fully_refunded_for_tax_reporting
-                        .not_chargedback_or_chargedback_reversed
+                        .not_chargedback_for_tax_reporting
                         .where.not(stripe_transaction_id: nil)
                         .where("purchases.created_at BETWEEN ? AND ?",
                                start_time,
@@ -59,12 +65,14 @@ class GenerateSalesReportJob
         # Refund leg: refunds issued during the reported period appear as their own negative
         # rows, dated by the refund's date, regardless of when the original purchase happened.
         # The purchase-side filters mirror the sales leg above (minus its date window) so a
-        # refund is only reported when its purchase's sale was — or would have been — reported.
+        # refund is only reported when its purchase's sale was — or would have been — reported;
+        # refunds of event-dated chargebacks ARE reported, since their sale row stays and the
+        # chargeback leg claws back only what the refund didn't.
         refunds = Refund.for_tax_period_reporting(start_time, end_time)
                         .joins(:purchase)
                         .merge(
                           Purchase.successful
-                            .not_chargedback_or_chargedback_reversed
+                            .not_chargedback_for_tax_reporting
                             .where.not(purchases: { stripe_transaction_id: nil })
                             .where(*country_condition)
                         )
@@ -86,6 +94,49 @@ class GenerateSalesReportJob
           if %w(AU SG).include?(country_code)
             row += [purchase.link.is_physical? ? "DTC" : "BS", purchase.zip_tax_rate_id]
           end
+
+          temp_file.write(row.to_csv)
+          temp_file.flush
+        end
+
+        # Chargeback leg: disputes formalized during the reported period appear as their own
+        # negative rows, dated by the dispute event date (purchases.chargeback_date has
+        # always held the processor's dispute-formalized timestamp, so no backfill is
+        # needed). Amounts are net of the purchase's refunds — money already returned by a
+        # refund was relieved by the refund's own reporting path and is not clawed back again.
+        chargebacks = Purchase.chargebacks_for_tax_period_reporting(start_time, end_time)
+                              .successful
+                              .where.not(stripe_transaction_id: nil)
+                              .where(*country_condition)
+        chargebacks = chargebacks.where("purchases.flags & ? > 0", Purchase.flag_mapping["flags"][:was_product_recommended]) if sales_type == DISCOVER_SALES
+
+        chargebacks.find_each do |purchase|
+          next if sales_type == DISCOVER_SALES && RecommendationType.is_free_recommendation_type?(purchase.recommended_by)
+
+          row = chargeback_row(purchase, purchase.chargeback_date, -1, country_code)
+          next unless row
+
+          temp_file.write(row.to_csv)
+          temp_file.flush
+        end
+
+        # Chargeback-reversal leg: disputes won during the reported period add their money
+        # back as positive rows dated by the Dispute row's won_at (real dispute rows only —
+        # reversal dates are never synthesized).
+        reversals = Purchase.chargeback_reversals_for_tax_period_reporting(start_time, end_time)
+                            .successful
+                            .where.not(stripe_transaction_id: nil)
+                            .where(*country_condition)
+        reversals = reversals.where("purchases.flags & ? > 0", Purchase.flag_mapping["flags"][:was_product_recommended]) if sales_type == DISCOVER_SALES
+
+        reversals.find_each do |purchase|
+          next if sales_type == DISCOVER_SALES && RecommendationType.is_free_recommendation_type?(purchase.recommended_by)
+
+          won_at = purchase.chargeback_reversal_reporting_date
+          next unless won_at&.between?(start_time, end_time)
+
+          row = chargeback_row(purchase, won_at, 1, country_code)
+          next unless row
 
           temp_file.write(row.to_csv)
           temp_file.flush
@@ -137,6 +188,34 @@ class GenerateSalesReportJob
       else
         "VAT Reporting"
       end
+    end
+
+    # A chargeback (sign = -1) or chargeback-reversal (sign = +1) row: same columns as a sale
+    # row, dated by the dispute event (or win) and carrying the purchase's amounts net of its
+    # refunds (see Purchase::Reportable#price_cents_for_chargeback_reporting), signed.
+    def chargeback_row(purchase, event_date, sign, country_code)
+      price_cents = sign * purchase.price_cents_for_chargeback_reporting
+      fee_cents = sign * purchase.fee_cents_for_chargeback_reporting
+      gumroad_tax_cents = sign * purchase.gumroad_tax_cents_for_chargeback_reporting
+      total_cents = sign * purchase.total_cents_for_chargeback_reporting
+
+      # A purchase fully refunded before its chargeback claws back nothing — every
+      # net-of-refunds amount is zero. Skip the spurious all-zero row.
+      return if [price_cents, fee_cents, gumroad_tax_cents, total_cents].all?(&:zero?)
+
+      row = [event_date, purchase.external_id,
+             purchase.seller.external_id, purchase.seller.form_email&.gsub(/.{0,4}@/, '####@'),
+             purchase.seller.user_compliance_infos.last&.legal_entity_country,
+             purchase.email&.gsub(/.{0,4}@/, '####@'), purchase.card_visual&.gsub(/.{0,4}@/, '####@'),
+             price_cents, fee_cents, gumroad_tax_cents,
+             0, total_cents,
+             purchase.purchase_sales_tax_info&.business_vat_id]
+
+      if %w(AU SG).include?(country_code)
+        row += [purchase.link.is_physical? ? "DTC" : "BS", purchase.zip_tax_rate_id]
+      end
+
+      row
     end
 
     def update_job_status_to_completed(country_code, start_time, end_time, sales_type, download_url)

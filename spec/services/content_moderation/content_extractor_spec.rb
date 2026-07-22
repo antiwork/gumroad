@@ -42,11 +42,24 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.text).to include("Name: Moderated Product")
       expect(result.text).to include("Main description")
       expect(result.text).to include("Rich content body")
-      expect(result.image_urls).to include(cover_preview.url)
+      expect(result.image_urls).to include(cover_preview.url(style: :original))
       expect(result.image_urls).to include("https://cdn.example.com/thumbnail.png")
       expect(result.image_urls).to include("https://cdn.example.com/description.png")
       expect(result.image_urls).to include("https://signed.example.com/file.png")
       expect(result.image_urls).to include("https://cdn.example.com/rich-content.png")
+    end
+
+    it "never generates image variants (extraction runs inside the product's save transaction)" do
+      # Regression test for a production Errno::ENOENT during publish:
+      # generating a variant here attaches a new blob whose upload is deferred
+      # to after_commit, by which point the image-processing tempfile is gone.
+      # Extraction must only ever read the ORIGINAL file URLs.
+      expect_any_instance_of(AssetPreview).not_to receive(:retina_variant)
+      expect_any_instance_of(Thumbnail).not_to receive(:thumbnail_variant)
+
+      result = extractor.extract_from_product(product)
+
+      expect(result.image_urls).to include(cover_preview.url(style: :original))
     end
 
 

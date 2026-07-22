@@ -40,7 +40,7 @@ class PurchaseProductPresenter
         is_physical: product.is_physical,
         custom_view_content_button_text: product.custom_view_content_button_text.presence,
         custom_button_text_option: product.custom_button_text_option,
-        is_multiseat_license: product.is_tiered_membership && product.is_multiseat_license,
+        is_multiseat_license: product.multiseat_license_enabled?,
         permalink: product.unique_permalink,
         preorder: product.is_in_preorder_state ? { release_date: product.preorder_link.release_at } : nil,
         description_html: product.html_safe_description,

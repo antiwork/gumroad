@@ -22,7 +22,7 @@ describe DispatchPendingFailedRefundExceptionsJob do
       )
 
       expect(ErrorNotifier).to receive(:notify).with(
-        a_string_including("escalated", "Notification delivery failed"),
+        a_string_including("escalated", "Sentry reporting failed"),
         context: hash_including(
           failed_refund_exception_id: exhausted.id,
           notification_failures: FailedRefundException::MAX_NOTIFICATION_FAILURES
@@ -34,7 +34,7 @@ describe DispatchPendingFailedRefundExceptionsJob do
       expect(NotifyFailedRefundExceptionJob.jobs.size).to eq(0)
       expect(exhausted.reload).to have_attributes(
         state: "escalated",
-        resolution: a_string_including("Notification delivery failed")
+        resolution: a_string_including("Sentry reporting failed")
       )
     end
 
@@ -58,19 +58,28 @@ describe DispatchPendingFailedRefundExceptionsJob do
       )
     end
 
-    it "still escalates when the escalation email cannot be delivered" do
-      exhausted = create(
+    it "never sends escalation email — Sentry is the only channel" do
+      create(
         :failed_refund_exception,
         notification_failures: FailedRefundException::MAX_NOTIFICATION_FAILURES
       )
-      expect(ErrorNotifier).to receive(:notify)
-      mailer = double("mailer")
-      expect(InternalNotificationMailer).to receive(:notify).and_return(mailer)
-      expect(mailer).to receive(:deliver_now).and_raise("mail unavailable")
+      create(:failed_refund_exception, due_at: 1.hour.ago, notification_sent_at: 25.hours.ago)
+      expect(InternalNotificationMailer).not_to receive(:notify)
+      allow(ErrorNotifier).to receive(:notify)
 
-      expect { described_class.new.perform }.not_to raise_error
+      described_class.new.perform
+    end
 
-      expect(exhausted.reload.state).to eq("escalated")
+    it "leaves the row pending for retry when the Sentry escalation itself fails" do
+      stuck = create(
+        :failed_refund_exception,
+        notification_failures: FailedRefundException::MAX_NOTIFICATION_FAILURES
+      )
+      expect(ErrorNotifier).to receive(:notify).and_raise("sentry unavailable")
+
+      expect { described_class.new.perform }.to raise_error("sentry unavailable")
+
+      expect(stuck.reload.state).to eq("pending")
     end
 
     it "does not escalate the same exception twice" do

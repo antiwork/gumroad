@@ -46,12 +46,20 @@ describe ExecuteScheduledPayoutsJob do
       suspended_user = create(:user, user_risk_state: "suspended_for_fraud")
       succeeding_payout = create(:scheduled_payout, user: suspended_user, action: "refund", scheduled_at: 1.day.ago, created_by: create(:user))
 
-      allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).and_raise(StandardError, "test error")
+      allow(Payouts).to receive(:create_payment).and_raise(StandardError, "test error")
 
       described_class.new.perform
 
       expect(failing_payout.reload.status).to eq("pending")
       expect(succeeding_payout.reload.status).to eq("executed")
+    end
+
+    it "flags due payouts with no payable balance instead of retrying them daily" do
+      scheduled_payout = create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago)
+
+      described_class.new.perform
+
+      expect(scheduled_payout.reload.status).to eq("flagged")
     end
   end
 end

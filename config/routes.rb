@@ -404,6 +404,7 @@ Rails.application.routes.draw do
               post :suspend_for_fraud
               post :suspend_for_tos_violation
               post :flag_for_tos_violation
+              post :refund_all_for_fraud
               post :refund_balance
               post :add_credit
               post :watch
@@ -541,7 +542,10 @@ Rails.application.routes.draw do
     # followers
     resources :followers, only: [:index, :destroy]
 
-    post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form
+    # format: false — the Rack::Attack throttles for this endpoint match the
+    # literal path, so a routable "/follow_from_embed_form.json" would slip
+    # past every rate limit. Clients negotiate JSON via the Accept header.
+    post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form, format: false
     post "/follow", to: "followers#create", as: :follow_user
     get "/follow/:id/cancel", to: "followers#cancel", as: :cancel_follow
     get "/follow/:id/confirm", to: "followers#confirm", as: :confirm_follow
@@ -1088,6 +1092,7 @@ Rails.application.routes.draw do
     get "/r/:id/product_files", to: "url_redirects#download_product_files", as: :url_redirect_download_product_files
     get "/zip/:id", to: "url_redirects#download_archive", as: :url_redirect_download_archive
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :url_redirect_download_subtitle_file
+    get "/r/:id/:product_file_id/:subtitle_file_id/captions.vtt", to: "url_redirects#subtitle_file_vtt", as: :url_redirect_subtitle_file_vtt
     get "/s/:id", to: "url_redirects#stream", as: :url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :url_redirect_stream_page_for_product_file
     get "/media_urls/:id", to: "url_redirects#media_urls", as: :url_redirect_media_urls
@@ -1153,6 +1158,11 @@ Rails.application.routes.draw do
         post "/agent/actions", to: "agent_messages#execute", as: :agent_actions
         get "/agent/conversations/latest", to: "agent_conversations#latest", as: :agent_conversations_latest
         get "/agent/turns/:client_turn_id", to: "agent_conversations#turn_status", as: :agent_turn_status
+        post "/agent/custom_html_preview", to: "agent_custom_html_previews#create", as: :agent_custom_html_preview
+        # Serves a staged preview document by token. This must be a real URL (not JSON consumed
+        # into an iframe srcdoc) so the response can carry the custom-page CSP header — srcdoc
+        # documents inherit the dashboard's CSP, which blocks the page's inline scripts.
+        get "/agent/custom_html_previews/:token", to: "agent_custom_html_previews#show", as: :agent_custom_html_preview_document, defaults: { format: :html }
       end
     end
 
@@ -1312,6 +1322,7 @@ Rails.application.routes.draw do
     get "/r/:id/product_files", to: "url_redirects#download_product_files", as: :custom_domain_url_redirect_download_product_files
     get "/zip/:id", to: "url_redirects#download_archive", as: :custom_domain_url_redirect_download_archive
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :custom_domain_url_redirect_download_subtitle_file
+    get "/r/:id/:product_file_id/:subtitle_file_id/captions.vtt", to: "url_redirects#subtitle_file_vtt", as: :custom_domain_url_redirect_subtitle_file_vtt
     get "/s/:id", to: "url_redirects#stream", as: :custom_domain_url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :custom_domain_url_redirect_stream_page_for_product_file
 
@@ -1352,6 +1363,14 @@ Rails.application.routes.draw do
         get "/:id/confirm", to: "followers#confirm"
       end
     end
+    # The gumroad:follow bridge on custom HTML pages fetches this relative to
+    # the wrapper page, which is served on the seller's subdomain or custom
+    # domain — hosts this block routes, not GumroadDomainConstraint (where the
+    # canonical route lives). Rack::Attack throttles match on the request path,
+    # so the /follow_from_embed_form limits apply here identically. format:
+    # false for the same reason as the canonical route: a ".json" suffix would
+    # change the path and slip past those throttles.
+    post "/follow_from_embed_form", to: "followers#from_embed_form", format: false
 
     resources :consumption_analytics, only: [:create], format: :json
     resources :media_locations, only: [:create], format: :json

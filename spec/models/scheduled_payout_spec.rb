@@ -245,12 +245,27 @@ describe ScheduledPayout do
         expect(scheduled_payout.reload.status).to eq("pending")
       end
 
-      it "raises if no payment is created" do
+      it "flags the payout for review when no payable balance is available" do
         allow(Payouts).to receive(:create_payment)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
           .and_return([nil, nil])
 
-        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: No payable balance available/)
+        expect(scheduled_payout.execute!).to eq(:flagged)
+        expect(scheduled_payout.reload.status).to eq("flagged")
+        expect(scheduled_payout.executed_at).to be_nil
+      end
+
+      it "raises without processing when the payment failed during preparation" do
+        # Payouts.create_payment can return a payment that the payout processor already marked as
+        # failed (e.g. no valid merchant account). Such a payment must not be sent to
+        # process_payments — the scheduled payout resets to pending and the error surfaces instead.
+        payment = instance_double(Payment, failed?: true)
+        allow(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .and_return([payment, ["Cannot process payout: no valid merchant account found for user."]])
+        expect(PayoutProcessorType).not_to receive(:get)
+
+        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Cannot process payout: no valid merchant account found for user\./)
         expect(scheduled_payout.reload.status).to eq("pending")
       end
 
@@ -269,7 +284,7 @@ describe ScheduledPayout do
 
       it "defers the bank payout instead of processing it immediately" do
         scheduled_payout.update!(processor: PayoutProcessorType::STRIPE)
-        payment = instance_double(Payment, id: 9876, blank?: false)
+        payment = instance_double(Payment, id: 9876, blank?: false, failed?: false)
         allow(Payouts).to receive(:create_payment)
           .with(Date.yesterday.to_s, PayoutProcessorType::STRIPE, user)
           .and_return([payment, nil])

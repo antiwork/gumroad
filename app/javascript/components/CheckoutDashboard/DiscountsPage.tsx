@@ -136,7 +136,8 @@ const formatAmount = (offerCode: OfferCode) => {
 const formatRevenue = (revenue: number) => formatPriceCentsWithCurrencySymbol("usd", revenue, { symbolFormat: "long" });
 const formatUses = (uses: number, limit: number | null) => `${uses}/${limit ?? "∞"}`;
 
-const extractParams = (rawParams: URLSearchParams): QueryParams => {
+// Exported for tests.
+export const extractParams = (rawParams: URLSearchParams): QueryParams => {
   const column = rawParams.get("column");
   let sort: Sort<SortKey> | null = null;
   switch (column) {
@@ -156,7 +157,10 @@ const extractParams = (rawParams: URLSearchParams): QueryParams => {
   const pageStr = rawParams.get("page");
   const page = pageStr ? parseInt(pageStr, 10) : 1;
   return {
-    query: query ? decodeURIComponent(query) : "",
+    // URLSearchParams.get() already percent-decodes the value. Decoding again
+    // threw URIError on queries containing a literal "%" (e.g. "100%"), which
+    // crashed the page on reload / direct navigation.
+    query: query ?? "",
     sort,
     page,
   };

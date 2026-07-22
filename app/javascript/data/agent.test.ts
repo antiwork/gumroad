@@ -33,13 +33,37 @@ const sseResponse = (chunks: string[], { fail = false } = {}) => {
   return new Response(body, { headers: { "content-type": "text/event-stream" } });
 };
 
+// A Response whose body stays open under manual control: chunks are pushed (and the stream closed)
+// via the returned controller. Models a connection that goes silent or never delivers its EOF.
+const openSseResponse = () => {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+  });
+  const encoder = new TextEncoder();
+  return {
+    response: new Response(body, { headers: { "content-type": "text/event-stream" } }),
+    push: (chunk: string) => controller.enqueue(encoder.encode(chunk)),
+    close: () => controller.close(),
+    // Rejects any pending read, the way aborting the underlying fetch does.
+    error: (reason: unknown) => controller.error(reason),
+  };
+};
+
 const frame = (event: string, data: object) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 
 const MESSAGES = [{ role: "user" as const, content: "hello" }];
 
+// Mirrors STREAM_INACTIVITY_TIMEOUT_MS in $app/data/agent — how long the stream may stay silent
+// before the client treats the connection as dead.
+const INACTIVITY_TIMEOUT_MS = 130_000;
+
 describe("streamAgentMessage", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("yields tokens as they arrive and resolves with the done frame's assembled turn", async () => {
@@ -90,6 +114,108 @@ describe("streamAgentMessage", () => {
 
     const result = await streamAgentMessage(MESSAGES);
     expect(result.reply).toBe("Want me to pull up?");
+  });
+
+  it("throws AgentStreamInterruptedError when the stream goes silent without a done frame", async () => {
+    // The bug this guards against: the server finishes the turn (200 OK logged), but the client
+    // never receives the trailing frames OR the connection close — reader.read() just stays
+    // pending. The inactivity timeout must surface that as an interruption so the caller enters
+    // turn-status recovery instead of hanging with the composer locked.
+    vi.useFakeTimers();
+    const stream = openSseResponse();
+    request.mockResolvedValue(stream.response);
+    const onToken = vi.fn<(text: string) => void>();
+
+    const promise = streamAgentMessage(MESSAGES, { onToken });
+    const expectation = expect(promise).rejects.toBeInstanceOf(AgentStreamInterruptedError);
+    stream.push(frame("token", { text: "Want me to " }));
+    await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS);
+    await expectation;
+    expect(onToken).toHaveBeenCalledWith("Want me to ");
+  });
+
+  it("throws AgentStreamInterruptedError when the connection stalls before response headers arrive", async () => {
+    // The server holds response headers until its first stream write, so a connection that dies
+    // before that leaves the fetch itself pending forever — the inactivity clock must cover the
+    // pre-header phase too, not just body reads.
+    vi.useFakeTimers();
+    request.mockReturnValue(new Promise<never>(() => {}));
+
+    const promise = streamAgentMessage(MESSAGES);
+    const expectation = expect(promise).rejects.toBeInstanceOf(AgentStreamInterruptedError);
+    await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS);
+    await expectation;
+  });
+
+  it("treats server keepalive comments as activity and never surfaces them as events", async () => {
+    // Tool-heavy turns can go minutes between real events; the server fills those stretches with
+    // SSE comment frames. Each one must reset the inactivity clock (four quiet stretches here,
+    // together well past the timeout) without producing tokens or other handler calls.
+    vi.useFakeTimers();
+    const stream = openSseResponse();
+    request.mockResolvedValue(stream.response);
+    const onToken = vi.fn<(text: string) => void>();
+
+    const promise = streamAgentMessage(MESSAGES, { onToken });
+    const expectation = expect(promise).resolves.toMatchObject({ reply: "All done." });
+    for (let i = 0; i < 4; i++) {
+      await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS - 1000);
+      stream.push(": heartbeat\n\n");
+    }
+    stream.push(frame("done", { reply: "All done.", proposed_action: null }));
+    stream.close();
+    await expectation;
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a slow but active stream as stalled — each frame resets the inactivity clock", async () => {
+    vi.useFakeTimers();
+    const stream = openSseResponse();
+    request.mockResolvedValue(stream.response);
+
+    const promise = streamAgentMessage(MESSAGES);
+    const expectation = expect(promise).resolves.toMatchObject({ reply: "Want me to pull up?" });
+    // Two quiet stretches whose total exceeds the timeout, but with a frame between them — the
+    // clock must restart on every chunk, so neither stretch alone trips it.
+    await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS - 1000);
+    stream.push(frame("token", { text: "Want me to " }));
+    await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS - 1000);
+    stream.push(frame("done", { reply: "Want me to pull up?", proposed_action: null }));
+    stream.close();
+    await expectation;
+  });
+
+  it("passes the abort signal through and swallows the abandoned read's late rejection", async () => {
+    vi.useFakeTimers();
+    const stream = openSseResponse();
+    request.mockResolvedValue(stream.response);
+    const controller = new AbortController();
+
+    const promise = streamAgentMessage(MESSAGES, {}, null, null, controller.signal);
+    const expectation = expect(promise).rejects.toBeInstanceOf(AgentStreamInterruptedError);
+    await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS);
+    await expectation;
+
+    expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ abortSignal: controller.signal }));
+
+    // The caller aborts the connection once the turn settles, which rejects the read the timeout
+    // abandoned. Nothing awaits that read anymore — its rejection must be swallowed internally,
+    // or it surfaces as an unhandled rejection (which vitest reports as a run-level error).
+    controller.abort();
+    stream.error(new DOMException("The operation was aborted.", "AbortError"));
+    await vi.advanceTimersByTimeAsync(0);
+  });
+
+  it("resolves the turn on the done frame even when the connection never closes", async () => {
+    const stream = openSseResponse();
+    request.mockResolvedValue(stream.response);
+
+    const promise = streamAgentMessage(MESSAGES);
+    stream.push(frame("done", { reply: "Want me to pull up?", proposed_action: null, conversation_id: "conv1" }));
+    // No close(): the stream stays open, but `done` is terminal so the turn must resolve anyway.
+    const result = await promise;
+    expect(result.reply).toBe("Want me to pull up?");
+    expect(result.conversationId).toBe("conv1");
   });
 
   it("throws AgentStreamInterruptedError when a frame arrives mangled", async () => {

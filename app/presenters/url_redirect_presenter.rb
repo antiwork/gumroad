@@ -12,14 +12,13 @@ class UrlRedirectPresenter
     email_confirmation_required: "email_confirmation_required",
   }.freeze
 
-  attr_reader :url_redirect, :logged_in_user, :product, :purchase, :installment
+  attr_reader :url_redirect, :logged_in_user, :product, :purchase
 
   def initialize(url_redirect:, logged_in_user: nil)
     @url_redirect = url_redirect
     @logged_in_user = logged_in_user
     @product = url_redirect.referenced_link
     @purchase = url_redirect.purchase
-    @installment = url_redirect.installment
   end
 
   def download_attributes
@@ -76,6 +75,9 @@ class UrlRedirectPresenter
       product_file_id: product_file.external_id,
       latest_media_location: product_file.latest_media_location_for(purchase),
       title:,
+      # Tells the Read page which in-browser reader to mount: pdf.js for PDFs,
+      # epub.js for EPUBs. `browser_readable?` guarantees one of the two.
+      file_type: product_file.epub? ? "epub" : "pdf",
     }
   end
 
@@ -92,10 +94,6 @@ class UrlRedirectPresenter
         terms_page_url: HomePageLinkService.terms,
         token: url_redirect.token,
         redirect_id: url_redirect.external_id,
-        creator:,
-        installment: url_redirect.with_product_files.is_a?(Installment) ? {
-          name: installment.name,
-        } : nil,
         purchase: purchase.present? ? {
           id: purchase.external_id,
           bundle_purchase_id: purchase.is_bundle_product_purchase? ? purchase.bundle_purchase.external_id : nil,
@@ -107,7 +105,6 @@ class UrlRedirectPresenter
           product_id: purchase.link&.external_id,
           product_name: purchase.link&.name,
           variant_id: url_redirect.with_product_files&.is_a?(BaseVariant) ? url_redirect.with_product_files.external_id : nil,
-          variant_name: purchase.variant_names&.join(", "),
           product_long_url: purchase.link&.long_url,
           allows_review: purchase.allows_review?,
           product_available: !purchase.link&.deleted?,
@@ -229,6 +226,8 @@ class UrlRedirectPresenter
     end
 
     def map_file(file)
+      media_location = media_locations_by_file[file.id]
+
       {
         type: "file",
         file_name: file.name_displayable,
@@ -243,10 +242,10 @@ class UrlRedirectPresenter
         kindle_data: file.can_send_to_kindle? ?
                        { email: logged_in_user&.kindle_email, icon_url: ActionController::Base.helpers.image_path("white-15.png") } :
                        nil,
-        latest_media_location: media_locations_by_file[file.id].as_json,
+        latest_media_location: file.media_location_for_download_page(media_location),
         content_length: file.content_length,
         isbn: file.isbn,
-        read_url: file.readable? ? (
+        read_url: file.browser_readable? ? (
           file.is_a?(Link) ? url_redirect_read_url(url_redirect.token) : file.is_a?(ProductFile) ? url_redirect_read_for_product_file_path(url_redirect.token, file.external_id) : nil
         ) : nil,
         external_link_url: file.external_link? ? file.url : nil,
@@ -258,7 +257,13 @@ class UrlRedirectPresenter
             language: subtitle_file.language,
             file_size: subtitle_file.size,
             download_url: url_redirect_download_subtitle_file_path(url_redirect.token, file.external_id, subtitle_file.external_id),
-            signed_url: file.signed_download_url_for_s3_key_and_filename(subtitle_file.s3_key, subtitle_file.s3_filename, is_video: true)
+            signed_url: file.signed_download_url_for_s3_key_and_filename(subtitle_file.s3_key, subtitle_file.s3_filename, is_video: true),
+            # What the video player should load as the caption track: the
+            # serve-time SRT→VTT conversion endpoint, which returns WebVTT with
+            # explicit centered cue positioning so iOS Safari's native caption
+            # renderer doesn't pin the cues to the right edge of the video.
+            # See https://github.com/antiwork/gumroad/issues/6043
+            vtt_url: url_redirect_subtitle_file_vtt_path(url_redirect.token, file.external_id, subtitle_file.external_id)
           }
         end,
         pdf_stamp_enabled: file.pdf_stamp_enabled?,
@@ -273,15 +278,6 @@ class UrlRedirectPresenter
       return unless logged_in_user == url_redirect.seller && !url_redirect.with_product_files.has_been_transcoded?
 
       { transcode_on_first_sale: product&.transcode_videos_on_purchase.present? }
-    end
-
-    def creator
-      user = product&.user || installment&.seller
-      user&.name || user&.username ? {
-        name: user.name.presence || user.username,
-        profile_url: user.profile_url(recommended_by: "library"),
-        avatar_url: user.avatar_url
-      } : nil
     end
 
     def media_locations_by_file

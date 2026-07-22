@@ -6,7 +6,7 @@ import typia from "typia";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -32,11 +32,15 @@ type PageProps = {
 };
 
 // The copy-paste prompt for building a page with an agent. The CLI commands it
-// references are the same ones a seller can run by hand.
+// references are the same ones a seller can run by hand. The follow-form
+// instructions match the serve-time gumroad:follow bridge: a form marked
+// data-gumroad-follow gets wired to the seller's email audience automatically.
+const followFormHint = `If I want an email signup, add a \`<form data-gumroad-follow>\` with an email input and an element marked \`data-gumroad-follow-message\` for the confirmation text — Gumroad wires the form to my email audience automatically.`;
+
 const agentPrompt = (username: string, slug: string | null, isProfile: boolean) =>
   isProfile
-    ? `Build and publish a custom landing page for my Gumroad profile (@${username}). Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push profile\`. The page replaces my entire profile, so link visitors to my product pages instead of adding checkout elements.`
-    : `Build and publish a custom page for my Gumroad store (@${username})${slug ? ` at /${slug}` : ""}. Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push ${slug ?? "<slug>"}\`.`;
+    ? `Build and publish a custom landing page for my Gumroad profile (@${username}). Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push profile\`. The page replaces my entire profile, so link visitors to my product pages instead of adding checkout elements. ${followFormHint}`
+    : `Build and publish a custom page for my Gumroad store (@${username})${slug ? ` at /${slug}` : ""}. Design a unique, on-brand page — fully responsive, with light and dark mode. Preview it with \`gumroad pages preview\`, then publish with \`gumroad pages push ${slug ?? "<slug>"}\`. ${followFormHint}`;
 
 export default function PagesEdit() {
   const { page, is_profile, is_new, username, profile_url } = typia.assert<PageProps>(usePage().props);
@@ -196,60 +200,80 @@ export default function PagesEdit() {
     if (frame && height) frame.style.height = `${Math.min(height, window.innerHeight)}px`;
   };
 
-  const previewSidebar = (
-    <PreviewSidebar
-      previewLink={
-        // A new page has nothing to open yet — the link would 404.
+  // The preview renders inside the shared browser-style chrome (see PreviewChrome): a top
+  // bar with the page's title and URL centered and an arrow that opens the live page in a
+  // new tab. The chrome IS the preview's identity strip, so the sidebar's old preview link
+  // and the separate URL caption are gone — everything lives in one place.
+  const displayTitle = is_profile ? "Home" : is_new ? title || "New page" : page.title;
+  const previewChrome = (frame: React.ReactNode) => (
+    <PreviewChrome
+      title={displayTitle}
+      url={publicUrl}
+      // A new page has nothing to open yet — the link would 404.
+      link={
         is_new
           ? undefined
-          : (props) => <NavigationButton {...props} size="icon" href={publicUrl} target="_blank" rel="noreferrer" />
+          : (props) => <NavigationButton {...props} href={publicUrl} target="_blank" rel="noreferrer" />
       }
     >
-      {is_profile && !page.custom_html ? (
-        // The default-template home page frames the live storefront.
-        // `allow-same-origin` is needed for the storefront's own scripts to
-        // boot — without it the page loads but renders blank. The frame
-        // shows our own domain (the seller's public profile), same trust
-        // level as the parent page.
-        // eslint-disable-next-line react/iframe-missing-sandbox -- allow-scripts + allow-same-origin is intentional for framing our own storefront
-        <iframe
-          title="Page preview"
-          src={publicUrl}
-          sandbox="allow-scripts allow-forms allow-same-origin"
-          className="h-[75vh] min-h-150 w-full rounded border border-border bg-white"
-        />
-      ) : page.custom_html && previewPath ? (
-        // Agent-built pages (and a custom HTML home page) render through the
-        // dashboard's same-origin preview endpoint — see the note on
-        // previewPath above for why the public URL can't be framed. The
-        // sandbox makes the document unreadable from here, so it can't be
-        // sized to content; it gets the same tall frame as the profile.
-        <iframe
-          title="Page preview"
-          src={previewPath}
-          sandbox="allow-scripts"
-          className="h-[75vh] min-h-150 w-full rounded border border-border bg-white"
-        />
-      ) : is_new ? (
-        <div className="rounded border border-border bg-background p-4 text-sm text-muted">
-          Create the page to see a preview.
-        </div>
-      ) : previewPath ? (
-        // The real page document, sized to its content. The endpoint renders
-        // sanitized rich text — no seller scripts can run (the sandbox has no
-        // allow-scripts) — and `allow-same-origin` keeps the same-origin
-        // document readable so the frame can be measured.
-        <iframe
-          ref={richTextFrameRef}
-          title="Page preview"
-          key={previewVersion}
-          src={`${previewPath}?v=${previewVersion}`}
-          sandbox="allow-same-origin"
-          onLoad={sizeRichTextPreview}
-          className="w-full rounded border border-border bg-white"
-        />
-      ) : null}
-      <p className="truncate text-xs text-muted">{publicUrl.replace(/^https?:\/\//u, "")}</p>
+      {frame}
+    </PreviewChrome>
+  );
+
+  const previewSidebar = (
+    // The chrome bar already says "this is a preview", so the sidebar carries no heading —
+    // the chrome lines up vertically with the top of the edit form on the left.
+    <PreviewSidebar>
+      {is_profile && !page.custom_html
+        ? previewChrome(
+            // The default-template home page frames the live storefront.
+            // `allow-same-origin` is needed for the storefront's own scripts to
+            // boot — without it the page loads but renders blank. The frame
+            // shows our own domain (the seller's public profile), same trust
+            // level as the parent page.
+            // eslint-disable-next-line react/iframe-missing-sandbox -- allow-scripts + allow-same-origin is intentional for framing our own storefront
+            <iframe
+              title="Page preview"
+              src={publicUrl}
+              sandbox="allow-scripts allow-forms allow-same-origin"
+              className="h-[75vh] min-h-150 w-full bg-white"
+            />,
+          )
+        : page.custom_html && previewPath
+          ? previewChrome(
+              // Agent-built pages (and a custom HTML home page) render through the
+              // dashboard's same-origin preview endpoint — see the note on
+              // previewPath above for why the public URL can't be framed. The
+              // sandbox makes the document unreadable from here, so it can't be
+              // sized to content; it gets the same tall frame as the profile.
+              <iframe
+                title="Page preview"
+                src={previewPath}
+                sandbox="allow-scripts"
+                className="h-[75vh] min-h-150 w-full bg-white"
+              />,
+            )
+          : is_new
+            ? previewChrome(
+                <div className="bg-background p-4 text-sm text-muted">Create the page to see a preview.</div>,
+              )
+            : previewPath
+              ? previewChrome(
+                  // The real page document, sized to its content. The endpoint renders
+                  // sanitized rich text — no seller scripts can run (the sandbox has no
+                  // allow-scripts) — and `allow-same-origin` keeps the same-origin
+                  // document readable so the frame can be measured.
+                  <iframe
+                    ref={richTextFrameRef}
+                    title="Page preview"
+                    key={previewVersion}
+                    src={`${previewPath}?v=${previewVersion}`}
+                    sandbox="allow-same-origin"
+                    onLoad={sizeRichTextPreview}
+                    className="w-full bg-white"
+                  />,
+                )
+              : null}
       {isEditable ? <p className="text-xs text-muted">The preview refreshes when you save.</p> : null}
     </PreviewSidebar>
   );

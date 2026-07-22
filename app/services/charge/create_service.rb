@@ -85,21 +85,31 @@ class Charge::CreateService
     yield
   rescue BuyerCurrencyQuoteInvalid => e
     logger.info "Buyer currency quote error: #{e.message} in charge: #{charge.external_id}"
-    purchases.each do |purchase|
-      purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
-      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
-    end
+    mark_purchases_buyer_currency_quote_invalid
     nil
   rescue ChargeProcessorFxQuoteInvalidError => e
     # Stripe drift-invalidates a quote before lock_expires_at when the market rate moves
     # beyond its tolerance; the buyer must re-quote, not be charged a different amount.
     logger.info "Buyer currency quote invalidated by Stripe: #{e.message} in charge: #{charge.external_id}"
-    purchases.each do |purchase|
-      purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
-      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
-    end
+    mark_purchases_buyer_currency_quote_invalid
     nil
   rescue ChargeProcessorInvalidRequestError => e
+    # Stripe can reject the settlement-currency mismatch at PaymentIntent create time too,
+    # not just at FX-quote creation (which StripeFxQuote already maps to a quiet USD
+    # fallback): the quote is created fine, but attaching it to the intent fails because the
+    # connected account actually settles in a non-USD currency. This charged 1,114 buyers a
+    # generic "temporary problem" error on 2026-07-20 (gumroad-private#933). Handle it like
+    # the quote-time mismatch: record the learned marker on the merchant account so the very
+    # next attempt skips the FX quote and charges canonical USD, and ask the buyer to review
+    # the updated (USD) total — we must never silently charge a different amount than the
+    # local-currency total the buyer confirmed.
+    if e.message.to_s.match?(StripeFxQuote::SETTLEMENT_MISMATCH_MESSAGE)
+      record_settlement_currency_mismatch
+      logger.info "Buyer currency settlement mismatch at intent create: #{e.message} in charge: #{charge.external_id}"
+      mark_purchases_buyer_currency_quote_invalid
+      return nil
+    end
+
     # The processor rejected our request as malformed — a deterministic failure on our side,
     # not an outage. The intent was never created, so the outcome is known. Record it under its
     # own code so a code regression shows up in monitoring instead of hiding inside
@@ -124,7 +134,7 @@ class Charge::CreateService
   rescue ChargeProcessorPayeeAccountRestrictedError => e
     logger.error "Charge processor error: #{e.message} in charge: #{charge.external_id}"
     purchases.each do |purchase|
-      purchase.errors.add :base, "There is a problem with creator's paypal account, please try again later (your card was not charged)."
+      purchase.errors.add :base, "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
       purchase.stripe_error_code = PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED
     end
     nil
@@ -143,7 +153,7 @@ class Charge::CreateService
     end
     nil
   rescue ChargeProcessorUnsupportedPaymentTypeError => e
-    logger.info "Charge processor error: Unsupported paypal payment method selected"
+    logger.info "Charge processor error: Unsupported PayPal payment method selected"
     purchases.each do |purchase|
       purchase.errors.add :base, "We weren't able to charge your PayPal account. Please select another method of payment."
       purchase.stripe_error_code = e.error_code
@@ -188,6 +198,13 @@ class Charge::CreateService
       PurchaseErrorCode::STRIPE_UNAVAILABLE
     else
       PurchaseErrorCode::PAYPAL_UNAVAILABLE
+    end
+  end
+
+  def mark_purchases_buyer_currency_quote_invalid
+    purchases.each do |purchase|
+      purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     end
   end
 
@@ -259,7 +276,15 @@ class Charge::CreateService
       seller:,
       merchant_account:,
       currency: eligibility_decision.currency,
-      canonical_total_cents: amount_cents
+      canonical_total_cents: amount_cents,
+      canonical_line_items: purchases.filter_map do |purchase|
+        next if purchase.total_transaction_cents.zero?
+
+        {
+          permalink: purchase.link.unique_permalink,
+          total_cents: purchase.total_transaction_cents,
+        }
+      end
     )
   rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
     Rails.logger.info("Buyer currency presentment quote rejected for charge #{charge.external_id}: #{e.message}")
@@ -271,6 +296,16 @@ class Charge::CreateService
       purchases.each { _1.purchase_presentment&.destroy! }
       charge.charge_presentment&.destroy!
     end
+  end
+
+  # Persists the learned settlement-currency mismatch (issue #6011) so subsequent checkouts
+  # for this seller skip the doomed FX-quote round trip and present canonical USD. A
+  # persistence failure must never mask the buyer-facing error handling that is already in
+  # progress — worst case the next checkout probes Stripe again.
+  def record_settlement_currency_mismatch
+    merchant_account&.record_settlement_currency_mismatch!
+  rescue StandardError => e
+    Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
   end
 
   def payment_intent_idempotency_key(presentment_args)

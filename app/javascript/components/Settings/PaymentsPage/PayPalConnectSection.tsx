@@ -81,7 +81,7 @@ const PayPalConnectSection = ({
                       className={isFormDisabled || !paypalConnect.allow_paypal_connect ? "opacity-30" : undefined}
                     >
                       <Paypal pack="brands" className="size-5" />
-                      Connect with Paypal
+                      Connect with PayPal
                     </a>
                   </Button>
                 </div>
@@ -148,7 +148,7 @@ const PayPalConnectSection = ({
                       className={isFormDisabled || !paypalConnect.allow_paypal_connect ? "opacity-30" : undefined}
                     >
                       <Paypal pack="brands" className="size-5" />
-                      Connect with Paypal
+                      Connect with PayPal
                     </a>
                   </Button>
                 </p>

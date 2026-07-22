@@ -5,7 +5,35 @@ class ScheduleAbandonedCartEmailsJob
 
   BATCH_SIZE = 500
 
+  # Upper bound on how many abandoned cart ids a single SQL statement may return while
+  # scanning a day's window. The carts table has grown to the point where fetching a whole
+  # day's abandoned carts in one statement exceeds MySQL's max_execution_time (the job died
+  # on that error every day from 2026-04-02 onward — see gumroad-private#1198), so the scan
+  # walks the window in id-ordered batches instead: no single statement's result set scales
+  # with platform size.
+  SCAN_BATCH_SIZE = 10_000
+
+  # Session-level statement budget while scanning. Batching bounds each statement's result
+  # set, but a window where almost every cart is filtered out (e.g. a day whose carts were
+  # already emailed) can still make one statement scan many rows before filling a batch.
+  # This is a scheduled background job, not a user-facing request, so a long statement is
+  # acceptable — the same rationale as the payout batch jobs, which use this exact helper
+  # (see PerformPayoutsUpToDelayDaysAgoWorker).
+  SCAN_TIME_BUDGET = 2.hours
+
   sidekiq_options queue: :low, retry: 5, lock: :until_executed
+
+  # This job failed silently every day for 3.5 months (gumroad-private#1198): it landed in
+  # the Sidekiq dead set with no alert, and no abandoned-cart emails went out platform-wide.
+  # Report retry exhaustion explicitly so a recurrence is visible in Sentry the same day.
+  sidekiq_retries_exhausted do |msg, exception|
+    ErrorNotifier.notify(
+      "ScheduleAbandonedCartEmailsJob exhausted retries — no abandoned-cart emails were scheduled for the day",
+      exception_class: exception&.class&.name,
+      exception_message: exception&.message,
+      enqueued_at: msg["enqueued_at"]
+    )
+  end
 
   def perform
     # cart_product_ids_with_cart_ids is a hash of { product_id => { cart_id => [variant_ids] } }
@@ -17,7 +45,7 @@ class ScheduleAbandonedCartEmailsJob
       day_end = day == 1 ? Cart::ABANDONED_IF_UPDATED_BEFORE_AGO.ago : (day - 1).days.ago.beginning_of_day
 
       start_time = Time.current
-      cart_ids = Cart.abandoned(updated_at: day_start..day_end).pluck(:id)
+      cart_ids = abandoned_cart_ids(day_start..day_end)
       cart_ids.each_slice(BATCH_SIZE) do |batch_ids|
         Cart.includes(:alive_cart_products).where(id: batch_ids).each do |cart|
           next if cart.user_id.blank? && cart.email.blank?
@@ -61,4 +89,28 @@ class ScheduleAbandonedCartEmailsJob
       CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
     end
   end
+
+  private
+    # Returns the ids of all abandoned carts in the given updated_at window, equivalent to
+    # `Cart.abandoned(updated_at: window).pluck(:id)` but walked in id-ordered keyset batches
+    # so no single statement has to materialize the whole window. The cursor advances past
+    # whole rows (ids are unique), so the union of batches is exactly the full result set.
+    def abandoned_cart_ids(window)
+      ids = []
+      last_id = 0
+      WithMaxExecutionTime.timeout_queries(seconds: SCAN_TIME_BUDGET) do
+        loop do
+          batch = Cart.abandoned(updated_at: window)
+                      .where("carts.id > ?", last_id)
+                      .reorder("carts.id ASC")
+                      .limit(SCAN_BATCH_SIZE)
+                      .pluck(:id)
+          break if batch.empty?
+
+          ids.concat(batch)
+          last_id = batch.last
+        end
+      end
+      ids
+    end
 end

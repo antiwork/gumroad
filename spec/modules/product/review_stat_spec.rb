@@ -251,4 +251,67 @@ describe Product::ReviewStat do
       expect(product.product_review_stat.reload.attributes).to eq(review_stat_attributes)
     end
   end
+
+  describe "#bundle_rating_stats" do
+    it "returns the product's own rating_stats for a non-bundle product" do
+      purchase = create(:purchase, link: @product)
+      create(:product_review, purchase:, rating: 4)
+
+      expect(@product.reload.bundle_rating_stats).to eq(@product.rating_stats)
+      expect(@product.bundle_rating_stats[:count]).to eq(1)
+    end
+
+    context "when the product is a bundle" do
+      before do
+        @bundle = create(:product, :bundle)
+        @first_bundled_product, @second_bundled_product = @bundle.bundle_products.map(&:product)
+      end
+
+      it "aggregates the bundled products' review stats weighted by review count" do
+        2.times { create(:product_review, purchase: create(:purchase, link: @first_bundled_product), rating: 5) }
+        create(:product_review, purchase: create(:purchase, link: @first_bundled_product), rating: 4)
+        create(:product_review, purchase: create(:purchase, link: @second_bundled_product), rating: 1)
+
+        stats = @bundle.reload.bundle_rating_stats
+        expect(stats[:count]).to eq(4)
+        expect(stats[:average]).to eq(3.8) # (5 + 5 + 4 + 1) / 4 = 3.75 rounded
+        expect(stats[:percentages]).to eq([25, 0, 0, 25, 50])
+        expect(stats[:percentages].sum).to eq(100)
+      end
+
+      it "excludes bundled products that hide reviews" do
+        create(:product_review, purchase: create(:purchase, link: @first_bundled_product), rating: 5)
+        create(:product_review, purchase: create(:purchase, link: @second_bundled_product), rating: 1)
+        @second_bundled_product.update!(display_product_reviews: false)
+
+        stats = @bundle.reload.bundle_rating_stats
+        expect(stats[:count]).to eq(1)
+        expect(stats[:average]).to eq(5.0)
+      end
+
+      it "excludes deleted bundle products" do
+        create(:product_review, purchase: create(:purchase, link: @first_bundled_product), rating: 5)
+        create(:product_review, purchase: create(:purchase, link: @second_bundled_product), rating: 1)
+        @bundle.bundle_products.find_by(product: @second_bundled_product).mark_deleted!
+
+        stats = @bundle.reload.bundle_rating_stats
+        expect(stats[:count]).to eq(1)
+        expect(stats[:average]).to eq(5.0)
+      end
+
+      it "returns zeroed stats when no bundled product has reviews" do
+        stats = @bundle.bundle_rating_stats
+        expect(stats[:count]).to eq(0)
+        expect(stats[:average]).to eq(0)
+        expect(stats[:percentages]).to eq([0, 0, 0, 0, 0])
+      end
+
+      it "does not persist anything on the bundle's own review stat" do
+        create(:product_review, purchase: create(:purchase, link: @first_bundled_product), rating: 5)
+
+        expect { @bundle.reload.bundle_rating_stats }.not_to change { ProductReviewStat.count }
+        expect(@bundle.product_review_stat).to be_nil
+      end
+    end
+  end
 end

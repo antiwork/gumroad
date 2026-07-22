@@ -17,21 +17,26 @@ class GenerateFeesByCreatorLocationReportJob
       starts_at = Date.new(year, month).beginning_of_month.beginning_of_day
       ends_at = Date.new(year, month).end_of_month.end_of_day
 
+      # Sales leg. not_chargedback_for_tax_reporting keeps, on top of the reversed (won)
+      # chargebacks the old scope kept, event-dated chargebacks (see
+      # Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER): their fee stays counted in the
+      # purchase's own month while the clawback is subtracted by the chargeback leg below.
+      # Chargebacks lost before the chargeback reporting cutover keep the legacy drop so
+      # historical months regenerate as filed.
       Purchase.successful
         .not_fully_refunded_for_tax_reporting
-        .not_chargedback_or_chargedback_reversed
+        .not_chargedback_for_tax_reporting
         .where.not(stripe_transaction_id: nil)
         .where("purchases.created_at BETWEEN ? AND ?", starts_at, ends_at)
         .includes(:seller).find_each do |purchase|
         GC.start if purchase.id % 10000 == 0
 
-        # Chargebacks keep their existing purchase-flag attribution (the chargeback
-        # event-date pass is tracked separately). There is deliberately NO per-row
+        # There is deliberately NO per-row
         # fully-refunded skip here: the not_fully_refunded_for_tax_reporting scope above is
         # the single gate. Any refunded purchase that reaches this loop either contributes its
         # gross fee (post-cutover) or has a post-cutover refund whose leg below subtracts the
         # refunded fee — re-skipping it here would understate the period pair.
-        next if purchase.chargedback_not_reversed?
+        next if purchase.chargedback_not_reversed? && !purchase.chargeback_event_dated_for_tax_reporting?
 
         fee_cents = purchase.fee_cents_for_tax_reporting
 
@@ -48,12 +53,14 @@ class GenerateFeesByCreatorLocationReportJob
 
       # Refund leg: fees refunded during the reported month are subtracted in this month,
       # dated by the refund's date, regardless of when the original purchase happened. The
-      # purchase-side filters mirror the sales leg above (minus its date window).
+      # purchase-side filters mirror the sales leg above (minus its date window); refunds of
+      # event-dated chargebacks ARE subtracted, since their fee stays counted and the
+      # chargeback leg claws back only what the refund didn't.
       Refund.for_tax_period_reporting(starts_at, ends_at)
         .joins(:purchase)
         .merge(
           Purchase.successful
-            .not_chargedback_or_chargedback_reversed
+            .not_chargedback_for_tax_reporting
             .where.not(purchases: { stripe_transaction_id: nil })
         )
         .includes(purchase: :seller)
@@ -70,6 +77,33 @@ class GenerateFeesByCreatorLocationReportJob
           state_data[state_name] ||= 0
           state_data[state_name] -= refunded_fee_cents
         end
+      end
+
+      # Chargeback leg: fees clawed back by disputes formalized during the reported month are
+      # subtracted in this month, dated by the dispute event date (purchases.chargeback_date
+      # has always held the processor's dispute-formalized timestamp, so no backfill is
+      # needed). Amounts are net of the purchase's refunds — a refunded fee was already
+      # subtracted by the refund's own reporting path and is not clawed back again.
+      Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at)
+        .successful
+        .where.not(stripe_transaction_id: nil)
+        .includes(:seller)
+        .find_each do |purchase|
+        apply_chargeback_fee(purchase, -1, country_data, state_data)
+      end
+
+      # Chargeback-reversal leg: fees from disputes won during the reported month are added
+      # back in this month, dated by the Dispute row's won_at (real dispute rows only —
+      # reversal dates are never synthesized).
+      Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at)
+        .successful
+        .where.not(stripe_transaction_id: nil)
+        .includes(:seller)
+        .find_each do |purchase|
+        won_at = purchase.chargeback_reversal_reporting_date
+        next unless won_at&.between?(starts_at, ends_at)
+
+        apply_chargeback_fee(purchase, 1, country_data, state_data)
       end
     end
 
@@ -124,6 +158,23 @@ class GenerateFeesByCreatorLocationReportJob
   end
 
   private
+    # Applies a chargeback (sign = -1) or chargeback-reversal (sign = +1) fee adjustment to
+    # the aggregates, bucketed by the same creator location as the sales leg.
+    def apply_chargeback_fee(purchase, sign, country_data, state_data)
+      fee_cents = sign * purchase.fee_cents_for_chargeback_reporting
+      return if fee_cents.zero?
+
+      country_name, state_name = determine_country_name_and_state_name(purchase)
+
+      country_data[country_name] ||= 0
+      country_data[country_name] += fee_cents
+
+      if country_name == "United States"
+        state_data[state_name] ||= 0
+        state_data[state_name] += fee_cents
+      end
+    end
+
     # Memoizes each seller's compliance-info rows once, then selects the
     # applicable one per purchase in Ruby. This keeps the exact
     # `created_at < purchase.created_at` semantics of the original per-purchase

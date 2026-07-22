@@ -5,6 +5,7 @@ class ProductPresenter
   include ProductsHelper
   include CurrencyHelper
   include PreorderHelper
+  include MailerHelper
 
   extend PreorderHelper
 
@@ -235,7 +236,6 @@ class ProductPresenter
           discount: default_offer_code.configured_discount_for_display,
         } : nil,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
-        audio_previews_enabled: Feature.active?(:audio_previews, product.user),
         community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
       },
       id: product.external_id,
@@ -272,13 +272,16 @@ class ProductPresenter
       aws_key: AWS_ACCESS_KEY,
       available_countries: ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } },
       google_client_id: GlobalConfig.get("GOOGLE_CLIENT_ID"),
-      google_calendar_enabled: Feature.active?(:google_calendar_link, product.user),
       seller_refund_policy_enabled: product.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
         title: product.user.refund_policy.title,
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      # The sender line receipt emails actually go out with (CustomerMailer#receipt builds the
+      # same name + noreply@customers address), so the Receipt tab's email-style preview
+      # chrome can show an honest From value.
+      receipt_email_from: "#{from_email_address_name(product.user.name.to_s)} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
       price_checker_enabled: Feature.active?(:price_checker, product.user),
       custom_html_pages_enabled: Feature.active?(:custom_html_pages, product.user),
       dropbox_api_key: DROPBOX_PICKER_API_KEY,

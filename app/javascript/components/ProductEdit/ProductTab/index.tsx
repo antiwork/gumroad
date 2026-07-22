@@ -60,7 +60,6 @@ export const ProductTab = () => {
     setCurrencyType,
     isPhysical,
     customDomainVerificationStatus,
-    googleCalendarEnabled,
     seller_refund_policy_enabled,
     cancellationDiscountsEnabled,
     priceCheckerEnabled,
@@ -145,7 +144,6 @@ export const ProductTab = () => {
                   setImagesUploading={setImagesUploading}
                   publicFiles={product.public_files}
                   updatePublicFiles={(updater) => updateProduct((product) => updater(product.public_files))}
-                  audioPreviewsEnabled={product.audio_previews_enabled}
                 />
                 <CustomPermalinkInput
                   value={product.custom_permalink}
@@ -244,7 +242,7 @@ export const ProductTab = () => {
                       })
                     }
                   />
-                  {product.native_type === "call" && googleCalendarEnabled ? (
+                  {product.native_type === "call" ? (
                     <GoogleCalendarIntegrationEditor
                       integration={product.integrations.google_calendar}
                       onChange={(newIntegration) =>

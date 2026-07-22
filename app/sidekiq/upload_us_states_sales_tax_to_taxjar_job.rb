@@ -92,6 +92,57 @@ class UploadUsStatesSalesTaxToTaxjarJob
       end
     end
 
-    Rails.logger.info("UploadUsStatesSalesTaxToTaxjarJob: uploaded #{uploaded_count} order and #{uploaded_refund_count} refund transactions to TaxJar for #{day.iso8601}")
+    # Chargeback legs: disputes formalized on the day are pushed as refund transactions dated
+    # by the dispute event date (purchases.chargeback_date), and disputes won on the day are
+    # pushed as re-add order transactions dated by the Dispute row's won_at. This replaces the
+    # old silent treatment where a charged-back purchase's order simply vanished on any
+    # re-push — deleting gross from a period whose return may already have been auto-filed.
+    # Only event-dated (post-cutover) chargebacks get legs; see
+    # Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.
+    chargeback_ids_by_state = UsStateSalesTaxUploader.grouped_chargeback_purchase_ids_by_state(
+      subdivision_codes:,
+      starts_at: day.beginning_of_day,
+      ends_at: day.end_of_day
+    )
+
+    uploaded_chargeback_count = 0
+    chargeback_ids_by_state.each do |subdivision_code, purchase_ids|
+      subdivision = subdivisions_by_code[subdivision_code]
+
+      purchase_ids.each do |id|
+        purchase = Purchase.find(id)
+        totals = uploader.upload_chargeback(purchase:, subdivision:)
+        uploaded_chargeback_count += 1 if totals
+      end
+    end
+
+    reversal_ids_by_state = UsStateSalesTaxUploader.grouped_chargeback_reversal_purchase_ids_by_state(
+      subdivision_codes:,
+      starts_at: day.beginning_of_day,
+      ends_at: day.end_of_day
+    )
+
+    uploaded_reversal_count = 0
+    reversal_ids_by_state.each do |subdivision_code, purchase_ids|
+      subdivision = subdivisions_by_code[subdivision_code]
+
+      purchase_ids.each do |id|
+        purchase = Purchase.find(id)
+        # The window is re-passed so the uploader only emits the leg when the purchase's
+        # canonical reversal date actually falls on this day (a purchase with several dispute
+        # rows can be selected by a non-canonical row's won_at — see the uploader).
+        totals = uploader.upload_chargeback_reversal(
+          purchase:, subdivision:,
+          starts_at: day.beginning_of_day, ends_at: day.end_of_day
+        )
+        uploaded_reversal_count += 1 if totals
+      end
+    end
+
+    Rails.logger.info(
+      "UploadUsStatesSalesTaxToTaxjarJob: uploaded #{uploaded_count} order, #{uploaded_refund_count} refund, " \
+      "#{uploaded_chargeback_count} chargeback, and #{uploaded_reversal_count} chargeback-reversal transactions " \
+      "to TaxJar for #{day.iso8601}"
+    )
   end
 end

@@ -421,15 +421,51 @@ describe Settings::MainController, type: :controller, inertia: true do
         end
       end
 
+      # Mirrors the state of a seller whose refund policy was enforced because of a high
+      # dispute rate while account-level refund policies are switched off globally. The
+      # enforced policy applies to the whole account and is managed by Gumroad: the seller
+      # has to contact us with remediation steps and we apply changes on their behalf, so
+      # the Settings write is skipped entirely.
+      context "when a refund policy is enforced and the seller_refund_policy_disabled_for_all feature flag is set to true" do
+        before do
+          Feature.activate(:seller_refund_policy_disabled_for_all)
+          seller.update!(refund_policy_enabled: false, refund_policy_enforced: true)
+          seller.refund_policy.update!(max_refund_period_in_days: 30)
+        end
+
+        it "does not update the seller refund policy" do
+          put :update, params: { user: { seller_refund_policy: { max_refund_period_in_days: "7", fine_print: "This is a fine print" } } }
+          expect(response).to redirect_to(settings_main_path)
+          expect(response).to have_http_status :see_other
+
+          expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
+          expect(seller.refund_policy.fine_print).to be_nil
+        end
+      end
+
+      # Even with account-level refund policies enabled, an enforced policy is managed by
+      # Gumroad and can't be self-edited.
+      context "when a refund policy is enforced and account-level refund policies are enabled" do
+        before do
+          seller.update!(refund_policy_enforced: true)
+          seller.refund_policy.update!(max_refund_period_in_days: 30)
+        end
+
+        it "does not update the seller refund policy" do
+          put :update, params: { user: { seller_refund_policy: { max_refund_period_in_days: "7", fine_print: "This is a fine print" } } }
+          expect(response).to redirect_to(settings_main_path)
+          expect(response).to have_http_status :see_other
+
+          expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
+          expect(seller.refund_policy.fine_print).to be_nil
+        end
+      end
+
       context "product level support emails" do
         let(:product1) { create(:product, user: seller) }
         let(:product2) { create(:product, user: seller) }
         let(:other_seller) { create(:user) }
         let(:other_product) { create(:product, user: other_seller) }
-
-        before do
-          Feature.activate(:product_level_support_emails)
-        end
 
         it "creates new support emails with associated products" do
           product_level_support_emails = [
@@ -491,25 +527,6 @@ describe Settings::MainController, type: :controller, inertia: true do
           expect(flash[:notice]).to eq("Your account has been updated!")
           expect(product1.reload.support_email).to be_nil
           expect(product2.reload.support_email).to be_nil
-        end
-
-        context "when product_level_support_emails feature is disabled" do
-          before do
-            Feature.deactivate(:product_level_support_emails)
-          end
-
-          it "does not update product support emails" do
-            product_level_support_emails = [
-              { email: "contact@example.com", product_ids: [product1.external_id] }
-            ]
-
-            put :update, params: { user: user_params.merge(product_level_support_emails:) }
-
-            expect(response).to redirect_to(settings_main_path)
-            expect(response).to have_http_status :see_other
-            expect(flash[:notice]).to eq("Your account has been updated!")
-            expect(product1.reload.support_email).to be_nil
-          end
         end
       end
     end

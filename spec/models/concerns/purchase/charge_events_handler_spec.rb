@@ -77,6 +77,24 @@ describe Purchase::ChargeEventsHandler, :vcr do
                                      extras: { refund_status: "pending", stripe_connect_account_id: "acct_1MExampleConnect" })
         Purchase.handle_charge_event(event)
       end
+
+      it "ignores a dispute formalized event for a connected account's own charge" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        event = build(:charge_event_dispute_formalized, charge_id: "py_nonexistent", charge_reference: nil,
+                                                        extras: { charge_processor_dispute_id: "dp_1", reason: "fraudulent",
+                                                                  stripe_connect_account_id: "acct_1MExampleConnect" })
+        Purchase.handle_charge_event(event)
+      end
+
+      it "ignores dispute won/lost events for a connected account's own charge" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        [ChargeEvent::TYPE_DISPUTE_WON, ChargeEvent::TYPE_DISPUTE_LOST].each do |type|
+          event = build(:charge_event, type:, comment: "charge.dispute.closed",
+                                       charge_id: "py_nonexistent", charge_reference: nil,
+                                       extras: { charge_processor_dispute_id: "dp_1", stripe_connect_account_id: "acct_1MExampleConnect" })
+          Purchase.handle_charge_event(event)
+        end
+      end
     end
   end
 

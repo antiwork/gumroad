@@ -436,8 +436,6 @@ describe User, :vcr do
     let!(:product3) { create(:product, user:, support_email: "3@example.com") }
     let!(:product4) { create(:product, user:, support_email: nil) }
 
-    before { Feature.activate(:product_level_support_emails) }
-
     it "returns the user's product support emails" do
       result = user.product_level_support_emails
 
@@ -452,14 +450,6 @@ describe User, :vcr do
         }
       )
     end
-
-    context "when product_level_support_emails feature is disabled" do
-      before { Feature.deactivate(:product_level_support_emails) }
-
-      it "returns nil" do
-        expect(user.product_level_support_emails).to be_nil
-      end
-    end
   end
 
   describe "#update_product_level_support_emails!" do
@@ -467,10 +457,6 @@ describe User, :vcr do
     let!(:product1) { create(:product, user:, support_email: "old1@example.com") }
     let!(:product2) { create(:product, user:, support_email: "old2@example.com") }
     let!(:product3) { create(:product, user:, support_email: "old3@example.com") }
-
-    before do
-      Feature.activate(:product_level_support_emails)
-    end
 
     it "updates products support emails" do
       user.update_product_level_support_emails!(
@@ -737,6 +723,34 @@ describe User, :vcr do
     end
   end
 
+  describe "#refund_policy_settings_editable?" do
+    let(:user) { create(:user) }
+
+    it "returns true when account-level refund policies are enabled" do
+      expect(user.refund_policy_settings_editable?).to be true
+    end
+
+    it "returns false when a refund policy is enforced on the account, even with account-level refund policies enabled" do
+      user.update!(refund_policy_enforced: true)
+
+      expect(user.refund_policy_settings_editable?).to be false
+    end
+
+    context "with seller_refund_policy_disabled_for_all" do
+      before { Feature.activate(:seller_refund_policy_disabled_for_all) }
+
+      it "returns false when no refund policy is enforced" do
+        expect(user.refund_policy_settings_editable?).to be false
+      end
+
+      it "returns false when a refund policy is enforced on the account" do
+        user.update!(refund_policy_enabled: false, refund_policy_enforced: true)
+
+        expect(user.refund_policy_settings_editable?).to be false
+      end
+    end
+  end
+
   describe "#paypal_payout_email" do
     let(:user) { create(:user, payment_address: "payme@example.com") }
 
@@ -957,9 +971,8 @@ describe User, :vcr do
         include_examples "user is not deactivated"
       end
 
-      context "when user has negative balances and the feature delete_account_forfeit_balance is active" do
+      context "when user has negative balances" do
         before do
-          Feature.activate_user :delete_account_forfeit_balance, @user
           create(:balance, user: @user, amount_cents: -50)
         end
 
@@ -3744,6 +3757,36 @@ describe User, :vcr do
         expect(user.eligible_to_send_emails?).to eq(false)
       end
 
+      it "returns true when user is verified even without a completed payment" do
+        user.update!(verified: true)
+        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        expect(user.eligible_to_send_emails?).to eq(true)
+      end
+
+      it "returns false when user is verified but has not made minimum required sales" do
+        user.update!(verified: true)
+        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+        expect(user.eligible_to_send_emails?).to eq(false)
+      end
+
+      it "returns false when a flagged user is then verified and has no completed payment" do
+        # Flag first, then verify: the state machine blocks flagging an
+        # already-verified user, but nothing stops verifying a flagged one.
+        admin_user = create(:admin_user)
+        user.flag_for_fraud(author_id: admin_user.id)
+        user.update!(verified: true)
+        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        expect(user.eligible_to_send_emails?).to eq(false)
+      end
+
+      it "returns true when user is flagged but has a completed payment and minimum sales" do
+        admin_user = create(:admin_user)
+        user.flag_for_fraud(author_id: admin_user.id)
+        create(:payment_completed, user:)
+        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+        expect(user.eligible_to_send_emails?).to eq(true)
+      end
+
       it "returns false when user has not made minimum required sales" do
         create(:payment_completed, user:)
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
@@ -3915,7 +3958,6 @@ describe User, :vcr do
     let(:user) { create(:user) }
 
     before do
-      Feature.activate_user(:ai_product_generation, user)
       user.confirm
       allow(user).to receive(:sales_cents_total).and_return(15_000)
     end
@@ -3938,12 +3980,6 @@ describe User, :vcr do
     end
 
     it "returns false when user has no completed payments or successful sales" do
-      expect(user.eligible_for_ai_product_generation?).to eq(false)
-    end
-
-    it "returns false when feature flag is inactive" do
-      Feature.deactivate_user(:ai_product_generation, user)
-      create(:payment_completed, user:)
       expect(user.eligible_for_ai_product_generation?).to eq(false)
     end
 

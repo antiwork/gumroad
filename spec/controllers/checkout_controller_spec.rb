@@ -653,6 +653,8 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "returns an error when params are invalid" do
+        allow(ErrorNotifier).to receive(:notify)
+
         expect do
           patch :update, params: {
             cart: {
@@ -670,9 +672,14 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        # Validation failures other than the known quantity/price out-of-range shape are
+        # unexpected and must still be reported.
+        expect(ErrorNotifier).to have_received(:notify)
       end
 
       it "returns an error when an item quantity exceeds the integer column limit" do
+        allow(ErrorNotifier).to receive(:notify)
+
         expect do
           patch :update, params: {
             cart: {
@@ -681,7 +688,8 @@ describe CheckoutController, type: :controller, inertia: true do
                   product: { id: create(:product).external_id },
                   price: 100,
                   quantity: CartProduct::MAX_QUANTITY + 1,
-                  referrer: "direct"
+                  referrer: "direct",
+                  url_parameters: {}
                 }
               ],
               discountCodes: []
@@ -692,9 +700,14 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        # An out-of-range quantity is expected buyer-supplied bad input already surfaced to the
+        # buyer via the alert above — it must not page Sentry on every occurrence.
+        expect(ErrorNotifier).not_to have_received(:notify)
       end
 
       it "returns an error when an item price exceeds the bigint column limit" do
+        allow(ErrorNotifier).to receive(:notify)
+
         expect do
           patch :update, params: {
             cart: {
@@ -703,7 +716,8 @@ describe CheckoutController, type: :controller, inertia: true do
                   product: { id: create(:product).external_id },
                   price: CartProduct::MAX_PRICE + 1,
                   quantity: 1,
-                  referrer: "direct"
+                  referrer: "direct",
+                  url_parameters: {}
                 }
               ],
               discountCodes: []
@@ -714,6 +728,37 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        # Same reasoning as the quantity spec above: expected bad input, no Sentry report.
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "still reports when an out-of-range quantity is combined with an unrelated validation failure" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: create(:product).external_id },
+                  price: 100,
+                  quantity: CartProduct::MAX_QUANTITY + 1,
+                  url_parameters: {}
+                  # referrer intentionally omitted — its presence validation fails too
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.not_to change(Cart, :count)
+
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        # The record has BOTH the known out-of-range error AND an unexpected one (missing
+        # referrer). Suppression only applies when the out-of-range shape is the sole cause,
+        # so this mixed failure must still be reported.
+        expect(ErrorNotifier).to have_received(:notify)
       end
 
       it "returns an error when cart contains more than allowed number of cart products" do

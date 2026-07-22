@@ -267,7 +267,7 @@ describe UrlRedirect do
         product.product_files << create(
           :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/a1a5b8c8c38749e2b3cb27099a817517/original/Alice&#39;s Adventures in Wonderland.pdf"
         )
-        purchase = create(:purchase, link: product, purchaser: create(:user))
+        purchase = create(:free_purchase, link: product, purchaser: create(:user))
         url_redirect = create(:url_redirect, link: product, purchase:)
 
         product_json = url_redirect.product_json_data
@@ -287,7 +287,7 @@ describe UrlRedirect do
         product = create(:product)
         files = create_list(:readable_document, 5, link: product)
         product.product_files = files
-        purchase = create(:purchase, link: product, purchaser: create(:user))
+        purchase = create(:free_purchase, link: product, purchaser: create(:user))
         url_redirect = create(:url_redirect, link: product, purchase:)
 
         consumed_at = Time.current.change(usec: 0)
@@ -318,6 +318,77 @@ describe UrlRedirect do
         files.last(2).each do |file|
           expect(locations_by_file_id[file.external_id][:latest_media_location]).to be_nil
         end
+      end
+
+      it "uses the newest web CFI instead of older native progress" do
+        product = create(:product)
+        epub = create(:epub_product_file, link: product, pagelength: 13)
+        purchase = create(:free_purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+        mobile_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                                  product_file_id: epub.id, product_id: product.id,
+                                                  platform: Platform::ANDROID, location: 4, consumed_at: 2.hours.ago)
+        web_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                               product_file_id: epub.id, product_id: product.id, platform: Platform::WEB,
+                                               location: 75, epub_cfi: "epubcfi(/6/8!/4/2/1:0)", consumed_at: 1.hour.ago)
+
+        file_data = url_redirect.product_file_json_data_for_mobile.sole
+
+        expect(file_data[:content_length]).to eq(13)
+        expect(file_data[:latest_media_location]).to eq(
+          location: 4,
+          unit: MediaLocation::Unit::PAGE_NUMBER,
+          timestamp: web_location.consumed_at
+        )
+        expect(file_data[:latest_media_location][:timestamp]).to be > mobile_location.consumed_at
+        expect(file_data[:latest_epub_location]).to eq(
+          cfi: web_location.epub_cfi,
+          percentage: 75,
+          page_number: 4,
+          completed: false,
+          timestamp: web_location.consumed_at
+        )
+      end
+
+      it "derives legacy mobile progress from the latest web CFI" do
+        product = create(:product)
+        epub = create(:epub_product_file, link: product, pagelength: 13)
+        purchase = create(:free_purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+        web_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                               product_file_id: epub.id, product_id: product.id, platform: Platform::WEB,
+                                               location: 75, epub_cfi: "epubcfi(/6/8!/4/2/1:0)")
+
+        file_data = url_redirect.product_file_json_data_for_mobile.sole
+
+        expect(file_data[:latest_media_location]).to eq(
+          location: 4,
+          unit: MediaLocation::Unit::PAGE_NUMBER,
+          timestamp: web_location.consumed_at
+        )
+        expect(file_data[:latest_epub_location]).to include(page_number: 4, percentage: 75, completed: false)
+      end
+
+      it "drops EPUB percentage progress after the file is replaced with a PDF" do
+        product = create(:product)
+        file = create(:epub_product_file, link: product, pagelength: 13)
+        purchase = create(:free_purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                product_file_id: file.id, product_id: product.id, platform: Platform::WEB,
+                                location: 75, epub_cfi: "epubcfi(/6/8!/4/2/1:0)")
+        file.update!(
+          url: "#{S3_BASE_URL}specs/billion-dollar-company-chapter-0.pdf",
+          filetype: "pdf",
+          filegroup: "document"
+        )
+        file.reload
+
+        file_data = url_redirect.product_file_json_data_for_mobile.sole
+
+        expect(file.latest_media_location_for(purchase)).to be_nil
+        expect(file_data[:latest_media_location]).to be_nil
+        expect(file_data[:latest_epub_location]).to be_nil
       end
     end
   end
@@ -420,6 +491,79 @@ describe UrlRedirect do
       url_redirect = create(:url_redirect, link: product, purchase: build(:purchase, link: product))
 
       expect(url_redirect.video_files_playlist(create(:product_file))[:index_to_play]).to eq(0)
+    end
+
+    it "bulk-loads subtitle files and media locations instead of querying once per video" do
+      purchase = create(:purchase, link: product)
+      url_redirect = create(:url_redirect, link: product, purchase:)
+
+      files = [file1, file2, file3, file4]
+      files.each { |file| create(:subtitle_file, product_file: file, language: "English (#{file.id})") }
+
+      consumed_at = Time.current.change(usec: 0)
+      files.first(2).each_with_index do |file, index|
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                product_file_id: file.id, product_id: product.id,
+                                location: index + 1, consumed_at:)
+      end
+
+      subtitle_queries = []
+      media_location_queries = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next unless sql.start_with?("SELECT")
+        subtitle_queries << sql if sql.include?("subtitle_files")
+        media_location_queries << sql if sql.include?("media_locations")
+      end
+
+      playlist = nil
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        playlist = url_redirect.video_files_playlist(file1)[:playlist]
+      end
+
+      expect(subtitle_queries.size).to eq(1)
+      expect(media_location_queries.size).to eq(1)
+
+      expect(playlist.size).to eq(4)
+      playlist_by_external_id = playlist.index_by { |video| video[:external_id] }
+      files.each do |file|
+        subtitle_file = file.alive_subtitle_files.sole
+        track = playlist_by_external_id[file.external_id][:tracks].sole
+        expect(track[:label]).to eq("English (#{file.id})")
+        expect(track[:file]).to eq(
+          Rails.application.routes.url_helpers.url_redirect_subtitle_file_vtt_path(url_redirect.token, file.external_id, subtitle_file.external_id)
+        )
+      end
+      files.first(2).each_with_index do |file, index|
+        expect(playlist_by_external_id[file.external_id][:latest_media_location]).to eq(
+          location: index + 1, unit: MediaLocation::Unit::SECONDS, timestamp: consumed_at
+        )
+      end
+      files.last(2).each do |file|
+        expect(playlist_by_external_id[file.external_id][:latest_media_location]).to be_nil
+      end
+    end
+
+    it "keeps resume positions when an installment redirect falls through to the product's files" do
+      purchase = create(:purchase, link: product)
+      installment = create(:installment, link: product)
+      url_redirect = installment.generate_url_redirect_for_purchase(purchase)
+
+      # The installment has no alive files of its own, so alive_product_files serves
+      # the product's files — watch positions recorded on those files must survive.
+      expect(installment.has_files?).to eq(false)
+
+      consumed_at = Time.current.change(usec: 0)
+      create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                              product_file_id: file1.id, product_id: product.id,
+                              location: 42, consumed_at:)
+
+      playlist = url_redirect.video_files_playlist(file1)[:playlist]
+      playlist_by_external_id = playlist.index_by { |video| video[:external_id] }
+
+      expect(playlist_by_external_id[file1.external_id][:latest_media_location]).to eq(
+        location: 42, unit: MediaLocation::Unit::SECONDS, timestamp: consumed_at
+      )
     end
   end
 

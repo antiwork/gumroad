@@ -114,6 +114,128 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "show product abc123" }])
       end
 
+      # Regression: gumroad-private#1168. list_products is paginated (10 per page) but the agent
+      # could never reach past page one, and the raw next_page_key had to reach the model so it
+      # knows more pages exist. A seller with >10 products would otherwise get silently incomplete
+      # catalog-wide answers.
+      it "passes page_key through to the API and feeds next_page_key back to the model" do
+        expect(api_client).to receive(:get).with("/products", { "page_key" => "key-1" }).and_return(
+          { "success" => true, "products" => [{ "id" => "p11", "name" => "Older Product" }], "next_page_key" => "key-2", "http_status" => 200 },
+        )
+        captured = nil
+        first = true
+        allow(client).to receive(:messages) do |args|
+          captured = captured_tool_result(args) unless first
+          if first
+            first = false
+            tool_result("api_read", { "endpoint" => "list_products", "params" => { "page_key" => "key-1" } })
+          else
+            text_result("Here is the next page.")
+          end
+        end
+
+        service.respond(messages: [{ role: "user", content: "show the rest of my products" }])
+
+        expect(captured).to include("next_page_key" => "key-2")
+      end
+
+      # Regression for the review finding on gumroad-private#1168's fix: the pagination prompt rule
+      # is useless if the tool-iteration cap stops the walk first. With the old cap of 5, a seller
+      # whose list spanned more than ~4 pages got the generic "couldn't finish" fallback on exactly
+      # the "all of X" tasks pagination exists for. This walks 8 pages and still gets a real answer.
+      it "lets the model walk well past five pages before the tool-iteration cap" do
+        pages = 8
+        call_count = 0
+        allow(api_client).to receive(:get) do |_path, _params|
+          call_count += 1
+          key = call_count < pages ? "key-#{call_count}" : nil
+          { "success" => true, "products" => [{ "id" => "p#{call_count}", "name" => "Product #{call_count}" }], "next_page_key" => key, "http_status" => 200 }.compact
+        end
+        turns = 0
+        allow(client).to receive(:messages) do
+          turns += 1
+          if turns <= pages
+            input = turns == 1 ? { "endpoint" => "list_products" } : { "endpoint" => "list_products", "params" => { "page_key" => "key-#{turns - 1}" } }
+            tool_result("api_read", input)
+          else
+            text_result("You have #{pages} pages of products; here's the full list.")
+          end
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "list all my products" }])
+
+        expect(call_count).to eq(pages)
+        expect(result[:reply]).to include("full list")
+        # The reply is the model's real answer, not the iteration-cap fallback.
+        expect(result[:reply]).not_to match(/couldn't finish/i)
+      end
+
+      it "teaches the model to paginate list reads in the system prompt" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("next_page_key")
+        expect(captured[:system]).to include("imply you checked items you did not actually fetch")
+      end
+
+      # Regression for gumroad-private#984: the agent invented dashboard settings screens
+      # ("Settings > Profile pickers") that don't exist, admitted it was "guessing at the UI",
+      # and looped on "confirm the change" without ever staging one. The system prompt must
+      # tell the model what is actually possible: no dashboard visibility, no self-serve
+      # appearance settings, custom HTML is the only appearance surface, a brand-new page must
+      # carry the whole storefront, and "prepared for confirmation" claims require a real
+      # api_write in the same reply.
+      it "teaches the model what is possible: no dashboard visibility, no appearance settings, no phantom confirmations" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("cannot see the creator's dashboard")
+        expect(captured[:system]).to include("NO self-serve settings")
+        expect(captured[:system]).to include("never direct them to dashboard settings that don't exist")
+        expect(captured[:system]).to include(%(<script id="gumroad-data"))
+        expect(captured[:system]).to match(/never hard-code the product list/)
+        expect(captured[:system]).to match(/Never publish a page that drops the creator's products/)
+        expect(captured[:system]).to match(/unless\s+you actually called api_write in this same reply/)
+      end
+
+      # Follow-up to gumroad-private#984: with the rules above in place, the agent authored a
+      # page whose script hunted for the creator's name in the gumroad-data JSON (data.user.name)
+      # — a key that doesn't exist there — so the published header fell back to a generic "Store"
+      # and the name and bio never rendered. The prompt must spell out the mechanism, not just
+      # the requirement: say exactly what the injected JSON contains (and that name/bio/avatar
+      # are NOT in it), point at data-gumroad-field elements as the only way to render name and
+      # bio, warn that Pages::Interpolator overwrites placeholder text even when a field is
+      # blank, restrict images to Gumroad-hosted urls the agent actually has, and require an
+      # empty state when the store has no published products so an empty store doesn't read as
+      # a broken page.
+      it "spells out how a page gets the creator's name, bio, and an empty product state" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to match(/does NOT contain the\s+creator's name, bio, avatar/)
+        expect(captured[:system]).to include(%(data-gumroad-field="name"))
+        expect(captured[:system]).to include(%(data-gumroad-field="bio"))
+        expect(captured[:system]).to match(/If the products array is empty,\s+render a visible empty state/)
+        expect(captured[:system]).to match(/Placeholder text you write inside\s+these elements is always overwritten/)
+        expect(captured[:system]).to match(/Only include\s+an avatar, logo, or photo when you have a real Gumroad-hosted image url/)
+        expect(captured[:system]).to match(/Never author an empty image slot/)
+      end
+
       it "rejects an unknown endpoint id without calling the API" do
         expect(api_client).not_to receive(:get)
         captured = nil

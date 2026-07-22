@@ -504,8 +504,11 @@ class Link < ApplicationRecord
   end
 
   def readable?
-    has_filetype?("pdf")
+    # Mirrors ProductFile#readable?: PDFs and EPUBs can be read in the browser.
+    has_filetype?("pdf") || has_filetype?("epub")
   end
+
+  alias_method :browser_readable?, :readable?
 
   def can_enable_rentals?
     streamable? && !is_in_preorder_state && !is_recurring_billing
@@ -513,6 +516,15 @@ class Link < ApplicationRecord
 
   def can_enable_quantity?
     [NATIVE_TYPE_MEMBERSHIP, NATIVE_TYPE_CALL].exclude?(native_type)
+  end
+
+  # Whether buyers should be offered a per-seat quantity for this product's license.
+  # Calls are excluded even when the is_multiseat_license flag is set (which can happen
+  # via the API or data that predates the editor hiding the toggle for calls): a call
+  # books exactly one slot per purchase, so a seat count would conflict with scheduling.
+  # Read this instead of the raw flag anywhere that decides whether to show or apply seats.
+  def multiseat_license_enabled?
+    is_multiseat_license? && native_type != NATIVE_TYPE_CALL
   end
 
   def eligible_for_installment_plans?
@@ -1236,8 +1248,6 @@ class Link < ApplicationRecord
   end
 
   def support_email_or_default
-    return user.support_or_form_email unless user.product_level_support_emails_enabled?
-
     support_email || user.support_or_form_email
   end
 

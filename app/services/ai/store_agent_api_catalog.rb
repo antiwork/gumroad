@@ -91,11 +91,11 @@ module Ai::StoreAgentApiCatalog
 
   ENDPOINTS = [
     # ---- Account / profile ----
-    ep("get_user", :get, "/user", "Get the creator's own account: name, email, currency, profile url, bio.", read: true, scope: "view_profile"),
+    ep("get_user", :get, "/user", "Get the creator's own account: name, email, currency, profile url, bio, profile_picture_url (the Gumroad-hosted avatar).", read: true, scope: "view_profile"),
     ep("update_user", :patch, "/user", "Update the creator's profile fields (name, bio).", scope: "edit_profile",
                                                                                            params: %w[name bio]),
     ep("get_user_custom_html", :get, "/user/custom_html", "Get the creator's profile custom HTML.", read: true, scope: "view_profile"),
-    ep("update_user_custom_html", :patch, "/user/custom_html", "Replace the creator's ENTIRE profile custom HTML with a new page. Destructive: anything not included in custom_html is lost. Only use this to author a brand-new page; to change part of an existing page, use edit_user_custom_html.", scope: "edit_profile", params: %w[custom_html]),
+    ep("update_user_custom_html", :patch, "/user/custom_html", "Replace the creator's ENTIRE profile custom HTML with a new page. Destructive: anything not included in custom_html is lost, and the page becomes the whole storefront — so it must show everything the store shows: render all products (with working links) dynamically from the gumroad-data JSON injected into every served page, plus the creator's name and bio via data-gumroad-field elements the server fills at render time (they are NOT in the JSON). Only use this to author a brand-new page; to change part of an existing page, use edit_user_custom_html.", scope: "edit_profile", params: %w[custom_html]),
     ep("edit_user_custom_html", :post, "/user/custom_html/edit", "Make a targeted edit to the creator's existing profile custom HTML: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_user_custom_html when a page already exists.", scope: "edit_profile", params: %w[find replace]),
 
     # ---- Public media library ----
@@ -115,7 +115,8 @@ module Ai::StoreAgentApiCatalog
                                                                                                             params: %w[refund_period fine_print]),
 
     # ---- Products ----
-    ep("list_products", :get, "/products", "List the creator's products with price, status, and stats.", read: true, scope: "view_sales"),
+    ep("list_products", :get, "/products", "List the creator's products with price, status, and stats. Returns 10 per page, newest first; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_sales",
+                                                                                                                                                                                                                                       params: %w[page_key]),
     ep("get_product", :get, "/products/:id", "Get one product by its id.", read: true, scope: "view_sales", path_params: %w[id]),
     ep("create_product", :post, "/products", "Create a new product.", scope: "edit_products",
                                                                       params: %w[name price description custom_permalink price_currency_type max_purchase_count]),
@@ -165,7 +166,7 @@ module Ai::StoreAgentApiCatalog
     ep("delete_cover", :delete, "/products/:link_id/covers/:id", "Remove a product cover image.", scope: "edit_products", path_params: %w[link_id id]),
 
     # ---- Product subscribers ----
-    ep("list_product_subscribers", :get, "/products/:link_id/subscribers", "List subscribers of a membership product.", read: true, scope: "view_sales", path_params: %w[link_id]),
+    ep("list_product_subscribers", :get, "/products/:link_id/subscribers", "List subscribers of a membership product. When the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_sales", path_params: %w[link_id], params: %w[page_key]),
     ep("get_subscriber", :get, "/subscribers/:id", "Get one subscriber by id.", read: true, scope: "view_sales", path_params: %w[id]),
 
     # ---- Upsells ----
@@ -178,7 +179,7 @@ module Ai::StoreAgentApiCatalog
     # ---- Emails (workflows / posts) ----
     # The v2 EmailsController gates EVERY action (incl. index/show) on edit_emails, so the reads use
     # edit_emails too (not view_sales) to match the real contract.
-    ep("list_emails", :get, "/emails", "List the creator's email posts.", read: true, scope: "edit_emails"),
+    ep("list_emails", :get, "/emails", "List the creator's email posts. Returns 10 per page; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "edit_emails", params: %w[page_key]),
     ep("get_email", :get, "/emails/:id", "Get one email post.", read: true, scope: "edit_emails", path_params: %w[id]),
     ep("create_email", :post, "/emails", "Draft a new email post to subscribers/customers.", scope: "edit_emails", params: %w[subject body audience product_id link_id publish draft]),
     ep("preview_email", :post, "/emails/:id/preview", "Send a preview of an email to the creator.", scope: "edit_emails", path_params: %w[id]),
@@ -197,7 +198,7 @@ module Ai::StoreAgentApiCatalog
     ep("resend_receipt", :post, "/sales/:id/resend_receipt", "Resend the purchase receipt email to the buyer.", scope: "edit_sales", path_params: %w[id]),
 
     # ---- Payouts ----
-    ep("list_payouts", :get, "/payouts", "List the creator's payouts.", read: true, scope: "view_payouts"),
+    ep("list_payouts", :get, "/payouts", "List the creator's payouts. Returns 10 per page; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_payouts", params: %w[page_key]),
     ep("upcoming_payout", :get, "/payouts/upcoming", "Get the creator's upcoming (not-yet-paid) payout.", read: true, scope: "view_payouts"),
     ep("get_payout", :get, "/payouts/:id", "Get one payout by id.", read: true, scope: "view_payouts", path_params: %w[id]),
 

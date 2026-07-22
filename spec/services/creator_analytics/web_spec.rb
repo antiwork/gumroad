@@ -45,6 +45,20 @@ describe CreatorAnalytics::Web do
 
       expect(@service.by_date).to eq(expected_result)
     end
+
+    it "labels the range end as Today based on the seller's time zone, not the server's" do
+      user = create(:user, timezone: "Tokyo")
+      create(:product, user: user)
+
+      # 8pm UTC on Jan 3 is already Jan 4 in Tokyo: the seller's current day differs
+      # from the server's. The end-of-range label must follow the seller's day.
+      travel_to(Time.utc(2021, 1, 3, 20, 0)) do
+        service = described_class.new(user: user, dates: (Date.new(2021, 1, 2) .. Date.new(2021, 1, 4)).to_a)
+        result = service.by_date
+        expect(result[:start_date]).to eq("Jan  2, 2021")
+        expect(result[:end_date]).to eq("Today")
+      end
+    end
   end
 
   describe "hourly interval" do

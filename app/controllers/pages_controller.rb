@@ -156,10 +156,15 @@ class PagesController < Sellers::BaseController
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           #{SANDBOX_COMPAT_SCRIPT}
-          #{self.class.pages_tailwind_inline}
+          #{self.class.pages_tailwind_head}
         </head>
         <body>
           #{interpolated}
+          <!-- The editor preview has no trusted wrapper listening, so a follow
+               can't complete here — but without the bridge a data-gumroad-follow
+               form would native-submit and navigate the preview frame away,
+               which reads as "the form is broken" while iterating. -->
+          #{FOLLOW_BRIDGE_SCRIPT}
         </body>
       </html>
     HTML

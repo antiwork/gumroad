@@ -185,8 +185,6 @@ type Props = {
   creators: { id: string; name: string }[];
   bundles: { id: string; label: string }[];
   purchase_analytics: Record<string, SellerAnalyticsProps>;
-  reviews_page_enabled: boolean;
-  following_wishlists_enabled: boolean;
 };
 
 type Params = {
@@ -256,8 +254,7 @@ const extractParams = (rawParams: URLSearchParams): Params => ({
 });
 
 export default function LibraryPage() {
-  const { results, creators, bundles, purchase_analytics, reviews_page_enabled, following_wishlists_enabled } =
-    typia.assert<Props>(usePage().props);
+  const { results, creators, bundles, purchase_analytics } = typia.assert<Props>(usePage().props);
 
   const originalLocation = useOriginalLocation();
   const discoverUrl = useDiscoverUrl();
@@ -279,7 +276,9 @@ export default function LibraryPage() {
         (state.search.creators.length === 0 || state.search.creators.includes(result.product.creator_id)) &&
         (state.search.bundles.length === 0 ||
           (result.purchase.bundle_id && state.search.bundles.includes(result.purchase.bundle_id))) &&
-        (!state.search.query || result.product.name.toLowerCase().includes(state.search.query.toLowerCase())),
+        (!state.search.query ||
+          result.product.name.toLowerCase().includes(state.search.query.toLowerCase()) ||
+          (result.product.creator?.name.toLowerCase().includes(state.search.query.toLowerCase()) ?? false)),
     );
     if (state.search.sort !== "purchase_date")
       filtered.sort((a, b) => b.product.updated_at.localeCompare(a.product.updated_at));
@@ -295,13 +294,18 @@ export default function LibraryPage() {
       return counts;
     }, new Map<string, number>());
 
-    return creators
-      .map((creator) => ({
-        ...creator,
-        count: productCountByCreatorId.get(creator.id) ?? 0,
-      }))
-      .filter((creator) => creator.count > 0)
-      .sort((a, b) => b.count - a.count);
+    return (
+      creators
+        .map((creator) => ({
+          ...creator,
+          count: productCountByCreatorId.get(creator.id) ?? 0,
+        }))
+        .filter((creator) => creator.count > 0)
+        // Alphabetical order makes a long creator list scannable — buyers with large
+        // libraries look for a specific creator by name, not by how many products they
+        // own from them (see gumroad-private#1177).
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+    );
   }, [creators, state.results, state.search.showArchivedOnly]);
 
   const RESULTS_PER_PAGE = 15;
@@ -394,11 +398,7 @@ export default function LibraryPage() {
   const shouldShowFilter = !showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9);
 
   return (
-    <Layout
-      selectedTab="purchases"
-      reviewsPageEnabled={reviews_page_enabled}
-      followingWishlistsEnabled={following_wishlists_enabled}
-    >
+    <Layout selectedTab="purchases">
       <section className="space-y-4 p-4 md:p-8">
         {state.results.length === 0 || showArchivedNotice ? (
           <Placeholder>

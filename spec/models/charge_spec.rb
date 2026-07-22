@@ -123,8 +123,15 @@ describe Charge, :vcr do
     it "attempts every purchase refund even when one purchase fails" do
       charge = create(:charge)
       failed_errors = instance_double(ActiveModel::Errors, full_messages: ["First refund failed"])
-      failed_purchase = instance_double(Purchase, refund_and_save!: false, errors: failed_errors)
-      successful_purchase = instance_double(Purchase, refund_and_save!: true)
+      failed_purchase = instance_double(Purchase, id: 1, refund_and_save!: false, errors: failed_errors)
+      successful_purchase = instance_double(Purchase, id: 2, refund_and_save!: true)
+      # The id-ordered lock pre-pass reloads and row-locks each purchase before any
+      # refund work; stub it out here — the concurrency guarantees are proven by
+      # real-thread coverage in handle_failed_refund_service_concurrency_spec.rb.
+      [failed_purchase, successful_purchase].each do |purchase|
+        allow(purchase).to receive(:reload).and_return(purchase)
+        allow(purchase).to receive(:lock!).and_return(purchase)
+      end
       allow(charge).to receive(:successful_purchases).and_return([failed_purchase, successful_purchase])
 
       expect(charge.refund_and_save!(123, reason: "Refund requested by the buyer")).to be(false)
@@ -139,8 +146,13 @@ describe Charge, :vcr do
     it "attempts every taxable purchase refund even when one purchase fails" do
       charge = create(:charge)
       failed_errors = instance_double(ActiveModel::Errors, full_messages: ["First tax refund failed"])
-      failed_purchase = instance_double(Purchase, gumroad_tax_cents: 100, refund_gumroad_taxes!: false, errors: failed_errors)
-      successful_purchase = instance_double(Purchase, gumroad_tax_cents: 100, refund_gumroad_taxes!: true)
+      failed_purchase = instance_double(Purchase, id: 1, gumroad_tax_cents: 100, refund_gumroad_taxes!: false, errors: failed_errors)
+      successful_purchase = instance_double(Purchase, id: 2, gumroad_tax_cents: 100, refund_gumroad_taxes!: true)
+      # Stub out the id-ordered lock pre-pass (see the #refund_and_save! example above).
+      [failed_purchase, successful_purchase].each do |purchase|
+        allow(purchase).to receive(:reload).and_return(purchase)
+        allow(purchase).to receive(:lock!).and_return(purchase)
+      end
       allow(charge).to receive(:successful_purchases).and_return([failed_purchase, successful_purchase])
 
       expect(charge.refund_gumroad_taxes!(refunding_user_id: 123, note: "note", business_vat_id: "vat")).to be(false)

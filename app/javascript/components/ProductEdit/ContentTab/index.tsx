@@ -47,12 +47,12 @@ import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
-import { EntityInfo } from "$app/components/DownloadPage/Layout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { EpubNudge } from "$app/components/ProductEdit/ContentTab/EpubNudge";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
@@ -97,6 +97,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
+import { resolveCopiedFileEmbeds } from "./resolveCopiedFileEmbeds";
 import { NodeVisibilityProvider } from "./useNodeVisibility";
 
 declare global {
@@ -166,7 +167,7 @@ const FileUploadMenu = ({
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
+  const { id, product, updateProduct, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -310,21 +311,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
-    const newFiles: FileEntry[] = [];
-    fragment.querySelectorAll("file-embed[url]").forEach((node) => {
-      const file = existingFiles.find(
-        (file) => file.id === node.getAttribute("id") || file.url === node.getAttribute("url"),
-      );
-      if (file) {
-        node.setAttribute("id", file.id);
-        if (node.hasAttribute("url")) {
-          newFiles.push(file);
-          node.removeAttribute("url");
-        }
-      } else {
-        node.remove();
-      }
-    });
+    const newFiles: FileEntry[] = resolveCopiedFileEmbeds(fragment, filesById, existingFiles);
     if (newFiles.length > 0) {
       updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
     }
@@ -856,6 +843,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             }
           />
         ) : null}
+        <EpubNudge />
         <PageListLayout
           ref={scrollContainerRef}
           className="md:h-auto! md:flex-1"
@@ -987,10 +975,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         </Details>
                       </CardContent>
                     </Card>
-                    <EntityInfo
-                      entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
-                      creator={seller}
-                    />
                   </>
                 ) : null}
               </div>
@@ -1224,7 +1208,9 @@ export const ContentTab = () => {
 
   const licenseInfo = {
     licenseKey: "6F0E4C97-B72A4E69-A11BF6C4-AF6517E7",
-    isMultiSeatLicense: product.native_type === "membership" ? product.is_multiseat_license : null,
+    // Seat-based licensing applies wherever a purchase quantity makes sense. Calls schedule
+    // one slot per purchase, so a seat count would conflict with the booking flow.
+    isMultiSeatLicense: product.native_type === "call" ? null : product.is_multiseat_license,
     seats: product.is_multiseat_license ? 5 : null,
     onIsMultiSeatLicenseChange: (value: boolean) => updateProduct({ is_multiseat_license: value }),
     productId: id,

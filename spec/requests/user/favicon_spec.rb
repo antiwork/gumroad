@@ -36,7 +36,7 @@ describe "User favicons", type: :system, js: true do
         click_on "Remove"
         attach_file("Upload", file_fixture("test.png"), visible: false)
       end
-      within_section("Preview", section_element: :aside) do
+      within find("aside[aria-label='Preview']") do
         expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
       end
       click_on "Update profile"

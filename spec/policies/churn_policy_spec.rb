@@ -16,7 +16,6 @@ describe ChurnPolicy do
     create(:team_membership, user: admin_for_seller, seller:, role: TeamMembership::ROLE_ADMIN)
     create(:team_membership, user: marketing_for_seller, seller:, role: TeamMembership::ROLE_MARKETING)
     create(:team_membership, user: support_for_seller, seller:, role: TeamMembership::ROLE_SUPPORT)
-    Feature.activate_user(:churn_analytics_enabled, seller)
   end
 
   permissions :show? do
@@ -43,17 +42,6 @@ describe ChurnPolicy do
     it "grants access to support" do
       seller_context = SellerContext.new(user: support_for_seller, seller:)
       expect(subject).to permit(seller_context, :churn)
-    end
-
-    context "when churn_analytics_enabled feature is inactive" do
-      before do
-        Feature.deactivate_user(:churn_analytics_enabled, seller)
-      end
-
-      it "denies access" do
-        seller_context = SellerContext.new(user: admin_for_seller, seller:)
-        expect(subject).not_to permit(seller_context, :churn)
-      end
     end
   end
 end

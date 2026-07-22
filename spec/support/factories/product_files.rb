@@ -45,10 +45,18 @@ FactoryBot.define do
       filegroup { "document" }
     end
 
-    factory :non_readable_document, aliases: [:epub_product_file] do
+    factory :epub_product_file do
       url { "#{S3_BASE_URL}specs/test.epub" }
       filetype { "epub" }
       filegroup { "epub_document" }
+    end
+
+    # A document that cannot be read in the browser (EPUBs became readable when
+    # the in-browser EPUB reader shipped, so a plain text file plays that role).
+    factory :non_readable_document do
+      url { "#{S3_BASE_URL}specs/blah.txt" }
+      filetype { "txt" }
+      filegroup { "document" }
     end
   end
 end

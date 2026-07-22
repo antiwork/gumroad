@@ -79,7 +79,7 @@ class SettingsPresenter
         show_nsfw_products: seller.show_nsfw_products?,
         disable_affiliate_requests: seller.disable_affiliate_requests?,
         seller_refund_policy:,
-        product_level_support_emails: seller.product_level_support_emails_enabled? ? seller.product_level_support_emails : nil
+        product_level_support_emails: seller.product_level_support_emails
       }
     }
   end
@@ -284,7 +284,12 @@ class SettingsPresenter
     allowed_periods -= [0] if seller.refund_policy_enforced?
 
     {
-      enabled: seller.account_level_refund_policy_enabled?,
+      # The section always renders in Settings. When it isn't editable (account-level
+      # refund policies are switched off and nothing is enforced on this account), the
+      # UI shows the controls disabled with a note explaining why, instead of hiding
+      # the section entirely.
+      editable: seller.refund_policy_settings_editable?,
+      refund_policy_enforced: seller.refund_policy_enforced?,
       allowed_refund_periods_in_days: allowed_periods.map do
         {
           key: _1,

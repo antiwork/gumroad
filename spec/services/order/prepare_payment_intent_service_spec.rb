@@ -301,6 +301,28 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "when the client-confirm seller-proceeds guard rejects the PaymentIntent" do
+      before { create(:merchant_account, user: seller) }
+
+      it "returns the guard's buyer-facing error instead of the generic prepare failure" do
+        order, params = build_order
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        allow(StripeDeferredPaymentIntent).to receive(:create).and_raise(
+          ChargeProcessorCardError.new(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE, StripeIntentChargeRouting::SELLER_PROCEEDS_ERROR_MESSAGE)
+        )
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_small_total").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_message]).to eq(StripeIntentChargeRouting::SELLER_PROCEEDS_ERROR_MESSAGE)
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.stripe_error_code).to eq(PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE)
+      end
+    end
+
     # The browser attaches a buyer-currency quote token exactly when the checkout displayed
     # local-currency totals. Client-confirm charges canonical USD with no quote machinery, so a
     # token arriving here means the buyer confirmed an amount this lane cannot charge — it must

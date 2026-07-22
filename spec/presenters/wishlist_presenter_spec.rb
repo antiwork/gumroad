@@ -317,14 +317,6 @@ describe WishlistPresenter do
         expect(described_class.new(wishlist:).public_props(request: nil, pundit_user:)[:following]).to eq(true)
       end
     end
-
-    context "when the follow feature flag is disabled" do
-      before { Feature.deactivate(:follow_wishlists) }
-
-      it "cannot be followed" do
-        expect(described_class.new(wishlist:).public_props(request: nil, pundit_user:)[:can_follow]).to eq(false)
-      end
-    end
   end
 
   describe "#public_items" do
@@ -361,6 +353,15 @@ describe WishlistPresenter do
 
       expect(second_page[:items].length).to eq(5)
       expect(second_page[:pagination]).to include(page: 2, prev: 1, next: nil)
+    end
+
+    it "returns an empty page instead of raising when the requested page exceeds the total pages" do
+      create(:wishlist_product, wishlist:)
+
+      result = described_class.new(wishlist:).public_items(request:, pundit_user:, page: 2)
+
+      expect(result[:items]).to eq([])
+      expect(result[:pagination]).to include(page: 2, pages: 1, next: nil)
     end
 
     it "does not issue per-item N+1 queries for variant associations" do

@@ -60,10 +60,10 @@ class User
       # PayPal sales have been disabled for this creator by admin (mostly due to high chargeback rate)
       return false if disable_paypal_sales?
 
-      # Paypal Connect is not enabled, fallback to old Paypal mode
+      # PayPal Connect is not enabled, fallback to old PayPal mode
       return Feature.inactive?(:disable_braintree_sales, self) unless paypal_connect_enabled?
 
-      # If Paypal Connect is supported, check if user has connected a Merchant Account
+      # If PayPal Connect is supported, check if user has connected a Merchant Account
       merchant_accounts.alive.charge_processor_alive.paypal.exists?
     end
 
@@ -89,10 +89,6 @@ class User
       timezone_for_gumroad_day = gumroad_day_timezone.presence || timezone
       is_today_gumroad_day = Time.now.in_time_zone(timezone_for_gumroad_day).to_date == $redis.get(RedisKey.gumroad_day_date)&.to_date
       is_today_gumroad_day || Feature.active?(:waive_gumroad_fee_on_new_sales, self)
-    end
-
-    def product_level_support_emails_enabled?
-      Feature.active?(:product_level_support_emails, self)
     end
 
     def tax_center_enabled?

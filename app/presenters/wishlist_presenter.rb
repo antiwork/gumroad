@@ -67,7 +67,7 @@ class WishlistPresenter
         avatar_url: wishlist.user.avatar_url,
       } : nil,
       following: pundit_user&.seller ? wishlist.followed_by?(pundit_user.seller) : false,
-      can_follow: Feature.active?(:follow_wishlists, pundit_user&.seller) && pundit_user&.seller != wishlist.user,
+      can_follow: pundit_user&.seller != wishlist.user,
       can_edit: pundit_user&.user ? Pundit.policy!(pundit_user, wishlist).update? : false,
       discover_opted_out: pundit_user&.user && Pundit.policy!(pundit_user, wishlist).update? ? wishlist.discover_opted_out? : nil,
       checkout_enabled: wishlist.alive_wishlist_products.available_to_buy.any?,
@@ -106,13 +106,19 @@ class WishlistPresenter
       product_count: wishlist.alive_wishlist_products.size,
       follower_count: wishlist.follower_count,
       following:,
-      can_follow: Feature.active?(:follow_wishlists, pundit_user&.seller) && pundit_user&.seller != wishlist.user,
+      can_follow: pundit_user&.seller != wishlist.user,
     }
   end
 
   private
     def paginated_public_items(request:, pundit_user:, recommended_by:, page:)
-      pagination, wishlist_products = pagy(wishlist.alive_wishlist_products, page:, limit: PER_PAGE)
+      # `overflow: :empty_page` returns an empty page (with `next: nil`) instead
+      # of raising Pagy::OverflowError when the requested page exceeds the total
+      # page count. This endpoint is public and the page number comes straight
+      # from the query string, so out-of-range pages arrive constantly (stale
+      # links, crawlers, wishlists whose products were removed between page
+      # loads) and were 500ing instead of returning an empty page.
+      pagination, wishlist_products = pagy(wishlist.alive_wishlist_products, page:, limit: PER_PAGE, overflow: :empty_page)
 
       paginated_products = wishlist_products
         .includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD)

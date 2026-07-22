@@ -313,6 +313,7 @@ class User < ApplicationRecord
             52 => :disable_affiliate_requests,
             53 => :refund_policy_enforced, # Set automatically when a seller's dispute rate is too high; forces a buyer-friendly refund policy. See Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!
             54 => :disable_review_reminders, # Seller setting: when enabled, buyers of this seller's products don't receive review reminder emails.
+            55 => :ach_payments_enabled, # Seller opt-in (checkout settings page): offers ACH Direct Debit (us_bank_account) at checkout. Off by default — ACH settles in ~4 business days and content only delivers on settlement, which surprises buyers of time-sensitive digital products (gumroad-private#1143).
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -558,8 +559,6 @@ class User < ApplicationRecord
   end
 
   def product_level_support_emails
-    return unless product_level_support_emails_enabled?
-
     products
       .where.not(support_email: nil)
       .pluck(:support_email, :id)
@@ -1086,7 +1085,13 @@ class User < ApplicationRecord
     return false if suspended?
     return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
 
-    has_completed_payouts?
+    # Verified creators are trusted enough to email their audience even before
+    # their first payout completes (payouts can sit in transit for weeks when a
+    # bank abroad delays crediting the transfer). Admins toggle `verified` from
+    # the admin user page. The bypass does not apply while the account is
+    # flagged for fraud or a terms-of-service violation — an unresolved risk
+    # review must be cleared before verification unlocks early email access.
+    (verified? && !flagged?) || has_completed_payouts?
   end
 
   LAST_ALLOWED_TIME_FOR_PRODUCT_LEVEL_REFUND_POLICY = Time.new(2025, 3, 31).end_of_day
@@ -1101,6 +1106,19 @@ class User < ApplicationRecord
     return false if account_level_refund_policy_delayed?
 
     refund_policy_enabled?
+  end
+
+  # Whether the seller can edit the account-level refund policy section in Settings.
+  # The section always renders; when this is false the UI shows the controls disabled
+  # with a note explaining why. Two things make it read-only:
+  # - Account-level refund policies are switched off (account_level_refund_policy_enabled?
+  #   is false), in which case refunds are handled per product instead.
+  # - A refund policy has been enforced on the whole account because of a high dispute
+  #   rate (see Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!).
+  #   While enforced, the seller cannot change the policy themselves — they have to
+  #   contact us with the remediation steps they've taken, and we apply any update.
+  def refund_policy_settings_editable?
+    !refund_policy_enforced? && account_level_refund_policy_enabled?
   end
 
   def has_all_eligible_refund_policies_as_no_refunds?
@@ -1174,7 +1192,6 @@ class User < ApplicationRecord
   end
 
   def eligible_for_ai_product_generation?
-    return false unless Feature.active?(:ai_product_generation, self)
     return true if Rails.env.development?
     return false unless confirmed?
     return false if suspended?

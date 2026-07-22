@@ -402,7 +402,7 @@
 - id: 247
   slug: "247-what-your-customers-see"
   title: "The Gumroad Library"
-  description: "In this article: Navigating your Library Archiving or deleting products What is the Gumroad app? FAQs When your customers purchase a product on Gumroad, it will"
+  description: "In this article: Navigating your Library Archiving or deleting products Reading PDFs and EPUBs in the browser What is the Gumroad app? FAQs When your customers purchase a product on Gumroad, it will"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 248
   slug: "248-delete-a-product"
@@ -472,7 +472,7 @@
 - id: 282
   slug: "282-how-do-purchases-work-for-my-customers"
   title: "How Gumroad works for customers"
-  description: "In this article: Buying on Gumroad without an account Receipts and Invoices VAT for your customers Credit and Debit card payments Paypal payments Making a test "
+  description: "In this article: Buying on Gumroad without an account Receipts and Invoices VAT for your customers Credit and Debit card payments PayPal payments Making a test "
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 283
   slug: "283-fraudulent-purchases"
@@ -625,3 +625,8 @@
   title: "Casting videos to your TV"
   description: "Gumroad's video player does not support Chromecast or AirPlay casting. Here are the ways that do work to watch a video on your TV: casting a Chrome tab, AirPlay screen mirroring, a smart TV browser, or an HDMI cable."
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 351
+  slug: "351-ach-direct-debit-at-checkout"
+  title: "Offering bank account payments (ACH Direct Debit)"
+  description: "ACH Direct Debit lets customers in the United States pay for your products directly from their bank account instead of using a card. It is turned off by default; you can offer it by opting in from your checkout settings."
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>

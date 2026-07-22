@@ -155,7 +155,6 @@ export type Product = {
   default_offer_code_id?: string | null;
   default_offer_code: OfferCode | null;
   public_files: PublicFileWithStatus[];
-  audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
 } & (
   | { native_type: "call"; variants: Duration[] }
@@ -198,10 +197,12 @@ export const ProductEditContext = React.createContext<{
   saving: boolean;
   save: () => Promise<void>;
   googleClientId: string;
-  googleCalendarEnabled: boolean;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
+  // The sender line receipt emails actually go out with (mirrors CustomerMailer#receipt),
+  // shown in the Receipt tab's email-style preview chrome.
+  receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
   customHtmlPagesEnabled: boolean;
   contentUpdates: ContentUpdates;

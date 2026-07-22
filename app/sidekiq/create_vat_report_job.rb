@@ -42,57 +42,98 @@ class CreateVatReportJob
         (start_date_of_quarter..end_date_of_quarter).each do |date|
           conversion_rate = gbp_to_usd_rate_for_date(date)
 
+          # Sales leg. not_chargedback_for_tax_reporting keeps: purchases with no chargeback;
+          # reversed (won) chargebacks, which belong in the purchase's own period — this
+          # replaces the report's previous exclude-then-add-back pair for won chargebacks with
+          # a single query, producing the same totals; and event-dated chargebacks (see
+          # Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER), whose sale stays here while
+          # the clawback is reported by the chargeback leg below. Chargebacks lost before the
+          # chargeback reporting cutover keep the legacy exclusion so historical quarters
+          # regenerate as filed.
           vat_purchases_on_date = zip_tax_rate.purchases
                                                 .where("purchase_state != 'failed'")
                                                 .where("stripe_transaction_id IS NOT NULL")
-                                                .not_chargedback
+                                                .not_chargedback_for_tax_reporting
                                                 .where(created_at: date.beginning_of_day..date.end_of_day)
-
-          vat_chargeback_won_purchases_on_date = zip_tax_rate.purchases
-                                                               .where("purchase_state != 'failed'")
-                                                               .chargedback
-                                                               .where("flags & :bit = :bit", bit: Purchase.flag_mapping["flags"][:chargeback_reversed])
-                                                               .where(created_at: date.beginning_of_day..date.end_of_day)
 
           # Refunds are subtracted in the period the refund happened, not the period of the
           # original purchase. A refund is an event of its own period (matching how OSS/MOSS
           # corrections are reported in the current return), and a purchase from a past quarter
           # refunded this quarter must still reduce this quarter's VAT due. The purchase-side
           # filters mirror the two queries above so we only ever subtract VAT that was (or would
-          # have been) reported in the first place: settled purchases that are either not charged
-          # back or had their chargeback reversed. A purchase that was charged back outright never
-          # contributes VAT to the report, so its refunds must not be subtracted either.
+          # have been) reported in the first place: settled purchases whose sale is (or will be)
+          # in the report — including event-dated chargebacks: their pre-chargeback refunds
+          # also shrink what the chargeback leg claws back, and a refund issued after a dispute
+          # win is relieved here alone (the already-filed chargeback legs never change). A
+          # purchase dropped by a legacy chargeback never contributes VAT, so its refunds must
+          # not be subtracted.
           # Only effective refunds count: a refund that terminally failed after acceptance and
           # had its balance debits reversed never actually returned money to the buyer, so it
           # must not reduce the VAT due (see Refund.effective for the full semantics).
           vat_refunds_on_date = zip_tax_rate.purchases
                                               .where("purchase_state != 'failed'")
                                               .where("stripe_transaction_id IS NOT NULL")
-                                              .not_chargedback_or_chargedback_reversed
+                                              .not_chargedback_for_tax_reporting
                                               .joins(:effective_refunds)
                                               .where(refunds: { created_at: date.beginning_of_day..date.end_of_day })
+
+          # Chargeback (debit) leg: disputes formalized on this day claw their money back in
+          # THIS period, regardless of when the purchase happened — purchases.chargeback_date
+          # has always held the processor's dispute-formalized event timestamp, so no backfill
+          # is needed (see Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER for the cutover
+          # contract; pre-cutover chargebacks keep the legacy exclusion above). Amounts are net
+          # of the refunds that existed before the chargeback — money already returned by a
+          # refund is not clawed back again and was already relieved by the refund's own
+          # reporting path. Later refunds (possible again after a dispute win) never rewrite
+          # these legs; they report through the refund leg of their own period.
+          vat_chargebacks_on_date = zip_tax_rate.purchases
+                                                  .where("purchase_state != 'failed'")
+                                                  .where("stripe_transaction_id IS NOT NULL")
+                                                  .chargebacks_for_tax_period_reporting(date.beginning_of_day, date.end_of_day)
+
+          # Chargeback-reversal (won) leg: disputes won on this day add their money back in
+          # THIS period, dated by the Dispute row's won_at. Only real dispute rows supply
+          # reversal dates — never synthesized (reliable 2016+; see app/models/dispute.rb).
+          vat_chargeback_reversals_on_date = zip_tax_rate.purchases
+                                                           .where("purchase_state != 'failed'")
+                                                           .where("stripe_transaction_id IS NOT NULL")
+                                                           .chargeback_reversals_for_tax_period_reporting(date.beginning_of_day, date.end_of_day)
 
           total_purchase_excluding_vat_amount_cents = vat_purchases_on_date.sum(:price_cents)
           total_purchase_vat_cents = vat_purchases_on_date.sum(:gumroad_tax_cents)
 
-          total_purchase_excluding_vat_amount_cents += vat_chargeback_won_purchases_on_date.sum(:price_cents)
-          total_purchase_vat_cents += vat_chargeback_won_purchases_on_date.sum(:gumroad_tax_cents)
-
           total_refund_excluding_vat_amount_cents = nil
           total_refund_vat_cents = nil
+          total_chargeback_excluding_vat_amount_cents = 0
+          total_chargeback_vat_cents = 0
           timeout_seconds = ($redis.get(RedisKey.create_vat_report_job_max_execution_time_seconds) || 1.hour).to_i
           WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
             total_refund_excluding_vat_amount_cents = vat_refunds_on_date.sum("refunds.amount_cents")
             total_refund_vat_cents = vat_refunds_on_date.sum("refunds.gumroad_tax_cents")
+
+            # Per-row because the leg amounts are net of each purchase's refunds (a correlated
+            # per-purchase sum); daily chargeback volume is tiny, so this stays cheap.
+            vat_chargebacks_on_date.find_each do |purchase|
+              total_chargeback_excluding_vat_amount_cents += purchase.price_cents_for_chargeback_reporting
+              total_chargeback_vat_cents += purchase.gumroad_tax_cents_for_chargeback_reporting
+            end
+
+            vat_chargeback_reversals_on_date.find_each do |purchase|
+              total_chargeback_excluding_vat_amount_cents -= purchase.price_cents_for_chargeback_reporting
+              total_chargeback_vat_cents -= purchase.gumroad_tax_cents_for_chargeback_reporting
+            end
           end
 
-          total_excluding_vat_cents += total_purchase_excluding_vat_amount_cents - total_refund_excluding_vat_amount_cents
-          total_excluding_vat_cents_estimated += (total_purchase_vat_cents - total_refund_vat_cents) / zip_tax_rate.combined_rate
-          total_vat_cents += total_purchase_vat_cents - total_refund_vat_cents
+          net_excluding_vat_cents = total_purchase_excluding_vat_amount_cents - total_refund_excluding_vat_amount_cents - total_chargeback_excluding_vat_amount_cents
+          net_vat_cents = total_purchase_vat_cents - total_refund_vat_cents - total_chargeback_vat_cents
 
-          total_excluding_vat_cents_in_gbp += (total_purchase_excluding_vat_amount_cents - total_refund_excluding_vat_amount_cents) / conversion_rate
-          total_excluding_vat_cents_estimated_in_gbp += ((total_purchase_vat_cents - total_refund_vat_cents) / zip_tax_rate.combined_rate) / conversion_rate
-          total_vat_cents_in_gbp += (total_purchase_vat_cents - total_refund_vat_cents) / conversion_rate
+          total_excluding_vat_cents += net_excluding_vat_cents
+          total_excluding_vat_cents_estimated += net_vat_cents / zip_tax_rate.combined_rate
+          total_vat_cents += net_vat_cents
+
+          total_excluding_vat_cents_in_gbp += net_excluding_vat_cents / conversion_rate
+          total_excluding_vat_cents_estimated_in_gbp += (net_vat_cents / zip_tax_rate.combined_rate) / conversion_rate
+          total_vat_cents_in_gbp += net_vat_cents / conversion_rate
         end
 
         temp_file.write([ISO3166::Country[zip_tax_rate.country].common_name,

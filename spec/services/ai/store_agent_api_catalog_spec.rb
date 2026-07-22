@@ -71,6 +71,23 @@ describe Ai::StoreAgentApiCatalog do
       expect(summary).to match(/destructive/i)
       expect(summary).to include("edit_user_custom_html")
     end
+
+    it "tells the model a replacement page must carry the whole storefront, not just the requested tweak" do
+      summary = described_class.find("update_user_custom_html").summary
+
+      expect(summary).to match(/whole storefront/i)
+      expect(summary).to match(/all products/i)
+      expect(summary).to match(/dynamically from the gumroad-data JSON/i)
+    end
+
+    # The creator's name and bio are filled server-side into data-gumroad-field elements — they
+    # are not in the injected JSON, and a page that looks for them there renders a blank header.
+    it "points page authoring at data-gumroad-field for the creator's name and bio" do
+      summary = described_class.find("update_user_custom_html").summary
+
+      expect(summary).to include("data-gumroad-field")
+      expect(summary).to match(/NOT in the JSON/)
+    end
   end
 
   describe "public media endpoints" do
@@ -96,6 +113,26 @@ describe Ai::StoreAgentApiCatalog do
     it "teaches the model that only hosted urls render on custom pages" do
       expect(described_class.find("upload_media").summary).to match(/hosted url/i)
       expect(described_class.find("list_media").summary).to match(/blocked/i)
+    end
+  end
+
+  describe "paginated list endpoints" do
+    # Regression: gumroad-private#1168. list_products exposed no params, so the model could never
+    # pass page_key even though the v2 endpoint supports it — any seller with >10 products was
+    # invisible past the newest 10, and the model fabricated "I checked page two" claims. Every
+    # paginated list read must declare page_key and teach the model to walk pages.
+    %w[list_products list_product_subscribers list_emails list_payouts list_sales].each do |id|
+      it "#{id} declares page_key so the model can fetch pages past the first" do
+        endpoint = described_class.find(id)
+
+        expect(endpoint.params).to include("page_key")
+      end
+    end
+
+    it "teaches the model that more pages exist when next_page_key is returned" do
+      %w[list_products list_product_subscribers list_emails list_payouts].each do |id|
+        expect(described_class.find(id).summary).to include("next_page_key")
+      end
     end
   end
 end

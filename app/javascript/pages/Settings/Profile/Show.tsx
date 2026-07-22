@@ -14,7 +14,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
-import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Props as ProfileProps } from "$app/components/Profile";
 import { EditProfile, ProfileEditorProps, ProfileEditorState } from "$app/components/Profile/EditPage";
 import { ProfileLandingPagePreview } from "$app/components/Profile/LandingPagePreview";
@@ -277,85 +277,84 @@ export default function SettingsPage() {
   );
 
   const previewSidebar = (
-    <PreviewSidebar
-      previewLink={(props) => (
-        <NavigationButton
-          // Icon size is only a default: the preview sidebar/sheet overrides it via props
-          // (the mobile sheet asks for a full-size button with a text label).
-          size="icon"
-          {...props}
-          disabled={isSaving}
-          href={profileUrl}
-          onClick={(evt) => {
-            evt.preventDefault();
-            // Persist pending edits before previewing, but only when there's something to save -
-            // settings (name/bio/avatar) are sent on every save with no freshness check, so an
-            // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
-            if (canSave) {
-              // Open the tab NOW, while we still have the user's click activation, then point it
-              // at the profile once the save finishes. Calling window.open after the await instead
-              // gets popup-blocked on iOS Safari (the async gap consumes the transient activation),
-              // which matters because the mobile preview sheet is this button's main audience.
-              // On a failed save, close the reserved tab so we don't surface a stale preview.
-              const previewWindow = window.open("about:blank", "_blank");
-              void save().then((saved) => {
-                if (!saved) previewWindow?.close();
-                else if (previewWindow) previewWindow.location.href = profileUrl;
-                else window.open(profileUrl, "_blank");
-              });
-            } else window.open(profileUrl, "_blank");
-          }}
-        />
-      )}
-    >
-      {custom_html_pages_enabled && has_custom_landing_page ? (
-        <ProfileLandingPagePreview username={username} name={profileSettings.name} bio={profileSettings.bio} />
-      ) : (
-        <Preview
-          scaleFactor={0.4}
-          style={{
-            border: "var(--border)",
-            borderRadius: "var(--border-radius-2)",
-            fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
-            ...profileColors,
-            "--primary": "var(--color)",
-            "--body-bg": "rgb(var(--filled))",
-            "--contrast-primary": "var(--filled)",
-            "--contrast-filled": "var(--color)",
-            "--color-body": "var(--body-bg)",
-            "--color-background": "rgb(var(--filled))",
-            "--color-foreground": "rgb(var(--color))",
-            "--color-border": "rgb(var(--color) / var(--border-alpha))",
-            "--color-accent": "rgb(var(--accent))",
-            "--color-accent-foreground": "rgb(var(--contrast-accent))",
-            "--color-primary": "rgb(var(--primary))",
-            "--color-primary-foreground": "rgb(var(--contrast-primary))",
-            "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
-            "--color-muted": "rgb(var(--color) / var(--gray-3))",
-            backgroundColor: "rgb(var(--filled))",
-            color: "rgb(var(--color))",
-          }}
-        >
-          {fontUrl ? (
-            <>
-              <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
-              <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-              <link rel="stylesheet" href={fontUrl} />
-            </>
-          ) : null}
-          <div inert>
-            <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
-              <EditProfile
-                {...editableProfile}
-                creator_profile={previewCreatorProfile}
-                bio={profileSettings.bio}
-                controls={false}
-                selectedTabIndex={previewTabIndex}
-              />
-            </ProfileLayout>
-          </div>
-        </Preview>
-      )}
+    <PreviewSidebar>
+      <PreviewChrome
+        title={profileSettings.name || username}
+        url={profileUrl}
+        link={(props) => (
+          <NavigationButton
+            {...props}
+            disabled={isSaving}
+            href={profileUrl}
+            onClick={(evt) => {
+              evt.preventDefault();
+              // Persist pending edits before previewing, but only when there's something to save -
+              // settings (name/bio/avatar) are sent on every save with no freshness check, so an
+              // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
+              if (canSave) {
+                // Open the tab NOW, while we still have the user's click activation, then point it
+                // at the profile once the save finishes. Calling window.open after the await instead
+                // gets popup-blocked on iOS Safari (the async gap consumes the transient activation),
+                // which matters because the mobile preview pane is this button's main audience.
+                // On a failed save, close the reserved tab so we don't surface a stale preview.
+                const previewWindow = window.open("about:blank", "_blank");
+                void save().then((saved) => {
+                  if (!saved) previewWindow?.close();
+                  else if (previewWindow) previewWindow.location.href = profileUrl;
+                  else window.open(profileUrl, "_blank");
+                });
+              } else window.open(profileUrl, "_blank");
+            }}
+          />
+        )}
+      >
+        {custom_html_pages_enabled && has_custom_landing_page ? (
+          <ProfileLandingPagePreview username={username} name={profileSettings.name} bio={profileSettings.bio} />
+        ) : (
+          <Preview
+            scaleFactor={0.4}
+            style={{
+              fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+              ...profileColors,
+              "--primary": "var(--color)",
+              "--body-bg": "rgb(var(--filled))",
+              "--contrast-primary": "var(--filled)",
+              "--contrast-filled": "var(--color)",
+              "--color-body": "var(--body-bg)",
+              "--color-background": "rgb(var(--filled))",
+              "--color-foreground": "rgb(var(--color))",
+              "--color-border": "rgb(var(--color) / var(--border-alpha))",
+              "--color-accent": "rgb(var(--accent))",
+              "--color-accent-foreground": "rgb(var(--contrast-accent))",
+              "--color-primary": "rgb(var(--primary))",
+              "--color-primary-foreground": "rgb(var(--contrast-primary))",
+              "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
+              "--color-muted": "rgb(var(--color) / var(--gray-3))",
+              backgroundColor: "rgb(var(--filled))",
+              color: "rgb(var(--color))",
+            }}
+          >
+            {fontUrl ? (
+              <>
+                <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                <link rel="stylesheet" href={fontUrl} />
+              </>
+            ) : null}
+            <div inert>
+              <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
+                <EditProfile
+                  {...editableProfile}
+                  creator_profile={previewCreatorProfile}
+                  bio={profileSettings.bio}
+                  controls={false}
+                  selectedTabIndex={previewTabIndex}
+                />
+              </ProfileLayout>
+            </div>
+          </Preview>
+        )}
+      </PreviewChrome>
     </PreviewSidebar>
   );
 

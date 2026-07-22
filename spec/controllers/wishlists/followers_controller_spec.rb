@@ -35,14 +35,6 @@ describe Wishlists::FollowersController do
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body["error"]).to eq("Follower user is already following this wishlist.")
     end
-
-    context "when the feature flag is off" do
-      before { Feature.deactivate(:follow_wishlists) }
-
-      it "returns 404" do
-        expect { post :create, params: { wishlist_id: wishlist.external_id } }.to raise_error(ActionController::RoutingError, "Not Found")
-      end
-    end
   end
 
   describe "DELETE destroy" do
@@ -65,14 +57,6 @@ describe Wishlists::FollowersController do
       expect do
         delete :destroy, params: { wishlist_id: wishlist.external_id }
       end.to raise_error(ActionController::RoutingError, "Not Found")
-    end
-
-    context "when the feature flag is off" do
-      before { Feature.deactivate(:follow_wishlists) }
-
-      it "returns 404" do
-        expect { delete :destroy, params: { wishlist_id: wishlist.external_id } }.to raise_error(ActionController::RoutingError, "Not Found")
-      end
     end
   end
 

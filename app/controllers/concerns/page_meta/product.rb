@@ -12,8 +12,16 @@ module PageMeta::Product
       set_meta_tag(name: "description", content: product_description)
       set_meta_tag(property: "gr:page:type", content: "product")
       set_meta_tag(property: "product:retailer_item_id", content: product.unique_permalink)
-      set_meta_tag(property: "product:price:amount", content: (product.price_cents / 100.0).round(2))
-      set_meta_tag(property: "product:price:currency", content: product.price_currency_type.upcase)
+
+      # A persisted product can have no live Price record (for example, a rent-only
+      # product whose rental price was removed), in which case price_cents is nil.
+      # Skip the price meta tags rather than crash the whole product page —
+      # Product::StructuredData applies the same nil guard for its "price" field.
+      price_cents = product.price_cents
+      unless price_cents.nil?
+        set_meta_tag(property: "product:price:amount", content: (price_cents / 100.0).round(2))
+        set_meta_tag(property: "product:price:currency", content: product.price_currency_type.upcase)
+      end
 
       set_open_graph_meta(product, product_description:)
 

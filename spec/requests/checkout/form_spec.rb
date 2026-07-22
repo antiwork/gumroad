@@ -199,6 +199,23 @@ describe("Checkout form page", type: :system, js: true) do
     end
   end
 
+  describe "ACH payments" do
+    it "allows updating the ACH Direct Debit setting" do
+      visit checkout_form_path
+
+      find_field("Allow customers to pay by bank account (ACH Direct Debit)", checked: false).check
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(seller.reload.ach_payments_enabled).to eq(true)
+
+      refresh
+      find_field("Allow customers to pay by bank account (ACH Direct Debit)", checked: true).uncheck
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(seller.reload.ach_payments_enabled).to eq(false)
+    end
+  end
+
   describe "preview" do
     context "when the user has alive products" do
       let!(:product2) { create(:product, user: seller, name: "Product 2", created_at: 2.days.ago) }
