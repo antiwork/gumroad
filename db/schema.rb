@@ -2632,8 +2632,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000005) do
     t.text "last_reason"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.bigint "purchase_id"
-    t.bigint "charge_id"
+    t.json "pending_targets"
     t.index ["email", "mail_kind"], name: "index_transient_email_failure_retries_on_email_and_mail_kind", unique: true
   end
 

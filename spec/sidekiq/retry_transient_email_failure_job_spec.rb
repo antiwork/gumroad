@@ -177,7 +177,7 @@ describe RetryTransientEmailFailureJob do
         TransientEmailFailureRetry.create!(
           email: purchase.email,
           mail_kind: TransientEmailFailureRetry::RECEIPT,
-          purchase_id: purchase.id,
+          pending_targets: [{ "purchase_id" => purchase.id }],
           attempts: 0,
           retry_in_flight: true,
           last_reason: "i/o timeout"
@@ -195,6 +195,31 @@ describe RetryTransientEmailFailureJob do
         receipt_retry.reload
         expect(receipt_retry.attempts).to eq(1)
         expect(receipt_retry.retry_in_flight).to eq(false)
+        expect(receipt_retry.pending_targets).to eq([])
+      end
+
+      it "re-sends every pending receipt when several failed for the same address" do
+        second_purchase = create(:free_purchase, email: purchase.email)
+        record = TransientEmailFailureRetry.create!(
+          email: purchase.email,
+          mail_kind: TransientEmailFailureRetry::RECEIPT,
+          pending_targets: [
+            { "purchase_id" => purchase.id },
+            { "purchase_id" => second_purchase.id },
+          ],
+          retry_in_flight: true
+        )
+        suppression_manager = instance_double(EmailSuppressionManager, remove_from_lists: {})
+        allow(EmailSuppressionManager).to receive(:new).and_return(suppression_manager)
+
+        described_class.new.perform(record.id)
+
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id)
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(second_purchase.id)
+        record.reload
+        # One claimed attempt covers all pending receipts for the address.
+        expect(record.attempts).to eq(1)
+        expect(record.pending_targets).to eq([])
       end
 
       it "re-sends the combined receipt when the retry is pinned to a charge" do
@@ -203,7 +228,7 @@ describe RetryTransientEmailFailureJob do
         record = TransientEmailFailureRetry.create!(
           email: purchase.email,
           mail_kind: TransientEmailFailureRetry::RECEIPT,
-          charge_id: charge.id,
+          pending_targets: [{ "charge_id" => charge.id }],
           retry_in_flight: true
         )
         suppression_manager = instance_double(EmailSuppressionManager, remove_from_lists: {})
@@ -226,7 +251,7 @@ describe RetryTransientEmailFailureJob do
         record = TransientEmailFailureRetry.create!(
           email: purchase.email,
           mail_kind: TransientEmailFailureRetry::RECEIPT,
-          charge_id: charge.id,
+          pending_targets: [{ "charge_id" => charge.id }],
           retry_in_flight: true
         )
 
@@ -236,13 +261,14 @@ describe RetryTransientEmailFailureJob do
         record.reload
         expect(record.attempts).to eq(0)
         expect(record.retry_in_flight).to eq(false)
+        expect(record.pending_targets).to eq([])
       end
 
       it "skips the resend and clears the claim when the purchase no longer exists" do
         record = TransientEmailFailureRetry.create!(
           email: purchase.email,
           mail_kind: TransientEmailFailureRetry::RECEIPT,
-          purchase_id: -1,
+          pending_targets: [{ "purchase_id" => -1 }],
           retry_in_flight: true
         )
 
@@ -252,6 +278,7 @@ describe RetryTransientEmailFailureJob do
         record.reload
         expect(record.attempts).to eq(0)
         expect(record.retry_in_flight).to eq(false)
+        expect(record.pending_targets).to eq([])
         expect(SendPurchaseReceiptJob.jobs).to be_empty
       end
 
@@ -265,6 +292,7 @@ describe RetryTransientEmailFailureJob do
         receipt_retry.reload
         expect(receipt_retry.attempts).to eq(0)
         expect(receipt_retry.retry_in_flight).to eq(false)
+        expect(receipt_retry.pending_targets).to eq([])
         expect(SendPurchaseReceiptJob.jobs).to be_empty
       end
 
@@ -281,6 +309,8 @@ describe RetryTransientEmailFailureJob do
         receipt_retry.reload
         expect(receipt_retry.attempts).to eq(0)
         expect(receipt_retry.retry_in_flight).to eq(true)
+        # The unsent target stays queued for the Sidekiq re-run.
+        expect(receipt_retry.pending_targets).to eq([{ "purchase_id" => purchase.id }])
         expect(SendPurchaseReceiptJob.jobs).to be_empty
       end
     end

@@ -28,7 +28,10 @@ class TransientEmailFailureRetryScheduler
 
   # purchase_id / charge_id pin the retry to the specific record whose email
   # failed (receipts); they're nil for account-level mail like signup
-  # confirmations, where the address alone identifies what to re-send.
+  # confirmations, where the address alone identifies what to re-send. Each
+  # pinned failure becomes an entry on the retry row's pending_targets list,
+  # so several distinct receipts failing for one address all get re-sent by
+  # the single scheduled retry.
   def self.perform(email_event_info, mail_kind:, purchase_id: nil, charge_id: nil)
     new(email_event_info, mail_kind:, purchase_id:, charge_id:).perform
   end
@@ -83,22 +86,19 @@ class TransientEmailFailureRetryScheduler
       if retry_record.retry_in_flight?
         # A retry is already scheduled. Providers can post several failure
         # events for the same send — those are true duplicates, and we keep
-        # the single scheduled retry. But a DIFFERENT record failing for the
+        # the single scheduled retry. But a DIFFERENT receipt failing for the
         # same address (say two separate purchases to one email both bounce)
-        # must not be silently dropped: re-point the pending retry at this
-        # most recent failure so the scheduled job resends it. The job reads
-        # purchase_id/charge_id from the row when it fires, so no re-enqueue
-        # is needed, and the attempts cap stays per-address (we retry the
-        # latest failure, never both).
-        incoming_target = [purchase_id, charge_id]
-        stored_target = [retry_record.purchase_id, retry_record.charge_id]
-        if incoming_target.any?(&:present?) && incoming_target != stored_target
+        # must not be silently dropped: add it to the row's pending target
+        # list so the already-scheduled job resends it too. The job reads
+        # pending_targets from the row when it fires, so no extra enqueue is
+        # needed, and the attempts cap stays per-address (one attempt covers
+        # however many receipts are pending for the address).
+        if pending_target.present? && !Array(retry_record.pending_targets).include?(pending_target)
           retry_record.update!(
-            purchase_id:,
-            charge_id:,
+            pending_targets: Array(retry_record.pending_targets) + [pending_target],
             last_reason: email_event_info.reason.to_s.first(1000)
           )
-          log("re-pointed pending retry for #{email_event_info.email} at the latest failed receipt")
+          log("added another failed receipt to the pending retry for #{email_event_info.email}")
         else
           log("retry already scheduled for #{email_event_info.email}, ignoring duplicate #{email_event_info.type} event")
         end
@@ -112,11 +112,12 @@ class TransientEmailFailureRetryScheduler
 
       delay = retry_record.backoff_delay
       retry_record.last_reason = email_event_info.reason.to_s.first(1000)
-      # Re-point the retry at the record from THIS failure event: if two
-      # receipts to the same address both bounced, we retry the most recent
-      # one (the attempts cap is per-address, so we never retry both).
-      retry_record.purchase_id = purchase_id
-      retry_record.charge_id = charge_id
+      # Queue THIS failure's receipt for the retry (deduped — the provider
+      # can post several failure events for one send). Targets left over from
+      # an earlier attempt stay on the list so they're retried too.
+      if pending_target.present?
+        retry_record.pending_targets = Array(retry_record.pending_targets) | [pending_target]
+      end
       retry_record.retry_in_flight = true
       retry_record.save!
     end
@@ -135,6 +136,18 @@ class TransientEmailFailureRetryScheduler
   end
 
   private
+    # The specific receipt this failure event is for, in the shape stored on
+    # the retry row's pending_targets list (string keys — the column is JSON,
+    # so that's what a database round-trip returns). Nil for address-level
+    # mail kinds like signup confirmations, where nothing needs pinning.
+    def pending_target
+      if charge_id.present?
+        { "charge_id" => charge_id.to_i }
+      elsif purchase_id.present?
+        { "purchase_id" => purchase_id.to_i }
+      end
+    end
+
     def log(message)
       Rails.logger.info("[TransientEmailRetry] #{message}")
     end

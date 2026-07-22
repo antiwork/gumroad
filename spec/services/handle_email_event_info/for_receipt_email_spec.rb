@@ -476,8 +476,7 @@ describe HandleEmailEventInfo::ForReceiptEmail do
           retry_record = TransientEmailFailureRetry.last
           expect(retry_record.email).to eq(purchase.email)
           expect(retry_record.mail_kind).to eq(TransientEmailFailureRetry::RECEIPT)
-          expect(retry_record.purchase_id).to eq(purchase.id)
-          expect(retry_record.charge_id).to be_nil
+          expect(retry_record.pending_targets).to eq([{ "purchase_id" => purchase.id }])
           expect(retry_record.retry_in_flight).to eq(true)
           expect(RetryTransientEmailFailureJob).to have_enqueued_sidekiq_job(retry_record.id).in(15.minutes)
         end
@@ -490,10 +489,10 @@ describe HandleEmailEventInfo::ForReceiptEmail do
       end
 
       context "when a different receipt for the same address fails while a retry is already pending" do
-        it "re-points the pending retry at the newest failed receipt instead of dropping it" do
+        it "adds the newest failed receipt to the pending retry instead of dropping it" do
           HandleSendgridEventJob.new.perform(sendgrid_params)
           retry_record = TransientEmailFailureRetry.last
-          expect(retry_record.purchase_id).to eq(purchase.id)
+          expect(retry_record.pending_targets).to eq([{ "purchase_id" => purchase.id }])
 
           second_purchase = create(:free_purchase, email: purchase.email)
           params = sendgrid_params
@@ -502,11 +501,14 @@ describe HandleEmailEventInfo::ForReceiptEmail do
           HandleSendgridEventJob.new.perform(params)
 
           # Still one row and one scheduled job (the attempts cap is
-          # per-address), but the pending retry now targets the purchase from
-          # the latest failure, so its receipt is the one that gets re-sent.
+          # per-address), but the pending retry now lists BOTH purchases, so
+          # the scheduled job re-sends both receipts.
           expect(TransientEmailFailureRetry.count).to eq(1)
           retry_record.reload
-          expect(retry_record.purchase_id).to eq(second_purchase.id)
+          expect(retry_record.pending_targets).to eq([
+                                                       { "purchase_id" => purchase.id },
+                                                       { "purchase_id" => second_purchase.id },
+                                                     ])
           expect(retry_record.retry_in_flight).to eq(true)
           expect(RetryTransientEmailFailureJob.jobs.size).to eq(1)
         end
@@ -531,7 +533,7 @@ describe HandleEmailEventInfo::ForReceiptEmail do
 
           retry_record = TransientEmailFailureRetry.last
           expect(retry_record.mail_kind).to eq(TransientEmailFailureRetry::RECEIPT)
-          expect(retry_record.charge_id).to eq(charge.id)
+          expect(retry_record.pending_targets).to eq([{ "charge_id" => charge.id }])
           expect(RetryTransientEmailFailureJob).to have_enqueued_sidekiq_job(retry_record.id).in(15.minutes)
         end
       end

@@ -57,32 +57,36 @@ class RetryTransientEmailFailureJob
     end
 
     def retry_receipt(retry_record)
-      # The receipt may have been sent for a standalone purchase or for a
-      # combined charge (multiple purchases in one checkout) — the failure
-      # event recorded whichever id its unique-args carried.
-      record = if retry_record.charge_id.present?
-        Charge.find_by(id: retry_record.charge_id)
-      elsif retry_record.purchase_id.present?
-        Purchase.find_by(id: retry_record.purchase_id)
-      end
+      # Several distinct receipts can fail for one address while a single
+      # retry is pending (two purchases in quick succession to a
+      # temporarily-unreachable mailbox), so the row carries a LIST of
+      # pending targets — each a standalone purchase or a combined charge
+      # (multiple purchases in one checkout), whichever id the failure
+      # event's unique-args carried. One claimed attempt resends all of them.
+      targets = Array(retry_record.pending_targets)
+      resolved = targets.map { |target| [target, resolve_receipt_target(target)] }
 
-      if record.nil?
-        retry_record.update!(retry_in_flight: false)
-        log("skipping receipt resend for #{retry_record.email}: purchase/charge no longer exists")
-        return
-      end
-
-      # If the buyer's email was corrected after the failure (support does
-      # this when a typo'd address bounces), the suppressed address is no
-      # longer the recipient — resending would email the wrong (dead) address
-      # and unsuppressing it buys nothing. `orderable.email` is exactly the
+      # A target can't be re-sent when the purchase/charge is gone, or when
+      # the buyer's email was corrected after the failure (support does this
+      # when a typo'd address bounces) — the suppressed address is no longer
+      # the recipient, so resending would email the wrong (dead) address and
+      # unsuppressing it buys nothing. `orderable.email` is exactly the
       # address CustomerMailer.receipt delivers to (for a charge that is the
-      # order's first successful purchase, not an arbitrary one), so this
+      # order's first successful purchase, not an arbitrary one), so the
       # guard compares against the address the resend would actually use.
-      recipient = record.orderable&.email
-      if recipient != retry_record.email
-        retry_record.update!(retry_in_flight: false)
-        log("skipping receipt resend for #{retry_record.email}: recipient is now #{recipient.inspect}")
+      deliverable, dead = resolved.partition do |_target, record|
+        record.present? && record.orderable&.email == retry_record.email
+      end
+      dead.each do |target, record|
+        reason = record.nil? ? "purchase/charge no longer exists" : "recipient is now #{record.orderable&.email.inspect}"
+        log("skipping receipt resend for #{retry_record.email} (#{target.inspect}): #{reason}")
+      end
+
+      if deliverable.empty?
+        # Nothing left to send. Drop the dead targets and release the claim
+        # (without counting an attempt) so a future failure for this address
+        # can schedule retries again.
+        remove_targets(retry_record, targets, release_claim: true)
         return
       end
 
@@ -93,14 +97,42 @@ class RetryTransientEmailFailureJob
         # Only the deliverability lists — never spam_reports or unsubscribes.
         EmailSuppressionManager.new(retry_record.email).remove_from_lists([:bounces, :blocks])
 
-        if record.is_a?(Charge)
-          CustomerMailer.receipt(nil, record.id).deliver_later(queue: "critical")
-        else
-          record.resend_receipt
+        deliverable.each do |_target, record|
+          if record.is_a?(Charge)
+            CustomerMailer.receipt(nil, record.id).deliver_later(queue: "critical")
+          else
+            record.resend_receipt
+          end
         end
       end
 
-      log("re-sent receipt to #{retry_record.email} (attempt #{retry_record.attempts}/#{TransientEmailFailureRetry::MAX_ATTEMPTS}, last failure: #{retry_record.last_reason.inspect})")
+      # Only now that the sends are enqueued do the processed targets come
+      # off the list — a crash before this point restores the claim (above)
+      # and the Sidekiq re-run picks the same targets up again.
+      remove_targets(retry_record, targets)
+
+      log("re-sent #{deliverable.size} receipt(s) to #{retry_record.email} (attempt #{retry_record.attempts}/#{TransientEmailFailureRetry::MAX_ATTEMPTS}, last failure: #{retry_record.last_reason.inspect})")
+    end
+
+    def resolve_receipt_target(target)
+      if target["charge_id"].present?
+        Charge.find_by(id: target["charge_id"])
+      elsif target["purchase_id"].present?
+        Purchase.find_by(id: target["purchase_id"])
+      end
+    end
+
+    # Removes exactly the targets this run processed, under the row lock the
+    # scheduler also takes. A new failure event may have appended another
+    # target concurrently — subtracting (rather than clearing the list)
+    # leaves that one in place for its own scheduled retry. with_lock reloads
+    # the row, so the write can't clobber a concurrently-set in-flight claim.
+    def remove_targets(retry_record, targets, release_claim: false)
+      retry_record.with_lock do
+        retry_record.pending_targets = Array(retry_record.pending_targets) - targets
+        retry_record.retry_in_flight = false if release_claim
+        retry_record.save!
+      end
     end
 
     # Records the attempt BEFORE sending, in one atomic UPDATE guarded on
