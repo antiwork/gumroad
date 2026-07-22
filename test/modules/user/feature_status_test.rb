@@ -264,23 +264,25 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
 
   # --- #paypal_connect_allowed? -----------------------------------------------
 
-  # Eligibility relaxed to compliant?-only in #6127 (sales/payout gates removed —
-  # they were added by #755 as a new-user fraud control; see issue #6118).
-  test "#paypal_connect_allowed? is true when the seller is compliant" do
+  # Eligibility relaxed in #6127 (see issue #6118): the only requirement is that
+  # the seller has set up how they receive payouts. The earlier minimum-sales,
+  # completed-payout, and compliant-status gates (added by #755 as a new-user
+  # fraud control) are all removed.
+  test "#paypal_connect_allowed? is true when the seller has payout information set up" do
     seller = paypal_connect_seller
     assert_equal true, seller.paypal_connect_allowed?
   end
 
-  test "#paypal_connect_allowed? is true for a compliant seller with no sales or payouts" do
+  test "#paypal_connect_allowed? does not require compliant status, sales, or payouts" do
     seller = paypal_connect_seller
+    seller.update!(user_risk_state: "not_reviewed")
     User.any_instance.stubs(:sales_cents_total).returns(0)
-    seller.payments.last.update!(state: "failed")
     assert_equal true, seller.reload.paypal_connect_allowed?
   end
 
-  test "#paypal_connect_allowed? is false when the seller is not compliant" do
+  test "#paypal_connect_allowed? is false when the seller has no payout information" do
     seller = paypal_connect_seller
-    seller.update!(user_risk_state: "not_reviewed")
+    seller.update!(payment_address: "")
     assert_equal false, seller.reload.paypal_connect_allowed?
   end
 
@@ -458,12 +460,8 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
     end
 
     # The `#paypal_connect_allowed?` describe's `let!(:seller)` + before hook: a
-    # compliant seller with >$100 in (stubbed) sales and one completed payout.
+    # seller with payout information set up (a PayPal payout email).
     def paypal_connect_seller
-      seller = create_user
-      seller.mark_compliant!(author_name: "ContentModeration")
-      User.any_instance.stubs(:sales_cents_total).returns(100_00)
-      create_payment_completed(user: seller)
-      seller
+      create_user(payment_address: "seller-payouts-#{unique_suffix}@example.com")
     end
 end

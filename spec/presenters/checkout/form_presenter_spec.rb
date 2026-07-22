@@ -28,7 +28,7 @@ describe Checkout::FormPresenter do
             products: [],
             paypal_connect: {
               show_paypal_connect: false,
-              allow_paypal_connect: false,
+              allow_paypal_connect: true,
               unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
               email: nil,
               charge_processor_merchant_id: nil,
@@ -122,10 +122,11 @@ describe Checkout::FormPresenter do
           expect(presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(false)
         end
 
-        it "allows connecting only when the seller is compliant" do
+        it "allows connecting only when the seller has payout information set up" do
+          seller.update!(payment_address: "")
           expect(owner_presenter.form_props[:paypal_connect][:allow_paypal_connect]).to eq(false)
 
-          seller.mark_compliant!(author_name: "ContentModeration")
+          seller.update!(payment_address: "seller-payouts@example.com")
 
           expect(described_class.new(pundit_user: SellerContext.new(user: seller, seller: seller.reload)).form_props[:paypal_connect][:allow_paypal_connect]).to eq(true)
         end

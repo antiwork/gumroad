@@ -109,7 +109,7 @@ describe PaypalController, :vcr do
     end
 
     it "returns an error alert if user is not allowed to connect their PayPal account" do
-      @user.update!(user_risk_state: "not_reviewed")
+      @user.update!(payment_address: "")
 
       get :connect
 

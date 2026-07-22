@@ -37,7 +37,10 @@ const ConnectWithPayPalButton = ({ disabled }: { disabled: boolean }) => (
 );
 
 const EligibilityAlert = () => (
-  <Alert variant="warning">Your account must be marked as compliant before you can connect a PayPal account.</Alert>
+  <Alert variant="warning">
+    You must set up how you receive payouts in your <a href={Routes.settings_payments_path()}>payout settings</a> before
+    you can connect a PayPal account.
+  </Alert>
 );
 
 const PayPalConnectSection = ({

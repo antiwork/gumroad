@@ -225,6 +225,8 @@ describe("Checkout form page", type: :system, js: true) do
       end
 
       it "shows the PayPal Connect section with a link to payout settings" do
+        seller.update!(payment_address: "")
+
         visit checkout_form_path
 
         within_section "PayPal", match: :first do
@@ -232,16 +234,14 @@ describe("Checkout form page", type: :system, js: true) do
           expect(page).to have_link("payout settings", href: settings_payments_path)
           expect(page).to have_link("Connect with PayPal", inert: true)
         end
-        expect(page).to have_text("Your account must be marked as compliant before you can connect a PayPal account.")
+        expect(page).to have_text("You must set up how you receive payouts in your payout settings before you can connect a PayPal account.")
       end
 
-      it "enables the connect button when the seller is compliant" do
-        seller.mark_compliant!(author_name: "ContentModeration")
-
+      it "enables the connect button when the seller has payout information set up" do
         visit checkout_form_path
 
         expect(page).to have_link("Connect with PayPal", inert: false)
-        expect(page).not_to have_text("Your account must be marked as compliant")
+        expect(page).not_to have_text("You must set up how you receive payouts")
       end
 
       context "when the seller is in an unsupported country" do
