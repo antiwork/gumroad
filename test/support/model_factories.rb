@@ -6,6 +6,13 @@
 # makes are replayed from the shared VCR cassettes (see test/support/vcr.rb).
 require Rails.root.join("spec", "support", "stripe_payment_method_helper")
 
+# StripeMerchantAccountHelper (also spec/support) uploads a verification document
+# and waits for charges to be enabled when building a real Stripe Connect account
+# (see create_merchant_account_stripe). Its only RSpec reference is a debug
+# `puts RSpec.current_example` inside the *recording* branch, which never runs
+# when a cassette is replayed, so it's safe to require in the Minitest suite.
+require Rails.root.join("spec", "support", "stripe_merchant_account_helper")
+
 # Factory-equivalent builders for the Minitest + fixtures suite (#5801).
 #
 # The suite has no FactoryBot, but complex hub models (Installment, Purchase,
@@ -974,6 +981,101 @@ module ModelFactories
     attrs[:delivered_at] = Time.current if %w[delivered opened].include?(state)
     attrs[:opened_at] = Time.current if state == "opened"
     CreatorContactingCustomersEmailInfo.create!(attrs)
+  end
+
+  # A terms-of-service acceptance record (mirrors :tos_agreement). Needed before
+  # a Stripe Connect account can be created for a user.
+  def create_tos_agreement(user: nil, **attrs)
+    TosAgreement.create!({ user: user || create_user, ip: "54.234.242.13" }.merge(attrs))
+  end
+
+  # A user's KYC/compliance record (mirrors :user_compliance_info): a US
+  # individual by default. Pass `country:` (and matching business/personal
+  # fields) for other jurisdictions, the way the parented factories do.
+  def create_user_compliance_info(user: nil, **attrs)
+    UserComplianceInfo.create!({
+      user: user || create_user,
+      first_name: "Chuck",
+      last_name: "Bartowski",
+      street_address: "address_full_match",
+      city: "San Francisco",
+      state: "California",
+      zip_code: "94107",
+      country: "United States",
+      verticals: [Vertical::PUBLISHING],
+      is_business: false,
+      has_sold_before: false,
+      individual_tax_id: "000000000",
+      birthday: Date.new(1901, 1, 1),
+      dba: "Chuckster",
+      phone: "0000000000",
+    }.merge(attrs))
+  end
+
+  # A US bank account (mirrors :ach_account).
+  def create_ach_account(user: nil, **attrs)
+    AchAccount.create!({
+      user: user || create_user,
+      account_number: "1112121234",
+      routing_number: "110000000",
+      account_number_last_four: "1234",
+      account_holder_full_name: "Gumbot Gumstein I",
+      account_type: "checking",
+    }.merge(attrs))
+  end
+
+  # A US bank account whose number Stripe's test mode marks as verifiable
+  # (mirrors :ach_account_stripe_succeed).
+  def create_ach_account_stripe_succeed(user: nil, **attrs)
+    create_ach_account(
+      user:,
+      account_number: "000123456789",
+      account_number_last_four: "6789",
+      account_holder_full_name: "Stripe Test Account",
+      **attrs
+    )
+  end
+
+  # An Indian bank account (mirrors :indian_bank_account).
+  def create_indian_bank_account(user: nil, **attrs)
+    IndianBankAccount.create!({
+      user: user || create_user,
+      account_number: "000123456789",
+      account_number_last_four: "6789",
+      ifsc: "HDFC0004051",
+      account_holder_full_name: "Gumbot Gumstein I",
+    }.merge(attrs))
+  end
+
+  # A payout (mirrors :payment): a processing PayPal payout by default.
+  def create_payment(user: nil, **attrs)
+    Payment.create!({
+      user: user || create_user,
+      state: "processing",
+      processor: PayoutProcessorType::PAYPAL,
+      correlation_id: "12345",
+      amount_cents: 150,
+      payout_period_end_date: Date.yesterday,
+    }.merge(attrs))
+  end
+
+  # A completed payout (mirrors :payment_completed).
+  def create_payment_completed(user: nil, **attrs)
+    create_payment(user:, state: "completed", txn_id: "txn-id", processor_fee_cents: 10, **attrs)
+  end
+
+  # A real Stripe Connect managed account (mirrors :merchant_account_stripe).
+  # Talks to Stripe to create the account, upload a verification document, and
+  # wait for charges to be enabled — so callers must wrap this in a VCR cassette
+  # (the RSpec factory carried the `:vcr` tag implicitly via its examples).
+  def create_merchant_account_stripe(user: nil)
+    user ||= create_user
+    create_tos_agreement(user:)
+    create_user_compliance_info(user:)
+    merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+    StripeMerchantAccountHelper.upload_verification_document(merchant_account.charge_processor_merchant_id)
+    StripeMerchantAccountHelper.ensure_charges_enabled(merchant_account.charge_processor_merchant_id)
+    merchant_account
   end
 
   private
