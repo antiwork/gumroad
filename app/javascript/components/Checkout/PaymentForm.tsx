@@ -752,11 +752,13 @@ const CreditCardContent = ({
   // siblings. Stripe's collapse() deselects the element's payment method without unmounting it,
   // so entered card details survive; interacting with the element again re-expands the clicked
   // row (and reclaimCardLane above switches checkout back to the card/wallet lane).
+  // paymentElementReady is a dependency so a remounted element (currency/mode switch while
+  // PayPal is selected) gets re-collapsed too — a fresh mount always renders expanded.
   const paymentMethodIsPayPal = state.paymentMethod === "paypal";
   React.useEffect(() => {
-    if (!flatPaymentMethodsList || !paymentMethodIsPayPal) return;
+    if (!flatPaymentMethodsList || !paymentMethodIsPayPal || !paymentElementReady) return;
     paymentElementRef.current?.elements.getElement("payment")?.collapse();
-  }, [flatPaymentMethodsList, paymentMethodIsPayPal]);
+  }, [flatPaymentMethodsList, paymentMethodIsPayPal, paymentElementReady]);
 
   // Expose the synchronous click-time wallet submit to the pay button (see walletClickSubmitRef
   // in the props above). Runs in the click handler itself: when a wallet row is selected on a
