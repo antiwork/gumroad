@@ -2734,10 +2734,22 @@ class Purchase < ApplicationRecord
     variant_ids = BaseVariant.joins(:purchases).where("purchases.id IN (?)", purchase_ids).select("base_variants.id")
     seller_ids = purchases.map(&:seller_id)
 
+    # Posts with "hasn't bought X" targeting run an existence probe against the
+    # seller's purchase history (see WithFiltering#seller_post_passes_filters).
+    # Many posts share the same exclusion criteria, and the mobile library
+    # endpoints call this method for a page of purchases at a time — without a
+    # shared cache the same probe re-runs once per (post, purchase) pair. For
+    # mega-sellers each probe can take seconds (antiwork/gumroad#6009: two
+    # identical probes accounted for 19.9s of a 22s request), so memoize per
+    # unique (targeting criteria, buyer email) signature across the whole batch.
+    # Cache keys include seller-scoped product/variant ids, so entries from
+    # different sellers in the same batch can't collide.
+    seller_post_filter_cache = {}
+
     check_filters = lambda do |posts|
       posts.select do |post|
         purchases.reduce(false) do |select_post, purchase|
-          select_post || post.purchase_passes_filters(purchase)
+          select_post || post.purchase_passes_filters(purchase, seller_post_filter_cache:)
         end
       end
     end
@@ -2748,7 +2760,7 @@ class Purchase < ApplicationRecord
           next true if select_post
 
           next false unless purchase.link.should_show_all_posts?
-          next false unless post.purchase_passes_filters(purchase)
+          next false unless post.purchase_passes_filters(purchase, seller_post_filter_cache:)
           # A seller-wide post (no product/variant targeting) is not "targeted at
           # the purchased item", but a should_show_all_posts buyer (e.g. a member)
           # is entitled to the full post history regardless of individual email
