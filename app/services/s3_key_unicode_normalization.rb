@@ -30,7 +30,7 @@ module S3KeyUnicodeNormalization
       variant = s3_key.unicode_normalize(form)
       variant unless variant == s3_key
     end
-  rescue ArgumentError, Encoding::CompatibilityError, Encoding::UndefinedConversionError
+  rescue ArgumentError, EncodingError
     []
   end
 end

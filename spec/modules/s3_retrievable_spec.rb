@@ -178,7 +178,7 @@ describe "S3Retrievable" do
       expect(record.s3_key).to eq(s3_directory + "/file.pdf")
     end
 
-    it "heals a Unicode-normalization mismatch even when the S3 directory holds several files" do
+    it "heals a Unicode-normalization mismatch when the directory-listing fallback cannot identify the file" do
       s3_directory = "#{SecureRandom.hex}/#{SecureRandom.hex}/original"
       # "música.pdf" with the "ú" precomposed (NFC) vs decomposed into "u" + combining accent (NFD)
       nfc_key = "#{s3_directory}/m\u00FAsica.pdf"
