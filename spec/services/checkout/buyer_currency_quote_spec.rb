@@ -304,6 +304,20 @@ describe Checkout::BuyerCurrencyQuote do
       end.not_to change { merchant_account.reload.settlement_currency_mismatch_active? }.from(false)
     end
 
+    it "records the mismatch on a seller-owned connected account" do
+      seller.update!(check_merchant_account_is_linked: true)
+      seller_merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      allow(StripeFxQuote).to receive(:create).with(
+        to_currency: Currency::USD,
+        from_currency: Currency::CAD,
+        stripe_account_id: seller_merchant_account.charge_processor_merchant_id
+      ).and_raise(StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd")
+
+      expect do
+        described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+      end.to change { seller_merchant_account.reload.settlement_currency_mismatch_active? }.from(false).to(true)
+    end
+
     it "skips the FX-quote round trip entirely while a recorded mismatch is fresh" do
       # Set the marker directly: it can only be recorded on a seller's own connected
       # account now, but the eligibility read path must still honor any fresh marker.
