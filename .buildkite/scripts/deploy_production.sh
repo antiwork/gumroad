@@ -7,10 +7,15 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") deploy_production.sh: $1${NC}"
 }
 
-# Check if we're in the payouts time window (UTC 10:00 to UTC 12:00)
+# Skip deploys only while a weekly payout batch may be running.
+# Batches are enqueued at UTC 10:00 on Tue-Fri (cross-border/non-US/US/PayPal+Connect)
+# and complete in 10-30 minutes (measured from payments.created_at bursts, July 2026;
+# worst observed: ~30 min on the US batch). One hour gives 2x headroom.
+# Sat/Sun/Mon have no weekly batch, so deploys are never blocked on those days.
 current_utc_hour=$(date -u +%H)
-if [ "$current_utc_hour" -ge 10 ] && [ "$current_utc_hour" -lt 12 ]; then
-  logger "Skipping deployment to production during payouts (UTC 10:00 to UTC 12:00)"
+current_utc_dow=$(date -u +%u) # 1=Mon .. 7=Sun
+if [ "$current_utc_dow" -ge 2 ] && [ "$current_utc_dow" -le 5 ] && [ "$current_utc_hour" -eq 10 ]; then
+  logger "Skipping deployment to production during weekly payout batch (Tue-Fri UTC 10:00 to 11:00)"
   exit 0
 fi
 
