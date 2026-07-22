@@ -101,22 +101,14 @@ module User::SocialGoogle
         user.name = sanitized_name
       end
 
-      # Always update user's email upon log in as it may have changed
-      # on google's side
-      # https://support.google.com/accounts/answer/19870?hl=en
-      #
-      # Exception: if the address Google now reports already belongs to a
-      # DIFFERENT Gumroad account, adopting it would fail the
-      # "An account already exists with this email." validation and the save!
-      # below would raise, locking the user out of Google sign-in entirely.
-      # In that case we keep the account's current email and let the user
-      # sign in as before. (New records skip this check — the caller already
-      # looked the user up by email, so a conflict there is a rare race and
-      # should still surface as a validation failure.)
-      if EmailFormatValidator.valid?(email) && user.email&.downcase != email.downcase
-        email_taken_by_another_account = user.persisted? && User.by_email(email).where.not(id: user.id).exists?
-        user.email = email unless email_taken_by_another_account
-      end
+      # Set the user's email from Google only when we don't already have one,
+      # i.e. at account creation. Sign-in is matched by google_uid, not email,
+      # so there's no need to re-sync it on later logins — and re-syncing would
+      # clobber a deliberate email change and could fail the "An account
+      # already exists with this email." validation, locking the user out of
+      # Google sign-in. This mirrors the Apple path, which assigns email only
+      # for new records.
+      user.email = email if user.email.blank? && EmailFormatValidator.valid?(email)
 
       # Set user's avatar if they don't have one
       user.google_picture_url(data) unless user.avatar.attached?

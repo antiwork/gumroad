@@ -27,13 +27,14 @@ describe User::SocialGoogle do
       expect(User.find_by(google_uid: @data["uid"])).to_not eq(nil)
     end
 
-    it "finds a user using google's uid payload" do
+    it "finds a user using google's uid payload and keeps its existing email" do
       created_user = create(:user, google_uid: @data_copy1["uid"])
+      original_email = created_user.email
       found_user = User.find_or_create_for_google_oauth2(@data_copy1)
 
       expect(found_user.id).to eq(created_user.id)
       expect(created_user.reload.email).to eq(found_user.email)
-      expect(created_user.reload.email).to eq(@data_copy1["info"]["email"])
+      expect(created_user.reload.email).to eq(original_email)
     end
 
     it "finds a user using email when google's uid is missing and fills in uid" do
@@ -193,11 +194,17 @@ describe User::SocialGoogle do
   end
 
   describe ".query_google" do
-    describe "email change" do
-      it "sets email if the email coming from google is different" do
+    describe "email" do
+      it "sets the email from Google when the account has none yet" do
+        user = User.find_or_create_for_google_oauth2(@data)
+
+        expect(user.email).to eq(@data["info"]["email"])
+      end
+
+      it "does not overwrite the email on subsequent logins" do
         @user = create(:user, email: "spongebob@example.com")
 
-        expect { User.query_google(@user, @data) }.to change { @user.reload.email }.from("spongebob@example.com").to(@data["info"]["email"])
+        expect { User.query_google(@user, @data) }.not_to change { @user.reload.email }
       end
 
       context "when the new email from Google already belongs to a different account" do
@@ -235,7 +242,7 @@ describe User::SocialGoogle do
         end
 
         it "doesn't raise error" do
-          expect { User.query_google(@user, @data) }.not_to raise_error(ActiveRecord::RecordInvalid)
+          expect { User.query_google(@user, @data) }.not_to raise_error
         end
       end
     end
