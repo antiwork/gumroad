@@ -40,25 +40,22 @@ class OrderReviewReminderJob
   end
 
   private
-    # SentEmailInfo.ensure_mailer_uniqueness commits the uniqueness key BEFORE
-    # the block runs, so if the enqueue itself raises (or the worker is shut
-    # down mid-block), a bare call would leave the key behind and the Sidekiq
-    # retry would skip that recipient permanently even though no email was ever
-    # enqueued. This wrapper removes the key whenever the enqueue did not
-    # complete, letting the retry attempt it again. A hard kill (SIGKILL) can
-    # still strand a key, but ordinary exceptions and graceful shutdowns
-    # (Sidekiq::Shutdown) are covered.
+    # Deliberately does NOT use SentEmailInfo.ensure_mailer_uniqueness: that
+    # helper commits the uniqueness key BEFORE running the block, so any crash
+    # between the key commit and the enqueue (an exception from deliver_later,
+    # a worker shutdown, or a hard kill) strands the key and the Sidekiq retry
+    # permanently skips that recipient even though no email was ever enqueued.
+    #
+    # Instead the key is recorded only AFTER deliver_later returns, making the
+    # operation at-least-once: a crash in the tiny window between the enqueue
+    # and the key commit means the retry may send one duplicate reminder, which
+    # is far less harmful than a recipient never receiving their reminder.
     def enqueue_reminder_once(mailer_method, mailer_arg)
-      enqueued = false
-      SentEmailInfo.ensure_mailer_uniqueness("CustomerLowPriorityMailer", mailer_method.to_s, mailer_arg) do
-        CustomerLowPriorityMailer.public_send(mailer_method, mailer_arg)
-                                 .deliver_later(queue: :low)
-        enqueued = true
-      ensure
-        unless enqueued
-          digest = SentEmailInfo.mailer_key_digest("CustomerLowPriorityMailer", mailer_method.to_s, mailer_arg)
-          SentEmailInfo.unscoped.where(key: digest).delete_all
-        end
-      end
+      digest = SentEmailInfo.mailer_key_digest("CustomerLowPriorityMailer", mailer_method.to_s, mailer_arg)
+      return if SentEmailInfo.key_exists?(digest)
+
+      CustomerLowPriorityMailer.public_send(mailer_method, mailer_arg)
+                               .deliver_later(queue: :low)
+      SentEmailInfo.set_key!(digest)
     end
 end
