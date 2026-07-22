@@ -45,19 +45,26 @@ class Onetime::BackfillAprilTaxRemittances
         next
       end
 
-      TaxRemittance.create!(
-        authority:,
-        jurisdiction: meta[:jurisdiction],
-        period: PERIOD,
-        currency: meta[:currency],
-        usd_amount_cents: usd_cents,
-        rail: "wise",
-        status: "completed",
-        paid_at: PAID_ON,
-        notes: "Backfilled from QBO GL (manual Wise dashboard payment, April 2026). " \
-               "Local-currency amount and Wise transfer ID pending statement sync.",
-      )
-      @created << authority
+      begin
+        TaxRemittance.create!(
+          authority:,
+          jurisdiction: meta[:jurisdiction],
+          period: PERIOD,
+          currency: meta[:currency],
+          usd_amount_cents: usd_cents,
+          rail: "wise",
+          status: "completed",
+          paid_at: PAID_ON,
+          notes: "Backfilled from QBO GL (manual Wise dashboard payment, April 2026). " \
+                 "Local-currency amount and Wise transfer ID pending statement sync.",
+        )
+        @created << authority
+      rescue ActiveRecord::RecordNotUnique
+        # A concurrent run inserted this row between our exists? check and the
+        # create!. The unique (authority, period) index makes that harmless —
+        # count it as skipped, same as if we had seen it up front.
+        @skipped << authority
+      end
     end
 
     Rails.logger.info("BackfillAprilTaxRemittances: created=#{created.size} skipped=#{skipped.size}")

@@ -83,6 +83,40 @@ describe TaxRemittance do
     end
   end
 
+  describe "terminal status immutability" do
+    it "refuses to move a completed remittance back to a non-terminal status" do
+      remittance = build_remittance(status: "completed", paid_at: Time.current).tap(&:save!)
+
+      remittance.status = "draft"
+      expect(remittance).not_to be_valid
+      expect(remittance.errors[:status].first).to include("terminal state completed")
+      expect(remittance.reload.status).to eq("completed")
+    end
+
+    it "refuses terminal-to-terminal changes too" do
+      remittance = build_remittance(status: "failed").tap(&:save!)
+
+      remittance.status = "cancelled"
+      expect(remittance).not_to be_valid
+    end
+
+    it "allows non-status updates on a terminal remittance" do
+      remittance = build_remittance(status: "completed", paid_at: Time.current).tap(&:save!)
+
+      remittance.qbo_journal_entry_ref = "JE-1234"
+      expect(remittance).to be_valid
+      expect(remittance.save).to be(true)
+    end
+
+    it "allows normal forward transitions on non-terminal rows" do
+      remittance = build_remittance(status: "draft").tap(&:save!)
+
+      remittance.update!(status: "pending_approval")
+      remittance.update!(status: "completed", paid_at: Time.current)
+      expect(remittance.reload.status).to eq("completed")
+    end
+  end
+
   describe "scopes" do
     it "separates in-progress from terminal remittances" do
       draft = build_remittance.tap(&:save!)

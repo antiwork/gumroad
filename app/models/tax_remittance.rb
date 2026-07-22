@@ -50,6 +50,8 @@ class TaxRemittance < ApplicationRecord
   scope :completed, -> { where(status: "completed") }
   scope :awaiting_approval, -> { where(status: "pending_approval") }
 
+  validate :terminal_status_immutable, on: :update
+
   def self.period_for(date)
     "#{date.year}-Q#{(date.month - 1) / 3 + 1}"
   end
@@ -57,4 +59,16 @@ class TaxRemittance < ApplicationRecord
   def terminal?
     status.in?(TERMINAL_STATUSES)
   end
+
+  private
+    # Once a remittance reaches a terminal state (completed/failed/cancelled),
+    # its status is frozen. A later status write silently resurrecting a
+    # completed payment (e.g. a stale webhook or a buggy sync) would re-count
+    # real money — the same catch class as purchase-status resurrection.
+    def terminal_status_immutable
+      return unless status_changed?
+      return unless status_was.in?(TERMINAL_STATUSES)
+
+      errors.add(:status, "cannot change from terminal state #{status_was}")
+    end
 end
