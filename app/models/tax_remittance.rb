@@ -88,10 +88,21 @@ class TaxRemittance < ApplicationRecord
   # state reset to a fresh draft. Raises if this attempt isn't retryable —
   # completed payments have nothing to retry, and retrying a live attempt
   # would create two concurrent payments for one filing.
+  #
+  # The next attempt number comes from the filing's current MAXIMUM attempt,
+  # not from this row's own number: if attempt 1 and attempt 2 both failed,
+  # retrying from the older attempt 1 must still produce attempt 3 — naively
+  # using `attempt + 1` would collide with the existing attempt 2 on the
+  # unique (authority, period, attempt) index. Two processes retrying the
+  # same filing concurrently can still both compute the same next number;
+  # that same unique index rejects the loser on save, which is the intended
+  # resolution (one retry wins, the other raises RecordNotUnique/invalid).
   def build_retry
     unless status.in?(RETRYABLE_STATUSES)
       raise ArgumentError, "can only retry a failed or cancelled remittance (status is #{status})"
     end
+
+    latest_attempt = self.class.where(authority:, period:).maximum(:attempt) || attempt
 
     self.class.new(
       authority:,
@@ -101,7 +112,7 @@ class TaxRemittance < ApplicationRecord
       usd_amount_cents:,
       target_amount_cents:,
       rail:,
-      attempt: attempt + 1,
+      attempt: latest_attempt + 1,
       status: "draft",
     )
   end

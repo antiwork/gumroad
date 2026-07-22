@@ -179,6 +179,22 @@ describe TaxRemittance do
       expect(described_class.where(authority: failed.authority, period: failed.period).count).to eq(2)
     end
 
+    it "derives the next attempt from the filing's max, so retrying an older failed attempt skips past newer ones" do
+      first = create(:tax_remittance, :failed)
+      second = first.build_retry
+      second.status = "failed"
+      second.save!
+
+      # Retrying from the OLDER failed attempt must produce attempt 3, not
+      # collide with the existing attempt 2 on the unique index.
+      third = first.build_retry
+      expect(third.attempt).to eq(3)
+      expect(third).to be_valid
+      third.save!
+
+      expect(described_class.where(authority: first.authority, period: first.period).pluck(:attempt)).to contain_exactly(1, 2, 3)
+    end
+
     it "refuses to retry a completed or live remittance" do
       expect { create(:tax_remittance, :completed).build_retry }.to raise_error(ArgumentError, /failed or cancelled/)
       expect { create(:tax_remittance, period: "2026-Q2").build_retry }.to raise_error(ArgumentError, /failed or cancelled/)
