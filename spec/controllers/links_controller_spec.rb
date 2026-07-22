@@ -3864,7 +3864,11 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "recognizes a review-eligible not_charged free trial purchase" do
-          trial_purchase = create(:free_trial_membership_purchase)
+          # The request host is pinned to @user's subdomain in the surrounding
+          # setup, so the trial product must belong to @user or the product
+          # lookup 404s before the digest check runs.
+          trial_product = create(:membership_product, :with_free_trial_enabled, user: @user)
+          trial_purchase = create(:free_trial_membership_purchase, link: trial_product)
 
           get :show, params: { id: trial_purchase.link.to_param, purchase_id: trial_purchase.external_id, purchase_email_digest: trial_purchase.email_digest }
 
