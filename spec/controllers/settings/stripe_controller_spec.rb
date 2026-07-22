@@ -83,6 +83,19 @@ describe Settings::StripeController, :vcr do
           content: "Stripe account disconnected by team admin #{team_admin.email}"
         )
       end
+
+      it "does not create an audit note when there was no connected Stripe account to disconnect" do
+        seller.stripe_connect_account.delete_charge_processor_account!
+        # The manager can still report success for this no-op path; the controller must
+        # not record a disconnection that never happened.
+        allow(StripeMerchantAccountManager).to receive(:disconnect).and_return(true)
+
+        expect do
+          post :disconnect
+        end.not_to change { seller.reload.comments.count }
+
+        expect(response.parsed_body["success"]).to eq(true)
+      end
     end
   end
 end
