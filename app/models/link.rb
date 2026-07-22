@@ -1387,16 +1387,16 @@ class Link < ApplicationRecord
     # authorization check in ProductReviewsController#set. Uses secure_compare so the
     # digest comparison isn't vulnerable to timing attacks.
     #
-    # The accepted purchase states must match the review-eligibility states
-    # (Purchase::COUNTS_REVIEWS_STATES, minus not_charged purchases that aren't free
-    # trials) — the reminder email is only sent to purchases that can leave a review,
-    # so any purchase the reminder links here must also be recognized here. Otherwise a
-    # buyer (e.g. on a free-trial "not_charged" purchase) would follow the reminder link
-    # and land on the product page with no review form.
+    # The lookup is scoped to Purchase.allowing_reviews_to_be_counted — exact parity
+    # with review eligibility — because the reminder email only links purchases that
+    # can leave a review, and any purchase this method accepts gets a review form
+    # rendered on the product page. A looser scope here would render forms that always
+    # error on submit (ProductReview enforces allows_review_to_be_counted? at write
+    # time); a stricter one would dead-end valid reminder links.
     def purchase_for_email_digest(purchase_id, purchase_email_digest)
       return nil if purchase_id.blank? || purchase_email_digest.blank?
 
-      purchase = sales.where(purchase_state: Purchase::COUNTS_REVIEWS_STATES).exclude_not_charged_except_free_trial.not_fully_refunded.not_chargedback.find_by_external_id(purchase_id)
+      purchase = sales.allowing_reviews_to_be_counted.find_by_external_id(purchase_id)
       return nil unless purchase&.email_digest.present?
       return nil unless ActiveSupport::SecurityUtils.secure_compare(purchase.email_digest, purchase_email_digest.to_s)
 

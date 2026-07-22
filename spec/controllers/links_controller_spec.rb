@@ -3869,11 +3869,40 @@ describe LinksController, :vcr, inertia: true do
           # lookup 404s before the digest check runs.
           trial_product = create(:membership_product, :with_free_trial_enabled, user: @user)
           trial_purchase = create(:free_trial_membership_purchase, link: trial_product)
+          # Free-trial purchases are created with should_exclude_product_review set;
+          # the subscription's first successful charge clears it (Subscription#charge!).
+          # Simulate a converted trial — the state review reminders actually target.
+          trial_purchase.update!(should_exclude_product_review: false)
+          expect(trial_purchase.allows_review_to_be_counted?).to eq(true)
 
           get :show, params: { id: trial_purchase.link.to_param, purchase_id: trial_purchase.external_id, purchase_email_digest: trial_purchase.email_digest }
 
           expect(response).to be_successful
           expect(inertia.props[:purchase][:id]).to eq(trial_purchase.external_id)
+        end
+
+        it "ignores an unconverted free trial purchase that can't yet leave a review" do
+          trial_product = create(:membership_product, :with_free_trial_enabled, user: @user)
+          trial_purchase = create(:free_trial_membership_purchase, link: trial_product)
+          expect(trial_purchase.allows_review_to_be_counted?).to eq(false)
+
+          get :show, params: { id: trial_purchase.link.to_param, purchase_id: trial_purchase.external_id, purchase_email_digest: trial_purchase.email_digest }
+
+          expect(response).to be_successful
+          expect(inertia.props[:purchase]).to be_nil
+        end
+
+        it "ignores a gift-sender purchase even with a matching email digest" do
+          # Gift senders can't review (the giftee's purchase owns the review), so
+          # rendering the review form for them would dead-end in an error on submit.
+          gift = create(:gift, link: product)
+          gifter_purchase = create(:purchase, :gift_sender, link: product, gift_given: gift)
+          create(:purchase, :gift_receiver, link: product, is_gift_receiver_purchase: true, gift_received: gift, purchase_state: "gift_receiver_purchase_successful")
+
+          get :show, params: { id: product.to_param, purchase_id: gifter_purchase.external_id, purchase_email_digest: gifter_purchase.email_digest }
+
+          expect(response).to be_successful
+          expect(inertia.props[:purchase]).to be_nil
         end
       end
 

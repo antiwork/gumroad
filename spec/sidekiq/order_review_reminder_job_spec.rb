@@ -86,4 +86,27 @@ describe OrderReviewReminderJob do
         .once
     end
   end
+
+  context "gifted bundle order" do
+    # The order for a gifted bundle contains the gift-SENDER purchase, which can
+    # never leave a review (the giftee's purchase owns the review) — so no reminder
+    # should go out for it.
+    let(:bundle) { create(:product, :bundle) }
+    let(:gift) { create(:gift, link: bundle) }
+    let(:gifter_purchase) { create(:purchase, :gift_sender, link: bundle, gift_given: gift, is_bundle_purchase: true) }
+    let(:gifted_bundle_order) { create(:order, purchases: [gifter_purchase]) }
+
+    before do
+      allow(Order).to receive(:find).and_call_original
+      create(:purchase, :gift_receiver, link: bundle, is_gift_receiver_purchase: true, gift_received: gift, purchase_state: "gift_receiver_purchase_successful", is_bundle_purchase: true)
+    end
+
+    it "does not send a review reminder to the gifter" do
+      expect(gifter_purchase.eligible_for_review_reminder?).to eq(false)
+
+      expect do
+        described_class.new.perform(gifted_bundle_order.id)
+      end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+    end
+  end
 end

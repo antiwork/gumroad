@@ -3417,6 +3417,10 @@ class Purchase < ApplicationRecord
   def eligible_for_review_reminder?
     purchase_state.in?(Purchase::COUNTS_REVIEWS_STATES) &&
     (is_original_subscription_purchase? || link.not_is_recurring_billing?) &&
+      # Gift-sender purchases can never leave a review (the giftee's purchase owns
+      # the review), so reminding the gifter would deep-link to a form that always
+      # errors on submit.
+      not_is_gift_sender_purchase &&
       product_review.blank? &&
       !chargedback_not_reversed_or_refunded? &&
       !seller&.disable_review_reminders? &&
