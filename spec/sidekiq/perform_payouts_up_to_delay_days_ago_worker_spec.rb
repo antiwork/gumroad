@@ -10,6 +10,53 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
       described_class.new.perform(payout_processor_type)
     end
 
+    describe "the in-flight deploy-freeze flag" do
+      before { $redis.del(RedisKey.payout_batch_in_flight) }
+      after  { $redis.del(RedisKey.payout_batch_in_flight) }
+
+      it "is set (with a TTL safety net) while the batch runs and cleared afterwards" do
+        expect(Payouts).to receive(:create_payments_for_balances_up_to_date) do
+          expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to be > 0
+          expect($redis.ttl(RedisKey.payout_batch_in_flight)).to be_between(1, 3.hours.to_i)
+        end
+
+        described_class.new.perform(payout_processor_type)
+
+        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(0)
+      end
+
+      it "is cleared even when the batch raises" do
+        expect(Payouts).to receive(:create_payments_for_balances_up_to_date).and_raise(ActiveRecord::StatementTimeout)
+
+        expect do
+          described_class.new.perform(payout_processor_type)
+        end.to raise_error(ActiveRecord::StatementTimeout)
+
+        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(0)
+      end
+
+      it "stays up until the last concurrent per-type job finishes" do
+        expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_bank_account_types) do
+          # Simulate a sibling per-type job still running alongside this one.
+          expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to be >= 2
+        end
+
+        $redis.incr(RedisKey.payout_batch_in_flight) # the sibling
+        described_class.new.perform(PayoutProcessorType::STRIPE, ["AchAccount"])
+
+        # This job's decrement leaves the sibling's count in place.
+        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(1)
+      end
+
+      it "is not touched by the fan-out dispatcher itself" do
+        allow(described_class).to receive(:perform_async)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE, ["AchAccount", "UkBankAccount"])
+
+        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(0)
+      end
+    end
+
     context "with a single bank account type" do
       it "processes the type directly without fanning out" do
         expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_bank_account_types)

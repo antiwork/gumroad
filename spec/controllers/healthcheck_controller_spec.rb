@@ -68,6 +68,44 @@ describe HealthcheckController do
     end
   end
 
+  describe "GET 'payouts'" do
+    context "when no payout batch is in flight (Redis key absent)" do
+      it "returns 200" do
+        $redis.del(RedisKey.payout_batch_in_flight)
+
+        get :payouts
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("Payouts: no batch in flight")
+      end
+    end
+
+    context "when a payout batch is in flight (counter above zero)" do
+      it "returns 503" do
+        $redis.set(RedisKey.payout_batch_in_flight, 2)
+
+        get :payouts
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Payouts: batch in flight")
+      ensure
+        $redis.del(RedisKey.payout_batch_in_flight)
+      end
+    end
+
+    context "when the counter has decayed to zero without being deleted" do
+      it "returns 200" do
+        $redis.set(RedisKey.payout_batch_in_flight, 0)
+
+        get :payouts
+
+        expect(response.status).to eq(200)
+      ensure
+        $redis.del(RedisKey.payout_batch_in_flight)
+      end
+    end
+  end
+
   describe "GET 'paypal_balance'" do
     context "when PayPal topup is not needed (Redis key is false)" do
       before do

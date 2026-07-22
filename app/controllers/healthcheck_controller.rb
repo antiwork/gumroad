@@ -17,6 +17,18 @@ class HealthcheckController < ApplicationController
     render plain: "Sidekiq: #{status}", status:
   end
 
+  # Reports whether a weekly payout batch is currently running (see
+  # PerformPayoutsUpToDelayDaysAgoWorker, which maintains the flag). The deploy
+  # pipeline polls this before deploying to production so deploys are held only
+  # while payouts are actually in flight, not on a fixed clock window.
+  def payouts
+    in_flight = $redis.get(RedisKey.payout_batch_in_flight).to_i > 0
+    status = in_flight ? :service_unavailable : :ok
+    message = in_flight ? "batch in flight" : "no batch in flight"
+
+    render plain: "Payouts: #{message}", status:
+  end
+
   def paypal_balance
     topup_not_needed = $redis.get(RedisKey.paypal_topup_needed) == "false"
     status = topup_not_needed ? :ok : :service_unavailable

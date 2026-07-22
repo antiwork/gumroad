@@ -31,6 +31,16 @@ class PerformPayoutsUpToDelayDaysAgoWorker
 
     Rails.logger.info("AUTOMATED PAYOUTS: #{payout_period_end_date}, #{payout_processor_type}, #{bank_account_types} (Started)")
 
+    # Mark a payout batch as in flight so the deploy pipeline can hold production
+    # deploys only while payouts are actually running (see HealthcheckController#payouts
+    # and .buildkite/scripts/deploy_production.sh). A counter (not a boolean) because
+    # the multi-bank-type batch fans out to concurrent per-type jobs — the flag must
+    # stay up until the LAST one finishes. The TTL is a crash safety net: if a job
+    # dies without the ensure running, the flag clears itself instead of freezing
+    # deploys forever. 3 hours covers the 2-hour query budget below with headroom.
+    $redis.incr(RedisKey.payout_batch_in_flight)
+    $redis.expire(RedisKey.payout_batch_in_flight, 3.hours.to_i)
+
     # The database connection defaults to a 5-minute statement cap (config/database.yml).
     # The `holding_balance` eligibility query for a large bank-account-type cohort (US ACH,
     # India, UK) regularly exceeds that cap during the 10:00 UTC batch window, and because
@@ -39,12 +49,20 @@ class PerformPayoutsUpToDelayDaysAgoWorker
     # 2026-07-08 UK batch). Payouts are a weekly batch job, not a user-facing request — a
     # long-running query here is expected, so give it a 2-hour budget instead of letting
     # the default cap kill the batch.
-    WithMaxExecutionTime.timeout_queries(seconds: 2.hours) do
-      if bank_account_types
-        Payouts.create_payments_for_balances_up_to_date_for_bank_account_types(payout_period_end_date, payout_processor_type, bank_account_types)
-      else
-        Payouts.create_payments_for_balances_up_to_date(payout_period_end_date, payout_processor_type)
+    begin
+      WithMaxExecutionTime.timeout_queries(seconds: 2.hours) do
+        if bank_account_types
+          Payouts.create_payments_for_balances_up_to_date_for_bank_account_types(payout_period_end_date, payout_processor_type, bank_account_types)
+        else
+          Payouts.create_payments_for_balances_up_to_date(payout_period_end_date, payout_processor_type)
+        end
       end
+    ensure
+      # Last concurrent per-type job out turns the light off. DECR below zero can't
+      # happen in practice (every INCR has a matching ensure), but guard anyway so a
+      # stray negative value doesn't read as "in flight" forever.
+      remaining = $redis.decr(RedisKey.payout_batch_in_flight)
+      $redis.del(RedisKey.payout_batch_in_flight) if remaining <= 0
     end
 
     Rails.logger.info("AUTOMATED PAYOUTS: #{payout_period_end_date}, #{payout_processor_type} #{bank_account_types} (Finished)")
