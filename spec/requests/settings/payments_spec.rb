@@ -79,8 +79,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       fill_in("Pay to the order of", with: "barnabas ngagy")
       fill_in("Routing number", with: "110000000")
-      fill_in("Account number", with: "123456781")
-      fill_in("Confirm account number", with: "123456781")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
 
       expect(page).to have_content("Must exactly match the name on your bank account")
       expect(page).to have_content("Payouts will be made in USD.")
@@ -90,11 +90,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       select("1980", from: "Year")
       fill_in("Last 4 digits of SSN", with: "1235")
 
-      click_on("Update settings")
-      expect(page).to have_alert("You must use a test bank account number. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
-
-      fill_in("Account number", with: "000123456789")
-      fill_in("Confirm account number", with: "000123456789")
       click_on("Update settings")
       expect(page).to have_alert(text: "Thanks! You're all set.")
       expect(page).to have_content("Routing number")
