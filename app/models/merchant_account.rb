@@ -120,10 +120,18 @@ class MerchantAccount < ApplicationRecord
   def record_settlement_currency_mismatch!(currency)
     return if currency.blank?
 
-    map = (settlement_currency_mismatch_map || {}).dup
-    map[currency.to_s.downcase] = Time.current.iso8601
-    self.settlement_currency_mismatch_map = map
-    save!
+    # Updating the map is a read-modify-write on shared persisted state: two checkouts
+    # learning mismatches for different currencies at the same time could each copy the
+    # same old map and the last save would drop the other currency's marker. with_lock
+    # takes a row lock and reloads the record, so the map read below is fresh and
+    # concurrent writers are serialized. Contention is negligible — this only runs on
+    # the rare mismatch-observation path, not on every checkout.
+    with_lock do
+      map = (settlement_currency_mismatch_map || {}).dup
+      map[currency.to_s.downcase] = Time.current.iso8601
+      self.settlement_currency_mismatch_map = map
+      save!
+    end
   end
 
   # Forgets all recorded settlement-currency mismatches. Called from the Stripe

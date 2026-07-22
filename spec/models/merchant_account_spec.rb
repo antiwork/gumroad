@@ -268,6 +268,20 @@ describe MerchantAccount do
         expect(merchant_account.reload.settlement_currency_mismatch_map.keys).to match_array(%w[eur gbp])
       end
 
+      it "does not lose a marker written concurrently through a different instance" do
+        # Two checkouts can observe mismatches for different currencies at the same time,
+        # each holding its own copy of the record. The row lock inside
+        # record_settlement_currency_mismatch! reloads before writing, so the second
+        # writer must see the first writer's currency instead of overwriting the map.
+        first_instance = MerchantAccount.find(merchant_account.id)
+        second_instance = MerchantAccount.find(merchant_account.id)
+
+        first_instance.record_settlement_currency_mismatch!("eur")
+        second_instance.record_settlement_currency_mismatch!("gbp")
+
+        expect(merchant_account.reload.settlement_currency_mismatch_map.keys).to match_array(%w[eur gbp])
+      end
+
       it "does nothing for a blank currency" do
         expect { merchant_account.record_settlement_currency_mismatch!(nil) }
           .not_to change { merchant_account.reload.settlement_currency_mismatch_map }
