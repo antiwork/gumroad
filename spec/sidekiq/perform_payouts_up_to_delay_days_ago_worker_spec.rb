@@ -55,6 +55,45 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
 
         expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(0)
       end
+
+      it "raises the flag and applies the TTL as one atomic operation" do
+        # The INCR and EXPIRE must land together — a positive counter with no TTL
+        # would hold deploys until someone deleted the key by hand.
+        expect(Payouts).to receive(:create_payments_for_balances_up_to_date) do
+          expect($redis.ttl(RedisKey.payout_batch_in_flight)).to be > 0
+        end
+
+        described_class.new.perform(payout_processor_type)
+      end
+
+      it "does not decrement a count it never added when raising the flag fails" do
+        # Simulate a sibling job's count already present, then a transient Redis error
+        # while this job raises the flag. The ensure must not decrement the sibling's
+        # count (that would falsely report the batch as finished).
+        $redis.incr(RedisKey.payout_batch_in_flight)
+
+        allow($redis).to receive(:eval).and_call_original
+        expect($redis).to receive(:eval)
+          .with(described_class::RAISE_IN_FLIGHT_FLAG_SCRIPT, any_args)
+          .and_raise(Redis::TimeoutError)
+
+        expect do
+          described_class.new.perform(payout_processor_type)
+        end.to raise_error(Redis::TimeoutError)
+
+        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(1)
+      end
+
+      it "cleans up a stray negative counter instead of leaving it behind" do
+        # A negative value should never survive a job finishing — left in place it
+        # would silently absorb a future batch's increment back to zero.
+        expect(Payouts).to receive(:create_payments_for_balances_up_to_date)
+
+        $redis.set(RedisKey.payout_batch_in_flight, -1)
+        described_class.new.perform(payout_processor_type)
+
+        expect($redis.exists?(RedisKey.payout_batch_in_flight)).to eq(false)
+      end
     end
 
     context "with a single bank account type" do
