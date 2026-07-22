@@ -471,6 +471,19 @@ describe CustomerLowPriorityMailer do
     end
   end
 
+  describe "already_subscribed_checkout_attempt" do
+    it "includes a tokenized link to manage the existing subscription" do
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+
+      mail = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id)
+
+      expect(mail.subject).to eq "Someone tried to purchase a membership you already have"
+      expect(mail.body.encoded).to include "manage your subscription here"
+      expect(mail.body.encoded).to include "/subscriptions/#{subscription.external_id}/manage?token=#{subscription.reload.token}"
+    end
+  end
+
   describe "expiring credit card membership", :vcr do
     it "notifies the customer that their credit card is expiring" do
       expiring_cc_user = create(:user, credit_card: create(:credit_card))

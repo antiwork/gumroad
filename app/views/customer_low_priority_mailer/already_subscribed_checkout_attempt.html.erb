@@ -2,6 +2,6 @@
 
 <p>Someone just tried to purchase a membership to <strong><%= @product.name %></strong> using your email address, but you already have an active subscription.</p>
 
-<p>If this was you, no worries! Your existing membership is still active and you don't need to do anything.</p>
+<p>If this was you, no worries! Your existing membership is still active and you don't need to do anything. You can <%= link_to "manage your subscription here", @manage_url %> at any time.</p>
 
 <p>If you didn't try to make this purchase, you can safely ignore this email.</p>

@@ -405,6 +405,12 @@ class CustomerLowPriorityMailer < ApplicationMailer
   def already_subscribed_checkout_attempt(subscription_id)
     @subscription = Subscription.find(subscription_id)
     @product = @subscription.link
+    # The checkout error shown to the logged-out visitor promises that this email
+    # contains a link to manage the subscription, so include a tokenized magic
+    # link. `refresh_token` issues a fresh token (with a new expiry) so the link
+    # is always valid when the email arrives, matching how other subscription
+    # emails in this mailer build their manage links.
+    @manage_url = manage_subscription_url(@subscription.external_id, token: @subscription.refresh_token)
 
     mail(
       to: @subscription.email,
