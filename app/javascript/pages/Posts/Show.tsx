@@ -86,9 +86,9 @@ export default function PostsShow() {
         <article className="border-b border-border">
           <div className="mx-auto grid max-w-6xl gap-8 p-4 pt-8 text-lg lg:px-0 lg:pt-12 lg:pb-8">
             {pageLoaded ? null : <LoadingSpinner className="size-8" />}
-            {/* dir="auto" makes the browser pick text direction per block from the first
-                strong character, so Hebrew/Arabic posts read right-to-left on the web view
-                too (gumroad-private#1244). */}
+            {/* dir="auto" gives the post a base direction from its first strong character;
+                per-block direction for mixed-language content is handled by the
+                unicode-bidi: plaintext rule in _rich_text.scss (gumroad-private#1244). */}
             <EditorContent className="rich-text" dir="auto" editor={editor} />
           </div>
 

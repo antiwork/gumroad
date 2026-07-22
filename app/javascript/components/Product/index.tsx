@@ -513,9 +513,9 @@ export const Product = ({
         ) : null}
         <section className="border-t border-border p-6">
           <CollapsibleDescription>
-            {/* dir="auto" makes the browser pick text direction per block from the first
-                strong character, so Hebrew/Arabic descriptions read right-to-left while
-                Latin-script content is unaffected (gumroad-private#1244). */}
+            {/* dir="auto" gives the description a base direction from its first strong
+                character; per-block direction for mixed-language content is handled by
+                the unicode-bidi: plaintext rule in _rich_text.scss (gumroad-private#1244). */}
             {pageLoaded ? (
               <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
                 <EditorContent className="rich-text" dir="auto" editor={descriptionEditor} />
