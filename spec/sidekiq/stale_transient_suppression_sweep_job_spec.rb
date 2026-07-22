@@ -16,7 +16,11 @@ describe StaleTransientSuppressionSweepJob do
     suppression = double("suppression")
     lists.each do |list, entries|
       list_client = double("list_client_#{list}")
-      allow(list_client).to receive(:get).and_return(double(parsed_body: entries))
+      # Return all entries on the first page; a short page ends pagination.
+      allow(list_client).to receive(:get) do |query_params: {}|
+        page = (query_params[:offset].to_i).zero? ? entries : []
+        double(parsed_body: page, status_code: "200")
+      end
       deletions[list] = []
       allow(list_client).to receive(:_) do |email|
         node = double("delete_node")
@@ -173,12 +177,71 @@ describe StaleTransientSuppressionSweepJob do
       expect(deletions[:blocks]).to eq([user.email])
     end
 
-    it "handles an unexpected (non-array) SendGrid response by skipping the list" do
+    it "pages through the list until a short page signals the end" do
+      stub_const("#{described_class}::PAGE_SIZE", 2)
+      users = Array.new(3) do
+        user = create(:user)
+        user.update_columns(current_sign_in_at: 1.day.ago)
+        user
+      end
+      entries = users.map { |u| entry(email: u.email) }
+      pages = [entries.first(2), entries.drop(2)]
+
+      suppression = double("suppression")
+      deletions[:bounces] = []
+      deletions[:blocks] = []
+      requested_offsets = []
+      bounces_client = double("bounces_client")
+      allow(bounces_client).to receive(:get) do |query_params: {}|
+        offset = query_params[:offset].to_i
+        requested_offsets << offset
+        double(parsed_body: pages[offset / 2] || [], status_code: "200")
+      end
+      allow(bounces_client).to receive(:_) do |email|
+        node = double("delete_node")
+        allow(node).to receive(:delete) do
+          deletions[:bounces] << email
+          double(status_code: "204")
+        end
+        node
+      end
+      blocks_client = double("blocks_client")
+      allow(blocks_client).to receive(:get).and_return(double(parsed_body: [], status_code: "200"))
+      allow(suppression).to receive(:bounces).and_return(bounces_client)
+      allow(suppression).to receive(:blocks).and_return(blocks_client)
+      allow(SendGrid::API).to receive(:new).and_return(double(client: double(suppression:)))
+
+      job.perform
+
+      expect(requested_offsets).to eq([0, 2])
+      expect(deletions[:bounces]).to match_array(users.map(&:email))
+    end
+
+    it "notifies and skips the list when SendGrid returns a non-2xx status without raising" do
+      user = create(:user)
+      user.update_columns(current_sign_in_at: 1.day.ago)
+      stub_suppression_entries(blocks: [entry(email: user.email)])
+      suppression = SendGrid::API.new(api_key: "x").client.suppression
+      # A structured auth failure arrives as a parsed error hash, not an
+      # exception — it must be surfaced, not treated as an empty list.
+      allow(suppression.bounces).to receive(:get)
+        .and_return(double(parsed_body: { errors: [{ message: "authorization required" }] }, status_code: "401"))
+      allow(ErrorNotifier).to receive(:notify)
+
+      job.perform
+
+      expect(ErrorNotifier).to have_received(:notify)
+      expect(deletions[:blocks]).to eq([user.email])
+    end
+
+    it "notifies when a 2xx response has an unexpected (non-array) body" do
       stub_suppression_entries
       suppression = SendGrid::API.new(api_key: "x").client.suppression
-      allow(suppression.bounces).to receive(:get).and_return(double(parsed_body: { error: "nope" }))
+      allow(suppression.bounces).to receive(:get).and_return(double(parsed_body: { error: "nope" }, status_code: "200"))
+      allow(ErrorNotifier).to receive(:notify)
 
       expect { job.perform }.not_to raise_error
+      expect(ErrorNotifier).to have_received(:notify)
     end
   end
 end

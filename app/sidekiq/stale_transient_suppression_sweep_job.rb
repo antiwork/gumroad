@@ -44,6 +44,15 @@ class StaleTransientSuppressionSweepJob
   # Reputation guardrail: the absolute ceiling of clears per nightly run.
   MAX_CLEARS_PER_RUN = 200
 
+  # SendGrid paginates the bounce/block list endpoints via limit/offset
+  # query params. PAGE_SIZE is how many entries we request per page;
+  # MAX_PAGES_PER_LIST bounds the requests per subuser+list so a
+  # surprisingly huge list (mass-bounce incident) or a misbehaving API
+  # can't turn one nightly run into an unbounded crawl — anything beyond
+  # the bound is picked up on subsequent nights.
+  PAGE_SIZE = 500
+  MAX_PAGES_PER_LIST = 20
+
   def perform
     cleared = 0
 
@@ -81,18 +90,43 @@ class StaleTransientSuppressionSweepJob
   private
     # Suppression entries in the [LOOKBACK_WINDOW.ago, MIN_SUPPRESSION_AGE.ago]
     # creation window for one subuser+list. SendGrid returns an array of
-    # { created:, email:, reason:, status: } hashes.
+    # { created:, email:, reason:, status: } hashes, paginated via
+    # limit/offset — we collect every page up front (bounded by
+    # MAX_PAGES_PER_LIST) so that deleting entries while we iterate can't
+    # shift offset-based pagination and skip candidates mid-run.
     def candidates(api_key, list)
+      entries = []
+      offset = 0
+      MAX_PAGES_PER_LIST.times do
+        page = fetch_page(api_key, list, offset:)
+        entries.concat(page.select { |entry| entry.is_a?(Hash) && entry[:email].present? })
+        break if page.size < PAGE_SIZE
+        offset += PAGE_SIZE
+      end
+      entries
+    end
+
+    # One page of a suppression list. Raises on a non-2xx status or an
+    # unexpected body shape (e.g. SendGrid's structured auth/rate-limit error
+    # JSON, which arrives without the client raising) so the per-list rescue
+    # in #perform notifies ErrorNotifier instead of the failure silently
+    # looking like an empty, successfully-fetched list.
+    def fetch_page(api_key, list, offset:)
       response = sendgrid(api_key).client.suppression.public_send(list).get(
         query_params: {
           start_time: LOOKBACK_WINDOW.ago.to_i,
           end_time: MIN_SUPPRESSION_AGE.ago.to_i,
+          limit: PAGE_SIZE,
+          offset:,
         }
       )
-      parsed = response.parsed_body
-      return [] unless parsed.is_a?(Array)
+      status_code = response.status_code.to_i
+      raise "SendGrid #{list} list request failed (status: #{status_code})" unless (200..299).cover?(status_code)
 
-      parsed.select { |entry| entry.is_a?(Hash) && entry[:email].present? }
+      parsed = response.parsed_body
+      raise "Unexpected SendGrid #{list} response shape: #{parsed.class}" unless parsed.is_a?(Array)
+
+      parsed
     end
 
     def clearable?(entry)
