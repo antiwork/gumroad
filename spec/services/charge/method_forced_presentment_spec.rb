@@ -293,7 +293,7 @@ describe Charge::MethodForcedPresentment do
         StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
       )
 
-      expect { result }.to change { merchant_account.reload.settlement_currency_mismatch_active? }.from(false).to(true)
+      expect { result }.to change { merchant_account.reload.settlement_currency_mismatch_active?("eur") }.from(false).to(true)
     end
   end
 end

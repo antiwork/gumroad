@@ -10040,12 +10040,12 @@ describe StripeMerchantAccountManager, :vcr do
       describe ".clear_settlement_currency_mismatch_on_currency_change" do
         let(:merchant_account) { create(:merchant_account, charge_processor_merchant_id: "acct_settlement_mismatch_test") }
 
-        before { merchant_account.record_settlement_currency_mismatch! }
+        before { merchant_account.record_settlement_currency_mismatch!("cad") }
 
         it "clears a recorded settlement-currency mismatch when the account's default currency changed" do
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "default_currency" => "cad" })
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(false)
         end
 
         it "clears a recorded settlement-currency mismatch when the account's external accounts changed" do
@@ -10053,7 +10053,7 @@ describe StripeMerchantAccountManager, :vcr do
           # settle in, so the learned marker must be re-probed.
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "external_accounts" => { "data" => [] } })
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(false)
         end
 
         it "clears the marker when previous_attributes arrives as a Stripe::StripeObject, the shape the webhook handler actually passes" do
@@ -10067,7 +10067,7 @@ describe StripeMerchantAccountManager, :vcr do
             described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, previous_attributes)
           end.not_to raise_error
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(false)
         end
 
         it "keeps the marker when a Stripe::StripeObject update touched unrelated attributes" do
@@ -10075,13 +10075,13 @@ describe StripeMerchantAccountManager, :vcr do
 
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, previous_attributes)
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(true)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(true)
         end
 
         it "keeps the marker when the update touched unrelated attributes" do
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "capabilities" => { "p24_payments" => "pending" } })
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(true)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(true)
         end
 
         it "does nothing when no merchant account matched the event" do

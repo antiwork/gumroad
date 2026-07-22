@@ -84,14 +84,23 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
-  it "falls back without an FX-quote round trip when a settlement-currency mismatch was recorded for the account" do
+  it "falls back without an FX-quote round trip when a settlement-currency mismatch was recorded for the buyer's currency" do
     # The stored currency still says usd for accounts with Stripe multi-currency
     # settlement — the recorded marker from a previously rejected FX quote is what tells
     # checkout the quote call is doomed (issue #6011).
-    merchant_account.record_settlement_currency_mismatch!
+    merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
 
     expect(decision).not_to be_eligible
     expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
+  end
+
+  it "stays eligible when the recorded mismatch is for a different currency" do
+    # Stripe settlement is configured per currency (gumroad-private#933, 2026-07-22): a
+    # EUR mismatch must not suppress quoting for this CAD buyer.
+    merchant_account.record_settlement_currency_mismatch!("eur")
+
+    expect(decision).to be_eligible
+    expect(decision.fallback_reason).to be_nil
   end
 
   it "regains eligibility once a recorded settlement-currency mismatch expires" do
