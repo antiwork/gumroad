@@ -376,16 +376,6 @@ class Installment < ApplicationRecord
       node.replace(%(<p><a href="#{target_url}" target="_blank" rel="noopener noreferrer">#{content}</a></p>))
     end
 
-    # Stamp dir="auto" on every top-level element so email clients resolve text
-    # direction per block from its own first strong character. A single dir="auto"
-    # on the wrapping container picks one direction for the whole message, which
-    # leaves a Hebrew/Arabic paragraph rendered left-to-right whenever an English
-    # paragraph comes first. CSS alternatives (unicode-bidi) are unreliable in email
-    # clients, so the attribute goes on each element directly (gumroad-private#1244).
-    doc.children.each do |node|
-      node.set_attribute("dir", "auto") if node.element?
-    end
-
     doc.to_html
   end
 

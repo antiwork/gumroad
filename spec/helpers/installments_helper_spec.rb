@@ -23,4 +23,28 @@ describe InstallmentsHelper do
       end
     end
   end
+
+  describe "#with_per_block_text_direction" do
+    it "returns blank input unchanged" do
+      expect(helper.with_per_block_text_direction(nil)).to be_nil
+      expect(helper.with_per_block_text_direction("")).to eq("")
+    end
+
+    it "adds dir=auto to each top-level text block so mixed-language messages resolve direction per block" do
+      html = "<p>Hello</p><p>שלום עולם</p><h2>Heading</h2><ul><li>One</li></ul><blockquote>Quote</blockquote>"
+      expect(helper.with_per_block_text_direction(html)).to eq(
+        '<p dir="auto">Hello</p><p dir="auto">שלום עולם</p><h2 dir="auto">Heading</h2><ul dir="auto"><li>One</li></ul><blockquote dir="auto">Quote</blockquote>'
+      )
+    end
+
+    it "leaves code blocks and wrapper divs untouched so code stays left-to-right and embeds keep their layout" do
+      html = '<pre><code>var a = 1;</code></pre><div class="item">upsell</div>'
+      expect(helper.with_per_block_text_direction(html)).to eq(html)
+    end
+
+    it "does not override an explicit dir attribute" do
+      html = '<p dir="ltr">Pinned</p>'
+      expect(helper.with_per_block_text_direction(html)).to eq(html)
+    end
+  end
 end

@@ -54,15 +54,12 @@ describe PostResendApi, :freeze_time do
       expect(html_doc(sent_email_content).at_css("div.rich-text")["dir"]).to eq("auto")
     end
 
-    it "stamps dir=auto on each message block so paragraphs resolve direction independently" do
-      # An English paragraph followed by a Hebrew one: with only a container-level
-      # dir="auto", both would inherit LTR from the English paragraph. Per-block
-      # stamping lets the Hebrew paragraph render right-to-left on its own.
-      @post.update!(message: "<p>Hello world</p><p>שלום עולם</p>")
+    it "marks each top-level text block with dir=auto so mixed-language posts resolve direction per paragraph" do
+      @post.update!(message: "<p>English intro</p><p>שלום עולם</p>")
       send_default_email
+
       paragraphs = html_doc(sent_email_content).css("div.rich-text > p")
-      expect(paragraphs.size).to eq(2)
-      expect(paragraphs.map { _1["dir"] }).to all(eq("auto"))
+      expect(paragraphs.map { |p| p["dir"] }).to eq(%w[auto auto])
     end
   end
 

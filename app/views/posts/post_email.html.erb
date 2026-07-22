@@ -19,11 +19,12 @@ Do not include route helpers (`root_url`), because the URL options (e.g. the hos
           <%= header_section(post_title_displayable(post: @post)) %>
         <% end %>
 
-        <%# dir="auto" lets email clients pick text direction per paragraph from the first
-            strong character, so Hebrew/Arabic posts read right-to-left while Latin-script
-            content is unaffected (gumroad-private#1244). %>
+        <%# dir="auto" on the container plus per-block direction below lets email clients
+            pick text direction per paragraph from its first strong character, so
+            Hebrew/Arabic paragraphs read right-to-left even after an English intro, while
+            Latin-script content is unaffected (gumroad-private#1244). %>
         <div class="rich-text" dir="auto">
-          <%= Rinku.auto_link(@post.message_with_inline_syntax_highlighting_and_upsells&.html_safe, :all, %(target="_blank" rel="nofollow")).html_safe %>
+          <%= with_per_block_text_direction(Rinku.auto_link(@post.message_with_inline_syntax_highlighting_and_upsells&.html_safe, :all, %(target="_blank" rel="nofollow")).html_safe) %>
 
           <% if @post.call_to_action_url.present? %>
             <p>
