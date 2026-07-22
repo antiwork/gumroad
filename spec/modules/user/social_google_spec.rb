@@ -200,11 +200,33 @@ describe User::SocialGoogle do
         expect { User.query_google(@user, @data) }.not_to change { @user.reload.email }
       end
 
-      it "sets the email from Google when the account has no email yet" do
-        @user = create(:user)
-        @user.update_column(:email, nil)
+      it "sets the email from Google when creating a new account" do
+        user = User.new(provider: :google_oauth2, password: Devise.friendly_token[0, 20])
 
-        expect { User.query_google(@user, @data) }.to change { @user.reload.email }.from(nil).to(@data["info"]["email"])
+        User.query_google(user, @data)
+
+        expect(user.reload.email).to eq(@data["info"]["email"])
+      end
+
+      context "when a persisted account has no email" do
+        before do
+          @user = create(:user, provider: :google_oauth2, google_uid: @data["uid"])
+          @user.update_column(:email, nil)
+        end
+
+        it "does not adopt the email Google reports" do
+          expect { User.query_google(@user, @data) }.not_to change { @user.reload.email }.from(nil)
+        end
+
+        it "still signs in when the Google email belongs to a different account" do
+          other_user = create(:user, email: @data["info"]["email"])
+
+          result = User.find_or_create_for_google_oauth2(@data)
+
+          expect(result).to eq(@user)
+          expect(@user.reload.email).to be_nil
+          expect(other_user.reload.email).to eq(@data["info"]["email"])
+        end
       end
 
       context "when the email from Google already belongs to a different account" do

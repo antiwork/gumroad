@@ -101,17 +101,20 @@ module User::SocialGoogle
         user.name = sanitized_name
       end
 
-      # Set the email from Google only when the account doesn't have one yet
-      # (i.e. at account creation), mirroring the Apple OAuth path. Returning
-      # sign-ins match the account by google_uid, so there is no need to keep
-      # the email in sync with Google: re-syncing on every login used to
-      # silently revert deliberate Gumroad email changes back to the Google
-      # address, and raised "An account already exists with this email."
-      # (locking the user out of Google sign-in) when the address Google
-      # reported was already taken by a different Gumroad account.
+      # Set the email from Google only at account creation, mirroring the
+      # Apple OAuth path. Returning sign-ins match the account by google_uid,
+      # so there is no need to keep the email in sync with Google: re-syncing
+      # on every login used to silently revert deliberate Gumroad email
+      # changes back to the Google address, and raised "An account already
+      # exists with this email." (locking the user out of Google sign-in)
+      # when the address Google reported was already taken by a different
+      # Gumroad account. We check new_record? rather than email.blank?
+      # because a persisted account may legally have no email — assigning
+      # one that belongs to another account would fail the uniqueness
+      # validation on save! and reintroduce that lockout.
       # The tradeoff: changing your primary email on Google's side no longer
       # propagates to Gumroad — update it in Gumroad settings instead.
-      user.email = email if user.email.blank? && EmailFormatValidator.valid?(email)
+      user.email = email if user.new_record? && EmailFormatValidator.valid?(email)
 
       # Set user's avatar if they don't have one
       user.google_picture_url(data) unless user.avatar.attached?
