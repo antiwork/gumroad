@@ -104,6 +104,36 @@ describe OrderReviewReminderJob do
         described_class.new.perform(order.id)
       end.not_to have_enqueued_mail(CustomerLowPriorityMailer)
     end
+
+    it "clears the uniqueness key when an enqueue raises, so the retry re-sends" do
+      # Simulates deliver_later itself failing (e.g. Redis unavailable) after
+      # the uniqueness key was committed. Without cleanup, the retry would find
+      # the key and permanently skip that recipient even though no email was
+      # ever enqueued.
+      call_count = 0
+      allow(CustomerLowPriorityMailer).to receive(:purchase_review_reminder).and_wrap_original do |original, *args|
+        call_count += 1
+        raise "enqueue failed" if call_count == 1
+        original.call(*args)
+      end
+
+      expect do
+        described_class.new.perform(order.id)
+      end.to raise_error("enqueue failed")
+
+      # The retry sends reminders for BOTH purchases: the failed one was not
+      # left with a stranded key, and the other was never attempted.
+      expect do
+        described_class.new.perform(order.id)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        .with(giftee_purchase.id)
+        .on_queue(:low)
+        .once
+        .and have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        .with(eligible_purchase.id)
+        .on_queue(:low)
+        .once
+    end
   end
 
   context "bundle order" do
