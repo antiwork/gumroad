@@ -123,7 +123,20 @@ export const PaymentElementInput = ({
   }, [defaultEmail, defaultName, elementsOptions.stripe_link_enabled]);
 
   return (
-    <Fieldset state={invalid ? "danger" : undefined} aria-label="Card information">
+    <Fieldset
+      state={invalid ? "danger" : undefined}
+      aria-label="Card information"
+      // Stripe sizes the element's iframe as `width: calc(100% + 8px); margin: 0 -4px` — a 4px
+      // bleed on each side that its inner UI offsets back, so focus rings can render outside the
+      // rows without clipping. Our global base rule (`* { max-width: 100% }` in _global.scss)
+      // clamps the iframe back to the container width while the -4px left margin still applies,
+      // shifting the element's content 4px left and leaving it 8px narrower than the container —
+      // which made the accordion rows visibly narrower than the flat PayPal row below. Lift the
+      // clamp for the element's iframes so Stripe's intended geometry (content edges flush with
+      // the container) applies. Scoped to walletsEnabled to leave the flag-off card form
+      // byte-identical to production.
+      className={walletsEnabled ? "[&_iframe]:max-w-none" : undefined}
+    >
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
         <StripePaymentElementProvider
           amount={mountedAmount}

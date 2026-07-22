@@ -746,6 +746,18 @@ const CreditCardContent = ({
     dispatch({ type: "set-value", paymentMethod: "card" });
   }, [flatPaymentMethodsList, state, dispatch]);
 
+  // Flat layout only: the whole list is one payment-method selector, so only one row may be
+  // expanded at a time. Picking PayPal collapses the element's expanded accordion row (Card /
+  // Apple Pay / Google Pay), exactly like picking one of the element's own rows collapses its
+  // siblings. Stripe's collapse() deselects the element's payment method without unmounting it,
+  // so entered card details survive; interacting with the element again re-expands the clicked
+  // row (and reclaimCardLane above switches checkout back to the card/wallet lane).
+  const paymentMethodIsPayPal = state.paymentMethod === "paypal";
+  React.useEffect(() => {
+    if (!flatPaymentMethodsList || !paymentMethodIsPayPal) return;
+    paymentElementRef.current?.elements.getElement("payment")?.collapse();
+  }, [flatPaymentMethodsList, paymentMethodIsPayPal]);
+
   // Expose the synchronous click-time wallet submit to the pay button (see walletClickSubmitRef
   // in the props above). Runs in the click handler itself: when a wallet row is selected on a
   // mounted element, kick off elements.submit() immediately so Stripe captures the click's
@@ -989,7 +1001,10 @@ const CreditCardContent = ({
               // card/wallet lane from PayPal. Ignore the empty card-form event a freshly
               // (re)mounted element can emit without any interaction, so a background remount
               // (e.g. a currency switch) can't silently steal the buyer's PayPal selection.
-              if (!evt.empty || isWalletPaymentElementType(evt.value.type)) reclaimCardLane();
+              // Also ignore collapsed events: selecting PayPal programmatically collapses the
+              // element (see the collapse effect above), and that collapse's own change event
+              // must not bounce the selection straight back to card.
+              if (!evt.collapsed && (!evt.empty || isWalletPaymentElementType(evt.value.type))) reclaimCardLane();
             }}
           />
         </div>
@@ -1497,7 +1512,10 @@ const StripePaymentRequestPayButton = ({ canPay }: { canPay: boolean }) => {
 // accordion already lists Card / Apple Pay / Google Pay as bordered rounded rows (the
 // ".AccordionItem" appearance rule in PaymentElementInput.tsx), so this row copies that look —
 // same border, radius, and padding — and sits directly below the element, making the whole
-// list read as one selector: Card / wallets / PayPal.
+// list read as one selector: Card / wallets / PayPal. The element's rows never change border
+// color when selected (selection shows as the row expanding), so this row keeps the plain
+// border too — selecting PayPal collapses the element's rows (see the collapse effect in
+// CreditCardContent) and surfaces the PayPal button, which is the selection cue.
 const FlatPayPalRow = () => {
   const [state, dispatch] = useState();
   const selected = state.paymentMethod === "paypal";
@@ -1512,8 +1530,7 @@ const FlatPayPalRow = () => {
       className={classNames(
         // all-unset resets box-sizing to content-box, which would make w-full + padding + border
         // overflow the parent — box-border restores the border-box sizing every other row uses.
-        "box-border flex w-full cursor-pointer items-center gap-3 rounded border p-4 text-left all-unset",
-        selected ? "border-accent" : "border-border",
+        "box-border flex w-full cursor-pointer items-center gap-3 rounded border border-border p-4 text-left all-unset",
         disabled && "cursor-not-allowed opacity-50",
       )}
       onClick={(e) => {
