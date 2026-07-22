@@ -33,11 +33,18 @@ class AffiliatedProductsPresenter
       # Pagy's default count for a grouped relation (COUNT(*) OVER ()) executes
       # the full grouped join against affiliate_credits just to learn how many
       # rows exist — for affiliates promoting many products that query took
-      # over a second in production traces. The grouped result has exactly one
-      # row per (link_id, affiliate_id) pair (every other GROUP BY column is
-      # functionally dependent on that pair), so we can count those pairs on
-      # the cheap un-grouped scope, which never touches affiliate_credits.
-      count = affiliated_products_scope.distinct.count("affiliates_links.link_id, affiliates_links.affiliate_id")
+      # over a second in production traces. Instead, count the distinct
+      # grouping keys on the cheap un-grouped scope, which never touches
+      # affiliate_credits. The keys are the (link_id, affiliate_id) pair plus
+      # the same basis-points expression the grouped query groups by (the
+      # remaining GROUP BY columns are functionally dependent on the pair), so
+      # this matches the grouped row count even if duplicate affiliates_links
+      # rows for one pair slip past the model-level uniqueness validation,
+      # which is not backed by a unique database constraint.
+      count = affiliated_products_scope.distinct.count(
+        "affiliates_links.link_id, affiliates_links.affiliate_id, " \
+        "affiliates_links.affiliate_basis_points || affiliates.affiliate_basis_points"
+      )
       pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE, overflow: :last_page, count:)
       records = records.map do |product|
         revenue = product.revenue || 0
