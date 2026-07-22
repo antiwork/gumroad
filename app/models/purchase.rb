@@ -2825,17 +2825,21 @@ class Purchase < ApplicationRecord
     # rows, and `installments.*` drags in each post's LONGTEXT `message` body
     # just so the Ruby-side buyer filters can look at `json_data`
     # (antiwork/gumroad#6009: this single fetch was 1.27s of a 2.06s mobile
-    # library search request). Run the filter pass on slim rows carrying only
-    # the columns `purchase_passes_filters` reads (`json_data` for the filter
-    # criteria, `seller_id` for the "hasn't bought X" sales probe), then load
+    # library search request). Run the filter pass on slim rows carrying just
+    # the columns the pass needs (`json_data` for the filter criteria,
+    # `seller_id` for the "hasn't bought X" sales probe, plus the scope's own
+    # type/flag/timestamp columns), then load
     # full rows for the few posts the buyer can actually see.
     slim_seller_profile_posts = Installment.profile_only_for_sellers(seller_ids)
                                            .select(:id, :seller_id, :installment_type, :link_id, :base_variant_id, :flags, :published_at, :json_data)
     visible_seller_profile_post_ids = check_filters.call(slim_seller_profile_posts).map(&:id)
-    # index_by + map keeps the scope's row order — the final sort_by below is
-    # stable only relative to its input order, so reordering here would change
-    # tie-breaking among posts with equal timestamps.
-    full_seller_profile_posts_by_id = visible_seller_profile_post_ids.any? ? Installment.where(id: visible_seller_profile_post_ids).index_by(&:id) : {}
+    # Reload through the same scope so a post mutated between the two queries
+    # (unpublished, flipped to send_emails) is dropped rather than reaching the
+    # sort below with a nil published_at. index_by + filter_map keeps the
+    # scope's row order — the final sort_by is stable only relative to its
+    # input order, so reordering here would change tie-breaking among posts
+    # with equal timestamps.
+    full_seller_profile_posts_by_id = visible_seller_profile_post_ids.any? ? Installment.profile_only_for_sellers(seller_ids).where(id: visible_seller_profile_post_ids).index_by(&:id) : {}
     seller_profile_posts = visible_seller_profile_post_ids.filter_map { |id| full_seller_profile_posts_by_id[id] }
     seller_posts = check_filters.call(emailed_seller_posts) + seller_profile_posts
 
