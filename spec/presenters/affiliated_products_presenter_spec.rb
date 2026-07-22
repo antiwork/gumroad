@@ -319,6 +319,30 @@ describe AffiliatedProductsPresenter do
         expected_last_page_size = grouped_row_count - (expected_pages - 1) * AffiliatedProductsPresenter::PER_PAGE
         expect(last_page_props[:affiliated_products].count).to eq(expected_last_page_size)
       end
+
+      it "counts pairs whose basis-points grouping key is NULL" do
+        # The basis-points columns are nullable at the database level
+        # (presence is only enforced by model validations), and MySQL's
+        # multi-column COUNT(DISTINCT ...) silently drops tuples containing a
+        # NULL argument while GROUP BY keeps the NULL-keyed group. With a NULL
+        # link-level value and a zero affiliate-level value, the grouping
+        # expression (NULL || 0) evaluates to NULL in MySQL, so without the
+        # COALESCE wrapper this pair would vanish from the page total and the
+        # last page could become unreachable.
+        pair = ProductAffiliate.find_by(affiliate: direct_affiliate_one, product: creator_one_product_one)
+        pair.update_column(:affiliate_basis_points, nil)
+        direct_affiliate_one.update_column(:affiliate_basis_points, 0)
+
+        grouped_row_count = described_class.new(affiliate_user).send(:affiliated_products).length
+
+        props = described_class.new(affiliate_user).affiliated_products_page_props
+        expected_pages = (grouped_row_count.to_f / AffiliatedProductsPresenter::PER_PAGE).ceil
+        expect(props[:pagination][:pages]).to eq(expected_pages)
+
+        last_page_props = described_class.new(affiliate_user, page: expected_pages).affiliated_products_page_props
+        expected_last_page_size = grouped_row_count - (expected_pages - 1) * AffiliatedProductsPresenter::PER_PAGE
+        expect(last_page_props[:affiliated_products].count).to eq(expected_last_page_size)
+      end
     end
 
     context "when sorting" do
