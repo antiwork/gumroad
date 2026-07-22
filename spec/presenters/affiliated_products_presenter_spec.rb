@@ -569,11 +569,18 @@ describe AffiliatedProductsPresenter do
       end
     end
 
-    it "caches the global affiliate earnings per affiliate" do
-      expect_any_instance_of(GlobalAffiliate).to receive(:total_cents_earned_formatted).once.and_return("$12.34")
+    it "caches the raw global affiliate earnings but formats them fresh on every request" do
+      # Only the expensive cents sum is cached; the currency formatting runs
+      # each time so a changed display preference is reflected immediately.
+      expect_any_instance_of(GlobalAffiliate).to receive(:total_cents_earned).once.and_return(1234)
 
       expect(described_class.new(user).affiliated_products_page_props[:global_affiliates_data][:global_affiliate_sales]).to eq "$12.34"
       expect(described_class.new(user).affiliated_products_page_props[:global_affiliates_data][:global_affiliate_sales]).to eq "$12.34"
+
+      # A formatting-preference change takes effect without waiting for the
+      # cached cents to expire.
+      allow_any_instance_of(User).to receive(:should_be_shown_currencies_always?).and_return(true)
+      expect(described_class.new(user).affiliated_products_page_props[:global_affiliates_data][:global_affiliate_sales]).to eq "$12.34 USD"
     end
 
     it "does not share cached revenue between users" do

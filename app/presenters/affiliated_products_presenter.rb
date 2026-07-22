@@ -91,15 +91,16 @@ class AffiliatedProductsPresenter
 
     # Same idea for the global affiliate's lifetime earnings, which sums
     # affiliate_credit_cents across all of the affiliate's paid purchases.
-    # The formatted string (not the raw cents) is cached because formatting
-    # depends only on the amount and the user's currency-display preference,
-    # which rarely changes.
+    # Only the raw cents amount is cached — formatting also depends on the
+    # user's currency-display preference, which can change at any time, so it
+    # is applied fresh on every request rather than baked into the cache.
     def cached_global_affiliate_sales(global_affiliate)
       return nil if global_affiliate.nil?
 
-      Rails.cache.fetch("affiliated_products/global_affiliate_sales/#{global_affiliate.id}", expires_in: STATS_CACHE_TTL) do
-        global_affiliate.total_cents_earned_formatted
+      cents = Rails.cache.fetch("affiliated_products/global_affiliate_earned_cents/#{global_affiliate.id}", expires_in: STATS_CACHE_TTL) do
+        global_affiliate.total_cents_earned
       end
+      global_affiliate.total_cents_earned_formatted(cents)
     end
 
     # Base relation shared by the paginated product list and the stats count:
