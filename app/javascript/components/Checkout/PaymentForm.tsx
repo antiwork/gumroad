@@ -768,6 +768,12 @@ const CreditCardContent = ({
   React.useEffect(() => {
     if (!walletClickSubmitRef) return;
     walletClickSubmitRef.current = () => {
+      // Every pay click starts from a clean slate. The ref is normally consumed (and cleared) by
+      // the tokenization effect once status reaches "starting", but a wallet click that fails
+      // checkout validation never gets there — without this reset, that stale wallet submit
+      // would be reused by the NEXT attempt (even a card one), skipping the current element's
+      // submit/validation and coupling the new attempt to the old wallet sheet.
+      pendingWalletSubmitRef.current = null;
       const controller = paymentElementRef.current;
       if (!controller || !isWalletPaymentElementType(paymentElementTypeRef.current)) return;
       pendingWalletSubmitRef.current = controller.elements.submit();
