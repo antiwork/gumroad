@@ -301,7 +301,7 @@ describe Checkout::BuyerCurrencyQuote do
 
       expect do
         described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
-      end.not_to change { merchant_account.reload.settlement_currency_mismatch_active? }.from(false)
+      end.not_to change { merchant_account.reload.settlement_currency_mismatch_noticed_at }.from(nil)
     end
 
     it "records the mismatch on a seller-owned connected account" do

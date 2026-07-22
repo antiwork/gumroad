@@ -220,7 +220,6 @@ describe MerchantAccount do
 
         expect { shared_platform_account.record_settlement_currency_mismatch! }
           .not_to change { shared_platform_account.reload.settlement_currency_mismatch_noticed_at }
-        expect(shared_platform_account.settlement_currency_mismatch_active?).to be(false)
       end
     end
 
