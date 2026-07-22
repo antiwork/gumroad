@@ -70,15 +70,14 @@ class RetryTransientEmailFailureJob
       # the buyer's email was corrected after the failure (support does this
       # when a typo'd address bounces) — the suppressed address is no longer
       # the recipient, so resending would email the wrong (dead) address and
-      # unsuppressing it buys nothing. `orderable.email` is exactly the
-      # address CustomerMailer.receipt delivers to (for a charge that is the
-      # order's first successful purchase, not an arbitrary one), so the
-      # guard compares against the address the resend would actually use.
+      # unsuppressing it buys nothing. The guard compares against the address
+      # the resend would ACTUALLY deliver to (see receipt_recipient), which
+      # is not always the target record's own email.
       deliverable, dead = resolved.partition do |_target, record|
-        record.present? && record.orderable&.email == retry_record.email
+        record.present? && receipt_recipient(record) == retry_record.email
       end
       dead.each do |target, record|
-        reason = record.nil? ? "purchase/charge no longer exists" : "recipient is now #{record.orderable&.email.inspect}"
+        reason = record.nil? ? "purchase/charge no longer exists" : "recipient is now #{receipt_recipient(record).inspect}"
         log("skipping receipt resend for #{retry_record.email} (#{target.inspect}): #{reason}")
       end
 
@@ -120,6 +119,25 @@ class RetryTransientEmailFailureJob
       elsif target["purchase_id"].present?
         Purchase.find_by(id: target["purchase_id"])
       end
+    end
+
+    # The address the resend for this record would actually be delivered to.
+    # This must mirror how the mailers pick their recipient, because the
+    # unsuppress + skip decisions key off it:
+    # * Charge target → CustomerMailer.receipt(nil, charge_id) sends to the
+    #   ORDER's email (Charge::Chargeable#orderable).
+    # * Preorder authorization purchase → Purchase#resend_receipt sends the
+    #   preorder receipt to the authorization purchase's own email.
+    # * Any other purchase → resend_receipt enqueues SendPurchaseReceiptJob →
+    #   CustomerMailer.receipt(purchase_id), which resolves through
+    #   find_by_purchase_or_charge!: a purchase whose receipt was originally
+    #   sent at the charge level (uses_charge_receipt?) re-sends the CHARGE
+    #   receipt to the order's email, not the purchase's own email.
+    def receipt_recipient(record)
+      return record.orderable&.email if record.is_a?(Charge)
+      return record.email if record.is_preorder_authorization
+
+      Charge::Chargeable.find_by_purchase_or_charge!(purchase: record).orderable&.email
     end
 
     # Removes exactly the targets this run processed, under the row lock the

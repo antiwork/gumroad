@@ -296,6 +296,54 @@ describe RetryTransientEmailFailureJob do
         expect(SendPurchaseReceiptJob.jobs).to be_empty
       end
 
+      it "resends a combined-charge purchase's receipt when the failed address is the ORDER email, even if the purchase's own email differs" do
+        # A purchase in a combined charge re-sends the CHARGE receipt, which
+        # goes to the order's email — so that's the address the original
+        # failure event carried. The guard must accept it even when the
+        # individual purchase's email is different.
+        order_recipient = create(:free_purchase, email: "order-recipient@example.com")
+        charge = create(:charge, purchases: [purchase])
+        charge.order.purchases << order_recipient
+        record = TransientEmailFailureRetry.create!(
+          email: "order-recipient@example.com",
+          mail_kind: TransientEmailFailureRetry::RECEIPT,
+          pending_targets: [{ "purchase_id" => purchase.id }],
+          retry_in_flight: true
+        )
+        suppression_manager = instance_double(EmailSuppressionManager, remove_from_lists: {})
+        expect(EmailSuppressionManager).to receive(:new).with("order-recipient@example.com").and_return(suppression_manager)
+
+        described_class.new.perform(record.id)
+
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id)
+        record.reload
+        expect(record.attempts).to eq(1)
+        expect(record.pending_targets).to eq([])
+      end
+
+      it "skips a combined-charge purchase target when the failed address is the purchase email but the receipt delivers to a different order email" do
+        # Unsuppressing the purchase's address while the mailer sends to the
+        # order's address would unsuppress the wrong recipient — skip instead.
+        order_recipient = create(:free_purchase, email: "order-recipient@example.com")
+        charge = create(:charge, purchases: [purchase])
+        charge.order.purchases << order_recipient
+        record = TransientEmailFailureRetry.create!(
+          email: purchase.email,
+          mail_kind: TransientEmailFailureRetry::RECEIPT,
+          pending_targets: [{ "purchase_id" => purchase.id }],
+          retry_in_flight: true
+        )
+
+        expect(EmailSuppressionManager).not_to receive(:new)
+        described_class.new.perform(record.id)
+
+        record.reload
+        expect(record.attempts).to eq(0)
+        expect(record.retry_in_flight).to eq(false)
+        expect(record.pending_targets).to eq([])
+        expect(SendPurchaseReceiptJob.jobs).to be_empty
+      end
+
       it "restores the in-flight claim and re-raises when the unsuppress call fails" do
         receipt_retry
         suppression_manager = instance_double(EmailSuppressionManager)
