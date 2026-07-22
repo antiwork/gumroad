@@ -290,18 +290,24 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
-    it "records the mismatch on the merchant account so later checkouts skip the FX-quote call" do
+    it "does not record the mismatch on a Gumroad-managed account (the shared platform account serves ~all managed sellers)" do
+      # Regression guard for the 2026-07-21 incident (gumroad-private#933): a single
+      # stale-session rejection recorded the marker on the shared platform account and
+      # silently suppressed FX quotes for every Gumroad-managed seller for the 30-day TTL.
+      # The checkout still falls back to USD, but only for this attempt.
       allow(StripeFxQuote).to receive(:create).and_raise(
         StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
       )
 
       expect do
         described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
-      end.to change { merchant_account.reload.settlement_currency_mismatch_active? }.from(false).to(true)
+      end.not_to change { merchant_account.reload.settlement_currency_mismatch_active? }.from(false)
     end
 
     it "skips the FX-quote round trip entirely while a recorded mismatch is fresh" do
-      merchant_account.record_settlement_currency_mismatch!
+      # Set the marker directly: it can only be recorded on a seller's own connected
+      # account now, but the eligibility read path must still honor any fresh marker.
+      merchant_account.update!(settlement_currency_mismatch_noticed_at: Time.current.iso8601)
       expect(StripeFxQuote).not_to receive(:create)
 
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
