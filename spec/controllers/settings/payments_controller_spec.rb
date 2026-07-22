@@ -1807,8 +1807,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
     before do
       seller.mark_compliant!(author_name: "ContentModeration")
-      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
-      create(:payment_completed, user: seller)
     end
 
     context "when the user has merchant migration enabled" do
@@ -1838,14 +1836,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(merchant_account.meta["isEmailConfirmed"]).to eq("true")
           expect(seller.reload.check_merchant_account_is_linked).to be(true)
 
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
         end
       end
 
       context "when PayPal account connection is not successful" do
         it "redirects user to payments settings path" do
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: nil)
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
         end
 
         it "allows same PayPal account to be connected even when it is already connected to the another Gumroad Account" do
@@ -1858,7 +1856,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         context "when there is some error connecting PayPal account" do
           it "flashes PayPal account connection error" do
             get :paypal_connect, params: paypal_params(paypal_merchant_reference: nil)
-            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to redirect_to(checkout_form_path)
             expect(flash[:notice]).to eq("There was an error connecting your PayPal account with Gumroad.")
           end
         end
@@ -1884,7 +1882,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           end.to change { MerchantAccount.count }.by(1)
 
           expect(seller.reload.check_merchant_account_is_linked).to be(false)
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
         end
       end
     end
@@ -1910,14 +1908,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(merchant_account.meta["isEmailConfirmed"]).to eq("true")
         expect(seller.reload.check_merchant_account_is_linked).to be(false)
 
-        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to redirect_to(checkout_form_path)
       end
     end
 
     context "when PayPal account connection is not successful" do
       it "redirects user to payments settings path" do
         get :paypal_connect, params: paypal_params(paypal_merchant_reference: nil)
-        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to redirect_to(checkout_form_path)
       end
 
       it "allows same PayPal account to be connected even when it is already connected to the another Gumroad Account" do
@@ -1941,7 +1939,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
         it "still connects the paypal account if paypal account is from a supported country" do
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: "A8RLJ7R5E389A")
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
           expect(flash[:notice]).to eq("You have successfully connected your PayPal account with Gumroad.")
           expect(seller.merchant_accounts.count).to eq(1)
         end
@@ -1955,7 +1953,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         it "still connects the paypal account" do
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: "MUWSRAF6QLQJG")
 
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
           expect(flash[:notice]).to eq("You have successfully connected your PayPal account with Gumroad.")
           expect(seller.merchant_accounts.count).to eq(1)
           expect(seller.merchant_accounts.paypal.last.country).to eq("CN")
@@ -1968,7 +1966,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: "U6E6N859GJJYQ")
 
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
           expect(flash[:notice]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
           expect(seller.merchant_accounts.alive.count).to eq(0)
         end

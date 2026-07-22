@@ -74,7 +74,7 @@ class PaypalController < ApplicationController
     if response[:success]
       redirect_to response[:redirect_url], allow_other_host: true
     else
-      redirect_to settings_payments_path, notice: response[:error_message]
+      redirect_to checkout_form_path, notice: response[:error_message]
     end
   end
 
@@ -97,12 +97,12 @@ class PaypalController < ApplicationController
         "Your PayPal account could not be connected because you do not meet the eligibility requirements."
       end
 
-      redirect_to settings_payments_path, alert:
+      redirect_to checkout_form_path, alert:
     end
 
     def validate_paypal_disconnect_allowed
       return if current_seller.paypal_disconnect_allowed?
 
-      redirect_to settings_payments_path, notice: "You cannot disconnect your PayPal account because it is being used for active subscription or preorder payments."
+      redirect_to checkout_form_path, notice: "You cannot disconnect your PayPal account because it is being used for active subscription or preorder payments."
     end
 end

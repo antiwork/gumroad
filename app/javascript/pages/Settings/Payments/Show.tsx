@@ -26,7 +26,6 @@ import BankAccountSection, {
 } from "$app/components/Settings/PaymentsPage/BankAccountSection";
 import BeneficialOwnersSection from "$app/components/Settings/PaymentsPage/BeneficialOwnersSection";
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
-import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -69,7 +68,6 @@ type PaymentsPageProps = {
   bank_account_details: BankAccountDetails;
   paypal_address: string | null;
   stripe_connect: StripeConnect;
-  paypal_connect: PayPalConnect;
   fee_info: {
     card_fee_info_text: string;
     paypal_fee_info_text: string;
@@ -1260,13 +1258,21 @@ export default function PaymentsPage() {
             />
           ) : null}
         </FormSection>
-        {props.paypal_connect.show_paypal_connect ? (
-          <PayPalConnectSection
-            paypalConnect={props.paypal_connect}
-            isFormDisabled={props.is_form_disabled}
-            connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
-          />
-        ) : null}
+        <FormSection
+          header={
+            <>
+              <h2>PayPal</h2>
+              <a href="/help/article/275-paypal-connect" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </>
+          }
+        >
+          <p>
+            Looking for PayPal Connect? It moved to <a href={Routes.checkout_form_path()}>Checkout settings</a> — it
+            lets buyers pay with PayPal at checkout and is separate from how you receive payouts.
+          </p>
+        </FormSection>
         {props.saved_card ? (
           <CreditCardForm
             card={props.saved_card}

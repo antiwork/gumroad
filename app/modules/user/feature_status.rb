@@ -16,7 +16,7 @@ class User
     end
 
     def paypal_connect_allowed?
-      compliant? && sales_cents_total >= PaypalMerchantAccountManager::MIN_SALES_CENTS_REQ_FOR_PCP && has_completed_payouts?
+      compliant?
     end
 
     def paypal_disconnect_allowed?

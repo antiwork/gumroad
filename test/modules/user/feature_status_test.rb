@@ -264,34 +264,23 @@ class User::FeatureStatusTest < ActiveSupport::TestCase
 
   # --- #paypal_connect_allowed? -----------------------------------------------
 
-  test "#paypal_connect_allowed? is true when the seller is compliant, has more than $100 in sales, and a successful payout" do
+  # Eligibility relaxed to compliant?-only in #6127 (sales/payout gates removed —
+  # they were added by #755 as a new-user fraud control; see issue #6118).
+  test "#paypal_connect_allowed? is true when the seller is compliant" do
     seller = paypal_connect_seller
     assert_equal true, seller.paypal_connect_allowed?
+  end
+
+  test "#paypal_connect_allowed? is true for a compliant seller with no sales or payouts" do
+    seller = paypal_connect_seller
+    User.any_instance.stubs(:sales_cents_total).returns(0)
+    seller.payments.last.update!(state: "failed")
+    assert_equal true, seller.reload.paypal_connect_allowed?
   end
 
   test "#paypal_connect_allowed? is false when the seller is not compliant" do
     seller = paypal_connect_seller
     seller.update!(user_risk_state: "not_reviewed")
-    assert_equal false, seller.reload.paypal_connect_allowed?
-  end
-
-  test "#paypal_connect_allowed? is false when the seller does not have $100 in sales" do
-    seller = paypal_connect_seller
-    User.any_instance.stubs(:sales_cents_total).returns(99_00)
-    assert_equal false, seller.reload.paypal_connect_allowed?
-  end
-
-  test "#paypal_connect_allowed? is false when the seller does not have a successful payout" do
-    seller = paypal_connect_seller
-    seller.payments.last.update!(state: "failed")
-    assert_equal false, seller.reload.paypal_connect_allowed?
-  end
-
-  test "#paypal_connect_allowed? is false when the seller meets no eligibility requirement" do
-    seller = paypal_connect_seller
-    seller.update!(user_risk_state: "not_reviewed")
-    User.any_instance.stubs(:sales_cents_total).returns(99_00)
-    seller.payments.last.update!(state: "failed")
     assert_equal false, seller.reload.paypal_connect_allowed?
   end
 

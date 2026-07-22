@@ -244,7 +244,6 @@ class SettingsPresenter
       ip_country_code: GeoIp.lookup(remote_ip)&.country_code,
       bank_account_details:,
       paypal_address: seller.payment_address,
-      paypal_connect:,
       fee_info: fee_info(user_compliance_info),
       user: user_details(user_compliance_info),
       compliance_info: compliance_info_details(user_compliance_info),
@@ -560,27 +559,6 @@ class SettingsPresenter
         stripe_connect_account_id: seller.stripe_connect_account&.charge_processor_merchant_id,
         stripe_disconnect_allowed: seller.stripe_disconnect_allowed?,
         supported_countries_help_text: "This feature is available in <a href='https://stripe.com/en-in/global'>all countries where Stripe operates</a>, except India, Indonesia, Malaysia, Mexico, Philippines, and Thailand.",
-      }
-    end
-
-    def paypal_connect
-      paypal_merchant_account = seller.merchant_accounts.alive.paypal.first
-      if paypal_merchant_account
-        payment_integration_api = PaypalIntegrationRestApi.new(seller, authorization_header: PaypalPartnerRestCredentials.new.auth_token)
-        merchant_account_response = payment_integration_api.get_merchant_account_by_merchant_id(paypal_merchant_account.charge_processor_merchant_id)
-        parsed_response = merchant_account_response.parsed_response
-        paypal_merchant_account_email = parsed_response["primary_email"]
-      end
-
-      {
-        show_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?,
-        allow_paypal_connect: seller.paypal_connect_allowed?,
-        unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
-        email: paypal_merchant_account_email,
-        charge_processor_merchant_id: paypal_merchant_account&.charge_processor_merchant_id,
-        charge_processor_verified: paypal_merchant_account.present? && paypal_merchant_account.charge_processor_verified?,
-        needs_email_confirmation: paypal_merchant_account.present? && paypal_merchant_account.meta.present? && paypal_merchant_account.meta["isEmailConfirmed"] == "false",
-        paypal_disconnect_allowed: seller.paypal_disconnect_allowed?,
       }
     end
 
