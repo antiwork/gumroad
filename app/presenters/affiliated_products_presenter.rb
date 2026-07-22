@@ -8,6 +8,14 @@ class AffiliatedProductsPresenter
 
   PER_PAGE = 20
 
+  # How long the expensive revenue/sales aggregates on this page are cached.
+  # These sums scan the user's entire affiliate_credits / purchases history on
+  # every page load (they were the two slowest queries in traced requests), but
+  # they only change when a new affiliate sale, refund, or chargeback lands —
+  # a few minutes of staleness on a dashboard stat is an acceptable trade for
+  # not re-scanning the tables on every request.
+  STATS_CACHE_TTL = 5.minutes
+
   def initialize(user, query: nil, page: nil, sort: nil)
     @user = user
     @query = query.presence
@@ -48,7 +56,7 @@ class AffiliatedProductsPresenter
 
     def stats
       {
-        total_revenue: user.affiliate_credits_sum_total,
+        total_revenue: cached_total_revenue,
         total_sales: user.affiliate_credits.count,
         # Count distinct products with a single SQL COUNT instead of executing
         # the full grouped affiliated-products query (which joins against
@@ -65,10 +73,33 @@ class AffiliatedProductsPresenter
       global_affiliate = user.global_affiliate
       {
         global_affiliate_id: global_affiliate&.external_id_numeric,
-        global_affiliate_sales: global_affiliate&.total_cents_earned_formatted,
+        global_affiliate_sales: cached_global_affiliate_sales(global_affiliate),
         cookie_expiry_days: GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS,
         affiliate_query_param: Affiliate::SHORT_QUERY_PARAM,
       }
+    end
+
+    # The lifetime affiliate revenue sum scans every affiliate_credits row for
+    # the user (with partial-refund adjustment joins) — the single slowest
+    # query on this page in production traces. Cache it briefly; see
+    # STATS_CACHE_TTL for why short staleness is fine here.
+    def cached_total_revenue
+      Rails.cache.fetch("affiliated_products/total_revenue/#{user.id}", expires_in: STATS_CACHE_TTL) do
+        user.affiliate_credits_sum_total
+      end
+    end
+
+    # Same idea for the global affiliate's lifetime earnings, which sums
+    # affiliate_credit_cents across all of the affiliate's paid purchases.
+    # The formatted string (not the raw cents) is cached because formatting
+    # depends only on the amount and the user's currency-display preference,
+    # which rarely changes.
+    def cached_global_affiliate_sales(global_affiliate)
+      return nil if global_affiliate.nil?
+
+      Rails.cache.fetch("affiliated_products/global_affiliate_sales/#{global_affiliate.id}", expires_in: STATS_CACHE_TTL) do
+        global_affiliate.total_cents_earned_formatted
+      end
     end
 
     # Base relation shared by the paginated product list and the stats count:
