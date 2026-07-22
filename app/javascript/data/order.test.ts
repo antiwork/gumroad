@@ -30,6 +30,7 @@ const requestData: StartCartPurchaseRequestPayload = {
     type: "payment-element-client-confirm",
     confirmationTokenId: "ct_123",
     cardCountry: "US",
+    walletType: null,
     mountCurrency: "usd",
   },
   email: "buyer@example.com",

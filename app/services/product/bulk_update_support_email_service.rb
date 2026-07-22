@@ -10,8 +10,6 @@ class Product::BulkUpdateSupportEmailService
   end
 
   def perform
-    return unless user.product_level_support_emails_enabled?
-
     validate_entries!
 
     ActiveRecord::Base.transaction do

@@ -9,11 +9,15 @@ import { UserAgentProvider } from "$app/components/UserAgent";
 
 // ResponsiveContainer measures its DOM node, which has no size in a headless test
 // environment, so the chart would render nothing. Replace it with a passthrough that
-// hands the chart a fixed size, keeping everything else in recharts real.
+// hands the chart a fixed size, keeping everything else in recharts real. Tests can
+// shrink `containerWidth` to simulate a mobile viewport before rendering.
+let containerWidth = 800;
 vi.mock("recharts", async (importOriginal) => {
   const recharts = await importOriginal<typeof import("recharts")>();
   const ResponsiveContainer = React.forwardRef(({ children }: { children: React.ReactElement }, _ref) => (
-    <div style={{ width: 800, height: 400 }}>{React.cloneElement(children, { width: 800, height: 400 })}</div>
+    <div style={{ width: containerWidth, height: 400 }}>
+      {React.cloneElement(children, { width: containerWidth, height: 400 })}
+    </div>
   ));
   ResponsiveContainer.displayName = "ResponsiveContainer";
   return { ...recharts, ResponsiveContainer };
@@ -64,9 +68,31 @@ describe("SalesChart projection overlay", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    containerWidth = 800;
   });
 
-  it("renders the dotted projection tick with finite coordinates for a daily range ending today", () => {
+  it("shrinks the projected dot below the desktop radius on a narrow (mobile) viewport", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-16T20:00:00Z"));
+
+    // A month of daily points on a 375px-wide chart gives each point a band of roughly
+    // 12px, so min(bandWidth / 7, 4) must come out well below the 4px desktop cap —
+    // this is the real mobile shape Jordi reported (30-day view on a phone).
+    containerWidth = 375;
+    const monthOfData = Array.from({ length: 26 }, (_, index) =>
+      dailyTotal(`July ${index + 1}`, 1_000 + index * 100),
+    ).concat(data);
+    const { container } = renderChart({ data: monthOfData });
+
+    const projectedDot = container.querySelector("[data-testid='chart-projected-dot']");
+    expect(projectedDot).not.toBeNull();
+    const radius = Number(projectedDot?.getAttribute("r"));
+    expect(radius).toBeGreaterThan(0);
+    expect(radius).toBeLessThan(4);
+    expectNoNaNAttributes(container);
+  });
+
+  it("renders one faint projected-total circle centered above today's bar, above today's booked total", () => {
     // Fix "now" to mid-afternoon so the projection guardrails (first hour of the day,
     // completed day) don't suppress the overlay.
     vi.useFakeTimers();
@@ -74,19 +100,49 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart();
 
-    const projectedTick = container.querySelector("[data-testid='chart-projected-tick']");
-    expect(projectedTick).not.toBeNull();
-    expect(projectedTick?.getAttribute("stroke-dasharray")).toBe("2 2");
+    // The projection series only carries a value on today's point, so exactly one
+    // circle renders.
+    const projectedDots = container.querySelectorAll("[data-testid='chart-projected-dot']");
+    expect(projectedDots.length).toBe(1);
+    const projectedDot = projectedDots[0];
 
-    for (const attribute of ["x1", "x2", "y1", "y2"]) {
-      expect(Number.isFinite(Number(projectedTick?.getAttribute(attribute)))).toBe(true);
+    // The circle must be horizontally centered on today's actual sales bar, so it sits
+    // directly above today's data point at any viewport width (the anchoring guarantee
+    // from #6048 — the old Customized overlay drifted left on mobile).
+    const actualBars = container.querySelectorAll("path[data-testid='chart-bar']");
+    expect(actualBars.length).toBeGreaterThan(0);
+    let todaysBar: Element | null = null;
+    let maxX = -Infinity;
+    for (const bar of actualBars) {
+      const barX = Number(bar.getAttribute("x"));
+      if (barX > maxX) {
+        maxX = barX;
+        todaysBar = bar;
+      }
     }
-    // The tick is horizontal (constant y) and has real width along x.
-    expect(Number(projectedTick?.getAttribute("y1"))).toBe(Number(projectedTick?.getAttribute("y2")));
-    expect(Number(projectedTick?.getAttribute("x2"))).toBeGreaterThan(Number(projectedTick?.getAttribute("x1")));
-    // The old vertical connector line and circle cap are gone.
+    expect(todaysBar).not.toBeNull();
+    const expectedCenterX = Number(todaysBar?.getAttribute("x")) + Number(todaysBar?.getAttribute("width")) / 2;
+    expect(Number(projectedDot?.getAttribute("cx"))).toBeCloseTo(expectedCenterX, 5);
+
+    // The projected circle must sit above today's actual total on the money axis (a
+    // projection is always higher than the booked total) — so there are two dots for
+    // the partial day: the line's solid dot and this faint one above it.
+    const dots = container.querySelectorAll("[data-testid='chart-dot']");
+    const lastDot = dots[dots.length - 1];
+    expect(lastDot).toBeDefined();
+    expect(Number(projectedDot?.getAttribute("cy"))).toBeLessThan(Number(lastDot?.getAttribute("cy")));
+
+    // The marker scales with the bar band (min(bandWidth / 7, 4)) so it stays subtle
+    // at narrow viewports instead of rendering at a fixed 4px that dwarfs the shrunken
+    // line dots on mobile.
+    const bandWidth = Number(todaysBar?.getAttribute("width"));
+    expect(Number(projectedDot?.getAttribute("r"))).toBeCloseTo(Math.min(bandWidth / 7, 4), 5);
+
+    // The earlier marker treatments are gone: no dotted tick, no vertical connector
+    // line, no shaded background bar (bars in this chart mean counts, not money).
+    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
     expect(container.querySelector("[data-testid='chart-projection-line']")).toBeNull();
-    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-bar']")).toBeNull();
 
     expectNoNaNAttributes(container);
   });
@@ -97,7 +153,7 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart({ aggregateBy: "monthly" });
 
-    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
     expectNoNaNAttributes(container);
   });
 
@@ -107,7 +163,7 @@ describe("SalesChart projection overlay", () => {
 
     const { container } = renderChart({ endDate: "Jul 10" });
 
-    expect(container.querySelector("[data-testid='chart-projected-tick']")).toBeNull();
+    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
     expectNoNaNAttributes(container);
   });
 });

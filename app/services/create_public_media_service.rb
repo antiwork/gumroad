@@ -256,6 +256,9 @@ class CreatePublicMediaService
     # by the caller's ensure-style cleanup, so it never gets a stable, discoverable public_id.
     # Mirrors ModerateRecordService: feature-flagged, verified sellers exempt, blocklist first.
     def moderation_error_for(blob, content_type)
+      # :content_moderation is fully enabled in production; the flag survives only as a global
+      # kill switch for automated moderation (see ModerateRecordService#moderation_enabled? and
+      # gumroad-private#1208). Remove this check once the kill switch is retired.
       return nil unless Feature.active?(:content_moderation)
       return nil if seller&.verified?
 

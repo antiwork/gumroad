@@ -13,6 +13,9 @@ module RecordMediaLocation
       consumed_at = params[:consumed_at].present? ? Time.zone.parse(params[:consumed_at]) : Time.current
       product_file = ProductFile.find(ObfuscateIds.decrypt(params[:product_file_id]))
       return false unless product_file.consumable?
+      epub_cfi = product_file.epub? ? params[:epub_cfi].presence : nil
+      return false if epub_cfi.present? && !MediaLocation.valid_epub_cfi?(epub_cfi)
+      return false if epub_cfi.present? && !MediaLocation.valid_epub_percentage?(params[:location])
 
       media_location = MediaLocation.find_or_initialize_by(url_redirect_id:,
                                                            purchase_id:,
@@ -21,7 +24,11 @@ module RecordMediaLocation
                                                            platform: params[:platform])
       return false unless media_location.new_record? || consumed_at > media_location.consumed_at
 
-      media_location.update!(location: params[:location], consumed_at:)
+      media_location.update!(
+        location: params[:location],
+        epub_cfi:,
+        consumed_at:
+      )
 
       true
     end

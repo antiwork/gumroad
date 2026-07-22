@@ -352,12 +352,5 @@ describe "Wishlist show page", :js, type: :system do
       expect(page).to have_alert(text: "You are no longer following My Wishlist.")
       expect(wishlist_follower.reload).to be_deleted
     end
-
-    it "does not show the button when the feature is disabled" do
-      Feature.deactivate(:follow_wishlists)
-
-      visit wishlist_url(wishlist.external_id_numeric, host: wishlist.user.subdomain_with_protocol)
-      expect(page).not_to have_button("Follow wishlist")
-    end
   end
 end

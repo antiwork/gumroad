@@ -6,7 +6,12 @@ import {
   type PayPalNativePaymentMethodParams,
   type StripeErrorParams,
 } from "$app/data/payment_method_params";
-import { getPaymentDetailsSource, type PurchasePaymentMethod } from "$app/data/purchase";
+import {
+  createPurchasesRequestData,
+  getPaymentDetailsSource,
+  type PurchasePaymentMethod,
+  type StartCartPurchaseRequestPayload,
+} from "$app/data/purchase";
 
 const cardParams: CardPaymentMethodParams = {
   status: "success",
@@ -95,9 +100,75 @@ describe("getPaymentDetailsSource", () => {
       type: "payment-element-client-confirm",
       confirmationTokenId: "ctoken_123",
       cardCountry: "US",
+      walletType: null,
       mountCurrency: "usd",
     };
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, true)).toBe("payment_element");
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, false)).toBe("payment_element");
+  });
+});
+
+describe("createPurchasesRequestData wallet_type threading", () => {
+  const payloadWith = (paymentMethod: PurchasePaymentMethod): StartCartPurchaseRequestPayload => ({
+    paymentMethod,
+    email: "buyer@example.com",
+    fullName: "Buyer",
+    zipCode: "10001",
+    state: "NY",
+    shippingInfo: null,
+    taxCountryElection: null,
+    vatId: null,
+    giftInfo: null,
+    eventAttributes: { plugins: null, friend: null, url_parameters: null, locale: "en-US" },
+    lineItems: [],
+    recaptchaResponse: null,
+    usedStripePaymentElement: true,
+    buyerCurrencyQuote: null,
+  });
+
+  it("sends wallet_type for a wallet that paid through the server-confirm Payment Element", () => {
+    const data = createPurchasesRequestData(
+      payloadWith({
+        type: "new",
+        cardParamsResult: {
+          type: "cc",
+          keepOnFile: false,
+          zipCode: null,
+          cardParams: {
+            ...cardParams,
+            wallet: { type: "apple_pay", billingAddress: { country: "US", postal_code: "10001", state: "NY" } },
+          },
+        },
+      }),
+      {},
+    );
+
+    expect(data.wallet_type).toBe("apple_pay");
+    expect(data.payment_details_source).toBe("payment_element");
+  });
+
+  it("sends wallet_type for a wallet that paid through the client-confirm lane", () => {
+    const data = createPurchasesRequestData(
+      payloadWith({
+        type: "payment-element-client-confirm",
+        confirmationTokenId: "ctoken_123",
+        cardCountry: "US",
+        walletType: "google_pay",
+        mountCurrency: "usd",
+      }),
+      {},
+    );
+
+    expect(data.wallet_type).toBe("google_pay");
+    expect(data.payment_details_source).toBe("payment_element");
+  });
+
+  it("sends no wallet_type for a plain card through the Payment Element", () => {
+    const data = createPurchasesRequestData(
+      payloadWith({ type: "new", cardParamsResult: { type: "cc", cardParams, keepOnFile: false, zipCode: null } }),
+      {},
+    );
+
+    expect(data).not.toHaveProperty("wallet_type");
   });
 });

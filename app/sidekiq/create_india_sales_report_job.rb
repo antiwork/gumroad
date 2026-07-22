@@ -44,8 +44,14 @@ class CreateIndiaSalesReportJob
         # entries dated by the credit note, not retroactive edits to the original invoice)
         # and makes re-generating a past month's report deterministic: a refund issued later
         # can no longer silently remove a sale from an already-filed month.
+        #
+        # Chargebacks get the same treatment from the chargeback reporting cutover on: an
+        # event-dated chargeback keeps its sale row here and is backed out by its own negative
+        # entry (below) in the month the dispute was formalized. Only legacy (pre-cutover)
+        # chargebacks keep the historical drop, so already-filed months regenerate as filed.
+        # See Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER for the cutover contract.
         india_purchases(start_date, end_date).find_each do |purchase|
-          next if purchase.chargeback_date.present? && !purchase.chargeback_reversed?
+          next if purchase.chargedback_not_reversed? && !purchase.chargeback_event_dated_for_tax_reporting?
 
           temp_file.write(sale_row(purchase, india_tax_rate, india_tax_rate_percentage).to_csv)
           temp_file.flush
@@ -55,13 +61,36 @@ class CreateIndiaSalesReportJob
         # (refunds.created_at), regardless of when the original purchase happened. Amounts
         # are negative so summing a column still nets out correctly. The purchase-side
         # filters mirror the sales leg so we only ever back out tax that was (or would have
-        # been) reported in the first place; a purchase that was charged back outright never
-        # contributes to the report, so its refunds must not be backed out either.
+        # been) reported in the first place; a purchase dropped by a legacy chargeback never
+        # contributes to the report, so its refunds must not be backed out either. Refunds of
+        # event-dated chargebacks ARE backed out — their sale row stays, and the chargeback
+        # entry claws back only what the refund didn't (see chargeback_row).
         india_refunds(start_date, end_date).find_each do |refund|
           purchase = refund.purchase
-          next if purchase.chargeback_date.present? && !purchase.chargeback_reversed?
+          next if purchase.chargedback_not_reversed? && !purchase.chargeback_event_dated_for_tax_reporting?
 
           temp_file.write(refund_row(refund, purchase, india_tax_rate, india_tax_rate_percentage).to_csv)
+          temp_file.flush
+        end
+
+        # Chargeback leg: every dispute formalized inside the report month, keyed on the
+        # dispute event date (purchases.chargeback_date has always held the processor's
+        # dispute-formalized timestamp, so no backfill is needed). Negative amounts, net of
+        # the purchase's refunds — money already returned by a refund was relieved by the
+        # refund leg and is not clawed back again.
+        india_chargebacks(start_date, end_date).find_each do |purchase|
+          temp_file.write(chargeback_row(purchase, india_tax_rate, india_tax_rate_percentage).to_csv)
+          temp_file.flush
+        end
+
+        # Chargeback-reversal leg: every dispute won inside the report month, keyed on the
+        # Dispute row's won_at (real dispute rows only — reversal dates are never
+        # synthesized). Positive amounts mirroring the chargeback entry they cancel.
+        india_chargeback_reversals(start_date, end_date).find_each do |purchase|
+          won_at = purchase.chargeback_reversal_reporting_date
+          next unless won_at&.between?(start_date, end_date)
+
+          temp_file.write(chargeback_reversal_row(purchase, won_at, india_tax_rate, india_tax_rate_percentage).to_csv)
           temp_file.flush
         end
       end
@@ -97,13 +126,7 @@ class CreateIndiaSalesReportJob
 
     # Taxable Indian consumer sales made inside the window, keyed on the purchase date.
     def india_purchases(start_date, end_date)
-      Purchase.joins("LEFT JOIN purchase_sales_tax_infos ON purchases.id = purchase_sales_tax_infos.purchase_id")
-              .where("purchase_state != 'failed'")
-              .where.not(stripe_transaction_id: nil)
-              .where(created_at: start_date..end_date)
-              .where("(country = 'India') OR (country IS NULL AND ip_country = 'India') OR (card_country = 'IN')")
-              .where("price_cents > 0")
-              .where("purchase_sales_tax_infos.business_vat_id IS NULL OR purchase_sales_tax_infos.business_vat_id = ''")
+      india_purchase_filters(Purchase.where(created_at: start_date..end_date))
     end
 
     # Refunds issued inside the window (keyed on refunds.created_at), restricted to
@@ -126,6 +149,32 @@ class CreateIndiaSalesReportJob
             .where("(purchases.country = 'India') OR (purchases.country IS NULL AND purchases.ip_country = 'India') OR (purchases.card_country = 'IN')")
             .where("purchases.price_cents > 0")
             .where("purchase_sales_tax_infos.business_vat_id IS NULL OR purchase_sales_tax_infos.business_vat_id = ''")
+    end
+
+    # Purchases whose chargeback (debit) entry lands in the window, keyed on the dispute
+    # event date. Same purchase-side filters as india_purchases, minus its purchase-date
+    # window: the entry belongs to the month of chargeback_date, not the purchase month.
+    def india_chargebacks(start_date, end_date)
+      india_purchase_filters(Purchase.chargebacks_for_tax_period_reporting(start_date, end_date))
+    end
+
+    # Purchases with a dispute won inside the window (real Dispute rows only). The scope
+    # over-selects slightly (any matching dispute row); the caller re-checks the resolved
+    # won_at per row before writing the entry.
+    def india_chargeback_reversals(start_date, end_date)
+      india_purchase_filters(Purchase.chargeback_reversals_for_tax_period_reporting(start_date, end_date))
+    end
+
+    # The India-report purchase filters shared by every leg, applied to an arbitrary base
+    # scope (see india_purchases for the canonical purchase-date-windowed version).
+    def india_purchase_filters(scope)
+      scope
+        .joins("LEFT JOIN purchase_sales_tax_infos ON purchases.id = purchase_sales_tax_infos.purchase_id")
+        .where("purchase_state != 'failed'")
+        .where.not(stripe_transaction_id: nil)
+        .where("(country = 'India') OR (country IS NULL AND ip_country = 'India') OR (card_country = 'IN')")
+        .where("price_cents > 0")
+        .where("purchase_sales_tax_infos.business_vat_id IS NULL OR purchase_sales_tax_infos.business_vat_id = ''")
     end
 
     def sale_row(purchase, india_tax_rate, india_tax_rate_percentage)
@@ -154,6 +203,35 @@ class CreateIndiaSalesReportJob
         india_tax_rate:,
         india_tax_rate_percentage:,
         entry_type: "refund"
+      )
+    end
+
+    # Dated by the dispute event (chargeback_date); negated, net of the purchase's refunds,
+    # so a sale + its refunds + its chargeback entry sum to zero across the months involved.
+    def chargeback_row(purchase, india_tax_rate, india_tax_rate_percentage)
+      build_row(
+        id: purchase.external_id,
+        date: purchase.chargeback_date,
+        purchase:,
+        price_cents: -purchase.price_cents_for_chargeback_reporting,
+        tax_amount_cents: -purchase.gumroad_tax_cents_for_chargeback_reporting,
+        india_tax_rate:,
+        india_tax_rate_percentage:,
+        entry_type: "chargeback"
+      )
+    end
+
+    # Dated by the dispute's won_at; the exact positive mirror of the chargeback entry.
+    def chargeback_reversal_row(purchase, won_at, india_tax_rate, india_tax_rate_percentage)
+      build_row(
+        id: purchase.external_id,
+        date: won_at,
+        purchase:,
+        price_cents: purchase.price_cents_for_chargeback_reporting,
+        tax_amount_cents: purchase.gumroad_tax_cents_for_chargeback_reporting,
+        india_tax_rate:,
+        india_tax_rate_percentage:,
+        entry_type: "chargeback_reversal"
       )
     end
 

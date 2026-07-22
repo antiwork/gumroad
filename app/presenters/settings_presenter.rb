@@ -79,7 +79,7 @@ class SettingsPresenter
         show_nsfw_products: seller.show_nsfw_products?,
         disable_affiliate_requests: seller.disable_affiliate_requests?,
         seller_refund_policy:,
-        product_level_support_emails: seller.product_level_support_emails_enabled? ? seller.product_level_support_emails : nil
+        product_level_support_emails: seller.product_level_support_emails
       }
     }
   end

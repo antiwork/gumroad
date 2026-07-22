@@ -15,7 +15,6 @@ import { Modal } from "$app/components/Modal";
 import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
@@ -43,9 +42,7 @@ export type LayoutProps = {
   terms_page_url: string;
   token: string;
   redirect_id: string;
-  creator: { name: string; profile_url: string; avatar_url: string | null } | null;
   add_to_library_option: AddToLibraryOption;
-  installment: { name: string } | null;
   purchase: {
     id: string;
     bundle_purchase_id: string | null;
@@ -56,7 +53,6 @@ export type LayoutProps = {
     product_permalink: string | null;
     product_name: string | null;
     variant_id: string | null;
-    variant_name: string | null;
     product_long_url: string | null;
     created_at: string;
     allows_review: boolean;
@@ -82,10 +78,8 @@ export const Layout = ({
   content_unavailability_reason_code,
   is_mobile_app_web_view,
   purchase,
-  installment,
   terms_page_url,
   add_to_library_option,
-  creator,
   headerActions,
   pageList,
   children,
@@ -229,20 +223,6 @@ export const Layout = ({
         </>
       ) : null}
       {purchase?.call ? <CallDetails call={purchase.call} /> : null}
-      <EntityInfo
-        entityName={
-          purchase
-            ? purchase.product_name
-              ? purchase.variant_name
-                ? `${purchase.product_name} - ${purchase.variant_name}`
-                : purchase.product_name
-              : null
-            : installment
-              ? installment.name
-              : null
-        }
-        creator={creator}
-      />
     </>
   );
 
@@ -334,27 +314,6 @@ const CallDetails = ({ call }: { call: Call }) => {
     </Card>
   );
 };
-
-export const EntityInfo = ({ entityName, creator }: { entityName: string | null; creator: LayoutProps["creator"] }) =>
-  entityName || creator ? (
-    <Card>
-      {entityName ? <CardContent>{entityName}</CardContent> : null}
-      {creator ? (
-        <CardContent>
-          <span style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} className="grow">
-            {creator.avatar_url ? <Avatar src={creator.avatar_url} /> : null}
-
-            <span>
-              By{" "}
-              <a href={creator.profile_url} target="_blank" className="relative" rel="noreferrer">
-                {creator.name}
-              </a>
-            </span>
-          </span>
-        </CardContent>
-      ) : null}
-    </Card>
-  ) : null;
 
 const PurchaseDeleteButton = ({
   purchase_id,

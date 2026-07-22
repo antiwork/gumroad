@@ -39,7 +39,9 @@ describe "Reading Scenario", type: :system, js: true do
 
       it "is absent for product files with non-pdf urls" do
         @product.product_files.delete_all
-        create(:non_readable_document, :analyze, link: @product)
+        # No :analyze here: the Read button depends only on the file type (readable?),
+        # and the plain-text fixture is not seeded in the spec S3 bucket for analysis.
+        create(:non_readable_document, link: @product)
         allow(@url_redirect).to receive(:redirect_or_s3_location).and_return("fakelink")
         visit("/d/#{@url_redirect.token}")
         expect(page).to_not have_link("Read")

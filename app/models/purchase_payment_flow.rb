@@ -47,7 +47,16 @@ class PurchasePaymentFlow < ApplicationRecord
   end
 
   def self.payment_details_source_for(params)
-    return PAYMENT_REQUEST if params[:wallet_type].present?
+    if params[:wallet_type].present?
+      # A wallet (Apple Pay / Google Pay) paid. Two client surfaces submit wallet payments and
+      # they are told apart by the params that accompany wallet_type: the Payment Element lanes
+      # send payment_details_source: "payment_element" (with a PaymentMethod id on the
+      # server-confirm lane or a confirmation_token on the client-confirm lane), while the
+      # Payment Request Button never sends the "payment_element" hint. Anything else claiming a
+      # wallet — including a missing or forged hint — is recorded as a payment_request, the only
+      # other surface that can produce a wallet payment.
+      return params[:payment_details_source] == PAYMENT_ELEMENT ? PAYMENT_ELEMENT : PAYMENT_REQUEST
+    end
 
     source = params[:payment_details_source].presence
     source if payment_details_sources.value?(source)

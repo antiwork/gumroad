@@ -301,4 +301,119 @@ describe CreateVatReportJob do
       temp_file.close(true)
     end
   end
+
+  describe "chargeback period attribution" do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/vat-reporting-chargeback-attribution-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day }
+
+    before do
+      zip_tax_rate = create(:zip_tax_rate, country: "AT", state: nil, zip_code: nil, combined_rate: 0.20, flags: 0)
+
+      # All purchases are made in the quarter before the cutover's quarter, so the sale
+      # period and the chargeback event period are distinct quarters.
+      @purchase_quarter_time = cutover.beginning_of_quarter - 1.month # Q2 2026
+      @event_quarter_time = cutover + 3.months                       # Q4 2026
+      @won_quarter_time = cutover + 6.months                         # Q1 2027
+
+      travel_to(@purchase_quarter_time) do
+        # Charged back after the cutover, never won: the sale stays in its own quarter and
+        # the clawback lands in the event's quarter.
+        @event_dated_purchase = create(:purchase, zip_tax_rate:, price_cents: 100_00, gumroad_tax_cents: 20_00,
+                                                  country: "Austria", ip_country: "Austria")
+
+        # Charged back after the cutover and later won (dispute row records won_at): a debit
+        # leg in the event quarter, a re-add leg in the won quarter.
+        @won_purchase = create(:purchase, zip_tax_rate:, price_cents: 100_00, gumroad_tax_cents: 20_00,
+                                          country: "Austria", ip_country: "Austria")
+
+        # Charged back BEFORE the cutover: keeps the legacy treatment (dropped from the
+        # purchase quarter on regeneration; no event-period legs).
+        @legacy_purchase = create(:purchase, zip_tax_rate:, price_cents: 100_00, gumroad_tax_cents: 20_00,
+                                             country: "Austria", ip_country: "Austria")
+
+        # Marked reversed but with NO dispute row recording won_at: without a real reversal
+        # date the legs can't balance, so it keeps the legacy treatment (a won chargeback's
+        # sale stays in the purchase quarter; no legs anywhere).
+        @undated_reversal_purchase = create(:purchase, zip_tax_rate:, price_cents: 100_00, gumroad_tax_cents: 20_00,
+                                                       country: "Austria", ip_country: "Austria")
+
+        # An ordinary, untouched sale so the purchase quarter's totals are non-zero.
+        create(:purchase, zip_tax_rate:, price_cents: 100_00, gumroad_tax_cents: 20_00,
+                          country: "Austria", ip_country: "Austria")
+
+        # Partially refunded before its chargeback: the debit leg claws back only what the
+        # refund didn't already return.
+        @partially_refunded_purchase = create(:purchase, zip_tax_rate:, price_cents: 100_00, gumroad_tax_cents: 20_00,
+                                                         country: "Austria", ip_country: "Austria")
+        create(:refund, purchase: @partially_refunded_purchase, amount_cents: 40_00, gumroad_tax_cents: 8_00)
+        @partially_refunded_purchase.update!(stripe_partially_refunded: true)
+      end
+
+      @legacy_purchase.update!(chargeback_date: cutover - 10.days)
+
+      travel_to(@event_quarter_time) do
+        @event_dated_purchase.update!(chargeback_date: Time.current)
+        @won_purchase.update!(chargeback_date: Time.current)
+        @undated_reversal_purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
+        @partially_refunded_purchase.update!(chargeback_date: Time.current)
+      end
+
+      travel_to(@won_quarter_time) do
+        @won_purchase.update!(chargeback_reversed: true)
+        create(:dispute, purchase: @won_purchase, state: "won", won_at: Time.current)
+      end
+    end
+
+    def perform_and_read(quarter, year)
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+      allow_any_instance_of(described_class).to receive(:gbp_to_usd_rate_for_date).and_return(2.0)
+
+      described_class.new.perform(quarter, year)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      CSV.read(temp_file)
+    ensure
+      temp_file&.close(true)
+    end
+
+    it "keeps event-dated chargebacks' sales in the purchase quarter and drops only the legacy chargeback" do
+      payload = perform_and_read(2, 2026)
+
+      # Six purchases of 100.00/20.00 VAT were made in Q2 2026. The legacy (pre-cutover)
+      # chargeback is dropped as filed; the undated reversal keeps its legacy won treatment
+      # (sale stays); the event-dated, won, and partially refunded chargebacks all keep
+      # their sale rows (their clawbacks belong to later quarters). The refund leg subtracts
+      # the 40.00/8.00 refund in this, its own, quarter. Supplies: 5 * 100.00 - 40.00 =
+      # 460.00; VAT: 5 * 20.00 - 8.00 = 92.00.
+      expect(payload[1]).to eq(["Austria", "Standard", "20.0", "460.00", "460.00", "92.00", "230.00", "230.00", "46.00"])
+    end
+
+    it "subtracts event-dated chargebacks in the quarter of the dispute event" do
+      payload = perform_and_read(4, 2026)
+
+      # Q4 2026 has no sales. Debit legs: the event-dated chargeback (100.00/20.00), the won
+      # chargeback (100.00/20.00), and the partially refunded chargeback net of its refund
+      # (60.00/12.00). The undated reversal emits NO leg (legacy treatment). Totals:
+      # -(100 + 100 + 60) = -260.00 supplies, -(20 + 20 + 12) = -52.00 VAT.
+      expect(payload[1]).to eq(["Austria", "Standard", "20.0", "-260.00", "-260.00", "-52.00", "-130.00", "-130.00", "-26.00"])
+    end
+
+    it "adds a won dispute back in the quarter of the dispute's won_at" do
+      payload = perform_and_read(1, 2027)
+
+      # Q1 2027 contains only the won chargeback's re-add leg: +100.00 supplies, +20.00 VAT.
+      expect(payload[1]).to eq(["Austria", "Standard", "20.0", "100.00", "100.00", "20.00", "50.00", "50.00", "10.00"])
+    end
+  end
 end

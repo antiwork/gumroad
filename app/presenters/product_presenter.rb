@@ -236,7 +236,6 @@ class ProductPresenter
           discount: default_offer_code.configured_discount_for_display,
         } : nil,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
-        audio_previews_enabled: Feature.active?(:audio_previews, product.user),
         community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
       },
       id: product.external_id,
@@ -273,7 +272,6 @@ class ProductPresenter
       aws_key: AWS_ACCESS_KEY,
       available_countries: ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } },
       google_client_id: GlobalConfig.get("GOOGLE_CLIENT_ID"),
-      google_calendar_enabled: Feature.active?(:google_calendar_link, product.user),
       seller_refund_policy_enabled: product.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
         title: product.user.refund_policy.title,

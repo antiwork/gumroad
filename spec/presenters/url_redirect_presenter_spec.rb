@@ -65,6 +65,7 @@ describe UrlRedirectPresenter do
                                                                      file_size: subtitle_file.size,
                                                                      download_url: url_redirect_download_subtitle_file_path(url_redirect.token, file.external_id, subtitle_file.external_id),
                                                                      signed_url: file.signed_download_url_for_s3_key_and_filename(subtitle_file.s3_key, subtitle_file.s3_display_name, is_video: true),
+                                                                     vtt_url: url_redirect_subtitle_file_vtt_path(url_redirect.token, file.external_id, subtitle_file.external_id),
                                                                    ],
                                                                    download_url: url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }),
                                                                    stream_url: url_redirect_stream_page_for_product_file_path(url_redirect.token, file.external_id),
@@ -115,6 +116,22 @@ describe UrlRedirectPresenter do
       expect(content_items.length).to eq(1)
       expect(content_items.first[:thumbnail_url]).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{file.thumbnail_variant.key}")
     end
+
+    it "keeps a known oversized EPUB download-only while allowing an unknown size" do
+      product = create(:product)
+      unknown_size = create(:epub_product_file, link: product, size: nil)
+      oversized = create(:epub_product_file, link: product, size: ProductFile::MAX_EPUB_READER_ARCHIVE_SIZE + 1)
+      purchase = create(:purchase, link: product)
+      url_redirect = create(:url_redirect, purchase:)
+
+      content_items = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).download_attributes[:content_items]
+      unknown_size_props = content_items.find { _1[:id] == unknown_size.external_id }
+      oversized_props = content_items.find { _1[:id] == oversized.external_id }
+
+      expect(unknown_size_props&.fetch(:read_url)).to eq(url_redirect_read_for_product_file_path(url_redirect.token, unknown_size.external_id))
+      expect(oversized_props&.fetch(:read_url)).to be_nil
+      expect(oversized_props&.fetch(:download_url)).to be_present
+    end
   end
 
   describe "#download_page_with_content_props" do
@@ -144,14 +161,8 @@ describe UrlRedirectPresenter do
         terms_page_url: HomePageLinkService.terms,
         token: @url_redirect.token,
         redirect_id: @url_redirect.external_id,
-        creator: {
-          name: "John Doe",
-          profile_url: @user.profile_url(recommended_by: "library"),
-          avatar_url: @user.avatar_url,
-        },
         product_has_third_party_analytics: false,
         seller_analytics: nil,
-        installment: nil,
         purchase: {
           id: @purchase.external_id,
           bundle_purchase_id: @purchase.bundle_purchase.external_id,
@@ -163,7 +174,6 @@ describe UrlRedirectPresenter do
           product_id: @product.external_id,
           product_name: @product.name,
           variant_id: nil,
-          variant_name: nil,
           product_permalink: @product.unique_permalink,
           allows_review: true,
           product_available: true,
@@ -192,6 +202,12 @@ describe UrlRedirectPresenter do
         )
       }]
       expect(instance.download_page_with_content_props).to eq(@props)
+    end
+
+    it "does not include a creator byline in props" do
+      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+
+      expect(instance.download_page_with_content_props).not_to have_key(:creator)
     end
 
     it "includes 'custom_receipt' in props" do
@@ -258,16 +274,6 @@ describe UrlRedirectPresenter do
 
       instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
       expect(instance.download_page_with_content_props[:content][:download_all_button]).to be_nil
-    end
-
-    it "includes 'creator' in props" do
-      @user.update!(name: "John Doe")
-      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
-      expect(instance.download_page_with_content_props[:creator]).to eq(
-        name: "John Doe",
-        profile_url: @user.profile_url(recommended_by: "library"),
-        avatar_url: @user.avatar_url,
-      )
     end
 
     it "includes 'membership' in props" do
@@ -581,15 +587,9 @@ describe UrlRedirectPresenter do
 
     it "returns the correct props" do
       expect(described_class.new(url_redirect: @url_redirect, logged_in_user: @user).download_page_without_content_props).to eq(
-        creator: {
-          name: "John Doe",
-          profile_url: @user.profile_url(recommended_by: "library"),
-          avatar_url: @user.avatar_url,
-        },
         terms_page_url: HomePageLinkService.terms,
         token: @url_redirect.token,
         redirect_id: @url_redirect.external_id,
-        installment: nil,
         purchase: {
           id: @purchase.external_id,
           bundle_purchase_id: nil,
@@ -600,7 +600,6 @@ describe UrlRedirectPresenter do
           product_id: @product.external_id,
           product_name: @product.name,
           variant_id: nil,
-          variant_name: nil,
           product_permalink: @product.unique_permalink,
           product_long_url: @product.long_url,
           allows_review: true,
@@ -670,17 +669,13 @@ describe UrlRedirectPresenter do
       expect(props[:purchase]).to include(email: nil)
     end
 
-    it "includes 'installment' and correct 'creator' in props" do
+    it "does not include 'installment' or 'creator' in props" do
       url_redirect = create(:installment_url_redirect, installment: create(:workflow_installment, name: "Thank you for the purchase!", link: nil, seller: @user, product_files: [create(:product_file)]))
 
       props = described_class.new(url_redirect:, logged_in_user: @user).download_page_without_content_props
 
-      expect(props[:installment]).to eq(name: "Thank you for the purchase!")
-      expect(props[:creator]).to eq(
-        name: "John Doe",
-        profile_url: @user.profile_url(recommended_by: "library"),
-        avatar_url: @user.avatar_url,
-      )
+      expect(props).not_to have_key(:installment)
+      expect(props).not_to have_key(:creator)
     end
 
     context "with completed installment plan" do
@@ -843,7 +838,23 @@ describe UrlRedirectPresenter do
         product_file_id: product_file.external_id,
         latest_media_location: nil,
         title:,
+        file_type: "pdf",
       )
+    end
+
+    it "returns file_type epub for an EPUB file" do
+      product = create(:product)
+      product_file = create(:epub_product_file, link: product)
+      purchase = create(:purchase, link: product, purchaser: create(:user))
+      url_redirect = create(:url_redirect, purchase:)
+
+      props = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).read_page_props(
+        product_file:,
+        read_url: "https://example.com/read/test.epub",
+        title: "Test EPUB",
+      )
+
+      expect(props[:file_type]).to eq("epub")
     end
 
     it "includes latest_media_location when available" do

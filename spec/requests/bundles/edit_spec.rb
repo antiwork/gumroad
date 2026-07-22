@@ -17,8 +17,6 @@ describe("Bundle edit page", type: :system, js: true) do
   end
 
   it "updates the bundle" do
-    Feature.activate_user(:audio_previews, seller)
-
     visit edit_bundle_product_path(bundle.external_id)
 
     in_preview { expect(page).to have_section("Bundle") }

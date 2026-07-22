@@ -75,12 +75,17 @@ export type PaymentElementClientConfirmConfig = {
 // rollout flag: when true, subscription carts declare recurring intent on the Apple Pay sheet so
 // Apple issues a device-independent merchant token (MPAN) instead of a device token. It applies
 // to the wallet button regardless of which card integration is active.
+// `payment_element_wallets` is another per-seller rollout flag: when true, the Payment Element
+// renders Apple Pay/Google Pay natively and the separate Payment Request Button is not mounted
+// for that cart (antiwork/gumroad#5768). It is always false on the card_element fallback lane,
+// which has no Payment Element to render wallets in.
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
       fallback_reason: string;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      payment_element_wallets: boolean;
       elements_options: null;
     }
   | {
@@ -88,6 +93,7 @@ export type CheckoutPaymentConfig =
       fallback_reason: null;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      payment_element_wallets: boolean;
       elements_options: PaymentElementConfig;
     }
   | {
@@ -95,6 +101,7 @@ export type CheckoutPaymentConfig =
       fallback_reason: null;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      payment_element_wallets: boolean;
       elements_options: PaymentElementClientConfirmConfig;
     };
 
@@ -226,6 +233,9 @@ type SimpleValue =
 
 type PublicAction =
   | ({ type: "set-value" } & Partial<{ [key in SimpleValue]?: State[key] | undefined }>)
+  // A wallet sheet's billing address adopted as checkout's tax location mid-payment (see the
+  // reducer case for why this is not a plain "set-value").
+  | { type: "set-wallet-billing-address"; country: string; zipCode: string | undefined; state: string }
   | { type: "set-custom-field"; key: string; value: string }
   | { type: "add-payment-method"; paymentMethod: PaymentMethod }
   | { type: "offer" }
@@ -682,6 +692,37 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       }
       Object.assign(state, action);
       break;
+    case "set-wallet-billing-address": {
+      // The wallet (Apple Pay / Google Pay) sheet shares its billing address only after the
+      // buyer approves the payment, so this always lands while the payment pipeline is at
+      // "starting". It must invalidate the surcharges quote exactly like the matching
+      // "set-value" edits would (the server derives the taxable location from these fields),
+      // but it must NOT cancel the in-flight payment back to "input": the wallet lanes hold
+      // the already-tokenized payment and resume it once the quote reloads — but only if the
+      // recalculated total still matches the one the buyer approved on the sheet (see
+      // resolveHeldWalletPayment). Cancelling here would abort that held payment before the
+      // hold is even registered, dropping every wallet payment whose billing address changes
+      // the tax location. A plain "set-value" can't express this, because on the element
+      // surfaces the wallet payment runs with paymentMethod "card" and the "set-value"
+      // invalidation cancels any past-"input" card payment.
+      const { country, zipCode, state: billingState } = action;
+      if (
+        country !== state.country ||
+        // Mirrors the "set-value" US ZIP rule: ANY ZIP change invalidates (partial ZIPs and
+        // ZIP+4 included), evaluated against the incoming country since it lands in the same
+        // action.
+        (country === "US" && zipCode !== state.zipCode) ||
+        (country === "CA" && billingState !== state.state)
+      ) {
+        if (state.surcharges.type === "loading") state.surcharges.abort();
+        state.surcharges = { type: "pending" };
+      }
+      if (state.status.type === "input") {
+        for (const key of ["country", "zipCode", "state"]) state.status.errors.delete(key);
+      }
+      Object.assign(state, { country, zipCode, state: billingState });
+      break;
+    }
     case "set-custom-field":
       if (state.status.type !== "input") return;
       state.customFieldValues[action.key] = action.value;
@@ -860,6 +901,7 @@ export function createReducer(initial: {
         fallback_reason: "not_checkout",
         disable_wallets: false,
         request_apple_pay_merchant_tokens: false,
+        payment_element_wallets: false,
         elements_options: null,
       },
       paymentMethod: "card",

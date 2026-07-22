@@ -162,14 +162,15 @@ module StripeMerchantAccountManager
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
       # Bank-account rejections (unknown bank/routing code, invalid account number) and
-      # tax-ID rejections (placeholder values like 123456789 that Stripe disallows) and
-      # Japanese address rejections (town/postal-code mismatches Stripe validates against
-      # its JP postal directory) are expected seller-input errors: the seller sees Stripe's
-      # message inline on the payments settings page and can correct the input themselves
-      # (a payout note is also recorded below for bank rejections), and the sync path
-      # (update_bank_account) already treats bank rejections as expected without alerting.
-      # Don't page Sentry for them — only unexpected failures should alert.
-      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || jp_address_invalid_error?(e)
+      # tax-ID rejections (placeholder values like 123456789 that Stripe disallows),
+      # phone-number rejections, and Japanese address rejections (town/postal-code
+      # mismatches Stripe validates against its JP postal directory) are expected
+      # seller-input errors: the seller sees Stripe's message inline on the payments
+      # settings page and can correct the input themselves (a payout note is also recorded
+      # below for bank rejections), and the sync path (update_bank_account) already treats
+      # bank rejections as expected without alerting. Don't page Sentry for them — only
+      # unexpected failures should alert.
+      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
@@ -497,6 +498,23 @@ module StripeMerchantAccountManager
     return true if param.split("[").last.to_s.delete("]").in?(%w[id_number tax_id])
 
     error.message.to_s.match?(/invalid tax id/i)
+  end
+
+  # Stripe validates the phone numbers we pass on account creation (individual phone,
+  # business support phone) and rejects malformed ones with an InvalidRequestError like
+  # `"+9203661015" is not a valid phone number`. The client-side formatter only normalizes
+  # to E.164 — it doesn't verify the number is real — so these are expected seller-input
+  # errors: the seller sees Stripe's message inline on the payments settings page and can
+  # correct the number themselves. Stripe doesn't always populate `code`/`param` on this
+  # rejection, so match on the message.
+  private_class_method
+  def self.phone_number_invalid_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    return true if param.split("[").last.to_s.delete("]").in?(%w[phone support_phone])
+
+    error.message.to_s.match?(/is not a valid phone number/i)
   end
 
   private_class_method
@@ -969,7 +987,18 @@ module StripeMerchantAccountManager
   # worst case is one extra FX-quote round trip that re-records the mismatch.
   def self.clear_settlement_currency_mismatch_on_currency_change(merchant_account, stripe_previous_attributes)
     return if merchant_account.nil?
-    return unless stripe_previous_attributes.key?("default_currency") || stripe_previous_attributes.key?("external_accounts")
+
+    # In production the webhook handler passes a Stripe::StripeObject here, not a Hash, and
+    # StripeObject (stripe-ruby 12.x) does not respond to `key?` — calling it raised a
+    # NoMethodError on every account.updated event and left learned mismatch markers
+    # permanently uncleared (gumroad-private#933, 2026-07-20). Normalize to a Hash first;
+    # StripeObject#to_hash yields symbol keys while raw webhook payloads use string keys, so
+    # check both.
+    previous_attributes = stripe_previous_attributes.respond_to?(:to_hash) ? stripe_previous_attributes.to_hash : stripe_previous_attributes
+    currency_config_changed = %w[default_currency external_accounts].any? do |attribute|
+      previous_attributes.key?(attribute) || previous_attributes.key?(attribute.to_sym)
+    end
+    return unless currency_config_changed
 
     merchant_account.clear_settlement_currency_mismatch!
   rescue StandardError => e

@@ -571,6 +571,61 @@ describe Charge::CreateService, :vcr do
       expect(purchase.has_payment_network_error?).to eq(true)
     end
 
+    it "records the settlement-currency mismatch and asks the buyer to re-quote when Stripe rejects the FX quote at intent create" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      eligibility_decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::EUR, fallback_reason: nil)
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(token: "locked-token",
+                                                              currency: Currency::EUR,
+                                                              canonical_total_cents: 10_00,
+                                                              presentment_total_cents: 9_20,
+                                                              fx_rate: BigDecimal("1.086"),
+                                                              stripe_fx_quote_id: "fxq_test",
+                                                              stripe_fx_quote_expires_at: 1.hour.from_now)
+
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
+      allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_quote)
+      # Some connected accounts settle in a non-USD currency (multi-currency settlement) and
+      # Stripe only rejects when the quote is attached to the PaymentIntent, not at quote
+      # creation. That is an expected account configuration, not a malformed request: the
+      # buyer must be asked to re-quote (the reloaded checkout will present USD), and the
+      # mismatch must be recorded so the next attempt skips the doomed FX quote entirely.
+      stripe_error = Stripe::InvalidRequestError.new(
+        "(Status 400) The FX Quote's to_currency: \"usd\" must match the payment intent's settlement currency: \"eur\".",
+        nil
+      )
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!)
+        .and_raise(ChargeProcessorInvalidRequestError.new(original_error: stripe_error))
+
+      Charge::CreateService.new(order:,
+                                seller: seller_1,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 10_00,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller_1.name_or_username,
+                                params: { buyer_currency_quote: "locked-token" }).perform
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      # The learned marker makes the buyer's retry (and every later checkout for this seller)
+      # skip the FX quote and charge canonical USD instead of failing again.
+      expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(true)
+      # The rejected intent was never created, so the presentment snapshots must not survive.
+      expect(ChargePresentment.count).to eq(0)
+      expect(PurchasePresentment.count).to eq(0)
+    end
+
     it "stops before Stripe and marks purchases when the locked buyer-currency quote is invalid" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

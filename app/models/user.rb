@@ -559,8 +559,6 @@ class User < ApplicationRecord
   end
 
   def product_level_support_emails
-    return unless product_level_support_emails_enabled?
-
     products
       .where.not(support_email: nil)
       .pluck(:support_email, :id)
@@ -1087,7 +1085,13 @@ class User < ApplicationRecord
     return false if suspended?
     return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
 
-    has_completed_payouts?
+    # Verified creators are trusted enough to email their audience even before
+    # their first payout completes (payouts can sit in transit for weeks when a
+    # bank abroad delays crediting the transfer). Admins toggle `verified` from
+    # the admin user page. The bypass does not apply while the account is
+    # flagged for fraud or a terms-of-service violation — an unresolved risk
+    # review must be cleared before verification unlocks early email access.
+    (verified? && !flagged?) || has_completed_payouts?
   end
 
   LAST_ALLOWED_TIME_FOR_PRODUCT_LEVEL_REFUND_POLICY = Time.new(2025, 3, 31).end_of_day
@@ -1188,7 +1192,6 @@ class User < ApplicationRecord
   end
 
   def eligible_for_ai_product_generation?
-    return false unless Feature.active?(:ai_product_generation, self)
     return true if Rails.env.development?
     return false unless confirmed?
     return false if suspended?

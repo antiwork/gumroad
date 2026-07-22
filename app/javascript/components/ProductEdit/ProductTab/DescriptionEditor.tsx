@@ -46,7 +46,6 @@ export const PublicFilesSettingsContext = React.createContext<{
   cancelUpload?: (id: string) => void;
   updateFile?: (id: string, file: Partial<PublicFileWithStatus>) => void;
   files: PublicFileWithStatus[];
-  audioPreviewsEnabled: boolean;
 } | null>(null);
 
 export const usePublicFilesSettings = () => {
@@ -134,7 +133,6 @@ export const DescriptionEditor = ({
   publicFiles,
   updatePublicFiles,
   setImagesUploading,
-  audioPreviewsEnabled,
 }: {
   id: string;
   initialDescription: string;
@@ -142,7 +140,6 @@ export const DescriptionEditor = ({
   publicFiles: PublicFileWithStatus[];
   updatePublicFiles: (updater: (prev: PublicFileWithStatus[]) => void) => void;
   setImagesUploading: React.Dispatch<React.SetStateAction<Set<File>>>;
-  audioPreviewsEnabled: boolean;
 }) => {
   const uid = React.useId();
   const [isMounted, setIsMounted] = React.useState(false);
@@ -191,7 +188,6 @@ export const DescriptionEditor = ({
         onError?: (error: Error | null) => void;
       }) => {
         if (!editor) return;
-        if (!audioPreviewsEnabled) return;
 
         if (!FileUtils.isAudioExtension(FileUtils.getFileExtension(file.name).toUpperCase())) {
           showAlert("Only audio files are allowed", "error");
@@ -301,7 +297,6 @@ export const DescriptionEditor = ({
           if (file) Object.assign(file, fileData);
         });
       },
-      audioPreviewsEnabled,
     }),
     [publicFiles, editor, updatePublicFiles, deleteActiveUploader, fileUploadCleanup],
   );

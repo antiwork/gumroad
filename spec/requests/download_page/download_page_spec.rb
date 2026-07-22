@@ -276,8 +276,10 @@ describe("Download Page", type: :system, js: true) do
       # Regular streamable files can be both watched and downloaded
       visit("/d/#{@url_redirect.token}")
 
-      expect(page).to have_text("Thank you!")
-      expect(page).to have_text("By John Doe")
+      # The entity info box (installment/product name plus the creator byline) was
+      # removed from the download page, so neither should render in the body.
+      expect(page).to_not have_text("Thank you!")
+      expect(page).to_not have_text("By John Doe")
       expect(page).to have_text("chapter2")
       expect(page).to have_link("Watch")
       expect(page).to have_link("Download", exact: true)

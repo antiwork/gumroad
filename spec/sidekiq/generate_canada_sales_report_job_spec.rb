@@ -232,4 +232,130 @@ describe GenerateCanadaSalesReportJob do
                                       ])
     end
   end
+
+  describe "chargeback event-date attribution" do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/canada-sales-fees-chargeback-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day }
+
+    before do
+      # Sold in the month before the cutover month; charged back post-cutover; dispute won
+      # two months after the event. Each event must land in its own month's report.
+      @seller_setup_time = (cutover - 1.month).beginning_of_month + 13.days
+      @sale_time = (cutover - 1.month).beginning_of_month + 14.days
+      @event_time = cutover + 5.days
+      @won_time = cutover + 2.months
+
+      canada_creator = nil
+      product = nil
+      travel_to(@seller_setup_time) do
+        canada_creator = create(:user).tap do |creator|
+          creator.fetch_or_build_user_compliance_info.dup_and_save! do |new_compliance_info|
+            new_compliance_info.country = "Canada"
+            new_compliance_info.state = "BC"
+          end
+        end
+        product = create(:product, user: canada_creator, price_cents: 100_00, native_type: "digital")
+      end
+
+      travel_to(@sale_time) do
+        @chargedback_purchase = create(:purchase, link: product, seller: canada_creator,
+                                                  price_cents: 100_00, fee_cents: 13_70,
+                                                  total_transaction_cents: 100_00,
+                                                  country: "Canada", state: "ON")
+
+        # A legacy chargeback (event before the cutover): keeps the historical drop.
+        @legacy_chargedback_purchase = create(:purchase, link: product, seller: canada_creator,
+                                                         price_cents: 100_00, fee_cents: 13_70,
+                                                         total_transaction_cents: 100_00,
+                                                         country: "Canada", state: "ON")
+      end
+
+      @legacy_chargedback_purchase.update!(chargeback_date: cutover - 10.days)
+      @chargedback_purchase.update!(chargeback_date: @event_time)
+
+      travel_to(@won_time) do
+        @chargedback_purchase.update!(chargeback_reversed: true)
+        create(:dispute, purchase: @chargedback_purchase, state: "won", won_at: Time.current)
+      end
+    end
+
+    def perform_and_read(month, year)
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+
+      described_class.new.perform(month, year)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      CSV.read(temp_file)
+    ensure
+      temp_file&.close(true)
+    end
+
+    it "keeps the event-dated chargeback's sale in the purchase month and drops only the legacy one" do
+      payload = perform_and_read(@sale_time.month, @sale_time.year)
+
+      # Header + the event-dated purchase's sale row; the legacy chargeback stays dropped
+      # (as filed), and the chargeback legs belong to later months.
+      expect(payload.length).to eq(2)
+      expect(payload[1][1]).to eq(@chargedback_purchase.external_id)
+      expect(payload[1][19]).to eq("10000") # Price, gross
+    end
+
+    it "reports the chargeback as a negative row in the month the dispute was formalized" do
+      payload = perform_and_read(@event_time.month, @event_time.year)
+
+      expect(payload.length).to eq(2)
+      row = payload[1]
+      expect(row[0]).to eq(@event_time.to_s)
+      expect(row[1]).to eq(@chargedback_purchase.external_id)
+      expect(row[19]).to eq("-10000") # Price
+      expect(row[20]).to eq("-1370")  # Total Gumroad Fee
+      expect(row[25]).to eq("-10000") # Total
+    end
+
+    it "adds the won dispute back as a positive row in the month of won_at" do
+      payload = perform_and_read(@won_time.month, @won_time.year)
+
+      expect(payload.length).to eq(2)
+      row = payload[1]
+      expect(row[0]).to eq(@won_time.to_s)
+      expect(row[1]).to eq(@chargedback_purchase.external_id)
+      expect(row[19]).to eq("10000")
+      expect(row[25]).to eq("10000")
+    end
+
+    it "omits a chargeback fully refunded before the dispute, since nothing is left to claw back" do
+      fully_refunded = nil
+      travel_to(@sale_time) do
+        fully_refunded = create(:purchase, link: @chargedback_purchase.link, seller: @chargedback_purchase.seller,
+                                           price_cents: 100_00, fee_cents: 13_70, total_transaction_cents: 100_00,
+                                           country: "Canada", state: "ON")
+        # Refund every amount (price, fee, tax, total) before the chargeback, so the dispute
+        # has nothing left to claw back and every *_for_chargeback_reporting value is zero.
+        create(:refund, purchase: fully_refunded,
+                        amount_cents: fully_refunded.price_cents,
+                        fee_cents: fully_refunded.fee_cents,
+                        gumroad_tax_cents: fully_refunded.gumroad_tax_cents,
+                        creator_tax_cents: fully_refunded.tax_cents,
+                        total_transaction_cents: fully_refunded.total_transaction_cents)
+      end
+      fully_refunded.update!(chargeback_date: @event_time)
+
+      payload = perform_and_read(@event_time.month, @event_time.year)
+
+      ids = payload.drop(1).map { |row| row[1] }
+      expect(ids).to include(@chargedback_purchase.external_id) # a real clawback is still reported
+      expect(ids).not_to include(fully_refunded.external_id)    # zero clawback ⇒ no spurious all-zero row
+    end
+  end
 end

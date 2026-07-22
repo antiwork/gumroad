@@ -48,6 +48,19 @@ function manualChunks(id: string) {
     return "vendor-payments";
   }
 
+  // EPUB reader — loaded only from the buyer's EPUB read page
+  if (
+    id.includes("/epubjs/") ||
+    id.includes("/jszip/") ||
+    id.includes("/localforage/") ||
+    id.includes("/@xmldom/xmldom/") ||
+    id.includes("/event-emitter/") ||
+    id.includes("/marks-pane/") ||
+    id.includes("/path-webpack/")
+  ) {
+    return "vendor-epub";
+  }
+
   // PDF.js worker — huge (2.3MB), loaded lazily on demand
   if (id.includes("/pdfjs-dist/")) {
     return "vendor-pdf";

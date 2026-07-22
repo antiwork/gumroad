@@ -134,14 +134,29 @@ class Subscription::UpdaterService
           subscription.subscription_plan_changes.alive.update_all(deleted_at: Time.current)
         end
 
-        # Do not allow restarting a subscription unless
-        # the card used for charging the subscription is supported by the product creator.
-        # It's possible that the creator has disconnected their PayPal account,
-        # and if the subscription is using PayPal as the payment method, future charges will fail.
-        if is_resubscribing &&
-          !subscription.link.user.supports_card?(subscription.user&.credit_card&.as_json) &&
-          !subscription.link.user.supports_card?(subscription.credit_card.as_json)
-          raise Subscription::UpdateFailed, "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
+        # Do not allow restarting a subscription when the payment method that
+        # future charges will actually use is no longer supported by the product
+        # creator. It's possible that the creator has disconnected their PayPal
+        # account, and if the subscription would be charged via PayPal, future
+        # charges will fail.
+        #
+        # We check `Subscription#credit_card_to_charge` — the same card recurring
+        # charges use (it prefers the subscription's own card over the user's
+        # default card) — so a supported default card on the user can't mask an
+        # unsupported card stored on the subscription itself. Subscriptions with
+        # no chargeable card (e.g. free memberships) have nothing to reject, and
+        # a new payment method supplied at checkout has already been validated
+        # and associated with the subscription above, so it is covered here too.
+        if is_resubscribing
+          card_to_charge = subscription.credit_card_to_charge
+          if card_to_charge.present? && !subscription.link.user.supports_card?(card_to_charge.as_json)
+            error_message = if card_to_charge.charge_processor_id == PaypalChargeProcessor.charge_processor_id
+              "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
+            else
+              "The payment method saved on this membership is no longer supported by the creator. Please use a different payment method (your card was not charged)."
+            end
+            raise Subscription::UpdateFailed, error_message
+          end
         end
 
         if !apply_plan_change_immediately?

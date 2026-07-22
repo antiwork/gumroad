@@ -1092,6 +1092,7 @@ Rails.application.routes.draw do
     get "/r/:id/product_files", to: "url_redirects#download_product_files", as: :url_redirect_download_product_files
     get "/zip/:id", to: "url_redirects#download_archive", as: :url_redirect_download_archive
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :url_redirect_download_subtitle_file
+    get "/r/:id/:product_file_id/:subtitle_file_id/captions.vtt", to: "url_redirects#subtitle_file_vtt", as: :url_redirect_subtitle_file_vtt
     get "/s/:id", to: "url_redirects#stream", as: :url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :url_redirect_stream_page_for_product_file
     get "/media_urls/:id", to: "url_redirects#media_urls", as: :url_redirect_media_urls
@@ -1158,6 +1159,10 @@ Rails.application.routes.draw do
         get "/agent/conversations/latest", to: "agent_conversations#latest", as: :agent_conversations_latest
         get "/agent/turns/:client_turn_id", to: "agent_conversations#turn_status", as: :agent_turn_status
         post "/agent/custom_html_preview", to: "agent_custom_html_previews#create", as: :agent_custom_html_preview
+        # Serves a staged preview document by token. This must be a real URL (not JSON consumed
+        # into an iframe srcdoc) so the response can carry the custom-page CSP header — srcdoc
+        # documents inherit the dashboard's CSP, which blocks the page's inline scripts.
+        get "/agent/custom_html_previews/:token", to: "agent_custom_html_previews#show", as: :agent_custom_html_preview_document, defaults: { format: :html }
       end
     end
 
@@ -1317,6 +1322,7 @@ Rails.application.routes.draw do
     get "/r/:id/product_files", to: "url_redirects#download_product_files", as: :custom_domain_url_redirect_download_product_files
     get "/zip/:id", to: "url_redirects#download_archive", as: :custom_domain_url_redirect_download_archive
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :custom_domain_url_redirect_download_subtitle_file
+    get "/r/:id/:product_file_id/:subtitle_file_id/captions.vtt", to: "url_redirects#subtitle_file_vtt", as: :custom_domain_url_redirect_subtitle_file_vtt
     get "/s/:id", to: "url_redirects#stream", as: :custom_domain_url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :custom_domain_url_redirect_stream_page_for_product_file
 

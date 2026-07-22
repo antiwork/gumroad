@@ -75,14 +75,22 @@ class ScheduledPayout < ApplicationRecord
         )
 
         if payment.blank? || payment.failed?
-          error_detail = if payment_errors.present?
-            payment_errors.join(", ")
-          elsif payment&.failed?
-            payment.errors.full_messages.first || "Payment failed during preparation"
-          else
-            "No payable balance available"
+          # Real failures (validation errors from Payouts.create_payment, or a payment that
+          # failed during preparation) should still raise so the rescue below resets the
+          # scheduled payout to "pending" and it is retried.
+          raise "Payout failed: #{payment_errors.join(", ")}" if payment_errors.present?
+
+          if payment&.failed?
+            raise "Payout failed: #{payment.errors.full_messages.first || "Payment failed during preparation"}"
           end
-          raise "Payout failed: #{error_detail}"
+
+          # The user has no payable balance, so there is nothing to pay out. Retrying won't
+          # help: the daily ExecuteScheduledPayoutsJob would pick this record up again every
+          # day and fail the same way forever (raising resets the status to "pending" below).
+          # Instead, flag the scheduled payout so an admin reviews it once and cancels it or
+          # issues the payout manually if the balance situation changes.
+          update!(status: "flagged", executed_at: nil)
+          return :flagged
         end
 
         if StripePayoutProcessor.cross_border_payout?(payment)

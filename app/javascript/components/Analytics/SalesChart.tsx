@@ -1,5 +1,5 @@
 import * as React from "react";
-import { XAxis, YAxis, Bar, Line, Cell, Customized } from "recharts";
+import { XAxis, YAxis, Bar, Line, Cell } from "recharts";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
@@ -64,60 +64,47 @@ type DataPoint = {
   projectedTotals?: number;
 };
 
-// Internal chart state Recharts passes to a `Customized` child: each graphical item
-// (our bars and the totals line) with its computed pixel coordinates and axis scales.
-// Recharts doesn't export this type, so we describe just the parts we read.
-type FormattedGraphicalItem = {
-  item?: { props?: { dataKey?: unknown; yAxisId?: unknown } };
-  props?: {
-    points?: ({ x?: number; y?: number } | null)[];
-    yAxis?: { scale?: (value: number) => number };
-  };
-};
-
-// Draws the projected end-of-day overlay: a small, semi-transparent dotted horizontal
-// tick at the projected total, aligned with the totals line's last point. (An earlier
-// version drew a vertical dashed connector line capped with a circle; seller feedback
-// found that too visually busy, so it's now just the tick.) Rendered through Recharts'
-// `Customized` so we can reuse the pixel coordinates Recharts already computed for the
-// totals line's last point — `ReferenceLine`'s categorical `segment` resolution
-// produced NaN x-coordinates for this chart (duplicate/empty category labels), so we
-// draw the SVG primitives ourselves from known-good coordinates instead.
-const ProjectionOverlay = ({
-  formattedGraphicalItems,
-  projectedTotals,
-}: {
-  formattedGraphicalItems?: FormattedGraphicalItem[];
-  projectedTotals: number;
-}) => {
-  const totalsLine = formattedGraphicalItems?.find(
-    (graphicalItem) => graphicalItem.item?.props?.dataKey === "totals" && graphicalItem.item.props.yAxisId === "totals",
-  );
-  const lastPoint = totalsLine?.props?.points?.[totalsLine.props.points.length - 1];
-  const scale = totalsLine?.props?.yAxis?.scale;
-  if (!lastPoint || typeof scale !== "function") return null;
-  const { x, y } = lastPoint;
-  if (typeof x !== "number" || typeof y !== "number") return null;
-  const projectedY = scale(projectedTotals);
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(projectedY)) return null;
-  // A short horizontal tick centered on the totals line's last x-coordinate. Dotted +
-  // semi-transparent so it still reads as a projection rather than an actual data point.
-  const tickHalfWidth = 6;
+// Draws the projected end-of-day marker: a single semi-transparent circle at the
+// projected total, centered above today's data point. So on a partial day there are two
+// dots at today's x position — the solid dot on the totals line (booked so far) and this
+// faint one above it (projected end of day). Earlier treatments — a dashed connector
+// line, a dotted tick, and a shaded background bar — were all rejected by seller
+// feedback (the bar read as a count bar because bars in this chart mean views/sales,
+// not money; see https://github.com/antiwork/gumroad/issues/6048 and follow-ups).
+// Rendered as a custom shape on an invisible bar series so the circle inherits the
+// bar band's geometry — the y Recharts hands us is the projected value's pixel and the
+// band center is exactly today's x at any viewport width, which fixes the mobile drift
+// the old `Customized` overlay suffered from.
+const ProjectedDot = ({ x, y, width, height }: { x?: number; y?: number; width?: number; height?: number }) => {
+  // Recharts invokes the shape for every data point in the series; only today's point
+  // carries a projected value (a positive bar height) — skip the rest.
+  if (
+    x == null ||
+    y == null ||
+    width == null ||
+    height == null ||
+    ![x, y, width, height].every(Number.isFinite) ||
+    width <= 0 ||
+    height <= 0
+  )
+    return <g />;
   return (
-    <g>
-      <line
-        x1={x - tickHalfWidth}
-        x2={x + tickHalfWidth}
-        y1={projectedY}
-        y2={projectedY}
-        stroke="rgb(var(--accent))"
-        strokeOpacity={0.5}
-        strokeWidth={2}
-        strokeDasharray="2 2"
-        strokeLinecap="round"
-        data-testid="chart-projected-tick"
-      />
-    </g>
+    <circle
+      cx={x + width / 2}
+      cy={y}
+      // Scale the marker with the bar band so it stays subtle at narrow
+      // viewports. The solid dots on the totals line size themselves as
+      // ~band/7 (see lineProps in Chart.tsx); using the same proportion with
+      // a lower cap keeps this estimate marker visually quieter than the
+      // booked-total dot on every screen size. A fixed 4px radius previously
+      // dwarfed the shrunken line dots on mobile.
+      r={Math.min(width / 7, 4)}
+      fill="rgb(var(--accent))"
+      fillOpacity={0.5}
+      stroke="none"
+      pointerEvents="none"
+      data-testid="chart-projected-dot"
+    />
   );
 };
 
@@ -197,8 +184,8 @@ export const SalesChart = ({
   // When the range ends today (the backend labels the seller's current day — evaluated
   // in the seller's time zone — as "Today"), overlay a projected end-of-day total above
   // today's point: current total extrapolated by the fraction of the seller's day
-  // elapsed. Rendered as a dashed, semi-transparent extension so it clearly reads as an
-  // estimate, not booked revenue.
+  // elapsed. Rendered as a faint circle so it clearly reads as an estimate, not booked
+  // revenue.
   const lastDataPoint = dataPoints[dataPoints.length - 1];
   const projection = React.useMemo(() => {
     if (aggregateBy !== "daily" || endDate !== "Today" || !sellerTimeZone || !lastDataPoint) return null;
@@ -267,6 +254,23 @@ export const SalesChart = ({
           })
         }
       />
+      {/* Hidden second x-axis for the projected-dot series. Bar groups are laid out
+          per axis, so putting the projection series on its own axis lets it occupy the
+          full band — centered on the same x position as the actual stacked bar —
+          instead of being placed side by side with it. */}
+      {projection ? <XAxis xAxisId="projection" dataKey="label" hide /> : null}
+      {/* An invisible bar series whose custom shape draws only the projected-total
+          circle; using a bar (not a Line/Customized overlay) keeps the marker anchored
+          to today's band center at any viewport width. */}
+      {projection ? (
+        <Bar
+          dataKey="projectedTotals"
+          xAxisId="projection"
+          yAxisId="totals"
+          shape={ProjectedDot}
+          isAnimationActive={false}
+        />
+      ) : null}
       <Bar dataKey="sales" stackId="stack" className="fill-current" data-testid="chart-bar" />
       <Bar dataKey="viewsWithoutSales" stackId="stack" radius={[4, 4, 0, 0]} data-testid="chart-bar">
         {dataPoints.map((_, index) => (
@@ -274,25 +278,6 @@ export const SalesChart = ({
         ))}
       </Bar>
       <Line {...lineProps(dotRef, dataPoints.length)} dataKey="totals" yAxisId="totals" />
-      {projection ? (
-        <>
-          {/* Invisible series whose only purpose is to include the projected value in the
-              totals axis domain, so the overlay's dot never lands above the plot area
-              (this replaces ReferenceLine's ifOverflow="extendDomain" behavior). */}
-          <Line
-            dataKey="projectedTotals"
-            yAxisId="totals"
-            stroke="none"
-            dot={false}
-            activeDot={false}
-            isAnimationActive={false}
-          />
-          <Customized
-            key={`projection-${projection.projectedTotals}`}
-            component={<ProjectionOverlay projectedTotals={projection.projectedTotals} />}
-          />
-        </>
-      ) : null}
     </Chart>
   );
 };

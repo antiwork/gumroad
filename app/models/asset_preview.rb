@@ -8,10 +8,24 @@ class AssetPreview < ApplicationRecord
   DEFAULT_DISPLAY_WIDTH = 670
   RETINA_DISPLAY_WIDTH = (DEFAULT_DISPLAY_WIDTH * 1.5).to_i
 
+  # Upload limits for image covers. Without them, sellers could upload
+  # enormous images (a real case: six 254 MB, 18000x13500px PNGs) and every
+  # later page render that needed a resized variant would spend minutes
+  # downloading and processing them, blowing the 120-second request timeout
+  # and locking the seller out of their own product editor.
+  MAX_IMAGE_FILE_SIZE = 50.megabytes
+  # Covers render at most RETINA_DISPLAY_WIDTH (1005px) wide, so anything
+  # bigger than this is wasted pixels; images above the limit are resized
+  # down in the background (see resize_oversized_image!).
+  MAX_IMAGE_DIMENSION = 4096
+
   after_commit :invalidate_product_cache
   # Kick off poster-frame extraction right away so the poster is usually
   # ready by the time anyone views the product page.
   after_create_commit :enqueue_video_poster_generation
+  # Shrink too-large image covers in the background so variant generation on
+  # later renders stays fast.
+  after_create_commit :enqueue_oversized_image_resize
 
   # Update updated_at of product to regenerate the sitemap in RefreshSitemapMonthlyWorker
   belongs_to :link, touch: true, optional: true
@@ -22,6 +36,7 @@ class AssetPreview < ApplicationRecord
   validate :height_and_width_presence
   validate :duration_presence_for_video
   validate :max_preview_count, on: :create
+  validate :image_file_size_within_limit, on: :create
   validate :oembed_has_width_and_height
   validate :oembed_url_presence, on: :create, if: -> { oembed.present? }
   validates :link, presence: :true
@@ -100,6 +115,85 @@ class AssetPreview < ApplicationRecord
     Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
       file.variant(resize_to_limit: [retina_width, nil]).processed
     end
+  end
+
+  # True when the attached image is larger than covers ever render and should
+  # be shrunk in the background (see ResizeOversizedAssetPreviewWorker).
+  # GIFs are excluded: resizing can break animation, and they skip
+  # post-processing everywhere else too (see should_post_process?).
+  def oversized_image?
+    return false unless file.attached? && file.analyzed?
+    return false unless should_post_process?
+
+    width.to_i > MAX_IMAGE_DIMENSION || height.to_i > MAX_IMAGE_DIMENSION
+  end
+
+  # Replaces an oversized image cover with a copy resized down to
+  # MAX_IMAGE_DIMENSION on its longest side. Runs from
+  # ResizeOversizedAssetPreviewWorker, never on a web request: with very
+  # large originals (the motivating case was a 254 MB, 18000px-wide PNG) the
+  # download + resize takes long enough to blow the request timeout, which is
+  # exactly the failure this exists to prevent.
+  def resize_oversized_image!
+    return unless oversized_image?
+
+    # Remember which blob we are resizing. Resizing a huge original can take
+    # a while (that slowness is the whole reason this runs in a background
+    # job), and the cover can be replaced or deleted in the meantime. Without
+    # this check the job would attach its resized copy of the OLD image,
+    # silently clobbering the seller's newer cover.
+    source_blob_id = file.blob.id
+
+    resized = file.variant(resize_to_limit: [MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION]).processed
+
+    # Upload the resized copy to storage BEFORE taking the row lock, so the
+    # lock is never held across network I/O.
+    resized_blob = resized.blob.open do |tempfile|
+      ActiveStorage::Blob.create_and_upload!(
+        io: tempfile,
+        filename: file.filename,
+        content_type: file.content_type
+      )
+    end
+
+    attached_resized_copy = false
+    begin
+      # with_lock reloads the record, so the deleted flag below reflects what
+      # is in the database right now. Locking the asset_previews row alone is
+      # not quite enough, though: a write to the cover's attachment lands in
+      # the active_storage_attachments table without touching this record's
+      # lock. So we also take a row lock on the attachment itself — any
+      # concurrent update or delete of that attachment blocks until this
+      # transaction commits. That closes the window where a change could land
+      # between the blob check and the attach. (Today, "replacing" a cover
+      # actually creates a NEW asset_previews row and soft-deletes the old one
+      # via mark_deleted! — an update on this row, serialized by with_lock —
+      # so the attachment lock is defense in depth for any future path that
+      # re-attaches on an existing row.)
+      with_lock do
+        attachment = ActiveStorage::Attachment.lock.find_by(record: self, name: "file")
+        if !deleted? && attachment&.blob_id == source_blob_id
+          file.attach(resized_blob)
+          attached_resized_copy = true
+        end
+      end
+    ensure
+      # Two ways we can end up here without having attached the resized copy:
+      # the cover changed (or was deleted) while we were resizing, or
+      # something raised after the upload. Either way, clean up the resized
+      # blob instead of leaving it orphaned in storage — purge_later so a
+      # storage hiccup here can't mask an in-flight exception, and so Sidekiq
+      # retries of this job don't pile up one orphan per attempt.
+      resized_blob.purge_later unless attached_resized_copy
+    end
+
+    return unless attached_resized_copy
+
+    file.analyze
+
+    # Product page JSON caches the cover URLs and dimensions, so bust it now
+    # that they point at the resized copy.
+    link&.invalidate_cache
   end
 
   def display_type
@@ -302,6 +396,12 @@ class AssetPreview < ApplicationRecord
       GenerateVideoPosterWorker.perform_async(id)
     end
 
+    def enqueue_oversized_image_resize
+      return unless oversized_image?
+
+      ResizeOversizedAssetPreviewWorker.perform_async(id)
+    end
+
     def set_position
       previous = link.asset_previews.in_order.last
       if previous
@@ -321,6 +421,14 @@ class AssetPreview < ApplicationRecord
       return if deleted?
 
       errors.add(:base, "Sorry, we have a limit of #{Link::MAX_PREVIEW_COUNT} previews. Please delete an existing one before adding another.") if link.asset_previews.alive.count >= Link::MAX_PREVIEW_COUNT
+    end
+
+    def image_file_size_within_limit
+      return if deleted?
+      return unless file.attached? && file.image?
+      return if file.blob.byte_size.to_i <= MAX_IMAGE_FILE_SIZE
+
+      errors.add(:base, "Cover images must be smaller than #{MAX_IMAGE_FILE_SIZE / 1.megabyte} MB. Please resize or compress the image and try again.")
     end
 
     def valid_file_type?

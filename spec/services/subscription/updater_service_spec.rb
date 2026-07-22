@@ -253,6 +253,70 @@ describe Subscription::UpdaterService, :vcr do
             expect(@subscription.reload).not_to be_alive
           end
 
+          it "raises error when the subscription's stored card is unsupported even though the user's default card is supported" do
+            # Future recurring charges use `Subscription#credit_card_to_charge`, which
+            # prefers the subscription's own card — so a supported default card on the
+            # user must not let an unsupported subscription card through the gate.
+            paypal_credit_card = create(:credit_card, chargeable: build(:native_paypal_chargeable), user: @user)
+            @subscription.update!(credit_card: paypal_credit_card)
+
+            expect(@subscription).not_to receive(:send_restart_notifications!)
+            expect(@subscription).not_to receive(:resubscribe!)
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: existing_card_params,
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result[:success]).to eq false
+            expect(result[:error_message]).to eq "There is a problem with creator's PayPal account, please try again later (your card was not charged)."
+            expect(@subscription.reload).not_to be_alive
+          end
+
+          it "does not raise error when neither the subscription nor the user has a stored card" do
+            @subscription.update!(credit_card: nil)
+            @user.update!(credit_card: nil)
+
+            expect(@subscription).to receive(:send_restart_notifications!)
+
+            service = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: existing_card_params,
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            )
+            allow(service).to receive(:charge_user!).and_return({ success: true })
+
+            result = service.perform
+
+            expect(result[:success]).to eq true
+            expect(@subscription.reload).to be_alive
+          end
+
+          it "raises a non-PayPal error message when an unsupported stored card is not a PayPal card" do
+            # Simulate the creator no longer supporting the stored (Stripe) card.
+            allow_any_instance_of(User).to receive(:supports_card?).and_return(false)
+
+            expect(@subscription).not_to receive(:send_restart_notifications!)
+            expect(@subscription).not_to receive(:resubscribe!)
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: existing_card_params,
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result[:success]).to eq false
+            expect(result[:error_message]).to eq "The payment method saved on this membership is no longer supported by the creator. Please use a different payment method (your card was not charged)."
+            expect(@subscription.reload).not_to be_alive
+          end
+
           it "does not send email when charge user fails" do
             travel_to(@originally_subscribed_at + 3.months)
             @subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)

@@ -41,7 +41,7 @@ class UserPagesController < ApplicationController
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           #{SANDBOX_COMPAT_SCRIPT}
-          #{self.class.pages_tailwind_inline}
+          #{self.class.pages_tailwind_head}
         </head>
         <body>
           #{interpolated}

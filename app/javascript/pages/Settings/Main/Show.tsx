@@ -76,7 +76,7 @@ type MainPageProps = {
       fine_print_enabled: boolean;
       fine_print: string | null;
     };
-    product_level_support_emails: ProductLevelSupportEmail[] | null;
+    product_level_support_emails: ProductLevelSupportEmail[];
   };
 };
 
@@ -93,7 +93,7 @@ export default function MainPage() {
       support_email: props.user.support_email ?? "",
       tax_id: null,
       purchasing_power_parity_excluded_product_ids: props.user.purchasing_power_parity_excluded_product_ids,
-      product_level_support_emails: props.user.product_level_support_emails ?? [],
+      product_level_support_emails: props.user.product_level_support_emails,
     },
   });
 
@@ -338,14 +338,12 @@ export default function MainPage() {
             />
             <FieldsetDescription>This email is listed on the receipt of every sale.</FieldsetDescription>
           </Fieldset>
-          {props.user.product_level_support_emails !== null && (
-            <ProductLevelSupportEmailsForm
-              productLevelSupportEmails={form.data.user.product_level_support_emails}
-              products={props.user.products}
-              isDisabled={isFormDisabled}
-              onChange={handleProductLevelSupportEmailsChange}
-            />
-          )}
+          <ProductLevelSupportEmailsForm
+            productLevelSupportEmails={form.data.user.product_level_support_emails}
+            products={props.user.products}
+            isDisabled={isFormDisabled}
+            onChange={handleProductLevelSupportEmailsChange}
+          />
         </FormSection>
         <FormSection
           header={

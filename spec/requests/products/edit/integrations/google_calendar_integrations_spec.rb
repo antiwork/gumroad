@@ -12,7 +12,6 @@ describe("Product Edit Integrations edit - Google Calendar", type: :system, js: 
   before :each do
     @product = create(:call_product, user: seller)
     @vcr_cassette_prefix = "Product Edit Integrations edit"
-    Feature.activate(:google_calendar_link)
   end
 
   describe "google calendar integration" do
@@ -109,17 +108,6 @@ describe("Product Edit Integrations edit - Google Calendar", type: :system, js: 
 
         expect(ProductIntegration.first.deleted?).to eq(true)
         expect(@product.reload.live_product_integrations).to be_empty
-      end
-
-      it "does not show the checkbox when the feature flag is disabled" do
-        Feature.deactivate(:google_calendar_link)
-
-        visit edit_link_path(@product)
-
-        within_section "Integrations", section_element: :section do
-          expect(page).not_to have_field "Connect with Google Calendar to sync your calls"
-          expect(page).not_to have_button "Connect to Google Calendar"
-        end
       end
     end
   end

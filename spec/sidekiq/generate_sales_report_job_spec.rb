@@ -285,6 +285,113 @@ describe GenerateSalesReportJob do
     end
   end
 
+  describe "chargeback event-date attribution" do
+    let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day }
+
+    before do
+      @mock_service = double("ExpiringS3FileService")
+      allow(@mock_service).to receive(:perform).and_return("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/test-url")
+
+      product = create(:product, price_cents: 100_00, native_type: "digital")
+
+      # Sold in the quarter before the cutover's quarter; charged back post-cutover; dispute
+      # won two quarters after the sale. Each event must land in its own quarter's report.
+      @sale_time = cutover.beginning_of_quarter - 1.month
+      @event_time = cutover + 5.days
+      @won_time = cutover + 3.months
+
+      travel_to(@sale_time) do
+        @chargedback_purchase = create(:purchase, link: product, price_cents: 100_00, fee_cents: 30_00,
+                                                  gumroad_tax_cents: 20_00, total_transaction_cents: 120_00,
+                                                  country: "United Kingdom")
+
+        # A legacy chargeback (event before the cutover): keeps the historical drop.
+        @legacy_chargedback_purchase = create(:purchase, link: product, price_cents: 100_00, fee_cents: 30_00,
+                                                         gumroad_tax_cents: 20_00, total_transaction_cents: 120_00,
+                                                         country: "United Kingdom")
+      end
+
+      @legacy_chargedback_purchase.update!(chargeback_date: cutover - 10.days)
+      @chargedback_purchase.update!(chargeback_date: @event_time)
+
+      travel_to(@won_time) do
+        @chargedback_purchase.update!(chargeback_reversed: true)
+        create(:dispute, purchase: @chargedback_purchase, state: "won", won_at: Time.current)
+      end
+    end
+
+    def perform_and_parse(start_time, end_time)
+      csv_content = nil
+      expect(ExpiringS3FileService).to receive(:new) do |args|
+        csv_content = args[:file].read
+        args[:file].rewind
+        @mock_service
+      end
+
+      described_class.new.perform("GB", start_time.to_date, end_time.to_date, GenerateSalesReportJob::ALL_SALES)
+
+      CSV.parse(csv_content, headers: true)
+    end
+
+    it "keeps the event-dated chargeback's sale in the purchase quarter and drops only the legacy one" do
+      csv = perform_and_parse(@sale_time.beginning_of_quarter, @sale_time.end_of_quarter)
+
+      expect(csv.length).to eq(1)
+      expect(csv[0]["Sale ID"]).to eq(@chargedback_purchase.external_id)
+      expect(csv[0]["Price"]).to eq("10000") # gross — the clawback belongs to the event quarter
+    end
+
+    it "reports the chargeback as a negative row in the quarter the dispute was formalized" do
+      csv = perform_and_parse(@event_time.beginning_of_quarter, @event_time.end_of_quarter)
+
+      expect(csv.length).to eq(1)
+      row = csv[0]
+      expect(row["Sale ID"]).to eq(@chargedback_purchase.external_id)
+      expect(row["Sale time"]).to eq(@event_time.to_s)
+      expect(row["Price"]).to eq("-10000")
+      # The purchase factory recalculates fee_cents on build, so read the persisted value
+      # rather than hardcoding it.
+      expect(row["Gumroad Fee"]).to eq((-@chargedback_purchase.fee_cents_for_chargeback_reporting).to_s)
+      expect(row["GST"]).to eq("-2000")
+      expect(row["Total"]).to eq("-12000")
+    end
+
+    it "adds the won dispute back as a positive row in the quarter of won_at" do
+      csv = perform_and_parse(@won_time.beginning_of_quarter, @won_time.end_of_quarter)
+
+      expect(csv.length).to eq(1)
+      row = csv[0]
+      expect(row["Sale ID"]).to eq(@chargedback_purchase.external_id)
+      expect(row["Sale time"]).to eq(@won_time.to_s)
+      expect(row["Price"]).to eq("10000")
+      expect(row["Total"]).to eq("12000")
+    end
+
+    it "omits a chargeback fully refunded before the dispute, since nothing is left to claw back" do
+      fully_refunded = nil
+      travel_to(@sale_time) do
+        fully_refunded = create(:purchase, link: @chargedback_purchase.link, price_cents: 100_00, fee_cents: 30_00,
+                                           gumroad_tax_cents: 20_00, total_transaction_cents: 120_00,
+                                           country: "United Kingdom")
+        # Refund every amount (price, fee, tax, total) before the chargeback, so the dispute
+        # has nothing left to claw back and every *_for_chargeback_reporting value is zero.
+        create(:refund, purchase: fully_refunded,
+                        amount_cents: fully_refunded.price_cents,
+                        fee_cents: fully_refunded.fee_cents,
+                        gumroad_tax_cents: fully_refunded.gumroad_tax_cents,
+                        creator_tax_cents: fully_refunded.tax_cents,
+                        total_transaction_cents: fully_refunded.total_transaction_cents)
+      end
+      fully_refunded.update!(chargeback_date: @event_time)
+
+      csv = perform_and_parse(@event_time.beginning_of_quarter, @event_time.end_of_quarter)
+
+      ids = csv.map { |row| row["Sale ID"] }
+      expect(ids).to include(@chargedback_purchase.external_id) # a real clawback is still reported
+      expect(ids).not_to include(fully_refunded.external_id)    # zero clawback ⇒ no spurious all-zero row
+    end
+  end
+
   describe "#update_job_status_to_completed" do
     let(:job_attributes) do
       {

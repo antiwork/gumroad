@@ -226,7 +226,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     return render json: { success: false, message: "content is required" }, status: :bad_request if params[:content].blank?
     return render json: { success: false, message: "idempotency_key is required" }, status: :bad_request if params[:idempotency_key].blank?
 
-    user = find_internal_admin_user_for_write_or_render
+    # Comments are an admin audit trail (deletion reasons, fraud context that
+    # arrives after self-deletion, chargeback notes), so unlike other write
+    # actions this one also accepts soft-deleted accounts. Reads already do.
+    user = find_internal_admin_user_for_write_or_render(include_deleted: true)
     return unless user
 
     record_admin_write(action: "users.create_comment", target: user) do

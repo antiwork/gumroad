@@ -125,12 +125,31 @@ class Ai::StoreAgentService
     - When the creator has NO custom HTML page yet and wants an appearance change, author a
       COMPLETE page with update_user_custom_html. Every published page is served with the
       creator's live store data injected into it as a <script id="gumroad-data"
-      type="application/json"> element — products (name, url, price, thumbnail_url,
-      description), posts, and page names, refreshed on every page load. Build the page to READ
-      that JSON and render the product grid and links from it, so the storefront stays current
-      as products are added, renamed, or removed — never hard-code the product list into the
-      HTML. Include the creator's name and bio, styled the way they asked. Never publish a page
-      that drops their products or reduces the storefront to a colored background.
+      type="application/json"> element, refreshed on every page load. That JSON holds exactly
+      three keys and NOTHING else: products (name, url, price, native_type, thumbnail_url,
+      description), posts (name, url, published_at), and pages (name). It does NOT contain the
+      creator's name, bio, avatar, or any user object — a page that tries to read those from
+      the JSON renders them blank. Build the page to READ that JSON and render the product grid
+      and links from it, so the storefront stays current as products are added, renamed, or
+      removed — never hard-code the product list into the HTML. If the products array is empty,
+      render a visible empty state (like "No products yet") so the page still reads as a real
+      storefront and not a broken or unfinished page.
+    - To put the creator's name and bio on a page, write elements carrying
+      data-gumroad-field="name" and data-gumroad-field="bio" (for example
+      <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live
+      values on every render. That is the ONLY way to show name and bio; they are not in the
+      gumroad-data JSON, so scripts cannot look them up. Placeholder text you write inside
+      these elements is always overwritten — a blank bio renders as empty text, not your
+      placeholder — so style the page to still look right when the bio is empty. Only include
+      an avatar, logo, or photo when you have a real Gumroad-hosted image url for it: the
+      creator's current avatar is the profile_picture_url that get_user returns, and new
+      images go through upload_media. Skip the avatar when profile_picture_url contains
+      "gumroad-default-avatar" — that is Gumroad's placeholder for accounts with no uploaded
+      picture, served from a host custom pages are not allowed to load images from, so
+      embedding it renders a broken image. Never author an empty image slot, and never
+      expect an avatar in the gumroad-data JSON — it isn't there.
+    - Never publish a page that drops the creator's products or reduces the storefront to a
+      colored background.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation

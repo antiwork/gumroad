@@ -1,5 +1,18 @@
 import { StripeError } from "@stripe/stripe-js";
 
+// Client-side details about the wallet (Apple Pay / Google Pay) behind a tokenized
+// PaymentMethod. The billing address feeds checkout's tax-location logic — for wallet payments
+// the wallet sheet, not the checkout form, is the buyer's source of truth — and the type is
+// reported to the server for analytics.
+export type WalletPaymentMethodDetails = {
+  type: string;
+  billingAddress: {
+    country: string | null;
+    postal_code: string | null;
+    state: string | null;
+  } | null;
+};
+
 export type CardPaymentMethodParams = {
   status: "success";
   type: "card";
@@ -7,9 +20,15 @@ export type CardPaymentMethodParams = {
   stripe_payment_method_id: string;
   card_country: string | null;
   card_country_source: "stripe";
+  // Present only when the buyer paid with a wallet through the Payment Element. Omitted (never
+  // null) for card payments so spreading these params into server requests stays unchanged.
+  wallet?: WalletPaymentMethodDetails;
 };
 export type PaymentRequestPaymentMethodParams = {
   wallet_type: string;
+  // Payment Request Button params never carry Payment Element wallet details; declaring the
+  // key as always-undefined lets code handle the union of both param shapes type-safely.
+  wallet?: undefined;
   status: "success";
   type: "payment-request";
   reusable: false;

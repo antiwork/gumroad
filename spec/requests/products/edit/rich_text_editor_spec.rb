@@ -112,8 +112,6 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
   end
 
   it "shows a warning when switching to other tabs while images or files are still uploading" do
-    Feature.activate_user(:audio_previews, @product.user)
-
     visit edit_link_path(@product)
 
     rich_text_editor_input = find("[aria-label='Description']")
@@ -576,10 +574,6 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
   end
 
   describe "public files in the product description" do
-    before do
-      Feature.activate_user(:audio_previews, @product.user)
-    end
-
     it "uploads and embeds public audio files" do
       visit edit_link_path(@product)
 

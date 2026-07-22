@@ -2884,6 +2884,49 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["success"]).to be(false)
     end
 
+    it "creates a comment on a soft-deleted user" do
+      deleted_user = create(:user)
+      deleted_user.mark_deleted!
+
+      expect do
+        post :create_comment, params: { user_id: deleted_user.external_id, content: "Post-deletion fraud note", idempotency_key: idempotency_key }
+      end.to change { deleted_user.comments.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["user_id"]).to eq(deleted_user.external_id)
+      expect(response.parsed_body["comment"]).to include(
+        "content" => "Post-deletion fraud note",
+        "comment_type" => Comment::COMMENT_TYPE_NOTE
+      )
+      expect(deleted_user.comments.last.author_id).to eq(admin_user.id)
+    end
+
+    it "keeps idempotency behavior on a soft-deleted user" do
+      deleted_user = create(:user)
+      deleted_user.mark_deleted!
+
+      post :create_comment, params: { user_id: deleted_user.external_id, content: "Note", idempotency_key: idempotency_key }
+      first_id = response.parsed_body["comment"]["id"]
+
+      expect do
+        post :create_comment, params: { user_id: deleted_user.external_id, content: "Note", idempotency_key: idempotency_key }
+      end.not_to change { deleted_user.comments.count }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["comment"]["id"]).to eq(first_id)
+    end
+
+    it "still checks expected_email against a soft-deleted user's current email" do
+      deleted_user = create(:user, email: "deleted-seller@example.com")
+      deleted_user.mark_deleted!
+
+      post :create_comment, params: { user_id: deleted_user.external_id, expected_email: "someone-else@example.com", content: "Note", idempotency_key: idempotency_key }
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to eq({ success: false, message: "expected_email does not match the user's current email" }.as_json)
+    end
+
     include_examples "requires user_id for user mutation", :create_comment, extra_params: { content: "via user_id", idempotency_key: SecureRandom.uuid }
     include_examples "supports user lookup by user_id", :create_comment, extra_params: { content: "via user_id", idempotency_key: SecureRandom.uuid }
     include_examples "checks expected_email for user mutation", :create_comment, extra_params: { content: "via user_id", idempotency_key: SecureRandom.uuid }
@@ -2906,6 +2949,16 @@ describe Api::Internal::Admin::UsersController do
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "returns 404 for a soft-deleted user (write lookups stay alive-only)" do
+      user.mark_deleted!
+
+      post :mark_compliant, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+      expect(user.reload).to be_suspended_for_fraud
     end
 
     it "marks the user compliant and creates separate audit and note comments attributed to GUMROAD_ADMIN_ID" do

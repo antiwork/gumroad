@@ -136,7 +136,6 @@ describe ProductPresenter::ProductProps do
               },
               bundle_products: [],
               public_files: [],
-              audio_previews_enabled: false,
             },
             discount_code: {
               valid: true,
@@ -379,7 +378,6 @@ describe ProductPresenter::ProductProps do
               },
               bundle_products: [],
               public_files: [],
-              audio_previews_enabled: false,
             },
             discount_code: nil,
             purchase: {
@@ -508,6 +506,21 @@ describe ProductPresenter::ProductProps do
               variant: nil,
             },
           ]
+        )
+      end
+
+      it "aggregates the bundled products' ratings for the bundle's own ratings prop" do
+        first_bundled_product = bundle.bundle_products.in_order.first.product
+        second_bundled_product = bundle.bundle_products.in_order.second.product
+        create(:product_review, purchase: create(:purchase, link: first_bundled_product), rating: 5)
+        create(:product_review, purchase: create(:purchase, link: second_bundled_product), rating: 3)
+        bundle.reload
+
+        props = described_class.new(product: bundle).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+        expect(props[:product][:ratings]).to eq(
+          count: 2,
+          average: 4.0,
+          percentages: [0, 0, 50, 0, 50],
         )
       end
 
@@ -674,8 +687,6 @@ describe ProductPresenter::ProductProps do
       let!(:public_file3) { create(:public_file, :with_audio, deleted_at: 1.day.ago) }
 
       before do
-        Feature.activate_user(:audio_previews, product.user)
-
         public_file1.file.analyze
       end
 
@@ -683,7 +694,6 @@ describe ProductPresenter::ProductProps do
         props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product]
 
         expect(props[:public_files].sole).to eq(PublicFilePresenter.new(public_file: public_file1).props)
-        expect(props[:audio_previews_enabled]).to be(true)
       end
     end
 

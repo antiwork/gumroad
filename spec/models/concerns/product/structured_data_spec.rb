@@ -337,7 +337,7 @@ describe Product::StructuredData do
 
           context "with EPUB file" do
             let!(:epub_file) do
-              create(:non_readable_document, link: product, filetype: "epub")
+              create(:epub_product_file, link: product)
             end
 
             it "includes workExample for the EPUB" do
@@ -388,7 +388,7 @@ describe Product::StructuredData do
               create(:readable_document, link: product, filetype: "pdf", isbn: "978-3-16-148410-0")
             end
             let!(:epub_file) do
-              create(:non_readable_document, link: product, filetype: "epub", isbn: "978-0-306-40615-7")
+              create(:epub_product_file, link: product, isbn: "978-0-306-40615-7")
             end
 
             it "includes workExample for all book files" do

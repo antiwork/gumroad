@@ -42,18 +42,19 @@ describe Checkout::StripePaymentPresenter do
   end
 
   def card_element_fallback(reason, request_apple_pay_merchant_tokens: false)
-    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, elements_options: nil }
+    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, payment_element_wallets: false, elements_options: nil }
   end
 
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
+      payment_element_wallets:,
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency:,
@@ -65,12 +66,13 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
+      payment_element_wallets:,
       elements_options: {
         stripe_elements_mode:,
         currency: "usd",
@@ -197,6 +199,7 @@ describe Checkout::StripePaymentPresenter do
       fallback_reason: "buyer_currency_presentment_unsupported",
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
       elements_options: nil,
     )
   ensure
@@ -230,6 +233,7 @@ describe Checkout::StripePaymentPresenter do
       fallback_reason: "buyer_currency_presentment_unsupported",
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
       elements_options: nil,
     )
   ensure
@@ -261,6 +265,7 @@ describe Checkout::StripePaymentPresenter do
       fallback_reason: "buyer_currency_presentment_unsupported",
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
       elements_options: nil,
     )
   ensure
@@ -295,6 +300,7 @@ describe Checkout::StripePaymentPresenter do
       fallback_reason: "buyer_currency_presentment_unsupported",
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
       elements_options: nil,
     )
   ensure
@@ -361,6 +367,9 @@ describe Checkout::StripePaymentPresenter do
       fallback_reason: "buyer_currency_presentment_unsupported",
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
+      # CardElement fallbacks never mount a Payment Element, so the wallets-in-the-element
+      # rollout flag can't apply — this branch's presenter reports the surface as off.
+      payment_element_wallets: false,
       elements_options: nil,
     )
   ensure
@@ -932,6 +941,7 @@ describe Checkout::StripePaymentPresenter do
         fallback_reason: "buyer_currency_presentment_unsupported",
         disable_wallets: true,
         request_apple_pay_merchant_tokens: false,
+        payment_element_wallets: false,
         elements_options: nil,
       )
     ensure
@@ -959,6 +969,7 @@ describe Checkout::StripePaymentPresenter do
         fallback_reason: "buyer_currency_presentment_unsupported",
         disable_wallets: true,
         request_apple_pay_merchant_tokens: false,
+        payment_element_wallets: false,
         elements_options: nil,
       )
     ensure
@@ -1021,6 +1032,96 @@ describe Checkout::StripePaymentPresenter do
     it "does not request merchant tokens for an empty cart" do
       expect(stripe_payment_props)
         .to eq(card_element_fallback("empty_cart", request_apple_pay_merchant_tokens: false))
+    end
+  end
+
+  describe "Payment Element wallets flag" do
+    it "enables wallets on the Payment Element integration when the seller is flagged" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_props(payment_element_wallets: true))
+    end
+
+    it "enables wallets on the client-confirm integration when the seller is flagged" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props(payment_element_wallets: true))
+    end
+
+    it "never enables element wallets on the CardElement fallback, even when the seller is flagged" do
+      # CardElement carts (installment plans and other fallbacks) never mount a Payment Element,
+      # so there is no element wallet surface to enable — they keep the Payment Request Button.
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product, pay_in_installments: true)]))
+        .to eq(card_element_fallback("setup_or_installment_flow"))
+    end
+
+    it "keeps element wallets off when the cart disables wallets, even with the seller flagged" do
+      # The method-forced buyer-currency QA shape reaches client-confirm with disable_wallets:
+      # true (a wallet payment would charge through the canonical USD path while the cart shows
+      # buyer-currency totals). The constraint is server-owned: the props must never say both
+      # "wallets are disabled" and "render wallets in the element".
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::CAD,
+          }
+        )
+      ]
+
+      props = stripe_payment_props(add_products:)
+
+      expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
+      expect(props[:disable_wallets]).to be(true)
+      expect(props[:payment_element_wallets]).to be(false)
+    ensure
+      if seller
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+    end
+
+    it "does not enable wallets when the seller is not flagged" do
+      expect(stripe_payment_props(add_products: [flagged_seller_product]))
+        .to eq(payment_element_props(payment_element_wallets: false))
+    end
+
+    it "does not enable wallets when any seller in the cart is not flagged" do
+      # Seller-complete keying: turning the flag on for one seller must never change another
+      # seller's checkout.
+      flagged_seller = create(:user)
+      flagged = create(:product, user: flagged_seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, flagged_seller)
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, flagged_seller)
+      unflagged_seller = create(:user)
+      unflagged = create(:product, user: unflagged_seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, unflagged_seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(flagged), checkout_product_for(unflagged)]))
+        .to eq(payment_element_props(payment_element_wallets: false))
     end
   end
 end

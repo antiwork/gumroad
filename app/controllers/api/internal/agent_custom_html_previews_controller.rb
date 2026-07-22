@@ -4,8 +4,17 @@
 # hasn't confirmed yet. The confirmation card for edit_user_custom_html / update_user_custom_html
 # proposals otherwise shows only the raw find/replace markup — which sellers read as the agent
 # glitching rather than as a staged page edit. This endpoint computes the page as it WOULD look
-# after the change and returns the same sandboxed document the live /landing/embed endpoint
-# serves, so the card can render a real preview inside an opaque-origin iframe.
+# after the change — the same sandboxed document the live /landing/embed endpoint serves — so the
+# card can render a real preview inside an opaque-origin iframe.
+#
+# The computed document is staged in Redis and served back by URL (GET #show) rather than
+# returned inline for the card to render via iframe srcdoc: srcdoc documents inherit the
+# dashboard's CSP, whose script-src has no 'unsafe-inline', so every inline script in the
+# previewed page — including the seller's own scripts and our sandbox shim — would be silently
+# blocked. A page that renders itself client-side (say, a product grid built from the injected
+# gumroad-data JSON) would preview as broken while being perfectly correct. Only a real network
+# response can carry the custom-page CSP header that allows those scripts, exactly like the live
+# embed endpoint does.
 #
 # Nothing is written here: the edit is spliced into an in-memory copy of the current page under
 # the same exactly-once find-match rule the real edit endpoint enforces
@@ -18,10 +27,40 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
   before_action :authorize_store_agent
   after_action :verify_authorized
 
+  # How long a staged preview document stays retrievable. Generous on purpose: the confirmation
+  # card keeps its preview URL so "Review" on an already-acted-on card can re-show what the
+  # seller evaluated, and an applied edit can't be recomputed (its find-snippet no longer matches
+  # the page). After expiry that Review shows the "preview expired" notice below.
+  PREVIEW_DOCUMENT_TTL = 24.hours
+
+  # How many staged documents one seller can have outstanding at once. Documents run up to
+  # ~500 KB (Page::MAX_CUSTOM_HTML_LENGTH), so without a cap a seller scripting this endpoint
+  # could grow the shared Redis without bound. Staging past the cap evicts the seller's oldest
+  # staged documents — in real use a conversation has a handful of proposal cards, so the only
+  # previews old enough to be evicted belong to long-acted-on cards whose "Review" then shows
+  # the expired notice, same as after the TTL.
+  MAX_STAGED_PREVIEWS_PER_SELLER = 20
+
+  # What #show serves when the token is unknown or expired. A human-readable page rather than a
+  # JSON error because the requester is the preview iframe itself.
+  EXPIRED_PREVIEW_DOCUMENT = <<~HTML
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+      </head>
+      <body style="display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: system-ui, sans-serif; color: #666;">
+        <p>This preview has expired.</p>
+      </body>
+    </html>
+  HTML
+
   # POST /internal/agent/custom_html_preview
   # params: { endpoint: "edit_user_custom_html" | "update_user_custom_html",
   #           find:, replace:   (edit)  —or—  custom_html: (update) }
-  # Renders { success: true, html: <full sandboxed document> } or { success: false, error: }.
+  # Renders { success: true, preview_url: <GET #show URL for the staged document> } or
+  # { success: false, error: }.
   # Errors render as 200s with success: false — a proposal whose preview can't be computed (say,
   # the page changed under it) is an expected state the card shows inline, not a request failure.
   def create
@@ -43,15 +82,59 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
     document = profile_custom_html_document(
       Pages::Interpolator.interpolate_profile(display_html, profile: current_seller),
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(current_seller).to_json),
-      meta_csp: true,
       scroll_to_change:,
     )
-    render json: { success: true, html: document }
+    render json: { success: true, preview_url: stage_preview_document(document) }
+  end
+
+  # GET /internal/agent/custom_html_previews/:token
+  # Serves a document staged by #create, carrying the same CSP response header as the live
+  # /landing/embed endpoint so the previewed page's scripts actually run. The Redis key is scoped
+  # to the signed-in seller, so a token can never fetch another seller's staged preview.
+  def show
+    document = $redis.get(RedisKey.agent_custom_html_preview(current_seller.id, params[:token]))
+    apply_custom_html_response_headers
+    # The document is derived from a not-yet-applied proposal on the seller's account — never
+    # cacheable by shared proxies, and pointless to cache locally.
+    response.set_header("Cache-Control", "private, no-store")
+    if document
+      render html: document.html_safe, layout: false
+    else
+      render html: EXPIRED_PREVIEW_DOCUMENT.html_safe, layout: false, status: :not_found
+    end
   end
 
   private
     def authorize_store_agent
       authorize current_seller, :use_store_agent?
+    end
+
+    # Stores the computed document under an unguessable, seller-scoped token and returns the URL
+    # #show serves it from. Redis rather than Rails.cache because the latter is a :null_store in
+    # default development setups and its production namespace changes every deploy — both would
+    # break open preview cards for no reason.
+    #
+    # A per-seller list of staged tokens (newest first) enforces MAX_STAGED_PREVIEWS_PER_SELLER:
+    # every stage pushes its token and evicts the documents that fall off the end of the list.
+    def stage_preview_document(document)
+      token = SecureRandom.urlsafe_base64(24)
+      index_key = RedisKey.agent_custom_html_preview_index(current_seller.id)
+      $redis.set(RedisKey.agent_custom_html_preview(current_seller.id, token), document, ex: PREVIEW_DOCUMENT_TTL.to_i)
+      $redis.lpush(index_key, token)
+      # The index only needs to outlive the documents it tracks; refresh alongside every stage.
+      $redis.expire(index_key, PREVIEW_DOCUMENT_TTL.to_i)
+      # Read-what-you-trim atomically (MULTI): if the read and the trim were separate commands, a
+      # concurrent stage's lpush could land between them, shifting the list so the trim drops a
+      # token the read never saw — that document would stay in Redis untracked until its TTL,
+      # quietly weakening the storage cap.
+      evicted, _trimmed = $redis.multi do |transaction|
+        transaction.lrange(index_key, MAX_STAGED_PREVIEWS_PER_SELLER, -1)
+        transaction.ltrim(index_key, 0, MAX_STAGED_PREVIEWS_PER_SELLER - 1)
+      end
+      if evicted.any?
+        $redis.del(*evicted.map { |evicted_token| RedisKey.agent_custom_html_preview(current_seller.id, evicted_token) })
+      end
+      internal_agent_custom_html_preview_document_path(token)
     end
 
     # The preview for a proposal that unpublishes the custom page (a blank update, or an edit
@@ -60,7 +143,7 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
     # agents as a starting point — instead of treating a valid "remove the page" proposal as
     # an unpreviewable error (which would leave its Confirm button permanently disabled).
     def render_cleared_page_preview
-      render json: { success: true, html: Pages::DefaultProfileDocument.render(current_seller) }
+      render json: { success: true, preview_url: stage_preview_document(Pages::DefaultProfileDocument.render(current_seller)) }
     end
 
     # [resulting_html, marked_html, error]: the page as it would read after the proposed change
