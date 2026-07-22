@@ -27,13 +27,13 @@ describe User::SocialGoogle do
       expect(User.find_by(google_uid: @data["uid"])).to_not eq(nil)
     end
 
-    it "finds a user using google's uid payload" do
+    it "finds a user using google's uid payload and keeps their existing email" do
       created_user = create(:user, google_uid: @data_copy1["uid"])
+      original_email = created_user.email
       found_user = User.find_or_create_for_google_oauth2(@data_copy1)
 
       expect(found_user.id).to eq(created_user.id)
-      expect(created_user.reload.email).to eq(found_user.email)
-      expect(created_user.reload.email).to eq(@data_copy1["info"]["email"])
+      expect(created_user.reload.email).to eq(original_email)
     end
 
     it "finds a user using email when google's uid is missing and fills in uid" do
@@ -193,14 +193,21 @@ describe User::SocialGoogle do
   end
 
   describe ".query_google" do
-    describe "email change" do
-      it "sets email if the email coming from google is different" do
+    describe "email assignment" do
+      it "keeps the user's existing email on a returning sign-in even when Google reports a different address" do
         @user = create(:user, email: "spongebob@example.com")
 
-        expect { User.query_google(@user, @data) }.to change { @user.reload.email }.from("spongebob@example.com").to(@data["info"]["email"])
+        expect { User.query_google(@user, @data) }.not_to change { @user.reload.email }
       end
 
-      context "when the new email from Google already belongs to a different account" do
+      it "sets the email from Google when the account has no email yet" do
+        @user = create(:user)
+        @user.update_column(:email, nil)
+
+        expect { User.query_google(@user, @data) }.to change { @user.reload.email }.from(nil).to(@data["info"]["email"])
+      end
+
+      context "when the email from Google already belongs to a different account" do
         before do
           @user = create(:user, email: "old-address@example.com", google_uid: @data["uid"])
           @other_user = create(:user, email: @data["info"]["email"])

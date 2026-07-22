@@ -59,7 +59,7 @@ module User::SocialGoogle
             user = User.new
             user.provider = :google_oauth2
             user.password = Devise.friendly_token[0, 20]
-            query_google(user, data, new_user: true)
+            query_google(user, data)
 
             if user.email.present?
               Purchase.where(email: user.email, purchaser_id: nil).each do |past_purchase|
@@ -88,7 +88,7 @@ module User::SocialGoogle
       nil
     end
 
-    def query_google(user, data, new_user: false)
+    def query_google(user, data)
       return if data.blank? || data.is_a?(String)
 
       email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
@@ -101,22 +101,17 @@ module User::SocialGoogle
         user.name = sanitized_name
       end
 
-      # Always update user's email upon log in as it may have changed
-      # on google's side
-      # https://support.google.com/accounts/answer/19870?hl=en
-      #
-      # Exception: if the address Google now reports already belongs to a
-      # DIFFERENT Gumroad account, adopting it would fail the
-      # "An account already exists with this email." validation and the save!
-      # below would raise, locking the user out of Google sign-in entirely.
-      # In that case we keep the account's current email and let the user
-      # sign in as before. (New records skip this check — the caller already
-      # looked the user up by email, so a conflict there is a rare race and
-      # should still surface as a validation failure.)
-      if EmailFormatValidator.valid?(email) && user.email&.downcase != email.downcase
-        email_taken_by_another_account = user.persisted? && User.by_email(email).where.not(id: user.id).exists?
-        user.email = email unless email_taken_by_another_account
-      end
+      # Set the email from Google only when the account doesn't have one yet
+      # (i.e. at account creation), mirroring the Apple OAuth path. Returning
+      # sign-ins match the account by google_uid, so there is no need to keep
+      # the email in sync with Google: re-syncing on every login used to
+      # silently revert deliberate Gumroad email changes back to the Google
+      # address, and raised "An account already exists with this email."
+      # (locking the user out of Google sign-in) when the address Google
+      # reported was already taken by a different Gumroad account.
+      # The tradeoff: changing your primary email on Google's side no longer
+      # propagates to Gumroad — update it in Gumroad settings instead.
+      user.email = email if user.email.blank? && EmailFormatValidator.valid?(email)
 
       # Set user's avatar if they don't have one
       user.google_picture_url(data) unless user.avatar.attached?
