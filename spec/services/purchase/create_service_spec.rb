@@ -2416,6 +2416,19 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "but the seller has disabled gifting at checkout" do
+      it "returns a gifting-disabled error message and creates no gift" do
+        not_giftable = create(:product)
+        not_giftable.user.update!(gifting_disabled: true)
+
+        expect do
+          _, error = Purchase::CreateService.new(product: not_giftable, params: gift_params).perform
+
+          expect(error).to eq "The creator has disabled gifting for their products."
+        end.not_to change { Gift.count }
+      end
+    end
+
     context "but the gift fails to save" do
       it "returns an error message" do
         gift_params[:gift].merge!(giftee_email: nil, gifter_email: nil)

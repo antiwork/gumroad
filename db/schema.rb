@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000004) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2023,6 +2023,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
     t.index ["card_type", "card_visual", "created_at", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_date_fingerprint"
     t.index ["card_type", "card_visual", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_fingerprint"
     t.index ["created_at"], name: "index_purchases_on_created_at"
+    t.index ["email", "link_id"], name: "index_purchases_on_email_and_link_id", length: { email: 191 }
     t.index ["email"], name: "index_purchases_on_email_long", length: 191
     t.index ["full_name"], name: "index_purchases_on_full_name"
     t.index ["ip_address"], name: "index_purchases_on_ip_address"

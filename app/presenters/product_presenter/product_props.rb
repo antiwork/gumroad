@@ -13,7 +13,7 @@ class ProductPresenter::ProductProps
     @seller = product.user
   end
 
-  def props(seller_custom_domain_url:, request:, pundit_user:, recommended_by: nil, discount_code: nil, quantity: 1, layout: nil)
+  def props(seller_custom_domain_url:, request:, pundit_user:, recommended_by: nil, discount_code: nil, quantity: 1, layout: nil, purchase_id: nil, purchase_email_digest: nil)
     discount_code_result = discount_code_props(discount_code, quantity, pundit_user&.user)
     ppp_details = product.ppp_details(request.remote_ip)
     displayed_price_cents = displayed_price_cents(discount_code_result:, ppp_details:, quantity:)
@@ -79,7 +79,7 @@ class ProductPresenter::ProductProps
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
       },
       discount_code: discount_code_result,
-      purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),
+      purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid], purchase_id:, purchase_email_digest:)),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
       ) : [],

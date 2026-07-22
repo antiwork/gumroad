@@ -65,13 +65,15 @@ describe("Bundle page", type: :system, js: true) do
     let(:user) { create(:user) }
     let!(:url_redirect) { create(:url_redirect, purchase: create(:purchase, link: bundle, purchaser: user)) }
 
-    it "displays the existing purchase stack" do
+    it "displays the existing purchase stack with the review form" do
       login_as user
       visit bundle.long_url
 
       within_section "You've purchased this bundle" do
         expect(page).to have_link("View content", href: url_redirect.download_page_url)
-        expect(page).to_not have_text("Liked it? Give it a rating")
+        # Bundle buyers can now review the bundle itself (gumroad-private#1213),
+        # so the purchase stack shows the rating prompt like any other product.
+        expect(page).to have_text("Liked it? Give it a rating")
       end
     end
   end

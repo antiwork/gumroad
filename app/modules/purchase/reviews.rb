@@ -20,7 +20,6 @@ module Purchase::Reviews
         not_is_gift_sender_purchase.
         not_should_exclude_product_review.
         not_access_revoked_or_is_paid.
-        not_is_bundle_purchase.
         not_is_commission_completion_purchase
     }
   end
@@ -55,7 +54,6 @@ module Purchase::Reviews
       allowed &= chargeback_date.nil?
       allowed &= subscription_id.nil? || is_original_subscription_purchase? unless permit_recurring_charges
       allowed &= !is_access_revoked || paid?
-      allowed &= not_is_bundle_purchase
       allowed &= not_is_commission_completion_purchase
       allowed
     end

@@ -8,6 +8,14 @@ class AffiliatedProductsPresenter
 
   PER_PAGE = 20
 
+  # How long the expensive revenue/sales aggregates on this page are cached.
+  # These sums scan the user's entire affiliate_credits / purchases history on
+  # every page load (they were the two slowest queries in traced requests), but
+  # they only change when a new affiliate sale, refund, or chargeback lands —
+  # a few minutes of staleness on a dashboard stat is an acceptable trade for
+  # not re-scanning the tables on every request.
+  STATS_CACHE_TTL = 5.minutes
+
   def initialize(user, query: nil, page: nil, sort: nil)
     @user = user
     @query = query.presence
@@ -30,7 +38,32 @@ class AffiliatedProductsPresenter
     attr_reader :user, :query, :page, :sort
 
     def affiliated_products_data
-      pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE, overflow: :last_page)
+      # Pagy's default count for a grouped relation (COUNT(*) OVER ()) executes
+      # the full grouped join against affiliate_credits just to learn how many
+      # rows exist — for affiliates promoting many products that query took
+      # over a second in production traces. Instead, count the distinct
+      # grouping keys on the cheap un-grouped scope, which never touches
+      # affiliate_credits. The keys are the (link_id, affiliate_id) pair plus
+      # the same basis-points expression the grouped query groups by (the
+      # remaining GROUP BY columns are functionally dependent on the pair), so
+      # this matches the grouped row count even if duplicate affiliates_links
+      # rows for one pair slip past the model-level uniqueness validation,
+      # which is not backed by a unique database constraint.
+      #
+      # The basis-points expression is wrapped in COALESCE with a -1 sentinel
+      # because MySQL's multi-column COUNT(DISTINCT a, b, c) silently skips any
+      # tuple where one argument is NULL, while GROUP BY keeps a NULL key as
+      # its own group — without the wrapper, a pair whose basis-points columns
+      # are both NULL (they are nullable at the database level; presence is
+      # only enforced by model validations) would be dropped from the count
+      # and the last page could become unreachable. The || expression only
+      # ever evaluates to 0, 1, or NULL in MySQL, so -1 can never collide
+      # with a real value and the count stays in sync with the grouped rows.
+      count = affiliated_products_scope.distinct.count(
+        "affiliates_links.link_id, affiliates_links.affiliate_id, " \
+        "COALESCE(affiliates_links.affiliate_basis_points || affiliates.affiliate_basis_points, -1)"
+      )
+      pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE, overflow: :last_page, count:)
       records = records.map do |product|
         revenue = product.revenue || 0
         {
@@ -48,7 +81,7 @@ class AffiliatedProductsPresenter
 
     def stats
       {
-        total_revenue: user.affiliate_credits_sum_total,
+        total_revenue: cached_total_revenue,
         total_sales: user.affiliate_credits.count,
         # Count distinct products with a single SQL COUNT instead of executing
         # the full grouped affiliated-products query (which joins against
@@ -65,10 +98,34 @@ class AffiliatedProductsPresenter
       global_affiliate = user.global_affiliate
       {
         global_affiliate_id: global_affiliate&.external_id_numeric,
-        global_affiliate_sales: global_affiliate&.total_cents_earned_formatted,
+        global_affiliate_sales: cached_global_affiliate_sales(global_affiliate),
         cookie_expiry_days: GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS,
         affiliate_query_param: Affiliate::SHORT_QUERY_PARAM,
       }
+    end
+
+    # The lifetime affiliate revenue sum scans every affiliate_credits row for
+    # the user (with partial-refund adjustment joins) — the single slowest
+    # query on this page in production traces. Cache it briefly; see
+    # STATS_CACHE_TTL for why short staleness is fine here.
+    def cached_total_revenue
+      Rails.cache.fetch("affiliated_products/total_revenue/#{user.id}", expires_in: STATS_CACHE_TTL) do
+        user.affiliate_credits_sum_total
+      end
+    end
+
+    # Same idea for the global affiliate's lifetime earnings, which sums
+    # affiliate_credit_cents across all of the affiliate's paid purchases.
+    # Only the raw cents amount is cached — formatting also depends on the
+    # user's currency-display preference, which can change at any time, so it
+    # is applied fresh on every request rather than baked into the cache.
+    def cached_global_affiliate_sales(global_affiliate)
+      return nil if global_affiliate.nil?
+
+      cents = Rails.cache.fetch("affiliated_products/global_affiliate_earned_cents/#{global_affiliate.id}", expires_in: STATS_CACHE_TTL) do
+        global_affiliate.total_cents_earned
+      end
+      global_affiliate.total_cents_earned_formatted(cents)
     end
 
     # Base relation shared by the paginated product list and the stats count:

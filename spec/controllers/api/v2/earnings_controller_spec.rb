@@ -11,7 +11,6 @@ describe Api::V2::EarningsController do
   before do
     travel_to Time.new(2026, 4, 15)
     create(:user_compliance_info, user: seller)
-    Feature.activate_user(:tax_center, seller)
   end
 
   describe "GET 'show'" do
@@ -35,8 +34,9 @@ describe Api::V2::EarningsController do
         expect(response.body.strip).to be_empty
       end
 
-      it "returns 403 when tax_center is not enabled" do
-        Feature.deactivate_user(:tax_center, seller)
+      it "returns 403 when the seller is not US-based (tax center disabled)" do
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_singapore, user: seller)
         get :show, params: @params
 
         expect(response.status).to eq(403)

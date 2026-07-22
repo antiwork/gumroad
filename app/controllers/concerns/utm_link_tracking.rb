@@ -42,7 +42,17 @@ module UtmLinkTracking
         # links, so if we only searched "active" links here we could miss a disabled duplicate,
         # try to create a new link, and have the save fail — which used to surface as a 422
         # error on the buyer-facing page.
-        utm_link = UtmLink.alive.find_or_initialize_by(utm_params.merge(target_resource_type:, target_resource_id:))
+        #
+        # Order by id so the lookup is deterministic when duplicate alive links exist.
+        # Duplicates happen when two simultaneous first visits both insert the same link:
+        # MySQL's unique index can't stop that when a nullable column (utm_term, utm_content,
+        # target_resource_id) is NULL, because NULLs never conflict in unique indexes. Without
+        # an explicit order, alternating visits could split between the duplicate rows;
+        # always picking the oldest row keeps all stats accumulating on one link.
+        utm_link = UtmLink.alive
+          .where(utm_params.merge(target_resource_type:, target_resource_id:))
+          .order(:id)
+          .first_or_initialize
 
         # A disabled link means the seller intentionally paused tracking for these UTM
         # parameters — respect that and don't record the visit.
@@ -80,13 +90,13 @@ module UtmLinkTracking
       #     validation sees the winner's row and fails with "A link with similar UTM parameters
       #     already exists".
       #
-      # There is a third outcome this rescue cannot recover: MySQL unique indexes treat NULL
-      # values as non-conflicting, and this index includes nullable columns (utm_term,
-      # utm_content, target_resource_id), so two racers can BOTH insert successfully and leave
-      # duplicate alive rows. After that, every visit fails the uniqueness validation on the
-      # persisted link's save below — new_record? is false, so we correctly don't retry
-      # (retrying would fail identically) and just report. Cleaning up such duplicates needs a
-      # separate dedup pass; see https://github.com/antiwork/gumroad/issues/5989.
+      # There is a third outcome: MySQL unique indexes treat NULL values as non-conflicting,
+      # and this index includes nullable columns (utm_term, utm_content, target_resource_id),
+      # so two racers can BOTH insert successfully and leave duplicate alive rows. Visits keep
+      # working for such links — the lookup above deterministically picks the oldest duplicate,
+      # and the model only re-validates uniqueness when identifying fields change (not on
+      # click-timestamp updates). Merging the duplicate rows themselves is handled by the
+      # Onetime::DedupUtmLinks task; see https://github.com/antiwork/gumroad/issues/5989.
       #
       # In both recoverable cases the winning request has committed the link by the time we get here, so
       # retrying once lets this request find that link and still record the visit. For

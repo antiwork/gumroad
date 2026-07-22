@@ -11,6 +11,7 @@ const buildFile = (id: string, url: string | null): FileEntry => ({
   file_size: 1024,
   is_pdf: true,
   pdf_stamp_enabled: false,
+  hide_kindle_and_read_buttons: false,
   is_streamable: false,
   stream_only: false,
   is_transcoding_in_progress: false,

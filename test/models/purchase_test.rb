@@ -6512,10 +6512,12 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal false, purchase.eligible_for_review_reminder?
   end
 
-  test "#eligible_for_review_reminder? when purchase is a bundle purchase returns false" do
+  test "#eligible_for_review_reminder? when purchase is a bundle purchase returns true" do
+    # Bundle purchases can review the bundle itself (gumroad-private#1213),
+    # so bundle orders now get a review reminder pointing at the bundle.
     purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
     purchase.update!(is_bundle_purchase: true)
-    assert_equal false, purchase.eligible_for_review_reminder?
+    assert_equal true, purchase.eligible_for_review_reminder?
   end
 
   test "#eligible_for_review_reminder? when product review exists returns false" do
