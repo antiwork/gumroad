@@ -147,6 +147,13 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(buyer_country: "US", cart_product_currency: "inr").payment_method_types).not_to include("upi")
         end
 
+        it "retains launched UPI on a PPP-discounted INR checkout from India — region-locked methods pass the U13 matrix" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_upi, seller)
+
+          expect(resolve(buyer_country: "IN", cart_product_currency: "inr", ppp_discounted: true).payment_method_types).to include("upi")
+        end
+
         it "keeps a launched method off carts not priced in its forced currency, even in live mode" do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
           Feature.activate_user(:checkout_local_method_ideal, seller)
@@ -199,10 +206,10 @@ describe Checkout::PaymentMethodResolver do
     end
 
     context "with a recurring (subscription) lifecycle" do
-      it "disables Afterpay/Clearpay and Affirm in the eligible set" do
+      it "disables Afterpay/Clearpay, Affirm, and UPI in the eligible set — none support recurring or off-session collection" do
         eligible = resolve(recurring: true).eligible_payment_method_types
 
-        expect(eligible).not_to include("afterpay_clearpay", "affirm")
+        expect(eligible).not_to include("afterpay_clearpay", "affirm", "upi")
         expect(eligible).to include("card", "link")
       end
 
