@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000004) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2511,6 +2511,26 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
     t.datetime "updated_at", null: false
     t.integer "recent_sales_count", default: 0
     t.index ["taxonomy_id"], name: "index_taxonomy_stats_on_taxonomy_id"
+  end
+
+  create_table "tax_remittances", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "authority", null: false
+    t.string "jurisdiction", null: false
+    t.string "period", null: false
+    t.string "currency", limit: 3, null: false
+    t.bigint "target_amount_cents"
+    t.bigint "usd_amount_cents", null: false
+    t.string "rail", default: "wise", null: false
+    t.string "transfer_id"
+    t.string "status", default: "draft", null: false
+    t.datetime "paid_at"
+    t.string "qbo_journal_entry_ref"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["authority", "period"], name: "index_tax_remittances_on_authority_and_period", unique: true
+    t.index ["rail", "transfer_id"], name: "index_tax_remittances_on_rail_and_transfer_id"
+    t.index ["status", "period"], name: "index_tax_remittances_on_status_and_period"
   end
 
   create_table "team_invitations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
