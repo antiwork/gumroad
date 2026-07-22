@@ -58,6 +58,29 @@ describe OauthCompletionsController, :vcr do
       end
     end
 
+    context "when a team admin connects a Stripe account for a seller" do
+      let(:seller) { create(:user) }
+      let(:team_admin) { create(:user) }
+
+      before do
+        create(:team_membership, user: team_admin, seller:, role: TeamMembership::ROLE_ADMIN)
+        cookies.encrypted[:current_seller_id] = seller.id
+        sign_in team_admin
+        allow(Stripe::Account).to receive(:retrieve).with(auth_uid).and_return(
+          Stripe::Account.construct_from(id: auth_uid, default_currency: "usd", country: "US")
+        )
+      end
+
+      it "links the Stripe account to the seller in context" do
+        post :stripe
+
+        expect(seller.reload.stripe_connect_account).to be_present
+        expect(seller.stripe_connect_account.charge_processor_merchant_id).to eq(auth_uid)
+        expect(seller.check_merchant_account_is_linked).to be(true)
+        expect(team_admin.reload.stripe_connect_account).to be_nil
+      end
+    end
+
     context "when there are errors" do
       it "handles already connected Stripe accounts" do
         post :stripe
