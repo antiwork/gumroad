@@ -80,17 +80,19 @@ export type FolderItem = {
   type: "folder";
   id: string;
   name: string;
+  // Per-folder seller setting: start this folder open on the download page.
+  expanded_by_default?: boolean;
   children: FileItem[];
 };
 
 type Props = {
   content_items: (FileItem | FolderItem)[];
-  // Seller setting: when true, folders on the buyer download page start open so
-  // buyers see the files inside without having to click each folder first.
-  expand_folders?: boolean;
 };
-export const FileList = ({ content_items, expand_folders = false }: Props) => {
+export const FileList = ({ content_items }: Props) => {
   const [playingAudioForId, setPlayingAudioForId] = React.useState<null | string>(null);
+  // When the page has exactly one top-level folder, start it expanded so buyers
+  // aren't left staring at a single closed chevron hiding all the files.
+  const hasSingleTopLevelFolder = content_items.filter((item) => item.type === "folder").length === 1;
 
   const getFileRow = (file: FileItem) => (
     <FileRow
@@ -105,7 +107,11 @@ export const FileList = ({ content_items, expand_folders = false }: Props) => {
     <Rows role="tree" aria-label="Files">
       {content_items.map((item) =>
         item.type === "folder" ? (
-          <FolderRow key={`folder${item.id}`} folder={item} defaultExpanded={expand_folders}>
+          <FolderRow
+            key={`folder${item.id}`}
+            folder={item}
+            defaultExpanded={(item.expanded_by_default ?? false) || hasSingleTopLevelFolder}
+          >
             {item.children.map((file) => getFileRow(file))}
           </FolderRow>
         ) : (

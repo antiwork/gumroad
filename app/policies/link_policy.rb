@@ -74,7 +74,6 @@ class LinkPolicy < ApplicationPolicy
       :quantity_enabled,
       :should_show_sales_count,
       :hide_sold_out_variants,
-      :expand_download_folders,
       :custom_button_text_option,
       :custom_summary,
       :custom_view_content_button_text,

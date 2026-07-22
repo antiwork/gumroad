@@ -336,7 +336,6 @@ describe ProductPresenter do
             can_enable_quantity: true,
             should_show_sales_count: true,
             hide_sold_out_variants: false,
-            expand_download_folders: false,
             is_epublication: false,
             product_refund_policy_enabled: false,
             section_ids: [profile_section.external_id],
@@ -605,7 +604,6 @@ describe ProductPresenter do
               can_enable_quantity: false,
               should_show_sales_count: false,
               hide_sold_out_variants: false,
-              expand_download_folders: false,
               is_epublication: false,
               product_refund_policy_enabled: false,
               refund_policy: {
@@ -867,7 +865,6 @@ describe ProductPresenter do
               can_enable_quantity: true,
               should_show_sales_count: false,
               hide_sold_out_variants: false,
-              expand_download_folders: false,
               is_epublication: false,
               product_refund_policy_enabled: false,
               section_ids: [],

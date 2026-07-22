@@ -155,10 +155,6 @@ class UrlRedirectPresenter
       {
         license:,
         content_items: download_attributes[:content_items],
-        # Seller setting: start all folders in the file list open on the buyer
-        # download page. `product` is nil for some url redirects (e.g. installments),
-        # in which case we keep the default collapsed behavior.
-        expand_download_folders: product&.expand_download_folders? || false,
         rich_content_pages:,
         last_content_page_id: purchase&.last_content_page_id,
         posts: posts(rich_content_pages),
