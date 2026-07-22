@@ -163,6 +163,7 @@ describe UrlRedirectPresenter do
           rich_content_pages: nil,
           last_content_page_id: nil,
           content_items: [],
+          expand_download_folders: false,
           posts: [],
           video_transcoding_info: nil,
           custom_receipt: nil,
@@ -236,6 +237,14 @@ describe UrlRedirectPresenter do
 
       @purchase.update!(last_content_page_id: "page_abc123")
       expect(instance.download_page_with_content_props[:content][:last_content_page_id]).to eq("page_abc123")
+    end
+
+    it "includes 'expand_download_folders' in props, reflecting the product setting" do
+      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+      expect(instance.download_page_with_content_props[:content][:expand_download_folders]).to eq(false)
+
+      @product.update!(expand_download_folders: true)
+      expect(instance.download_page_with_content_props[:content][:expand_download_folders]).to eq(true)
     end
 
     it "includes 'discord' in props" do

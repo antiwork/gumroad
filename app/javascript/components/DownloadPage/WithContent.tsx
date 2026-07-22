@@ -91,6 +91,9 @@ export type ContentProps = {
   last_content_page_id: string | null;
   license: License | null;
   content_items: (FileItem | FolderItem)[];
+  // Seller setting ("Expand folders by default on the download page"): open all
+  // folders in the file list when the page loads instead of starting collapsed.
+  expand_download_folders: boolean;
   posts: Post[];
   video_transcoding_info: { transcode_on_first_sale: boolean } | null;
   custom_receipt: string | null;
@@ -310,7 +313,10 @@ export const WithContent = ({
                 </ContentFilesProvider>
               ) : null
             ) : content.content_items.length > 0 ? (
-              <DownloadFileList content_items={content.content_items} />
+              <DownloadFileList
+                content_items={content.content_items}
+                expand_folders={content.expand_download_folders}
+              />
             ) : null}
           </IsMobileAppViewProvider>
         </MediaUrlsProvider>

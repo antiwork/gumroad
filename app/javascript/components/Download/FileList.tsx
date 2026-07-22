@@ -83,8 +83,13 @@ export type FolderItem = {
   children: FileItem[];
 };
 
-type Props = { content_items: (FileItem | FolderItem)[] };
-export const FileList = ({ content_items }: Props) => {
+type Props = {
+  content_items: (FileItem | FolderItem)[];
+  // Seller setting: when true, folders on the buyer download page start open so
+  // buyers see the files inside without having to click each folder first.
+  expand_folders?: boolean;
+};
+export const FileList = ({ content_items, expand_folders = false }: Props) => {
   const [playingAudioForId, setPlayingAudioForId] = React.useState<null | string>(null);
 
   const getFileRow = (file: FileItem) => (
@@ -100,7 +105,7 @@ export const FileList = ({ content_items }: Props) => {
     <Rows role="tree" aria-label="Files">
       {content_items.map((item) =>
         item.type === "folder" ? (
-          <FolderRow key={`folder${item.id}`} folder={item}>
+          <FolderRow key={`folder${item.id}`} folder={item} defaultExpanded={expand_folders}>
             {item.children.map((file) => getFileRow(file))}
           </FolderRow>
         ) : (
@@ -111,8 +116,16 @@ export const FileList = ({ content_items }: Props) => {
   );
 };
 
-const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.ReactNode }) => {
-  const [isExpanded, setIsExpanded] = React.useState(false);
+const FolderRow = ({
+  folder,
+  children,
+  defaultExpanded = false,
+}: {
+  folder: FolderItem;
+  children: React.ReactNode;
+  defaultExpanded?: boolean;
+}) => {
+  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
 
   return (
     <Row role="treeitem" aria-expanded={isExpanded}>

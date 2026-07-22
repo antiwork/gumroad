@@ -447,6 +447,11 @@ export const ProductTab = () => {
                         : "Publicly show the number of sales on your product page"
                     }
                   />
+                  <Switch
+                    checked={product.expand_download_folders}
+                    onChange={(e) => updateProduct({ expand_download_folders: e.target.checked })}
+                    label="Expand folders by default on the download page"
+                  />
                   {product.native_type !== "physical" ? (
                     <Switch
                       checked={product.is_epublication}
