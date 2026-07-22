@@ -101,14 +101,17 @@ module User::SocialGoogle
         user.name = sanitized_name
       end
 
-      # Set the user's email from Google only when we don't already have one,
-      # i.e. at account creation. Sign-in is matched by google_uid, not email,
-      # so there's no need to re-sync it on later logins — and re-syncing would
-      # clobber a deliberate email change and could fail the "An account
-      # already exists with this email." validation, locking the user out of
-      # Google sign-in. This mirrors the Apple path, which assigns email only
-      # for new records.
-      user.email = email if user.email.blank? && EmailFormatValidator.valid?(email)
+      # Set the user's email from Google only for brand-new accounts. Returning
+      # sign-ins are matched by google_uid, not email, so there's no need to
+      # re-sync — and re-syncing would clobber a deliberate email change or, if
+      # Google now reports an address owned by another account, fail the
+      # "An account already exists with this email." validation and lock the
+      # user out of Google sign-in. We key off new_user rather than a blank
+      # email because provider-backed accounts are allowed to have no email
+      # (email_required? is false when a provider is set), so a blank email on a
+      # returning login must not adopt a conflicting address either. Mirrors the
+      # Apple path.
+      user.email = email if new_user && EmailFormatValidator.valid?(email)
 
       # Set user's avatar if they don't have one
       user.google_picture_url(data) unless user.avatar.attached?

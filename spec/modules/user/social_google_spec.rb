@@ -232,6 +232,20 @@ describe User::SocialGoogle do
         end
       end
 
+      context "when a persisted OAuth account has no email and Google reports one owned by another account" do
+        before do
+          @user = create(:user, provider: "google_oauth2", google_uid: @data["uid"], email: "")
+          @other_user = create(:user, email: @data["info"]["email"])
+        end
+
+        it "does not adopt the conflicting email or lock the user out" do
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          expect { User.query_google(@user, @data) }.not_to raise_error
+          expect(@user.reload.email).to be_blank
+        end
+      end
+
       context "when the email already exists in a different case" do
         before do
           @user = create(:user, email: @data["info"]["email"].upcase)
