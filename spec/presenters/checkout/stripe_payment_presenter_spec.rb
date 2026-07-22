@@ -728,6 +728,8 @@ describe Checkout::StripePaymentPresenter do
   end
 
   describe "method-forced test-mode QA surface (iDEAL/Bancontact)" do
+    let(:platform_merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
+
     def buyer_currency_seller_with_product(price_currency_type: "eur", price_cents: 1500)
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type:, price_cents:)
@@ -814,6 +816,22 @@ describe Checkout::StripePaymentPresenter do
           disable_wallets: true,
         )
       )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_ideal, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps the canonical USD element when the platform account has learned an EUR settlement mismatch" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_ideal, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      platform_merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props)
     ensure
       if seller
         Feature.deactivate_user(:checkout_local_method_ideal, seller)
