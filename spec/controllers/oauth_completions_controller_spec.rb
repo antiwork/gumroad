@@ -72,12 +72,18 @@ describe OauthCompletionsController, :vcr do
       end
 
       it "links the Stripe account to the seller in context" do
-        post :stripe
+        expect do
+          post :stripe
+        end.to change { seller.reload.comments.count }.by(1)
 
         expect(seller.reload.stripe_connect_account).to be_present
         expect(seller.stripe_connect_account.charge_processor_merchant_id).to eq(auth_uid)
         expect(seller.check_merchant_account_is_linked).to be(true)
         expect(team_admin.reload.stripe_connect_account).to be_nil
+        expect(seller.comments.last).to have_attributes(
+          author_id: team_admin.id,
+          content: "Stripe account connected by team admin #{team_admin.email}"
+        )
       end
     end
 

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class OauthCompletionsController < ApplicationController
+  include AuditsPayoutSettingsChanges
+
   before_action :authenticate_user!
 
   def stripe
@@ -54,6 +56,7 @@ class OauthCompletionsController < ApplicationController
 
     if merchant_account.active?
       merchant_account_owner.stripe_account&.delete_charge_processor_account!
+      log_payout_settings_update_by_non_owner("Stripe account connected") unless signing_in
       flash[:notice] = signing_in ? "You have successfully signed in with your Stripe account!" : "You have successfully connected your Stripe account!"
     else
       flash[:alert] = "There was an error connecting your Stripe account with Gumroad."
