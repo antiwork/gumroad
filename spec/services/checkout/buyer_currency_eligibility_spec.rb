@@ -299,6 +299,20 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(bancontact_decision.currency).to eq(Currency::EUR)
     end
 
+    it "allows UPI in INR" do
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision).to be_eligible
+      expect(upi_decision.currency).to eq(Currency::INR)
+    end
+
     it "does not depend on GeoIP buyer currency detection" do
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_raise("GeoIP must not be consulted in method-forced mode")
 
@@ -393,6 +407,14 @@ describe Checkout::BuyerCurrencyEligibility do
 
       expect(bancontact_decision).not_to be_eligible
       expect(bancontact_decision.fallback_reason).to eq(:method_not_launched)
+    end
+
+    it "does not let the UPI launch flag launch EUR methods in live mode" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      Feature.activate_user(:checkout_local_method_upi, seller)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:method_not_launched)
     end
 
     it "allows a card token from a forced-currency element in live mode when a method forcing that currency is launched" do
