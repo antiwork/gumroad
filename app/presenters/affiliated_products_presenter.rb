@@ -30,7 +30,15 @@ class AffiliatedProductsPresenter
     attr_reader :user, :query, :page, :sort
 
     def affiliated_products_data
-      pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE, overflow: :last_page)
+      # Pagy's default count for a grouped relation (COUNT(*) OVER ()) executes
+      # the full grouped join against affiliate_credits just to learn how many
+      # rows exist — for affiliates promoting many products that query took
+      # over a second in production traces. The grouped result has exactly one
+      # row per (link_id, affiliate_id) pair (every other GROUP BY column is
+      # functionally dependent on that pair), so we can count those pairs on
+      # the cheap un-grouped scope, which never touches affiliate_credits.
+      count = affiliated_products_scope.distinct.count("affiliates_links.link_id, affiliates_links.affiliate_id")
+      pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE, overflow: :last_page, count:)
       records = records.map do |product|
         revenue = product.revenue || 0
         {

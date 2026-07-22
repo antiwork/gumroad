@@ -276,6 +276,29 @@ describe AffiliatedProductsPresenter do
         expect(pagination[:page]).to eq(2)
         expect(pagination[:pages]).to eq(2)
       end
+
+      it "computes the pagination total without running the grouped affiliate_credits join" do
+        # The page total used to come from pagy's COUNT(*) OVER () on the full
+        # grouped relation, re-running the expensive affiliate_credits join a
+        # second time per request. The count now comes from a plain
+        # COUNT(DISTINCT link_id, affiliate_id) on the un-grouped scope, so no
+        # counting query should reference affiliate_credits.
+        counting_queries_with_credits_join = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          sql = payload[:sql]
+          if sql.match?(/\bCOUNT\b/i) && sql.include?("affiliate_credits") && !sql.include?("COUNT(DISTINCT affiliate_credits")
+            counting_queries_with_credits_join << sql
+          end
+        end
+
+        props = nil
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          props = described_class.new(affiliate_user).affiliated_products_page_props
+        end
+
+        expect(props[:pagination][:pages]).to eq(2)
+        expect(counting_queries_with_credits_join.grep(/OVER \(\)/)).to be_empty
+      end
     end
 
     context "when sorting" do
