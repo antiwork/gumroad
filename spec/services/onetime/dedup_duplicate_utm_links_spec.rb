@@ -33,11 +33,14 @@ describe Onetime::DedupDuplicateUtmLinks do
     let!(:keeper_visit) { create(:utm_link_visit, utm_link: keeper, browser_guid: "guid-a") }
     let!(:duplicate_visit) { create(:utm_link_visit, utm_link: duplicate, browser_guid: "guid-b") }
     let!(:duplicate_driven_sale) do
-      create(:utm_link_driven_sale, utm_link: duplicate, utm_link_visit: duplicate_visit)
+      purchase = create(:free_purchase, seller:, link: create(:product, user: seller, price_cents: 0))
+      create(:utm_link_driven_sale, utm_link: duplicate, utm_link_visit: duplicate_visit, purchase:)
     end
 
     before do
       duplicate.update_columns(first_click_at: 4.days.ago, last_click_at: 1.day.ago)
+      # Don't actually wait out the straggler grace period in specs.
+      allow_any_instance_of(described_class).to receive(:sleep)
     end
 
     it "does not change anything on a dry run" do
@@ -46,6 +49,24 @@ describe Onetime::DedupDuplicateUtmLinks do
       end.to not_change { duplicate.reload.deleted_at }
         .and not_change { duplicate_visit.reload.utm_link_id }
         .and not_change { keeper.reload.total_clicks }
+    end
+
+    it "sweeps up visits committed by requests that raced the merge and recounts the keeper" do
+      # Simulate a request that loaded the duplicate while it was still alive and
+      # committed its visit only after the merge transaction ran: inject the late visit
+      # during the grace-period wait, right before the straggler sweep.
+      late_visit = nil
+      allow_any_instance_of(described_class).to receive(:sleep) do
+        late_visit ||= create(:utm_link_visit, browser_guid: "guid-late").tap do
+          _1.update_column(:utm_link_id, duplicate.id)
+        end
+      end
+
+      described_class.process(dry_run: false)
+
+      expect(late_visit.reload.utm_link_id).to eq(keeper.id)
+      expect(keeper.reload.total_clicks).to eq(3)
+      expect(keeper.unique_clicks).to eq(3)
     end
 
     it "repoints visits and driven sales to the oldest link, merges click data, and soft-deletes the duplicate" do
