@@ -8,7 +8,8 @@
 # ATTEMPTS_WINDOW.
 class TransientEmailFailureRetry < ApplicationRecord
   SIGNUP_CONFIRMATION = "signup_confirmation"
-  MAIL_KINDS = [SIGNUP_CONFIRMATION].freeze
+  RECEIPT = "receipt"
+  MAIL_KINDS = [SIGNUP_CONFIRMATION, RECEIPT].freeze
 
   # Retry schedule: the Nth retry (indexed by the attempts counter at enqueue
   # time) is delayed by BACKOFF_SCHEDULE[N]. Spread out so a slow DNS

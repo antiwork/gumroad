@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000004) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000005) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2632,6 +2632,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000004) do
     t.text "last_reason"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "purchase_id"
+    t.bigint "charge_id"
     t.index ["email", "mail_kind"], name: "index_transient_email_failure_retries_on_email_and_mail_kind", unique: true
   end
 

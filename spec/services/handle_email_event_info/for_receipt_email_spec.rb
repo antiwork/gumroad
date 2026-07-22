@@ -452,5 +452,93 @@ describe HandleEmailEventInfo::ForReceiptEmail do
         expect(CustomerEmailInfo.count).to eq 0
       end
     end
+
+    describe "transient failure retries" do
+      let(:purchase) { create(:free_purchase) }
+      def sendgrid_params(event: "bounce", reason: "error dialing remote address: dial tcp 1.2.3.4:25: i/o timeout")
+        {
+          "_json" => [{
+            "email" => purchase.email,
+            "event" => event,
+            "reason" => reason,
+            "mailer_class" => "CustomerMailer",
+            "mailer_method" => "receipt",
+            "mailer_args" => "[#{purchase.id}]",
+            "purchase_id" => purchase.id.to_s,
+          }]
+        }
+      end
+
+      context "when a receipt bounces with a transient reason" do
+        it "schedules a retry pinned to the purchase" do
+          HandleSendgridEventJob.new.perform(sendgrid_params)
+
+          retry_record = TransientEmailFailureRetry.last
+          expect(retry_record.email).to eq(purchase.email)
+          expect(retry_record.mail_kind).to eq(TransientEmailFailureRetry::RECEIPT)
+          expect(retry_record.purchase_id).to eq(purchase.id)
+          expect(retry_record.charge_id).to be_nil
+          expect(retry_record.retry_in_flight).to eq(true)
+          expect(RetryTransientEmailFailureJob).to have_enqueued_sidekiq_job(retry_record.id).in(15.minutes)
+        end
+
+        it "still marks the email info as bounced" do
+          HandleSendgridEventJob.new.perform(sendgrid_params)
+
+          expect(CustomerEmailInfo.last.state).to eq("bounced")
+        end
+      end
+
+      context "when a receipt for a combined charge is blocked with a transient reason" do
+        let(:charge) { create(:charge, purchases: [purchase]) }
+
+        it "schedules a retry pinned to the charge" do
+          params = {
+            "_json" => [{
+              "email" => purchase.email,
+              "event" => "blocked",
+              "reason" => "451 Temporary local problem - please try later",
+              "mailer_class" => "CustomerMailer",
+              "mailer_method" => "receipt",
+              "mailer_args" => "[nil, #{charge.id}]",
+              "charge_id" => charge.id.to_s,
+            }]
+          }
+          HandleSendgridEventJob.new.perform(params)
+
+          retry_record = TransientEmailFailureRetry.last
+          expect(retry_record.mail_kind).to eq(TransientEmailFailureRetry::RECEIPT)
+          expect(retry_record.charge_id).to eq(charge.id)
+          expect(RetryTransientEmailFailureJob).to have_enqueued_sidekiq_job(retry_record.id).in(15.minutes)
+        end
+      end
+
+      context "when the failure reason is hard" do
+        it "does not schedule a retry" do
+          HandleSendgridEventJob.new.perform(sendgrid_params(reason: "550 5.1.1 The email account that you tried to reach does not exist"))
+
+          expect(RetryTransientEmailFailureJob.jobs).to be_empty
+          expect(TransientEmailFailureRetry.count).to eq(0)
+        end
+      end
+
+      context "when the failure reason is missing (Resend events carry none)" do
+        it "does not schedule a retry (fail-closed)" do
+          HandleSendgridEventJob.new.perform(sendgrid_params(reason: nil))
+
+          expect(RetryTransientEmailFailureJob.jobs).to be_empty
+        end
+      end
+
+      context "when the event is a delivery success" do
+        it "does not schedule a retry" do
+          params = sendgrid_params(event: "delivered", reason: nil)
+          params["_json"].first["timestamp"] = 1.hour.ago.to_i
+          HandleSendgridEventJob.new.perform(params)
+
+          expect(RetryTransientEmailFailureJob.jobs).to be_empty
+        end
+      end
+    end
   end
 end

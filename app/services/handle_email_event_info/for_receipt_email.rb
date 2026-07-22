@@ -26,9 +26,25 @@ class HandleEmailEventInfo::ForReceiptEmail
         Purchase.find_by(id: email_event_info.purchase_id)&.unsubscribe_buyer
       end
     end
+
+    # A receipt that failed with a TRANSIENT reason (receiving server timed
+    # out, greylisted, mailbox full) gets auto-retried instead of leaving the
+    # buyer's address silently suppressed — same mechanism as signup
+    # confirmations (see gumroad-private#1210). The scheduler classifies the
+    # reason fail-closed, so hard bounces keep today's behavior exactly.
+    schedule_transient_retry
   end
 
   private
+    def schedule_transient_retry
+      TransientEmailFailureRetryScheduler.perform(
+        email_event_info,
+        mail_kind: TransientEmailFailureRetry::RECEIPT,
+        purchase_id: email_event_info.purchase_id,
+        charge_id: email_event_info.charge_id
+      )
+    end
+
     # We create these records when sending emails so we shouldn't really need to create them again here.
     # However, this code needs to stay so as to support events which are triggered on emails which were sent before
     # the code to create these records was in place. From our investigation, we saw that we still receive events

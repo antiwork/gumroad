@@ -170,5 +170,96 @@ describe RetryTransientEmailFailureJob do
         described_class.new.perform(-1)
       end.not_to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
     end
+
+    describe "receipt retries" do
+      let(:purchase) { create(:free_purchase) }
+      let(:receipt_retry) do
+        TransientEmailFailureRetry.create!(
+          email: purchase.email,
+          mail_kind: TransientEmailFailureRetry::RECEIPT,
+          purchase_id: purchase.id,
+          attempts: 0,
+          retry_in_flight: true,
+          last_reason: "i/o timeout"
+        )
+      end
+
+      it "unsuppresses the address and re-enqueues the purchase receipt" do
+        suppression_manager = instance_double(EmailSuppressionManager)
+        expect(EmailSuppressionManager).to receive(:new).with(purchase.email).and_return(suppression_manager)
+        expect(suppression_manager).to receive(:remove_from_lists).with([:bounces, :blocks])
+
+        described_class.new.perform(receipt_retry.id)
+
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id)
+        receipt_retry.reload
+        expect(receipt_retry.attempts).to eq(1)
+        expect(receipt_retry.retry_in_flight).to eq(false)
+      end
+
+      it "re-sends the combined receipt when the retry is pinned to a charge" do
+        charge = create(:charge, purchases: [purchase])
+        record = TransientEmailFailureRetry.create!(
+          email: purchase.email,
+          mail_kind: TransientEmailFailureRetry::RECEIPT,
+          charge_id: charge.id,
+          retry_in_flight: true
+        )
+        suppression_manager = instance_double(EmailSuppressionManager, remove_from_lists: {})
+        allow(EmailSuppressionManager).to receive(:new).and_return(suppression_manager)
+
+        expect do
+          described_class.new.perform(record.id)
+        end.to have_enqueued_mail(CustomerMailer, :receipt).with(nil, charge.id)
+
+        expect(record.reload.attempts).to eq(1)
+      end
+
+      it "skips the resend and clears the claim when the purchase no longer exists" do
+        record = TransientEmailFailureRetry.create!(
+          email: purchase.email,
+          mail_kind: TransientEmailFailureRetry::RECEIPT,
+          purchase_id: -1,
+          retry_in_flight: true
+        )
+
+        expect(EmailSuppressionManager).not_to receive(:new)
+        described_class.new.perform(record.id)
+
+        record.reload
+        expect(record.attempts).to eq(0)
+        expect(record.retry_in_flight).to eq(false)
+        expect(SendPurchaseReceiptJob.jobs).to be_empty
+      end
+
+      it "skips the resend when the purchase's email has since been corrected to a different address" do
+        receipt_retry
+        purchase.update_column(:email, "corrected@example.com")
+
+        expect(EmailSuppressionManager).not_to receive(:new)
+        described_class.new.perform(receipt_retry.id)
+
+        receipt_retry.reload
+        expect(receipt_retry.attempts).to eq(0)
+        expect(receipt_retry.retry_in_flight).to eq(false)
+        expect(SendPurchaseReceiptJob.jobs).to be_empty
+      end
+
+      it "restores the in-flight claim and re-raises when the unsuppress call fails" do
+        receipt_retry
+        suppression_manager = instance_double(EmailSuppressionManager)
+        allow(EmailSuppressionManager).to receive(:new).and_return(suppression_manager)
+        allow(suppression_manager).to receive(:remove_from_lists).and_raise(StandardError.new("suppression API unavailable"))
+
+        expect do
+          described_class.new.perform(receipt_retry.id)
+        end.to raise_error(StandardError, "suppression API unavailable")
+
+        receipt_retry.reload
+        expect(receipt_retry.attempts).to eq(0)
+        expect(receipt_retry.retry_in_flight).to eq(true)
+        expect(SendPurchaseReceiptJob.jobs).to be_empty
+      end
+    end
   end
 end
