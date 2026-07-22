@@ -2870,6 +2870,89 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal license.serial, Purchase.purchase_info(nil, link, purchase)[:license_key]
   end
 
+  # --- per-variant license keys (#license_key / #create_license! / #uses_license_key?) ---
+
+  test "#create_license! creates a license for a licensed product with product-level content" do
+    product = create_product(is_licensed: true)
+    purchase = create_purchase(link: product)
+
+    purchase.create_license!
+    assert purchase.reload.license.present?
+    assert purchase.license_key.present?
+  end
+
+  test "#create_license! skips purchases of a variant whose per-variant content has no license-key block" do
+    product = create_product(is_licensed: true)
+    category = create_variant_category(link: product)
+    free_variant = create_variant(variant_category: category)
+    pro_variant = create_variant(variant_category: category)
+    create_rich_content(entity: free_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Free tier content" }] }])
+    create_rich_content(entity: pro_variant, description: [{ "type" => "licenseKey" }])
+
+    free_purchase = create_purchase(link: product, variant_attributes: [free_variant])
+    free_purchase.create_license!
+    assert_nil free_purchase.reload.license
+    assert_nil free_purchase.license_key
+
+    pro_purchase = create_purchase(link: product, variant_attributes: [pro_variant])
+    pro_purchase.create_license!
+    assert pro_purchase.reload.license.present?
+    assert pro_purchase.license_key.present?
+  end
+
+  test "#create_license! creates a license for variant purchases when the product uses product-level content" do
+    product = create_product(is_licensed: true, has_same_rich_content_for_all_variants: true)
+    category = create_variant_category(link: product)
+    variant = create_variant(variant_category: category)
+    create_rich_content(entity: product, description: [{ "type" => "licenseKey" }])
+
+    purchase = create_purchase(link: product, variant_attributes: [variant])
+    purchase.create_license!
+    assert purchase.reload.license.present?
+    assert purchase.license_key.present?
+  end
+
+  test "#create_license! creates a license for a purchase without variants on a licensed product" do
+    product = create_product(is_licensed: true)
+    category = create_variant_category(link: product)
+    variant = create_variant(variant_category: category)
+    create_rich_content(entity: variant, description: [{ "type" => "licenseKey" }])
+
+    purchase = create_purchase(link: product)
+    purchase.create_license!
+    assert purchase.reload.license.present?
+  end
+
+  test "#license_key hides an existing license for a variant whose content has no license-key block" do
+    product = create_product(is_licensed: true)
+    category = create_variant_category(link: product)
+    free_variant = create_variant(variant_category: category)
+    pro_variant = create_variant(variant_category: category)
+    create_rich_content(entity: free_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Free tier content" }] }])
+    create_rich_content(entity: pro_variant, description: [{ "type" => "licenseKey" }])
+
+    purchase = create_purchase(link: product, variant_attributes: [free_variant])
+    create_license(link: product, purchase:)
+    assert_nil purchase.reload.license_key
+  end
+
+  test "#uses_license_key? is false when the product is not licensed" do
+    product = create_product(is_licensed: false)
+    purchase = create_purchase(link: product)
+    assert_equal false, purchase.uses_license_key?
+  end
+
+  test "#uses_license_key? is true for a variant with no rich content at all on a licensed product" do
+    product = create_product(is_licensed: true)
+    category = create_variant_category(link: product)
+    bare_variant = create_variant(variant_category: category)
+    licensed_variant = create_variant(variant_category: category)
+    create_rich_content(entity: licensed_variant, description: [{ "type" => "licenseKey" }])
+
+    purchase = create_purchase(link: product, variant_attributes: [bare_variant])
+    assert_equal true, purchase.uses_license_key?
+  end
+
   test "#purchase_info returns should_show_receipt as true if purchase is a received gift" do
     link, _purchase = setup_purchase_info_context
     purchase = create_purchase(is_gift_receiver_purchase: true, purchase_state: "gift_receiver_purchase_successful")

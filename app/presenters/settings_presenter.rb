@@ -541,8 +541,7 @@ class SettingsPresenter
 
     def aus_backtax_details(user_compliance_info)
       {
-        show_au_backtax_prompt: Feature.active?(:au_backtaxes, seller) &&
-          seller.au_backtax_owed_cents >= User::MIN_AU_BACKTAX_OWED_CENTS_FOR_CONTACT &&
+        show_au_backtax_prompt: seller.au_backtax_owed_cents >= User::MIN_AU_BACKTAX_OWED_CENTS_FOR_CONTACT &&
           AustraliaBacktaxEmailInfo.where(user_id: seller.id).exists?,
         total_amount_to_au: Money.new(seller.au_backtax_sales_cents).format(no_cents_if_whole: false, symbol: true),
         au_backtax_amount: Money.new(seller.au_backtax_owed_cents).format(no_cents_if_whole: false, symbol: true),

@@ -670,8 +670,7 @@ describe SettingsPresenter do
       expect(countries).to have_key("US")
     end
 
-    it "shows the AU backtax prompt when the feature is on and the creator owes more than $100 and the creator has received an email" do
-      Feature.activate_user(:au_backtaxes, seller)
+    it "shows the AU backtax prompt when the creator owes more than $100 and the creator has received an email" do
       seller.update!(au_backtax_owed_cents: 100_01)
       create(:australia_backtax_email_info, user: seller)
 
@@ -684,7 +683,6 @@ describe SettingsPresenter do
     end
 
     it "does not show the AU backtax prompt when the creator owes less than $100" do
-      Feature.activate_user(:au_backtaxes, seller)
       seller.update!(au_backtax_owed_cents: 99_00)
       create(:australia_backtax_email_info, user: seller)
 
@@ -1222,7 +1220,19 @@ describe SettingsPresenter do
         create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
       end
 
-      it "exposes false so the section is hidden from team admins who lack :update? on payments" do
+      it "exposes true because team admins can now manage payout settings, including beneficial owners" do
+        expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(true)
+      end
+    end
+
+    context "when the logged-in user is a support team member for the seller" do
+      let(:user) { create(:user) }
+
+      before do
+        create(:team_membership, user:, seller:, role: TeamMembership::ROLE_SUPPORT)
+      end
+
+      it "exposes false so the section is hidden from roles without :update? on payments" do
         expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(false)
       end
     end

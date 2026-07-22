@@ -25,6 +25,19 @@ module User::EmailNormalization
     def abusive_gmail_variant_exists?(email)
       GmailAbuseFilter.exists?(email)
     end
+
+    # True when a save failed because one of the signup fraud gates rejected the
+    # account (blocked email domain, blocked signup IP, or a gmail variant of a
+    # suspended account — all of them add a :blocked_signup error on :base with
+    # the deliberately vague "Something went wrong." message). Callers that
+    # rescue ActiveRecord::RecordInvalid (e.g. the OAuth signup paths) use this
+    # to tell an expected fraud-gate rejection apart from a real bug, so only
+    # the latter alerts Sentry.
+    def blocked_signup_error?(exception)
+      exception.respond_to?(:record) &&
+        exception.record.present? &&
+        exception.record.errors.of_kind?(:base, :blocked_signup)
+    end
   end
 
   def add_to_gmail_abuse_filter
@@ -41,6 +54,6 @@ module User::EmailNormalization
       return if Feature.inactive?(:block_gmail_abuse_at_signup)
       return if !User.abusive_gmail_variant_exists?(email)
 
-      errors.add(:base, "Something went wrong.")
+      errors.add(:base, :blocked_signup, message: "Something went wrong.")
     end
 end

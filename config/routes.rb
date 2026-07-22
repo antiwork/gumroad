@@ -473,6 +473,7 @@ Rails.application.routes.draw do
       # for SEO.
       resources :articles, only: [:index, :show], param: :slug, path: "article"
       resources :categories, only: [:show], param: :slug, path: "category"
+      resource :contact, only: [:create], controller: "contacts"
     end
 
     get "/ifttt/v1/status" => "api/v2/users#ifttt_status"

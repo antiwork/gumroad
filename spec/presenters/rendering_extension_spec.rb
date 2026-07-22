@@ -135,7 +135,7 @@ describe "RenderingExtension" do
                     create: true,
                   },
                   utm_link: {
-                    index: false,
+                    index: true,
                   },
                   community: {
                     index: false,

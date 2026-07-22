@@ -135,6 +135,48 @@ describe User::SocialGoogle do
 
       expect(result).to be_nil
     end
+
+    context "when the gmail-abuse signup gate blocks the email" do
+      before do
+        Feature.activate(:block_gmail_abuse_at_signup)
+        GmailAbuseFilter.add!("scammer@gmail.com")
+      end
+
+      after do
+        Feature.deactivate(:block_gmail_abuse_at_signup)
+        $redis.del(GmailAbuseFilter::REDIS_KEY)
+      end
+
+      it "returns nil without alerting Sentry (expected fraud-control rejection)" do
+        blocked_data = @data.deep_dup
+        blocked_data["uid"] = "google-gmail-abuse-blocked-uid"
+        blocked_data["info"]["email"] = "scammer+variant@gmail.com"
+        blocked_data["extra"]["raw_info"]["email"] = "scammer+variant@gmail.com"
+
+        allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        result = User.find_or_create_for_google_oauth2(blocked_data)
+
+        expect(result).to be_nil
+        expect(User.find_by(google_uid: blocked_data["uid"])).to be_nil
+      end
+    end
+
+    it "still alerts Sentry for RecordInvalid raised by other validations" do
+      invalid_data = @data.deep_dup
+      invalid_data["uid"] = "google-other-invalid-uid"
+      invalid_data["info"]["email"] = "not-an-email"
+      invalid_data["extra"]["raw_info"]["email"] = "not-an-email"
+
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+      allow_any_instance_of(User).to receive(:save!).and_raise(ActiveRecord::RecordInvalid.new(User.new.tap { |u| u.errors.add(:base, "some other failure") }))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordInvalid))
+
+      result = User.find_or_create_for_google_oauth2(invalid_data)
+
+      expect(result).to be_nil
+    end
   end
 
   describe ".google_picture_url", :vcr do
