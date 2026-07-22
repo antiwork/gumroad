@@ -157,6 +157,12 @@ export type Product = {
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
+  // External ids of variants / content pages the seller explicitly deleted in
+  // this editor session (via the respective confirmation modals). Sent with the
+  // save payload so the server can tell an intentional deletion apart from a
+  // stale payload that would otherwise silently wipe content.
+  confirmed_removed_variant_ids?: string[];
+  confirmed_removed_rich_content_ids?: string[];
 } & (
   | { native_type: "call"; variants: Duration[] }
   | { native_type: "membership"; variants: Tier[] }

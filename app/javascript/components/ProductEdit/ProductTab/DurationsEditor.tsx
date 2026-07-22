@@ -30,8 +30,19 @@ export const DurationsEditor = ({
     onChange(durations.map((duration) => (duration.id === id ? { ...duration, ...update } : duration)));
   };
 
+  const { updateProduct } = useProductEditContext();
   const [deletionModalDurationId, setDeletionModalDurationId] = React.useState<string | null>(null);
   const deletionModalDuration = durations.find(({ id }) => id === deletionModalDurationId);
+
+  // Records that the seller explicitly confirmed removing this duration, so the
+  // server-side wipe guard allows deleting it even if it still has content.
+  const confirmRemoval = (duration: Duration) => {
+    if (!duration.newlyAdded)
+      updateProduct((product) => {
+        product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), duration.id];
+      });
+    onChange(durations.filter(({ id }) => id !== duration.id));
+  };
 
   const addButton = (
     <Button
@@ -78,10 +89,7 @@ export const DurationsEditor = ({
           footer={
             <>
               <Button onClick={() => setDeletionModalDurationId(null)}>No, cancel</Button>
-              <Button
-                color="accent"
-                onClick={() => onChange(durations.filter(({ id }) => id !== deletionModalDuration.id))}
-              >
+              <Button color="accent" onClick={() => confirmRemoval(deletionModalDuration)}>
                 Yes, remove
               </Button>
             </>

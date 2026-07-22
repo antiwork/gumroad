@@ -517,7 +517,12 @@ class UrlRedirect < ApplicationRecord
 
     def product_or_cheapest_variant_as_rich_content_provider(entity)
       product = entity.is_a?(BaseVariant) ? entity.link : entity
-      return product if product.is_physical? || product.has_same_rich_content_for_all_variants? || product.rich_content_json.present? || product.alive_variants.none?
+      # A product-level page that is just an empty placeholder (a blank paragraph
+      # the editor can leave behind) must not count as "the product has its own
+      # content" — that would show buyers a single blank page instead of falling
+      # through to the content-bearing variant.
+      has_product_level_content = product.alive_rich_contents.any?(&:has_editor_content?)
+      return product if product.is_physical? || product.has_same_rich_content_for_all_variants? || has_product_level_content || product.alive_variants.none?
 
       product.alive_variants.order(price_difference_cents: :asc).first
     end

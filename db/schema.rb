@@ -115,10 +115,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
     t.integer "affiliate_id"
     t.bigint "fee_cents", default: 0, null: false
     t.index ["affiliate_credit_chargeback_balance_id"], name: "idx_affiliate_credits_on_affiliate_credit_chargeback_balance_id"
-    t.index ["affiliate_user_id", "affiliate_credit_refund_balance_id", "affiliate_credit_chargeback_balance_id", "affiliate_credit_success_balance_id", "amount_cents"], name: "idx_affiliate_credits_on_user_and_balances_and_amount"
     t.index ["affiliate_credit_refund_balance_id"], name: "index_affiliate_credits_on_affiliate_credit_refund_balance_id"
     t.index ["affiliate_credit_success_balance_id"], name: "index_affiliate_credits_on_affiliate_credit_success_balance_id"
     t.index ["affiliate_id"], name: "index_affiliate_credits_on_affiliate_id"
+    t.index ["affiliate_user_id", "affiliate_credit_refund_balance_id", "affiliate_credit_chargeback_balance_id", "affiliate_credit_success_balance_id", "amount_cents"], name: "idx_affiliate_credits_on_user_and_balances_and_amount"
     t.index ["affiliate_user_id"], name: "index_affiliate_credits_on_affiliate_user_id"
     t.index ["link_id"], name: "index_affiliate_credits_on_link_id"
     t.index ["oauth_application_id"], name: "index_affiliate_credits_on_oauth_application_id"

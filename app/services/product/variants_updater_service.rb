@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -9,10 +9,21 @@ class Product::VariantsUpdaterService
            :variant_categories_alive,
            :skus, to: :product
 
-  def initialize(product:, variants_params:, skus_params: {})
+  # confirmed_removed_variant_ids: external ids of variants the seller explicitly
+  # deleted in the editor (via the "Remove version" confirmation). Deleting a
+  # variant that still has content (rich content pages or files) is only allowed
+  # when its id is in this list — this protects sellers from a stale editor
+  # session submitting an outdated variant list and silently wiping their whole
+  # version tree (it happened three times in one week on a single product).
+  # payload_page_ids / confirmed_removed_rich_content_ids feed the analogous
+  # guard for page deletions (Product::RichContentDeletionGuard).
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [])
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
+    @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
+    @payload_page_ids = Array.wrap(payload_page_ids)
+    @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
   end
 
   def perform
@@ -24,7 +35,10 @@ class Product::VariantsUpdaterService
     variants_params.each do |category|
       variant_category_updater = Product::VariantCategoryUpdaterService.new(
         product:,
-        category_params: category
+        category_params: category,
+        confirmed_removed_variant_ids:,
+        payload_page_ids:,
+        confirmed_removed_rich_content_ids:
       )
       variant_category = variant_category_updater.perform
       keep_categories << variant_category if category[:id].present?
@@ -32,7 +46,14 @@ class Product::VariantsUpdaterService
 
     categories_to_delete = existing_categories - keep_categories
     categories_to_delete.each do |variant_category|
-      variant_category.mark_deleted! unless variant_category.has_alive_grouping_variants_with_purchases?
+      next if variant_category.has_alive_grouping_variants_with_purchases?
+
+      Product::VariantCategoryUpdaterService.ensure_deletion_intent!(
+        product:,
+        variants: variant_category.alive_variants.to_a,
+        confirmed_removed_variant_ids:
+      )
+      variant_category.mark_deleted!
     end
 
     begin

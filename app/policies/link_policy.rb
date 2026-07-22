@@ -146,6 +146,8 @@ class LinkPolicy < ApplicationPolicy
       section_ids: [],
       tags: [],
       rich_content:,
+      confirmed_removed_variant_ids: [],
+      confirmed_removed_rich_content_ids: [],
       files: [:id, :display_name, :description, :folder_id, :size, :position, :url, :isbn,
               :extension, :stream_only, :pdf_stamp_enabled, :modified, subtitle_files: [:url, :language], thumbnail: [:signed_id]],
       call_limitation_info: [:minimum_notice_in_minutes, :maximum_calls_per_day],

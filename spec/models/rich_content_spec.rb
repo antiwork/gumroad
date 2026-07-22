@@ -280,4 +280,37 @@ describe RichContent do
       )
     end
   end
+
+  describe "#has_editor_content?" do
+    let(:product) { create(:product) }
+
+    it "returns false for an empty description" do
+      expect(create(:rich_content, entity: product, description: []).has_editor_content?).to be(false)
+    end
+
+    it "returns false for the editor's blank placeholder (a single bare paragraph)" do
+      rich_content = create(:rich_content, entity: product, description: [{ "type" => "paragraph" }])
+      expect(rich_content.has_editor_content?).to be(false)
+    end
+
+    it "returns false for empty paragraphs and headings" do
+      rich_content = create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [] }, { "type" => "heading" }])
+      expect(rich_content.has_editor_content?).to be(false)
+    end
+
+    it "returns true when a node has text" do
+      rich_content = create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }])
+      expect(rich_content.has_editor_content?).to be(true)
+    end
+
+    it "returns true for content-bearing leaf nodes like file embeds" do
+      rich_content = create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => "abc", "uid" => "def" } }])
+      expect(rich_content.has_editor_content?).to be(true)
+    end
+
+    it "returns true when content is nested inside containers" do
+      rich_content = create(:rich_content, entity: product, description: [{ "type" => "orderedList", "content" => [{ "type" => "listItem", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Item" }] }] }] }])
+      expect(rich_content.has_editor_content?).to be(true)
+    end
+  end
 end

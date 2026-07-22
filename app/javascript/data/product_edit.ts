@@ -36,6 +36,8 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),
       variants: product.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
+      confirmed_removed_variant_ids: product.confirmed_removed_variant_ids ?? [],
+      confirmed_removed_rich_content_ids: product.confirmed_removed_rich_content_ids ?? [],
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
         newlyAdded ? { ...availability, id: null } : availability,
       ),

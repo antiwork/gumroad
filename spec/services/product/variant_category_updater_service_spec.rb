@@ -160,11 +160,25 @@ describe Product::VariantCategoryUpdaterService do
               Product::VariantCategoryUpdaterService.new(
                 product: @product,
                 category_params: { id: @variant.variant_category.external_id, title: "" },
+                # The variant carries files, so the wipe guard requires explicit
+                # deletion intent (the seller confirming the removal in the editor).
+                confirmed_removed_variant_ids: [@variant.external_id],
                 ).perform
             end.to change { @variant.reload.deleted_at }.from(nil).to(Time.current)
 
             expect(DeleteProductRichContentWorker).to have_enqueued_sidekiq_job(@product.id, @variant.id)
           end
+        end
+
+        it "refuses to delete a content-bearing version without explicit confirmation" do
+          expect do
+            Product::VariantCategoryUpdaterService.new(
+              product: @product,
+              category_params: { id: @variant.variant_category.external_id, title: "" },
+              ).perform
+          end.to raise_error(Link::LinkInvalid, /updated in another tab/)
+
+          expect(@variant.reload.deleted_at).to be_nil
         end
       end
     end

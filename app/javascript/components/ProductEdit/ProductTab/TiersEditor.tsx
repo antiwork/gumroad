@@ -47,12 +47,23 @@ const areAllEnabledPricesZero = (recurrencePriceValues: Record<string, Recurrenc
 };
 
 export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tiers: Tier[]) => void }) => {
+  const { updateProduct } = useProductEditContext();
   const updateVersion = (id: string, update: Partial<Tier>) => {
     onChange(tiers.map((version) => (version.id === id ? { ...version, ...update } : version)));
   };
 
   const [deletionModalVersionId, setDeletionModalVersionId] = React.useState<string | null>(null);
   const deletionModalVersion = tiers.find(({ id }) => id === deletionModalVersionId);
+
+  // Records that the seller explicitly confirmed removing this tier, so the
+  // server-side wipe guard allows deleting it even if it still has content.
+  const confirmRemoval = (tier: Tier) => {
+    if (!tier.newlyAdded)
+      updateProduct((product) => {
+        product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), tier.id];
+      });
+    onChange(tiers.filter(({ id }) => id !== tier.id));
+  };
 
   const addButton = (
     <Button
@@ -104,7 +115,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
           footer={
             <>
               <Button onClick={() => setDeletionModalVersionId(null)}>No, cancel</Button>
-              <Button color="accent" onClick={() => onChange(tiers.filter(({ id }) => id !== deletionModalVersion.id))}>
+              <Button color="accent" onClick={() => confirmRemoval(deletionModalVersion)}>
                 Yes, remove
               </Button>
             </>

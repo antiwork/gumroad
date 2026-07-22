@@ -3,7 +3,7 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
-  attr_reader :product, :category_params
+  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids
   attr_accessor :variant_category
 
   delegate :price_currency_type,
@@ -27,9 +27,39 @@ class Product::VariantCategoryUpdaterService
     product_files
   ].freeze
 
-  def initialize(product:, category_params:)
+  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [])
     @product = product
     @category_params = category_params
+    @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
+    @payload_page_ids = Array.wrap(payload_page_ids)
+    @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
+  end
+
+  # Blocks deleting variants that still carry seller content (rich content pages
+  # or attached files) unless the seller explicitly confirmed each removal in the
+  # editor. A stale browser tab (or a race between two editor sessions) can
+  # submit an outdated variant list, and without this check the save would treat
+  # every missing variant as "removed" and soft-delete the seller's entire
+  # version tree along with its content. Purchased variants are already
+  # protected separately; this covers content-bearing ones.
+  def self.ensure_deletion_intent!(product:, variants:, confirmed_removed_variant_ids:)
+    unconfirmed = variants.reject do |variant|
+      confirmed_removed_variant_ids.include?(variant.external_id) || !variant_has_content?(variant)
+    end
+    return if unconfirmed.empty?
+
+    ErrorNotifier.notify(
+      "Blocked product save that would delete content-bearing variants without confirmation",
+      product_id: product.id,
+      variant_ids: unconfirmed.map(&:id)
+    )
+    message = "This save would remove versions that still have content. Your product may have been updated in another tab — please refresh the page and try again."
+    product.errors.add(:base, message)
+    raise Link::LinkInvalid, message
+  end
+
+  def self.variant_has_content?(variant)
+    variant.alive_rich_contents.any? { _1.description.present? } || variant.has_files?
   end
 
   def perform
@@ -41,6 +71,7 @@ class Product::VariantCategoryUpdaterService
     end
 
     if category_params[:options].nil?
+      self.class.ensure_deletion_intent!(product:, variants: variant_category.variants.alive.to_a, confirmed_removed_variant_ids:)
       batch_delete_variants(variant_category.variants)
       variant_category.mark_deleted! if variant_category.title.blank?
     else
@@ -77,6 +108,7 @@ class Product::VariantCategoryUpdaterService
       end
 
       variants_to_delete = existing_variants - keep_variants
+      self.class.ensure_deletion_intent!(product:, variants: variants_to_delete.select(&:alive?), confirmed_removed_variant_ids:)
       batch_delete_variants(variants_to_delete)
     end
 
@@ -162,7 +194,14 @@ class Product::VariantCategoryUpdaterService
         rich_content.update!(title: variant_rich_content[:title].presence, description: variant_rich_content[:description].presence || [], position: index)
         rich_contents_to_keep << rich_content
       end
-      (existing_rich_contents - rich_contents_to_keep).map(&:mark_deleted!)
+      rich_contents_to_delete = existing_rich_contents - rich_contents_to_keep
+      Product::RichContentDeletionGuard.ensure_intent!(
+        product:,
+        rich_contents_to_delete:,
+        payload_page_ids:,
+        confirmed_removed_ids: confirmed_removed_rich_content_ids
+      )
+      rich_contents_to_delete.map(&:mark_deleted!)
     end
 
     # For tiered memberships that have per-tier pricing, validates that:

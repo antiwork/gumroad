@@ -565,6 +565,133 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
+      describe "content deletion guards (stale-payload wipe protection)" do
+        # Reproduces gumroad-private#1230: a stale editor session (or a race
+        # between two tabs) submits a save payload that doesn't know about the
+        # product's variants/pages, and without the guards the save silently
+        # soft-deletes the seller's entire version tree and content.
+        let(:content_description) { [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Course content" }] }] }
+
+        before do
+          @category = create(:variant_category, link: @product, title: "Versions")
+          @version1 = create(:variant, variant_category: @category, name: "Summer Sale")
+          @version1_page = create(:rich_content, entity: @version1, description: content_description)
+        end
+
+        it "blocks a save whose payload omits a content-bearing variant" do
+          # The stale payload only knows about a different, new variant — the
+          # server would previously treat version1 as removed and wipe it.
+          post :update, params: @params.merge({
+                                                variants: [{ id: nil, name: "Brand new version" }]
+                                              }), format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["error_message"]).to include("refresh the page")
+          expect(@version1.reload).to be_alive
+          expect(@version1_page.reload).to be_alive
+        end
+
+        it "blocks a save with an empty variants list that would delete the whole category" do
+          post :update, params: @params.merge({ variants: [] }), format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(@version1.reload).to be_alive
+          expect(@version1_page.reload).to be_alive
+          expect(@category.reload).to be_alive
+        end
+
+        it "allows removing a content-bearing variant when the seller confirmed the removal" do
+          post :update, params: @params.merge({
+                                                variants: [{ id: nil, name: "Brand new version" }],
+                                                confirmed_removed_variant_ids: [@version1.external_id]
+                                              }), format: :json
+
+          expect(response).to be_successful
+          expect(@version1.reload).to be_deleted
+        end
+
+        it "allows removing a variant that has no content without confirmation" do
+          empty_version = create(:variant, variant_category: @category, name: "Empty version")
+
+          post :update, params: @params.merge({
+                                                variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: content_description } }] }]
+                                              }), format: :json
+
+          expect(response).to be_successful
+          expect(empty_version.reload).to be_deleted
+          expect(@version1.reload).to be_alive
+        end
+
+        it "blocks a save whose payload omits a content-bearing page" do
+          page2 = create(:rich_content, entity: @version1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Page 2" }] }])
+
+          # Payload keeps the variant but only knows about one of its two pages.
+          post :update, params: @params.merge({
+                                                variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page 1", description: { type: "doc", content: content_description } }] }]
+                                              }), format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(page2.reload).to be_alive
+          expect(@version1_page.reload).to be_alive
+        end
+
+        it "allows deleting a page when the seller confirmed the deletion" do
+          page2 = create(:rich_content, entity: @version1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Page 2" }] }])
+
+          post :update, params: @params.merge({
+                                                variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page 1", description: { type: "doc", content: content_description } }] }],
+                                                confirmed_removed_rich_content_ids: [page2.external_id]
+                                              }), format: :json
+
+          expect(response).to be_successful
+          expect(page2.reload).to be_deleted
+        end
+
+        it "allows deleting a page with no content without confirmation" do
+          blank_page = create(:rich_content, entity: @version1, description: [])
+
+          post :update, params: @params.merge({
+                                                variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page 1", description: { type: "doc", content: content_description } }] }]
+                                              }), format: :json
+
+          expect(response).to be_successful
+          expect(blank_page.reload).to be_deleted
+        end
+
+        it "allows a page to move between the product level and a variant without confirmation" do
+          # Toggling "use the same content for all versions" legitimately moves
+          # pages from the variant to the product level — the page id appears
+          # elsewhere in the payload, so it isn't a deletion.
+          post :update, params: @params.merge({
+                                                rich_content: [{ id: @version1_page.external_id, title: "Moved page", description: { type: "doc", content: content_description } }],
+                                                variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }]
+                                              }), format: :json
+
+          expect(response).to be_successful
+        end
+
+        it "blocks deleting a product-level content page missing from a stale payload" do
+          product_page = create(:product_rich_content, entity: @product, description: content_description)
+
+          post :update, params: @params.merge({
+                                                rich_content: [{ id: nil, title: "Other page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Other" }] }] } }],
+                                                variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page 1", description: { type: "doc", content: content_description } }] }]
+                                              }), format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(product_page.reload).to be_alive
+        end
+
+        it "reports blocked wipes to the error notifier" do
+          expect(ErrorNotifier).to receive(:notify).with(
+            "Blocked product save that would delete content-bearing variants without confirmation",
+            hash_including(product_id: @product.id)
+          )
+
+          post :update, params: @params.merge({ variants: [] }), format: :json
+        end
+      end
+
       describe "coffee products" do
         it "sets suggested_price_cents to the maximum price_difference_cents of variants" do
           coffee_product = create(:coffee_product)
@@ -2084,9 +2211,22 @@ describe LinksController, :vcr, inertia: true do
           expect(new_rich_content.description).to eq(new_rich_content_description)
           expect(product.alive_rich_contents.sort_by(&:position).pluck(:title, :position)).to eq([["Intro", 0], ["Page 1", 1], ["Page 2", 2], ["Page 3", 3]])
 
-          # Deletes all existing rich content pages if no rich content is passed
+          # A save with no rich content and no confirmed removals would wipe
+          # content-bearing pages — the deletion guard now blocks it (see
+          # "content deletion guards" above).
           expect do
             post :update, params: { id: product.unique_permalink, rich_content: [] }, format: :json
+          end.not_to change { product.reload.alive_rich_contents.count }
+          expect(response).to have_http_status(:unprocessable_entity)
+
+          # Deletes all existing rich content pages when the seller confirmed
+          # removing them (empty pages need no confirmation).
+          expect do
+            post :update, params: {
+              id: product.unique_permalink,
+              rich_content: [],
+              confirmed_removed_rich_content_ids: product.alive_rich_contents.map(&:external_id),
+            }, format: :json
           end.to change { product.reload.alive_rich_contents.count }.from(4).to(0)
           .and change { product.rich_contents.count }.by(0)
         end
@@ -2147,6 +2287,10 @@ describe LinksController, :vcr, inertia: true do
                   name: "Version 1",
                   rich_content: [
                     {
+                      # The page moves from the product level to the variant,
+                      # keeping its id — mirroring what the editor sends when
+                      # un-toggling "use the same content for all versions".
+                      id: @product.alive_rich_contents.find_by(position: 0).external_id,
                       title: "Version 1 - Page 1",
                       description: { type: "doc", content: description, }
                     }
@@ -2186,7 +2330,10 @@ describe LinksController, :vcr, inertia: true do
             post :update, params: {
               id: @product.unique_permalink,
               has_same_rich_content_for_all_variants: true,
-              rich_content: [{ id: nil, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content_description } }],
+              # The page keeps its id as it moves from the variant to the
+              # product level — mirroring what the editor sends when toggling
+              # "use the same content for all versions".
+              rich_content: [{ id: version1.reload.alive_rich_contents.first.external_id, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content_description } }],
               files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],
               variants: [{ id: version1.external_id, name: version1.name }]
             }, format: :json
@@ -2256,7 +2403,9 @@ describe LinksController, :vcr, inertia: true do
             post :update, params: {
               id: @product.unique_permalink,
               name: "New product name",
-              rich_content: [{ id: nil, title: "New page title", description: { type: "doc", content: [folder1] } }],
+              # Reuse the existing page's id — the editor renames a page in
+              # place rather than replacing it with a brand-new one.
+              rich_content: [{ id: @product.alive_rich_contents.first.external_id, title: "New page title", description: { type: "doc", content: [folder1] } }],
               files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],
             }, format: :json
           end.to_not change { @product.product_files_archives.folder_archives.alive.count }

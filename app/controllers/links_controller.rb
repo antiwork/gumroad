@@ -408,7 +408,9 @@ class LinksController < ApplicationController
           :call_limitation_info,
           :installment_plan,
           :community_chat_enabled,
-          :default_offer_code_id
+          :default_offer_code_id,
+          :confirmed_removed_variant_ids,
+          :confirmed_removed_rich_content_ids
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -457,7 +459,14 @@ class LinksController < ApplicationController
           rich_content.update!(title: product_rich_content[:title].presence, description: product_rich_content[:description].presence || [], position: index)
           rich_contents_to_keep << rich_content
         end
-        (existing_rich_contents - rich_contents_to_keep).each(&:mark_deleted!)
+        product_rich_contents_to_delete = existing_rich_contents - rich_contents_to_keep
+        Product::RichContentDeletionGuard.ensure_intent!(
+          product: @product,
+          rich_contents_to_delete: product_rich_contents_to_delete,
+          payload_page_ids:,
+          confirmed_removed_ids: confirmed_removed_rich_content_ids
+        )
+        product_rich_contents_to_delete.each(&:mark_deleted!)
 
         Product::SaveIntegrationsService.perform(@product, product_permitted_params[:integrations])
         update_variants
@@ -802,6 +811,9 @@ class LinksController < ApplicationController
               options: variants,
             }
           ],
+          confirmed_removed_variant_ids:,
+          payload_page_ids:,
+          confirmed_removed_rich_content_ids:,
         ).perform
       elsif variant_category.present?
         Product::VariantsUpdaterService.new(
@@ -811,7 +823,42 @@ class LinksController < ApplicationController
               id: variant_category.external_id,
               options: nil,
             }
-          ]).perform
+          ],
+          confirmed_removed_variant_ids:,
+          payload_page_ids:,
+          confirmed_removed_rich_content_ids:,
+        ).perform
+      end
+    end
+
+    # External ids of variants the seller explicitly removed in the editor (via
+    # the "Remove version/tier/duration" confirmation modal). Used to distinguish
+    # an intentional deletion from a stale payload that simply doesn't know about
+    # a variant.
+    def confirmed_removed_variant_ids
+      Array.wrap(product_permitted_params[:confirmed_removed_variant_ids])
+    end
+
+    # External ids of content pages the seller explicitly deleted or replaced in
+    # the editor (delete-page modal, copy-content-from-version, discard-other-
+    # versions'-content).
+    def confirmed_removed_rich_content_ids
+      Array.wrap(product_permitted_params[:confirmed_removed_rich_content_ids])
+    end
+
+    # Every page id present anywhere in the save payload (product-level and
+    # variant-level). A page whose id appears here isn't being deleted — at most
+    # it's moving between the product level and a variant (e.g. toggling "use the
+    # same content for all versions"), so the deletion guards must not block it.
+    def payload_page_ids
+      @_payload_page_ids ||= begin
+        product_pages = product_permitted_params[:rich_content]
+        ids = product_pages.is_a?(Array) ? product_pages.map { _1[:id] } : []
+        (product_permitted_params[:variants] || []).each do |variant|
+          variant_pages = variant[:rich_content]
+          ids.concat(variant_pages.map { _1[:id] }) if variant_pages.is_a?(Array)
+        end
+        ids.compact
       end
     end
 

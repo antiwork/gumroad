@@ -187,6 +187,17 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         product.rich_content = pages;
       }
     });
+  // Records that the seller explicitly deleted these pages, so the server-side
+  // wipe guard allows removing them even though they may still have content.
+  const confirmPageRemovals = (removedPages: Page[]) => {
+    if (removedPages.length === 0) return;
+    updateProduct((product) => {
+      product.confirmed_removed_rich_content_ids = [
+        ...(product.confirmed_removed_rich_content_ids ?? []),
+        ...removedPages.map(({ id }) => id),
+      ];
+    });
+  };
   const addPage = (description?: object) => {
     const page = {
       id: GuidGenerator.generate(),
@@ -521,6 +532,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         updated_at: new Date().toISOString(),
       };
     });
+    // Replacing this variant's pages deletes the current ones — record that the
+    // seller confirmed it (the copy-from-version dialog) for the server-side guard.
+    confirmPageRemovals(pages);
     updatePages(cloned);
     if (cloned[0]) setSelectedPageId(cloned[0].id);
     setCopyFromOpen(false);
@@ -1032,6 +1046,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 color="danger"
                 onClick={() => {
                   if (!editor) return;
+                  confirmPageRemovals([confirmingDeletePage]);
                   updatePages(pages.filter((page) => page !== confirmingDeletePage));
                   setConfirmingDeletePage(null);
                 }}
@@ -1142,6 +1157,20 @@ export const ContentTab = () => {
       updateProduct((product) => {
         product.has_same_rich_content_for_all_variants = true;
         if (!product.rich_content.length) product.rich_content = selectedVariant?.rich_content ?? [];
+        // Emptying the variants' page lists deletes any page that didn't move to
+        // the product level. The seller confirmed this (the "Discard content from
+        // other versions?" dialog) — record the removals so the server-side wipe
+        // guard allows the save.
+        const keptPageIds = new Set(product.rich_content.map(({ id }) => id));
+        const removedPageIds = product.variants
+          .flatMap((variant) => variant.rich_content)
+          .filter(({ id }) => !keptPageIds.has(id))
+          .map(({ id }) => id);
+        if (removedPageIds.length > 0)
+          product.confirmed_removed_rich_content_ids = [
+            ...(product.confirmed_removed_rich_content_ids ?? []),
+            ...removedPageIds,
+          ];
         for (const variant of product.variants) variant.rich_content = [];
       });
     } else {

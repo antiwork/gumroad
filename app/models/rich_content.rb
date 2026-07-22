@@ -61,6 +61,16 @@ class RichContent < ApplicationRecord
     description.flat_map { select_file_embed_ids(_1) }.compact.uniq
   end
 
+  # True when the page carries anything a buyer could actually see. A page whose
+  # description is only empty structural nodes (e.g. a single bare paragraph —
+  # the shape the editor creates as a blank placeholder) has no content. This
+  # matters for content resolution: an empty product-level placeholder page must
+  # not make the product look like it has product-level content, which would
+  # hide the real variant-level content from buyers.
+  def has_editor_content?
+    description.present? && description.any? { node_has_content?(_1) }
+  end
+
   def owning_product
     entity.is_a?(Link) ? entity : entity.try(:link)
   end
@@ -147,6 +157,25 @@ class RichContent < ApplicationRecord
         end
 
         []
+      end
+    end
+
+    # A node counts as content when it's anything other than an empty container:
+    # text, media/embed nodes (which have no "content" array), or a container
+    # with at least one contentful child. A bare `{"type" => "paragraph"}` — the
+    # editor's blank placeholder — is not content.
+    def node_has_content?(node)
+      return false unless node.is_a?(Hash)
+      return true if node["text"].present?
+
+      children = node["content"]
+      if children.is_a?(Array)
+        children.any? { node_has_content?(_1) }
+      else
+        # Leaf nodes without a content array (fileEmbed, image, licenseKey,
+        # posts, horizontal rule, etc.) render something by themselves —
+        # except structural placeholders like an empty paragraph/heading.
+        !node["type"].in?(%w[paragraph heading])
       end
     end
 end
