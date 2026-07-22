@@ -33,7 +33,6 @@ class ProductPresenter
     native_product_types = Link::NATIVE_TYPES - Link::LEGACY_TYPES - Link::SERVICE_TYPES
     native_product_types -= [Link::NATIVE_TYPE_PHYSICAL] unless current_seller.can_create_physical_products?
     service_product_types = Link::SERVICE_TYPES
-    service_product_types -= [Link::NATIVE_TYPE_COMMISSION] unless Feature.active?(:commissions, current_seller)
     release_at_date = displayable_release_at_date(1.month.from_now, current_seller.timezone)
 
     {

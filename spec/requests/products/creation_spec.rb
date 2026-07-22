@@ -131,16 +131,7 @@ describe "Product creation", type: :system, js: true do
       end
     end
 
-    context "commissions are disabled" do
-      it "does not allow the creation of a commission product" do
-        visit new_product_path
-        expect(page).to_not have_radio_button("Commission")
-      end
-    end
-
-    context "commissions are enabled" do
-      before { Feature.activate(:commissions) }
-
+    context "commission products" do
       context "seller is not eligible for service products" do
         it "does not allow the creation of a service product" do
           visit new_product_path

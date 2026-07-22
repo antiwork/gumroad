@@ -39,7 +39,7 @@ describe ProductPresenter do
         {
           current_seller_currency_code: "usd",
           native_product_types: ["digital", "course", "ebook", "membership", "bundle"],
-          service_product_types: ["call", "coffee"],
+          service_product_types: ["commission", "call", "coffee"],
           release_at_date:,
           show_orientation_text: true,
           eligible_for_service_products: false,
@@ -57,7 +57,7 @@ describe ProductPresenter do
         {
           current_seller_currency_code: "usd",
           native_product_types: ["digital", "course", "ebook", "membership", "bundle"],
-          service_product_types: ["call", "coffee"],
+          service_product_types: ["commission", "call", "coffee"],
           release_at_date:,
           show_orientation_text: false,
           eligible_for_service_products: false,
@@ -65,14 +65,6 @@ describe ProductPresenter do
           ai_promo_dismissed: false,
         }
       )
-    end
-
-    context "commissions are enabled" do
-      before { Feature.activate_user(:commissions, existing_seller) }
-
-      it "includes commission in the native product types" do
-        expect(described_class.new_page_props(current_seller: existing_seller)[:service_product_types]).to include("commission")
-      end
     end
 
     context "physical products are enabled" do
