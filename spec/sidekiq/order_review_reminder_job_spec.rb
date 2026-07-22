@@ -60,6 +60,52 @@ describe OrderReviewReminderJob do
     end
   end
 
+  context "when a gift recipient is among multiple eligible purchases" do
+    let(:product) { create(:product) }
+    let(:gift) { create(:gift, link: product) }
+    let(:gifter_purchase) { create(:purchase, :gift_sender, link: product, gift_given: gift) }
+    let!(:giftee_purchase) { create(:purchase, :gift_receiver, link: product, gift_received: gift) }
+
+    before do
+      allow(order).to receive(:purchases).and_return([gifter_purchase, eligible_purchase])
+    end
+
+    it "sends a per-purchase reminder to each eligible purchase instead of the order-level email" do
+      expect do
+        described_class.new.perform(order.id)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        .with(giftee_purchase.id)
+        .on_queue(:low)
+        .once
+        .and have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        .with(eligible_purchase.id)
+        .on_queue(:low)
+        .once
+    end
+
+    it "sends only the never-enqueued reminders when retrying after a partial enqueue" do
+      # Simulates a Sidekiq retry after the process died partway through the
+      # per-purchase loop: the gift recipient's reminder was already recorded,
+      # but the other purchase was never attempted. Because each purchase
+      # carries its own uniqueness record, the retry sends the remaining
+      # reminder instead of skipping the whole order.
+      SentEmailInfo.set_key!(
+        SentEmailInfo.mailer_key_digest("CustomerLowPriorityMailer", "purchase_review_reminder", giftee_purchase.id)
+      )
+
+      expect do
+        described_class.new.perform(order.id)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        .with(eligible_purchase.id)
+        .on_queue(:low)
+        .once
+
+      expect do
+        described_class.new.perform(order.id)
+      end.not_to have_enqueued_mail(CustomerLowPriorityMailer)
+    end
+  end
+
   context "bundle order" do
     # A bundle checkout creates one order-level purchase for the bundle plus a child
     # purchase per product inside it. Only the bundle purchase belongs to the order,
