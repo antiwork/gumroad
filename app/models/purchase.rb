@@ -2847,13 +2847,7 @@ class Purchase < ApplicationRecord
     # filters between the two queries, deciding from the slim snapshot could
     # hand a now-restricted post to a buyer who no longer passes its filters.
     # The reloaded set is small (only posts the buyer could see), so the
-    # second pass is cheap. The opposite race — a post becoming visible to the
-    # buyer between the two queries — is deliberately not recovered: its ID was
-    # dropped by the slim pass and stays dropped. That is fail-closed on
-    # purpose. Omitting a post for one request is benign and self-corrects on
-    # the next request (the pre-optimization single-query version had the same
-    # window), while recovering it would require re-running the unbounded
-    # full-row query this change exists to avoid.
+    # second pass is cheap.
     #
     # The reverse race — a post the slim pass rejected whose filters change
     # to allow the buyer before the reload — is deliberately left alone: the
