@@ -181,6 +181,13 @@ describe MerchantAccount do
         expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
       end
 
+      it "ignores a pre-existing marker on a Gumroad-managed account" do
+        shared_platform_account = create(:merchant_account, user: nil)
+        shared_platform_account.update!(settlement_currency_mismatch_noticed_at: Time.current.iso8601)
+
+        expect(shared_platform_account.reload.settlement_currency_mismatch_active?).to be(false)
+      end
+
       it "is true while the recorded mismatch is fresh" do
         merchant_account.record_settlement_currency_mismatch!
         expect(merchant_account.settlement_currency_mismatch_active?).to be(true)

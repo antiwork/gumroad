@@ -307,7 +307,9 @@ describe Checkout::BuyerCurrencyQuote do
     it "skips the FX-quote round trip entirely while a recorded mismatch is fresh" do
       # Set the marker directly: it can only be recorded on a seller's own connected
       # account now, but the eligibility read path must still honor any fresh marker.
-      merchant_account.update!(settlement_currency_mismatch_noticed_at: Time.current.iso8601)
+      seller.update!(check_merchant_account_is_linked: true)
+      seller_merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      seller_merchant_account.update!(settlement_currency_mismatch_noticed_at: Time.current.iso8601)
       expect(StripeFxQuote).not_to receive(:create)
 
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")

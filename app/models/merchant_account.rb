@@ -79,6 +79,11 @@ class MerchantAccount < ApplicationRecord
   # True while a recorded settlement-currency mismatch is fresh — checkout should skip the
   # FX-quote round trip and fall back to canonical USD immediately.
   def settlement_currency_mismatch_active?
+    # The shared Gumroad account settles in USD, so this marker can never be meaningful
+    # there. Treat a marker written before the write guard shipped as inert immediately;
+    # waiting for a manual production cleanup would keep every managed seller in USD.
+    return false if is_managed_by_gumroad?
+
     noticed_at_raw = settlement_currency_mismatch_noticed_at
     return false if noticed_at_raw.blank?
 
