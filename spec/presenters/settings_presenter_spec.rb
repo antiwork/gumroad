@@ -1051,6 +1051,20 @@ describe SettingsPresenter do
       end
     end
 
+    context "when a stored tax ID contains Unicode whitespace (legacy rows saved before write-time normalization)" do
+      it "serializes payments_props to JSON and exposes the last four digits" do
+        # Strongbox decrypt returns a BINARY string; a trailing multi-byte character
+        # like U+202F used to get cut in half by the byte-based [-4..] slice, producing
+        # invalid UTF-8 that crashed JSON serialization and 500ed /settings/payments.
+        create(:user_compliance_info_business, user: seller, country: "France", business_country: "France", business_tax_id: "912\u202F904\u202F331", individual_tax_id: "12\u202F345\u202F678")
+
+        props = presenter.payments_props
+        expect(props[:user][:business_tax_id_last_four]).to eq("4331")
+        expect(props[:user][:individual_tax_id_last_four]).to eq("5678")
+        expect { JSON.generate(props) }.not_to raise_error
+      end
+    end
+
     context "when the seller is from Brazil" do
       before do
         @user_compliance_info = create(:user_compliance_info, user: seller, country: "Brazil")

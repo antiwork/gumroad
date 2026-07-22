@@ -452,13 +452,26 @@ class SettingsPresenter
                                              Compliance::Countries::PRY.alpha2,
                                              Compliance::Countries::PAK.alpha2],
         individual_tax_id_entered: user_compliance_info.individual_tax_id.present?,
-        individual_tax_id_last_four: user_compliance_info.individual_tax_id.present? ? user_compliance_info.individual_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s[-4..] : nil,
+        individual_tax_id_last_four: tax_id_last_four(user_compliance_info.individual_tax_id),
         business_tax_id_entered: user_compliance_info.business_tax_id.present?,
-        business_tax_id_last_four: user_compliance_info.business_tax_id.present? ? user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s[-4..] : nil,
+        business_tax_id_last_four: tax_id_last_four(user_compliance_info.business_tax_id),
         requires_credit_card: seller.requires_credit_card?,
         is_charged_paypal_payout_fee: seller.charge_paypal_payout_fee?,
         joined_at: seller.created_at.iso8601
       }
+    end
+
+    # Strongbox decryption returns a BINARY (ASCII-8BIT) string, and older records can
+    # contain Unicode whitespace (for example U+202F narrow no-break space from a
+    # locale-formatted paste) that predates write-time normalization. Slicing such a
+    # value with [-4..] operates on bytes and can cut a multi-byte character in half,
+    # producing invalid UTF-8 that crashes JSON serialization of the page props and
+    # 500s the entire settings page. Force UTF-8, drop any invalid bytes, and strip
+    # Unicode whitespace before taking the last four characters.
+    def tax_id_last_four(encrypted_tax_id)
+      return nil if encrypted_tax_id.blank?
+      decrypted = encrypted_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s
+      decrypted.force_encoding(Encoding::UTF_8).scrub("").gsub(/[[:space:]]/, "")[-4..]
     end
 
     def compliance_info_details(user_compliance_info)
