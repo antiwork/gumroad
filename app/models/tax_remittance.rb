@@ -42,6 +42,11 @@ class TaxRemittance < ApplicationRecord
   validates :usd_amount_cents, presence: true, numericality: { only_integer: true, greater_than: 0 }
   validates :target_amount_cents, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :rail, presence: true, inclusion: { in: RAILS }
+  # A rail-side payment (Wise transfer, Stripe payout, Mercury transaction)
+  # must map to at most one remittance — two rows claiming the same transfer
+  # would double-count one real payment during reconciliation. Backed by a
+  # unique index on (rail, transfer_id); nil is fine (payment not made yet).
+  validates :transfer_id, uniqueness: { scope: :rail }, allow_nil: true
   validates :status, presence: true, inclusion: { in: STATUSES }
   validates :paid_at, presence: true, if: -> { status.in?(%w[sent completed]) }
 

@@ -43,7 +43,10 @@ class CreateTaxRemittances < ActiveRecord::Migration[7.1]
       t.timestamps
 
       t.index [:authority, :period], unique: true
-      t.index [:rail, :transfer_id]
+      # Unique so one rail-side payment can never be reconciled against two
+      # remittance rows (which would double-count real money). MySQL unique
+      # indexes allow multiple NULLs, so rows awaiting a transfer ID coexist.
+      t.index [:rail, :transfer_id], unique: true
       t.index [:status, :period]
     end
   end

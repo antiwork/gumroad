@@ -45,6 +45,23 @@ describe TaxRemittance do
       expect(build_remittance(period: "2026-Q2")).to be_valid
     end
 
+    it "enforces one remittance per rail-side transfer" do
+      build_remittance(transfer_id: "WISE-123").save!
+
+      dup = build_remittance(authority: "IRAS Singapore", jurisdiction: "SG", currency: "SGD", transfer_id: "WISE-123")
+      expect(dup).not_to be_valid
+      expect(dup.errors[:transfer_id]).to be_present
+
+      # Same transfer ID on a different rail is a different payment.
+      expect(build_remittance(authority: "Australian Taxation Office", jurisdiction: "AU", currency: "AUD",
+                              rail: "mercury", transfer_id: "WISE-123")).to be_valid
+    end
+
+    it "allows many rows without a transfer ID yet" do
+      build_remittance(transfer_id: nil).save!
+      expect(build_remittance(authority: "IRAS Singapore", jurisdiction: "SG", currency: "SGD", transfer_id: nil)).to be_valid
+    end
+
     it "requires paid_at once the payment has been sent" do
       expect(build_remittance(status: "sent", paid_at: nil)).not_to be_valid
       expect(build_remittance(status: "completed", paid_at: nil)).not_to be_valid

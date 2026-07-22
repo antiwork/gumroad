@@ -2529,7 +2529,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000004) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["authority", "period"], name: "index_tax_remittances_on_authority_and_period", unique: true
-    t.index ["rail", "transfer_id"], name: "index_tax_remittances_on_rail_and_transfer_id"
+    t.index ["rail", "transfer_id"], name: "index_tax_remittances_on_rail_and_transfer_id", unique: true
     t.index ["status", "period"], name: "index_tax_remittances_on_status_and_period"
   end
 

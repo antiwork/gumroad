@@ -34,4 +34,19 @@ describe Onetime::BackfillAprilTaxRemittances do
     expect(second.skipped.size).to eq(7)
     expect(TaxRemittance.count).to eq(7)
   end
+
+  it "raises when an existing row conflicts with the backfill data" do
+    TaxRemittance.create!(
+      authority: "HMRC",
+      jurisdiction: "GB",
+      period: "2026-Q1",
+      currency: "GBP",
+      usd_amount_cents: 1, # wrong amount — not the real April payment
+      rail: "wise",
+      status: "completed",
+      paid_at: Time.utc(2026, 4, 15),
+    )
+
+    expect { described_class.new.process }.to raise_error(/HMRC 2026-Q1 row conflicts/)
+  end
 end
