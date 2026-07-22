@@ -3427,6 +3427,17 @@ class Purchase < ApplicationRecord
     FlowOfFunds.new(issued_amount:, settled_amount:, gumroad_amount:, merchant_account_gross_amount:, merchant_account_net_amount:)
   end
 
+  # The purchase whose buyer can actually leave the review. For a gift, the
+  # sender's purchase can never be reviewed — the recipient's linked purchase
+  # owns the review (see Purchase::Reviews#original_product_review) — so review
+  # reminders resolve a gift-sender purchase to the recipient's purchase. That
+  # recipient purchase is not part of the order (order purchases only join
+  # checkout line items), which is why callers can't find it by iterating the
+  # order's purchases directly.
+  def purchase_for_review_reminder
+    is_gift_sender_purchase? ? gift_given&.giftee_purchase : self
+  end
+
   def eligible_for_review_reminder?
     # Delegate to the same gate that decides whether the review form is shown and
     # the review counted (`Purchase::Reviews#allows_review_to_be_counted?`). If the

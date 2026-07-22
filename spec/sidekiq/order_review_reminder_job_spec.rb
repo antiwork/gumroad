@@ -88,25 +88,77 @@ describe OrderReviewReminderJob do
   end
 
   context "gifted bundle order" do
-    # The order for a gifted bundle contains the gift-SENDER purchase, which can
-    # never leave a review (the giftee's purchase owns the review) — so no reminder
-    # should go out for it.
+    # The order for a gifted bundle contains only the gift-SENDER purchase, which
+    # can never leave a review — the recipient's linked purchase owns the review.
+    # The job resolves the sender purchase to the recipient's purchase and sends
+    # the reminder there.
     let(:bundle) { create(:product, :bundle) }
     let(:gift) { create(:gift, link: bundle) }
     let(:gifter_purchase) { create(:purchase, :gift_sender, link: bundle, gift_given: gift, is_bundle_purchase: true) }
+    let!(:giftee_purchase) { create(:purchase, :gift_receiver, link: bundle, gift_received: gift, is_bundle_purchase: true) }
     let(:gifted_bundle_order) { create(:order, purchases: [gifter_purchase]) }
 
     before do
       allow(Order).to receive(:find).and_call_original
-      create(:purchase, :gift_receiver, link: bundle, is_gift_receiver_purchase: true, gift_received: gift, purchase_state: "gift_receiver_purchase_successful", is_bundle_purchase: true)
     end
 
-    it "does not send a review reminder to the gifter" do
+    it "sends a single review reminder to the gift recipient's purchase" do
       expect(gifter_purchase.eligible_for_review_reminder?).to eq(false)
+      expect(giftee_purchase.eligible_for_review_reminder?).to eq(true)
 
       expect do
         described_class.new.perform(gifted_bundle_order.id)
-      end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        described_class.new.perform(gifted_bundle_order.id)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        .with(giftee_purchase.id)
+        .on_queue(:low)
+        .once
+    end
+  end
+
+  context "gifted regular product order" do
+    let(:product) { create(:product) }
+    let(:gift) { create(:gift, link: product) }
+    let(:gifter_purchase) { create(:purchase, :gift_sender, link: product, gift_given: gift) }
+    let!(:giftee_purchase) { create(:purchase, :gift_receiver, link: product, gift_received: gift) }
+    let(:gifted_order) { create(:order, purchases: [gifter_purchase]) }
+
+    before do
+      allow(Order).to receive(:find).and_call_original
+    end
+
+    it "sends a single review reminder to the gift recipient's purchase" do
+      expect do
+        described_class.new.perform(gifted_order.id)
+        described_class.new.perform(gifted_order.id)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+        .with(giftee_purchase.id)
+        .on_queue(:low)
+        .once
+    end
+
+    context "when the gift recipient opted out of review reminders" do
+      before do
+        giftee_purchase.update!(purchaser: create(:user, opted_out_of_review_reminders: true))
+      end
+
+      it "does not send a reminder" do
+        expect do
+          described_class.new.perform(gifted_order.id)
+        end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+      end
+    end
+
+    context "when the seller disabled review reminders" do
+      before do
+        product.user.update!(disable_review_reminders: true)
+      end
+
+      it "does not send a reminder" do
+        expect do
+          described_class.new.perform(gifted_order.id)
+        end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+      end
     end
   end
 end
