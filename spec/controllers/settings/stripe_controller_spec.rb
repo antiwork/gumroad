@@ -57,5 +57,32 @@ describe Settings::StripeController, :vcr do
         expect(@creator.stripe_account).to eq stripe_account
       end
     end
+
+    context "when a team admin disconnects the seller's Stripe account" do
+      let(:seller) { create(:user) }
+      let(:team_admin) { create(:user) }
+
+      before do
+        create(:user_compliance_info, user: seller)
+        Feature.activate_user(:merchant_migration, seller)
+        create(:merchant_account_stripe_connect, user: seller)
+        create(:merchant_account_stripe_connect, user: team_admin)
+        create(:team_membership, user: team_admin, seller:, role: TeamMembership::ROLE_ADMIN)
+        cookies.encrypted[:current_seller_id] = seller.id
+        sign_in team_admin
+      end
+
+      it "disconnects the seller account and attributes the change to the admin" do
+        post :disconnect
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(seller.reload.stripe_connect_account).to be_nil
+        expect(team_admin.reload.stripe_connect_account).to be_present
+        expect(seller.comments.last).to have_attributes(
+          author_id: team_admin.id,
+          content: "Stripe account disconnected by team admin #{team_admin.email}"
+        )
+      end
+    end
   end
 end
