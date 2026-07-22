@@ -29,41 +29,31 @@ describe("applyWalletBillingAddressToCheckout", () => {
 
   it("adopts the wallet's country, ZIP, and state", () => {
     expect(dispatched({ country: "US", postal_code: "10001", state: "NY" })).toEqual([
-      { type: "set-value", country: "US" },
-      { type: "set-value", zipCode: "10001" },
-      { type: "set-value", state: "NY" },
+      { type: "set-wallet-billing-address", country: "US", zipCode: "10001", state: "NY" },
     ]);
   });
 
   it("clears a stale state when the wallet omits one for a non-Canadian country", () => {
     expect(dispatched({ country: "DE", postal_code: "10115", state: null })).toEqual([
-      { type: "set-value", country: "DE" },
-      { type: "set-value", zipCode: "10115" },
-      { type: "set-value", state: "" },
+      { type: "set-wallet-billing-address", country: "DE", zipCode: "10115", state: "" },
     ]);
   });
 
   it("derives the Canadian province from the postal code when the wallet omits the state", () => {
     expect(dispatched({ country: "CA", postal_code: "H2X 1Y4", state: null })).toEqual([
-      { type: "set-value", country: "CA" },
-      { type: "set-value", zipCode: "H2X 1Y4" },
-      { type: "set-value", state: "QC" },
+      { type: "set-wallet-billing-address", country: "CA", zipCode: "H2X 1Y4", state: "QC" },
     ]);
   });
 
   it("keeps the existing checkout state and ZIP when the wallet's country matches checkout's country", () => {
     expect(dispatched({ country: "US", postal_code: null, state: null })).toEqual([
-      { type: "set-value", country: "US" },
-      { type: "set-value", zipCode: "94103" },
-      { type: "set-value", state: "CA" },
+      { type: "set-wallet-billing-address", country: "US", zipCode: "94103", state: "CA" },
     ]);
   });
 
   it("falls back to GST-only Alberta for Canada when no province can be determined", () => {
     expect(dispatched({ country: "CA", postal_code: null, state: null })).toEqual([
-      { type: "set-value", country: "CA" },
-      { type: "set-value", zipCode: undefined },
-      { type: "set-value", state: "AB" },
+      { type: "set-wallet-billing-address", country: "CA", zipCode: undefined, state: "AB" },
     ]);
   });
 

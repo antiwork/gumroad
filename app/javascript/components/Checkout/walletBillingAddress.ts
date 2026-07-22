@@ -42,7 +42,12 @@ import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/
 export const applyWalletBillingAddressToCheckout = (
   billingAddress: { country: string | null; postal_code: string | null; state: string | null } | null | undefined,
   checkout: { country: string; state: string; zipCode: string },
-  dispatch: (action: { type: "set-value"; country?: string; zipCode?: string | undefined; state?: string }) => void,
+  dispatch: (action: {
+    type: "set-wallet-billing-address";
+    country: string;
+    zipCode: string | undefined;
+    state: string;
+  }) => void,
 ): boolean => {
   if (!billingAddress?.country) return false;
   const billingState =
@@ -57,12 +62,21 @@ export const applyWalletBillingAddressToCheckout = (
   // tax-location change) and, for US buyers, wipe a ZIP the server requires.
   const billingZipCode =
     billingAddress.postal_code || (billingAddress.country === checkout.country ? checkout.zipCode : undefined);
-  dispatch({ type: "set-value", country: billingAddress.country });
-  dispatch({ type: "set-value", zipCode: billingZipCode });
-  dispatch({ type: "set-value", state: billingState ?? "" });
+  // A single dedicated action rather than three "set-value" dispatches: the wallet's address
+  // lands mid-payment (after the buyer approved the sheet), and the reducer's "set-value"
+  // tax-location invalidation cancels an in-flight card payment back to "input" — which on the
+  // Payment Element wallet lanes (where the wallet payment runs as paymentMethod "card") would
+  // abort the held wallet payment before it could wait for the surcharges reload. The dedicated
+  // action invalidates the quote without cancelling the pipeline; see the reducer case.
+  dispatch({
+    type: "set-wallet-billing-address",
+    country: billingAddress.country,
+    zipCode: billingZipCode,
+    state: billingState ?? "",
+  });
   // Each condition matches the reducer's surcharge-invalidation rule for the corresponding
-  // dispatch above, evaluated the way the reducer sees it (the country dispatch lands first, so
-  // the ZIP and state rules key on the wallet's country). The US ZIP rule deliberately has no
+  // field above, evaluated the way the reducer sees it (the fields land in one action, so the
+  // ZIP and state rules key on the wallet's country). The US ZIP rule deliberately has no
   // length/format requirement — the reducer invalidates on ANY US ZIP change (partial ZIPs and
   // ZIP+4 included, since the server derives the taxable location from whatever ZIP is
   // submitted), so this must report those changes too or a held wallet payment would be
