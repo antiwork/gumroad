@@ -670,8 +670,7 @@ describe SettingsPresenter do
       expect(countries).to have_key("US")
     end
 
-    it "shows the AU backtax prompt when the feature is on and the creator owes more than $100 and the creator has received an email" do
-      Feature.activate_user(:au_backtaxes, seller)
+    it "shows the AU backtax prompt when the creator owes more than $100 and the creator has received an email" do
       seller.update!(au_backtax_owed_cents: 100_01)
       create(:australia_backtax_email_info, user: seller)
 
@@ -684,7 +683,6 @@ describe SettingsPresenter do
     end
 
     it "does not show the AU backtax prompt when the creator owes less than $100" do
-      Feature.activate_user(:au_backtaxes, seller)
       seller.update!(au_backtax_owed_cents: 99_00)
       create(:australia_backtax_email_info, user: seller)
 

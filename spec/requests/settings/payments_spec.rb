@@ -6376,67 +6376,53 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       login_as @creator
     end
 
-    describe "when the feature flag is not active" do
-      it "displays the taxes collection section" do
-        visit settings_payments_path
+    it "does not display the backtaxes collection section if creator has not received an email" do
+      visit settings_payments_path
 
-        expect(page).not_to have_text("Backtaxes collection")
-      end
+      expect(page).not_to have_text("Backtaxes collection")
     end
 
-    describe "when the feature flag is active" do
+    describe "when the creator has received an email" do
       before do
-        Feature.activate(:au_backtaxes)
+        create(:australia_backtax_email_info, user: @creator)
       end
 
-      it "does not display the backtaxes collection section if creator has not received an email" do
+      it "displays the taxes collection section and allows the creator to opt in" do
         visit settings_payments_path
 
-        expect(page).not_to have_text("Backtaxes collection")
+        expect(page).to have_text("Backtaxes collection")
+
+        click_on "Opt-in to backtaxes collection"
+        fill_in "Type your full name to opt-in", with: "Chuck Bartowski"
+        click_on "Save and opt-in"
+
+        expect(page).to have_text("You've opted in to backtaxes collection.")
+        expect(@creator.backtax_agreements.count).to eq(1)
+        expect(@creator.backtax_agreements.first.signature).to eq("Chuck Bartowski")
       end
 
-      describe "when the creator has received an email" do
-        before do
-          create(:australia_backtax_email_info, user: @creator)
-        end
+      it "renders an error message when the creator provides an invalid name for a signature" do
+        visit settings_payments_path
 
-        it "displays the taxes collection section and allows the creator to opt in" do
-          visit settings_payments_path
+        expect(page).to have_text("Backtaxes collection")
 
-          expect(page).to have_text("Backtaxes collection")
+        click_on "Opt-in to backtaxes collection"
+        fill_in "Type your full name to opt-in", with: "Chuck"
+        click_on "Save and opt-in"
 
-          click_on "Opt-in to backtaxes collection"
-          fill_in "Type your full name to opt-in", with: "Chuck Bartowski"
-          click_on "Save and opt-in"
+        expect(page).to have_text("Please enter your exact name.")
+        expect(@creator.backtax_agreements.count).to eq(0)
+      end
 
-          expect(page).to have_text("You've opted in to backtaxes collection.")
-          expect(@creator.backtax_agreements.count).to eq(1)
-          expect(@creator.backtax_agreements.first.signature).to eq("Chuck Bartowski")
-        end
+      it "allows the creator to open the opt-in modal even if their legal entity name is missing" do
+        @creator.fetch_or_build_user_compliance_info
+        allow_any_instance_of(UserComplianceInfo).to receive(:legal_entity_name).and_return(nil)
 
-        it "renders an error message when the creator provides an invalid name for a signature" do
-          visit settings_payments_path
+        visit settings_payments_path
 
-          expect(page).to have_text("Backtaxes collection")
+        click_on "Opt-in to backtaxes collection"
 
-          click_on "Opt-in to backtaxes collection"
-          fill_in "Type your full name to opt-in", with: "Chuck"
-          click_on "Save and opt-in"
-
-          expect(page).to have_text("Please enter your exact name.")
-          expect(@creator.backtax_agreements.count).to eq(0)
-        end
-
-        it "allows the creator to open the opt-in modal even if their legal entity name is missing" do
-          @creator.fetch_or_build_user_compliance_info
-          allow_any_instance_of(UserComplianceInfo).to receive(:legal_entity_name).and_return(nil)
-
-          visit settings_payments_path
-
-          click_on "Opt-in to backtaxes collection"
-
-          expect(page).to have_field("Type your full name to opt-in")
-        end
+        expect(page).to have_field("Type your full name to opt-in")
       end
     end
   end
