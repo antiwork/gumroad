@@ -75,8 +75,11 @@ class RetryTransientEmailFailureJob
       # If the buyer's email was corrected after the failure (support does
       # this when a typo'd address bounces), the suppressed address is no
       # longer the recipient — resending would email the wrong (dead) address
-      # and unsuppressing it buys nothing.
-      recipient = record.is_a?(Charge) ? record.purchases.last&.email : record.email
+      # and unsuppressing it buys nothing. `orderable.email` is exactly the
+      # address CustomerMailer.receipt delivers to (for a charge that is the
+      # order's first successful purchase, not an arbitrary one), so this
+      # guard compares against the address the resend would actually use.
+      recipient = record.orderable&.email
       if recipient != retry_record.email
         retry_record.update!(retry_in_flight: false)
         log("skipping receipt resend for #{retry_record.email}: recipient is now #{recipient.inspect}")

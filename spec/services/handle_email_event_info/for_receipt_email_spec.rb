@@ -489,6 +489,29 @@ describe HandleEmailEventInfo::ForReceiptEmail do
         end
       end
 
+      context "when a different receipt for the same address fails while a retry is already pending" do
+        it "re-points the pending retry at the newest failed receipt instead of dropping it" do
+          HandleSendgridEventJob.new.perform(sendgrid_params)
+          retry_record = TransientEmailFailureRetry.last
+          expect(retry_record.purchase_id).to eq(purchase.id)
+
+          second_purchase = create(:free_purchase, email: purchase.email)
+          params = sendgrid_params
+          params["_json"].first["mailer_args"] = "[#{second_purchase.id}]"
+          params["_json"].first["purchase_id"] = second_purchase.id.to_s
+          HandleSendgridEventJob.new.perform(params)
+
+          # Still one row and one scheduled job (the attempts cap is
+          # per-address), but the pending retry now targets the purchase from
+          # the latest failure, so its receipt is the one that gets re-sent.
+          expect(TransientEmailFailureRetry.count).to eq(1)
+          retry_record.reload
+          expect(retry_record.purchase_id).to eq(second_purchase.id)
+          expect(retry_record.retry_in_flight).to eq(true)
+          expect(RetryTransientEmailFailureJob.jobs.size).to eq(1)
+        end
+      end
+
       context "when a receipt for a combined charge is blocked with a transient reason" do
         let(:charge) { create(:charge, purchases: [purchase]) }
 

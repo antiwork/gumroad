@@ -81,9 +81,27 @@ class TransientEmailFailureRetryScheduler
       retry_record.retry_in_flight = false if retry_record.claim_expired?
 
       if retry_record.retry_in_flight?
-        # A retry is already scheduled; providers can post several failure
-        # events for the same send, and we only want one retry per failure.
-        log("retry already scheduled for #{email_event_info.email}, ignoring duplicate #{email_event_info.type} event")
+        # A retry is already scheduled. Providers can post several failure
+        # events for the same send — those are true duplicates, and we keep
+        # the single scheduled retry. But a DIFFERENT record failing for the
+        # same address (say two separate purchases to one email both bounce)
+        # must not be silently dropped: re-point the pending retry at this
+        # most recent failure so the scheduled job resends it. The job reads
+        # purchase_id/charge_id from the row when it fires, so no re-enqueue
+        # is needed, and the attempts cap stays per-address (we retry the
+        # latest failure, never both).
+        incoming_target = [purchase_id, charge_id]
+        stored_target = [retry_record.purchase_id, retry_record.charge_id]
+        if incoming_target.any?(&:present?) && incoming_target != stored_target
+          retry_record.update!(
+            purchase_id:,
+            charge_id:,
+            last_reason: email_event_info.reason.to_s.first(1000)
+          )
+          log("re-pointed pending retry for #{email_event_info.email} at the latest failed receipt")
+        else
+          log("retry already scheduled for #{email_event_info.email}, ignoring duplicate #{email_event_info.type} event")
+        end
         next
       end
 

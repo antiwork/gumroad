@@ -199,6 +199,7 @@ describe RetryTransientEmailFailureJob do
 
       it "re-sends the combined receipt when the retry is pinned to a charge" do
         charge = create(:charge, purchases: [purchase])
+        charge.order.purchases << purchase
         record = TransientEmailFailureRetry.create!(
           email: purchase.email,
           mail_kind: TransientEmailFailureRetry::RECEIPT,
@@ -213,6 +214,28 @@ describe RetryTransientEmailFailureJob do
         end.to have_enqueued_mail(CustomerMailer, :receipt).with(nil, charge.id)
 
         expect(record.reload.attempts).to eq(1)
+      end
+
+      it "skips the charge resend when the order's receipt recipient no longer matches the failed address" do
+        # The mailer picks the charge's recipient through order.email (the
+        # order's first successful purchase), so the guard must compare
+        # against that same address — not an arbitrary purchase on the charge.
+        charge = create(:charge, purchases: [purchase])
+        recipient_purchase = create(:free_purchase, email: "corrected@example.com")
+        charge.order.purchases << recipient_purchase
+        record = TransientEmailFailureRetry.create!(
+          email: purchase.email,
+          mail_kind: TransientEmailFailureRetry::RECEIPT,
+          charge_id: charge.id,
+          retry_in_flight: true
+        )
+
+        expect(EmailSuppressionManager).not_to receive(:new)
+        described_class.new.perform(record.id)
+
+        record.reload
+        expect(record.attempts).to eq(0)
+        expect(record.retry_in_flight).to eq(false)
       end
 
       it "skips the resend and clears the claim when the purchase no longer exists" do
