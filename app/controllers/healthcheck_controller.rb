@@ -18,11 +18,20 @@ class HealthcheckController < ApplicationController
   end
 
   # Reports whether a weekly payout batch is currently running (see
-  # PerformPayoutsUpToDelayDaysAgoWorker, which maintains the flag). The deploy
-  # pipeline polls this before deploying to production so deploys are held only
-  # while payouts are actually in flight, not on a fixed clock window.
+  # PerformPayoutsUpToDelayDaysAgoWorker, which registers a token per running job).
+  # The deploy pipeline polls this before deploying to production so deploys are held
+  # only while payouts are actually in flight, not on a fixed clock window.
+  #
+  # Only entries younger than the worker's per-entry TTL count: the key-level EXPIRE
+  # is refreshed whenever any job registers, so score-based filtering here is what
+  # actually ages out an entry left behind by a job that died mid-batch.
   def payouts
-    in_flight = $redis.get(RedisKey.payout_batch_in_flight).to_i > 0
+    key = RedisKey.payout_batch_in_flight
+    oldest_valid_score = PerformPayoutsUpToDelayDaysAgoWorker::IN_FLIGHT_ENTRY_TTL.ago.to_i
+    # Prune expired entries first so a dead job's leftover token gets removed rather
+    # than lingering until the whole key expires.
+    $redis.zremrangebyscore(key, "-inf", "(#{oldest_valid_score}")
+    in_flight = $redis.zcard(key) > 0
     status = in_flight ? :service_unavailable : :ok
     message = in_flight ? "batch in flight" : "no batch in flight"
 

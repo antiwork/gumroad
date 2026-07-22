@@ -16,30 +16,28 @@ class PerformPayoutsUpToDelayDaysAgoWorker
     ErrorNotifier.notify(exception, payout_processor_type:, bank_account_types:)
   end
 
-  # Both scripts below run as single atomic Redis operations (a Lua script can't be
-  # interleaved with other commands). The atomicity matters for correctness, not tidiness:
-  #
-  # Raising the flag: if INCR and EXPIRE were two separate calls, a transient Redis error
-  # between them could leave a positive counter with no TTL — the healthcheck would then
-  # report "payouts in flight" forever and every deploy would stall until someone deleted
-  # the key by hand.
-  RAISE_IN_FLIGHT_FLAG_SCRIPT = <<~LUA
-    local count = redis.call('INCR', KEYS[1])
-    redis.call('EXPIRE', KEYS[1], ARGV[1])
-    return count
-  LUA
+  # How long a job's in-flight entry stays valid. This is the crash safety net: if a
+  # job dies without its ensure running (or Redis is unreachable during cleanup), the
+  # entry stops counting after this long, so a dead job can never freeze deploys
+  # forever. 3 hours covers the 2-hour query budget below with headroom. The
+  # healthcheck (HealthcheckController#payouts) only counts entries younger than this.
+  IN_FLIGHT_ENTRY_TTL = 3.hours
 
-  # Lowering the flag: the last job out deletes the key, but if DECR and DEL were two
-  # separate calls, a sibling per-type job could INCR in between and have its count
-  # deleted — the healthcheck would report "clear" while that sibling was still paying
-  # out, letting a deploy land mid-batch. The <= 0 guard also removes any stray negative
-  # value so it can't linger and absorb a future batch's increment.
-  LOWER_IN_FLIGHT_FLAG_SCRIPT = <<~LUA
-    local count = redis.call('DECR', KEYS[1])
-    if count <= 0 then
-      redis.call('DEL', KEYS[1])
-    end
-    return count
+  # Each running payout job registers its own unique token in a Redis sorted set,
+  # scored by start time, rather than incrementing a shared counter. A shared counter
+  # has an unfixable ambiguity: when Redis executes an increment but the client loses
+  # the response (network blip), the job cannot know whether it owns a count — so it
+  # must either leak one (stale "in flight" that stalls deploys) or risk decrementing
+  # a concurrent sibling job's count (deploy lands mid-batch). With per-job tokens the
+  # cleanup is removing our OWN token: idempotent, safe to run no matter how the
+  # registration attempt ended, and it can never touch a sibling's entry.
+  #
+  # ZADD and EXPIRE run as one atomic Lua script so a transient error between them
+  # can't leave the key without its expiry backstop.
+  RAISE_IN_FLIGHT_FLAG_SCRIPT = <<~LUA
+    redis.call('ZADD', KEYS[1], ARGV[1], ARGV[2])
+    redis.call('EXPIRE', KEYS[1], ARGV[3])
+    return redis.call('ZCARD', KEYS[1])
   LUA
 
   def perform(payout_processor_type, bank_account_types = nil)
@@ -59,14 +57,12 @@ class PerformPayoutsUpToDelayDaysAgoWorker
 
     # Mark a payout batch as in flight so the deploy pipeline can hold production
     # deploys only while payouts are actually running (see HealthcheckController#payouts
-    # and .buildkite/scripts/deploy_production.sh). A counter (not a boolean) because
-    # the multi-bank-type batch fans out to concurrent per-type jobs — the flag must
-    # stay up until the LAST one finishes. The TTL is a crash safety net: if a job
-    # dies without the ensure running, the flag clears itself instead of freezing
-    # deploys forever. 3 hours covers the 2-hour query budget below with headroom.
-    # `counted` tracks whether the increment actually landed, so the ensure never
-    # decrements a count it didn't add.
-    counted = false
+    # and .buildkite/scripts/deploy_production.sh). Each job registers a unique token
+    # (a set of tokens, not a boolean) because the multi-bank-type batch fans out to
+    # concurrent per-type jobs — the flag must stay up until the LAST one finishes.
+    # The per-entry TTL (via the score, enforced by the healthcheck reader) means a
+    # crashed job's entry expires on its own instead of freezing deploys forever.
+    in_flight_token = "#{Process.pid}-#{SecureRandom.uuid}"
 
     # The database connection defaults to a 5-minute statement cap (config/database.yml).
     # The `holding_balance` eligibility query for a large bank-account-type cohort (US ACH,
@@ -77,8 +73,11 @@ class PerformPayoutsUpToDelayDaysAgoWorker
     # long-running query here is expected, so give it a 2-hour budget instead of letting
     # the default cap kill the batch.
     begin
-      $redis.eval(RAISE_IN_FLIGHT_FLAG_SCRIPT, keys: [RedisKey.payout_batch_in_flight], argv: [3.hours.to_i])
-      counted = true
+      $redis.eval(
+        RAISE_IN_FLIGHT_FLAG_SCRIPT,
+        keys: [RedisKey.payout_batch_in_flight],
+        argv: [Time.current.to_i, in_flight_token, IN_FLIGHT_ENTRY_TTL.to_i]
+      )
 
       WithMaxExecutionTime.timeout_queries(seconds: 2.hours) do
         if bank_account_types
@@ -88,9 +87,17 @@ class PerformPayoutsUpToDelayDaysAgoWorker
         end
       end
     ensure
-      # Last concurrent per-type job out turns the light off — atomically, so a sibling
-      # job's count can never be deleted out from under it (see the script's comment).
-      $redis.eval(LOWER_IN_FLIGHT_FLAG_SCRIPT, keys: [RedisKey.payout_batch_in_flight]) if counted
+      # Remove our own token. This is idempotent (removing an absent member is a no-op)
+      # and scoped to this job's entry, so it runs unconditionally: even if the
+      # registration above failed — or Redis executed it but the response was lost —
+      # cleanup can neither leak our entry nor touch a concurrent sibling job's.
+      begin
+        $redis.zrem(RedisKey.payout_batch_in_flight, in_flight_token)
+      rescue Redis::BaseError => e
+        # A failed cleanup self-heals via the entry's TTL; don't let it mask the
+        # batch's own outcome (success, or the exception already propagating).
+        ErrorNotifier.notify(e, redis_key: RedisKey.payout_batch_in_flight)
+      end
     end
 
     Rails.logger.info("AUTOMATED PAYOUTS: #{payout_period_end_date}, #{payout_processor_type} #{bank_account_types} (Finished)")

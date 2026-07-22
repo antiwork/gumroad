@@ -16,13 +16,13 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
 
       it "is set (with a TTL safety net) while the batch runs and cleared afterwards" do
         expect(Payouts).to receive(:create_payments_for_balances_up_to_date) do
-          expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to be > 0
+          expect($redis.zcard(RedisKey.payout_batch_in_flight)).to be > 0
           expect($redis.ttl(RedisKey.payout_batch_in_flight)).to be_between(1, 3.hours.to_i)
         end
 
         described_class.new.perform(payout_processor_type)
 
-        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(0)
+        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(0)
       end
 
       it "is cleared even when the batch raises" do
@@ -32,20 +32,21 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
           described_class.new.perform(payout_processor_type)
         end.to raise_error(ActiveRecord::StatementTimeout)
 
-        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(0)
+        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(0)
       end
 
       it "stays up until the last concurrent per-type job finishes" do
         expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_bank_account_types) do
           # Simulate a sibling per-type job still running alongside this one.
-          expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to be >= 2
+          expect($redis.zcard(RedisKey.payout_batch_in_flight)).to be >= 2
         end
 
-        $redis.incr(RedisKey.payout_batch_in_flight) # the sibling
+        $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "sibling-token")
         described_class.new.perform(PayoutProcessorType::STRIPE, ["AchAccount"])
 
-        # This job's decrement leaves the sibling's count in place.
-        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(1)
+        # This job removes only its own token, leaving the sibling's entry in place.
+        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(1)
+        expect($redis.zscore(RedisKey.payout_batch_in_flight, "sibling-token")).to be_present
       end
 
       it "is not touched by the fan-out dispatcher itself" do
@@ -53,12 +54,12 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
 
         described_class.new.perform(PayoutProcessorType::STRIPE, ["AchAccount", "UkBankAccount"])
 
-        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(0)
+        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(0)
       end
 
-      it "raises the flag and applies the TTL as one atomic operation" do
-        # The INCR and EXPIRE must land together — a positive counter with no TTL
-        # would hold deploys until someone deleted the key by hand.
+      it "registers the token and applies the TTL as one atomic operation" do
+        # The ZADD and EXPIRE must land together — a token in a key with no TTL would
+        # have no crash backstop if the healthcheck-side score pruning ever regressed.
         expect(Payouts).to receive(:create_payments_for_balances_up_to_date) do
           expect($redis.ttl(RedisKey.payout_batch_in_flight)).to be > 0
         end
@@ -66,11 +67,11 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
         described_class.new.perform(payout_processor_type)
       end
 
-      it "does not decrement a count it never added when raising the flag fails" do
-        # Simulate a sibling job's count already present, then a transient Redis error
-        # while this job raises the flag. The ensure must not decrement the sibling's
-        # count (that would falsely report the batch as finished).
-        $redis.incr(RedisKey.payout_batch_in_flight)
+      it "never removes a sibling's entry when registering its own token fails" do
+        # Simulate a sibling job's entry already present, then a transient Redis error
+        # while this job registers. Cleanup removes only this job's token (a no-op if
+        # it never landed), so the sibling's entry survives.
+        $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "sibling-token")
 
         allow($redis).to receive(:eval).and_call_original
         expect($redis).to receive(:eval)
@@ -81,18 +82,40 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
           described_class.new.perform(payout_processor_type)
         end.to raise_error(Redis::TimeoutError)
 
-        expect($redis.get(RedisKey.payout_batch_in_flight).to_i).to eq(1)
+        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(1)
+        expect($redis.zscore(RedisKey.payout_batch_in_flight, "sibling-token")).to be_present
       end
 
-      it "cleans up a stray negative counter instead of leaving it behind" do
-        # A negative value should never survive a job finishing — left in place it
-        # would silently absorb a future batch's increment back to zero.
+      it "cleans up its own entry even when Redis executed the registration but the response was lost" do
+        # The ambiguous-outcome case: the registration script runs on the server but the
+        # client sees an error. Because cleanup removes this job's own token
+        # unconditionally, the entry cannot go stale and stall deploys for hours.
+        registered_token = nil
+        allow($redis).to receive(:eval).and_wrap_original do |original, *args, **kwargs|
+          original.call(*args, **kwargs) # Redis DID execute the script...
+          registered_token = kwargs[:argv][1]
+          raise Redis::TimeoutError # ...but the response never made it back.
+        end
+        expect(Payouts).not_to receive(:create_payments_for_balances_up_to_date)
+
+        expect do
+          described_class.new.perform(payout_processor_type)
+        end.to raise_error(Redis::TimeoutError)
+
+        expect(registered_token).to be_present
+        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(0)
+      end
+
+      it "does not let a cleanup failure mask the batch outcome" do
+        # A dead Redis during the ensure would otherwise replace the batch's own
+        # result; the entry self-heals via its TTL, so report and move on.
         expect(Payouts).to receive(:create_payments_for_balances_up_to_date)
+        allow($redis).to receive(:zrem).and_raise(Redis::CannotConnectError)
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError), redis_key: RedisKey.payout_batch_in_flight)
 
-        $redis.set(RedisKey.payout_batch_in_flight, -1)
-        described_class.new.perform(payout_processor_type)
-
-        expect($redis.exists?(RedisKey.payout_batch_in_flight)).to eq(false)
+        expect do
+          described_class.new.perform(payout_processor_type)
+        end.not_to raise_error
       end
     end
 
