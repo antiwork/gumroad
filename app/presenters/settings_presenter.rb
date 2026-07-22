@@ -303,6 +303,20 @@ class SettingsPresenter
   end
 
   private
+    # True when the most recent Stripe account-creation attempt failed because Stripe
+    # rejected the seller's postal code. The failure leaves a breadcrumb payout note
+    # (written by StripeMerchantAccountManager, authored by the Gumroad admin account)
+    # that the retry pipeline also keys off; it's soft-deleted when a later attempt
+    # succeeds or the address changes, so an alive note means the block is current.
+    def postal_code_rejected_by_stripe?
+      seller.comments
+            .with_type_payout_note
+            .alive
+            .where(author_id: GUMROAD_ADMIN_ID)
+            .where("content LIKE ?", "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}%")
+            .exists?
+    end
+
     def country_code_for_compliance_field(field, user_compliance_info)
       case field
       when UserComplianceInfoFields::Business::TAX_ID, UserComplianceInfoFields::Business::VAT_NUMBER
@@ -401,6 +415,23 @@ class SettingsPresenter
         if missing_fields.any?
           compliance_actions << { message: "Please provide: #{missing_fields.uniq.to_sentence}.", href: nil }
         end
+      end
+
+      # Our payment partner (Stripe) rejected the postal code the seller entered, so their
+      # payout account couldn't be created. That rejection happens asynchronously after the
+      # settings save, so without this banner the seller sees a successful save and then
+      # retries blindly (observed sellers re-submitting the same code 4-13 times). The
+      # rejection leaves a "Stripe postal code rejected" payout note on the account, which
+      # is cleared automatically once an account creation succeeds or the seller saves a
+      # corrected address — so this banner self-heals. Only shown while there is no live
+      # Stripe account (i.e. the rejection is still what's blocking setup).
+      if stripe_account.blank? && postal_code_rejected_by_stripe?
+        country = seller.alive_user_compliance_info&.legal_entity_country
+        weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
+        compliance_actions << {
+          message: "Our payment partner couldn't verify the postal code you entered#{" for #{country}" if country.present?}. Please double-check it and re-save your address. If you're sure it's correct (for example, a newly built address), you don't need to do anything — we'll automatically re-check it every few days for up to #{weeks} weeks.",
+          href: nil,
+        }
       end
 
       gumroad_status = if is_under_review && !is_suspended

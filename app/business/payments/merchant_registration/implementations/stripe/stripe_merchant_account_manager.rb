@@ -508,19 +508,33 @@ module StripeMerchantAccountManager
     error.message.to_s.match?(/invalid address for japan|cannot find an address with town of/i)
   end
 
-  # Luxembourg postal codes are four digits, but residents habitually write them with the
-  # conventional "L-" prefix (e.g. "L-9767"). Stripe rejects the prefixed form with
-  # `postal_code_invalid`, and the resulting account-creation failure is invisible to the
-  # seller at save time (creation runs async), so strip the prefix at the Stripe boundary.
-  # Normalizing here (rather than at input time) also repairs already-saved compliance
-  # records when the retry job re-attempts account creation.
+  # Some countries have a habitual way of writing postal codes that differs from the exact
+  # format Stripe's validation accepts. Stripe rejects the off-format code with
+  # `postal_code_invalid`, and because merchant-account creation often runs asynchronously
+  # after the settings save, that failure used to be invisible to the seller. Rewrite the
+  # unambiguous habitual shapes into Stripe's expected format at the Stripe boundary:
+  #
+  # - Luxembourg: codes are four digits, but residents habitually add the conventional
+  #   "L-" prefix (e.g. "L-9767"). Stripe only accepts the bare digits.
+  # - Netherlands: codes are four digits + two letters, and Stripe requires the standard
+  #   spaced uppercase form "NNNN LL" (e.g. "2742 NZ"), but sellers often type them without
+  #   the space or in lowercase ("2742nz").
+  #
+  # Anything that doesn't match the expected shape passes through unchanged so Stripe can
+  # report its own validation error rather than us guessing. Normalizing here (rather than
+  # at input time) also repairs already-saved compliance records when the retry job
+  # re-attempts account creation — no re-entry needed from the seller.
   private_class_method
   def self.normalize_postal_code(postal_code, country_code)
     return postal_code if postal_code.blank?
 
-    if country_code == Compliance::Countries::LUX.alpha2
+    case country_code
+    when Compliance::Countries::LUX.alpha2
       normalized = postal_code.to_s.strip[/\AL[-\s]?(\d{4})\z/i, 1]
       return normalized if normalized.present?
+    when Compliance::Countries::NLD.alpha2
+      match = postal_code.to_s.strip.match(/\A(\d{4})\s?([A-Za-z]{2})\z/)
+      return "#{match[1]} #{match[2].upcase}" if match
     end
 
     postal_code
