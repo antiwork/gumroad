@@ -2741,9 +2741,10 @@ class Purchase < ApplicationRecord
     # shared cache the same probe re-runs once per (post, purchase) pair. For
     # mega-sellers each probe can take seconds (antiwork/gumroad#6009: two
     # identical probes accounted for 19.9s of a 22s request), so memoize per
-    # unique (targeting criteria, buyer email) signature across the whole batch.
-    # Cache keys include seller-scoped product/variant ids, so entries from
-    # different sellers in the same batch can't collide.
+    # unique (seller, targeting criteria, buyer email) signature across the
+    # whole batch. The cache key carries the post's seller id (see
+    # WithFiltering#seller_post_passes_filters), so entries from different
+    # sellers in the same batch can't collide.
     seller_post_filter_cache = {}
 
     check_filters = lambda do |posts|
