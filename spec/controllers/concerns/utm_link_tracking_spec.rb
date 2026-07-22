@@ -18,8 +18,6 @@ describe UtmLinkTracking, type: :controller do
 
     cookies[:_gumroad_guid] = "abc123"
     request.remote_ip = "192.168.0.1"
-
-    Feature.activate_user(:utm_links, seller)
   end
 
   context "when a matching UTM link is found" do
@@ -340,7 +338,6 @@ describe UtmLinkTracking, type: :controller do
     end
 
     before do
-      Feature.activate_user(:utm_links, seller)
       request.host = "#{seller.subdomain}"
     end
 
@@ -541,18 +538,6 @@ describe UtmLinkTracking, type: :controller do
 
       utm_link = UtmLink.last
       expect(utm_link.utm_source.length).to eq(UtmLink::MAX_UTM_PARAM_LENGTH)
-    end
-
-    it "does not auto-create UTM link when feature is disabled" do
-      Feature.deactivate_user(:utm_links, seller)
-      request.host = "#{seller.subdomain}"
-      request.path = "/"
-
-      expect do
-        expect do
-          get :action, params: utm_params
-        end.not_to change(UtmLink, :count)
-      end.not_to change(UtmLinkVisit, :count)
     end
 
     it "does not auto-create UTM link when cookies are disabled" do
