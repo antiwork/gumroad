@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe Onetime::BackfillAprilTaxRemittances do
-  it "creates all seven April 2026 remittances as completed Wise payments" do
+  it "creates all seven April 2026 remittances as completed Wise payments with their GL dates" do
     service = described_class.new.process
 
     expect(service.created.size).to eq(7)
@@ -16,11 +16,15 @@ describe Onetime::BackfillAprilTaxRemittances do
     expect(hmrc.usd_amount_cents).to eq(25_333_498)
     expect(hmrc.rail).to eq("wise")
     expect(hmrc.status).to eq("completed")
-    expect(hmrc.paid_at).to be_present
+    expect(hmrc.paid_at).to eq(Time.utc(2026, 4, 28))
     expect(hmrc.target_amount_cents).to be_nil
 
     oss = TaxRemittance.find_by!(jurisdiction: "EU_OSS", period: "2026-Q1")
     expect(oss.usd_amount_cents).to eq(70_308_965)
+    expect(oss.paid_at).to eq(Time.utc(2026, 4, 17))
+
+    ato = TaxRemittance.find_by!(jurisdiction: "AU", period: "2026-Q1")
+    expect(ato.paid_at).to eq(Time.utc(2026, 4, 13))
 
     total = TaxRemittance.for_period("2026-Q1").sum(:usd_amount_cents)
     expect(total).to eq(110_804_883) # ~$1.108M, matching the QBO GL April total
@@ -36,17 +40,14 @@ describe Onetime::BackfillAprilTaxRemittances do
   end
 
   it "raises when an existing row conflicts with the backfill data" do
-    TaxRemittance.create!(
-      authority: "HMRC",
-      jurisdiction: "GB",
-      period: "2026-Q1",
-      currency: "GBP",
-      usd_amount_cents: 1, # wrong amount — not the real April payment
-      rail: "wise",
-      status: "completed",
-      paid_at: Time.utc(2026, 4, 15),
-    )
+    create(:tax_remittance, :completed, usd_amount_cents: 1) # wrong amount — not the real April payment
 
     expect { described_class.new.process }.to raise_error(/HMRC 2026-Q1 row conflicts/)
+  end
+
+  it "raises when an existing row has a different payment date" do
+    create(:tax_remittance, :completed, usd_amount_cents: 25_333_498, paid_at: Time.utc(2026, 4, 15))
+
+    expect { described_class.new.process }.to raise_error(/paid_at/)
   end
 end

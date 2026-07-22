@@ -10,13 +10,29 @@
 # Lifecycle: draft → pending_approval → funded → sent → completed. A draft is
 # the system's proposed payment for a period (amount computed from collected
 # tax); a human approves it before any money moves. `failed` and `cancelled`
-# are terminal. Backfilled historical rows go straight to completed.
+# are terminal — a retry is a NEW row for the same (authority, period) with
+# the next attempt number (see #build_retry), so the failed attempt's history
+# is preserved. Backfilled historical rows go straight to completed.
 class TaxRemittance < ApplicationRecord
   include ExternalId
 
   RAILS = %w[wise stripe_global_payouts mercury].freeze
   STATUSES = %w[draft pending_approval funded sent completed failed cancelled].freeze
   TERMINAL_STATUSES = %w[completed failed cancelled].freeze
+  # Terminal statuses that a retry attempt may follow. `completed` is absent
+  # on purpose: the money arrived, there is nothing to retry.
+  RETRYABLE_STATUSES = %w[failed cancelled].freeze
+
+  # Once a remittance is terminal, its financial identity is frozen — these
+  # fields describe WHAT was (or wasn't) paid and can never be rewritten.
+  FROZEN_WHEN_TERMINAL = %w[authority jurisdiction period currency usd_amount_cents rail attempt status paid_at].freeze
+  # Reconciliation fields the Wise statement sync fills in after the fact:
+  # they may go from nil to a value on a terminal row (enrichment), but once
+  # set they are frozen too — changing a recorded amount or transfer ID on a
+  # completed payment would falsify the record.
+  ENRICHABLE_WHEN_TERMINAL = %w[target_amount_cents transfer_id].freeze
+  # qbo_journal_entry_ref and notes stay freely writable: they are annotations
+  # about the payment, not the payment itself.
 
   # The recurring authorities paid from the Wise treasury today, keyed by the
   # stable authority slug used in `authority`. `jurisdiction` is the ISO
@@ -37,7 +53,8 @@ class TaxRemittance < ApplicationRecord
   validates :authority, presence: true
   validates :jurisdiction, presence: true
   validates :period, presence: true, format: { with: PERIOD_FORMAT, message: "must look like 2026-Q1" }
-  validates :authority, uniqueness: { scope: :period }
+  validates :attempt, presence: true, numericality: { only_integer: true, greater_than: 0 }
+  validates :authority, uniqueness: { scope: [:period, :attempt] }
   validates :currency, presence: true, length: { is: 3 }
   validates :usd_amount_cents, presence: true, numericality: { only_integer: true, greater_than: 0 }
   validates :target_amount_cents, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
@@ -55,7 +72,8 @@ class TaxRemittance < ApplicationRecord
   scope :completed, -> { where(status: "completed") }
   scope :awaiting_approval, -> { where(status: "pending_approval") }
 
-  validate :terminal_status_immutable, on: :update
+  validate :terminal_rows_immutable, on: :update
+  validate :single_live_attempt_per_filing
 
   def self.period_for(date)
     "#{date.year}-Q#{(date.month - 1) / 3 + 1}"
@@ -65,15 +83,63 @@ class TaxRemittance < ApplicationRecord
     status.in?(TERMINAL_STATUSES)
   end
 
+  # Builds (does not save) the next attempt for a failed or cancelled
+  # remittance: same filing identity, attempt number incremented, payment
+  # state reset to a fresh draft. Raises if this attempt isn't retryable —
+  # completed payments have nothing to retry, and retrying a live attempt
+  # would create two concurrent payments for one filing.
+  def build_retry
+    unless status.in?(RETRYABLE_STATUSES)
+      raise ArgumentError, "can only retry a failed or cancelled remittance (status is #{status})"
+    end
+
+    self.class.new(
+      authority:,
+      jurisdiction:,
+      period:,
+      currency:,
+      usd_amount_cents:,
+      target_amount_cents:,
+      rail:,
+      attempt: attempt + 1,
+      status: "draft",
+    )
+  end
+
   private
     # Once a remittance reaches a terminal state (completed/failed/cancelled),
-    # its status is frozen. A later status write silently resurrecting a
-    # completed payment (e.g. a stale webhook or a buggy sync) would re-count
-    # real money — the same catch class as purchase-status resurrection.
-    def terminal_status_immutable
-      return unless status_changed?
+    # the row is frozen: a later write rewriting the amount, authority, or
+    # status of a finished payment (a stale webhook, a buggy sync) would
+    # falsify a record finance automation treats as the source of truth —
+    # the same catch class as purchase-status resurrection. Two carve-outs:
+    # reconciliation fields may be filled in where they were nil (the Wise
+    # statement sync learns local amounts and transfer IDs after payment),
+    # and annotations (qbo_journal_entry_ref, notes) stay freely writable.
+    def terminal_rows_immutable
       return unless status_was.in?(TERMINAL_STATUSES)
 
-      errors.add(:status, "cannot change from terminal state #{status_was}")
+      changed.each do |field|
+        if field.in?(FROZEN_WHEN_TERMINAL)
+          errors.add(field, "cannot change on a #{status_was} remittance")
+        elsif field.in?(ENRICHABLE_WHEN_TERMINAL) && attribute_was(field).present?
+          errors.add(field, "cannot change once set on a #{status_was} remittance")
+        end
+      end
+    end
+
+    # At most one attempt per (authority, period) may be live (not failed or
+    # cancelled) at a time — two concurrent live attempts would risk paying
+    # the same filing twice. The unique (authority, period, attempt) index
+    # keeps history append-only; this validation keeps it single-threaded.
+    def single_live_attempt_per_filing
+      return if status.in?(RETRYABLE_STATUSES)
+      return if authority.blank? || period.blank?
+
+      other_live = self.class.where(authority:, period:)
+                       .where.not(status: RETRYABLE_STATUSES)
+      other_live = other_live.where.not(id:) if persisted?
+      if other_live.exists?
+        errors.add(:base, "another live attempt already exists for #{authority} #{period}")
+      end
     end
 end

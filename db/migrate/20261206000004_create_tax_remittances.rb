@@ -32,6 +32,14 @@ class CreateTaxRemittances < ActiveRecord::Migration[7.1]
       t.string :transfer_id
 
       t.string :status, null: false, default: "draft"
+
+      # Payment attempts for one (authority, period) filing are numbered from
+      # 1. A failed or cancelled attempt stays in the table as history, and a
+      # retry inserts a fresh row with the next attempt number — the model
+      # guarantees at most one attempt per filing is ever "live"
+      # (not failed/cancelled).
+      t.integer :attempt, null: false, default: 1
+
       t.datetime :paid_at
 
       # Reference to the QuickBooks journal entry that books the 4-way split
@@ -42,7 +50,7 @@ class CreateTaxRemittances < ActiveRecord::Migration[7.1]
 
       t.timestamps
 
-      t.index [:authority, :period], unique: true
+      t.index [:authority, :period, :attempt], unique: true
       # Unique so one rail-side payment can never be reconciled against two
       # remittance rows (which would double-count real money). MySQL unique
       # indexes allow multiple NULLs, so rows awaiting a transfer ID coexist.
