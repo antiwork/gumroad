@@ -307,14 +307,30 @@ class SettingsPresenter
     # rejected the seller's postal code. The failure leaves a breadcrumb payout note
     # (written by StripeMerchantAccountManager, authored by the Gumroad admin account)
     # that the retry pipeline also keys off; it's soft-deleted when a later attempt
-    # succeeds or the address changes, so an alive note means the block is current.
+    # succeeds, so an alive note usually means the block is current.
+    #
+    # One wrinkle: in the account-creation path the note is only cleared when an
+    # attempt SUCCEEDS. If the seller corrects their address and the next attempt
+    # fails for an unrelated reason (say, a bad bank account number), the old
+    # postal-code note is still alive even though the corrected postal code was
+    # never rejected. To avoid blaming an address the seller already fixed, only
+    # treat the note as current when it postdates the seller's latest
+    # compliance-info save (changing the payments form writes a fresh
+    # UserComplianceInfo record — records are immutable and replaced on edit). If
+    # the corrected postal code is in fact still invalid, the next attempt records
+    # a fresh note and the banner comes back.
     def postal_code_rejected_by_stripe?
-      seller.comments
+      note = seller.comments
             .with_type_payout_note
             .alive
             .where(author_id: GUMROAD_ADMIN_ID)
             .where("content LIKE ?", "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}%")
-            .exists?
+            .order(created_at: :desc, id: :desc)
+            .first
+      return false if note.nil?
+
+      compliance_info = seller.alive_user_compliance_info
+      compliance_info.nil? || note.created_at >= compliance_info.created_at
     end
 
     def country_code_for_compliance_field(field, user_compliance_info)
@@ -421,10 +437,12 @@ class SettingsPresenter
       # payout account couldn't be created. That rejection happens asynchronously after the
       # settings save, so without this banner the seller sees a successful save and then
       # retries blindly (observed sellers re-submitting the same code 4-13 times). The
-      # rejection leaves a "Stripe postal code rejected" payout note on the account, which
-      # is cleared automatically once an account creation succeeds or the seller saves a
-      # corrected address — so this banner self-heals. Only shown while there is no live
-      # Stripe account (i.e. the rejection is still what's blocking setup).
+      # rejection leaves a "Stripe postal code rejected" payout note on the account, so the
+      # banner self-heals: the note is soft-deleted once an account creation succeeds, and
+      # postal_code_rejected_by_stripe? ignores notes older than the seller's latest
+      # compliance-info save (i.e. a corrected address hides the banner even before the
+      # retry runs). Only shown while there is no live Stripe account (i.e. the rejection
+      # is still what's blocking setup).
       if stripe_account.blank? && postal_code_rejected_by_stripe?
         country = seller.alive_user_compliance_info&.legal_entity_country
         weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
