@@ -95,6 +95,15 @@ module User::Taxation
     alive_user_compliance_info&.country_code == Compliance::Countries::USA.alpha2
   end
 
+  # The tax center (1099 forms, earnings summaries) only applies to US-based
+  # sellers, because the forms it serves are IRS forms. The `tax_center`
+  # feature flag that used to gate this was fully enabled in production and
+  # removed (see gumroad-private#1208), leaving US residency as the only
+  # remaining condition.
+  def tax_center_enabled?
+    from_us?
+  end
+
   private
     def sales_scope_for(year)
       range = Date.new(year).in_time_zone(timezone).all_year

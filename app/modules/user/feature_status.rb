@@ -90,9 +90,5 @@ class User
       is_today_gumroad_day = Time.now.in_time_zone(timezone_for_gumroad_day).to_date == $redis.get(RedisKey.gumroad_day_date)&.to_date
       is_today_gumroad_day || Feature.active?(:waive_gumroad_fee_on_new_sales, self)
     end
-
-    def tax_center_enabled?
-      Feature.active?(:tax_center, self) && from_us?
-    end
   end
 end
