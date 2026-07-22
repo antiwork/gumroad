@@ -221,8 +221,10 @@ class Purchase::CreateService < Purchase::BaseService
           # A logged-out visitor entered an email that already has an active subscription
           # to this membership. This is an expected, fully-handled outcome: we block the
           # duplicate purchase and email the subscriber a reminder (see the mailer call
-          # above). The error message is intentionally vague so the checkout form can't
-          # be used to probe whether an arbitrary email is subscribed to a product.
+          # above). The error message tells the buyer exactly what happened and where the
+          # management link went, so they don't get stuck retrying a blocked checkout.
+          # (This does reveal that the email has a subscription; we accept that trade-off
+          # here because a vague "something went wrong" left legitimate buyers stranded.)
           #
           # We log instead of reporting to Sentry: each occurrence used to be captured as
           # an info-level Sentry event (thousands of events for a non-defect), and the
@@ -230,7 +232,7 @@ class Purchase::CreateService < Purchase::BaseService
           Rails.logger.info(
             "Existing subscription checkout attempt: subscription_id=#{active_subscription.id} product_id=#{product.id}"
           )
-          "Sorry, something went wrong. Please contact support@gumroad.com if the problem persists."
+          "This email address already has an active subscription to this membership. We've emailed it a link to manage the subscription — check your inbox."
         end
 
         return nil, error_message

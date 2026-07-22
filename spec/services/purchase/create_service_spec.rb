@@ -3704,11 +3704,11 @@ describe Purchase::CreateService, :vcr do
         create_subscription_for(product: membership_product, purchaser: create(:user), email: email)
       end
 
-      it "returns a generic error" do
+      it "returns an explicit already-subscribed error" do
         purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params).perform
 
         expect(purchase).to be_nil
-        expect(error).to eq("Sorry, something went wrong. Please contact support@gumroad.com if the problem persists.")
+        expect(error).to eq("This email address already has an active subscription to this membership. We've emailed it a link to manage the subscription — check your inbox.")
       end
 
       it "logs the attempt without reporting to Sentry" do
