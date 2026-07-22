@@ -122,14 +122,6 @@ class OrdersController < ApplicationController
     end
 
     def skip_recaptcha?
-      # TEMP: QA on preview apps only; revert after wallet QA sign-off.
-      # Preview apps (deployed per-branch, marked by BRANCH_DEPLOYMENT=true) run in the staging
-      # Rails environment with test-mode Stripe keys, where the checkout reCAPTCHA can't be
-      # solved. The bypass requires the staging environment, the explicit preview-app marker,
-      # AND a test-mode key, so a misconfigured key in real production (which is never the
-      # staging env and never sets BRANCH_DEPLOYMENT) can't accidentally disable reCAPTCHA,
-      # and CI keeps exercising these code paths.
-      return true if Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true" && Stripe.api_key.to_s.start_with?("sk_test_")
       site_key = CheckoutRecaptcha.site_key(logged_in_user)
       return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
       return true if action_name.in?(%w[create prepare]) && all_free_products_without_captcha?
