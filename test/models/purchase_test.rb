@@ -6550,6 +6550,30 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal false, purchase.eligible_for_review_reminder?
   end
 
+  test "#eligible_for_review_reminder? when the purchase is excluded from reviews returns false" do
+    # A purchase flagged `should_exclude_product_review` (e.g. after a charge
+    # reversal on a free-trial membership) never shows a review form, so it must
+    # not receive a reminder that deep-links to a page without one.
+    purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
+    purchase.update!(should_exclude_product_review: true)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
+  test "#eligible_for_review_reminder? when access is revoked on an unpaid purchase returns false" do
+    # Access-revoked free purchases can't leave a review, so no reminder either.
+    purchase = create_free_purchase(purchaser: create_user, link: create_product(price_cents: 0))
+    purchase.update!(is_access_revoked: true)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
+  test "#eligible_for_review_reminder? when a chargeback was reversed returns false" do
+    # A reversed chargeback still blocks the review form (`chargeback_date` is
+    # set), so the reminder must stay suppressed to match.
+    purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
+    purchase.update!(chargeback_date: 1.day.ago, chargeback_reversed: true)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
   # ---- #schedule_order_review_reminder --------------------------------------
 
   test "#schedule_order_review_reminder schedules the order review reminder when a purchase transitions to successful" do

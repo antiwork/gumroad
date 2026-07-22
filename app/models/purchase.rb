@@ -3428,14 +3428,13 @@ class Purchase < ApplicationRecord
   end
 
   def eligible_for_review_reminder?
-    purchase_state.in?(Purchase::COUNTS_REVIEWS_STATES) &&
-    (is_original_subscription_purchase? || link.not_is_recurring_billing?) &&
-      # Gift-sender purchases can never leave a review (the giftee's purchase owns
-      # the review), so reminding the gifter would deep-link to a form that always
-      # errors on submit.
-      not_is_gift_sender_purchase &&
+    # Delegate to the same gate that decides whether the review form is shown and
+    # the review counted (`Purchase::Reviews#allows_review_to_be_counted?`). If the
+    # two checks drift apart, buyers get a reminder email whose link opens a page
+    # with no review form (e.g. purchases flagged `should_exclude_product_review`
+    # after a charge reversal, or access-revoked free purchases).
+    allows_review_to_be_counted? &&
       product_review.blank? &&
-      !chargedback_not_reversed_or_refunded? &&
       !seller&.disable_review_reminders? &&
       (purchaser.present? ? !purchaser.opted_out_of_review_reminders? : true)
   end
