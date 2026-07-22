@@ -10806,6 +10806,54 @@ describe StripeMerchantAccountManager, :vcr do
                 .and(not_have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review))
             end
 
+            it "sends the under-review email instead when requirements are satisfied but payouts stay paused before the action-required email sends" do
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { StripePayoutsPausedEmailJob.jobs.size }.by(1)
+
+              # Within the debounce window the seller satisfies the past-due
+              # requirement, but payouts remain disabled pending Stripe's review.
+              review_event = stripe_event.deep_dup
+              review_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
+              review_event["data"]["object"]["requirements"]["past_due"] = []
+              expect do
+                described_class.handle_stripe_event(review_event)
+              end.to change { StripePayoutsPausedEmailJob.jobs.size }.by(1)
+
+              # The de-escalation rotated the claim token, so the pending
+              # action-required job is stale: the seller is not told to act
+              # when nothing is due — only the under-review email sends.
+              expect do
+                StripePayoutsPausedEmailJob.drain
+              end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review).with(user.id)
+                .and(not_have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled))
+            end
+
+            it "invalidates a pending pause email when the account transitions to a rejected state before the debounce elapses" do
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { StripePayoutsPausedEmailJob.jobs.size }.by(1)
+
+              # Stripe rejects the account within the debounce window. Telling
+              # the seller to provide information now would contradict the
+              # rejection, so the claim is dropped entirely.
+              rejected_event = stripe_event.deep_dup
+              rejected_event["data"]["object"]["requirements"]["disabled_reason"] = "rejected.listed"
+              described_class.handle_stripe_event(rejected_event)
+
+              expect(merchant_account.reload.stripe_payouts_pause_email_sent).to be_nil
+              expect(merchant_account.stripe_payouts_pause_email_claim_token).to be_nil
+
+              expect do
+                StripePayoutsPausedEmailJob.drain
+              end.to not_have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled)
+                .and(not_have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review))
+            end
+
             it "clears the pause-email marker when Stripe re-enables payouts" do
               merchant_account.update!(stripe_payouts_pause_email_sent: "action_required", stripe_payouts_pause_email_claim_token: "stale-token")
               user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)

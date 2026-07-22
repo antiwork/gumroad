@@ -46,22 +46,43 @@ module StripeMerchantAccountManager
   # Claims (at most one of each) pause email per Stripe-disabled episode,
   # surviving admin/payout-method resumes (the marker is cleared only when
   # Stripe re-enables payouts). Action-required is claimed on first notice or on
-  # escalation from under-review; under-review only as the first notice. Updates
-  # the marker (called inside the user lock) and returns the email type to
-  # schedule after the lock commits, or nil.
+  # escalation from under-review; under-review is claimed as the first notice or
+  # on de-escalation from action-required (the seller satisfied the outstanding
+  # requirements but payouts stay paused pending Stripe's review). Updates the
+  # marker (called inside the user lock) and returns the email type to schedule
+  # after the lock commits, or nil.
   #
-  # Each successful claim also rotates stripe_payouts_pause_email_claim_token.
-  # The scheduled StripePayoutsPausedEmailJob carries the token it was created
-  # with and only sends if it still matches, so a job left over from an earlier
-  # pause (or from an under-review notice that has since escalated to
-  # action-required) can never send a stale or duplicate email.
+  # Each successful claim also rotates stripe_payouts_pause_email_claim_token,
+  # and a transition to a state that must never email (rejected.*,
+  # platform_paused) drops the claim entirely. The scheduled
+  # StripePayoutsPausedEmailJob carries the token it was created with and only
+  # sends if it still matches, so the token changes whenever the desired
+  # notification changes — a job left over from an earlier pause, or from a
+  # notice whose type has since escalated, de-escalated, or become
+  # a never-email state, can never send a stale or contradictory email.
   def self.claim_stripe_payouts_pause_email(merchant_account, pause_email_type)
+    already_claimed = merchant_account.stripe_payouts_pause_email_sent
     case pause_email_type
     when :action_required
-      return nil if merchant_account.stripe_payouts_pause_email_sent == "action_required"
+      return nil if already_claimed == "action_required"
     when :under_review
-      return nil unless merchant_account.stripe_payouts_pause_email_sent.nil?
+      # already_claimed == "action_required" falls through: the requirements
+      # were satisfied while the account stayed paused, so claim the
+      # under-review email. The rotated token invalidates any action-required
+      # job still waiting out its debounce window — without this, that stale
+      # job would tell the seller to act when nothing is due anymore.
+      return nil if already_claimed == "under_review"
     else
+      # The account moved to a state this flow never emails about (rejected.*
+      # or platform_paused). An email still waiting out its debounce window
+      # from before the transition would now contradict the account's state
+      # ("please provide information" on a rejected account), so drop the
+      # claim — clearing the token invalidates the pending job. Clearing the
+      # marker also lets a later actionable phase (e.g. a rejection appeal
+      # that reopens verification) email the seller afresh.
+      if already_claimed || merchant_account.stripe_payouts_pause_email_claim_token
+        merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil)
+      end
       return nil
     end
     merchant_account.update!(
