@@ -125,22 +125,26 @@ class Api::V2::UsersController < Api::V2::BaseController
           raise ActiveRecord::Rollback
         end
 
-        # `find` must match exactly once so the edit is unambiguous. Zero matches means the caller
-        # is working from stale HTML; multiple matches means the snippet needs more surrounding
-        # context. Both errors say so explicitly, so the agent can correct itself in the same turn.
-        occurrences = previous_custom_html.scan(find).size
-        if occurrences.zero?
+        # `find` must locate exactly one place in the page so the edit is unambiguous. Matching is
+        # whitespace-tolerant (Ai::CustomHtmlSnippetMatcher): agents reading the page routinely
+        # normalize characters like non-breaking spaces to plain spaces when they echo a snippet
+        # back, and an exact-only match would make such an edit permanently unappliable
+        # (gumroad-private#1251). Zero matches means the caller is working from stale HTML;
+        # multiple matches means the snippet needs more surrounding context. Both errors say so
+        # explicitly, so the agent can correct itself in the same turn.
+        match = Ai::CustomHtmlSnippetMatcher.match(previous_custom_html, find)
+        if match.occurrences.zero?
           edit_error = "find does not appear in the current custom HTML. Re-read the page and copy the snippet exactly, including whitespace."
           raise ActiveRecord::Rollback
-        elsif occurrences > 1
-          edit_error = "find matches #{occurrences} places in the current custom HTML. Include more surrounding context so it matches exactly once."
+        elsif match.occurrences > 1
+          edit_error = "find matches #{match.occurrences} places in the current custom HTML. Include more surrounding context so it matches exactly once."
           raise ActiveRecord::Rollback
         end
 
         # Block form so the replacement is inserted literally — the two-argument form of String#sub
         # treats backslash sequences (\0, \1, \\) in the replacement specially, which would corrupt
         # HTML that legitimately contains backslashes.
-        edited = previous_custom_html.sub(find) { replace }
+        edited = previous_custom_html.sub(match.matcher) { replace }
 
         if edited.length > Page::MAX_CUSTOM_HTML_LENGTH
           edit_error = "The edited custom_html would be too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."

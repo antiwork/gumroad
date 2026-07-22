@@ -379,7 +379,7 @@ describe("AgentChat custom-html proposal cards", () => {
     expect(screen.getByText("Dismiss").closest("button")?.disabled).toBe(false);
   });
 
-  it("shows why a preview is unavailable and keeps Confirm disabled", async () => {
+  it("shows why a preview failed as a prominent alert and keeps Confirm disabled", async () => {
     streamTurnWithAction(customHtmlAction);
     fetchCustomHtmlProposalPreview.mockRejectedValue(
       new Error("The snippet to replace no longer appears in the current page."),
@@ -388,11 +388,15 @@ describe("AgentChat custom-html proposal cards", () => {
     render(<AgentChat greeting="Hi" suggestions={[]} />);
     await sendMessage("change my headline");
 
+    // The failure is why Confirm is disabled, so it renders as an alert naming the cause and the
+    // way out — not a muted footnote (gumroad-private#1251).
     await waitFor(() =>
       expect(
-        screen.getByText("Preview unavailable: The snippet to replace no longer appears in the current page."),
+        screen.getByText("This change can't be applied: The snippet to replace no longer appears in the current page."),
       ).toBeTruthy(),
     );
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByText("Ask the agent to re-read the page and propose the change again.")).toBeTruthy();
     // An invalid proposal would fail on apply too — Confirm stays off; Dismiss remains the way out.
     expect(screen.getByText("Confirm").closest("button")?.disabled).toBe(true);
     expect(screen.getByText("Dismiss").closest("button")?.disabled).toBe(false);

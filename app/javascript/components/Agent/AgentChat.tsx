@@ -289,7 +289,17 @@ const CustomHtmlProposalPreview = ({ state }: { state: CustomHtmlPreviewState })
         Loading preview…
       </span>
     );
-  if (state.status === "error") return <span className="text-sm text-muted">Preview unavailable: {state.message}</span>;
+  if (state.status === "error")
+    return (
+      // A failed preview means Confirm stays disabled (confirmBlockedOnPreview below), so this
+      // has to read as the reason the proposal can't be applied — not as a muted footnote. The
+      // seller-facing symptom of hiding it was a "permanently disabled Confirm button" with no
+      // explanation (gumroad-private#1251). Tell them what happened and what to do about it.
+      <div role="alert" className="text-sm text-danger">
+        <p>This change can't be applied: {state.message}</p>
+        <p>Ask the agent to re-read the page and propose the change again.</p>
+      </div>
+    );
   return (
     <iframe
       title="Preview of your page after this change"
