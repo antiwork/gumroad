@@ -67,7 +67,10 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
-                    <h4 className="font-bold">{product.name}</h4>
+                    {/* dir="auto" lets RTL product names render right-to-left (gumroad-private#1259). */}
+                    <h4 className="font-bold" dir="auto">
+                      {product.name}
+                    </h4>
                   </a>
 
                   <a href={product.url} title={product.url} target="_blank" rel="noreferrer">

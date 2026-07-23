@@ -112,11 +112,17 @@ export const ProductsPageProductsTable = (props: {
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   {product.can_edit ? (
                     <Link href={product.edit_url} style={{ textDecoration: "none" }}>
-                      <h4 className="font-bold">{product.name}</h4>
+                      {/* dir="auto" lets RTL product names (Hebrew, Arabic) render right-to-left
+                          (gumroad-private#1259; same fix as the product page in #6190). */}
+                      <h4 className="font-bold" dir="auto">
+                        {product.name}
+                      </h4>
                     </Link>
                   ) : (
                     <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
-                      <h4 className="font-bold">{product.name}</h4>
+                      <h4 className="font-bold" dir="auto">
+                        {product.name}
+                      </h4>
                     </a>
                   )}
 
