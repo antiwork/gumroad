@@ -25,14 +25,6 @@ describe DisposableEmailValidator do
   end
 
   describe "user signup validation" do
-    before do
-      Feature.activate(:block_disposable_emails_at_signup)
-    end
-
-    after do
-      Feature.deactivate(:block_disposable_emails_at_signup)
-    end
-
     it "blocks signup with a disposable email domain" do
       user = build(:user, email: "test@mailinator.com")
       user.valid?(:create)
@@ -45,14 +37,11 @@ describe DisposableEmailValidator do
       expect(user.errors[:email]).to be_empty
     end
 
-    context "when the feature flag is disabled" do
-      before { Feature.deactivate(:block_disposable_emails_at_signup) }
-
-      it "skips the validation" do
-        user = build(:user, email: "test@mailinator.com")
-        user.valid?(:create)
-        expect(user.errors[:email]).to be_empty
-      end
+    it "does not re-validate existing users on update" do
+      user = create(:user)
+      user.update_column(:email, "test@mailinator.com")
+      user.name = "New Name"
+      expect(user.valid?).to be(true)
     end
   end
 end

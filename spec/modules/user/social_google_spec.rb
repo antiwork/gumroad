@@ -138,12 +138,10 @@ describe User::SocialGoogle do
 
     context "when the gmail-abuse signup gate blocks the email" do
       before do
-        Feature.activate(:block_gmail_abuse_at_signup)
         GmailAbuseFilter.add!("scammer@gmail.com")
       end
 
       after do
-        Feature.deactivate(:block_gmail_abuse_at_signup)
         $redis.del(GmailAbuseFilter::REDIS_KEY)
       end
 

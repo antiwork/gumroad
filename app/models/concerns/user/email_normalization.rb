@@ -51,7 +51,6 @@ module User::EmailNormalization
   private
     def email_not_from_suspended_gmail_variant
       return if email.blank?
-      return if Feature.inactive?(:block_gmail_abuse_at_signup)
       return if !User.abusive_gmail_variant_exists?(email)
 
       errors.add(:base, :blocked_signup, message: "Something went wrong.")
