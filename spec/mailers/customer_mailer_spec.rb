@@ -1474,13 +1474,35 @@ describe CustomerMailer do
       end
 
       it "does not send the email when the stamped PDF is missing" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          "CustomerMailer#send_to_kindle: stamped PDF unavailable, not sending",
+          product_file_id: product_file.id,
+          url_redirect_id: url_redirect.id
+        )
+
         mail = CustomerMailer.send_to_kindle("kindle@kindle.com", product_file.id, url_redirect.id)
         expect(mail.message).to be_a(ActionMailer::Base::NullMail)
       end
 
       it "does not send the email without url_redirect context" do
-        mail = CustomerMailer.send_to_kindle("kindle@kindle.com", product_file.id)
+        expect(ErrorNotifier).to receive(:notify).with(
+          "CustomerMailer#send_to_kindle: stamped PDF unavailable, not sending",
+          product_file_id: product_file.id,
+          url_redirect_id: nil
+        )
+
+        mail = CustomerMailer.send_to_kindle("kindle@kindle.com", product_file.id, nil)
         expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "attaches the original file for legacy two-argument jobs queued before the stamping change" do
+        # Jobs enqueued before this code shipped serialize only two arguments;
+        # they must keep the old behavior instead of silently sending nothing.
+        expect_any_instance_of(ProductFile).to receive(:s3_object).and_call_original
+
+        mail = CustomerMailer.send_to_kindle("kindle@kindle.com", product_file.id)
+        expect(mail.to).to eq(["kindle@kindle.com"])
+        expect(mail.attachments.first.filename).to eq(product_file.s3_filename)
       end
     end
   end
