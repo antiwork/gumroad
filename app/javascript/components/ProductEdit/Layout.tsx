@@ -364,7 +364,15 @@ export const Layout = ({
                               // consumes the transient activation), which matters because the mobile
                               // preview pane is this button's main audience.
                               const previewWindow = window.open("about:blank", "_blank");
-                              void save().then(() => {
+                              void save().then((saved) => {
+                                // A false result means the seller cancelled the deletion
+                                // confirmation or the save request failed — opening the preview
+                                // then would show stale saved content that doesn't match what's
+                                // on screen. Close the placeholder tab and stay in the editor.
+                                if (!saved) {
+                                  previewWindow?.close();
+                                  return;
+                                }
                                 if (previewWindow) previewWindow.location.href = url;
                                 else window.open(url, "_blank");
                               });
