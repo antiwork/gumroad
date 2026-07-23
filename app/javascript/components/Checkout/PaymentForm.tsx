@@ -215,7 +215,7 @@ const ZipCodeInput = () => {
   );
 };
 
-const SharedInputs = ({ className }: { className?: string | undefined }) => {
+const SharedInputs = () => {
   const uid = React.useId();
   const loggedInUser = useLoggedInUser();
   const [state, dispatch] = useState();
@@ -353,85 +353,83 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
   const showCountryInput = !(hasShipping(state) || !requiresPayment(state)) && !elementCollectsFullBillingDetails;
   const showFullNameInput = requiresPayment(state) && !hasShipping(state) && !elementCollectsFullBillingDetails;
 
+  // These fields render inside the same box as the "Pay with" section (one card: email address,
+  // then the payment methods right below) rather than a separate "Contact information" card, so
+  // this component returns bare fieldsets for the caller's flex column.
   return (
-    <Card>
-      <div className={className}>
-        <div className="flex grow flex-col gap-4">
-          <h4 className="text-base sm:text-lg">Contact information</h4>
-          <Fieldset state={errors.has("email") ? "danger" : undefined}>
-            <FieldsetTitle>
-              <Label htmlFor={`${uid}email`}>Email address</Label>
-            </FieldsetTitle>
-            <div className="relative inline-block w-full">
-              <Popover open={!!state.emailTypoSuggestion}>
-                <PopoverAnchor>
-                  <Input
-                    id={`${uid}email`}
-                    type="email"
-                    aria-invalid={errors.has("email")}
-                    value={state.email}
-                    onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
-                    disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
-                    onBlur={checkForEmailTypos}
-                  />
-                </PopoverAnchor>
-                {/* Open upward: the pay/download button sits right below the email field, and a
+    <>
+      <Fieldset state={errors.has("email") ? "danger" : undefined}>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}email`}>Email address</Label>
+        </FieldsetTitle>
+        <div className="relative inline-block w-full">
+          <Popover open={!!state.emailTypoSuggestion}>
+            <PopoverAnchor>
+              <Input
+                id={`${uid}email`}
+                type="email"
+                aria-invalid={errors.has("email")}
+                value={state.email}
+                onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
+                disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
+                onBlur={checkForEmailTypos}
+              />
+            </PopoverAnchor>
+            {/* Open upward: the pay/download button sits right below the email field, and a
                     downward popover covers it, blocking the purchase until the buyer answers. */}
-                <PopoverContent className="grid gap-2" matchTriggerWidth side="top">
-                  <div>Did you mean {state.emailTypoSuggestion}?</div>
-                  <div className="flex gap-2">
-                    <Button onClick={rejectEmailTypoSuggestion}>No</Button>
-                    <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </Fieldset>
-          {showFullNameInput ? (
-            <Fieldset state={errors.has("fullName") ? "danger" : undefined}>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}fullName`}>Full name</Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}fullName`}
-                type="text"
-                aria-invalid={errors.has("fullName")}
-                value={state.fullName}
-                onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
-                disabled={isProcessing(state)}
-              />
-            </Fieldset>
-          ) : null}
-          {showCountryInput ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(min((20rem - 100%) * 1000, 100%), 1fr))",
-                gap: "var(--spacer-4)",
-              }}
-            >
-              <CountryInput />
-              {state.country === "US" ? <ZipCodeInput /> : null}
-              {state.country === "CA" ? <StateInput /> : null}
-            </div>
-          ) : null}
-          {showVatIdInput ? (
-            <Fieldset state={errors.has("vatId") ? "danger" : undefined}>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}vatId`}>{vatLabel}</Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}vatId`}
-                type="text"
-                value={state.vatId}
-                onChange={(e) => dispatch({ type: "set-value", vatId: e.target.value })}
-                disabled={isProcessing(state)}
-              />
-            </Fieldset>
-          ) : null}
+            <PopoverContent className="grid gap-2" matchTriggerWidth side="top">
+              <div>Did you mean {state.emailTypoSuggestion}?</div>
+              <div className="flex gap-2">
+                <Button onClick={rejectEmailTypoSuggestion}>No</Button>
+                <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
-      </div>
-    </Card>
+      </Fieldset>
+      {showFullNameInput ? (
+        <Fieldset state={errors.has("fullName") ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}fullName`}>Full name</Label>
+          </FieldsetTitle>
+          <Input
+            id={`${uid}fullName`}
+            type="text"
+            aria-invalid={errors.has("fullName")}
+            value={state.fullName}
+            onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
+            disabled={isProcessing(state)}
+          />
+        </Fieldset>
+      ) : null}
+      {showCountryInput ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min((20rem - 100%) * 1000, 100%), 1fr))",
+            gap: "var(--spacer-4)",
+          }}
+        >
+          <CountryInput />
+          {state.country === "US" ? <ZipCodeInput /> : null}
+          {state.country === "CA" ? <StateInput /> : null}
+        </div>
+      ) : null}
+      {showVatIdInput ? (
+        <Fieldset state={errors.has("vatId") ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}vatId`}>{vatLabel}</Label>
+          </FieldsetTitle>
+          <Input
+            id={`${uid}vatId`}
+            type="text"
+            value={state.vatId}
+            onChange={(e) => dispatch({ type: "set-value", vatId: e.target.value })}
+            disabled={isProcessing(state)}
+          />
+        </Fieldset>
+      ) : null}
+    </>
   );
 };
 
@@ -499,7 +497,6 @@ const CustomerDetails = ({ className }: { className?: string }) => {
 
   return (
     <>
-      <SharedInputs className={className} />
       {hasShipping(state) ? (
         <Card>
           <div className={className}>
@@ -1810,9 +1807,13 @@ export const PaymentForm = ({
       {showCustomFields ? <CustomFields className="p-4 sm:p-5" /> : null}
       <CustomerDetails className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" />
       {!isFreePurchase ? (
+        // One box for the whole payment step: the buyer's email address (plus name/country when
+        // the selected payment method doesn't collect them) sits directly above "Pay with", so
+        // contact details and payment methods read as a single flow instead of two cards.
         <Card borderless={borderless}>
           <CardContent className="sm:p-5">
             <div className="flex grow flex-col gap-4">
+              <SharedInputs />
               <h4 className="text-base sm:text-lg">Pay with</h4>
               <StripeElementsProvider>
                 <PaymentMethodsSection isPayPalAvailable={isPayPalAvailable} isTestPurchase={!!isTestPurchase} />
@@ -1828,10 +1829,16 @@ export const PaymentForm = ({
           ) : null}
         </Card>
       ) : (
-        <PayButton
-          className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5"
-          isTestPurchase={!!isTestPurchase}
-        />
+        // Free purchases skip the payment methods but still need the contact fields — keep the
+        // same one-box shape: email (plus any other shared fields) with the download CTA below.
+        <Card borderless={borderless}>
+          <CardContent className="sm:p-5">
+            <div className="flex grow flex-col gap-4">
+              <SharedInputs />
+              <PayButton className="flex" card={false} isTestPurchase={!!isTestPurchase} />
+            </div>
+          </CardContent>
+        </Card>
       )}
       {recaptcha.container}
     </div>
