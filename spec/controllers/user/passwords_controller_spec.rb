@@ -19,7 +19,6 @@ describe User::PasswordsController, type: :controller, inertia: true do
       expect(inertia.component).to eq("User/Passwords/New")
       expect(inertia.props[:email]).to be_nil
       expect(inertia.props[:application_name]).to be_nil
-      expect(inertia.props[:recaptcha_site_key]).to eq(GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"))
     end
 
     it "sets the page title" do

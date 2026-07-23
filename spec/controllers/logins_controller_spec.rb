@@ -21,18 +21,6 @@ describe LoginsController, type: :controller, inertia: true do
       expect(inertia.props[:title]).to eq("Log In")
       expect(inertia.props[:email]).to be_nil
       expect(inertia.props[:application_name]).to be_nil
-      expect(inertia.props[:recaptcha_site_key]).to eq(GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"))
-    end
-
-    context "when disable_login_recaptcha feature flag is active" do
-      before { Feature.activate(:disable_login_recaptcha) }
-      after { Feature.deactivate(:disable_login_recaptcha) }
-
-      it "does not pass reCAPTCHA site key" do
-        get :new
-
-        expect(inertia.props[:recaptcha_site_key]).to be_nil
-      end
     end
 
     context "when the passkeys feature is active" do
@@ -269,56 +257,13 @@ describe LoginsController, type: :controller, inertia: true do
       expect(flash[:warning]).to eq("You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!")
     end
 
-    it "does not log in a user when reCAPTCHA is not completed" do
-      allow(controller).to receive(:valid_recaptcha_response?).and_return(false)
-
-      post :create, params: { user: { login_identifier: @user.email, password: "password" } }
-
-      expect(response).to redirect_to(login_path)
-      expect(flash[:warning]).to eq ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE
-      expect(controller.user_signed_in?).to be(false)
-    end
-
-    it "logs in a user when reCAPTCHA is completed correctly" do
+    # Login reCAPTCHA was removed with the disable_login_recaptcha flag (100% on in prod
+    # since 2026-04, so production has run without login reCAPTCHA for months — gp#1208).
+    it "logs in a user without any reCAPTCHA validation" do
       post :create, params: { user: { login_identifier: @user.email, password: "password" } }
 
       expect(response).to redirect_to(dashboard_path)
       expect(controller.user_signed_in?).to be(true)
-    end
-
-    context "when disable_login_recaptcha feature flag is active" do
-      before { Feature.activate(:disable_login_recaptcha) }
-      after { Feature.deactivate(:disable_login_recaptcha) }
-
-      it "skips reCAPTCHA validation and logs in the user" do
-        allow(controller).to receive(:valid_recaptcha_response?).and_return(false)
-
-        post :create, params: { user: { login_identifier: @user.email, password: "password" } }
-
-        expect(response).to redirect_to(dashboard_path)
-        expect(controller.user_signed_in?).to be(true)
-      end
-    end
-
-    it "logs in a user when reCAPTCHA site key is not set in development environment" do
-      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
-      allow(GlobalConfig).to receive(:get).with("RECAPTCHA_LOGIN_SITE_KEY").and_return(nil)
-
-      post :create, params: { user: { login_identifier: @user.email, password: "password" } }
-
-      expect(response).to redirect_to(dashboard_path)
-      expect(controller.user_signed_in?).to be(true)
-    end
-
-    it "does not log in a user when reCAPTCHA site key is not set in production environment" do
-      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
-      allow(GlobalConfig).to receive(:get).with("RECAPTCHA_LOGIN_SITE_KEY").and_return(nil)
-      allow_any_instance_of(LoginsController).to receive(:valid_recaptcha_response?).and_return(false)
-
-      post :create, params: { user: { login_identifier: @user.email, password: "password" } }
-
-      expect(response).to redirect_to(login_path)
-      expect(controller.user_signed_in?).to be(false)
     end
 
     it "sets the 'Remember Me' cookie" do
