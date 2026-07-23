@@ -162,6 +162,11 @@ class ProductPresenter
             max_purchase_count: variant.max_purchase_count,
             integrations: Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? },
             rich_content: variant.rich_content_json,
+            # Whether the variant has files attached directly (legacy products
+            # predating embedded rich-content files). The editor's save-time
+            # deletion summary uses this to treat file-only variants as
+            # content-bearing, matching the server-side deletion guard.
+            has_files: variant.has_files?,
             sales_count_for_inventory: variant.max_purchase_count? ? variant.sales_count_for_inventory : 0,
             active_subscribers_count: variant.active_subscribers_count,
           }

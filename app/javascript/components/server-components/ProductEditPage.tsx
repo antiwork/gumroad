@@ -175,10 +175,13 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
   // excluding them would mean the summary never appears at all.
   const currentVariantIds = new Set(product.variants.map(({ id }) => id));
   // Only content-bearing variants warrant the scary confirmation — mirroring
-  // the server-side guard. Contentless variants (e.g. a coffee product's
+  // the server-side guard, which protects variants with visible rich-content
+  // pages OR directly-attached files (legacy products predating embedded
+  // rich-content files). Contentless variants (e.g. a coffee product's
   // "suggested amounts", an empty just-added version) delete without fuss.
   const removedVariants = lastSavedProduct.variants.filter(
-    ({ id, rich_content }) => !currentVariantIds.has(id) && rich_content.some(pageHasVisibleContent),
+    ({ id, rich_content, has_files }) =>
+      !currentVariantIds.has(id) && (rich_content.some(pageHasVisibleContent) || has_files === true),
   );
 
   // A page id that still appears anywhere in the current state (product-level

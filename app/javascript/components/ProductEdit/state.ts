@@ -33,6 +33,11 @@ export type Variant = {
   integrations: Record<keyof Product["integrations"], boolean>;
   newlyAdded?: boolean;
   rich_content: Page[];
+  // Whether the variant has files attached directly (legacy products predating
+  // embedded rich-content files). Set by the server; variants created in this
+  // editor session leave it unset. Used by the save-time deletion summary to
+  // treat file-only variants as content-bearing, matching the server guard.
+  has_files?: boolean;
   sales_count_for_inventory?: number;
   active_subscribers_count?: number;
 };
