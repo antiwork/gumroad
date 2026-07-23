@@ -3,6 +3,7 @@ import typia from "typia";
 
 import {
   CardPaymentMethodParams,
+  ElementCollectedBillingAddress,
   PaymentRequestPaymentMethodParams,
   ReusableCardPaymentMethodParams,
   ReusablePaymentRequestPaymentMethodParams,
@@ -137,7 +138,7 @@ const walletPaymentMethodDetails = (paymentMethod: WalletPaymentMethodPayload): 
 const elementCollectedBillingAddress = (
   collection: PaymentElementBillingDetailsCollection,
   paymentMethod: WalletPaymentMethodPayload,
-): { country: string | null; postal_code: string | null; state: string | null } | null => {
+): ElementCollectedBillingAddress | null => {
   if (collection !== "element-full") return null;
   const address = paymentMethod.billing_details?.address;
   return address ? { country: address.country, postal_code: address.postal_code, state: address.state } : null;
@@ -215,6 +216,10 @@ export const preparePaymentElementPaymentMethodData = async (
   }
 
   const walletDetails = walletPaymentMethodDetails(paymentMethodResult.paymentMethod);
+  const elementBillingAddress = elementCollectedBillingAddress(
+    cardData.billingDetailsCollection,
+    paymentMethodResult.paymentMethod,
+  );
   return {
     ...cardPaymentMethodParams(paymentMethodResult.paymentMethod),
     // When a wallet paid, surface its type and billing address so checkout can update the tax
@@ -222,6 +227,11 @@ export const preparePaymentElementPaymentMethodData = async (
     // The key is omitted entirely for card payments so the params object — which callers
     // spread into server requests (see prepareFutureCharges) — is unchanged for them.
     ...(walletDetails ? { wallet: walletDetails } : {}),
+    // Same for the address the element's own pane collected ("element-full" — UPI on digital
+    // carts): surface it so the server-confirm lane can update checkout's tax location and run
+    // the held-payment total check, exactly like the client-confirm lane does with the
+    // ConfirmationToken preview's address.
+    ...(elementBillingAddress ? { elementBillingAddress } : {}),
   };
 };
 
@@ -235,7 +245,7 @@ export type PaymentElementConfirmationTokenResult =
       // the full billing details itself ("element-full" — UPI on digital carts); null otherwise.
       // Checkout adopts it as the tax location, same as a wallet's billing address (see the
       // client-confirm submit effect in PaymentForm.tsx).
-      elementBillingAddress: { country: string | null; postal_code: string | null; state: string | null } | null;
+      elementBillingAddress: ElementCollectedBillingAddress | null;
     }
   | StripeErrorParams;
 
@@ -345,11 +355,11 @@ export const prepareFutureCharges = async <
 >(
   data: PrepareFutureChargesRequest<CardParams>,
 ): Promise<PrepareFutureChargesResponse<CardParams>> => {
-  // The wallet details on the card params are client-side context (checkout tax location and
-  // the wallet_type reported with the purchase) — the setup-intent endpoint has no contract for
-  // them, so keep them out of the request body while preserving them on the returned reusable
-  // params, which the purchase submission still needs.
-  const { wallet: _wallet, ...setupIntentCardParams } = data.cardParams;
+  // The wallet details and element-collected billing address on the card params are client-side
+  // context (checkout tax location and the wallet_type reported with the purchase) — the
+  // setup-intent endpoint has no contract for them, so keep them out of the request body while
+  // preserving them on the returned reusable params, which the purchase submission still needs.
+  const { wallet: _wallet, elementBillingAddress: _elementBillingAddress, ...setupIntentCardParams } = data.cardParams;
   const response = await request({
     method: "POST",
     url: Routes.stripe_setup_intents_path(),
