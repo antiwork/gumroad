@@ -147,6 +147,52 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
         expect(@variant_option.reload).to be_deleted
       end
 
+      it "shows a save-time summary confirmation and keeps the version when cancelled" do
+        visit edit_link_path(product.unique_permalink)
+
+        within version_rows[0] do
+          within version_option_rows[0] do
+            click_on "Remove version"
+          end
+        end
+
+        within_modal "Remove First Product Files Grouping?" do
+          click_on "Yes, remove"
+        end
+
+        # The save itself re-confirms the accumulated deletions in one summary
+        # modal. Cancelling aborts the save entirely — nothing is deleted.
+        click_on "Save changes"
+        within_modal "Save and delete content?" do
+          expect(page).to have_text("Saving now will permanently delete the following from this product:")
+          expect(page).to have_text("1 version")
+          expect(page).to have_text("First Product Files Grouping")
+          click_on "No, cancel"
+        end
+
+        refresh
+        expect(@variant_option.reload).to be_present
+
+        within version_rows[0] do
+          within version_option_rows[0] do
+            click_on "Remove version"
+          end
+        end
+
+        within_modal "Remove First Product Files Grouping?" do
+          click_on "Yes, remove"
+        end
+
+        click_on "Save changes"
+        within_modal "Save and delete content?" do
+          click_on "Yes, save and delete"
+        end
+        wait_for_ajax
+        expect(page).to have_alert(text: "Changes saved!")
+
+        expect(@variant_option.reload).to be_deleted
+      end
+
       it "deletes a variant option with only test purchases" do
         create(:purchase, link: product, variant_attributes: [@variant_option], purchaser: seller, purchase_state: "test_successful")
         visit edit_link_path(product.unique_permalink)
