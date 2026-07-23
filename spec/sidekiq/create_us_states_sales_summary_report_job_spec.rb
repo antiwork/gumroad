@@ -334,9 +334,17 @@ describe CreateUsStatesSalesSummaryReportJob do
       @chargedback_purchase.update!(chargeback_date: event_month_start + 5.days)
       @won_purchase.update!(chargeback_date: event_month_start + 6.days)
 
+      # The tax-period chargeback scopes now resolve each leg's reporting window through the
+      # disputes table (see Purchase.purchase_ids_for_disputes_in_window, #6199), so each
+      # event-dated chargeback needs a Dispute row whose event_created_at mirrors the
+      # purchase's chargeback_date — just setting chargeback_date is no longer enough.
+      create(:dispute, purchase: @chargedback_purchase, event_created_at: event_month_start + 5.days)
+
       travel_to(won_month_start + 2.days) do
         @won_purchase.update!(chargeback_reversed: true)
-        create(:dispute, purchase: @won_purchase, state: "won", won_at: Time.current)
+        # One Dispute row carries both the formalization date (event_created_at) and the win
+        # date (won_at); the debit leg reports in the event month, the reversal in the won month.
+        create(:dispute, purchase: @won_purchase, state: "won", event_created_at: event_month_start + 6.days, won_at: Time.current)
       end
 
       # A same-month sale so the event month has a positive base to subtract from.
