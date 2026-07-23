@@ -28,6 +28,7 @@ class Order::PreparePaymentIntentService
     return responses if preview.nil?
 
     apply_previewed_card_country(preview)
+    return responses if block_region_locked_payment_method_country_mismatch
     return responses if block_purchasing_power_parity_mismatches
 
     prepare_unconfirmed_charge
@@ -149,11 +150,12 @@ class Order::PreparePaymentIntentService
     # Stripe-owned funding-source countries, safe to trust for PPP verification. US-locked methods
     # (Cash App Pay, ACH) expose no country in their preview blocks, but Stripe only lets a US Cash
     # App account or US bank account fund them — the region lock IS the funding country, so verify
-    # them as US (U13's region-locked bucket). We deliberately do NOT fall back to buyer-supplied
-    # billing_details: that is checkout-form input, so trusting it would let a buyer spoof the
-    # discounted country. When Stripe exposes no funding country the value stays nil and a
-    # PPP-discounted purchase fails closed. Uses [] access because a Stripe::StripeObject raises on a
-    # missing attribute reader but returns nil for an absent key.
+    # them as US (U13's region-locked bucket). UPI has the same property for India. We deliberately
+    # do NOT fall back to buyer-supplied billing_details: that is checkout-form input, so trusting it
+    # would let a buyer spoof the discounted country. When Stripe exposes no funding country and the
+    # method has no region lock, the value stays nil and a PPP-discounted purchase fails closed. Uses
+    # [] access because a Stripe::StripeObject raises on a missing attribute reader but returns nil
+    # for an absent key.
     def previewed_country(preview)
       card_country = preview[:card]&.[](:country)
       return card_country if card_country.present?
@@ -163,7 +165,25 @@ class Order::PreparePaymentIntentService
 
       method_country = preview[method_type.to_sym]&.[](:country)
       return method_country if method_country.present?
+
+      region_locked_country(method_type)
+    end
+
+    # The resolver's country gate decides what the browser may render, but a stale or crafted
+    # ConfirmationToken can reach prepare after that decision. Enforce the same lock against the
+    # purchase's server-owned GeoIP country before the selected method is appended to the intent.
+    def block_region_locked_payment_method_country_mismatch
+      required_country = region_locked_country(@previewed_payment_method_type)
+      return false if required_country.blank? || buyer_country_alpha2 == required_country
+
+      Rails.logger.error("Region-locked #{@previewed_payment_method_type} payment blocked for order #{order.id}: buyer country #{buyer_country_alpha2.inspect} does not match #{required_country}")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
+    end
+
+    def region_locked_country(method_type)
       return Checkout::PaymentMethodResolver::US_ALPHA2 if Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
+      return Checkout::PaymentMethodResolver::IN_ALPHA2 if Checkout::PaymentMethodResolver::IN_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
 
       nil
     end

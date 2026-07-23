@@ -6,7 +6,7 @@ class Checkout::BuyerCurrencyEligibility
   FEATURE_NAME = :buyer_currency_charging
 
   # Some local payment methods only work in a single currency: iDEAL and Bancontact
-  # charges must be made in euros, full stop. When a checkout wants one of these
+  # charges must be made in euros; UPI charges must be made in rupees. When a checkout wants one of these
   # methods, the payment method itself decides the presentment currency — there is
   # nothing to detect from the buyer's location. This registry maps each such
   # payment method (Stripe payment method type string) to the currency it forces.
@@ -14,6 +14,7 @@ class Checkout::BuyerCurrencyEligibility
   FORCED_CURRENCY_PAYMENT_METHODS = {
     "ideal" => Currency::EUR,
     "bancontact" => Currency::EUR,
+    "upi" => Currency::INR,
   }.freeze
 
   # Per-method production launch flags for the forced-currency local methods. Stripe test
@@ -25,6 +26,7 @@ class Checkout::BuyerCurrencyEligibility
   LOCAL_METHOD_LAUNCH_FEATURES = {
     "ideal" => :checkout_local_method_ideal,
     "bancontact" => :checkout_local_method_bancontact,
+    "upi" => :checkout_local_method_upi,
   }.freeze
 
   # `direct_listed_amount` is only set by the method-forced mode: true means the

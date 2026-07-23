@@ -25,9 +25,12 @@ class Checkout::PaymentMethodResolver
   # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
   # Element, so they are not separate types here. us_bank_account (ACH Direct Debit) is a
   # delayed-notification method: it settles asynchronously via the PaymentIntent webhook lifecycle.
-  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp us_bank_account].freeze
-  # Afterpay/Clearpay and Affirm are one-time, buyer-present only, so a recurring lifecycle drops them.
-  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm].freeze
+  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account].freeze
+  # Afterpay/Clearpay, Affirm, and UPI are one-time, buyer-present only, so a recurring lifecycle
+  # drops them. (Recurring carts currently fall back to Lane A before any Stripe method list is
+  # built, but the eligible-policy set is logged and intersected by later units, so it must not
+  # claim a recurring-incapable method.)
+  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi].freeze
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
   # element flags themselves since Stripe's dashboard payment-method settings are the emergency
@@ -55,6 +58,8 @@ class Checkout::PaymentMethodResolver
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
+  # UPI can only be used by Indian buyers on INR PaymentIntents. Unknown GeoIP fails safe.
+  IN_LOCKED_PAYMENT_METHOD_TYPES = %w[upi].freeze
   # Never gated by the per-account capability check on direct-charge sellers. Card processing is
   # the baseline capability of any chargeable Stripe account — an account that truly can't take
   # cards is unusable no matter what we render, and an empty method list would just break the
@@ -63,6 +68,7 @@ class Checkout::PaymentMethodResolver
   # (verified live, gumroad-private#1026) — waits for the account's capability snapshot.
   ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES = %w[card].freeze
   US_ALPHA2 = "US"
+  IN_ALPHA2 = "IN"
   # PPP method matrix (U13). On a PPP-discounted checkout, only methods whose funding country is
   # verifiable pre-charge (card/wallets via card.country, and later sepa_debit.country) or whose
   # region lock matches the discount country (Cash App Pay / ACH are US-locked, so US-only) may be
@@ -71,11 +77,11 @@ class Checkout::PaymentMethodResolver
   # fail closed at prepare — don't render a method that cannot complete.
   # sepa_debit is wired but dormant until SEPA launches post-FX.
   PPP_VERIFIABLE_PAYMENT_METHOD_TYPES = %w[card sepa_debit].freeze
-  # US-locked methods double as region-locked entries: allowed on a PPP checkout only when the
-  # buyer's (GeoIP) country — the basis of the discount — is the lock country. The resolver's US
-  # region gate already enforces buyer_country == US for these, so on a PPP checkout they stay
-  # offered exactly when the discount country is the lock country.
-  PPP_REGION_LOCKED_PAYMENT_METHOD_TYPES = US_LOCKED_PAYMENT_METHOD_TYPES
+  # Region-locked methods are allowed on a PPP checkout only when the buyer's (GeoIP) country —
+  # the basis of the discount — is the lock country. The resolver's region gates already enforce
+  # buyer_country == US for Cash App Pay/ACH and buyer_country == IN for UPI, so on a PPP checkout
+  # they stay offered exactly when the discount country is the lock country.
+  PPP_REGION_LOCKED_PAYMENT_METHOD_TYPES = (US_LOCKED_PAYMENT_METHOD_TYPES + IN_LOCKED_PAYMENT_METHOD_TYPES).freeze
   # Multi-seller and other Lane A carts keep Gumroad's existing card + PayPal set.
   LANE_A_PAYMENT_METHOD_TYPES = %w[card paypal].freeze
 
@@ -170,6 +176,7 @@ class Checkout::PaymentMethodResolver
       launched += seller_opt_in_methods(eligible)
       launched += forced_currency_methods(eligible)
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
+      launched -= IN_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == IN_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched & account_supported_methods(launched)
     end

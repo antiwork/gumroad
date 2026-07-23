@@ -471,6 +471,46 @@ describe CustomerLowPriorityMailer do
     end
   end
 
+  describe "already_subscribed_checkout_attempt" do
+    it "includes a tokenized link to manage the existing subscription" do
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+
+      mail = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id)
+
+      expect(mail.subject).to eq "Someone tried to purchase a membership you already have"
+      expect(mail.body.encoded).to include "manage your subscription here"
+      expect(mail.body.encoded).to include "/subscriptions/#{subscription.external_id}/manage?token=#{subscription.reload.token}"
+    end
+
+    it "reuses a still-valid token across repeated deliveries so earlier links keep working" do
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+
+      first_body = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id).body.encoded
+      first_token = subscription.reload.token
+
+      second_body = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id).body.encoded
+
+      expect(subscription.reload.token).to eq first_token
+      expect(first_body).to include "token=#{first_token}"
+      expect(second_body).to include "token=#{first_token}"
+    end
+
+    it "mints a new token when the existing one has expired" do
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+      subscription.update!(token: "expired-token", token_expires_at: 1.minute.ago)
+
+      body = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id).body.encoded
+
+      new_token = subscription.reload.token
+      expect(new_token).not_to eq "expired-token"
+      expect(subscription.token_expires_at).to be > Time.current
+      expect(body).to include "token=#{new_token}"
+    end
+  end
+
   describe "expiring credit card membership", :vcr do
     it "notifies the customer that their credit card is expiring" do
       expiring_cc_user = create(:user, credit_card: create(:credit_card))

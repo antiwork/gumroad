@@ -2820,8 +2820,44 @@ class Purchase < ApplicationRecord
                                            .pluck(:id)
     emailed_seller_posts = Installment.seller_with_sent_emails_for_purchases(purchase_ids + purchase_ids_with_same_email)
                                       .select("installments.*, email_infos.sent_at, email_infos.delivered_at, email_infos.opened_at")
-    seller_profile_posts = Installment.profile_only_for_sellers(seller_ids)
-    seller_posts = check_filters.call(emailed_seller_posts + seller_profile_posts)
+    # `profile_only_for_sellers` matches every profile-only seller post the
+    # seller has ever published — for prolific sellers that's thousands of
+    # rows, and `installments.*` drags in each post's LONGTEXT `message` body
+    # just so the Ruby-side buyer filters can look at `json_data`
+    # (antiwork/gumroad#6009: this single fetch was 1.27s of a 2.06s mobile
+    # library search request). Run the filter pass on slim rows carrying just
+    # the columns the pass needs (`json_data` for the filter criteria,
+    # `seller_id` for the "hasn't bought X" sales probe, plus the scope's own
+    # type/flag/timestamp columns), then load
+    # full rows for the few posts the buyer can actually see.
+    slim_seller_profile_posts = Installment.profile_only_for_sellers(seller_ids)
+                                           .select(:id, :seller_id, :installment_type, :link_id, :base_variant_id, :flags, :published_at, :json_data)
+    candidate_seller_profile_post_ids = check_filters.call(slim_seller_profile_posts).map(&:id)
+    # Reload through the same scope so a post mutated between the two queries
+    # (unpublished, flipped to send_emails) is dropped rather than reaching the
+    # sort below with a nil published_at. index_by + filter_map keeps the
+    # scope's row order — the final sort_by is stable only relative to its
+    # input order, so reordering here would change tie-breaking among posts
+    # with equal timestamps.
+    full_seller_profile_posts_by_id = candidate_seller_profile_post_ids.any? ? Installment.profile_only_for_sellers(seller_ids).where(id: candidate_seller_profile_post_ids).index_by(&:id) : {}
+    reloaded_seller_profile_posts = candidate_seller_profile_post_ids.filter_map { |id| full_seller_profile_posts_by_id[id] }
+    # Re-run the buyer-filter pass on the reloaded rows so the visibility
+    # decision is made against the data we actually return. The slim pass
+    # above is only a candidate pre-filter: if a seller edits a post's buyer
+    # filters between the two queries, deciding from the slim snapshot could
+    # hand a now-restricted post to a buyer who no longer passes its filters.
+    # The reloaded set is small (only posts the buyer could see), so the
+    # second pass is cheap.
+    #
+    # The reverse race — a post the slim pass rejected whose filters change
+    # to allow the buyer before the reload — is deliberately left alone: the
+    # post is merely omitted from this one response and shows up on the next
+    # request. That matches the pre-optimization behavior (a single query
+    # also worked from one point-in-time snapshot and couldn't see edits made
+    # after it ran), and closing it would mean reloading full rows for every
+    # rejected post, which is exactly the cost this split avoids.
+    seller_profile_posts = check_filters.call(reloaded_seller_profile_posts)
+    seller_posts = check_filters.call(emailed_seller_posts) + seller_profile_posts
 
     profile_seller_sent_email_posts = installments_with_sent_emails + profile_only_product_posts + profile_only_variant_posts + seller_posts
     should_show_all_posts = purchases.map(&:link).any? { |product| product.should_show_all_posts? }
