@@ -989,7 +989,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
             "attrs" => {
               "name" => "Folder 1",
-              "uid" => file_group_uid
+              "uid" => file_group_uid,
+              "expandedByDefault" => false
             },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file2.external_id, "uid" => file2_uid } },
@@ -1025,7 +1026,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
             "attrs" => {
               "name" => "Folder 1",
-              "uid" => file_group_uid
+              "uid" => file_group_uid,
+              "expandedByDefault" => false
             },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file3.external_id, "uid" => file3_uid, "collapsed" => false } },
@@ -1088,7 +1090,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
             "attrs" => {
               "name" => "Folder 1",
-              "uid" => file_group_uid
+              "uid" => file_group_uid,
+              "expandedByDefault" => false
             },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file3.external_id, "uid" => file3_uid, "collapsed" => false } },
@@ -1167,7 +1170,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
         [
           {
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
-            "attrs" => { "name" => "Folder 1", "uid" => file_group_uid },
+            "attrs" => { "name" => "Folder 1", "uid" => file_group_uid, "expandedByDefault" => false },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file2.external_id, "uid" => file2_uid, "collapsed" => false } },
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file3.external_id, "uid" => file3_uid, "collapsed" => false } },
@@ -1249,7 +1252,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
           { "type" => RichContent::POSTS_NODE_TYPE },
           {
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
-            "attrs" => { "name" => "Folder 2", "uid" => file_group_2_uid },
+            "attrs" => { "name" => "Folder 2", "uid" => file_group_2_uid, "expandedByDefault" => false },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file3.external_id, "uid" => file3_uid, "collapsed" => false } },
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file2.external_id, "uid" => file2_uid, "collapsed" => false } },
@@ -1283,7 +1286,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
         [
           {
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
-            "attrs" => { "name" => "My folder", "uid" => new_folder_uid },
+            "attrs" => { "name" => "My folder", "uid" => new_folder_uid, "expandedByDefault" => false },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file1.external_id, "uid" => file1_uid, "collapsed" => false } },
             ]
@@ -1292,7 +1295,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
             "attrs" => {
               "name" => "Folder 1",
-              "uid" => file_group_uid
+              "uid" => file_group_uid,
+              "expandedByDefault" => false
             },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file2.external_id, "uid" => file2_uid, "collapsed" => false } },
@@ -1348,7 +1352,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
             "attrs" => {
               "name" => "Folder 1",
-              "uid" => file_group_uid
+              "uid" => file_group_uid,
+              "expandedByDefault" => false
             },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file3.external_id, "uid" => file3_uid, "collapsed" => false } },
@@ -1358,7 +1363,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
             "attrs" => {
               "name" => "100",
-              "uid" => new_folder_uid
+              "uid" => new_folder_uid,
+              "expandedByDefault" => false
             },
             "content" => [
               { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file2.external_id, "uid" => file2_uid, "collapsed" => false } },
