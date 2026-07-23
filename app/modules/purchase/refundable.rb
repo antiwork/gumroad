@@ -16,6 +16,7 @@ class Purchase
     PROCESSOR_REJECTED_REFUND_ERROR_MESSAGE = "The payment processor rejected this refund. " \
                                               "Try again later or contact support if the problem persists."
     NOTHING_TO_REFUND_ERROR_MESSAGE = "This purchase has already been refunded or has nothing left to refund."
+    NO_TAX_TO_REFUND_ERROR_MESSAGE = "The tax on this purchase has already been refunded or there is no tax left to refund."
 
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
     # * reason - free-text explanation of why the sale is being refunded. It is stored on
@@ -406,7 +407,14 @@ class Purchase
 
   def refund_gumroad_taxes!(refunding_user_id:, note: nil, business_vat_id: nil)
     gumroad_tax_refundable_cents = self.gumroad_tax_refundable_cents
-    return false if stripe_refunded || gumroad_tax_refundable_cents <= 0
+    if stripe_refunded || gumroad_tax_refundable_cents <= 0
+      # Populate a user-facing message so callers that render errors.full_messages
+      # (dashboard, admin UI, admin API) never show a blank failure. Callers for
+      # which this outcome is expected and non-blocking (invoice generation after
+      # the VAT was already refunded) filter this specific message out.
+      errors.add :base, NO_TAX_TO_REFUND_ERROR_MESSAGE
+      return false
+    end
 
     if chargedback_not_reversed?
       errors.add :base, ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE

@@ -1022,7 +1022,7 @@ describe "PurchaseRefunds", :vcr do
           expect(@purchase.reload.stripe_refunded).to be(true)
         end
 
-        it "does not refund anything if purchase is already refunded" do
+        it "does not refund anything and adds a user-facing error if purchase is already refunded" do
           expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, anything).and_call_original
 
           expect(@purchase.refund_and_save!(@user.id)).to be(true)
@@ -1030,20 +1030,22 @@ describe "PurchaseRefunds", :vcr do
           refund_count = Refund.count
 
           expect(ChargeProcessor).to_not receive(:refund!)
-          @purchase.refund_gumroad_taxes!(refunding_user_id: nil)
+          expect(@purchase.refund_gumroad_taxes!(refunding_user_id: nil)).to be(false)
 
           expect(Refund.count).to eq(refund_count)
+          expect(@purchase.errors[:base]).to include(Purchase::Refundable::NO_TAX_TO_REFUND_ERROR_MESSAGE)
         end
 
-        it "does not refund anything if purchase already stripe refunded" do
+        it "does not refund anything and adds a user-facing error if purchase already stripe refunded" do
           @purchase.stripe_refunded = true
           @purchase.save!
           refund_count = Refund.count
 
           expect(ChargeProcessor).to_not receive(:refund!)
-          @purchase.refund_gumroad_taxes!(refunding_user_id: nil)
+          expect(@purchase.refund_gumroad_taxes!(refunding_user_id: nil)).to be(false)
 
           expect(Refund.count).to eq(refund_count)
+          expect(@purchase.errors[:base]).to include(Purchase::Refundable::NO_TAX_TO_REFUND_ERROR_MESSAGE)
         end
 
         it "saves business vat id along with refund information" do
