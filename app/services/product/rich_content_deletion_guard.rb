@@ -16,14 +16,16 @@
 #   content from another version, discard other versions' content), which the
 #   client reports via confirmed_removed_rich_content_ids.
 #
-# Pages with a blank description are deletable without confirmation — they carry
-# no content, and the editor legitimately drops them in several flows.
+# Pages without visible editor content (a blank description, or only empty
+# structural nodes like the single bare paragraph the editor creates as a
+# placeholder) are deletable without confirmation — they carry nothing a buyer
+# could see, and the editor legitimately drops them in several flows.
 class Product::RichContentDeletionGuard
   MESSAGE = "This save would remove content pages that weren't explicitly deleted. Your product may have been updated in another tab — please refresh the page and try again."
 
   def self.ensure_intent!(product:, rich_contents_to_delete:, payload_page_ids:, confirmed_removed_ids:)
     unconfirmed = rich_contents_to_delete.select do |rich_content|
-      rich_content.description.present? &&
+      rich_content.has_editor_content? &&
         !payload_page_ids.include?(rich_content.external_id) &&
         !confirmed_removed_ids.include?(rich_content.external_id)
     end

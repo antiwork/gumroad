@@ -658,6 +658,33 @@ describe LinksController, :vcr, inertia: true do
           expect(blank_page.reload).to be_deleted
         end
 
+        it "allows deleting a page holding only the editor's blank placeholder paragraph without confirmation" do
+          # The editor initializes every new page with a single empty paragraph,
+          # so a structurally-blank page must count as contentless — otherwise
+          # cleaning up never-used pages would trip the stale-save guard.
+          placeholder_page = create(:rich_content, entity: @version1, description: [{ "type" => "paragraph" }])
+
+          post :update, params: @params.merge({
+                                                variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page 1", description: { type: "doc", content: content_description } }] }]
+                                              }), format: :json
+
+          expect(response).to be_successful
+          expect(placeholder_page.reload).to be_deleted
+        end
+
+        it "allows removing a variant whose only page is a blank placeholder without confirmation" do
+          placeholder_version = create(:variant, variant_category: @category, name: "Placeholder version")
+          create(:rich_content, entity: placeholder_version, description: [{ "type" => "paragraph" }])
+
+          post :update, params: @params.merge({
+                                                variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: content_description } }] }]
+                                              }), format: :json
+
+          expect(response).to be_successful
+          expect(placeholder_version.reload).to be_deleted
+          expect(@version1.reload).to be_alive
+        end
+
         it "allows a page to move between the product level and a variant without confirmation" do
           # Toggling "use the same content for all versions" legitimately moves
           # pages from the variant to the product level — the page id appears

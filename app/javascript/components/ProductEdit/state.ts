@@ -202,7 +202,10 @@ export const ProductEditContext = React.createContext<{
   s3Url: string;
   availableCountries: ShippingCountry[];
   saving: boolean;
-  save: () => Promise<void>;
+  // Resolves true only when the save request actually succeeded (false on
+  // request failure or when the seller cancels the deletion confirmation) —
+  // callers chaining navigation on save() must check it before proceeding.
+  save: () => Promise<boolean>;
   googleClientId: string;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;

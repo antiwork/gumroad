@@ -263,7 +263,11 @@ export const Layout = ({
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void save().then(() => navigate.current(`${rootPath}/content`))}
+              onClick={() =>
+                void save().then((saved) => {
+                  if (saved) navigate.current(`${rootPath}/content`);
+                })
+              }
             >
               {saving ? "Saving changes..." : "Save and continue"}
             </Button>

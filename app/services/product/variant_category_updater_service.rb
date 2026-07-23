@@ -59,7 +59,9 @@ class Product::VariantCategoryUpdaterService
   end
 
   def self.variant_has_content?(variant)
-    variant.alive_rich_contents.any? { _1.description.present? } || variant.has_files?
+    # has_editor_content? (not description.present?) so a variant whose only
+    # page is the editor's blank placeholder paragraph stays freely deletable.
+    variant.alive_rich_contents.any?(&:has_editor_content?) || variant.has_files?
   end
 
   def perform

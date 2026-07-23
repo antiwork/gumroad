@@ -117,7 +117,7 @@ const createContextValue = (props: Props) => ({
   s3Url: props.s3_url,
   availableCountries: props.available_countries,
   saving: false,
-  save: async () => {},
+  save: () => Promise.resolve(false),
   googleClientId: props.google_client_id,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
@@ -229,11 +229,17 @@ const ProductEditPage = (props: Props) => {
   // in-flight save() promise so callers awaiting save() (e.g. "Save and
   // continue") settle once the seller decides.
   const [pendingDeletions, setPendingDeletions] = React.useState<PendingDeletions | null>(null);
-  const pendingSaveRef = React.useRef<(() => void) | null>(null);
-  const performSave = async () => {
+  const pendingSaveRef = React.useRef<((saved: boolean) => void) | null>(null);
+  // Resolves true only when the save request actually succeeded — callers that
+  // chain follow-up actions on save() (navigating to the next tab, opening the
+  // preview) use this to stay put when the save failed or the seller cancelled
+  // the deletion confirmation.
+  const performSave = async (): Promise<boolean> => {
+    let saved = false;
     try {
       setSaving(true);
       const response = await saveProduct(props.unique_permalink, props.id, product, currencyType);
+      saved = true;
       if (response.warning_message) showAlert(response.warning_message, "warning");
       else {
         const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
@@ -260,8 +266,9 @@ const ProductEditPage = (props: Props) => {
       showAlert(e.message, "error");
     }
     setSaving(false);
+    return saved;
   };
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     // A save that deletes existing versions/tiers or content pages gets one
     // final summary confirmation before the request goes out. Each deletion
     // already had its own modal when the seller clicked delete, but this is
@@ -270,24 +277,23 @@ const ProductEditPage = (props: Props) => {
     const deletions = findPendingDeletions(product, lastSavedProductRef.current);
     if (deletions.variants.length + deletions.pages.length > 0) {
       setPendingDeletions(deletions);
-      await new Promise<void>((resolve) => {
+      return new Promise<boolean>((resolve) => {
         pendingSaveRef.current = resolve;
       });
-      return;
     }
-    await performSave();
+    return performSave();
   };
   const confirmDeletionsAndSave = async () => {
     setPendingDeletions(null);
-    await performSave();
-    pendingSaveRef.current?.();
+    const saved = await performSave();
+    pendingSaveRef.current?.(saved);
     pendingSaveRef.current = null;
   };
   const cancelDeletionConfirmation = () => {
     setPendingDeletions(null);
-    // Resolve without saving — callers chained on save() (e.g. "Save and
-    // continue") proceed the same way they do when a save request fails.
-    pendingSaveRef.current?.();
+    // Resolve as not-saved — callers chained on save() (e.g. "Save and
+    // continue") stay put, the same way they do when a save request fails.
+    pendingSaveRef.current?.(false);
     pendingSaveRef.current = null;
   };
   // What the product type calls its variants, matching the per-row deletion
