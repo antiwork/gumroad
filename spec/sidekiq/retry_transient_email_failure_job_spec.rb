@@ -344,6 +344,33 @@ describe RetryTransientEmailFailureJob do
         expect(SendPurchaseReceiptJob.jobs).to be_empty
       end
 
+      it "picks up a receipt appended concurrently just before the claim is taken, instead of stranding it" do
+        # Simulates the webhook scheduler appending receipt B to the row
+        # after the job loads the record but before claim_attempt runs. The
+        # scheduler does NOT enqueue another job for that append (it relies
+        # on the in-flight one), so the job must snapshot the target list
+        # AFTER claiming — otherwise B is left with no claim and no job.
+        second_purchase = create(:free_purchase, email: purchase.email)
+        suppression_manager = instance_double(EmailSuppressionManager, remove_from_lists: {})
+        allow(EmailSuppressionManager).to receive(:new).and_return(suppression_manager)
+
+        job = described_class.new
+        allow(job).to receive(:claim_attempt).and_wrap_original do |original, record|
+          TransientEmailFailureRetry.where(id: record.id).update_all(
+            pending_targets: Array(record.pending_targets) + [{ "purchase_id" => second_purchase.id }]
+          )
+          original.call(record)
+        end
+
+        job.perform(receipt_retry.id)
+
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id)
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(second_purchase.id)
+        receipt_retry.reload
+        expect(receipt_retry.pending_targets).to eq([])
+        expect(receipt_retry.retry_in_flight).to eq(false)
+      end
+
       it "drops already-enqueued receipts from the pending list when a later enqueue in the batch fails, so the re-run doesn't send duplicates" do
         second_purchase = create(:free_purchase, email: purchase.email)
         record = TransientEmailFailureRetry.create!(

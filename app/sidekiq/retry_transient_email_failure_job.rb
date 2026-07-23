@@ -63,6 +63,17 @@ class RetryTransientEmailFailureJob
       # pending targets — each a standalone purchase or a combined charge
       # (multiple purchases in one checkout), whichever id the failure
       # event's unique-args carried. One claimed attempt resends all of them.
+      return unless claim_attempt(retry_record)
+
+      # Snapshot the target list only AFTER taking the claim (claim_attempt
+      # reloads the row, so this read is fresh). While the claim is pending,
+      # the scheduler appends any newly-failed receipt to the row WITHOUT
+      # enqueuing another job — it counts on this job picking the appended
+      # target up when it fires. A snapshot taken before the claim could
+      # miss such an append and then clear the claim, stranding that receipt
+      # with no in-flight claim and no scheduled job. Appends that land
+      # after the claim is consumed are safe to miss here: the scheduler
+      # sees retry_in_flight = false and schedules its own retry for them.
       targets = Array(retry_record.pending_targets)
       resolved = targets.map { |target| [target, resolve_receipt_target(target)] }
 
@@ -82,14 +93,15 @@ class RetryTransientEmailFailureJob
       end
 
       if deliverable.empty?
-        # Nothing left to send. Drop the dead targets and release the claim
-        # (without counting an attempt) so a future failure for this address
-        # can schedule retries again.
-        remove_targets(retry_record, targets, release_claim: true)
+        # Nothing left to send. Drop the dead targets and give the claimed
+        # attempt back — no email went out, so it shouldn't count toward the
+        # per-address cap. The claim itself stays released (claim_attempt
+        # already cleared it), so a future failure for this address can
+        # schedule retries again.
+        remove_targets(retry_record, targets)
+        refund_attempt(retry_record)
         return
       end
-
-      return unless claim_attempt(retry_record)
 
       # Tracks which receipts actually got enqueued, so a failure partway
       # through the batch (say the second enqueue raises after the first
@@ -160,12 +172,24 @@ class RetryTransientEmailFailureJob
     # target concurrently — subtracting (rather than clearing the list)
     # leaves that one in place for its own scheduled retry. with_lock reloads
     # the row, so the write can't clobber a concurrently-set in-flight claim.
-    def remove_targets(retry_record, targets, release_claim: false)
+    def remove_targets(retry_record, targets)
       retry_record.with_lock do
         retry_record.pending_targets = Array(retry_record.pending_targets) - targets
-        retry_record.retry_in_flight = false if release_claim
         retry_record.save!
       end
+    end
+
+    # Gives back an attempt that claim_attempt recorded but that resulted in
+    # no email (every target turned out dead). Same compare-and-swap shape as
+    # with_claim_restore's rollback — guarded on the attempts value our own
+    # increment produced — so it can never clobber a newer job's counter.
+    # Unlike that rollback, the in-flight claim stays released: there is
+    # nothing left to re-send, so restoring the claim would only block the
+    # next failure event from scheduling a fresh retry.
+    def refund_attempt(retry_record)
+      TransientEmailFailureRetry
+        .where(id: retry_record.id, attempts: retry_record.attempts)
+        .update_all(["attempts = attempts - 1, updated_at = ?", Time.current])
     end
 
     # Records the attempt BEFORE sending, in one atomic UPDATE guarded on
