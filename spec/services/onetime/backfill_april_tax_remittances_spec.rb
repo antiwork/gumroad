@@ -67,4 +67,16 @@ describe Onetime::BackfillAprilTaxRemittances do
     expect(hmrc_first.usd_amount_cents).to eq(25_333_498)
     expect(later_attempt.reload.attempt).to eq(2)
   end
+
+  it "raises a descriptive error when a later attempt is live and attempt 1 is missing" do
+    # A draft attempt 2 exists for HMRC's filing with no attempt-1 row. The
+    # backfilled row is `completed` (live), so inserting it would put two live
+    # attempts on one filing — the backfill must fail with an actionable
+    # message instead of an opaque validation error, and must not write the
+    # HMRC row.
+    create(:tax_remittance, status: "draft", paid_at: nil, attempt: 2)
+
+    expect { described_class.new.process }.to raise_error(/HMRC 2026-Q1 has a live attempt 2 \(status draft\)/)
+    expect(TaxRemittance.find_by(authority: "HMRC", period: "2026-Q1", attempt: 1)).to be_nil
+  end
 end

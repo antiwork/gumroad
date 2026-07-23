@@ -62,6 +62,25 @@ class Onetime::BackfillAprilTaxRemittances
         next
       end
 
+      # The historical row is written as `completed`, which counts as a live
+      # attempt under the single-live-attempt-per-filing rule. If some later
+      # attempt for this filing is already live (draft/pending_approval/
+      # funded/sent/completed), inserting the backfill row would put two live
+      # attempts on one filing — the exact double-payment shape the model
+      # validation exists to block. Rather than letting create! abort the run
+      # with an opaque RecordInvalid, detect it here and explain what needs
+      # reconciling: a live later attempt existing while the historical first
+      # payment is unrecorded means the table's history for this filing is
+      # wrong and a human has to sort it out before re-running.
+      live_later_attempt = TaxRemittance.where(authority:, period: PERIOD)
+                                        .where.not(status: TaxRemittance::RETRYABLE_STATUSES)
+                                        .first
+      if live_later_attempt
+        raise "BackfillAprilTaxRemittances: #{authority} #{PERIOD} has a live attempt #{live_later_attempt.attempt} " \
+              "(status #{live_later_attempt.status}) but no attempt-1 row — backfilling the historical completed " \
+              "payment would create two live attempts for one filing. Reconcile the filing's history manually before re-running"
+      end
+
       begin
         TaxRemittance.create!(
           authority:,
