@@ -172,11 +172,27 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
-  def send_to_kindle(kindle_email, product_file_id)
+  def send_to_kindle(kindle_email, product_file_id, url_redirect_id = nil)
     product_file = ProductFile.find(product_file_id)
 
+    # For stamp-enabled PDFs, attach the buyer-specific stamped copy instead
+    # of the original upload — emailing the original would bypass the
+    # seller's PDF stamping (watermarking) setting. The stamped copy lives on
+    # the buyer's UrlRedirect, so we need that context to find it.
+    s3_retrievable = product_file
+    if product_file.must_be_pdf_stamped?
+      url_redirect = url_redirect_id ? UrlRedirect.find_by(id: url_redirect_id) : nil
+      stamped_pdf = url_redirect&.alive_stamped_pdfs&.find_by(product_file_id: product_file.id)
+      # Never fall back to the original file for a stamp-enabled PDF. The
+      # controller only enqueues this mail once the stamped copy exists, so
+      # this guard only trips if the stamped copy was deleted in between.
+      return if stamped_pdf.nil?
+
+      s3_retrievable = stamped_pdf
+    end
+
     temp_file = Tempfile.new
-    product_file.s3_object.download_file(temp_file.path)
+    s3_retrievable.s3_object.download_file(temp_file.path)
     temp_file.rewind
     attachments[product_file.s3_filename] = temp_file.read
 

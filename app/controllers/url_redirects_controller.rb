@@ -312,12 +312,25 @@ class UrlRedirectsController < ApplicationController
     return render json: { success: false, error: "File not found" }, status: :not_found if @product_file.nil?
     return render json: { success: false, error: "This file cannot be sent to Kindle" }, status: :unprocessable_entity if !@product_file.can_send_to_kindle?
 
+    # Stamp-enabled PDFs must be sent as the buyer-specific stamped copy, not
+    # the original upload (mirrors the Download button behavior). If the
+    # stamped copy hasn't been generated yet, kick off stamping and ask the
+    # buyer to retry instead of leaking the un-watermarked original.
+    if @product_file.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(@product_file)
+      # Do not enqueue the job more than once in 2 hours
+      Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(@url_redirect.purchase_id), expires_in: 4.hours) do
+        StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
+      end
+
+      return render json: { success: false, error: "We are preparing the file. Please try again in a few minutes." }, status: :unprocessable_entity
+    end
+
     if logged_in_user.present?
       logged_in_user.kindle_email = params[:email]
       return render json: { success: false, error: logged_in_user.errors.full_messages.to_sentence } unless logged_in_user.save
     end
 
-    @product_file.send_to_kindle(params[:email])
+    @product_file.send_to_kindle(params[:email], url_redirect: @url_redirect)
     create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ)
     render json: { success: true }
   rescue ArgumentError => e
