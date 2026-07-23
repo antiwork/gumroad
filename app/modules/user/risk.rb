@@ -41,13 +41,20 @@ module User::Risk
   # (MIN_SETTLED_PURCHASES_FOR_REFUND_POLICY_ENFORCEMENT) measures sales volume, which is
   # inherently a purchase count.
   def dispute_rate_stats
+    # purchases.email has no database-level NOT NULL constraint, so legacy or
+    # validation-bypassing rows can carry a NULL email. COUNT(DISTINCT email) would
+    # silently drop those rows from both the numerator and the denominator. An unknown
+    # buyer can't be de-duplicated, so each null-email purchase falls back to counting
+    # as its own buyer (keyed by the purchase id).
+    buyer_key = Arel.sql("COALESCE(purchases.email, CONCAT('missing-email-', purchases.id))")
+
     settled_count = sales.successful.count
-    settled_buyers_count = sales.successful.distinct.count(:email)
+    settled_buyers_count = sales.successful.distinct.count(buyer_key)
     disputing_buyers_count = sales.successful
                                   .where.not(chargeback_date: nil)
                                   .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
                                   .distinct
-                                  .count(:email)
+                                  .count(buyer_key)
     rate = settled_buyers_count > 0 ? disputing_buyers_count * 100.0 / settled_buyers_count : nil
     { settled_count:, settled_buyers_count:, disputing_buyers_count:, rate: }
   end

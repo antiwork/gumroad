@@ -170,6 +170,23 @@ describe User::Risk do
       expect(stats[:disputing_buyers_count]).to eq(0)
       expect(stats[:rate]).to eq(0.0)
     end
+
+    it "counts purchases with a null email as separate buyers instead of dropping them" do
+      # purchases.email has no NOT NULL constraint at the database level, so legacy rows
+      # can carry a null email even though model validation blocks it on normal writes.
+      # COUNT(DISTINCT email) would drop such rows from both sides of the rate.
+      create(:purchase, link: product)
+      null_settled = create(:purchase, link: product)
+      null_settled.update_column(:email, nil)
+      null_disputed = create(:purchase, link: product, chargeback_date: Time.current)
+      null_disputed.update_column(:email, nil)
+
+      stats = seller.dispute_rate_stats
+      expect(stats[:settled_count]).to eq(3)
+      expect(stats[:settled_buyers_count]).to eq(3)
+      expect(stats[:disputing_buyers_count]).to eq(1)
+      expect(stats[:rate]).to eq(1 * 100.0 / 3)
+    end
   end
 
   describe "#clear_refund_policy_enforcement!" do
