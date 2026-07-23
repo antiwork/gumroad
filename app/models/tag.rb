@@ -17,7 +17,11 @@ class Tag < ApplicationRecord
   # counting product_taggings per request — short prefixes like "m%" match
   # thousands of tags, and the old LEFT JOIN + GROUP BY recomputed every
   # tag's usage count just to pick the top 10 (p99 was ~4.8s in production).
-  # The "uses" alias is kept because the frontend reads it.
+  # MySQL still sorts the prefix matches (the (name, taggings_count) index
+  # can't serve this ORDER BY for a name range), but it's a covering-index
+  # top-N sort over integers rather than a join + count across the whole
+  # product_taggings table. The "uses" alias is kept because the frontend
+  # reads it.
   scope :by_text, lambda { |text: "", limit: 10|
     select("tags.*, tags.taggings_count AS uses")
       .where("tags.name LIKE ?", "#{text.downcase}%")
