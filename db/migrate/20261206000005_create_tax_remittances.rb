@@ -2,7 +2,13 @@
 
 class CreateTaxRemittances < ActiveRecord::Migration[7.1]
   def change
-    create_table :tax_remittances do |t|
+    # if_not_exists guards against databases that already applied this
+    # migration under its original version number (20261206000004, from
+    # #6116) before it was renumbered to resolve a duplicate-version clash.
+    # On those databases the renumbered version shows as pending; without
+    # the guard, re-running create_table would fail because the table
+    # already exists.
+    create_table :tax_remittances, if_not_exists: true do |t|
       # Who we paid: the tax authority's display name (e.g. "HMRC") and the
       # jurisdiction it collects for (ISO country code, or "EU_OSS" for the
       # Irish Revenue one-stop-shop filing that covers all EU member states).
