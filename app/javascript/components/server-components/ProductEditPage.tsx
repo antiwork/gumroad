@@ -166,21 +166,19 @@ type PendingDeletions = {
 };
 
 const findPendingDeletions = (product: Product, lastSavedProduct: Product): PendingDeletions => {
-  // Deletions the seller already confirmed one-by-one (the per-row "Yes,
-  // remove" / delete-page modals record ids here) don't need re-confirming —
-  // this summary modal exists to catch deletions the seller DIDN'T ask for
-  // (e.g. a stale tab about to overwrite newer state), mirroring the
-  // server-side deletion guard.
-  const confirmedVariantIds = new Set(product.confirmed_removed_variant_ids ?? []);
-  const confirmedPageIds = new Set(product.confirmed_removed_rich_content_ids ?? []);
-
+  // Note: deletions the seller confirmed per-row (the "Yes, remove" /
+  // delete-page modals record ids into confirmed_removed_*_ids) are NOT
+  // excluded here. Those ids exist to satisfy the server-side deletion guard;
+  // this summary modal is deliberately a second, save-time gate — the last
+  // chance to notice an accumulated (possibly large) wipe as one list before
+  // it becomes permanent. Every UI deletion path records a confirmed id, so
+  // excluding them would mean the summary never appears at all.
   const currentVariantIds = new Set(product.variants.map(({ id }) => id));
   // Only content-bearing variants warrant the scary confirmation — mirroring
   // the server-side guard. Contentless variants (e.g. a coffee product's
   // "suggested amounts", an empty just-added version) delete without fuss.
   const removedVariants = lastSavedProduct.variants.filter(
-    ({ id, rich_content }) =>
-      !currentVariantIds.has(id) && !confirmedVariantIds.has(id) && rich_content.some(pageHasVisibleContent),
+    ({ id, rich_content }) => !currentVariantIds.has(id) && rich_content.some(pageHasVisibleContent),
   );
 
   // A page id that still appears anywhere in the current state (product-level
@@ -195,8 +193,7 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
     ...lastSavedProduct.rich_content,
     ...lastSavedProduct.variants.flatMap((variant) => variant.rich_content),
   ]) {
-    if (!currentPageIds.has(page.id) && !confirmedPageIds.has(page.id) && pageHasVisibleContent(page))
-      removedPagesById.set(page.id, page);
+    if (!currentPageIds.has(page.id) && pageHasVisibleContent(page)) removedPagesById.set(page.id, page);
   }
 
   return {
