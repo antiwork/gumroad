@@ -133,10 +133,23 @@ describe Checkout::PaymentMethodResolver do
           expect(methods).not_to include("bancontact")
         end
 
-        it "withholds a launched forced-currency method when the charged account has learned a mismatch for that currency" do
+        # Regression test for the 2026-07-23 iDEAL dark-ramp (gumroad-private#933): the
+        # EUR mismatch marker is the expected steady state once iDEAL/SEPA capabilities
+        # make the account settle EUR in EUR, and the resolver only offers these methods
+        # on carts priced in the forced currency (no FX quote involved) — so the marker
+        # must not hide the method tab.
+        it "keeps a launched forced-currency method offered when the charged account has learned a mismatch for that currency" do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
           Feature.activate_user(:checkout_local_method_ideal, seller)
           platform_merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
+
+          expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
+        end
+
+        it "withholds a launched forced-currency method when the charged account holds a non-USD balance" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          platform_merchant_account.update!(currency: Currency::CAD)
 
           expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).not_to include("ideal")
         end
