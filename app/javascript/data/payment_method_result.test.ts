@@ -83,7 +83,7 @@ const selectedPaymentMethod = (): NewPaymentElementSelectedPaymentMethod => ({
   state: "NY",
   city: "New York",
   address: "123 Main St",
-  walletSelected: false,
+  billingDetailsCollection: "form",
 });
 
 describe("getPaymentMethodResult", () => {
@@ -95,10 +95,10 @@ describe("getPaymentMethodResult", () => {
     vi.mocked(preparePaymentElementPaymentMethodData).mockResolvedValue(cardParams);
     const pendingSubmit = Promise.resolve({});
 
-    await getPaymentMethodResult({ ...selectedPaymentMethod(), walletSelected: true, pendingSubmit });
+    await getPaymentMethodResult({ ...selectedPaymentMethod(), billingDetailsCollection: "element", pendingSubmit });
 
     expect(preparePaymentElementPaymentMethodData).toHaveBeenCalledWith(
-      expect.objectContaining({ walletSelected: true, pendingSubmit }),
+      expect.objectContaining({ billingDetailsCollection: "element", pendingSubmit }),
     );
   });
 
@@ -146,7 +146,7 @@ describe("getReusablePaymentMethodResult", () => {
       state: "NY",
       city: "New York",
       address: "123 Main St",
-      walletSelected: false,
+      billingDetailsCollection: "form",
       pendingSubmit: null,
     });
     expect(prepareFutureCharges).toHaveBeenCalledWith({ products: [product], cardParams });

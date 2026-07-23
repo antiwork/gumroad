@@ -178,58 +178,131 @@ describe MerchantAccount do
 
     describe "#settlement_currency_mismatch_active?" do
       it "is false when no mismatch was ever recorded" do
-        expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
       end
 
-      it "ignores a pre-existing marker on a Gumroad-managed account" do
+      it "is false for a blank currency" do
+        merchant_account.record_settlement_currency_mismatch!("eur")
+
+        expect(merchant_account.settlement_currency_mismatch_active?(nil)).to be(false)
+        expect(merchant_account.settlement_currency_mismatch_active?("")).to be(false)
+      end
+
+      it "is true only for the currency the mismatch was recorded in" do
+        # Regression guard for the 2026-07-22 20:45 UTC ramp-down (gumroad-private#933):
+        # Stripe settlement is configured per currency, so a EUR mismatch (real, from the
+        # iDEAL/SEPA capabilities) must not suppress quoting for GBP buyers — and a GBP
+        # marker must not leave EUR checkouts failing closed.
+        merchant_account.record_settlement_currency_mismatch!("eur")
+
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(true)
+        expect(merchant_account.settlement_currency_mismatch_active?("gbp")).to be(false)
+      end
+
+      it "honors the per-currency marker on a Gumroad-managed account" do
+        # The shared platform account genuinely settles EUR in EUR since the iDEAL/SEPA
+        # capabilities were enabled (2026-07-22, gumroad-private#933). Without the marker
+        # every eurozone quote-backed charge fails closed at PaymentIntent create.
+        shared_platform_account = create(:merchant_account, user: nil)
+        shared_platform_account.record_settlement_currency_mismatch!("eur")
+
+        expect(shared_platform_account.reload.settlement_currency_mismatch_active?("eur")).to be(true)
+        expect(shared_platform_account.settlement_currency_mismatch_active?("gbp")).to be(false)
+      end
+
+      it "ignores a legacy blanket marker on a Gumroad-managed account" do
+        # A pre-map blanket marker on the shared account is known-bogus (the 2026-07-21
+        # incident wrote one from a single stale-session failure and silently suppressed
+        # FX quotes for ~all managed sellers).
         shared_platform_account = create(:merchant_account, user: nil)
         shared_platform_account.update!(settlement_currency_mismatch_noticed_at: Time.current.iso8601)
 
-        expect(shared_platform_account.reload.settlement_currency_mismatch_active?).to be(false)
+        expect(shared_platform_account.reload.settlement_currency_mismatch_active?("eur")).to be(false)
       end
 
-      it "is true while the recorded mismatch is fresh" do
-        merchant_account.record_settlement_currency_mismatch!
-        expect(merchant_account.settlement_currency_mismatch_active?).to be(true)
+      it "honors a fresh legacy blanket marker on a seller-connected account for every currency" do
+        merchant_account.update!(settlement_currency_mismatch_noticed_at: Time.current.iso8601)
+
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(true)
+        expect(merchant_account.settlement_currency_mismatch_active?("gbp")).to be(true)
+      end
+
+      it "matches the recorded currency case-insensitively" do
+        merchant_account.record_settlement_currency_mismatch!("EUR")
+
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(true)
+        expect(merchant_account.settlement_currency_mismatch_active?(:EUR)).to be(true)
       end
 
       it "expires after the TTL so accounts that fix their settlement config regain presentment" do
-        merchant_account.update!(settlement_currency_mismatch_noticed_at: (described_class::SETTLEMENT_CURRENCY_MISMATCH_TTL + 1.day).ago.iso8601)
-        expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
+        stale = (described_class::SETTLEMENT_CURRENCY_MISMATCH_TTL + 1.day).ago.iso8601
+        merchant_account.update!(settlement_currency_mismatch_map: { "eur" => stale })
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
+
+        merchant_account.update!(settlement_currency_mismatch_map: nil, settlement_currency_mismatch_noticed_at: stale)
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
       end
 
       it "treats a malformed timestamp as no marker instead of raising" do
-        merchant_account.update!(settlement_currency_mismatch_noticed_at: "not-a-timestamp")
-        expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
+        merchant_account.update!(settlement_currency_mismatch_map: { "eur" => "not-a-timestamp" })
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
+
+        merchant_account.update!(settlement_currency_mismatch_map: nil, settlement_currency_mismatch_noticed_at: "not-a-timestamp")
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
       end
     end
 
     describe "#record_settlement_currency_mismatch!" do
-      it "persists the current time so the TTL measures the LAST observed mismatch" do
-        travel_to(Time.zone.local(2026, 7, 1, 12)) { merchant_account.record_settlement_currency_mismatch! }
-        travel_to(Time.zone.local(2026, 7, 15, 12)) { merchant_account.record_settlement_currency_mismatch! }
+      it "persists the current time per currency so the TTL measures the LAST observed mismatch" do
+        travel_to(Time.zone.local(2026, 7, 1, 12)) { merchant_account.record_settlement_currency_mismatch!("eur") }
+        travel_to(Time.zone.local(2026, 7, 15, 12)) { merchant_account.record_settlement_currency_mismatch!("eur") }
 
-        expect(Time.zone.parse(merchant_account.reload.settlement_currency_mismatch_noticed_at)).to eq(Time.zone.local(2026, 7, 15, 12))
+        recorded = merchant_account.reload.settlement_currency_mismatch_map.fetch("eur")
+        expect(Time.zone.parse(recorded)).to eq(Time.zone.local(2026, 7, 15, 12))
       end
 
-      it "refuses to mark the shared Gumroad-managed platform account, which serves ~all managed sellers and settles USD" do
-        # Regression guard for the 2026-07-21 incident (gumroad-private#933): one
-        # stale-session failure recorded the marker on the shared platform account and
-        # suppressed FX quotes for every Gumroad-managed seller for the 30-day TTL.
-        shared_platform_account = create(:merchant_account, user: nil)
+      it "keeps other currencies' markers when recording a new one" do
+        merchant_account.record_settlement_currency_mismatch!("eur")
+        merchant_account.record_settlement_currency_mismatch!("gbp")
 
-        expect { shared_platform_account.record_settlement_currency_mismatch! }
-          .not_to change { shared_platform_account.reload.settlement_currency_mismatch_noticed_at }
+        expect(merchant_account.reload.settlement_currency_mismatch_map.keys).to match_array(%w[eur gbp])
+      end
+
+      it "does not lose a marker written concurrently through a different instance" do
+        # Two checkouts can observe mismatches for different currencies at the same time,
+        # each holding its own copy of the record. The row lock inside
+        # record_settlement_currency_mismatch! reloads before writing, so the second
+        # writer must see the first writer's currency instead of overwriting the map.
+        first_instance = MerchantAccount.find(merchant_account.id)
+        second_instance = MerchantAccount.find(merchant_account.id)
+
+        first_instance.record_settlement_currency_mismatch!("eur")
+        second_instance.record_settlement_currency_mismatch!("gbp")
+
+        expect(merchant_account.reload.settlement_currency_mismatch_map.keys).to match_array(%w[eur gbp])
+      end
+
+      it "does nothing for a blank currency" do
+        expect { merchant_account.record_settlement_currency_mismatch!(nil) }
+          .not_to change { merchant_account.reload.settlement_currency_mismatch_map }
+      end
+
+      it "never writes the legacy blanket marker" do
+        merchant_account.record_settlement_currency_mismatch!("eur")
+
+        expect(merchant_account.reload.settlement_currency_mismatch_noticed_at).to be_nil
       end
     end
 
     describe "#clear_settlement_currency_mismatch!" do
-      it "removes a recorded marker" do
-        merchant_account.record_settlement_currency_mismatch!
+      it "removes recorded markers in both formats" do
+        merchant_account.record_settlement_currency_mismatch!("eur")
+        merchant_account.update!(settlement_currency_mismatch_noticed_at: Time.current.iso8601)
         merchant_account.clear_settlement_currency_mismatch!
 
         expect(merchant_account.reload.settlement_currency_mismatch_noticed_at).to be_nil
-        expect(merchant_account.settlement_currency_mismatch_active?).to be(false)
+        expect(merchant_account.settlement_currency_mismatch_map).to be_nil
+        expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
       end
 
       it "does not touch the record when no marker is present" do

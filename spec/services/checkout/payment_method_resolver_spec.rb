@@ -86,6 +86,8 @@ describe Checkout::PaymentMethodResolver do
       end
 
       context "with the internal buyer-currency flags enabled in Stripe test mode" do
+        let(:platform_merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
+
         before do
           allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
           Feature.activate_user(:buyer_currency_charging, seller)
@@ -129,6 +131,22 @@ describe Checkout::PaymentMethodResolver do
           methods = resolve(cart_product_currency: "eur").payment_method_types
           expect(methods).to include("ideal")
           expect(methods).not_to include("bancontact")
+        end
+
+        it "withholds a launched forced-currency method when the charged account has learned a mismatch for that currency" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          platform_merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
+
+          expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).not_to include("ideal")
+        end
+
+        it "keeps a launched forced-currency method when the charged account's mismatch is for another currency" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          platform_merchant_account.record_settlement_currency_mismatch!(Currency::GBP)
+
+          expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
         end
 
         it "launches UPI in live mode when its per-method launch flag is on for an Indian buyer, without pulling EUR methods along" do

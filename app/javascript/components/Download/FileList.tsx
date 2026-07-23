@@ -80,12 +80,19 @@ export type FolderItem = {
   type: "folder";
   id: string;
   name: string;
+  // Per-folder seller setting: start this folder open on the download page.
+  expanded_by_default?: boolean;
   children: FileItem[];
 };
 
-type Props = { content_items: (FileItem | FolderItem)[] };
+type Props = {
+  content_items: (FileItem | FolderItem)[];
+};
 export const FileList = ({ content_items }: Props) => {
   const [playingAudioForId, setPlayingAudioForId] = React.useState<null | string>(null);
+  // When the page has exactly one top-level folder, start it expanded so buyers
+  // aren't left staring at a single closed chevron hiding all the files.
+  const hasSingleTopLevelFolder = content_items.filter((item) => item.type === "folder").length === 1;
 
   const getFileRow = (file: FileItem) => (
     <FileRow
@@ -100,7 +107,11 @@ export const FileList = ({ content_items }: Props) => {
     <Rows role="tree" aria-label="Files">
       {content_items.map((item) =>
         item.type === "folder" ? (
-          <FolderRow key={`folder${item.id}`} folder={item}>
+          <FolderRow
+            key={`folder${item.id}`}
+            folder={item}
+            defaultExpanded={(item.expanded_by_default ?? false) || hasSingleTopLevelFolder}
+          >
             {item.children.map((file) => getFileRow(file))}
           </FolderRow>
         ) : (
@@ -111,8 +122,16 @@ export const FileList = ({ content_items }: Props) => {
   );
 };
 
-const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.ReactNode }) => {
-  const [isExpanded, setIsExpanded] = React.useState(false);
+const FolderRow = ({
+  folder,
+  children,
+  defaultExpanded = false,
+}: {
+  folder: FolderItem;
+  children: React.ReactNode;
+  defaultExpanded?: boolean;
+}) => {
+  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
 
   return (
     <Row role="treeitem" aria-expanded={isExpanded}>

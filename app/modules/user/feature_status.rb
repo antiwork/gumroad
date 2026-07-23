@@ -16,7 +16,12 @@ class User
     end
 
     def paypal_connect_allowed?
-      compliant? && sales_cents_total >= PaypalMerchantAccountManager::MIN_SALES_CENTS_REQ_FOR_PCP && has_completed_payouts?
+      # The only eligibility requirement (beyond country support, which
+      # `paypal_connect_enabled?` checks) is that the seller has set up how they
+      # receive payouts — a bank account, PayPal payout email, or a connected
+      # Stripe/PayPal account. Earlier gates (minimum sales, completed payouts,
+      # compliant status) were removed in #6127; see issue #6118.
+      has_payout_information?
     end
 
     def paypal_disconnect_allowed?

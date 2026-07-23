@@ -238,6 +238,23 @@ describe UrlRedirectPresenter do
       expect(instance.download_page_with_content_props[:content][:last_content_page_id]).to eq("page_abc123")
     end
 
+    it "round-trips the per-folder 'expandedByDefault' attribute through rich content in props" do
+      product_content = [
+        {
+          "type" => "fileEmbedGroup",
+          "attrs" => { "uid" => "folder-uid-1", "name" => "GOYOW", "expandedByDefault" => true },
+          "content" => [],
+        },
+      ]
+      rich_content = create(:rich_content, entity: @product, title: "Page title", description: product_content)
+      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+
+      pages = instance.download_page_with_content_props[:content][:rich_content_pages]
+      expect(pages.first[:id]).to eq(rich_content.external_id)
+      folder_node = pages.first[:description][:content].first
+      expect(folder_node["attrs"]).to eq("uid" => "folder-uid-1", "name" => "GOYOW", "expandedByDefault" => true)
+    end
+
     it "includes 'discord' in props" do
       integration = create(:discord_integration)
       @product.active_integrations << integration

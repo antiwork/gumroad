@@ -968,7 +968,11 @@ class Purchase < ApplicationRecord
       invoice_url: (invoice_url if version == 2 && has_invoice?),
       upsell: upsell_purchase&.as_json,
       paypal_refund_expired: paypal_refund_expired?,
-      **(version == 2 ? web_csv_parity_fields : {})
+      **(version == 2 ? web_csv_parity_fields : {}),
+      # Opt-in (Sales API only) so other version-2 serializations — like the audience
+      # customers search, which renders up to 100 purchases without the Sales API
+      # preloads — don't pick up per-purchase presentment/refund queries.
+      **(version == 2 && options[:include_buyer_presentment] ? { buyer_presentment: buyer_presentment_api_fields } : {})
     ).delete_if { |_, v| v.nil? }
 
     json[:card] = {
@@ -3660,6 +3664,44 @@ class Purchase < ApplicationRecord
 
     def web_csv_tax_cents
       gumroad_responsible_for_tax? ? gumroad_tax_cents : tax_cents
+    end
+
+    # Sales API v2 buyer-presentment fields (gumroad#5419, Phase 4 / Open Question 8).
+    # Present only when this purchase was charged in the buyer's own currency (a
+    # purchase_presentment row exists — i.e. the processor charge currency differed
+    # from Gumroad's canonical USD accounting path). Strictly additive: canonical
+    # fields like price, tip_cents, and tax_cents keep their existing seller/accounting
+    # meaning, and these amounts are buyer-currency minor units (whole yen for
+    # zero-decimal currencies like JPY), NOT seller revenue.
+    # Returns nil for canonical-USD sales so as_json's delete_if drops the key entirely.
+    def buyer_presentment_api_fields
+      presentment = purchase_presentment
+      return if presentment.nil?
+
+      {
+        currency: presentment.presentment_currency,
+        price_cents: presentment.presentment_price_cents,
+        tip_cents: presentment.presentment_tip_cents,
+        seller_tax_cents: presentment.presentment_seller_tax_cents,
+        gumroad_tax_cents: presentment.presentment_gumroad_tax_cents,
+        shipping_cents: presentment.presentment_shipping_cents,
+        total_cents: presentment.presentment_total_cents,
+        # String to survive JSON round-trips without float precision loss.
+        fx_rate: presentment.charge_presentment&.fx_rate&.to_s,
+        refunded_cents: presentment_refunded_cents_for_api
+      }
+    end
+
+    # Sum of the buyer-currency amounts actually returned to the buyer across this
+    # purchase's effective refunds. Presentment refund amounts intentionally live as
+    # snapshots in refunds.json_data (not a SQL-summable column — see gumroad#5419:
+    # aggregate refunded-presentment reporting must derive it intentionally), so this
+    # walks the refunds association in memory. Uses the same effective?/loaded? pattern
+    # as amount_refunded_cents so API serialization with preloaded refunds issues no
+    # extra queries.
+    def presentment_refunded_cents_for_api
+      effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
+      effective_refunds.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
     end
 
     def web_csv_payment_processor

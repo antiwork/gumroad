@@ -173,7 +173,7 @@ class Settings::PaymentsController < Settings::BaseController
 
   def paypal_connect
     if params[:merchantIdInPayPal].blank? || params[:merchantId].blank? || current_seller.external_id != params[:merchantId].split("-")[0]
-      redirect_to settings_payments_path, notice: "There was an error connecting your PayPal account with Gumroad."
+      redirect_to checkout_form_path, notice: "There was an error connecting your PayPal account with Gumroad."
       return
     end
 
@@ -188,7 +188,7 @@ class Settings::PaymentsController < Settings::BaseController
 
     log_payout_settings_update_by_non_owner("PayPal account connection updated")
 
-    redirect_to settings_payments_path, notice: message
+    redirect_to checkout_form_path, notice: message
   end
 
   def remove_credit_card

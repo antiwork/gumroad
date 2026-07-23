@@ -41,7 +41,23 @@ class MerchantAccount < ApplicationRecord
   # expires on its own and is cleared by the Stripe account.updated webhook when the
   # account's currency configuration changes, so accounts that stop settling in another
   # currency regain presentment without manual intervention. ISO8601 timestamp string.
+  #
+  # LEGACY, read-only: superseded by the per-currency map below. Still honored for
+  # seller-connected accounts whose marker was written before the per-currency change so
+  # they keep their USD fallback until it expires; new mismatches only write the map.
   attr_json_data_accessor :settlement_currency_mismatch_noticed_at
+  # Per-currency version of the marker above: { "eur" => "<iso8601>", ... }. Stripe
+  # multi-currency settlement is configured PER CURRENCY (e.g. enabling iDEAL/SEPA made
+  # the shared platform account settle EUR in EUR while every other currency still
+  # settles in USD), so a mismatch observed for one presentment currency says nothing
+  # about the others. The 2026-07-21/22 gumroad-private#933 incidents were both blast-radius
+  # failures of the single blanket marker: first a blanket marker on the shared account
+  # silently suppressed FX quotes for ALL currencies (#6117), then #6117's blanket
+  # "never record on managed accounts" guard removed the graceful USD fallback for the
+  # one currency that genuinely mismatched, failing every eurozone checkout closed.
+  # Scoping the marker to the currency fixes both: only the mismatching currency falls
+  # back to USD, on managed and connected accounts alike.
+  attr_json_data_accessor :settlement_currency_mismatch_map
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }
@@ -76,51 +92,58 @@ class MerchantAccount < ApplicationRecord
   # currency configuration actually changes.
   SETTLEMENT_CURRENCY_MISMATCH_TTL = 30.days
 
-  # True while a recorded settlement-currency mismatch is fresh — checkout should skip the
-  # FX-quote round trip and fall back to canonical USD immediately.
-  def settlement_currency_mismatch_active?
-    # The shared Gumroad account settles in USD, so this marker can never be meaningful
-    # there. Treat a marker written before the write guard shipped as inert immediately;
-    # waiting for a manual production cleanup would keep every managed seller in USD.
+  # True while a recorded settlement-currency mismatch FOR THIS PRESENTMENT CURRENCY is
+  # fresh — checkout should skip the FX-quote round trip for this currency and fall back
+  # to canonical USD immediately. Other currencies are unaffected: Stripe configures
+  # multi-currency settlement per currency, so each currency learns independently.
+  def settlement_currency_mismatch_active?(currency)
+    return false if currency.blank?
+    return true if fresh_mismatch_timestamp?((settlement_currency_mismatch_map || {})[currency.to_s.downcase])
+
+    # Legacy blanket marker written before the per-currency map existed. The shared
+    # Gumroad platform account is exempt: on 2026-07-21 a single stale-session failure
+    # recorded the blanket marker there and silently suppressed FX quotes for ~all
+    # managed sellers (gumroad-private#933), so a pre-map marker on it is known-bogus.
     return false if is_managed_by_gumroad?
 
-    noticed_at_raw = settlement_currency_mismatch_noticed_at
-    return false if noticed_at_raw.blank?
-
-    noticed_at = Time.zone.parse(noticed_at_raw.to_s)
-    return false if noticed_at.nil?
-
-    noticed_at > SETTLEMENT_CURRENCY_MISMATCH_TTL.ago
-  rescue ArgumentError
-    # A malformed timestamp must never break checkout: treat it as no marker.
-    false
+    fresh_mismatch_timestamp?(settlement_currency_mismatch_noticed_at)
   end
 
-  # Records that Stripe just rejected (or redirected) an FX quote because this account
-  # settles in a non-USD currency. Refreshes the timestamp on every occurrence so the TTL
-  # measures time since the LAST observed mismatch, not the first.
-  #
-  # Gumroad-managed accounts are exempt: the shared platform account (MerchantAccount.gumroad)
-  # is used by nearly every Gumroad-managed seller and settles in USD, so a mismatch-looking
-  # rejection there (e.g. a stale-session quote expiring at intent create) is never evidence
-  # of a real non-USD settlement configuration. On 2026-07-21 a single stale-session failure
-  # recorded this marker on the shared account and silently suppressed FX quotes for ~all
-  # managed sellers for the whole TTL (gumroad-private#933) — the marker must only ever land
-  # on a seller's own connected account.
-  def record_settlement_currency_mismatch!
-    return if is_managed_by_gumroad?
+  # Records that Stripe just rejected (or redirected) an FX quote or PaymentIntent for
+  # this account in `currency`, because the account settles that currency in itself
+  # rather than USD (Stripe multi-currency settlement). Refreshes the timestamp on every
+  # occurrence so the TTL measures time since the LAST observed mismatch, not the first.
+  # Recorded per currency — including on the shared Gumroad-managed platform account,
+  # where enabling EUR local methods (iDEAL/SEPA) legitimately made EUR settle in EUR
+  # (2026-07-22, gumroad-private#933): the graceful USD fallback must apply there too,
+  # but only for the currency that actually mismatched.
+  def record_settlement_currency_mismatch!(currency)
+    return if currency.blank?
 
-    self.settlement_currency_mismatch_noticed_at = Time.current.iso8601
-    save!
+    # Updating the map is a read-modify-write on shared persisted state: two checkouts
+    # learning mismatches for different currencies at the same time could each copy the
+    # same old map and the last save would drop the other currency's marker. with_lock
+    # takes a row lock and reloads the record, so the map read below is fresh and
+    # concurrent writers are serialized. Contention is negligible — this only runs on
+    # the rare mismatch-observation path, not on every checkout.
+    with_lock do
+      map = (settlement_currency_mismatch_map || {}).dup
+      map[currency.to_s.downcase] = Time.current.iso8601
+      self.settlement_currency_mismatch_map = map
+      save!
+    end
   end
 
-  # Forgets a recorded settlement-currency mismatch. Called from the Stripe
+  # Forgets all recorded settlement-currency mismatches. Called from the Stripe
   # account.updated webhook when the account's currency configuration changes, so the next
-  # eligible checkout probes Stripe again instead of waiting out the TTL.
+  # eligible checkout probes Stripe again instead of waiting out the TTL. Clears the whole
+  # map (not one currency) because the webhook doesn't say which currency changed, and the
+  # only cost of over-clearing is one re-probed FX quote per currency.
   def clear_settlement_currency_mismatch!
-    return if settlement_currency_mismatch_noticed_at.blank?
+    return if settlement_currency_mismatch_noticed_at.blank? && settlement_currency_mismatch_map.blank?
 
     self.settlement_currency_mismatch_noticed_at = nil
+    self.settlement_currency_mismatch_map = nil
     save!
   end
 
@@ -251,4 +274,19 @@ class MerchantAccount < ApplicationRecord
       parsed_response
     end
   end
+
+  private
+    # Shared TTL check for both marker formats (per-currency map values and the legacy
+    # blanket timestamp).
+    def fresh_mismatch_timestamp?(raw)
+      return false if raw.blank?
+
+      noticed_at = Time.zone.parse(raw.to_s)
+      return false if noticed_at.nil?
+
+      noticed_at > SETTLEMENT_CURRENCY_MISMATCH_TTL.ago
+    rescue ArgumentError
+      # A malformed timestamp must never break checkout: treat it as no marker.
+      false
+    end
 end

@@ -8,7 +8,7 @@ import {
 } from "@stripe/stripe-js";
 import * as React from "react";
 
-import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
+import { paymentElementBillingDetailsCollection } from "$app/data/card_payment_method_data";
 import { getCheckoutStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
@@ -54,6 +54,7 @@ export const PaymentElementInput = ({
   disabled,
   defaultEmail,
   defaultName,
+  hasShippingCart,
   invalid,
   onReady,
   onChange,
@@ -83,6 +84,10 @@ export const PaymentElementInput = ({
   disabled?: boolean | undefined;
   defaultEmail: string;
   defaultName: string;
+  // Whether the cart requires shipping, i.e. whether checkout's own form is collecting a full
+  // street address. Drives which billing-details fields the element renders for methods that
+  // need an address (see paymentElementBillingDetailsCollection).
+  hasShippingCart: boolean;
   invalid?: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
@@ -152,6 +157,7 @@ export const PaymentElementInput = ({
             applePayOption={applePayOption}
             defaultEmail={linkPrefillContact.email}
             defaultName={linkPrefillContact.name}
+            hasShippingCart={hasShippingCart}
             onReady={onReady}
             onChange={onChange}
             onFocus={onFocus}
@@ -175,6 +181,7 @@ const PaymentElementControllerInput = ({
   applePayOption,
   defaultEmail,
   defaultName,
+  hasShippingCart,
   onReady,
   onChange,
   onFocus,
@@ -187,6 +194,7 @@ const PaymentElementControllerInput = ({
   applePayOption?: PaymentElementApplePayOption | undefined;
   defaultEmail: string;
   defaultName: string;
+  hasShippingCart: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
   onFocus?: (() => void) | undefined;
@@ -200,7 +208,7 @@ const PaymentElementControllerInput = ({
   // because it drives the fields option below, which must reach the mounted element via
   // element.update() when the selection flips between card and wallet.
   const [selectedType, setSelectedType] = React.useState("card");
-  const walletTypeSelected = isWalletPaymentElementType(selectedType);
+  const billingDetailsCollection = paymentElementBillingDetailsCollection(selectedType, hasShippingCart);
 
   React.useEffect(() => {
     onReady(stripe && elements && ready ? { stripe, elements } : null);
@@ -231,34 +239,58 @@ const PaymentElementControllerInput = ({
         // rule in StripePaymentElementProvider — the exact pre-flag behavior.
         layout: walletsEnabled ? { type: "accordion", radios: false, spacedAccordionItems: true } : { type: "tabs" },
         ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
-        // Checkout collects billing details in its own form, so for card payments every field is
-        // pinned to "never" and tokenization passes the form's values explicitly (see
-        // paymentElementBillingDetails in card_payment_method_data.ts). Wallet selections flip
-        // the whole block to "auto": the wallet sheet supplies the buyer's verified billing
-        // details and tokenization deliberately passes no override — but Stripe's client-side
-        // validation rejects createPaymentMethod/createConfirmationToken with an
-        // IntegrationError ("You specified "never" for fields.billing_details.name … but did
-        // not pass params.billing_details.name") whenever a field is "never" and no param is
-        // passed, wallets included. "auto" removes that requirement and lets the wallet's own
-        // details flow onto the PaymentMethod. The switch reaches the mounted element through
-        // react-stripe-js's option diffing (element.update) as soon as the change event reports
-        // a wallet row selection — before tokenization, which only starts from the pay click.
+        // Checkout collects billing details in its own form, so each element field is only shown
+        // when checkout does NOT already ask for it — nothing should be asked for twice. The
+        // collection mode (see paymentElementBillingDetailsCollection) decides per selection:
+        // - "form" (cards, Link, iDEAL): every field pinned to "never"; tokenization passes the
+        //   form's values explicitly (see paymentElementBillingDetails in
+        //   card_payment_method_data.ts). Stripe's client-side validation rejects
+        //   createPaymentMethod/createConfirmationToken with an IntegrationError ("You specified
+        //   "never" for fields.billing_details.name … but did not pass
+        //   params.billing_details.name") whenever a field is "never" and no param is passed,
+        //   which is why the override is mandatory on this mode.
+        // - "element" (wallets): the whole block is "auto" — the wallet sheet supplies the
+        //   buyer's verified billing details and tokenization deliberately passes no override.
+        //   Nothing extra renders on the page (the sheet is its own surface).
+        // - "element-address" (UPI on digital carts): Stripe requires billing_details.name and a
+        //   full street address to CONFIRM a UPI payment, and checkout's digital form has no
+        //   street-address fields. With everything pinned to "never" the confirm always failed
+        //   server-side with parameter_missing and no last_payment_error — buyers could never
+        //   complete a UPI purchase (the July 2026 UPI ramp-down, gumroad-private#933). Only the
+        //   street-address fields render inside the UPI pane (the one thing the form doesn't
+        //   have); name/email/country stay "never" because checkout's form already collects
+        //   those, and tokenization passes them alongside. On shippable carts the form collects
+        //   the full address itself, so UPI stays on "form" and no element fields appear.
+        // The switch reaches the mounted element through react-stripe-js's option diffing
+        // (element.update) as soon as the change event reports the row selection — before
+        // tokenization, which only starts from the pay click.
         fields: {
-          billingDetails: walletTypeSelected
-            ? "auto"
-            : {
-                name: "never",
-                email: "never",
-                phone: "never",
-                address: {
-                  country: "never",
-                  postalCode: "never",
-                  state: "never",
-                  city: "never",
-                  line1: "never",
-                  line2: "never",
+          billingDetails:
+            billingDetailsCollection === "element"
+              ? "auto"
+              : {
+                  name: "never",
+                  email: "never",
+                  phone: "never",
+                  address:
+                    billingDetailsCollection === "element-address"
+                      ? {
+                          country: "never",
+                          postalCode: "auto",
+                          state: "auto",
+                          city: "auto",
+                          line1: "auto",
+                          line2: "auto",
+                        }
+                      : {
+                          country: "never",
+                          postalCode: "never",
+                          state: "never",
+                          city: "never",
+                          line1: "never",
+                          line2: "never",
+                        },
                 },
-              },
         },
         wallets: paymentElementWallets(stripeLinkEnabled, walletsEnabled),
         // The recurring declaration attaches to the PaymentElement's own options (that's where

@@ -185,7 +185,13 @@ class PurchasesController < ApplicationController
       size: per_page,
       sort: [:_score, { created_at: :desc }, { id: :desc }]
     }
-    purchases_records = PurchaseSearchService.search(search_options).records.load
+    # Preload refunds: the v2 serializer's amount_refundable_in_currency sums refunds
+    # per purchase, and Refund#effective?/loaded? uses the in-memory association when
+    # present — without this, each serialized row issues its own SUM query.
+    # buyer_presentment itself is Sales-API-only (include_buyer_presentment option),
+    # so no presentment preloads are needed here.
+    purchases_records = PurchaseSearchService.search(search_options).records.
+      includes(:refunds).load
 
     imported_customers_records = current_seller.imported_customers.alive.
       where("email LIKE ?", "%#{query}%").

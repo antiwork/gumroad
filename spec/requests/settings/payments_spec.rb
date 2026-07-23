@@ -16,7 +16,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
     let(:user) { create(:user, name: "Gum") }
 
     before do
-      allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(true)
       login_as user
     end
 
@@ -26,100 +25,14 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_tab_button("Payments", open: true)
     end
 
-    it "shows the PayPal Connect section if country is supported" do
+    it "does not render the PayPal Connect section and points to checkout settings instead" do
       create(:user_compliance_info, user:)
-
-      visit settings_payments_path
-
-      expect(page).to have_link("Connect with PayPal")
-    end
-
-    it "does not show the Paypal Connect section if country is not supported" do
-      creator = create(:user)
-      create(:user_compliance_info, user: creator, country: "India")
-      login_as creator
 
       visit settings_payments_path
 
       expect(page).not_to have_link("Connect with PayPal")
-    end
-
-    it "keeps the PayPal Connect button enabled and does not show the notification when user has payment_address set up" do
-      create(:user_compliance_info, user:)
-      visit settings_payments_path
-      expect(page).not_to have_alert(text: "You must set up credit card purchases above before enabling customers to pay with PayPal.")
-      expect(page).not_to have_link(text: "Connect with PayPal", inert: true)
-    end
-
-    it "keeps the PayPal Connect button enabled even when user does not have either bank account or payment address set up" do
-      creator = create(:user, payment_address: nil)
-      create(:user_compliance_info, user: creator)
-      login_as creator
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: false)
-    end
-
-    it "keeps the PayPal Connect button enabled when user has stripe account connected" do
-      creator = create(:user, payment_address: nil)
-      create(:user_compliance_info, user: creator)
-      create(:merchant_account_stripe_connect, user: creator)
-      creator.check_merchant_account_is_linked = true
-      creator.save!
-
-      expect(creator.has_stripe_account_connected?).to be true
-      login_as creator
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: false)
-    end
-
-    it "keeps the PayPal Connect button enabled when user has bank account connected" do
-      creator = create(:user, payment_address: nil)
-      create(:user_compliance_info, user: creator)
-      create(:ach_account, user: creator)
-
-      login_as creator
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: false)
-    end
-
-    it "keeps the PayPal Connect button enabled when user has debit card connected" do
-      creator = create(:user, payment_address: nil)
-      create(:user_compliance_info, user: creator)
-      create(:card_bank_account, user: creator)
-
-      login_as creator
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: false)
-    end
-
-    it "keeps the PayPal Connect button disabled and shows the eligibility requirements when the user is not eligible" do
-      create(:user_compliance_info, user:)
-      allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(false)
-
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: true)
-      expect(page).to have_text("You must meet the following requirements in order to connect a PayPal account:")
-      expect(page).to have_text("Your account must be marked as compliant")
-      expect(page).to have_text("You must have earned at least $100")
-      expect(page).to have_text("You must have received at least one successful payout")
-    end
-
-    context "when logged user has role admin" do
-      let(:seller) { create(:named_seller) }
-
-      include_context "with switching account to user as admin for seller"
-
-      it "shows the PayPal connect section requirements like the owner sees" do
-        create(:user_compliance_info, user: seller)
-        allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(false)
-
-        visit settings_payments_path
-
-        # Team admins can now manage payout settings, so they see the same
-        # PayPal connect section as the owner (gated on the seller's own
-        # eligibility requirements, not on the viewer's role).
-        expect(page).to have_text("You must meet the following requirements in order to connect a PayPal account:")
-      end
+      expect(page).to have_text("Looking for PayPal Connect?")
+      expect(page).to have_link("Checkout settings", href: checkout_form_path)
     end
   end
 
@@ -166,8 +79,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       fill_in("Pay to the order of", with: "barnabas ngagy")
       fill_in("Routing number", with: "110000000")
-      fill_in("Account number", with: "123456781")
-      fill_in("Confirm account number", with: "123456781")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
 
       expect(page).to have_content("Must exactly match the name on your bank account")
       expect(page).to have_content("Payouts will be made in USD.")
@@ -177,11 +90,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       select("1980", from: "Year")
       fill_in("Last 4 digits of SSN", with: "1235")
 
-      click_on("Update settings")
-      expect(page).to have_alert("You must use a test bank account number. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
-
-      fill_in("Account number", with: "000123456789")
-      fill_in("Confirm account number", with: "000123456789")
       click_on("Update settings")
       expect(page).to have_alert(text: "Thanks! You're all set.")
       expect(page).to have_content("Routing number")

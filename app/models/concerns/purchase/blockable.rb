@@ -136,8 +136,9 @@ module Purchase::Blockable
   end
 
   # Called when a dispute (chargeback) lands on one of this seller's purchases.
-  # If the seller's lifetime dispute COUNT rate — disputed purchases divided by settled
-  # successful purchases — crosses 1%, we force a buyer-friendly refund policy on their
+  # If the seller's lifetime dispute rate — unique buyers with a standing chargeback
+  # divided by unique buyers with settled successful purchases — crosses 1%, we force a
+  # buyer-friendly refund policy on their
   # account: their seller-level refund policy is bumped to at least a 30-day money-back
   # guarantee and they can no longer pick "No refunds allowed" (the guard lives in
   # RefundPolicy's validation) until an admin clears the enforcement with
@@ -153,9 +154,11 @@ module Purchase::Blockable
     return if seller.refund_policy_enforced?
 
     stats = seller.dispute_rate_stats
-    # Volume gates: don't act on statistical noise from small accounts.
+    # Volume gates: don't act on statistical noise from small accounts. Settled purchases
+    # gate sales volume; the dispute gate counts distinct disputing buyers, so one buyer
+    # disputing several installments of the same purchase can't clear it alone.
     return if stats[:settled_count] < User::MIN_SETTLED_PURCHASES_FOR_REFUND_POLICY_ENFORCEMENT
-    return if stats[:disputed_count] < User::MIN_DISPUTES_FOR_REFUND_POLICY_ENFORCEMENT
+    return if stats[:disputing_buyers_count] < User::MIN_DISPUTING_BUYERS_FOR_REFUND_POLICY_ENFORCEMENT
 
     dispute_count_rate = stats[:rate]
     return if dispute_count_rate.nil? || dispute_count_rate <= User::MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY
@@ -175,7 +178,7 @@ module Purchase::Blockable
 
       seller.comments.create!(
         content: "Refund policy enforcement applied: dispute rate #{format("%.1f%%", dispute_count_rate)} " \
-                 "(#{stats[:disputed_count]} disputes / #{stats[:settled_count]} settled sales) exceeded " \
+                 "(#{stats[:disputing_buyers_count]} disputing buyers / #{stats[:settled_buyers_count]} unique buyers) exceeded " \
                  "#{User::MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY}% by count. Seller-level refund policy " \
                  "is now at least a #{User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS}-day money-back guarantee and " \
                  "\"No refunds allowed\" is unavailable until an admin clears the enforcement.",

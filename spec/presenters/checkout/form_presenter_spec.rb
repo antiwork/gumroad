@@ -26,6 +26,17 @@ describe Checkout::FormPresenter do
             card_product: nil,
             custom_fields: [],
             products: [],
+            paypal_connect: {
+              show_paypal_connect: false,
+              allow_paypal_connect: true,
+              unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
+              email: nil,
+              charge_processor_merchant_id: nil,
+              charge_processor_verified: false,
+              needs_email_confirmation: false,
+              paypal_disconnect_allowed: true,
+            },
+            connect_account_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: 10% + 50¢\n• Discover sales: 30% flat\n",
           }
         )
     end
@@ -92,6 +103,109 @@ describe Checkout::FormPresenter do
           { id: field.external_id, name: field.name, global: false, required: false, collect_per_product: false, type: field.type, products: [product.external_id] },
           { id: other_field.external_id, name: other_field.name, global: false, required: false, collect_per_product: false, type: other_field.type, products: [other_product.external_id] }
         ]
+      end
+    end
+
+    describe "paypal_connect props" do
+      let(:owner_presenter) { described_class.new(pundit_user: SellerContext.new(user: seller, seller:)) }
+
+      context "when the seller is in a supported country and the user is the owner" do
+        before do
+          create(:user_compliance_info, user: seller)
+        end
+
+        it "shows the PayPal Connect section" do
+          expect(owner_presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(true)
+        end
+
+        it "shows the PayPal Connect section to team members with the admin role" do
+          # Team admins can manage payout settings (see #6067), which includes
+          # connecting PayPal on the seller's behalf.
+          expect(presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(true)
+        end
+
+        it "does not show the PayPal Connect section to team members without the admin role" do
+          marketing_user = create(:user)
+          create(:team_membership, user: marketing_user, seller:, role: TeamMembership::ROLE_MARKETING)
+          marketing_presenter = described_class.new(pundit_user: SellerContext.new(user: marketing_user, seller:))
+
+          expect(marketing_presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(false)
+        end
+
+        it "allows connecting only when the seller has payout information set up" do
+          seller.update!(payment_address: "")
+          expect(owner_presenter.form_props[:paypal_connect][:allow_paypal_connect]).to eq(false)
+
+          seller.update!(payment_address: "seller-payouts@example.com")
+
+          expect(described_class.new(pundit_user: SellerContext.new(user: seller, seller: seller.reload)).form_props[:paypal_connect][:allow_paypal_connect]).to eq(true)
+        end
+      end
+
+      context "when the seller is in an unsupported country" do
+        before do
+          create(:user_compliance_info, user: seller, country: "India")
+        end
+
+        it "does not show the PayPal Connect section" do
+          expect(owner_presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(false)
+        end
+      end
+
+      context "when the seller has a connected PayPal merchant account" do
+        before do
+          create(:user_compliance_info, user: seller)
+          seller.mark_compliant!(author_name: "ContentModeration")
+          @paypal_connect_account = create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "B66YJBBNCRW6L", charge_processor_verified_at: Time.current)
+          allow_any_instance_of(PaypalIntegrationRestApi).to receive(:get_merchant_account_by_merchant_id).and_return(double(parsed_response: { "primary_email" => "seller-paypal@example.com" }))
+          allow(PaypalPartnerRestCredentials).to receive(:new).and_return(double(auth_token: "token"))
+        end
+
+        it "returns the merchant account details" do
+          props = owner_presenter.form_props[:paypal_connect]
+          expect(props[:charge_processor_merchant_id]).to eq(@paypal_connect_account.charge_processor_merchant_id)
+          expect(props[:charge_processor_verified]).to eq(true)
+          expect(props[:email]).to eq("seller-paypal@example.com")
+        end
+
+        it "does not call the PayPal API when the section is not shown" do
+          expect(PaypalIntegrationRestApi).not_to receive(:new)
+
+          marketing_user = create(:user)
+          create(:team_membership, user: marketing_user, seller:, role: TeamMembership::ROLE_MARKETING)
+          marketing_presenter = described_class.new(pundit_user: SellerContext.new(user: marketing_user, seller:))
+
+          props = marketing_presenter.form_props[:paypal_connect]
+          expect(props[:show_paypal_connect]).to eq(false)
+          expect(props[:email]).to be_nil
+        end
+
+        context "when the PayPal API raises" do
+          before do
+            allow_any_instance_of(PaypalIntegrationRestApi).to receive(:get_merchant_account_by_merchant_id).and_raise(StandardError, "PayPal is down")
+          end
+
+          it "omits the email and still renders the rest of the props" do
+            expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError))
+
+            props = owner_presenter.form_props[:paypal_connect]
+            expect(props[:email]).to be_nil
+            expect(props[:show_paypal_connect]).to eq(true)
+            expect(props[:charge_processor_merchant_id]).to eq(@paypal_connect_account.charge_processor_merchant_id)
+          end
+        end
+
+        context "when the PayPal API returns an unusable response" do
+          before do
+            allow_any_instance_of(PaypalIntegrationRestApi).to receive(:get_merchant_account_by_merchant_id).and_return(double(parsed_response: nil))
+          end
+
+          it "omits the email without raising" do
+            props = owner_presenter.form_props[:paypal_connect]
+            expect(props[:email]).to be_nil
+            expect(props[:show_paypal_connect]).to eq(true)
+          end
+        end
       end
     end
   end

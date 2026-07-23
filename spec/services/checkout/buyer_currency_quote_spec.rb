@@ -290,18 +290,22 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
-    it "does not record the mismatch on a Gumroad-managed account (the shared platform account serves ~all managed sellers)" do
-      # Regression guard for the 2026-07-21 incident (gumroad-private#933): a single
-      # stale-session rejection recorded the marker on the shared platform account and
-      # silently suppressed FX quotes for every Gumroad-managed seller for the 30-day TTL.
-      # The checkout still falls back to USD, but only for this attempt.
+    it "records the mismatch per currency on a Gumroad-managed account, leaving other currencies quoting" do
+      # The shared platform account can genuinely settle one currency in itself (enabling
+      # iDEAL/SEPA made EUR settle in EUR on 2026-07-22, gumroad-private#933), so the
+      # per-currency marker must be recorded there too — the earlier blanket "never record
+      # on managed accounts" guard (#6117) left the mismatching currency failing closed at
+      # PaymentIntent create instead of falling back to USD. Only the observed currency is
+      # marked; the legacy blanket marker is never written.
       allow(StripeFxQuote).to receive(:create).and_raise(
         StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
       )
 
-      expect do
-        described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
-      end.not_to change { merchant_account.reload.settlement_currency_mismatch_noticed_at }.from(nil)
+      described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(merchant_account.reload.settlement_currency_mismatch_active?(Currency::CAD)).to be(true)
+      expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
+      expect(merchant_account.settlement_currency_mismatch_noticed_at).to be_nil
     end
 
     it "records the mismatch on a seller-owned connected account" do
@@ -315,12 +319,23 @@ describe Checkout::BuyerCurrencyQuote do
 
       expect do
         described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
-      end.to change { seller_merchant_account.reload.settlement_currency_mismatch_active? }.from(false).to(true)
+      end.to change { seller_merchant_account.reload.settlement_currency_mismatch_active?(Currency::CAD) }.from(false).to(true)
     end
 
-    it "skips the FX-quote round trip entirely while a recorded mismatch is fresh" do
-      # Set the marker directly: it can only be recorded on a seller's own connected
-      # account now, but the eligibility read path must still honor any fresh marker.
+    it "skips the FX-quote round trip entirely while a recorded mismatch is fresh for the buyer's currency" do
+      seller.update!(check_merchant_account_is_linked: true)
+      seller_merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      seller_merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
+    it "still honors a fresh legacy blanket marker on a seller-connected account" do
+      # Markers written before the per-currency map existed must keep their USD fallback
+      # until they expire (the write path only produces the map now).
       seller.update!(check_merchant_account_is_linked: true)
       seller_merchant_account = create(:merchant_account_stripe_connect, user: seller)
       seller_merchant_account.update!(settlement_currency_mismatch_noticed_at: Time.current.iso8601)

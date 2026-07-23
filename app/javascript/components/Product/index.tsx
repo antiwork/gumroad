@@ -400,7 +400,13 @@ export const Product = ({
       {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
       <section className="lg:border-r">
         <header className="grid gap-4 p-6 not-first:border-t">
-          <h1 itemProp="name">{product.name}</h1>
+          {/* dir="auto" lets an RTL product name (Hebrew, Arabic) render right-to-left
+              instead of inheriting the document's LTR base direction, which misplaces
+              neutral characters like quotes and digits (gumroad-private#1259; same
+              rationale as the description fix in #6138). */}
+          <h1 itemProp="name" dir="auto">
+            {product.name}
+          </h1>
         </header>
         <section className="grid grid-cols-[auto_1fr] gap-[1px] border-t border-border p-0 sm:grid-cols-[auto_auto_minmax(max-content,1fr)]">
           {showPrice ? (

@@ -192,14 +192,18 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
         current = current_seller.custom_html
         return [nil, nil, "There is no custom HTML page to edit."] if current.blank?
 
-        occurrences = current.scan(find).size
-        return [nil, nil, "The snippet to replace no longer appears in the current page."] if occurrences.zero?
-        return [nil, nil, "The snippet to replace matches #{occurrences} places in the current page."] if occurrences > 1
+        # Same whitespace-tolerant matcher as the real edit endpoint (Ai::CustomHtmlSnippetMatcher)
+        # so preview and apply always agree on whether — and where — the snippet matches. See the
+        # matcher for why exact-only matching isn't enough (agent-normalized whitespace like
+        # NBSP→space made proposals permanently unconfirmable, gumroad-private#1251).
+        match = Ai::CustomHtmlSnippetMatcher.match(current, find)
+        return [nil, nil, "The snippet to replace no longer appears in the current page."] if match.occurrences.zero?
+        return [nil, nil, "The snippet to replace matches #{match.occurrences} places in the current page."] if match.occurrences > 1
 
         # Block form so the replacement is inserted literally — the two-argument form of
         # String#sub treats backslash sequences (\0, \1, \\) specially, which would corrupt HTML
         # that legitimately contains backslashes. Matches the real edit endpoint.
-        edited = current.sub(find) { replace }
+        edited = current.sub(match.matcher) { replace }
         return [nil, nil, custom_html_length_error(edited)] if custom_html_length_error(edited)
 
         # If the page (or the replacement) somehow already contains the marker text, the scroll
@@ -209,7 +213,7 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
           if edited.include?(PREVIEW_CHANGED_MARKER_TEXT)
             nil
           else
-            current.sub(find) { PREVIEW_CHANGED_MARKER + replace }
+            current.sub(match.matcher) { PREVIEW_CHANGED_MARKER + replace }
           end
         [edited, marked, nil]
       else

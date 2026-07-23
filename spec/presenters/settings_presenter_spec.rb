@@ -372,13 +372,13 @@ describe SettingsPresenter do
       end
 
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false, show_passkeys_settings: false, passkeys: [])
+        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:, authenticator_app_enabled: false, show_passkeys_settings: false, passkeys: [])
       end
     end
 
     context "when seller is registered using email" do
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false, show_passkeys_settings: false, passkeys: [])
+        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:, authenticator_app_enabled: false, show_passkeys_settings: false, passkeys: [])
       end
     end
 
@@ -525,16 +525,6 @@ describe SettingsPresenter do
           bank_account: nil,
         },
         paypal_address: seller.payment_address,
-        paypal_connect: {
-          show_paypal_connect: false,
-          allow_paypal_connect: false,
-          unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
-          email: nil,
-          charge_processor_merchant_id: nil,
-          charge_processor_verified: false,
-          needs_email_confirmation: false,
-          paypal_disconnect_allowed: true,
-        },
         fee_info: {
           card_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: 10% + 50¢ Gumroad fee + 2.9% + 30¢ credit card fee.\n• Discover sales: 30% flat\n",
           paypal_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: 10% + 50¢ Gumroad fee + 2.9% + 30¢ PayPal fee.\n• Discover sales: 30% flat\n",
@@ -750,10 +740,6 @@ describe SettingsPresenter do
                                                                                                               show_bank_account: true,
                                                                                                               show_paypal: false,
                                                                                                             }),
-                                             paypal_connect: @base_props[:paypal_connect].merge({
-                                                                                                  show_paypal_connect: true,
-                                                                                                  allow_paypal_connect: false,
-                                                                                                }),
                                              aus_backtax_details: @base_props[:aus_backtax_details].merge({
                                                                                                             legal_entity_name: @user_compliance_info.first_and_last_name,
                                                                                                           }),
@@ -791,35 +777,9 @@ describe SettingsPresenter do
                                                                      }))
       end
 
-      it "returns correct props when seller is eligible for PayPal Connect" do
-        expect(presenter.payments_props).to eq(@base_us_props)
-        expect(presenter.payments_props[:paypal_connect][:allow_paypal_connect]).to be false
-
-        seller.mark_compliant!(author_name: "ContentModeration")
-        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
-        create(:payment_completed, user: seller)
-
-        expect(presenter.payments_props).to eq(@base_us_props.merge!({
-                                                                       paypal_connect: {
-                                                                         show_paypal_connect: true,
-                                                                         allow_paypal_connect: true,
-                                                                         unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
-                                                                         email: nil,
-                                                                         charge_processor_merchant_id: nil,
-                                                                         charge_processor_verified: false,
-                                                                         needs_email_confirmation: false,
-                                                                         paypal_disconnect_allowed: true,
-                                                                       },
-                                                                     }))
-        expect(presenter.payments_props[:paypal_connect][:allow_paypal_connect]).to be true
-      end
-
-      it "returns correct props when seller has a bank account and a PayPal Connect account", :vcr do
+      it "returns correct props when seller has a bank account" do
         active_bank_account = create(:ach_account, user: seller)
         seller.mark_compliant!(author_name: "ContentModeration")
-        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
-        create(:payment_completed, user: seller)
-        paypal_connect_account = create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "B66YJBBNCRW6L", charge_processor_verified_at: Time.current)
 
         bank_account_details = @base_us_props[:bank_account_details].merge({
                                                                              show_bank_account: true,
@@ -831,19 +791,8 @@ describe SettingsPresenter do
                                                                              },
                                                                            })
 
-        paypal_connect_details = @base_us_props[:paypal_connect].merge({
-                                                                         show_paypal_connect: true,
-                                                                         allow_paypal_connect: true,
-                                                                         email: paypal_connect_account.paypal_account_details["primary_email"],
-                                                                         charge_processor_merchant_id: paypal_connect_account.charge_processor_merchant_id,
-                                                                         charge_processor_verified: true,
-                                                                         needs_email_confirmation: false,
-                                                                         paypal_disconnect_allowed: true,
-                                                                       })
-
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
                                                                        bank_account_details:,
-                                                                       paypal_connect: paypal_connect_details,
                                                                      }))
       end
 
@@ -874,6 +823,54 @@ describe SettingsPresenter do
                                                                          needs_id_upload: true,
                                                                        ),
                                                                      }))
+      end
+
+      it "surfaces a Stripe postal-code rejection as a compliance action while payout setup is blocked" do
+        # Regression coverage for gumroad-private#1247: Stripe rejects the postal code
+        # asynchronously after the settings save, so without this banner the seller sees a
+        # successful save and retries blindly.
+        seller.add_payout_note(content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — Invalid NL postal code")
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:show_section]).to eq(true)
+        expect(account_status[:compliance_actions]).to contain_exactly(
+          hash_including(message: a_string_matching(/couldn't verify the postal code you entered for United States/), href: nil)
+        )
+      end
+
+      it "does not surface the postal-code rejection once a Stripe account exists" do
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_postal_note_test")
+        seller.add_payout_note(content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — Invalid NL postal code")
+
+        expect(presenter.payments_props[:account_status][:compliance_actions]).to eq([])
+      end
+
+      it "does not surface a postal-code rejection whose breadcrumb note was cleared" do
+        # The note is soft-deleted when a later account creation succeeds or the seller
+        # saves a corrected address, so a deleted note means the block is resolved.
+        note = seller.add_payout_note(content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — Invalid NL postal code")
+        note.update!(deleted_at: Time.current)
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:compliance_actions]).to eq([])
+        expect(account_status[:show_section]).to eq(false)
+      end
+
+      it "does not surface a postal-code rejection that predates the seller's latest compliance-info save" do
+        # If the seller corrects their address and the next account-creation attempt fails
+        # for an unrelated reason, the old note stays alive (it's only cleared on success).
+        # The rejection is stale — it belongs to the pre-correction address — so the banner
+        # must not blame the corrected postal code.
+        note = seller.add_payout_note(content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — Invalid NL postal code")
+        note.update!(created_at: 1.day.ago)
+        seller.alive_user_compliance_info.dup_and_save! do |info|
+          info.zip_code = "94104"
+          info.skip_stripe_job_on_create = true
+        end
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:compliance_actions]).to eq([])
+        expect(account_status[:show_section]).to eq(false)
       end
 
       it "flags the Stripe account as rejected and hides the remediation link when the rejection is terminal" do

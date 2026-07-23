@@ -97,17 +97,20 @@ class Checkout::BuyerCurrencyEligibility
     merchant_account.is_managed_by_gumroad? || merchant_account.is_a_stripe_connect_account?
   end
 
-  def self.usd_settling_merchant_account?(merchant_account)
+  def self.usd_settling_merchant_account?(merchant_account, presentment_currency:)
     return false unless merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
 
     # The stored currency answers the wrong question for accounts with Stripe
     # multi-currency settlement enabled: it mirrors Stripe's default_currency ("usd"),
-    # but the payment intent's settlement currency can still differ per intent. Stripe's
-    # rejection of an FX quote is the only reliable signal, and once observed it is
-    # recorded on the merchant account — while that marker is fresh, skip the doomed
-    # FX-quote round trip (up to 2s of checkout latency, on every visit) and fall back
-    # to canonical USD immediately.
-    !merchant_account.settlement_currency_mismatch_active?
+    # but the payment intent's settlement currency can still differ per intent — and
+    # Stripe configures it PER CURRENCY (e.g. the platform account settles EUR in EUR
+    # since the iDEAL/SEPA capabilities were enabled, while every other currency still
+    # settles in USD). Stripe's rejection of an FX quote or intent is the only reliable
+    # signal, and once observed it is recorded on the merchant account for that
+    # presentment currency — while that marker is fresh, skip the doomed FX-quote round
+    # trip for that currency (up to 2s of checkout latency, on every visit) and fall
+    # back to canonical USD immediately. Other currencies keep quoting.
+    !merchant_account.settlement_currency_mismatch_active?(presentment_currency)
   end
 
   def self.stripe_test_mode?
@@ -129,7 +132,6 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
-    return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?
     return fallback(:wallet_payment_request) if wallet_type.present?
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
@@ -161,6 +163,9 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
     return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    # Checked here (not up top with the other account gates) because the settlement
+    # mismatch marker is scoped to the presentment currency, which isn't known earlier.
+    return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?(buyer_currency)
 
     eligible(currency: buyer_currency)
   end
@@ -205,8 +210,9 @@ class Checkout::BuyerCurrencyEligibility
     # when the product is already priced in the forced currency (say EUR), the
     # seller's merchant account still receives the money, and today the pipeline
     # only knows how to settle accounts that hold USD. So this check applies to
-    # both the USD-priced and the forced-currency-priced product cases.
-    return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?
+    # both the USD-priced and the forced-currency-priced product cases, scoped to
+    # the forced currency (a mismatch learned for another currency is irrelevant).
+    return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?(forced_currency)
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
     return fallback(:multi_item_checkout) unless purchases.one?
@@ -260,8 +266,8 @@ class Checkout::BuyerCurrencyEligibility
       end
     end
 
-    def usd_settling_merchant_account?
-      self.class.usd_settling_merchant_account?(merchant_account)
+    def usd_settling_merchant_account?(presentment_currency)
+      self.class.usd_settling_merchant_account?(merchant_account, presentment_currency:)
     end
 
     def supported_charge_model?

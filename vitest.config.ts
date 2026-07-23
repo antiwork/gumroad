@@ -14,6 +14,7 @@ export default defineConfig({
     alias: {
       $app: path.resolve(rootPath, "app/javascript"),
       $assets: path.resolve(rootPath, "public"),
+      $vendor: path.resolve(rootPath, "vendor/assets/javascripts"),
     },
   },
   test: {

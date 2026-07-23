@@ -640,6 +640,60 @@ describe StripeMerchantAccountManager, :vcr do
           expect(described_class.send(:normalize_postal_code, "94107", "US")).to eq("94107")
           expect(described_class.send(:normalize_postal_code, nil, "LU")).to be_nil
         end
+
+        it "normalizes NL postal codes to the spaced uppercase 'NNNN LL' form Stripe requires" do
+          # Regression coverage for gumroad-private#1247: an NL seller saved "2742NZ" (no
+          # space) and Stripe rejected it with `postal_code_invalid` four times while the
+          # settings page showed a successful save each time.
+          expect(described_class.send(:normalize_postal_code, "2742NZ", "NL")).to eq("2742 NZ")
+          expect(described_class.send(:normalize_postal_code, "2742nz", "NL")).to eq("2742 NZ")
+          expect(described_class.send(:normalize_postal_code, "2742 nz", "NL")).to eq("2742 NZ")
+          expect(described_class.send(:normalize_postal_code, " 2742 NZ ", "NL")).to eq("2742 NZ")
+          # Already correct: unchanged.
+          expect(described_class.send(:normalize_postal_code, "2742 NZ", "NL")).to eq("2742 NZ")
+          # Not the NL shape: pass through so Stripe can report its own validation error.
+          expect(described_class.send(:normalize_postal_code, "2742", "NL")).to eq("2742")
+          expect(described_class.send(:normalize_postal_code, "2742NZX", "NL")).to eq("2742NZX")
+          expect(described_class.send(:normalize_postal_code, "NZ2742", "NL")).to eq("NZ2742")
+          expect(described_class.send(:normalize_postal_code, "2742  NZ", "NL")).to eq("2742  NZ")
+          # Other countries are untouched, even when the value matches the NL shape.
+          expect(described_class.send(:normalize_postal_code, "2742NZ", "BE")).to eq("2742NZ")
+          expect(described_class.send(:normalize_postal_code, nil, "NL")).to be_nil
+        end
+      end
+    end
+
+    describe "Netherlands postal codes written without the space" do
+      # Regression coverage for gumroad-private#1247: Dutch postcodes are "NNNN LL" but
+      # sellers often type "2742NZ". Stripe rejects the unspaced form with
+      # `postal_code_invalid`, which (because account creation runs async) left the seller
+      # silently unable to publish. Normalize at the Stripe boundary so both fresh saves
+      # and retry-job re-attempts of already-saved records succeed.
+      let(:user_compliance_info) do
+        create(:user_compliance_info,
+               user:,
+               street_address: "Mahoniehout 1",
+               city: "Waddinxveen",
+               state: nil,
+               zip_code: "2742nz",
+               country: "Netherlands")
+      end
+
+      it "inserts the space and upcases in the individual address postal code" do
+        person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(person_hash[:address]).to include(country: "NL", postal_code: "2742 NZ")
+      end
+
+      it "normalizes the legal-entity address on business accounts" do
+        business_info = create(:user_compliance_info_business,
+                               user:,
+                               business_street_address: "Mahoniehout 1",
+                               business_city: "Waddinxveen",
+                               business_state: nil,
+                               business_zip_code: "2742NZ",
+                               business_country: "Netherlands")
+        company_hash = described_class.send(:company_hash, business_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(company_hash[:company][:address]).to include(country: "NL", postal_code: "2742 NZ")
       end
     end
 
@@ -10040,12 +10094,12 @@ describe StripeMerchantAccountManager, :vcr do
       describe ".clear_settlement_currency_mismatch_on_currency_change" do
         let(:merchant_account) { create(:merchant_account, charge_processor_merchant_id: "acct_settlement_mismatch_test") }
 
-        before { merchant_account.record_settlement_currency_mismatch! }
+        before { merchant_account.record_settlement_currency_mismatch!("cad") }
 
         it "clears a recorded settlement-currency mismatch when the account's default currency changed" do
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "default_currency" => "cad" })
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(false)
         end
 
         it "clears a recorded settlement-currency mismatch when the account's external accounts changed" do
@@ -10053,7 +10107,7 @@ describe StripeMerchantAccountManager, :vcr do
           # settle in, so the learned marker must be re-probed.
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "external_accounts" => { "data" => [] } })
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(false)
         end
 
         it "clears the marker when previous_attributes arrives as a Stripe::StripeObject, the shape the webhook handler actually passes" do
@@ -10067,7 +10121,7 @@ describe StripeMerchantAccountManager, :vcr do
             described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, previous_attributes)
           end.not_to raise_error
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(false)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(false)
         end
 
         it "keeps the marker when a Stripe::StripeObject update touched unrelated attributes" do
@@ -10075,13 +10129,13 @@ describe StripeMerchantAccountManager, :vcr do
 
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, previous_attributes)
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(true)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(true)
         end
 
         it "keeps the marker when the update touched unrelated attributes" do
           described_class.clear_settlement_currency_mismatch_on_currency_change(merchant_account, { "capabilities" => { "p24_payments" => "pending" } })
 
-          expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(true)
+          expect(merchant_account.reload.settlement_currency_mismatch_active?("cad")).to be(true)
         end
 
         it "does nothing when no merchant account matched the event" do

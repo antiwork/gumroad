@@ -87,6 +87,7 @@ const props = {
   disabled: false,
   defaultEmail: "buyer@example.com",
   defaultName: "Buyer",
+  hasShippingCart: false,
   invalid: false,
   onReady: vi.fn<(controller: PaymentElementController | null) => void>(),
 };
@@ -160,6 +161,56 @@ describe("PaymentElementInput", () => {
     // Back to the card row: the "never" pinning (and with it the requirement to pass the
     // checkout form's billing details) must return.
     act(() => paymentElementRender.onChange?.({ value: { type: "card" }, complete: false, empty: false }));
+    expect(paymentElementRender.options?.fields).toEqual({
+      billingDetails: {
+        name: "never",
+        email: "never",
+        phone: "never",
+        address: {
+          country: "never",
+          postalCode: "never",
+          state: "never",
+          city: "never",
+          line1: "never",
+          line2: "never",
+        },
+      },
+    });
+  });
+
+  it("renders only the street-address fields inside the UPI pane on a digital cart", () => {
+    render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
+
+    // The buyer selects the UPI row. Stripe requires billing_details.name + a full street
+    // address to confirm UPI, and the digital checkout form has no street-address fields — so
+    // the element's address fields open up. Name/email/country stay "never": checkout's own
+    // form already collects those and must remain the only place asking for them
+    // (gumroad-private#933 — the UI should not repeat questions the form already asked).
+    act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
+    expect(paymentElementRender.options?.fields).toEqual({
+      billingDetails: {
+        name: "never",
+        email: "never",
+        phone: "never",
+        address: {
+          country: "never",
+          postalCode: "auto",
+          state: "auto",
+          city: "auto",
+          line1: "auto",
+          line2: "auto",
+        },
+      },
+    });
+  });
+
+  it("keeps every UPI billing field on the checkout form for shippable carts", () => {
+    render(<PaymentElementInput {...props} hasShippingCart walletsEnabled amount={100_000} mountCurrency="inr" />);
+
+    // Shippable carts collect the full street address in checkout's shipping form, so the
+    // element must not ask for the address a second time — everything stays "never" and
+    // tokenization passes the form's values, exactly like a card payment.
+    act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
     expect(paymentElementRender.options?.fields).toEqual({
       billingDetails: {
         name: "never",

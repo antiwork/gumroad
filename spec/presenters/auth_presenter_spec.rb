@@ -19,7 +19,6 @@ describe AuthPresenter do
           {
             email: nil,
             application_name: nil,
-            recaptcha_site_key: GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"),
             show_passkey_login: false,
           }
         )
@@ -34,7 +33,6 @@ describe AuthPresenter do
           {
             email: nil,
             application_name: "Test App",
-            recaptcha_site_key: GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"),
             show_passkey_login: false,
           }
         )
@@ -76,7 +74,6 @@ describe AuthPresenter do
 
     context "when disable_signup_recaptcha feature flag is active" do
       before do
-        allow(Feature).to receive(:active?).with(:disable_login_recaptcha).and_return(false)
         allow(Feature).to receive(:active?).with(:disable_signup_recaptcha).and_return(true)
         allow(Feature).to receive(:active?).with(:passkeys).and_return(false)
         $redis.del(RedisKey.total_made)

@@ -618,9 +618,11 @@ describe Charge::CreateService, :vcr do
 
       expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
       expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
-      # The learned marker makes the buyer's retry (and every later checkout for this seller)
-      # skip the FX quote and charge canonical USD instead of failing again.
-      expect(merchant_account.reload.settlement_currency_mismatch_active?).to be(true)
+      # The learned marker makes the buyer's retry (and every later checkout for this seller
+      # in this currency) skip the FX quote and charge canonical USD instead of failing again.
+      expect(merchant_account.reload.settlement_currency_mismatch_active?(Currency::EUR)).to be(true)
+      # Other currencies keep quoting: Stripe settlement is configured per currency.
+      expect(merchant_account.settlement_currency_mismatch_active?("gbp")).to be(false)
       # The rejected intent was never created, so the presentment snapshots must not survive.
       expect(ChargePresentment.count).to eq(0)
       expect(PurchasePresentment.count).to eq(0)

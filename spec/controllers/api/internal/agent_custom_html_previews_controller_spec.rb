@@ -159,6 +159,21 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
         expect(response.parsed_body).to eq("success" => false, "error" => "The snippet to replace no longer appears in the current page.")
       end
 
+      it "previews an edit whose find uses a plain space where the page has a non-breaking space" do
+        # Same whitespace tolerance as the apply endpoint (gumroad-private#1251): a snippet the
+        # agent echoed back with a plain space must still preview against a page holding U+00A0,
+        # otherwise the proposal can never be confirmed.
+        seller.custom_html = "<section><h1>Old<span>\u00A0</span>headline</h1><p>Keep me</p></section>"
+        seller.save!
+
+        post :create, params: { endpoint: "edit_user_custom_html", find: "<h1>Old<span> </span>headline</h1>", replace: "<h1>New headline</h1>" }, format: :json
+
+        expect(response.parsed_body["success"]).to be(true)
+        html = staged_preview_document
+        expect(html).to include("<h1>New headline</h1>")
+        expect(html).to include("<p>Keep me</p>")
+      end
+
       it "renders an error when the snippet matches more than once" do
         seller.custom_html = "<section><p>Twice</p><p>Twice</p></section>"
         seller.save!

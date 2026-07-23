@@ -261,12 +261,33 @@ class Checkout::PaymentMethodResolver
     def forced_currency_methods(eligible)
       return [] unless sellers.one? && Checkout::BuyerCurrencyEligibility.seller_enabled?(sellers.first)
 
-      (eligible & Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.keys).select do |method|
-        next false unless Checkout::BuyerCurrencyEligibility.forced_currency_for(method) == cart_product_currency
+      methods_for_cart_currency = (eligible & Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.keys).select do |method|
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(method) == cart_product_currency
+      end
+      return [] if methods_for_cart_currency.empty?
 
+      # The prepare-time eligibility check rejects a forced-currency intent when Stripe
+      # has already shown that this account does not settle the currency to canonical USD.
+      # Remove the method before mounting the Element too; otherwise checkout advertises
+      # iDEAL/Bancontact and then fails generically after the buyer selects it.
+      return [] unless forced_currency_settlement_supported?
+
+      methods_for_cart_currency.select do |method|
         Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
           Checkout::BuyerCurrencyEligibility.local_method_launched?(method, sellers.first)
       end
+    end
+
+    def forced_currency_settlement_supported?
+      seller = sellers.first
+      merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
+                         MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      return false if merchant_account.blank?
+
+      Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(
+        merchant_account,
+        presentment_currency: cart_product_currency
+      )
     end
 
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify

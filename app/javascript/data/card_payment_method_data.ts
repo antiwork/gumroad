@@ -53,10 +53,9 @@ export type PaymentElementCardData = {
   state: string | null;
   city: string | null;
   address: string | null;
-  // True when the buyer picked Apple Pay / Google Pay inside the Payment Element (see
-  // isWalletPaymentElementType). Wallet payments carry their own verified billing details from
-  // the wallet sheet, so tokenization must NOT overwrite them with the checkout form's values.
-  walletSelected: boolean;
+  // Who collects the buyer's billing details for the selected payment-method row — see
+  // paymentElementBillingDetailsCollection below for the three modes and why each exists.
+  billingDetailsCollection: PaymentElementBillingDetailsCollection;
   // Wallet submissions only: the elements.submit() promise from the call made synchronously in
   // the buyer's click (see the wallet submit chain in PaymentForm.tsx). Safari only lets the
   // Apple Pay sheet open inside a user-activation window, and checkout's submission pipeline
@@ -73,6 +72,34 @@ export type PaymentElementCardData = {
 // overridden billing details there is no way to un-clobber the wallet's own values.
 const WALLET_PAYMENT_ELEMENT_TYPES = ["apple_pay", "google_pay"];
 export const isWalletPaymentElementType = (type: string) => WALLET_PAYMENT_ELEMENT_TYPES.includes(type);
+
+// Who collects the buyer's billing details for a given Payment Element selection. Checkout has
+// its own fields (email, full name, country, ZIP...) so anything our form collects stays pinned
+// to "never" on the element — each piece of information should only be asked for once.
+// - "form": checkout's own form collects everything and tokenization passes its values
+//   explicitly (cards, Link, iDEAL — and UPI on shippable carts, where the shipping form
+//   already collects the full street address).
+// - "element": the element supplies everything and tokenization passes no override. Wallets
+//   only — the Apple Pay / Google Pay sheet carries the buyer's verified billing details, and
+//   nothing extra is rendered on the page.
+// - "element-address": the element renders ONLY the street-address fields; checkout's form
+//   still owns email, name, and country. UPI on non-shippable carts: Stripe requires
+//   `billing_details.name` and a full street address to confirm a UPI payment, and the digital
+//   checkout form only collects email + name (+ ZIP for US buyers) — with every field pinned
+//   to "never" the confirm always failed server-side with `parameter_missing` and buyers could
+//   never complete a UPI purchase (the July 2026 UPI ramp-down, gumroad-private#933). Flipping
+//   the whole block to "auto" instead would have Stripe re-ask for name and country inside the
+//   UPI pane, duplicating checkout's own fields — so only the address fields our form doesn't
+//   have are element-collected, and tokenization passes the form's email/name/country alongside.
+export type PaymentElementBillingDetailsCollection = "form" | "element" | "element-address";
+export const paymentElementBillingDetailsCollection = (
+  type: string,
+  hasShippingCart: boolean,
+): PaymentElementBillingDetailsCollection => {
+  if (isWalletPaymentElementType(type)) return "element";
+  if (type === "upi" && !hasShippingCart) return "element-address";
+  return "form";
+};
 
 // Client-side details about the wallet that paid through the Payment Element, read off the
 // tokenized PaymentMethod (or ConfirmationToken preview). The billing address feeds the
@@ -120,6 +147,32 @@ export const paymentElementBillingDetails = (cardData: PaymentElementBillingDeta
   },
 });
 
+// Builds the billing_details override tokenization passes to Stripe (or null when it must pass
+// none), per the collection mode above:
+// - "form": the full checkout-form values — required, because every element field is "never".
+// - "element": no override at all — the wallet sheet's verified details must survive, and
+//   passing any value would clobber them on the resulting PaymentMethod.
+// - "element-address": only the fields checkout's form still owns (email, name, country) —
+//   Stripe merges these with the street-address fields the element collected. The form's
+//   city/state/ZIP are NOT passed: for US buyers the form shows a ZIP field, and overriding
+//   the element-collected postal code with it would corrupt the address the buyer typed into
+//   the element's pane.
+const paymentElementBillingDetailsOverride = (cardData: PaymentElementCardData) => {
+  switch (cardData.billingDetailsCollection) {
+    case "element":
+      return null;
+    case "element-address":
+      return {
+        email: cardData.email,
+        name: cardData.fullName || null,
+        phone: null,
+        address: { country: cardData.country || null },
+      };
+    case "form":
+      return paymentElementBillingDetails(cardData);
+  }
+};
+
 export const preparePaymentElementPaymentMethodData = async (
   cardData: PaymentElementCardData,
 ): Promise<CardPaymentMethodParams | StripeErrorParams> => {
@@ -131,21 +184,20 @@ export const preparePaymentElementPaymentMethodData = async (
   }
 
   // For card payments the Payment Element pins every billingDetails field to "never" (checkout
-  // collects them itself), which REQUIRES us to supply billing_details here. Wallet submissions
-  // are the exception: the element flips its fields to "auto" while a wallet row is selected
-  // (see PaymentElementInput.tsx), the wallet sheet collects the buyer's verified billing
-  // details, and Stripe attaches them to the PaymentMethod — so we must not clobber them with
-  // the checkout form's values (the form may hold a stale/geo-guessed country the wallet buyer
-  // never saw), and passing no params is valid because no field is "never" at that point.
+  // collects them itself), which REQUIRES us to supply billing_details here. See
+  // paymentElementBillingDetailsOverride for the wallet and UPI exceptions — where the element
+  // collects some or all of the billing details itself, the corresponding form values must not
+  // be passed or they would clobber what the buyer entered in the element.
+  const billingDetailsOverride = paymentElementBillingDetailsOverride(cardData);
   const paymentMethodResult = await cardData.stripe.createPaymentMethod({
     elements: cardData.elements,
-    ...(cardData.walletSelected
-      ? {}
-      : {
+    ...(billingDetailsOverride
+      ? {
           params: {
-            billing_details: paymentElementBillingDetails(cardData),
+            billing_details: billingDetailsOverride,
           },
-        }),
+        }
+      : {}),
   });
 
   if (paymentMethodResult.error) {
@@ -183,14 +235,15 @@ export const createPaymentElementConfirmationToken = async (
     return { status: "error", stripe_error: submitResult.error };
   }
 
-  // Same wallet exception as preparePaymentElementPaymentMethodData above: for wallet
-  // submissions the wallet sheet supplies the billing details, so the checkout-form override
-  // must be skipped or it would overwrite them on the resulting PaymentMethod.
+  // Same billing-details collection rules as preparePaymentElementPaymentMethodData above (see
+  // paymentElementBillingDetailsOverride): full form values for cards, none for wallets, and
+  // email/name/country only for UPI where the element collected the street address.
+  const confirmationBillingDetailsOverride = paymentElementBillingDetailsOverride(cardData);
   const result = await cardData.stripe.createConfirmationToken({
     elements: cardData.elements,
-    ...(cardData.walletSelected
-      ? {}
-      : { params: { payment_method_data: { billing_details: paymentElementBillingDetails(cardData) } } }),
+    ...(confirmationBillingDetailsOverride
+      ? { params: { payment_method_data: { billing_details: confirmationBillingDetailsOverride } } }
+      : {}),
   });
 
   if (result.error) {
