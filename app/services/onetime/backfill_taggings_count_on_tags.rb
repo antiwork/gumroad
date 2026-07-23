@@ -23,19 +23,36 @@ module Onetime
 
       scope.in_batches(of: batch_size) do |batch|
         ReplicaLagWatcher.watch
-        min_id, max_id = batch.minimum(:id), batch.maximum(:id)
-        ActiveRecord::Base.connection.execute(<<~SQL.squish)
-          UPDATE tags t
-          LEFT JOIN (
-            SELECT pt.tag_id AS tag_id, COUNT(*) AS total
-            FROM product_taggings pt
-            WHERE pt.tag_id BETWEEN #{min_id.to_i} AND #{max_id.to_i}
-            GROUP BY pt.tag_id
-          ) agg ON agg.tag_id = t.id
-          SET t.taggings_count = COALESCE(agg.total, 0)
-          WHERE t.id BETWEEN #{min_id.to_i} AND #{max_id.to_i}
-        SQL
-        puts "Tag taggings_count backfill: reached id=#{max_id}"
+        max_id = nil
+
+        Tag.transaction do
+          # Lock this batch's tag rows BEFORE counting. The live write path
+          # (ProductTagging create/destroy -> counter-cache UPDATE on tags)
+          # has to take the same row lock, so while we hold it no concurrent
+          # tagging write for these tags can commit. The COUNT below is this
+          # transaction's first consistent read, which means its read view is
+          # created only after the locks are held: any tagging write either
+          # committed before the count (and is included in it) or is blocked
+          # on our lock and applies its +1/-1 on top of the value we write
+          # after we commit. Either way the recomputed count can't clobber a
+          # live update with a stale aggregate. Lock ordering is safe — we
+          # only lock tags rows (the count is a plain non-locking read), so
+          # there is no lock cycle with the live path's product_taggings ->
+          # tags ordering.
+          tag_ids = batch.lock.pluck(:id)
+          next if tag_ids.empty?
+          max_id = tag_ids.max
+
+          counts = ProductTagging.where(tag_id: tag_ids).group(:tag_id).count
+
+          # Group by resulting count so most tags (long tail of 0s and 1s)
+          # update in a handful of statements instead of one per tag.
+          tag_ids.group_by { |tag_id| counts.fetch(tag_id, 0) }.each do |count, ids|
+            Tag.where(id: ids).update_all(taggings_count: count)
+          end
+        end
+
+        puts "Tag taggings_count backfill: reached id=#{max_id}" if max_id
       end
     end
   end

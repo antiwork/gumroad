@@ -40,6 +40,27 @@ describe Onetime::BackfillTaggingsCountOnTags do
       expect(tag.reload.taggings_count).to eq(1)
     end
 
+    it "locks each batch's tag rows before counting, so live counter-cache writes can't be clobbered" do
+      create(:tag, name: "quokka")
+
+      queries = []
+      callback = ->(_name, _start, _finish, _id, payload) { queries << payload[:sql] }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        described_class.process
+      end
+
+      # The batch's tag ids must be read with FOR UPDATE inside a transaction:
+      # holding the row locks blocks the counter-cache UPDATE from a concurrent
+      # ProductTagging create/destroy, which is what prevents the recompute from
+      # overwriting a live update with a stale aggregate.
+      lock_query = queries.find { |sql| sql.match?(/SELECT .*`tags`.*FOR UPDATE/i) }
+      expect(lock_query).to be_present
+
+      count_index = queries.index { |sql| sql.include?("product_taggings") && sql.match?(/COUNT/i) }
+      expect(count_index).to be > queries.index(lock_query)
+    end
+
     it "respects id bounds" do
       first = create(:tag, name: "aardvark")
       second = create(:tag, name: "zebra")
