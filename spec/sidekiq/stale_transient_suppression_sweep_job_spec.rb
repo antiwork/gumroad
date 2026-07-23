@@ -162,6 +162,42 @@ describe StaleTransientSuppressionSweepJob do
       expect(deletions[:bounces].size).to eq(2)
     end
 
+    it "splits the clear cap across subusers so a heavy first subuser cannot starve later ones" do
+      stub_const("#{described_class}::MAX_CLEARS_PER_RUN", 2)
+      allow(EmailSuppressionManager).to receive(:subuser_api_keys)
+        .and_return({ gumroad: "SG.key-a", followers: "SG.key-b" })
+      users = Array.new(3) do
+        user = create(:user)
+        user.update_columns(current_sign_in_at: 1.day.ago)
+        user
+      end
+      entries = users.map { |u| entry(email: u.email) }
+
+      deletions_by_key = { "SG.key-a" => [], "SG.key-b" => [] }
+      allow(SendGrid::API).to receive(:new) do |api_key:|
+        list_client = double("list_client")
+        allow(list_client).to receive(:get)
+          .and_return(double(parsed_body: entries, status_code: "200"))
+        allow(list_client).to receive(:_) do |email|
+          node = double("delete_node")
+          allow(node).to receive(:delete) do
+            deletions_by_key[api_key] << email
+            double(status_code: "204")
+          end
+          node
+        end
+        suppression = double("suppression", bounces: list_client, blocks: double("blocks", get: double(parsed_body: [], status_code: "200")))
+        double(client: double(suppression:))
+      end
+
+      job.perform
+
+      # Budget is 2 / 2 subusers = 1 each: both subusers clear exactly one
+      # entry instead of the first consuming the whole cap.
+      expect(deletions_by_key["SG.key-a"].size).to eq(1)
+      expect(deletions_by_key["SG.key-b"].size).to eq(1)
+    end
+
     it "continues with the next list when one list errors" do
       user = create(:user)
       user.update_columns(current_sign_in_at: 1.day.ago)
@@ -215,6 +251,26 @@ describe StaleTransientSuppressionSweepJob do
 
       expect(requested_offsets).to eq([0, 2])
       expect(deletions[:bounces]).to match_array(users.map(&:email))
+    end
+
+    it "logs when the page bound is exhausted so a huge list is not silently truncated" do
+      stub_const("#{described_class}::PAGE_SIZE", 1)
+      stub_const("#{described_class}::MAX_PAGES_PER_LIST", 2)
+      # Every fetched page comes back full (size == PAGE_SIZE), so the job
+      # hits the page bound without ever seeing a short page.
+      full_page = [entry(email: "full-page@example.com")]
+      list_client = double("list_client")
+      allow(list_client).to receive(:get).and_return(double(parsed_body: full_page, status_code: "200"))
+      blocks_client = double("blocks_client")
+      allow(blocks_client).to receive(:get).and_return(double(parsed_body: [], status_code: "200"))
+      suppression = double("suppression", bounces: list_client, blocks: blocks_client)
+      allow(SendGrid::API).to receive(:new).and_return(double(client: double(suppression:)))
+      allow(Rails.logger).to receive(:info).and_call_original
+
+      job.perform
+
+      expect(Rails.logger).to have_received(:info)
+        .with(a_string_including("page bound (2 pages) reached for bounces"))
     end
 
     it "notifies and skips the list when SendGrid returns a non-2xx status without raising" do

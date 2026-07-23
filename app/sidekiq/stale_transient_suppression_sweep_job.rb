@@ -42,6 +42,9 @@ class StaleTransientSuppressionSweepJob
   LOOKBACK_WINDOW = 60.days
 
   # Reputation guardrail: the absolute ceiling of clears per nightly run.
+  # The cap is split evenly across subusers (see #perform) so that on a
+  # heavy night the first subuser in the fixed sweep order can't consume
+  # the whole cap and starve the later ones night after night.
   MAX_CLEARS_PER_RUN = 200
 
   # SendGrid paginates the bounce/block list endpoints via limit/offset
@@ -55,15 +58,26 @@ class StaleTransientSuppressionSweepJob
 
   def perform
     cleared = 0
+    subuser_api_keys = EmailSuppressionManager.subuser_api_keys
 
-    EmailSuppressionManager.subuser_api_keys.each do |subuser, api_key|
+    # Split the run cap evenly so a night where one subuser has a large
+    # backlog can't starve the subusers swept after it (the iteration order
+    # is fixed, so without a split the same accounts would be skipped every
+    # night until the first one drained).
+    per_subuser_budget = [MAX_CLEARS_PER_RUN / [subuser_api_keys.size, 1].max, 1].max
+
+    subuser_api_keys.each do |subuser, api_key|
       next if api_key.blank?
 
+      subuser_cleared = 0
+
       SWEPT_LISTS.each do |list|
-        candidates(api_key, list).each do |entry|
-          if cleared >= MAX_CLEARS_PER_RUN
-            log("clear cap (#{MAX_CLEARS_PER_RUN}) reached, stopping; remaining entries will be considered tomorrow")
-            return
+        break if subuser_cleared >= per_subuser_budget
+
+        candidates(subuser, api_key, list).each do |entry|
+          if subuser_cleared >= per_subuser_budget
+            log("per-subuser clear budget (#{per_subuser_budget}) reached for #{subuser}, moving on; remaining entries will be considered tomorrow")
+            break
           end
 
           next unless clearable?(entry)
@@ -71,6 +85,7 @@ class StaleTransientSuppressionSweepJob
           status_code = sendgrid(api_key).client.suppression.public_send(list)._(entry[:email]).delete.status_code
           if (200..299).cover?(status_code.to_i)
             cleared += 1
+            subuser_cleared += 1
             log("cleared stale transient #{list} suppression for #{entry[:email]} (subuser: #{subuser}, suppressed: #{Time.zone.at(entry[:created]).iso8601}, reason: #{entry[:reason].inspect})")
           else
             log("failed to clear #{list} suppression for #{entry[:email]} (subuser: #{subuser}, status: #{status_code})")
@@ -94,14 +109,25 @@ class StaleTransientSuppressionSweepJob
     # limit/offset — we collect every page up front (bounded by
     # MAX_PAGES_PER_LIST) so that deleting entries while we iterate can't
     # shift offset-based pagination and skip candidates mid-run.
-    def candidates(api_key, list)
+    def candidates(subuser, api_key, list)
       entries = []
       offset = 0
+      exhausted_page_bound = true
       MAX_PAGES_PER_LIST.times do
         page = fetch_page(api_key, list, offset:)
         entries.concat(page.select { |entry| entry.is_a?(Hash) && entry[:email].present? })
-        break if page.size < PAGE_SIZE
+        if page.size < PAGE_SIZE
+          # A short page means we reached the end of the list.
+          exhausted_page_bound = false
+          break
+        end
         offset += PAGE_SIZE
+      end
+      if exhausted_page_bound
+        # Every allowed page came back full, so the list likely extends
+        # beyond the bound. Log it so a persistently huge list can't be
+        # silently truncated night after night without anyone noticing.
+        log("page bound (#{MAX_PAGES_PER_LIST} pages) reached for #{list} (subuser: #{subuser}); entries beyond it will be considered on later runs")
       end
       entries
     end
