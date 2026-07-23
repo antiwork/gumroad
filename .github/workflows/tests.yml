@@ -19,7 +19,10 @@ jobs:
   ci_gate:
     name: CI Gate${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: ubicloud-standard-2
-    environment: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'ci-protected' || '' }}
+    # The 'ci-protected' environment approval gate used to sit here for fork-headed
+    # pull requests. Removed 2026-07-23 (Sahil): the repo takes no external
+    # contributions, so every fork PR is from a trusted internal account (e.g.
+    # gumclaw's fork) and the manual approve-this-run step only stalled CI.
     steps:
       - run: true
 
