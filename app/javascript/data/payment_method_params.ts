@@ -60,6 +60,11 @@ export type PayPalNativePaymentMethodParams = {
   paypal_order_id: string;
   visual: string;
   card_country: string;
+  // PayPal params never carry Payment Element wallet details or an element-collected billing
+  // address; declaring the keys as always-undefined lets serializeCardParamsIntoQueryParamsObject
+  // strip them from the whole AnyPaymentMethodParams union type-safely.
+  wallet?: undefined;
+  elementBillingAddress?: undefined;
 };
 
 export type ReusableCardPaymentMethodParams = { stripe_customer_id: string; stripe_setup_intent_id: string } & Omit<
@@ -80,6 +85,9 @@ export type ReusablePayPalBraintreePaymentMethodParams = {
   reusable: true;
   braintree_transient_customer_store_key: string | null;
   braintree_device_data: string | null;
+  // Same as PayPalNativePaymentMethodParams above: never present, declared for union safety.
+  wallet?: undefined;
+  elementBillingAddress?: undefined;
 };
 export type ReusablePayPalNativePaymentMethodParams = {
   status: "success";
@@ -89,6 +97,9 @@ export type ReusablePayPalNativePaymentMethodParams = {
   billing_agreement_id: string;
   visual: string;
   card_country: string;
+  // Same as PayPalNativePaymentMethodParams above: never present, declared for union safety.
+  wallet?: undefined;
+  elementBillingAddress?: undefined;
 };
 
 export type AnyPayPalMethodParams =
@@ -116,6 +127,11 @@ export const serializeCardParamsIntoQueryParamsObject = (
     const { status: _, ...rest } = cardParams;
     return rest;
   }
-  const { status: _, type: __, reusable: ___, ...rest } = cardParams;
+  // `wallet` and `elementBillingAddress` are client-side checkout context (tax location and the
+  // wallet type reported with the purchase) — the account and subscription endpoints this
+  // serializer feeds have no contract for them, and a nested unknown object fails their
+  // parameter validation. The purchase path reads them explicitly off the params object instead
+  // of going through this serializer, so dropping them here loses nothing.
+  const { status: _, type: __, reusable: ___, wallet: ____, elementBillingAddress: _____, ...rest } = cardParams;
   return rest;
 };
