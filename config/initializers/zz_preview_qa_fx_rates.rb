@@ -8,9 +8,13 @@
 # presentment lane under QA on antiwork/gumroad#5781 never activates.
 #
 # Seeds a few plausible USD-based rates at boot so QA testers (and the scripted QA run)
-# can exercise the presentment-mounted Payment Element. Gated to Stripe test mode so it
-# can never run in production (production runs live keys).
+# can exercise the presentment-mounted Payment Element. Gated to per-PR preview apps
+# (BRANCH_DEPLOYMENT is set only by the preview-app deploy pipeline) plus a Stripe
+# test-key check as defense in depth. Shared staging also runs test keys but has its own
+# long-lived Redis fed by the real hourly worker, so it must never get fabricated rates —
+# the BRANCH_DEPLOYMENT gate keeps this seed off shared staging and production alike.
 Rails.application.config.after_initialize do
+  next unless Rails.env.development? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true")
   next unless Stripe.api_key.to_s.start_with?("sk_test_")
 
   begin
@@ -40,20 +44,21 @@ end
 # from the custom header (which the LB passes through untouched), restoring the ability
 # to QA non-US buyer flows. Production runs live Stripe keys, so this can never activate there.
 #
-# Scope: the spoof and the debug endpoint only respond on per-PR preview app hosts
-# (*.apps.staging.gumroad.org) and local development. The shared staging site also runs
-# test Stripe keys, so without this host check anyone could rewrite their apparent IP
-# there — the QA helper is only needed on the throwaway preview apps.
+# Scope: the spoof and the debug endpoint only respond on per-PR preview apps and local
+# development. Preview apps are identified by the BRANCH_DEPLOYMENT environment variable
+# (set only by the preview-app deploy pipeline), never by the request's Host header —
+# host authorization is disabled in this app, so a Host header is attacker-controlled
+# and must not gate a middleware that rewrites REMOTE_ADDR/forwarding headers. The shared
+# staging site also runs test Stripe keys but does not set BRANCH_DEPLOYMENT, so the QA
+# helper stays off there.
 class PreviewQaDebugMiddleware
-  PREVIEW_HOST_SUFFIX = ".apps.staging.gumroad.org"
-
   def initialize(app)
     @app = app
   end
 
   def call(env)
     return @app.call(env) unless Stripe.api_key.to_s.start_with?("sk_test_")
-    return @app.call(env) unless preview_or_development_host?(env)
+    return @app.call(env) unless preview_app_or_development?
 
     req = Rack::Request.new(env)
 
@@ -105,11 +110,10 @@ class PreviewQaDebugMiddleware
   end
 
   private
-    # Rack::Request#host strips the port and handles a missing Host header.
-    def preview_or_development_host?(env)
-      return true if Rails.env.development?
-
-      Rack::Request.new(env).host.to_s.end_with?(PREVIEW_HOST_SUFFIX)
+    # Server-side gate: BRANCH_DEPLOYMENT comes from the preview-app deploy pipeline's
+    # environment, so unlike the request's Host header it cannot be forged by a client.
+    def preview_app_or_development?
+      Rails.env.development? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true")
     end
 end
 Rails.application.config.middleware.insert_before(0, PreviewQaDebugMiddleware) if Rails.env.staging? || Rails.env.development?
