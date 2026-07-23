@@ -393,6 +393,32 @@ export const SALE_FIELDS: FieldDefinition[] = [
     condition: "omitted when the purchase was not driven by a UTM link",
   },
   { name: "subscription_duration", type: "string | null", description: "Subscription billing interval if applicable" },
+  {
+    name: "buyer_presentment",
+    type: "object",
+    description:
+      "What the buyer was actually charged when the sale was charged in their local currency. All amounts are buyer-side cents in `currency`, not seller revenue — canonical fields like `price` keep their USD accounting meaning.",
+    condition: "omitted when the buyer was charged in Gumroad's canonical currency (most sales)",
+    children: [
+      { name: "currency", type: "string", description: 'Buyer currency code (e.g. "cad")' },
+      { name: "price_cents", type: "number", description: "Product price in buyer currency cents" },
+      { name: "tip_cents", type: "number", description: "Tip in buyer currency cents" },
+      { name: "seller_tax_cents", type: "number", description: "Seller-remitted tax in buyer currency cents" },
+      { name: "gumroad_tax_cents", type: "number", description: "Gumroad-remitted tax in buyer currency cents" },
+      { name: "shipping_cents", type: "number", description: "Shipping in buyer currency cents" },
+      { name: "total_cents", type: "number", description: "Total charged to the buyer in buyer currency cents" },
+      {
+        name: "fx_rate",
+        type: "string | null",
+        description: "Exchange rate used for the charge, as a decimal string",
+      },
+      {
+        name: "refunded_cents",
+        type: "number",
+        description: "Amount returned to the buyer so far, in buyer currency cents",
+      },
+    ],
+  },
   { name: "formatted_display_price", type: "string", description: "Human-readable display price" },
   { name: "formatted_total_price", type: "string", description: "Human-readable total price" },
   { name: "currency_symbol", type: "string", description: 'Currency symbol (e.g. "$")' },
