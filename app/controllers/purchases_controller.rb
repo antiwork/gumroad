@@ -185,7 +185,11 @@ class PurchasesController < ApplicationController
       size: per_page,
       sort: [:_score, { created_at: :desc }, { id: :desc }]
     }
-    purchases_records = PurchaseSearchService.search(search_options).records.load
+    # Preload the associations the v2 serializer reads unconditionally
+    # (buyer_presentment fields need the presentment row, its charge_presentment,
+    # and refunds) so serializing a page of results doesn't issue per-purchase queries.
+    purchases_records = PurchaseSearchService.search(search_options).records.
+      includes(:refunds, purchase_presentment: :charge_presentment).load
 
     imported_customers_records = current_seller.imported_customers.alive.
       where("email LIKE ?", "%#{query}%").
