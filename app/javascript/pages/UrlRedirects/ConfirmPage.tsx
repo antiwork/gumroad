@@ -86,17 +86,21 @@ const EmailConfirmation = ({
         action={Routes.confirm_redirect_path()}
         method="post"
         onSubmit={handleSubmit}
-        className="flex flex-col gap-4"
-        style={{ width: "calc(min(428px, 100%))" }}
+        className="flex w-full max-w-[428px] flex-col gap-4"
       >
         <input type="hidden" name="utf8" value="✓" />
         <input type="hidden" name="authenticity_token" value={authenticity_token} />
         <input type="hidden" name="id" value={data.id} />
         <input type="hidden" name="destination" value={data.destination} />
         <input type="hidden" name="display" value={data.display} />
+        <label htmlFor="confirm-email" className="sr-only">
+          Email address
+        </label>
         <Input
-          type="text"
+          id="confirm-email"
+          type="email"
           name="email"
+          autoComplete="email"
           placeholder="Email address"
           onChange={(e) => setData("email", e.target.value)}
           defaultValue={confirmation_info.email ?? ""}
