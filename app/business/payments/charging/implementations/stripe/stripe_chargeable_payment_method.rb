@@ -73,7 +73,15 @@ class StripeChargeablePaymentMethod
   end
 
   def card_type
-    StripeCardType.to_new_card_type(card[:brand]) if card.present? && card[:brand].present?
+    return StripeCardType.to_new_card_type(card[:brand]) if card.present? && card[:brand].present?
+
+    # Non-card methods (UPI, iDEAL, Link, ...) have no card block, which used to leave
+    # purchases.card_type nil and made their volume invisible in payment-method metrics.
+    # Record the method's own type instead, but only when it maps to a known CardType —
+    # an unrecognized method keeps the historical nil rather than leaking "generic_card".
+    method_type = payment_method&.type
+    mapped = StripeCardType.to_new_card_type(method_type) if method_type.present?
+    mapped unless mapped == CardType::UNKNOWN
   end
 
   def country
@@ -82,6 +90,12 @@ class StripeChargeablePaymentMethod
 
   def card
     @merchant_account&.is_a_stripe_connect_account? ? @payment_method_on_connect_account&.card : @payment_method&.card
+  end
+
+  # The Stripe::PaymentMethod backing this chargeable (fetched by #prepare!). Mirrors the
+  # connect-account selection in #card so both read the same object.
+  def payment_method
+    @merchant_account&.is_a_stripe_connect_account? ? @payment_method_on_connect_account : @payment_method
   end
 
   def reusable_token!(user)
