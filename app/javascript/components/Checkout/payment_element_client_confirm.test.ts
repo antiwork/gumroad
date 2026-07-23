@@ -25,7 +25,7 @@ const cardData = (stripe: Stripe, elements: StripeElements): PaymentElementCardD
   state: "NY",
   city: "New York",
   address: "1 Test St",
-  walletSelected: false,
+  elementCollectsBillingDetails: false,
 });
 
 const submitOk = () => elementsWith(vi.fn().mockResolvedValue({ error: undefined }));
@@ -69,7 +69,7 @@ describe("createPaymentElementConfirmationToken", () => {
 
     const result = await createPaymentElementConfirmationToken({
       ...cardData(stripeWith(createConfirmationToken), elements),
-      walletSelected: true,
+      elementCollectsBillingDetails: true,
     });
 
     // The wallet sheet's billing details must survive; the checkout form override is omitted.
