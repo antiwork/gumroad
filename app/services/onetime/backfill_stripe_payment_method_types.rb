@@ -90,8 +90,15 @@ module Onetime
         # must not be collapsed into "generic_card" (same rule as the charge-time fix).
         return tick(:skipped_not_local_method) if mapped_card_type == CardType::UNKNOWN
 
-        fix_card_type(purchase, mapped_card_type)
-        fix_payment_flow(purchase, method_type)
+        # Both corrections happen in one transaction so a purchase can never end up
+        # half-fixed. Without this, a failure writing the payment-flow row AFTER
+        # card_type was already corrected would drop the purchase out of the candidate
+        # scope (its card_type is no longer nil/generic), leaving the flow row stuck at
+        # its "card" placeholder with no rerun able to repair it.
+        ApplicationRecord.transaction do
+          fix_card_type(purchase, mapped_card_type)
+          fix_payment_flow(purchase, method_type)
+        end
       end
 
       def payment_method_type_for(purchase)

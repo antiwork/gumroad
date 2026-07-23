@@ -125,6 +125,28 @@ describe Onetime::BackfillStripePaymentMethodTypes do
       expect(purchase_two.reload.card_type).to eq(CardType::UPI)
     end
 
+    it "rolls back the card_type write when the payment-flow update fails, so a rerun can retry" do
+      purchase = create_upi_shaped_purchase
+      flow = create(:purchase_payment_flow, purchase:)
+      stub_charge(purchase.stripe_transaction_id, "upi")
+      allow_any_instance_of(PurchasePaymentFlow).to receive(:update!)
+        .and_raise(ActiveRecord::RecordInvalid)
+
+      stats = described_class.process(dry_run: false)
+
+      expect(stats[:errors]).to eq(1)
+      # card_type must roll back too — otherwise the purchase drops out of the candidate
+      # scope and the flow row stays stuck at "card" forever.
+      expect(purchase.reload.card_type).to be_nil
+      expect(flow.reload.stripe_payment_method_type).to eq("card")
+
+      # A rerun with the failure gone repairs both rows.
+      allow_any_instance_of(PurchasePaymentFlow).to receive(:update!).and_call_original
+      described_class.process(dry_run: false)
+      expect(purchase.reload.card_type).to eq(CardType::UPI)
+      expect(flow.reload.stripe_payment_method_type).to eq("upi")
+    end
+
     it "records an error and keeps going when a charge fetch raises" do
       failing = create_upi_shaped_purchase
       healthy = create_upi_shaped_purchase
