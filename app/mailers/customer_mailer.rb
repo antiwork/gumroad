@@ -190,6 +190,11 @@ class CustomerMailer < ApplicationMailer
     # seller's PDF stamping (watermarking) setting. The stamped copy lives on
     # the buyer's UrlRedirect, so we need that context to find it.
     s3_retrievable = product_file
+    # Legacy two-argument jobs deliberately skip this branch: they carry no
+    # purchase context, so there is no stamped copy to look up. Attaching the
+    # original is exactly what the pre-deploy code would have sent for the
+    # same job, so this adds no new exposure — it only exists for the
+    # seconds-long window while pre-deploy jobs drain from the queue.
     if product_file.must_be_pdf_stamped? && !legacy_call
       url_redirect = url_redirect_id ? UrlRedirect.find_by(id: url_redirect_id) : nil
       stamped_pdf = url_redirect&.alive_stamped_pdfs&.find_by(product_file_id: product_file.id)
