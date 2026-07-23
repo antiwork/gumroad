@@ -104,82 +104,33 @@ class InstallmentPresenter
     # the only skew is a straggler finally opening the original email after the resend
     # went out, which still answers "did the resend reach people who were not opening".
     def non_opener_resend_props
-      def non_opener_resend_props
-        # Filter the preloaded association in Ruby (rather than a scoped query) so the
-        # Published list page doesn't issue one blasts query per row.
-        resends = installment.blasts.select(&:to_non_openers?).sort_by(&:requested_at)
-        open_counts = resend_open_counts(resends)
+      # Filter the preloaded association in Ruby (rather than a scoped query) so the
+      # Published list page doesn't issue one blasts query per row.
+      resends = installment.blasts.select(&:to_non_openers?).sort_by(&:requested_at)
 
-        resends.map.with_index do |blast, index|
-          completed = blast.completed_at.present?
-          open_count = completed ? open_counts[index] : nil
-          open_rate =
-            if open_count.present? && blast.delivery_count > 0
-              [open_count / blast.delivery_count.to_f * 100, 100].min.round(1)
-            end
-
-          {
-            requested_at: blast.requested_at,
-            delivery_count: blast.delivery_count,
-            completed:,
-            open_count:,
-            open_rate:,
-          }
-        end
-      end
-
-      # First opens recorded in each completed resend's attribution window (see
-      # non_opener_resend_props). Counts every window in a single query — one conditional
-      # COUNT per window — instead of one query per resend, so an installment with many
-      # resends doesn't multiply queries on the Published list page. Returns a hash of
-      # resend index => open count (completed resends only).
-      def resend_open_counts(resends)
-        windows = resends.each_with_index.filter_map do |blast, index|
-          next if blast.completed_at.blank?
-          [index, blast.requested_at, resends[index + 1]&.requested_at]
-        end
-        return {} if windows.empty?
-
-        count_columns = windows.map do |index, window_start, window_end|
-          if window_end.present?
-            ActiveRecord::Base.sanitize_sql_array(
-              ["COUNT(CASE WHEN opened_at >= ? AND opened_at < ? THEN 1 END) AS window_#{index}", window_start, window_end]
-            )
-          else
-            ActiveRecord::Base.sanitize_sql_array(
-              ["COUNT(CASE WHEN opened_at >= ? THEN 1 END) AS window_#{index}", window_start]
-            )
+      resends.map.with_index do |blast, index|
+        completed = blast.completed_at.present?
+        open_count = completed ? resend_open_count(blast, next_blast: resends[index + 1]) : nil
+        open_rate =
+          if open_count.present? && blast.delivery_count > 0
+            [open_count / blast.delivery_count.to_f * 100, 100].min.round(1)
           end
-        end
 
-        row = installment.email_infos.where(state: "opened").select(count_columns.join(", ")).take
-        windows.to_h { |index, _, _| [index, row["window_#{index}"].to_i] }
+        {
+          requested_at: blast.requested_at,
+          delivery_count: blast.delivery_count,
+          completed:,
+          open_count:,
+          open_rate:,
+        }
       end
-    # fall outside every completed resend's window (e.g. during an in-progress
-    # resend's window) bucket to NULL and are dropped.
-    def resend_open_counts(resends)
-      windows = resends.each_with_index.filter_map do |blast, index|
-        next if blast.completed_at.blank?
-        [index, blast.requested_at, resends[index + 1]&.requested_at]
-      end
-      return {} if windows.empty?
+    end
 
-      when_clauses = windows.map do |index, starts_at, ends_at|
-        if ends_at
-          ActiveRecord::Base.sanitize_sql_array(["WHEN opened_at >= ? AND opened_at < ? THEN ?", starts_at, ends_at, index])
-        else
-          ActiveRecord::Base.sanitize_sql_array(["WHEN opened_at >= ? THEN ?", starts_at, index])
-        end
-      end
-      window_bucket = Arel.sql("CASE #{when_clauses.join(' ')} END")
-
-      installment.email_infos
-        .where(state: "opened")
-        .where("opened_at >= ?", windows.first[1])
-        .group(window_bucket)
-        .count
-        .except(nil)
-        .transform_keys(&:to_i)
+    # First opens recorded in this resend's attribution window (see non_opener_resend_props).
+    def resend_open_count(blast, next_blast:)
+      opens = installment.email_infos.where(state: "opened").where("opened_at >= ?", blast.requested_at)
+      opens = opens.where("opened_at < ?", next_blast.requested_at) if next_blast.present?
+      opens.count
     end
 
     # Resolve the single-customer recipient server-side from the purchase id so the
