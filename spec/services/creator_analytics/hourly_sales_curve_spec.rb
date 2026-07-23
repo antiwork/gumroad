@@ -141,7 +141,7 @@ describe CreatorAnalytics::HourlySalesCurve do
     it "caches a nil result for sellers without enough history" do
       expect(service.cumulative_fractions).to be_nil
       digest = Digest::SHA256.hexdigest(seller.links.alive.ids.sort.join(","))
-      expect(Rails.cache.exist?("creator_analytics/hourly_sales_curve/v3/#{seller.id}/#{digest}")).to be(true)
+      expect(Rails.cache.exist?("creator_analytics/hourly_sales_curve/v3/#{seller.id}/#{seller.timezone_id}/#{digest}")).to be(true)
     end
 
     it "recomputes immediately when the live-product set changes" do
@@ -165,6 +165,26 @@ describe CreatorAnalytics::HourlySalesCurve do
 
       other_product.update!(deleted_at: nil)
       expect(described_class.new(seller:).cumulative_fractions).to eq(curve_with_both)
+    end
+
+    it "recomputes immediately when the seller changes their time zone" do
+      # The curve buckets sales by hour in the seller's analytics time zone, and the
+      # presenter sends the new zone to the frontend as soon as it changes — a cached
+      # curve built under the old zone must not be served against it for the rest of
+      # the cache window. The time zone in the key invalidates the entry.
+      described_class::MINIMUM_DAYS_WITH_SALES.times do |i|
+        create_sale(days_ago: i + 1, hour: 9)
+      end
+
+      pacific_curve = service.cumulative_fractions
+      expect(pacific_curve[8]).to eq(0.0)
+      expect(pacific_curve[9]).to eq(1.0)
+
+      seller.update!(timezone: "Eastern Time (US & Canada)")
+      eastern_curve = described_class.new(seller:).cumulative_fractions
+      # The same sales land three hours later on the clock in Eastern time.
+      expect(eastern_curve[11]).to eq(0.0)
+      expect(eastern_curve[12]).to eq(1.0)
     end
   end
 end

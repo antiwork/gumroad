@@ -52,9 +52,14 @@ class CreatorAnalytics::HourlySalesCurve
     # fingerprint of the live-product ids into the key makes any lifecycle change
     # invalidate the entry on the next load instead (stale entries are never read
     # again and simply age out).
+    #
+    # The seller's analytics time zone is part of the key for the same reason: the
+    # curve buckets sales by hour in that zone, so if the seller changes it, a
+    # per-seller key would keep serving the old zone's curve while the chart already
+    # shows totals (and the projection interpolates the current time) in the new one.
     def cache_key
       live_product_ids = seller.links.alive.ids.sort
-      "creator_analytics/hourly_sales_curve/v3/#{seller.id}/#{Digest::SHA256.hexdigest(live_product_ids.join(','))}"
+      "creator_analytics/hourly_sales_curve/v3/#{seller.id}/#{seller.timezone_id}/#{Digest::SHA256.hexdigest(live_product_ids.join(','))}"
     end
 
     def compute
