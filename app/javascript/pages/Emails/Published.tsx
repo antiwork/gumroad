@@ -12,6 +12,7 @@ import { EmptyStatePlaceholder } from "$app/components/EmailsPage/EmptyStatePlac
 import { EmailsLayout } from "$app/components/EmailsPage/Layout";
 import { DeleteEmailModal, EmailSheetActions, LoadMoreButton } from "$app/components/EmailsPage/shared";
 import { useEmailSearch } from "$app/components/EmailsPage/useEmailSearch";
+import { Modal } from "$app/components/Modal";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -32,9 +33,13 @@ export default function EmailsPublished() {
   const currentSeller = assertDefined(useCurrentSeller(), "currentSeller is required");
   const [selectedInstallmentId, setSelectedInstallmentId] = React.useState<string | null>(null);
   const [deletingInstallment, setDeletingInstallment] = React.useState<{ id: string; name: string } | null>(null);
+  const [clickedUrlsInstallmentId, setClickedUrlsInstallmentId] = React.useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const selectedInstallment = selectedInstallmentId
     ? (installments.find((i) => i.external_id === selectedInstallmentId) ?? null)
+    : null;
+  const clickedUrlsInstallment = clickedUrlsInstallmentId
+    ? (installments.find((i) => i.external_id === clickedUrlsInstallmentId) ?? null)
     : null;
 
   const { query, setQuery } = useEmailSearch();
@@ -102,25 +107,20 @@ export default function EmailsPublished() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {installment.clicked_urls.length > 0 ? (
-                        <WithTooltip
-                          tooltipProps={{ className: "w-[20rem] p-0" }}
-                          tip={
-                            <Table>
-                              <TableBody>
-                                {installment.clicked_urls.map(({ url, count }) => (
-                                  <TableRow key={`${installment.external_id}-${url}`} className="bg-transparent">
-                                    <TableHead scope="row" className="max-w-56 whitespace-break-spaces">
-                                      {url}
-                                    </TableHead>
-                                    <TableCell>{formatStatNumber({ value: count })}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          }
+                        <button
+                          type="button"
+                          className="cursor-pointer underline decoration-dotted underline-offset-2 all-unset hover:decoration-solid"
+                          aria-label={`View clicked URLs for ${installment.name}`}
+                          onClick={(e) => {
+                            // Clicking the count should only open the clicked-URLs
+                            // modal, not also select the row (which opens the
+                            // installment detail sheet underneath the modal).
+                            e.stopPropagation();
+                            setClickedUrlsInstallmentId(installment.external_id);
+                          }}
                         >
                           {formatStatNumber({ value: installment.click_count })}
-                        </WithTooltip>
+                        </button>
                       ) : (
                         formatStatNumber({ value: installment.click_count })
                       )}
@@ -203,6 +203,34 @@ export default function EmailsPublished() {
                   }
                 />
               </Sheet>
+            ) : null}
+            {clickedUrlsInstallment ? (
+              <Modal
+                open
+                title="Clicked URLs"
+                onClose={() => setClickedUrlsInstallmentId(null)}
+                className="w-full max-w-2xl"
+              >
+                <p className="text-muted">{clickedUrlsInstallment.name}</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>URL</TableHead>
+                      <TableHead className="text-right">Clicks</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clickedUrlsInstallment.clicked_urls.map(({ url, count }) => (
+                      <TableRow key={url}>
+                        <TableCell className="break-all whitespace-normal">{url}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          {formatStatNumber({ value: count })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Modal>
             ) : null}
             <DeleteEmailModal
               installment={deletingInstallment}

@@ -214,6 +214,20 @@ describe InstallmentPresenter do
       expect(props.keys).to_not include(:recipient_description, :to_be_published_at)
     end
 
+    context "when the installment has clicked URLs" do
+      it "returns each full URL without truncation so the UI can show it verbatim" do
+        long_url = "example.com/blog/#{"a" * 90}?utm_source=newsletter&utm_campaign=july"
+        CreatorEmailClickSummary.create!(installment_id: installment.id, total_unique_clicks: 12, urls: { "example.com" => 10, long_url => 2 })
+
+        props = described_class.new(seller:, installment:).props
+
+        expect(props[:clicked_urls]).to eq([
+                                             { url: "example.com", count: 10 },
+                                             { url: long_url, count: 2 }
+                                           ])
+      end
+    end
+
     context "when the installment has non-opener resends" do
       it "returns each unopened blast in non_opener_resends ordered by requested_at" do
         older = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 2.days.ago, started_at: 2.days.ago, completed_at: 2.days.ago, delivery_count: 5)
