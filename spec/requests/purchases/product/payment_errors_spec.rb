@@ -118,11 +118,10 @@ describe("Purchase from a product page", type: :system, js: true) do
       within_credit_card_frame { expect_focused find_field("CVC") }
     end
 
+    # Error focus lands on the first invalid field in DOM order. With the one-box checkout
+    # layout, the email address lives inside the "Pay with" box, which renders AFTER the
+    # shipping card — so for shippable carts the shipping fields now come first and email last.
     fill_in_credit_card
-    click_on "Pay"
-    expect_focused find_field("Email address")
-
-    fill_in "Email address", with: "gumroad@example.com"
     click_on "Pay"
     expect_focused find_field("Full name")
 
@@ -137,6 +136,10 @@ describe("Purchase from a product page", type: :system, js: true) do
     fill_in "City", with: "San Francisco"
     click_on "Pay"
     expect_focused find_field("ZIP code")
+
+    fill_in "ZIP code", with: "94103"
+    click_on "Pay"
+    expect_focused find_field("Email address")
   end
 
   describe "when the total is so small that Gumroad's fee leaves the seller no proceeds" do
