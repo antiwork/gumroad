@@ -4467,3 +4467,507 @@ class LinksControllerWithoutEmailTest < ActionController::TestCase
     assert_response :success
   end
 end
+
+# The Minitest harness stubs Elasticsearch process-wide for stability (see
+# test_helper.rb). The search and page-view-analytics endpoints genuinely depend
+# on real Elasticsearch results, so these tests swap the real client in for the
+# duration of the test and restore the fake in teardown. Indices are namespaced
+# per test-database so parallel agents on the shared ES cluster don't collide.
+module RealElasticsearchBridge
+  def self.real_client
+    @real_client ||= Elasticsearch::Client.new(
+      host: ENV.fetch("ELASTICSEARCH_HOST"),
+      retry_on_failure: 5,
+      transport_options: { request: { timeout: 15 } }
+    )
+  end
+
+  # Point the stubbed client (installed everywhere) at real Elasticsearch for the
+  # duration of the test via the thread-local flag test_helper honors, and give
+  # the models isolated index names so runs on the shared cluster don't collide.
+  # No client objects are swapped, so elasticsearch-model's per-class client
+  # memoization is a non-issue and nothing leaks between test classes.
+  def install_real_elasticsearch!(models)
+    @es_models = models
+    @prev_index_names = models.index_with { |model| model.index_name }
+    Thread.current[:minitest_real_es] = RealElasticsearchBridge.real_client
+    models.each do |model|
+      model.index_name("minitest-#{ENV.fetch('TEST_DATABASE_NAME', 'test')}-#{model.name.parameterize}")
+      model.__elasticsearch__.create_index!(force: true)
+    end
+  end
+
+  def restore_fake_elasticsearch!
+    return unless @es_models
+    @es_models.each do |model|
+      begin
+        model.__elasticsearch__.delete_index!
+      rescue StandardError
+        # index may already be gone; ignore
+      end
+      model.index_name(@prev_index_names[model])
+    end
+    Thread.current[:minitest_real_es] = nil
+    @es_models = nil
+  end
+
+  def recreate_model_index(model)
+    model.__elasticsearch__.create_index!(force: true)
+  end
+
+  def index_model_records(model)
+    model.import(refresh: true, force: true)
+  rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
+    raise unless e.message.include?("resource_already_exists_exception")
+    model.import(refresh: true)
+  end
+end
+
+class LinksControllerIncrementViewsDataRecordedTest < ActionController::TestCase
+  tests LinksController
+  include LinksControllerTestHelpers
+  include RealElasticsearchBridge
+
+  setup do
+    @user = create_user
+    @increment_product = create_product
+    @request.env["HTTP_USER_AGENT"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) AppleWebKit/535.19 (KHTML, like Gecko) Chrome/18.0.1025.165 Safari/535.19"
+    ElasticsearchIndexerWorker.jobs.clear
+    install_real_elasticsearch!([ProductPageView])
+    travel_to Time.utc(2021, 1, 1)
+    sign_in @user
+  end
+
+  teardown { restore_fake_elasticsearch! }
+
+  # The page-view indexer runs inline here (RSpec's :sidekiq_inline) and the
+  # index write is followed by a refresh (RSpec's :elasticsearch_wait_for_refresh)
+  # so the document is immediately searchable.
+  def record_view(params = {})
+    Sidekiq::Testing.inline! do
+      post :increment_views, params: { id: @increment_product.to_param }.merge(params)
+    end
+  end
+
+  def last_page_view_data
+    ProductPageView.__elasticsearch__.refresh_index!
+    ProductPageView.search({ sort: { timestamp: :desc }, size: 1 }).first["_source"]
+  end
+
+  test "POST increment_views sets basic data" do
+    record_view
+    assert_equal(
+      {
+        product_id: @increment_product.id,
+        seller_id: @increment_product.user_id,
+        country: nil,
+        state: nil,
+        referrer_domain: "direct",
+        timestamp: "2021-01-01T00:00:00Z",
+        user_id: @user.id,
+        ip_address: "0.0.0.0",
+        url: "/links/#{@increment_product.unique_permalink}/increment_views",
+        browser_guid: cookies[:_gumroad_guid],
+        browser_fingerprint: Digest::MD5.hexdigest(@request.env["HTTP_USER_AGENT"] + ","),
+        referrer: nil,
+      }.with_indifferent_access,
+      last_page_view_data.with_indifferent_access
+    )
+  end
+
+  test "POST increment_views sets country and state from custom IP address" do
+    @request.remote_ip = "54.234.242.13"
+    record_view
+    assert_includes_attributes last_page_view_data.with_indifferent_access, {
+      country: "United States",
+      state: "VA",
+      ip_address: "54.234.242.13",
+    }.with_indifferent_access
+  end
+
+  test "POST increment_views sets referrer" do
+    @request.env["HTTP_REFERER"] = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    record_view
+    assert_includes_attributes last_page_view_data.with_indifferent_access, {
+      referrer_domain: "youtube.com",
+      referrer: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    }.with_indifferent_access
+  end
+
+  test "POST increment_views sets referrer via HTTP header" do
+    @request.env["HTTP_REFERER"] = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    record_view
+    assert_includes_attributes last_page_view_data.with_indifferent_access, {
+      referrer_domain: "youtube.com",
+      referrer: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    }.with_indifferent_access
+  end
+
+  test "POST increment_views sets referrer via params" do
+    record_view(referrer: "https://gum.co/posts/news-新しい?#{"1" * 200}&extra")
+    assert_includes_attributes last_page_view_data.with_indifferent_access, {
+      referrer_domain: "gum.co",
+      referrer: "https://gum.co/posts/news-?#{"1" * 164}",
+    }.with_indifferent_access
+  end
+
+  test "POST increment_views sets custom browser_guid" do
+    cookies[:_gumroad_guid] = "custom_guid"
+    record_view
+    assert_equal "custom_guid", last_page_view_data["browser_guid"]
+  end
+
+  test "POST increment_views sets user_id to nil when the user is signed out" do
+    sign_out @user
+    record_view
+    assert_nil last_page_view_data["user_id"]
+  end
+
+  test "POST increment_views sets correct referrer_domain when product is not recommended" do
+    @request.env["HTTP_REFERER"] = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    record_view(was_product_recommended: false)
+    assert_equal "youtube.com", last_page_view_data["referrer_domain"]
+  end
+
+  test "POST increment_views sets correct referrer_domain when product is recommended" do
+    @request.env["HTTP_REFERER"] = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    record_view(was_product_recommended: true)
+    assert_equal "recommended_by_gumroad", last_page_view_data["referrer_domain"]
+  end
+end
+
+class LinksControllerSearchTest < ActionController::TestCase
+  tests LinksController
+  include LinksControllerTestHelpers
+  include RealElasticsearchBridge
+
+  setup do
+    @user = create_user
+    @recommended_by = "search"
+    @on_profile = false
+    install_real_elasticsearch!([Link, Purchase])
+  end
+
+  teardown { restore_fake_elasticsearch! }
+
+  # The :compliant_user factory carries the base :user factory's payment_address,
+  # which Product#recommendable? requires; create_user doesn't set one, so spell
+  # it out here to keep the creator's products discoverable.
+  def create_compliant_user(**attrs)
+    create_user(user_risk_state: "compliant", payment_address: "compliant-#{unique_suffix}@example.com", **attrs)
+  end
+
+  def product_json(product, target, query = @request.params["query"])
+    ProductPresenter.card_for_web(product:, request: @request, recommended_by: @recommended_by, show_seller: !@on_profile, target:, query:).as_json
+  end
+
+  test "GET search accepts a string ids param when searching by user" do
+    Link.__elasticsearch__.create_index!(force: true)
+    creator = create_compliant_user(username: "creatordudey", name: "Creator Dudey")
+    section = create_seller_profile_products_section(seller: creator)
+    product = create_product(name: "Top quality weasel", user: creator)
+    other_product = create_product(name: "First product", user: creator)
+    section.update!(shown_products: [other_product, product].map(&:id))
+    Link.import(force: true, refresh: true)
+
+    @recommended_by = nil
+    @on_profile = true
+
+    get :search, params: { user_id: creator.external_id, section_id: section.external_id, ids: product.external_id }
+
+    assert_response :success
+    assert_equal [product_json(product, "profile")], response.parsed_body["products"]
+  end
+
+  test "GET search searches by explicit ids when the section is not persisted yet" do
+    Link.__elasticsearch__.create_index!(force: true)
+    creator = create_compliant_user(username: "creatordudey", name: "Creator Dudey")
+    product = create_product(name: "Top quality weasel", user: creator)
+    other_product = create_product(name: "First product", user: creator)
+    Link.import(force: true, refresh: true)
+
+    @recommended_by = nil
+    @on_profile = true
+
+    get :search, params: {
+      user_id: creator.external_id,
+      section_id: "0b8f3782-3a85-4f93-8e3c-2b1f5d3e8a90",
+      ids: [other_product.external_id, product.external_id].join(","),
+      sort: ProductSortKey::PAGE_LAYOUT,
+    }
+
+    assert_response :success
+    assert_equal [product_json(other_product, "profile"), product_json(product, "profile")], response.parsed_body["products"]
+  end
+
+  def setting_and_ordering_setup
+    Link.__elasticsearch__.create_index!(force: true)
+    @creator = create_compliant_user(username: "creatordudey", name: "Creator Dudey")
+    @section = create_seller_profile_products_section(seller: @creator)
+    @sao_product = create_product(name: "Top quality weasel", user: @creator, taxonomy: Taxonomy.find_or_create_by(slug: "3d"))
+    reviewed = create_purchase(link: @sao_product, created_at: 1.week.ago)
+    create_product_review(purchase: reviewed, rating: 5)
+    create_product_review(link: @sao_product)
+    Link.import(force: true, refresh: true)
+  end
+
+  test "GET search returns the expected JSON response when no search parameters are specified" do
+    setting_and_ordering_setup
+    expected = {
+      "total" => 1,
+      "filetypes_data" => [],
+      "tags_data" => [],
+      "products" => [product_json(@sao_product, "discover")]
+    }
+    get :search
+    assert_equal expected, response.parsed_body
+
+    get :search, params: { query: "" }
+    assert_equal expected, response.parsed_body
+  end
+
+  test "GET search returns the expected JSON response when searching by a user" do
+    setting_and_ordering_setup
+    @sao_product.tag!("mustelid")
+    @on_profile = true
+    @recommended_by = nil
+    another_product = create_product(name: "Another product", user: @creator)
+    products = create_list(:product, 20, user: @creator)
+    product3 = create_product(user: @creator)
+    create_product_file(link: another_product)
+    create_product(name: "Bad product", user: @creator)
+    shown_products = [@sao_product, product3, another_product] + products
+    @section.update!(shown_products: shown_products.map(&:id))
+    Link.import(force: true, refresh: true)
+
+    get :search, params: { user_id: @creator.external_id, section_id: @section.external_id }
+
+    assert_equal({
+                   "total" => 23,
+                   "filetypes_data" => [{ "doc_count" => 1, "key" => "pdf" }],
+                   "tags_data" => [{ "doc_count" => 1, "key" => "mustelid" }],
+                   "products" => shown_products[0...9].map { |p| product_json(p, "profile") }
+                 }, response.parsed_body)
+  end
+
+  test "GET search returns products in page layout order when applicable if searching by user" do
+    setting_and_ordering_setup
+    @recommended_by = nil
+    @on_profile = true
+    product_b = create_product(name: "First product", user: @creator)
+    product_c = create_product(name: "Second product", user: @creator)
+    create_product(name: "Hide me", user: @creator)
+    @section.update!(shown_products: [product_b, product_c, @sao_product].map(&:id))
+    Link.import(force: true, refresh: true)
+
+    get :search, params: { user_id: @creator.external_id, section_id: @section.external_id }
+    assert_equal [product_json(product_b, "profile"), product_json(product_c, "profile"), product_json(@sao_product, "profile")], response.parsed_body["products"]
+  end
+
+  test "GET search returns an empty response when searching by non-existent user" do
+    setting_and_ordering_setup
+    get :search, params: { user_id: 1640736000000, section_id: @section.id }
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+  end
+
+  test "GET search returns an empty response when searching by non-existent section" do
+    setting_and_ordering_setup
+    get :search, params: { user_id: @creator.external_id, section_id: 1640736000000 }
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+
+    section = create_seller_profile_posts_section(seller: @creator)
+    get :search, params: { user_id: @creator.external_id, section_id: section.id }
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+  end
+
+  test "GET search returns all the creator's live profile products for the virtual default products section" do
+    setting_and_ordering_setup
+    @recommended_by = nil
+    @on_profile = true
+    @section.destroy!
+    another_product = create_product(name: "Another product", user: @creator)
+    Link.import(force: true, refresh: true)
+
+    get :search, params: { user_id: @creator.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+
+    assert_response :success
+    assert_equal 2, response.parsed_body["total"]
+    assert_equal [product_json(@sao_product, "profile"), product_json(another_product, "profile")].sort_by { |p| p["permalink"] }, response.parsed_body["products"].sort_by { |p| p["permalink"] }
+  end
+
+  test "GET search returns an empty response for the default products section id when the creator has saved sections" do
+    setting_and_ordering_setup
+    get :search, params: { user_id: @creator.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+  end
+
+  test "GET search searches only for recommendable products" do
+    setting_and_ordering_setup
+    bad = create_product(name: "Previously-owned weasel")
+    @sao_product.tag!("mustelid")
+    bad.tag!("irrelevant")
+    create_product_file(link: @sao_product)
+    create_product_review(purchase: create_purchase(link: @sao_product, created_at: 1.month.ago))
+    Link.import(force: true, refresh: true)
+
+    get :search, params: { query: "weasel" }
+
+    assert_equal({
+                   "total" => 1,
+                   "filetypes_data" => [{ "doc_count" => 1, "key" => "pdf" }],
+                   "tags_data" => [{ "doc_count" => 1, "key" => "mustelid" }],
+                   "products" => [product_json(@sao_product, "discover")]
+                 }, response.parsed_body)
+  end
+
+  test "GET search returns product in fee revenue order" do
+    setting_and_ordering_setup
+    products = %i[meh unpopular popular old].each_with_object({}) do |name, hash|
+      hash[name] = create_product
+      hash[name].tag!("ocelot")
+      hash[name].expects(:recommendable?).at_least_once.returns(true)
+    end
+    travel_to(4.months.ago) { 4.times { create_purchase(link: products[:old]) } }
+    3.times { create_purchase(link: products[:popular]) }
+    2.times { create_purchase(link: products[:meh]) }
+    create_purchase(link: products[:unpopular])
+    index_model_records(Purchase)
+    products.each do |_key, product|
+      product.stubs(:reviews_count).returns(1)
+      product.__elasticsearch__.index_document
+      product.unstub(:reviews_count)
+    end
+    Link.__elasticsearch__.refresh_index!
+    get :search, params: { query: "ocelot" }
+
+    assert_equal [
+      product_json(products[:popular], "discover"),
+      product_json(products[:meh], "discover"),
+      product_json(products[:unpopular], "discover"),
+      product_json(products[:old], "discover")
+    ], response.parsed_body["products"]
+  end
+
+  test "GET search searches successfully for a product with a regex character" do
+    setting_and_ordering_setup
+    @sao_product.update(name: "Top [quality weasel")
+    Link.import(force: true, refresh: true)
+    get :search, params: { query: "Top [quality" }
+    assert_equal [product_json(@sao_product, "discover")], response.parsed_body["products"]
+  end
+
+  def loose_matching_setup
+    Link.__elasticsearch__.create_index!(force: true)
+    @loose_products = {
+      name: create_product(name: "North American river otter"),
+      desc: create_product(description: "The North American river otter, also known as the northern river otter or the common otter, is a semiaquatic mammal."),
+      creator: create_product(user: create_user(name: "Brig. Gen. W. North American River Otter III")),
+      inexact: create_product(description: "An American otter is found in the north river."),
+      partial: create_product(name: "Just an ordinary otter"),
+      cross_field: create_product(name: "River otter", description: "Animals of this description are common and live in the North and the South of the American and European continents."),
+      tagged: create_product(name: "River otter")
+    }
+    @loose_products[:tagged].tag!("North American")
+    @loose_products[:tagged].tag!("common")
+    @loose_products.each do |_key, product|
+      product.expects(:recommendable?).at_least_once.returns(true)
+      product.stubs(:reviews_count).returns(1)
+      product.__elasticsearch__.index_document
+      product.unstub(:reviews_count)
+    end
+    Link.__elasticsearch__.refresh_index!
+    sleep 0.5
+  end
+
+  test "GET search finds all matches if exact match not specified" do
+    loose_matching_setup
+    get :search, params: { query: "north american river otter" }
+    assert_equal %i[name desc creator inexact cross_field tagged].map { |key| product_json(@loose_products[key], "discover") }.sort_by { |p| p["permalink"] },
+                 response.parsed_body["products"].sort_by { |p| p["permalink"] }
+  end
+
+  test "GET search finds exact match if double-quotes used" do
+    loose_matching_setup
+    get :search, params: { query: '" north american river otter  "' }
+    assert_equal %i[name desc creator].map { |key| product_json(@loose_products[key], "discover") }.sort_by { |p| p["permalink"] },
+                 response.parsed_body["products"].sort_by { |p| p["permalink"] }
+  end
+
+  test "GET search finds compound match when double-quotes used in combination with another term" do
+    loose_matching_setup
+    get :search, params: { query: 'common "river otter"' }
+    assert_equal %i[desc cross_field tagged].map { |key| product_json(@loose_products[key], "discover") }.sort_by { |p| p["permalink"] },
+                 response.parsed_body["products"].sort_by { |p| p["permalink"] }
+  end
+
+  test "GET search finds results for a complex match across different fields" do
+    loose_matching_setup
+    get :search, params: { query: 'north "river otter" american' }
+    assert_equal %i[name desc creator cross_field tagged].map { |key| product_json(@loose_products[key], "discover") }.sort_by { |p| p["permalink"] },
+                 response.parsed_body["products"].sort_by { |p| p["permalink"] }
+  end
+
+  test "GET search handles potentially malformed query" do
+    loose_matching_setup
+    get :search, params: { query: "\\" }
+    assert_equal [], response.parsed_body["products"]
+  end
+
+  test "GET search filters on discover for products with no reviews" do
+    Link.__elasticsearch__.create_index!(force: true)
+    user = create_recommendable_user
+    create_seller_profile_products_section(seller: user)
+    create_product(name: "sample 2", user:)
+    product_with_review = create_product(name: "sample 1", user:, taxonomy: Taxonomy.find_or_create_by(slug: "films"))
+    create_product_review(purchase: create_purchase(link: product_with_review, created_at: 1.week.ago), rating: 5)
+    create_product_review(purchase: create_purchase(link: product_with_review))
+    Link.import(force: true, refresh: true)
+    Link.__elasticsearch__.refresh_index!
+
+    get :search, params: { query: "sample" }
+    assert_equal [product_json(product_with_review, "discover")], response.parsed_body["products"]
+  end
+
+  test "GET search does not filter on profile for products with no reviews" do
+    Link.__elasticsearch__.create_index!(force: true)
+    user = create_recommendable_user
+    section = create_seller_profile_products_section(seller: user)
+    product_without_review = create_product(name: "sample 2", user:)
+    product_with_review = create_product(name: "sample 1", user:, taxonomy: Taxonomy.find_or_create_by(slug: "films"))
+    create_product_review(purchase: create_purchase(link: product_with_review, created_at: 1.week.ago), rating: 5)
+    create_product_review(purchase: create_purchase(link: product_with_review))
+    Link.import(force: true, refresh: true)
+    Link.__elasticsearch__.refresh_index!
+
+    @recommended_by = nil
+    @on_profile = true
+    get :search, params: { user_id: user.external_id, section_id: section.external_id }
+    assert_equal [product_json(product_without_review, "profile"), product_json(product_with_review, "profile")], response.parsed_body["products"]
+  end
+
+  test "GET search stores the search query along with useful metadata" do
+    Taxonomy.find_or_create_by(slug: "3d")
+    cookies[:_gumroad_guid] = "custom_guid"
+    sign_in @user
+
+    assert_difference -> { DiscoverSearch.count }, 1 do
+      get :search, params: { query: "something", taxonomy: "3d" }
+    end
+
+    assert_includes_attributes DiscoverSearch.last!.attributes, {
+      "query" => "something",
+      "user_id" => @user.id,
+      "taxonomy_id" => Taxonomy.find_by_path(["3d"]).id,
+      "ip_address" => "0.0.0.0",
+      "browser_guid" => "custom_guid",
+      "autocomplete" => false
+    }
+  end
+
+  test "GET search does not store search when querying user products" do
+    assert_no_difference -> { DiscoverSearch.count } do
+      get :search, params: { query: "something", user_id: @user.id }
+    end
+  end
+end

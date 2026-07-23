@@ -340,6 +340,21 @@ jobs:
         image: mongo:4.4
         ports:
           - 27017:27017
+      # Elasticsearch for the handful of ported tests that index records and query
+      # them back (product search, page-view analytics). Matches the version and
+      # heap the RSpec docker-compose stack uses. Most Minitest tests never touch
+      # it — test_helper stubs the ES client by default and tests opt into this real
+      # cluster via Thread.current[:minitest_real_es] (see RealElasticsearchBridge).
+      elasticsearch:
+        image: elasticsearch:7.9.3
+        env:
+          discovery.type: single-node
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+      # MinIO (S3-compatible object storage) is started as a step below rather than
+      # a service: the official minio/minio image needs a `server /data` command
+      # that GitHub Actions service containers can't supply.
 
     env:
       RAILS_ENV: test
@@ -358,6 +373,23 @@ jobs:
 
       - name: Prepare test database
         run: bundle exec rake db:prepare
+
+      - name: Start MinIO (S3-compatible object storage)
+        run: |
+          docker run -d --name minio -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --console-address ":9001"
+          for i in $(seq 1 30); do curl -fsS http://localhost:9000/minio/health/ready >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://localhost:9000/minio/health/ready || { echo "MinIO did not become ready"; exit 1; }
+          # Create the buckets the app's :test storage service expects (see config/storage.yml).
+          docker run --rm --network host --entrypoint /bin/sh minio/mc:latest -c "
+            mc alias set local http://localhost:9000 minioadmin minioadmin &&
+            mc mb --ignore-existing local/gumroad-specs local/gumroad-invoices"
+
+      - name: Wait for Elasticsearch
+        run: |
+          for i in $(seq 1 30); do curl -fsS http://localhost:9200/_cluster/health >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://localhost:9200/_cluster/health || { echo "Elasticsearch did not become ready"; exit 1; }
 
       - name: Run Minitest
         run: bundle exec rails test
