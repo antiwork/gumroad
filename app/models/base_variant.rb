@@ -141,8 +141,10 @@ class BaseVariant < ApplicationRecord
   end
 
   def sales_count_for_inventory
-    return sales_count_for_inventory_cache if Feature.active?(:inventory_counter_cache)
-    purchases.counts_towards_inventory.sum(:quantity)
+    # The counter-cache column is kept in sync by Purchase/Subscription callbacks and has been
+    # the production source since 2026-04 (the inventory_counter_cache flag was 100% on; removed
+    # via gp#1208). The live SUM fallback is gone with the flag.
+    sales_count_for_inventory_cache
   end
 
   def is_downloadable?

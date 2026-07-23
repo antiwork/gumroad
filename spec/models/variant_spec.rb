@@ -257,14 +257,17 @@ describe Variant do
       end
 
       it "count all successful purchases" do
-        expect(@variant.sales_count_for_inventory).to eq 1
+        # Reload picks up the counter-cache column synced by purchase callbacks (the
+        # inventory_counter_cache flag was removed — the cached column is now the only
+        # source; see gp#1208).
+        expect(@variant.reload.sales_count_for_inventory).to eq 1
       end
 
       it "excludes purchases for other products" do
         create(:purchase)
         create(:membership_purchase)
 
-        expect(@variant.sales_count_for_inventory).to eq 1
+        expect(@variant.reload.sales_count_for_inventory).to eq 1
       end
     end
 
@@ -291,14 +294,14 @@ describe Variant do
       end
 
       it "only counts active subscriptions + non-subscription purchases for the given tier" do
-        expect(@first_tier.sales_count_for_inventory).to eq 2
+        expect(@first_tier.reload.sales_count_for_inventory).to eq 2
       end
 
       it "excludes purchases for other products" do
         create(:purchase)
         create(:membership_purchase)
 
-        expect(@first_tier.sales_count_for_inventory).to eq 2
+        expect(@first_tier.reload.sales_count_for_inventory).to eq 2
       end
     end
   end
@@ -307,13 +310,14 @@ describe Variant do
     describe "has max_purchase_count" do
       before do
         @variant = create(:variant, max_purchase_count: 3)
-        @purchase = create(:purchase)
-        @purchase.variant_attributes << @variant
-        @purchase.save
+        # Assign the variant at purchase creation (as checkout does) so the inventory
+        # counter-cache callbacks see it; the cache column is now the only source for
+        # sales_count_for_inventory (gp#1208).
+        @purchase = create(:purchase, link: @variant.variant_category.link, variant_attributes: [@variant])
       end
 
       it "show correctly" do
-        expect(@variant.quantity_left).to eq 2
+        expect(@variant.reload.quantity_left).to eq 2
       end
     end
 
@@ -341,7 +345,7 @@ describe Variant do
       it "remains valid if when inventory sold is greater" do
         @variant = create(:variant, max_purchase_count: 3)
         create_list(:purchase, 3, link: @variant.variant_category.link, variant_attributes: [@variant])
-        @variant.update_column(:max_purchase_count, 1)
+        @variant.reload.update_column(:max_purchase_count, 1)
         expect(@variant.valid?).to eq(true)
         @variant.max_purchase_count = 2
         expect(@variant.valid?).to eq(false)
@@ -420,7 +424,7 @@ describe Variant do
       end
 
       it "returns false" do
-        expect(@variant.available?).to be(false)
+        expect(@variant.reload.available?).to be(false)
       end
     end
   end
