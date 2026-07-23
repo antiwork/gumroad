@@ -118,6 +118,73 @@ describe CustomDomainVerificationService do
     end
   end
 
+  # Issue #6184: #domains_pointed_to_gumroad accepts a name that merely carries
+  # a CNAME record to CUSTOM_DOMAIN_CNAME, even when the name's A record now
+  # resolves to a registrar parking page (a lapsed apex with a stale CNAME).
+  # #domains_resolving_to_gumroad is the stricter list used for certificate
+  # ordering: only names whose A record actually resolves to Gumroad, matching
+  # what a Let's Encrypt HTTP-01 challenge connects to.
+  describe "#domains_resolving_to_gumroad" do
+    before(:each) do
+      # Both the apex and the www variant advertise a CNAME record to
+      # CUSTOM_DOMAIN_CNAME, so #domains_pointed_to_gumroad returns both.
+      allow_any_instance_of(Resolv::DNS)
+        .to receive(:getresources)
+        .with(anything, Resolv::DNS::Resource::IN::CNAME)
+        .and_return([double(name: CUSTOM_DOMAIN_CNAME)])
+
+      allow_any_instance_of(Resolv::DNS)
+        .to receive(:getresources)
+        .with(CUSTOM_DOMAIN_CNAME, Resolv::DNS::Resource::IN::A)
+        .and_return([double(address: "100.0.0.1"), double(address: "100.0.0.2")])
+
+      allow_any_instance_of(Resolv::DNS)
+        .to receive(:getresources)
+        .with(CUSTOM_DOMAIN_STATIC_IP_HOST, Resolv::DNS::Resource::IN::A)
+        .and_return([double(address: "100.0.0.10"), double(address: "100.0.0.20")])
+    end
+
+    context "when only the www variant resolves to Gumroad" do
+      before do
+        # Lapsed apex now resolves to a registrar parking page...
+        allow_any_instance_of(Resolv::DNS)
+          .to receive(:getresources)
+          .with("example.com", Resolv::DNS::Resource::IN::A)
+          .and_return([double(address: "162.0.0.9")])
+
+        # ...while www still resolves to Gumroad.
+        allow_any_instance_of(Resolv::DNS)
+          .to receive(:getresources)
+          .with("www.example.com", Resolv::DNS::Resource::IN::A)
+          .and_return([double(address: "100.0.0.1"), double(address: "100.0.0.2")])
+      end
+
+      it "returns only the variant whose A record resolves to Gumroad" do
+        expect(service.domains_pointed_to_gumroad).to eq ["example.com", "www.example.com"]
+        expect(service.domains_resolving_to_gumroad).to eq ["www.example.com"]
+      end
+    end
+
+    context "when no variant resolves to Gumroad despite a CNAME record" do
+      before do
+        allow_any_instance_of(Resolv::DNS)
+          .to receive(:getresources)
+          .with("example.com", Resolv::DNS::Resource::IN::A)
+          .and_return([double(address: "162.0.0.9")])
+
+        allow_any_instance_of(Resolv::DNS)
+          .to receive(:getresources)
+          .with("www.example.com", Resolv::DNS::Resource::IN::A)
+          .and_return([double(address: "162.0.0.9")])
+      end
+
+      it "returns an empty array" do
+        expect(service.domains_pointed_to_gumroad).to eq ["example.com", "www.example.com"]
+        expect(service.domains_resolving_to_gumroad).to eq []
+      end
+    end
+  end
+
   describe "#has_valid_ssl_certificates?" do
     before(:each) do
       allow_any_instance_of(Resolv::DNS)
