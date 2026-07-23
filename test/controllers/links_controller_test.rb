@@ -639,7 +639,7 @@ class LinksControllerSellerAreaTest < ActionController::TestCase
     post :create, params: { link: { price_cents: 100, name: "test link" } }
     assert_redirected_to edit_link_path(Link.last)
     link = @seller.links.last
-    assert link.display_product_reviews
+    assert_equal true, link.display_product_reviews
   end
 
   test "POST create redirects with an error instead of raising when price_cents is too large" do
@@ -1519,8 +1519,13 @@ class LinksControllerUpdateTest < ActionController::TestCase
     calls = spy_on_class_new(Product::SaveCancellationDiscountService) do
       post :update, params: @params, format: :json
     end
-    assert calls.any? { |call| call[:args].first == @product && call[:args].second.present? },
-           "Expected Product::SaveCancellationDiscountService to be built with the product and discount params"
+    # Mirror the original's `.with(@product, @params[:cancellation_discount])`: verify the
+    # service is built with the product AND the exact cancellation-discount params, not
+    # merely a present second argument.
+    assert calls.any? { |call|
+      call[:args].first == @product &&
+        call[:args].second.to_unsafe_h.deep_stringify_keys == cancellation_discount_params.to_unsafe_h.deep_stringify_keys
+    }, "Expected Product::SaveCancellationDiscountService to be built with the product and the cancellation discount params"
   end
 
   # --- default discount code --------------------------------------------------
