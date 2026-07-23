@@ -34,8 +34,9 @@ class CreatorAnalytics::HourlySalesCurve
   def cumulative_fractions
     # Rails.cache.fetch treats a stored nil as a miss, so wrap the result in a hash to
     # also cache the "no stable curve" answer instead of recomputing it every load.
-    # Key is versioned: v2 nets out partial refunds, so a v1 entry must not be reused.
-    Rails.cache.fetch("creator_analytics/hourly_sales_curve/v2/#{seller.id}", expires_in: CACHE_EXPIRES_IN) do
+    # Key is versioned so entries computed under an older formula are never reused:
+    # v2 netted out partial refunds, v3 restricts to live products.
+    Rails.cache.fetch("creator_analytics/hourly_sales_curve/v3/#{seller.id}", expires_in: CACHE_EXPIRES_IN) do
       { curve: compute }
     end[:curve]
   end
@@ -61,8 +62,14 @@ class CreatorAnalytics::HourlySalesCurve
       local_time_sql = "DATE_ADD(purchases.created_at, INTERVAL #{offset_seconds} SECOND)"
       local_day_and_hour = [Arel.sql("DATE(#{local_time_sql})"), Arel.sql("HOUR(#{local_time_sql})")]
 
+      # Restrict to live (not deleted/banned/disabled) products so the curve describes
+      # the same set of sales as the chart's default view. The chart defaults to
+      # selecting only live products, and the frontend only applies the curve when the
+      # selection matches that default — historical sales of a since-deleted product
+      # would otherwise skew a divisor used against a total that excludes them.
       countable_sales = seller.sales
         .counts_towards_volume
+        .joins(:link).merge(Link.alive)
         .where(created_at: window_start.utc...window_end.utc)
 
       net_by_day_and_hour = countable_sales

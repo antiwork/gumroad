@@ -106,6 +106,24 @@ describe CreatorAnalytics::HourlySalesCurve do
       expect(curve[15]).to be > curve[14] # the sale still counts at full weight
     end
 
+    it "excludes sales of deleted products from the curve" do
+      # The chart's default view only shows live products, so a deleted product's
+      # historical sales must not shape the divisor. $1 at 09:00 each day on the live
+      # product, plus a big deleted-product sale at 15:00 that must contribute nothing.
+      described_class::MINIMUM_DAYS_WITH_SALES.times do |i|
+        create_sale(days_ago: i + 1, hour: 9)
+      end
+      deleted_product = create(:product, user: seller, price_cents: 100, deleted_at: Time.current)
+      created_at = (ActiveSupport::TimeZone.new(seller.timezone_id).now.beginning_of_day - 1.day) + 15.hours
+      deleted_sale = build(:purchase, link: deleted_product, seller:, price_cents: 10_000, created_at:)
+      deleted_sale.save!(validate: false)
+
+      curve = service.cumulative_fractions
+      expect(curve[9]).to eq(1.0)
+      expect(curve[15]).to eq(1.0)
+      expect(curve[14]).to eq(1.0) # nothing between 9am and 3pm either
+    end
+
     it "caches the computed curve" do
       described_class::MINIMUM_DAYS_WITH_SALES.times do |i|
         create_sale(days_ago: i + 1, hour: 9)
@@ -122,7 +140,7 @@ describe CreatorAnalytics::HourlySalesCurve do
 
     it "caches a nil result for sellers without enough history" do
       expect(service.cumulative_fractions).to be_nil
-      expect(Rails.cache.exist?("creator_analytics/hourly_sales_curve/v2/#{seller.id}")).to be(true)
+      expect(Rails.cache.exist?("creator_analytics/hourly_sales_curve/v3/#{seller.id}")).to be(true)
     end
   end
 end
