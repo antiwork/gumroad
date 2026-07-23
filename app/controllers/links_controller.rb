@@ -1040,7 +1040,10 @@ class LinksController < ApplicationController
       # (PageMeta::Product) and the same JSON-LD (Product::StructuredData).
       # All of this is trusted, Gumroad-authored data rendered in the trusted
       # wrapper — none of it comes from the seller's custom HTML.
-      description = product.description.present? ? product.plaintext_description : "Available on Gumroad"
+      # `.presence` on the plaintext (not the raw description) so markup-only
+      # descriptions like "<p><br></p>" — present as raw HTML but empty once
+      # stripped to text — still fall back instead of emitting empty tags.
+      description = product.plaintext_description.presence || "Available on Gumroad"
       # plaintext_description comes back from the Rails sanitizer, which strips
       # tags and entity-encodes &/</> for text context but does NOT escape
       # double quotes — and ERB::Util.h passes html_safe strings through

@@ -136,6 +136,14 @@ describe LinksController, :vcr, type: :controller do
         expect(response.body).to include(%(<meta name="description" content="Available on Gumroad">))
       end
 
+      it "falls back to the default description when the description is markup with no text" do
+        product.update!(description: "<p><br></p>")
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta name="description" content="Available on Gumroad">))
+      end
+
       it "escapes HTML-special characters in the meta description" do
         product.update!(description: %(Quotes " and <tags> & ampersands))
 
