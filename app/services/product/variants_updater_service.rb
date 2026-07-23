@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :payload_page_descriptions
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :rewrite_budget
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -17,14 +17,18 @@ class Product::VariantsUpdaterService
   # version tree (it happened three times in one week on a single product).
   # payload_page_ids / confirmed_removed_rich_content_ids feed the analogous
   # guard for page deletions (Product::RichContentDeletionGuard).
-  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], payload_page_descriptions: [])
+  # rewrite_budget: the SHARED request-wide rewrite allowance built once by
+  # Product::RichContentDeletionGuard.build_rewrite_budget — pass the same hash
+  # to every service in the save so a resubmitted page can only authorize one
+  # deletion across all scopes, not one per scope.
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], rewrite_budget: {})
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
     @payload_page_ids = Array.wrap(payload_page_ids)
     @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
-    @payload_page_descriptions = Array.wrap(payload_page_descriptions)
+    @rewrite_budget = rewrite_budget
   end
 
   def perform
@@ -40,7 +44,7 @@ class Product::VariantsUpdaterService
         confirmed_removed_variant_ids:,
         payload_page_ids:,
         confirmed_removed_rich_content_ids:,
-        payload_page_descriptions:
+        rewrite_budget:
       )
       variant_category = variant_category_updater.perform
       keep_categories << variant_category if category[:id].present?

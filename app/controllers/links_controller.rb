@@ -476,7 +476,7 @@ class LinksController < ApplicationController
           rich_contents_to_delete: product_rich_contents_to_delete,
           payload_page_ids:,
           confirmed_removed_ids: confirmed_removed_rich_content_ids,
-          payload_page_descriptions:
+          rewrite_budget: page_rewrite_budget
         )
         product_rich_contents_to_delete.each(&:mark_deleted!)
 
@@ -826,7 +826,7 @@ class LinksController < ApplicationController
           confirmed_removed_variant_ids:,
           payload_page_ids:,
           confirmed_removed_rich_content_ids:,
-          payload_page_descriptions:,
+          rewrite_budget: page_rewrite_budget,
         ).perform
       elsif variant_category.present?
         Product::VariantsUpdaterService.new(
@@ -840,7 +840,7 @@ class LinksController < ApplicationController
           confirmed_removed_variant_ids:,
           payload_page_ids:,
           confirmed_removed_rich_content_ids:,
-          payload_page_descriptions:,
+          rewrite_budget: page_rewrite_budget,
         ).perform
       end
     end
@@ -900,6 +900,15 @@ class LinksController < ApplicationController
           page[:description].present? ? page[:description][:content].as_json : nil
         end
       end
+    end
+
+    # The request-wide rewrite allowance shared by every deletion-guard
+    # invocation in this save (product-level pages + each variant's pages).
+    # Memoized so all invocations consume from the SAME budget — otherwise a
+    # single resubmitted page could authorize one deletion per scope instead
+    # of one deletion total.
+    def page_rewrite_budget
+      @_page_rewrite_budget ||= Product::RichContentDeletionGuard.build_rewrite_budget(payload_page_descriptions)
     end
 
     def update_custom_domain

@@ -1251,6 +1251,29 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal 2, @version1.reload.alive_rich_contents.count
   end
 
+  test "PUT update blocks a stale payload where one unknown-id page matches omitted duplicate-content pages across the product and a variant" do
+    # The rewrite allowance is shared across the whole save request: the guard
+    # runs once for the product-level pages and once per variant, and a single
+    # resubmitted unknown-id page must not authorize one deletion in EACH of
+    # those scopes. Here duplicate content exists both as a product-level page
+    # and as a variant page, both are omitted, and the payload resubmits the
+    # content once under an unknown id — only one rewrite is covered, so the
+    # save must be blocked.
+    setup_guarded_version!
+    duplicated_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Shared across scopes" }] }]
+    product_page = create_product_rich_content(entity: @product, description: duplicated_content)
+    variant_page = create_rich_content(entity: @version1, description: duplicated_content)
+
+    post :update, params: @params.merge(
+      rich_content: [{ id: "client-generated-uuid", title: "Twin", description: { type: "doc", content: duplicated_content } }],
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page 1", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal false, product_page.reload.deleted?
+    assert_equal false, variant_page.reload.deleted?
+  end
+
   test "PUT update allows deleting a page holding only the editor's blank placeholder paragraph without confirmation" do
     setup_guarded_version!
     # The editor initializes every new page with a single empty paragraph,

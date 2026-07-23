@@ -31,10 +31,13 @@
 class Product::RichContentDeletionGuard
   MESSAGE = "This save would remove content pages that weren't explicitly deleted. Your product may have been updated in another tab — please refresh the page and try again."
 
-  def self.ensure_intent!(product:, rich_contents_to_delete:, payload_page_ids:, confirmed_removed_ids:, payload_page_descriptions: [])
-    # Each unknown-id payload page can account for at most one deleted stored
-    # page (the one it rewrites), so track a consumable count per description.
-    rewrite_budget = payload_page_descriptions.map { |description| normalize_description(description) }.tally
+  # rewrite_budget: the shared allowance built by .build_rewrite_budget for the
+  # whole save request. The guard runs several times per save (once for the
+  # product-level pages, once per variant), so the SAME hash must be passed to
+  # every call — building a fresh budget per call would let one resubmitted
+  # page account for one omitted stored page in each scope instead of one
+  # total. Entries are consumed (mutated) as they authorize rewrites.
+  def self.ensure_intent!(product:, rich_contents_to_delete:, payload_page_ids:, confirmed_removed_ids:, rewrite_budget: {})
     unconfirmed = rich_contents_to_delete.select do |rich_content|
       next false unless rich_content.has_editor_content?
       next false if payload_page_ids.include?(rich_content.external_id)
@@ -56,6 +59,16 @@ class Product::RichContentDeletionGuard
     )
     product.errors.add(:base, MESSAGE)
     raise Link::LinkInvalid, MESSAGE
+  end
+
+  # Builds the request-wide rewrite allowance from the unknown-id payload page
+  # descriptions: each unknown-id payload page can account for at most one
+  # deleted stored page (the one it rewrites), so track a consumable count per
+  # normalized description. Build this ONCE per save request and pass the same
+  # hash to every ensure_intent! call so the allowance is shared across the
+  # product-level and per-variant guard invocations.
+  def self.build_rewrite_budget(payload_page_descriptions)
+    Array.wrap(payload_page_descriptions).map { |description| normalize_description(description) }.tally
   end
 
   # File ids inside fileEmbed nodes are rewritten between client and server
