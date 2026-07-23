@@ -23,19 +23,12 @@
   <p>It's available to creators from countries where PayPal operates, except Algeria, Brazil, Egypt, India, Israel, Japan, Federated States of Micronesia, Morocco, and Türkiye.</p>
   <p>Additionally, amounts arrive from your buyer's email in the default currency of your PayPal account.</p>
   <h3 id="eligibility">Eligibility Requirements</h3>
-  <p>In addition to being in a supported country, you must meet the following requirements to connect PayPal:</p>
-  <ul>
-    <li>Earn at least $100 in total sales on Gumroad</li>
-    <li>Receive at least one successful payout from Gumroad</li>
-    <li>Have a compliant account status</li>
-  </ul>
+  <p>In addition to being in a supported country, you must have set up how you receive payouts — such as a bank account or PayPal payout email — on the <a href="https://gumroad.com/settings/payments">Payments settings</a> page.</p>
   <h3 id="setup">Set up </h3>
-  <p>Once you meet the <a href="#eligibility">eligibility requirements</a>, go to the <a href="https://gumroad.com/settings/payments">'Payments'</a> tab. You will be prompted to enter your PayPal email and validate the integration.</p>
+  <p>PayPal Connect is a checkout setting, not a payout method — connecting PayPal lets your customers pay with PayPal at checkout, while your payouts are configured separately on the <a href="https://gumroad.com/settings/payments">Payments settings</a> page.</p>
+  <p>Once you meet the <a href="#eligibility">eligibility requirements</a>, go to the <a href="https://gumroad.com/checkout/form">Checkout form settings</a> page and find the PayPal section. You will be prompted to enter your PayPal email and validate the integration.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63b6adcfe0d50f5555840132/file-MJi0aQm9sf.png" %></figure>
   <p>If you are using a VPN and experiencing difficulties, please disconnect the VPN and try again.</p>
-  <p>You may encounter the following message when attempting to connect your PayPal: </p>
-  <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65e4891ae1b84509927922ff/file-bCiZT0gZdi.png" %></figure>
-  <p>This message means that you must first connect your bank account, Stripe account, or PayPal account in the section above, then click “Update Settings” before you will be able to click the “Connect with PayPal” button. </p>
   <h3 id="balancepage">Payouts page</h3>
   <p>Since PayPal sales arrive immediately in your PayPal, they are also on the <a href="https://gumroad.com/payouts">Payouts page</a> under ‘PayPal Payouts.’ What looks suspiciously like a “PayPal fee” is the amount already paid out to your connected PayPal account at the time of sale.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63b6aed4b31bcd14df2c40e8/file-tV621SjyeU.png" %></figure>
@@ -63,7 +56,7 @@
   <h3 id="review">PayPal account under review</h3>
   <p>In rare cases, PayPal may place accounts under review and withhold payments. If this happens, please contact PayPal Support for more assistance.</p>
   <h3 id="disconnect">Disconnect your PayPal account</h3>
-  <p>You can disconnect your PayPal account on <a href="https://gumroad.com/settings/payments">the page</a> where you connected it.</p>
+  <p>You can disconnect your PayPal account on <a href="https://gumroad.com/checkout/form">the page</a> where you connected it.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63b6afa8d0b6de7e3be2a5e6/file-oRrgscg9q7.png" %></figure>
   <p>However, you cannot disconnect your PayPal if you have a membership product with active recurring payments. You have to cancel all existing memberships first, wait until those memberships expire, then proceed to disconnect.</p>
   <p>Alternatively, you can cancel Gumroad’s access to your PayPal account in your PayPal settings. However, this will lead to a failure of all payments going to your PayPal account.</p>

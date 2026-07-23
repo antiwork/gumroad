@@ -1,4 +1,24 @@
 .rich-text {
+  // Posts and product descriptions can mix languages (say, an English intro followed by
+  // Hebrew or Arabic paragraphs). The dir="auto" set on the container only picks ONE base
+  // direction from the first strongly-directional character in the whole document, so
+  // later blocks in the other script would inherit the wrong direction. unicode-bidi:
+  // plaintext makes each block resolve its own direction from its own first strong
+  // character (and `text-align: start` follows that resolved direction), which is the
+  // per-block equivalent of dir="auto". Code blocks (<pre>) are excluded on purpose:
+  // source code should always read left-to-right (gumroad-private#1244).
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  li,
+  blockquote {
+    unicode-bidi: plaintext;
+  }
+
   &,
   .ProseMirror {
     > * {

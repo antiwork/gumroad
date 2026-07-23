@@ -8,7 +8,6 @@ describe "Tax Center", js: true, type: :system do
 
   before do
     create(:user_compliance_info, user: seller)
-    Feature.activate_user(:tax_center, seller)
 
     login_as seller
   end

@@ -5,6 +5,13 @@ class UtmLink < ApplicationRecord
 
   MAX_UTM_PARAM_LENGTH = 200
 
+  # The set of columns that must be unique together across a seller's alive links. The
+  # database's unique index on these columns cannot fully enforce this because several of
+  # them are nullable and MySQL treats NULLs in unique indexes as non-conflicting — so the
+  # model validation below is the real guard, and it only runs when one of these fields (or
+  # the record's alive-ness) changes. See #utm_fields_are_unique_per_target_resource.
+  UTM_UNIQUENESS_ATTRIBUTES = %w[seller_id utm_source utm_medium utm_campaign utm_term utm_content target_resource_type target_resource_id].freeze
+
   has_paper_trail
 
   belongs_to :seller, class_name: "User"
@@ -37,7 +44,14 @@ class UtmLink < ApplicationRecord
   validates :utm_term, length: { maximum: MAX_UTM_PARAM_LENGTH }
   validates :utm_content, length: { maximum: MAX_UTM_PARAM_LENGTH }
   validate :last_click_at_is_same_or_after_first_click_at
-  validate :utm_fields_are_unique_per_target_resource
+  # Only validate uniqueness when the identifying fields change (or the record is new /
+  # being restored). Duplicate alive rows can already exist in the database: the unique
+  # index can't catch two simultaneous first visits when a nullable column (utm_term,
+  # utm_content, target_resource_id) is NULL, because MySQL treats NULLs as non-conflicting.
+  # Before this condition, any save on such a duplicate (even just updating click
+  # timestamps) failed this validation forever, dropping every visit for that link.
+  # See https://github.com/antiwork/gumroad/issues/5989.
+  validate :utm_fields_are_unique_per_target_resource, if: :utm_uniqueness_fields_changing?
 
   scope :enabled, -> { where(disabled_at: nil) }
   scope :active, -> { alive.enabled }
@@ -153,5 +167,14 @@ class UtmLink < ApplicationRecord
       ).where.not(id:).none?
 
       errors.add(:target_resource_id, "A link with similar UTM parameters already exists for this destination!")
+    end
+
+    def utm_uniqueness_fields_changing?
+      return true if new_record?
+      # A soft-deleted link being restored re-enters the alive set, so it must re-check
+      # uniqueness even though none of its UTM fields changed.
+      return true if will_save_change_to_deleted_at? && deleted_at.nil?
+
+      UTM_UNIQUENESS_ATTRIBUTES.any? { will_save_change_to_attribute?(_1) }
     end
 end

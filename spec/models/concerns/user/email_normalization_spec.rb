@@ -66,11 +66,7 @@ describe User::EmailNormalization do
   end
 
   describe "email_not_from_suspended_gmail_variant validation" do
-    before { Feature.activate(:block_gmail_abuse_at_signup) }
-    after do
-      Feature.deactivate(:block_gmail_abuse_at_signup)
-      $redis.del(GmailAbuseFilter::REDIS_KEY)
-    end
+    after { $redis.del(GmailAbuseFilter::REDIS_KEY) }
 
     context "when a suspended account's normalized email is in the filter" do
       before { GmailAbuseFilter.add!("scammer@gmail.com") }
@@ -95,18 +91,42 @@ describe User::EmailNormalization do
         expect(user.errors[:base]).to be_empty
       end
     end
+  end
 
-    context "when the feature flag is disabled" do
-      before do
-        Feature.deactivate(:block_gmail_abuse_at_signup)
-        GmailAbuseFilter.add!("scammer@gmail.com")
+  describe ".blocked_signup_error?" do
+    after { $redis.del(GmailAbuseFilter::REDIS_KEY) }
+
+    it "returns true for a RecordInvalid raised by the gmail-abuse signup gate" do
+      GmailAbuseFilter.add!("scammer@gmail.com")
+      user = build(:user, email: "scammer+new@gmail.com")
+
+      exception = begin
+        user.save!
+        nil
+      rescue ActiveRecord::RecordInvalid => e
+        e
       end
 
-      it "skips the validation" do
-        user = build(:user, email: "scammer+new@gmail.com")
-        user.valid?(:create)
-        expect(user.errors[:base]).to be_empty
+      expect(exception).to be_present
+      expect(User.blocked_signup_error?(exception)).to be(true)
+    end
+
+    it "returns false for a RecordInvalid raised by an unrelated validation" do
+      user = build(:user, email: "not-an-email")
+
+      exception = begin
+        user.save!
+        nil
+      rescue ActiveRecord::RecordInvalid => e
+        e
       end
+
+      expect(exception).to be_present
+      expect(User.blocked_signup_error?(exception)).to be(false)
+    end
+
+    it "returns false for exceptions without a record" do
+      expect(User.blocked_signup_error?(StandardError.new("boom"))).to be(false)
     end
   end
 end

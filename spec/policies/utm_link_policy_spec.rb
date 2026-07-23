@@ -17,8 +17,6 @@ describe UtmLinkPolicy do
     create(:team_membership, user: admin_for_seller, seller:, role: TeamMembership::ROLE_ADMIN)
     create(:team_membership, user: marketing_for_seller, seller:, role: TeamMembership::ROLE_MARKETING)
     create(:team_membership, user: support_for_seller, seller:, role: TeamMembership::ROLE_SUPPORT)
-
-    Feature.activate_user(:utm_links, seller)
   end
 
   permissions :index? do

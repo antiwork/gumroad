@@ -26,11 +26,12 @@ module AgentConversationPersistence
   # validated so arbitrary client strings don't end up in Redis keys or stored metadata.
   CLIENT_TURN_ID_FORMAT = /\A[0-9a-fA-F-]{1,64}\z/
   # TTL of the Redis "this turn is being generated right now" marker. The marker is re-armed on
-  # every stream write, and the model client tolerates up to 120 seconds of silence between chunks
-  # (Ai::StoreAgentService::REQUEST_TIMEOUT_IN_SECONDS) — so the TTL must comfortably outlast that
-  # silence plus the trailing persistence + follow-up-suggestions work. If the marker expires it
-  # means the server stopped working on the turn without recording an outcome (the process died),
-  # and a recovering client should stop waiting.
+  # every stream write and by the streaming controller's periodic heartbeat (which covers the long
+  # silent stretches: tool-use iterations write nothing to the stream, and the model client
+  # tolerates up to 120 seconds of silence between chunks —
+  # Ai::StoreAgentService::REQUEST_TIMEOUT_IN_SECONDS). The TTL must comfortably outlast the
+  # heartbeat interval. If the marker expires it means the server stopped working on the turn
+  # without recording an outcome (the process died), and a recovering client should stop waiting.
   AGENT_TURN_IN_PROGRESS_TTL = 180.seconds
   # TTL of the Redis "this turn failed / will never persist" marker. Only needs to outlive a
   # recovering client's polling window; it exists so the client can stop waiting immediately
@@ -149,6 +150,29 @@ module AgentConversationPersistence
       return if client_turn_id.blank?
 
       $redis.set(RedisKey.agent_turn_status(current_seller.id, client_turn_id), "failed", ex: AGENT_TURN_FAILED_TTL.to_i)
+    end
+
+    # Re-arm the in-progress marker's TTL without changing what it says. Used by the streaming
+    # controller's heartbeat, which fires on a timer and can race the failure paths — a plain SET
+    # there could resurrect "in_progress" moments after the turn was marked failed, leaving a
+    # recovering client polling a verdict the server already reached. Only an existing
+    # "in_progress" marker is extended; a "failed" marker (or an already-expired one) is left
+    # untouched. The check and the extend run as one Lua script because they race the request
+    # thread: done separately, a "failed" written between them would get the (much shorter)
+    # in-progress TTL applied to it, cutting the failure marker's lifetime.
+    AGENT_TURN_REFRESH_IF_IN_PROGRESS_SCRIPT = <<~LUA.squish
+      if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("expire", KEYS[1], ARGV[2])
+      else
+        return 0
+      end
+    LUA
+
+    def refresh_agent_turn_in_progress!(client_turn_id)
+      return if client_turn_id.blank?
+
+      key = RedisKey.agent_turn_status(current_seller.id, client_turn_id)
+      $redis.eval(AGENT_TURN_REFRESH_IF_IN_PROGRESS_SCRIPT, keys: [key], argv: ["in_progress", AGENT_TURN_IN_PROGRESS_TTL.to_i])
     end
 
     def agent_turn_marker(client_turn_id)

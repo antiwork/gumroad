@@ -265,6 +265,60 @@ describe UtmLink do
         expect(utm_link).to be_valid
         expect(utm_link.save).to be(true)
       end
+
+      context "when duplicate alive links already exist in the database" do
+        # MySQL's unique index can't prevent duplicates when a nullable column (utm_term,
+        # utm_content, target_resource_id) is NULL, so a race in auto-creation can leave two
+        # alive rows with the same UTM fields. Existing duplicates must not make every
+        # subsequent save on those rows fail — see issue #5989.
+        let!(:original) do
+          create(:utm_link, seller:, target_resource_type: "profile_page", target_resource_id: nil,
+                            utm_source: "facebook", utm_medium: "social", utm_campaign: "spring",
+                            utm_term: nil, utm_content: nil)
+        end
+        let!(:duplicate) do
+          # save!(validate: false) skips before_validation callbacks too, so the permalink
+          # (normally auto-generated there) must be set explicitly.
+          build(:utm_link, seller:, target_resource_type: "profile_page", target_resource_id: nil,
+                           utm_source: "facebook", utm_medium: "social", utm_campaign: "spring",
+                           utm_term: nil, utm_content: nil,
+                           permalink: UtmLink.generate_permalink).tap { _1.save!(validate: false) }
+        end
+
+        it "still allows saving non-identifying changes (e.g. click timestamps) on a duplicate" do
+          duplicate.first_click_at = Time.current
+          duplicate.last_click_at = Time.current
+          duplicate.title = "Renamed"
+
+          expect(duplicate).to be_valid
+          expect(duplicate.save).to be(true)
+        end
+
+        it "still allows soft-deleting a duplicate" do
+          expect { duplicate.mark_deleted! }.not_to raise_error
+          expect(duplicate.reload).to be_deleted
+        end
+
+        it "re-validates uniqueness when an identifying field changes" do
+          other = create(:utm_link, seller:, target_resource_type: "subscribe_page", target_resource_id: nil,
+                                    utm_source: "twitter", utm_medium: "social", utm_campaign: "spring",
+                                    utm_term: nil, utm_content: nil)
+
+          other.utm_source = "facebook"
+          other.target_resource_type = "profile_page"
+
+          expect(other).not_to be_valid
+          expect(other.errors[:target_resource_id]).to include("A link with similar UTM parameters already exists for this destination!")
+        end
+
+        it "re-validates uniqueness when restoring a soft-deleted link" do
+          duplicate.mark_deleted!
+
+          duplicate.deleted_at = nil
+          expect(duplicate).not_to be_valid
+          expect(duplicate.errors[:target_resource_id]).to include("A link with similar UTM parameters already exists for this destination!")
+        end
+      end
     end
   end
 

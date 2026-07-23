@@ -27,6 +27,8 @@ class RedisKey
     def ai_request_throttle(user_id) = "ai_request_throttle:#{user_id}"
     def agent_request_throttle(user_id) = "agent_request_throttle:#{user_id}"
     def agent_turn_status(user_id, client_turn_id) = "agent_turn_status:#{user_id}:#{client_turn_id}"
+    def agent_custom_html_preview(user_id, token) = "agent_custom_html_preview:#{user_id}:#{token}"
+    def agent_custom_html_preview_index(user_id) = "agent_custom_html_preview_index:#{user_id}"
     def fraudulent_free_purchases_block_hours = "fraudulent_free_purchases_block_hours"
     def recaptcha_score_threshold(surface) = "recaptcha_score_threshold:#{surface}"
     def sales_related_products_internal_limit = "sales_related_products_internal_limit"

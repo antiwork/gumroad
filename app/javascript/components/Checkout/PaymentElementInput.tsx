@@ -8,6 +8,7 @@ import {
 } from "@stripe/stripe-js";
 import * as React from "react";
 
+import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
 import { getCheckoutStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
@@ -16,6 +17,7 @@ import {
   type PaymentElementConfig,
   type PaymentElementClientConfirmConfig,
 } from "$app/components/Checkout/payment";
+import { type PaymentElementApplePayOption } from "$app/components/Checkout/paymentElementApplePayOption";
 import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -29,9 +31,15 @@ type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementClient
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
 type LinkPrefillContact = { email: string; name: string };
 
-const paymentElementWallets = (stripeLinkEnabled: boolean): PaymentElementWallets => ({
-  applePay: "never",
-  googlePay: "never",
+// When the payment_element_wallets rollout flag is off, Apple Pay and Google Pay are pinned to
+// "never" — that was the Phase-1 duplication guard while the separate Payment Request Button
+// rendered next to the element, and it stays in place for sellers not yet on the flag. When the
+// flag is on, the Payment Request Button is not mounted for the cart (that suppression lives in
+// PaymentForm.tsx), so the element itself can show the wallet buttons without duplicates.
+// See antiwork/gumroad#5768 (and #5362 for the original duplication guard).
+const paymentElementWallets = (stripeLinkEnabled: boolean, walletsEnabled: boolean): PaymentElementWallets => ({
+  applePay: walletsEnabled ? "auto" : "never",
+  googlePay: walletsEnabled ? "auto" : "never",
   link: stripeLinkEnabled ? "auto" : "never",
 });
 
@@ -41,12 +49,15 @@ export const PaymentElementInput = ({
   amount,
   mountCurrency,
   elementsOptions,
+  walletsEnabled,
+  applePayOption,
   disabled,
   defaultEmail,
   defaultName,
   invalid,
   onReady,
   onChange,
+  onFocus,
 }: {
   amount: number | null;
   // Mounts the element in this currency instead of elementsOptions.currency (from
@@ -60,12 +71,26 @@ export const PaymentElementInput = ({
   // while a surcharge refresh is merely in flight.
   mountCurrency?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
+  // Per-seller rollout flag (payment_element_wallets): show Apple Pay/Google Pay inside the
+  // Payment Element instead of via the separate Payment Request Button.
+  walletsEnabled: boolean;
+  // Apple Pay recurring declaration (merchant-token rollout): describes the cart's recurring
+  // agreement on the Apple Pay sheet so Apple issues a device-independent merchant token. The
+  // caller derives it from cart state (see paymentElementApplePayOption.ts) and memoizes it on
+  // its content so option updates only reach the mounted element when the declaration actually
+  // changes. Undefined leaves the element's options untouched (flags off / client-confirm lane).
+  applePayOption?: PaymentElementApplePayOption | undefined;
   disabled?: boolean | undefined;
   defaultEmail: string;
   defaultName: string;
   invalid?: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
+  // Fires when the buyer focuses any field inside the element. Used by the flat wallets layout
+  // (see PaymentMethodsSection in PaymentForm.tsx) to re-select the card/wallet lane when the
+  // buyer returns to the element after picking PayPal — clicks inside the element's iframe never
+  // reach the surrounding DOM, so this Stripe event is the only reliable interaction signal.
+  onFocus?: (() => void) | undefined;
 }) => {
   const [mountedAmount, setMountedAmount] = React.useState(amount);
 
@@ -98,21 +123,38 @@ export const PaymentElementInput = ({
   }, [defaultEmail, defaultName, elementsOptions.stripe_link_enabled]);
 
   return (
-    <Fieldset state={invalid ? "danger" : undefined} aria-label="Card information">
+    <Fieldset
+      state={invalid ? "danger" : undefined}
+      aria-label="Card information"
+      // Stripe sizes the element's iframe as `width: calc(100% + 8px); margin: 0 -4px` — a 4px
+      // bleed on each side that its inner UI offsets back, so focus rings can render outside the
+      // rows without clipping. Our global base rule (`* { max-width: 100% }` in _global.scss)
+      // clamps the iframe back to the container width while the -4px left margin still applies,
+      // shifting the element's content 4px left and leaving it 8px narrower than the container —
+      // which made the accordion rows visibly narrower than the flat PayPal row below. Lift the
+      // clamp for the element's iframes so Stripe's intended geometry (content edges flush with
+      // the container) applies. Scoped to walletsEnabled to leave the flag-off card form
+      // byte-identical to production.
+      className={walletsEnabled ? "[&_iframe]:max-w-none" : undefined}
+    >
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
         <StripePaymentElementProvider
           amount={mountedAmount}
           currencyOverride={mountedCurrency}
           elementsOptions={elementsOptions}
+          walletsEnabled={walletsEnabled}
         >
           <PaymentElementControllerInput
             amount={mountedAmount}
             disabled={disabled}
             stripeLinkEnabled={elementsOptions.stripe_link_enabled}
+            walletsEnabled={walletsEnabled}
+            applePayOption={applePayOption}
             defaultEmail={linkPrefillContact.email}
             defaultName={linkPrefillContact.name}
             onReady={onReady}
             onChange={onChange}
+            onFocus={onFocus}
             onTouched={handlePaymentElementTouched}
           />
         </StripePaymentElementProvider>
@@ -129,24 +171,36 @@ const PaymentElementControllerInput = ({
   amount,
   disabled,
   stripeLinkEnabled,
+  walletsEnabled,
+  applePayOption,
   defaultEmail,
   defaultName,
   onReady,
   onChange,
+  onFocus,
   onTouched,
 }: {
   amount: number | null;
   disabled?: boolean | undefined;
   stripeLinkEnabled: boolean;
+  walletsEnabled: boolean;
+  applePayOption?: PaymentElementApplePayOption | undefined;
   defaultEmail: string;
   defaultName: string;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
+  onFocus?: (() => void) | undefined;
   onTouched: () => void;
 }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [ready, setReady] = React.useState(false);
+  // Which payment-method row the buyer currently has selected inside the element ("card",
+  // "apple_pay", "google_pay", ...), reported by the element's change event. State (not a ref)
+  // because it drives the fields option below, which must reach the mounted element via
+  // element.update() when the selection flips between card and wallet.
+  const [selectedType, setSelectedType] = React.useState("card");
+  const walletTypeSelected = isWalletPaymentElementType(selectedType);
 
   React.useEffect(() => {
     onReady(stripe && elements && ready ? { stripe, elements } : null);
@@ -171,28 +225,59 @@ const PaymentElementControllerInput = ({
     <PaymentElement
       options={{
         readOnly: disabled ?? false,
-        layout: { type: "tabs" },
+        // With wallets enabled the element must actually show its payment-method surface, so we
+        // use the accordion layout (wallet buttons render as express-checkout-style rows). With
+        // wallets disabled we keep the tabs layout, whose tabs are hidden via the ".Tab" appearance
+        // rule in StripePaymentElementProvider — the exact pre-flag behavior.
+        layout: walletsEnabled ? { type: "accordion", radios: false, spacedAccordionItems: true } : { type: "tabs" },
         ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
+        // Checkout collects billing details in its own form, so for card payments every field is
+        // pinned to "never" and tokenization passes the form's values explicitly (see
+        // paymentElementBillingDetails in card_payment_method_data.ts). Wallet selections flip
+        // the whole block to "auto": the wallet sheet supplies the buyer's verified billing
+        // details and tokenization deliberately passes no override — but Stripe's client-side
+        // validation rejects createPaymentMethod/createConfirmationToken with an
+        // IntegrationError ("You specified "never" for fields.billing_details.name … but did
+        // not pass params.billing_details.name") whenever a field is "never" and no param is
+        // passed, wallets included. "auto" removes that requirement and lets the wallet's own
+        // details flow onto the PaymentMethod. The switch reaches the mounted element through
+        // react-stripe-js's option diffing (element.update) as soon as the change event reports
+        // a wallet row selection — before tokenization, which only starts from the pay click.
         fields: {
-          billingDetails: {
-            name: "never",
-            email: "never",
-            phone: "never",
-            address: {
-              country: "never",
-              postalCode: "never",
-              state: "never",
-              city: "never",
-              line1: "never",
-              line2: "never",
-            },
-          },
+          billingDetails: walletTypeSelected
+            ? "auto"
+            : {
+                name: "never",
+                email: "never",
+                phone: "never",
+                address: {
+                  country: "never",
+                  postalCode: "never",
+                  state: "never",
+                  city: "never",
+                  line1: "never",
+                  line2: "never",
+                },
+              },
         },
-        wallets: paymentElementWallets(stripeLinkEnabled),
+        wallets: paymentElementWallets(stripeLinkEnabled, walletsEnabled),
+        // The recurring declaration attaches to the PaymentElement's own options (that's where
+        // Stripe's typings put `applePay`), not to the Elements provider. react-stripe-js diffs
+        // these options on every render and pushes real changes to the mounted element via
+        // element.update(), so cart edits that change the declaration update the sheet without a
+        // remount — and the provider's mode+currency key already remounts everything when the
+        // element switches between payment and setup mode.
+        ...(applePayOption ? { applePay: applePayOption } : {}),
       }}
       onReady={() => setReady(true)}
-      onFocus={onTouched}
-      {...(onChange ? { onChange } : {})}
+      onFocus={() => {
+        onTouched();
+        onFocus?.();
+      }}
+      onChange={(event) => {
+        setSelectedType(event.value.type);
+        onChange?.(event);
+      }}
     />
   );
 };
@@ -201,11 +286,13 @@ const StripePaymentElementProvider = ({
   amount,
   currencyOverride,
   elementsOptions,
+  walletsEnabled,
   children,
 }: {
   amount: number | null;
   currencyOverride?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
+  walletsEnabled: boolean;
   children: React.ReactNode;
 }) => {
   const [stripePromise] = React.useState(() =>
@@ -262,9 +349,26 @@ const StripePaymentElementProvider = ({
           focusBoxShadow: "none",
         },
         rules: {
-          ".Tab": {
-            display: "none",
-          },
+          // With wallets disabled the element uses the tabs layout purely as an internal card
+          // form, so the tabs themselves are hidden. With wallets enabled the element switches to
+          // the accordion layout and must show its payment-method rows, so the tabs rule is
+          // dropped and the accordion items are styled to match our inputs.
+          ...(walletsEnabled
+            ? {
+                ".AccordionItem": {
+                  borderColor,
+                  boxShadow: "none",
+                  borderRadius: "4px",
+                  // Match the flat PayPal row appended below the element (p-4 in
+                  // FlatPayPalRow), so every payment-method row has the same height.
+                  padding: "1rem",
+                },
+              }
+            : {
+                ".Tab": {
+                  display: "none",
+                },
+              }),
           ".TabLabel": {
             fontSize: "1rem",
             fontWeight: "400",
@@ -299,6 +403,7 @@ const StripePaymentElementProvider = ({
       fontFamily,
       initialAmount,
       placeholderColor,
+      walletsEnabled,
     ],
   );
 

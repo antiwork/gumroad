@@ -529,7 +529,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
     product1_description = [
       { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Paragraph 1" }] },
       { "type" => "fileEmbedGroup",
-        "attrs" => { "name" => "My folder", "uid" => folder_uid },
+        "attrs" => { "name" => "My folder", "uid" => folder_uid, "expandedByDefault" => false },
         "content" => [
           { "type" => "fileEmbed", "attrs" => { "id" => file1.external_id, "uid" => SecureRandom.uuid, "collapsed" => false } },
           { "type" => "fileEmbed", "attrs" => { "id" => file2.external_id, "uid" => SecureRandom.uuid, "collapsed" => false } },

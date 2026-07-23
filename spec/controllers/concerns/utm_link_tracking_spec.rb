@@ -18,8 +18,6 @@ describe UtmLinkTracking, type: :controller do
 
     cookies[:_gumroad_guid] = "abc123"
     request.remote_ip = "192.168.0.1"
-
-    Feature.activate_user(:utm_links, seller)
   end
 
   context "when a matching UTM link is found" do
@@ -287,6 +285,45 @@ describe UtmLinkTracking, type: :controller do
     end
   end
 
+  context "when duplicate alive UTM links already exist for the same UTM parameters" do
+    # The auto-create race can leave two alive rows with identical UTM fields when a
+    # nullable column is NULL (MySQL unique indexes never conflict on NULL). Visits to
+    # such links must keep working: the lookup picks the oldest row deterministically and
+    # updating its click timestamps must not fail the uniqueness validation (issue #5989).
+    let!(:older_link) do
+      create(:utm_link, seller:, target_resource_type: "profile_page", target_resource_id: nil,
+                        utm_source: "facebook", utm_medium: "social", utm_campaign: "summer_sale",
+                        utm_term: nil, utm_content: nil)
+    end
+    let!(:newer_duplicate) do
+      build(:utm_link, seller:, target_resource_type: "profile_page", target_resource_id: nil,
+                       utm_source: "facebook", utm_medium: "social", utm_campaign: "summer_sale",
+                       utm_term: nil, utm_content: nil,
+                       permalink: UtmLink.generate_permalink).tap { _1.save!(validate: false) }
+    end
+
+    before do
+      allow(controller).to receive(:root_path).and_return("/")
+      request.host = "#{seller.subdomain}"
+      request.path = "/"
+    end
+
+    it "records the visit on the oldest duplicate without reporting an error", :sidekiq_inline do
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        expect do
+          get :action, params: { utm_source: "facebook", utm_medium: "social", utm_campaign: "summer_sale" }
+        end.to change { older_link.reload.utm_link_visits.count }.by(1)
+      end.not_to change(UtmLink, :count)
+
+      expect(response).to be_successful
+      expect(newer_duplicate.reload.utm_link_visits.count).to eq(0)
+      expect(older_link.reload.total_clicks).to eq(1)
+      expect(older_link.last_click_at).to be_present
+    end
+  end
+
   context "when a matching UTM link is not found" do
     let(:product) { create(:product, user: seller) }
     let(:post) { create(:published_installment, seller:, shown_on_profile: true) }
@@ -301,7 +338,6 @@ describe UtmLinkTracking, type: :controller do
     end
 
     before do
-      Feature.activate_user(:utm_links, seller)
       request.host = "#{seller.subdomain}"
     end
 
@@ -502,18 +538,6 @@ describe UtmLinkTracking, type: :controller do
 
       utm_link = UtmLink.last
       expect(utm_link.utm_source.length).to eq(UtmLink::MAX_UTM_PARAM_LENGTH)
-    end
-
-    it "does not auto-create UTM link when feature is disabled" do
-      Feature.deactivate_user(:utm_links, seller)
-      request.host = "#{seller.subdomain}"
-      request.path = "/"
-
-      expect do
-        expect do
-          get :action, params: utm_params
-        end.not_to change(UtmLink, :count)
-      end.not_to change(UtmLinkVisit, :count)
     end
 
     it "does not auto-create UTM link when cookies are disabled" do

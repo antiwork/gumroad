@@ -21,6 +21,14 @@ module StripeMerchantAccountManager
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
 
+  # How long we wait before emailing a seller that Stripe paused their payouts.
+  # Stripe's periodic re-verification sweeps sometimes disable payouts and
+  # re-enable them minutes later; the internal pause is applied instantly
+  # (money safety), but the email waits out this window so a blip that resolves
+  # itself never alarms the seller. A genuine pause is still notified — just
+  # this much later, which is immaterial next to Stripe review timelines.
+  PAYOUTS_PAUSE_EMAIL_DEBOUNCE_DELAY = 30.minutes
+
   # Stripe intervention categories (the middle segment of an `interv_*`
   # requirement, e.g. `interv_XXX.rejection_appeal.support`) that mean the
   # seller is inside an appeal window. These are actionable: the webhook
@@ -38,19 +46,49 @@ module StripeMerchantAccountManager
   # Claims (at most one of each) pause email per Stripe-disabled episode,
   # surviving admin/payout-method resumes (the marker is cleared only when
   # Stripe re-enables payouts). Action-required is claimed on first notice or on
-  # escalation from under-review; under-review only as the first notice. Updates
-  # the marker (called inside the user lock) and returns the email type to
-  # enqueue after the lock commits, or nil.
+  # escalation from under-review; under-review is claimed as the first notice or
+  # on de-escalation from action-required (the seller satisfied the outstanding
+  # requirements but payouts stay paused pending Stripe's review). Updates the
+  # marker (called inside the user lock) and returns the email type to schedule
+  # after the lock commits, or nil.
+  #
+  # Each successful claim also rotates stripe_payouts_pause_email_claim_token,
+  # and a transition to a state that must never email (rejected.*,
+  # platform_paused) drops the claim entirely. The scheduled
+  # StripePayoutsPausedEmailJob carries the token it was created with and only
+  # sends if it still matches, so the token changes whenever the desired
+  # notification changes — a job left over from an earlier pause, or from a
+  # notice whose type has since escalated, de-escalated, or become
+  # a never-email state, can never send a stale or contradictory email.
   def self.claim_stripe_payouts_pause_email(merchant_account, pause_email_type)
+    already_claimed = merchant_account.stripe_payouts_pause_email_sent
     case pause_email_type
     when :action_required
-      return nil if merchant_account.stripe_payouts_pause_email_sent == "action_required"
+      return nil if already_claimed == "action_required"
     when :under_review
-      return nil unless merchant_account.stripe_payouts_pause_email_sent.nil?
+      # already_claimed == "action_required" falls through: the requirements
+      # were satisfied while the account stayed paused, so claim the
+      # under-review email. The rotated token invalidates any action-required
+      # job still waiting out its debounce window — without this, that stale
+      # job would tell the seller to act when nothing is due anymore.
+      return nil if already_claimed == "under_review"
     else
+      # The account moved to a state this flow never emails about (rejected.*
+      # or platform_paused). An email still waiting out its debounce window
+      # from before the transition would now contradict the account's state
+      # ("please provide information" on a rejected account), so drop the
+      # claim — clearing the token invalidates the pending job. Clearing the
+      # marker also lets a later actionable phase (e.g. a rejection appeal
+      # that reopens verification) email the seller afresh.
+      if already_claimed || merchant_account.stripe_payouts_pause_email_claim_token
+        merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil)
+      end
       return nil
     end
-    merchant_account.update!(stripe_payouts_pause_email_sent: pause_email_type.to_s)
+    merchant_account.update!(
+      stripe_payouts_pause_email_sent: pause_email_type.to_s,
+      stripe_payouts_pause_email_claim_token: SecureRandom.uuid
+    )
     pause_email_type
   end
   private_class_method :claim_stripe_payouts_pause_email
@@ -162,13 +200,15 @@ module StripeMerchantAccountManager
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
       # Bank-account rejections (unknown bank/routing code, invalid account number) and
-      # Japanese address rejections (town/postal-code mismatches Stripe validates against
-      # its JP postal directory) are expected seller-input errors: the seller sees Stripe's
-      # message inline on the payments settings page and can correct the input themselves
-      # (a payout note is also recorded below for bank rejections), and the sync path
-      # (update_bank_account) already treats bank rejections as expected without alerting.
-      # Don't page Sentry for them — only unexpected failures should alert.
-      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || jp_address_invalid_error?(e)
+      # tax-ID rejections (placeholder values like 123456789 that Stripe disallows),
+      # phone-number rejections, and Japanese address rejections (town/postal-code
+      # mismatches Stripe validates against its JP postal directory) are expected
+      # seller-input errors: the seller sees Stripe's message inline on the payments
+      # settings page and can correct the input themselves (a payout note is also recorded
+      # below for bank rejections), and the sync path (update_bank_account) already treats
+      # bank rejections as expected without alerting. Don't page Sentry for them — only
+      # unexpected failures should alert.
+      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
@@ -389,6 +429,14 @@ module StripeMerchantAccountManager
     clear_stale_bank_sync_failure_notes(user)
     :synced
   rescue Stripe::InvalidRequestError => e
+    # Stripe returns "Gumroad has blocked payments on this account..." when the connected
+    # account was rejected by Gumroad itself (a platform-level risk block). No bank account
+    # update can succeed until that block is lifted, so this outcome is expected: don't page
+    # Sentry and don't leave a bank-sync failure note that would trigger automated retries.
+    if e.message.to_s.include?("has blocked payments on this account")
+      return :account_blocked_by_platform
+    end
+
     if e.code == "incorrect_account_holder_name"
       ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
       return :invalid_account_holder_name
@@ -460,22 +508,73 @@ module StripeMerchantAccountManager
     error.message.to_s.match?(/invalid address for japan|cannot find an address with town of/i)
   end
 
-  # Luxembourg postal codes are four digits, but residents habitually write them with the
-  # conventional "L-" prefix (e.g. "L-9767"). Stripe rejects the prefixed form with
-  # `postal_code_invalid`, and the resulting account-creation failure is invisible to the
-  # seller at save time (creation runs async), so strip the prefix at the Stripe boundary.
-  # Normalizing here (rather than at input time) also repairs already-saved compliance
-  # records when the retry job re-attempts account creation.
+  # Some countries have a habitual way of writing postal codes that differs from the exact
+  # format Stripe's validation accepts. Stripe rejects the off-format code with
+  # `postal_code_invalid`, and because merchant-account creation often runs asynchronously
+  # after the settings save, that failure used to be invisible to the seller. Rewrite the
+  # unambiguous habitual shapes into Stripe's expected format at the Stripe boundary:
+  #
+  # - Luxembourg: codes are four digits, but residents habitually add the conventional
+  #   "L-" prefix (e.g. "L-9767"). Stripe only accepts the bare digits.
+  # - Netherlands: codes are four digits + two letters, and Stripe requires the standard
+  #   spaced uppercase form "NNNN LL" (e.g. "2742 NZ"), but sellers often type them without
+  #   the space or in lowercase ("2742nz").
+  #
+  # Anything that doesn't match the expected shape passes through unchanged so Stripe can
+  # report its own validation error rather than us guessing. Normalizing here (rather than
+  # at input time) also repairs already-saved compliance records when the retry job
+  # re-attempts account creation — no re-entry needed from the seller.
   private_class_method
   def self.normalize_postal_code(postal_code, country_code)
     return postal_code if postal_code.blank?
 
-    if country_code == Compliance::Countries::LUX.alpha2
+    case country_code
+    when Compliance::Countries::LUX.alpha2
       normalized = postal_code.to_s.strip[/\AL[-\s]?(\d{4})\z/i, 1]
       return normalized if normalized.present?
+    when Compliance::Countries::NLD.alpha2
+      match = postal_code.to_s.strip.match(/\A(\d{4})\s?([A-Za-z]{2})\z/)
+      return "#{match[1]} #{match[2].upcase}" if match
     end
 
     postal_code
+  end
+
+  # Stripe validates the tax IDs we pass on account creation (individual `id_number`,
+  # business `tax_id`) and rejects obviously-fake values with an InvalidRequestError like
+  # `Invalid Tax ID. 123456789 is not an allowed value.` — placeholder numbers (all-same
+  # digits, sequential digits) are on Stripe's denylist. We don't pre-validate against that
+  # denylist, so these are expected seller-input errors: the seller sees Stripe's message
+  # inline on the payments settings page and can correct the tax ID themselves. Stripe
+  # doesn't always populate `code`/`param` on this rejection, so also match on the message.
+  private_class_method
+  def self.tax_id_invalid_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    code = error.respond_to?(:code) ? error.code : nil
+    return true if code == "tax_id_invalid"
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    return true if param.split("[").last.to_s.delete("]").in?(%w[id_number tax_id])
+
+    error.message.to_s.match?(/invalid tax id/i)
+  end
+
+  # Stripe validates the phone numbers we pass on account creation (individual phone,
+  # business support phone) and rejects malformed ones with an InvalidRequestError like
+  # `"+9203661015" is not a valid phone number`. The client-side formatter only normalizes
+  # to E.164 — it doesn't verify the number is real — so these are expected seller-input
+  # errors: the seller sees Stripe's message inline on the payments settings page and can
+  # correct the number themselves. Stripe doesn't always populate `code`/`param` on this
+  # rejection, so match on the message.
+  private_class_method
+  def self.phone_number_invalid_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    return true if param.split("[").last.to_s.delete("]").in?(%w[phone support_phone])
+
+    error.message.to_s.match?(/is not a valid phone number/i)
   end
 
   private_class_method
@@ -1175,7 +1274,7 @@ module StripeMerchantAccountManager
             "Stripe re-enabled payouts on the connected account; payouts remain paused by the creator." :
             "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
         )
-        merchant_account.update!(stripe_payouts_pause_email_sent: nil) if merchant_account.stripe_payouts_pause_email_sent
+        merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil) if merchant_account.stripe_payouts_pause_email_sent
       elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         user.comments.create!(
@@ -1198,10 +1297,18 @@ module StripeMerchantAccountManager
     end
 
     case pause_email_to_send
-    when :action_required
-      MerchantRegistrationMailer.stripe_payouts_disabled(user.id).deliver_later
-    when :under_review
-      MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
+    when :action_required, :under_review
+      # Don't email immediately: schedule a delayed job that re-checks the
+      # account and only sends if payouts are still paused by Stripe, so a
+      # verification blip that auto-resolves inside the window never emails.
+      # The claim token ties the job to this specific pause episode.
+      StripePayoutsPausedEmailJob.perform_in(
+        PAYOUTS_PAUSE_EMAIL_DEBOUNCE_DELAY,
+        user.id,
+        merchant_account.id,
+        pause_email_to_send.to_s,
+        merchant_account.stripe_payouts_pause_email_claim_token
+      )
     end
 
     # A terminally rejected account is final, so don't open new verification

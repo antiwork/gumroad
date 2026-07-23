@@ -16,7 +16,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
     let(:user) { create(:user, name: "Gum") }
 
     before do
-      allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(true)
       login_as user
     end
 
@@ -26,94 +25,14 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_tab_button("Payments", open: true)
     end
 
-    it "shows the PayPal Connect section if country is supported" do
+    it "does not render the PayPal Connect section and points to checkout settings instead" do
       create(:user_compliance_info, user:)
-
-      visit settings_payments_path
-
-      expect(page).to have_link("Connect with PayPal")
-    end
-
-    it "does not show the Paypal Connect section if country is not supported" do
-      creator = create(:user)
-      create(:user_compliance_info, user: creator, country: "India")
-      login_as creator
 
       visit settings_payments_path
 
       expect(page).not_to have_link("Connect with PayPal")
-    end
-
-    it "keeps the PayPal Connect button enabled and does not show the notification when user has payment_address set up" do
-      create(:user_compliance_info, user:)
-      visit settings_payments_path
-      expect(page).not_to have_alert(text: "You must set up credit card purchases above before enabling customers to pay with PayPal.")
-      expect(page).not_to have_link(text: "Connect with PayPal", inert: true)
-    end
-
-    it "keeps the PayPal Connect button enabled even when user does not have either bank account or payment address set up" do
-      creator = create(:user, payment_address: nil)
-      create(:user_compliance_info, user: creator)
-      login_as creator
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: false)
-    end
-
-    it "keeps the PayPal Connect button enabled when user has stripe account connected" do
-      creator = create(:user, payment_address: nil)
-      create(:user_compliance_info, user: creator)
-      create(:merchant_account_stripe_connect, user: creator)
-      creator.check_merchant_account_is_linked = true
-      creator.save!
-
-      expect(creator.has_stripe_account_connected?).to be true
-      login_as creator
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: false)
-    end
-
-    it "keeps the PayPal Connect button enabled when user has bank account connected" do
-      creator = create(:user, payment_address: nil)
-      create(:user_compliance_info, user: creator)
-      create(:ach_account, user: creator)
-
-      login_as creator
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: false)
-    end
-
-    it "keeps the PayPal Connect button enabled when user has debit card connected" do
-      creator = create(:user, payment_address: nil)
-      create(:user_compliance_info, user: creator)
-      create(:card_bank_account, user: creator)
-
-      login_as creator
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: false)
-    end
-
-    it "keeps the PayPal Connect button disabled and shows the eligibility requirements when the user is not eligible" do
-      create(:user_compliance_info, user:)
-      allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(false)
-
-      visit settings_payments_path
-      expect(page).to have_link(text: "Connect with PayPal", inert: true)
-      expect(page).to have_text("You must meet the following requirements in order to connect a PayPal account:")
-      expect(page).to have_text("Your account must be marked as compliant")
-      expect(page).to have_text("You must have earned at least $100")
-      expect(page).to have_text("You must have received at least one successful payout")
-    end
-
-    context "when logged user has role admin" do
-      let(:seller) { create(:named_seller) }
-
-      include_context "with switching account to user as admin for seller"
-
-      it "does not show the Connect with PayPal button link" do
-        visit settings_payments_path
-
-        expect(page).not_to have_link("Connect with PayPal")
-      end
+      expect(page).to have_text("Looking for PayPal Connect?")
+      expect(page).to have_link("Checkout settings", href: checkout_form_path)
     end
   end
 
@@ -160,8 +79,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       fill_in("Pay to the order of", with: "barnabas ngagy")
       fill_in("Routing number", with: "110000000")
-      fill_in("Account number", with: "123456781")
-      fill_in("Confirm account number", with: "123456781")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
 
       expect(page).to have_content("Must exactly match the name on your bank account")
       expect(page).to have_content("Payouts will be made in USD.")
@@ -171,11 +90,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       select("1980", from: "Year")
       fill_in("Last 4 digits of SSN", with: "1235")
 
-      click_on("Update settings")
-      expect(page).to have_alert("You must use a test bank account number. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
-
-      fill_in("Account number", with: "000123456789")
-      fill_in("Confirm account number", with: "000123456789")
       click_on("Update settings")
       expect(page).to have_alert(text: "Thanks! You're all set.")
       expect(page).to have_content("Routing number")
@@ -6338,10 +6252,10 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       include_context "with switching account to user as admin for seller"
 
-      it "disables the form" do
+      it "keeps the form enabled for team admins" do
         visit settings_payments_path
-        expect(page).to have_field("First name", disabled: true)
-        expect(page).not_to have_button("Update settings")
+        expect(page).to have_field("First name", disabled: false)
+        expect(page).to have_button("Update settings")
       end
     end
   end
@@ -6376,67 +6290,53 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       login_as @creator
     end
 
-    describe "when the feature flag is not active" do
-      it "displays the taxes collection section" do
-        visit settings_payments_path
+    it "does not display the backtaxes collection section if creator has not received an email" do
+      visit settings_payments_path
 
-        expect(page).not_to have_text("Backtaxes collection")
-      end
+      expect(page).not_to have_text("Backtaxes collection")
     end
 
-    describe "when the feature flag is active" do
+    describe "when the creator has received an email" do
       before do
-        Feature.activate(:au_backtaxes)
+        create(:australia_backtax_email_info, user: @creator)
       end
 
-      it "does not display the backtaxes collection section if creator has not received an email" do
+      it "displays the taxes collection section and allows the creator to opt in" do
         visit settings_payments_path
 
-        expect(page).not_to have_text("Backtaxes collection")
+        expect(page).to have_text("Backtaxes collection")
+
+        click_on "Opt-in to backtaxes collection"
+        fill_in "Type your full name to opt-in", with: "Chuck Bartowski"
+        click_on "Save and opt-in"
+
+        expect(page).to have_text("You've opted in to backtaxes collection.")
+        expect(@creator.backtax_agreements.count).to eq(1)
+        expect(@creator.backtax_agreements.first.signature).to eq("Chuck Bartowski")
       end
 
-      describe "when the creator has received an email" do
-        before do
-          create(:australia_backtax_email_info, user: @creator)
-        end
+      it "renders an error message when the creator provides an invalid name for a signature" do
+        visit settings_payments_path
 
-        it "displays the taxes collection section and allows the creator to opt in" do
-          visit settings_payments_path
+        expect(page).to have_text("Backtaxes collection")
 
-          expect(page).to have_text("Backtaxes collection")
+        click_on "Opt-in to backtaxes collection"
+        fill_in "Type your full name to opt-in", with: "Chuck"
+        click_on "Save and opt-in"
 
-          click_on "Opt-in to backtaxes collection"
-          fill_in "Type your full name to opt-in", with: "Chuck Bartowski"
-          click_on "Save and opt-in"
+        expect(page).to have_text("Please enter your exact name.")
+        expect(@creator.backtax_agreements.count).to eq(0)
+      end
 
-          expect(page).to have_text("You've opted in to backtaxes collection.")
-          expect(@creator.backtax_agreements.count).to eq(1)
-          expect(@creator.backtax_agreements.first.signature).to eq("Chuck Bartowski")
-        end
+      it "allows the creator to open the opt-in modal even if their legal entity name is missing" do
+        @creator.fetch_or_build_user_compliance_info
+        allow_any_instance_of(UserComplianceInfo).to receive(:legal_entity_name).and_return(nil)
 
-        it "renders an error message when the creator provides an invalid name for a signature" do
-          visit settings_payments_path
+        visit settings_payments_path
 
-          expect(page).to have_text("Backtaxes collection")
+        click_on "Opt-in to backtaxes collection"
 
-          click_on "Opt-in to backtaxes collection"
-          fill_in "Type your full name to opt-in", with: "Chuck"
-          click_on "Save and opt-in"
-
-          expect(page).to have_text("Please enter your exact name.")
-          expect(@creator.backtax_agreements.count).to eq(0)
-        end
-
-        it "allows the creator to open the opt-in modal even if their legal entity name is missing" do
-          @creator.fetch_or_build_user_compliance_info
-          allow_any_instance_of(UserComplianceInfo).to receive(:legal_entity_name).and_return(nil)
-
-          visit settings_payments_path
-
-          click_on "Opt-in to backtaxes collection"
-
-          expect(page).to have_field("Type your full name to opt-in")
-        end
+        expect(page).to have_field("Type your full name to opt-in")
       end
     end
   end

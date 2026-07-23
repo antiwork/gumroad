@@ -136,6 +136,51 @@ describe ProfileSectionsPresenter do
     end
   end
 
+  describe "show_ratings_filter" do
+    let(:other_seller) { create(:user) }
+    let(:other_pundit_user) { SellerContext.new(user: other_seller, seller: other_seller) }
+    subject(:presenter) { described_class.new(seller: other_seller, query: other_seller.seller_profile_sections) }
+
+    def show_ratings_filter
+      presenter.props(request:, pundit_user: other_pundit_user, seller_custom_domain_url: nil)[:show_ratings_filter]
+    end
+
+    it "is true when the seller has an alive product with reviews displayed" do
+      create(:product, user: other_seller, display_product_reviews: true)
+      create(:product, user: other_seller, display_product_reviews: false)
+
+      expect(show_ratings_filter).to eq(true)
+    end
+
+    it "is false when all of the seller's products have reviews display disabled" do
+      create(:product, user: other_seller, display_product_reviews: false)
+
+      expect(show_ratings_filter).to eq(false)
+    end
+
+    it "is false when the seller's only reviews-enabled product is deleted" do
+      create(:product, user: other_seller, display_product_reviews: true, deleted_at: Time.current)
+
+      expect(show_ratings_filter).to eq(false)
+    end
+
+    it "is false when the seller has no products" do
+      expect(show_ratings_filter).to eq(false)
+    end
+
+    it "computes the boolean in SQL without loading the seller's products into Ruby" do
+      create_list(:product, 3, user: other_seller, display_product_reviews: true)
+
+      # The flag scope must agree with the Ruby predicate, and it must be
+      # expressed as a SQL bit test on links.flags (bit 17 => 2^16 = 65536)
+      # rather than materializing rows and filtering in Ruby.
+      expect(other_seller.links.alive.display_product_reviews.exists?)
+        .to eq(other_seller.links.alive.any?(&:display_product_reviews?))
+      expect(other_seller.links.alive.display_product_reviews.to_sql)
+        .to include("`flags` & 65536")
+    end
+  end
+
   describe "sold-out product filtering" do
     let!(:sold_out_product) { create(:product, user: seller, tags:, name: "Sold Out Product", hide_sold_out_variants: true, max_purchase_count: 0) }
     let!(:in_stock_product) { create(:product, user: seller, tags:, name: "In Stock Product", hide_sold_out_variants: true, max_purchase_count: 5) }

@@ -344,14 +344,6 @@ describe Api::V2::LinksController do
         end
       end
 
-      it "rejects commission when commissions feature flag is off" do
-        post @action, params: @params.merge(native_type: "commission")
-
-        expect(response).to be_successful
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["message"]).to include("do not have access")
-      end
-
       it "rejects subscription_duration for non-membership products" do
         post @action, params: @params.merge(subscription_duration: "monthly")
 

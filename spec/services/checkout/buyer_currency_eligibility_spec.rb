@@ -84,14 +84,23 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
-  it "falls back without an FX-quote round trip when a settlement-currency mismatch was recorded for the account" do
+  it "falls back without an FX-quote round trip when a settlement-currency mismatch was recorded for the buyer's currency" do
     # The stored currency still says usd for accounts with Stripe multi-currency
     # settlement — the recorded marker from a previously rejected FX quote is what tells
     # checkout the quote call is doomed (issue #6011).
-    merchant_account.record_settlement_currency_mismatch!
+    merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
 
     expect(decision).not_to be_eligible
     expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
+  end
+
+  it "stays eligible when the recorded mismatch is for a different currency" do
+    # Stripe settlement is configured per currency (gumroad-private#933, 2026-07-22): a
+    # EUR mismatch must not suppress quoting for this CAD buyer.
+    merchant_account.record_settlement_currency_mismatch!("eur")
+
+    expect(decision).to be_eligible
+    expect(decision.fallback_reason).to be_nil
   end
 
   it "regains eligibility once a recorded settlement-currency mismatch expires" do
@@ -299,6 +308,20 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(bancontact_decision.currency).to eq(Currency::EUR)
     end
 
+    it "allows UPI in INR" do
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision).to be_eligible
+      expect(upi_decision.currency).to eq(Currency::INR)
+    end
+
     it "does not depend on GeoIP buyer currency detection" do
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_raise("GeoIP must not be consulted in method-forced mode")
 
@@ -393,6 +416,14 @@ describe Checkout::BuyerCurrencyEligibility do
 
       expect(bancontact_decision).not_to be_eligible
       expect(bancontact_decision.fallback_reason).to eq(:method_not_launched)
+    end
+
+    it "does not let the UPI launch flag launch EUR methods in live mode" do
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      Feature.activate_user(:checkout_local_method_upi, seller)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:method_not_launched)
     end
 
     it "allows a card token from a forced-currency element in live mode when a method forcing that currency is launched" do

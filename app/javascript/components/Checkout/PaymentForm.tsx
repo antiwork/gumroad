@@ -17,6 +17,7 @@ import * as React from "react";
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
 import {
   createPaymentElementConfirmationToken,
+  isWalletPaymentElementType,
   preparePaymentRequestPaymentMethodData,
 } from "$app/data/card_payment_method_data";
 import {
@@ -29,7 +30,6 @@ import {
 import { createBillingAgreement, createBillingAgreementToken } from "$app/data/paypal";
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { assert, assertDefined } from "$app/utils/assert";
-import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
 import { classNames } from "$app/utils/classNames";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
@@ -39,6 +39,7 @@ import { persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedE
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
+import { resolveHeldWalletPayment, type HeldWalletPayment } from "$app/components/Checkout/heldWalletPayment";
 import {
   addressFields,
   canUseStripePaymentElement,
@@ -58,7 +59,9 @@ import {
   usePayLabel,
   useState,
 } from "$app/components/Checkout/payment";
+import { getPaymentElementApplePayOption } from "$app/components/Checkout/paymentElementApplePayOption";
 import { PaymentElementController, PaymentElementInput } from "$app/components/Checkout/PaymentElementInput";
+import { applyWalletBillingAddressToCheckout } from "$app/components/Checkout/walletBillingAddress";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
@@ -567,6 +570,10 @@ const CustomerDetails = ({ className }: { className?: string }) => {
   );
 };
 
+// The shared wallet billing-address tax-location logic lives in walletBillingAddress.ts —
+// both wallet surfaces (Payment Request Button and Payment Element wallets) must go through
+// applyWalletBillingAddressToCheckout so the tax-critical rules can never drift between them.
+
 const PayButton = ({
   className,
   isTestPurchase,
@@ -609,8 +616,27 @@ const PayButton = ({
 
 const CreditCardContent = ({
   onPaymentElementReadyChange,
+  walletClickSubmitRef,
+  flatPaymentMethodsList = false,
+  paymentMethodsAppendix,
 }: {
   onPaymentElementReadyChange?: ((ready: boolean) => void) | undefined;
+  // Set by this component to a function the card Pay button calls SYNCHRONOUSLY in its click
+  // handler. Safari only opens the Apple Pay sheet inside a user-activation window, and Stripe's
+  // deferred flow requires elements.submit() to run directly in the pay click for wallet
+  // payments (the sheet itself opens later, at createPaymentMethod/createConfirmationToken).
+  // Checkout reaches tokenization through async effects several ticks after the click, so the
+  // click handler triggers the submit here and tokenization reuses the in-flight promise.
+  walletClickSubmitRef?: React.MutableRefObject<(() => void) | null> | undefined;
+  // The payment_element_wallets flat layout (see PaymentMethodsSection): this component stays
+  // mounted even while PayPal is checkout's selected payment method (the element's accordion IS
+  // the payment-method list, and unmounting it would wipe entered card details). Interacting
+  // with the element (focusing a field or picking one of its rows) re-selects the card/wallet
+  // lane, and the save-card checkbox only shows while that lane is selected.
+  flatPaymentMethodsList?: boolean;
+  // Rendered directly below the Payment Element in the flat layout — the PayPal row, styled to
+  // read as one more accordion item so Card / Apple Pay / PayPal form a single flat list.
+  paymentMethodsAppendix?: React.ReactNode;
 }) => {
   const [state, dispatch] = useState();
   const fail = useFail();
@@ -630,6 +656,24 @@ const CreditCardContent = ({
   }, [dispatch, willSaveCard]);
 
   const [cardError, setCardError] = React.useState(false);
+
+  // The in-flight elements.submit() started synchronously by the pay-button click for a wallet
+  // payment (see walletClickSubmitRef above). Consumed (and cleared) by the tokenization
+  // effects below so Stripe keeps Safari's user-activation window for the Apple Pay sheet.
+  const pendingWalletSubmitRef = React.useRef<ReturnType<StripeElements["submit"]> | null>(null);
+  // The Payment Element's change event reports which payment-method row the buyer selected
+  // (`value.type` — "card", "apple_pay", "google_pay", ...). We remember it in a ref so that at
+  // submit time tokenization knows whether a wallet is paying — wallet submissions must keep the
+  // wallet sheet's own billing details instead of the checkout form's (see
+  // card_payment_method_data.ts). A ref (not state) because it's only read inside the submit
+  // effect and shouldn't cause re-renders. Defaults to "card": with wallets disabled the element
+  // only ever shows the card form.
+  const paymentElementTypeRef = React.useRef("card");
+  // A tokenized wallet payment held back because the wallet's billing address changed checkout's
+  // tax location (see the submit effect below). A ref, not state: it's produced inside the async
+  // submit effect and consumed by the resolution effect — it never drives rendering itself (the
+  // resolution effect re-runs on the surcharges/status changes that decide its fate).
+  const heldWalletPaymentRef = React.useRef<HeldWalletPayment<PurchasePaymentMethod> | null>(null);
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
@@ -637,6 +681,38 @@ const CreditCardContent = ({
     usesPaymentElement && state.checkoutPayment.integration !== "card_element"
       ? state.checkoutPayment.elements_options
       : null;
+
+  // When the Payment Element renders Apple Pay, describe the cart's recurring agreement on the
+  // sheet so Apple issues a device-independent merchant token (MPAN) — the exact same declaration
+  // the Payment Request Button path builds below (getApplePayOption in useStripePaymentRequest),
+  // via the same shared builder, so the two wallet surfaces can't drift. Applies to both element
+  // modes the server-confirm lane uses: "payment" (subscriptions — regular recurring billing) and
+  // "setup" (free trials / preorders — the builder emits the zero-amount trialBilling line there).
+  // The client-confirm lane never gets a declaration: Checkout::PaymentMethodResolver only routes
+  // one-time, non-recurring carts to it, so there is never a recurring agreement to declare.
+  //
+  // The builder computes the end date from "now", so it returns a fresh object every call; the
+  // useMemo below keys on the declaration's content (end-date excluded, same reasoning as the
+  // PRB's applePayRecurringDeclarationKey) so the options object keeps its identity between
+  // renders and react-stripe-js only pushes an element.update() when the declaration really
+  // changed — e.g. the cart flips between recurring-eligible and not, or the renewal price moves.
+  const paymentElementApplePayOption =
+    state.checkoutPayment.integration === "payment_element"
+      ? getPaymentElementApplePayOption({
+          products: state.products,
+          managementURL: Routes.library_url(),
+          requestApplePayMerchantTokens: state.checkoutPayment.request_apple_pay_merchant_tokens,
+          paymentElementWallets: state.checkoutPayment.payment_element_wallets,
+        })
+      : undefined;
+  const paymentElementApplePayOptionKey = JSON.stringify(paymentElementApplePayOption ?? null, (key, value: unknown) =>
+    key === "recurringPaymentEndDate" ? undefined : value,
+  );
+  const memoizedPaymentElementApplePayOption = React.useMemo(
+    () => paymentElementApplePayOption,
+    // Intentionally keyed on the serialized content instead of the object, see the comment above.
+    [paymentElementApplePayOptionKey],
+  );
   const stripePaymentElementAmount = getStripePaymentElementAmount(state);
   // The element's mount currency — the FX quote's currency on the buyer-currency presentment
   // lane (stripePaymentElementAmount then carries the quote's local-currency total), canonical
@@ -645,12 +721,70 @@ const CreditCardContent = ({
   const stripePaymentElementMountCurrency = getStripePaymentElementMountCurrency(state);
   const handlePaymentElementReady = React.useCallback((controller: PaymentElementController | null) => {
     paymentElementRef.current = controller;
+    // A fresh (re)mounted element always starts on the card form, but the ref outlives element
+    // remounts (mode/currency switches, toggling a saved card). Without this reset, a buyer who
+    // selected Apple Pay before a remount would still be recorded as paying by wallet even
+    // though the remounted element is showing the card form — and the card submission would then
+    // skip the checkout-form billing details it depends on. Reset to the safe default and let
+    // the element's change event re-establish any wallet selection.
+    paymentElementTypeRef.current = "card";
     setPaymentElementReady(controller !== null);
   }, []);
 
   React.useEffect(() => {
     if (!usesPaymentElement) handlePaymentElementReady(null);
   }, [handlePaymentElementReady, usesPaymentElement]);
+
+  // Flat layout only: the buyer touched the Payment Element (focused a field or picked one of
+  // its rows) while PayPal was checkout's selected payment method — that interaction IS the
+  // "select the card/wallet lane" gesture in a single flat list, so switch back. Clicks inside
+  // the element's iframe never reach the surrounding DOM, so the element's own focus/change
+  // events are the only reliable signal.
+  const reclaimCardLane = React.useCallback(() => {
+    if (!flatPaymentMethodsList) return;
+    if (state.paymentMethod !== "paypal" || isProcessing(state)) return;
+    dispatch({ type: "set-value", paymentMethod: "card" });
+  }, [flatPaymentMethodsList, state, dispatch]);
+
+  // Flat layout only: the whole list is one payment-method selector, so only one row may be
+  // expanded at a time. Picking PayPal collapses the element's expanded accordion row (Card /
+  // Apple Pay / Google Pay), exactly like picking one of the element's own rows collapses its
+  // siblings. Stripe's collapse() deselects the element's payment method without unmounting it,
+  // so entered card details survive; interacting with the element again re-expands the clicked
+  // row (and reclaimCardLane above switches checkout back to the card/wallet lane).
+  // paymentElementReady is a dependency so a remounted element (currency/mode switch while
+  // PayPal is selected) gets re-collapsed too — a fresh mount always renders expanded.
+  const paymentMethodIsPayPal = state.paymentMethod === "paypal";
+  React.useEffect(() => {
+    if (!flatPaymentMethodsList || !paymentMethodIsPayPal || !paymentElementReady) return;
+    paymentElementRef.current?.elements.getElement("payment")?.collapse();
+  }, [flatPaymentMethodsList, paymentMethodIsPayPal, paymentElementReady]);
+
+  // Expose the synchronous click-time wallet submit to the pay button (see walletClickSubmitRef
+  // in the props above). Runs in the click handler itself: when a wallet row is selected on a
+  // mounted element, kick off elements.submit() immediately so Stripe captures the click's
+  // user-activation for opening the Apple Pay sheet later in the flow. Card submissions are
+  // unaffected (tokenization keeps calling elements.submit() itself).
+  React.useEffect(() => {
+    if (!walletClickSubmitRef) return;
+    walletClickSubmitRef.current = () => {
+      // Every pay click starts from a clean slate. The ref is normally consumed (and cleared) by
+      // the tokenization effect once status reaches "starting", but a wallet click that fails
+      // checkout validation never gets there — without this reset, that stale wallet submit
+      // would be reused by the NEXT attempt (even a card one), skipping the current element's
+      // submit/validation and coupling the new attempt to the old wallet sheet.
+      pendingWalletSubmitRef.current = null;
+      const controller = paymentElementRef.current;
+      if (!controller || !isWalletPaymentElementType(paymentElementTypeRef.current)) return;
+      pendingWalletSubmitRef.current = controller.elements.submit();
+      // Swallow here only to avoid an unhandled-rejection warning; tokenization awaits this same
+      // promise and handles the error for real.
+      pendingWalletSubmitRef.current.catch(() => {});
+    };
+    return () => {
+      walletClickSubmitRef.current = null;
+    };
+  }, [walletClickSubmitRef]);
 
   React.useEffect(() => {
     onPaymentElementReadyChange?.(
@@ -679,6 +813,8 @@ const CreditCardContent = ({
           paymentElementRef.current,
           "`paymentElementRef.current` should be defined when confirming via the Payment Element",
         );
+        const pendingSubmit = pendingWalletSubmitRef.current;
+        pendingWalletSubmitRef.current = null;
         const tokenResult = await createPaymentElementConfirmationToken({
           stripe: controller.stripe,
           elements: controller.elements,
@@ -689,26 +825,53 @@ const CreditCardContent = ({
           state: state.state,
           city: state.city,
           address: state.address,
+          walletSelected: isWalletPaymentElementType(paymentElementTypeRef.current),
+          pendingSubmit,
         });
         if (tokenResult.status === "error") {
           setCardError(true);
           return dispatch({ type: "cancel" });
         }
-        return dispatch({
-          type: "set-payment-method",
-          paymentMethod: {
-            type: "payment-element-client-confirm",
-            confirmationTokenId: tokenResult.confirmationTokenId,
-            cardCountry: tokenResult.cardCountry,
-            mountCurrency: stripePaymentElementConfig.currency,
-          },
-        });
+        // A wallet paid through the Payment Element: adopt the wallet sheet's billing address as
+        // checkout's tax location (same shared rules as the Payment Request Button path) before
+        // the purchase params are posted. Skipped for shippable carts, where the shipping
+        // address governs the tax location — matching the Payment Request Button behavior.
+        const clientConfirmPaymentMethod: PurchasePaymentMethod = {
+          type: "payment-element-client-confirm",
+          confirmationTokenId: tokenResult.confirmationTokenId,
+          cardCountry: tokenResult.cardCountry,
+          walletType: tokenResult.wallet?.type ?? null,
+          mountCurrency: stripePaymentElementConfig.currency,
+        };
+        if (tokenResult.wallet && !hasShipping(state)) {
+          const taxLocationChanged = applyWalletBillingAddressToCheckout(
+            tokenResult.wallet.billingAddress,
+            state,
+            dispatch,
+          );
+          // The wallet's billing address changed the tax location, invalidating the surcharges
+          // quote — the server may now calculate a different total than the wallet sheet showed.
+          // Hold the tokenized payment instead of submitting; the held-payment effect below
+          // resumes it once surcharges reload, and only if the total the buyer approved still
+          // matches. `state` here is the pre-change snapshot, so the recorded approved amount is
+          // exactly what the wallet sheet displayed.
+          if (taxLocationChanged) {
+            heldWalletPaymentRef.current = {
+              paymentMethod: clientConfirmPaymentMethod,
+              approvedAmount: getStripePaymentElementAmount(state),
+            };
+            return;
+          }
+        }
+        return dispatch({ type: "set-payment-method", paymentMethod: clientConfirmPaymentMethod });
       }
 
       if (!useSavedCard && !useStripePaymentElement && !cardElementRef.current) {
         setCardError(true);
         return dispatch({ type: "cancel" });
       }
+      const serverConfirmPendingSubmit = pendingWalletSubmitRef.current;
+      pendingWalletSubmitRef.current = null;
       const selectedPaymentMethod: SelectedPaymentMethod = useSavedCard
         ? { type: "saved" }
         : useStripePaymentElement
@@ -726,6 +889,8 @@ const CreditCardContent = ({
               state: state.state,
               city: state.city,
               address: state.address,
+              walletSelected: isWalletPaymentElementType(paymentElementTypeRef.current),
+              pendingSubmit: serverConfirmPendingSubmit,
             }
           : {
               type: "card",
@@ -751,12 +916,68 @@ const CreditCardContent = ({
         setCardError(true);
         return dispatch({ type: "cancel" });
       }
+      // A wallet paid through the Payment Element (server-confirm lane): adopt the wallet
+      // sheet's billing address as checkout's tax location (same shared rules as the Payment
+      // Request Button path) before the purchase params are posted. Skipped for shippable
+      // carts, where the shipping address governs the tax location.
+      if (
+        paymentMethod.type === "new" &&
+        paymentMethod.cardParamsResult.type === "cc" &&
+        paymentMethod.cardParamsResult.cardParams.wallet &&
+        !hasShipping(state)
+      ) {
+        const taxLocationChanged = applyWalletBillingAddressToCheckout(
+          paymentMethod.cardParamsResult.cardParams.wallet.billingAddress,
+          state,
+          dispatch,
+        );
+        // Same held-submission rule as the client-confirm wallet lane above: a tax-location
+        // change invalidates the surcharges quote, so hold the tokenized payment until the
+        // reload confirms the total still matches what the wallet sheet showed the buyer.
+        if (taxLocationChanged) {
+          heldWalletPaymentRef.current = {
+            paymentMethod,
+            approvedAmount: getStripePaymentElementAmount(state),
+          };
+          return;
+        }
+      }
       dispatch({ type: "set-payment-method", paymentMethod });
     })().catch(fail);
   }, [paymentElementReady, state.status.type, usesPaymentElement]);
 
+  // Resolves a held wallet payment as checkout state settles (see the submit effect above for
+  // why one exists). Re-runs whenever surcharges or the submission status move: while the
+  // reload for the wallet's tax location is in flight, keep waiting; once it lands, submit the
+  // held payment only if the recalculated total still matches the one the buyer approved on the
+  // wallet sheet. On a mismatch the buyer must re-confirm — the Payment Element's amount has
+  // already been updated to the recalculated total by the amount effect in
+  // PaymentElementInput.tsx (it tracks getStripePaymentElementAmount), so the next wallet sheet
+  // shows the new total. Charging a total the buyer never saw is never an option.
+  React.useEffect(() => {
+    const held = heldWalletPaymentRef.current;
+    if (!held) return;
+    const resolution = resolveHeldWalletPayment(state, held);
+    if (resolution.type === "wait") return;
+    heldWalletPaymentRef.current = null;
+    if (resolution.type === "continue") {
+      dispatch({ type: "set-payment-method", paymentMethod: resolution.paymentMethod });
+    } else if (resolution.type === "re-confirm") {
+      dispatch({ type: "cancel" });
+      showAlert(
+        "Your total changed after applying your payment method's billing address. Please review the updated total and try again.",
+        "warning",
+      );
+    }
+    // "abort": the submission was cancelled or failed elsewhere while holding — just drop it.
+  }, [state.surcharges, state.status.type]);
+
   return (
-    <div className="flex flex-col gap-4">
+    // In the flat wallets layout a click anywhere in the card area (the saved-card box, the
+    // element's surrounding padding) re-selects the card/wallet lane from PayPal. Focus/change
+    // events inside the element's iframe are handled separately (see reclaimCardLane); the
+    // PayPal row itself stops propagation so selecting it doesn't immediately bounce back.
+    <div className="flex flex-col gap-4" onClick={flatPaymentMethodsList ? reclaimCardLane : undefined}>
       {stripePaymentElementConfig && !useSavedCard ? (
         <div className="flex flex-col gap-4">
           {state.savedCreditCard && paymentElementReady ? (
@@ -773,13 +994,25 @@ const CreditCardContent = ({
             amount={stripePaymentElementAmount}
             mountCurrency={stripePaymentElementMountCurrency}
             elementsOptions={stripePaymentElementConfig}
+            walletsEnabled={state.checkoutPayment.payment_element_wallets}
+            applePayOption={memoizedPaymentElementApplePayOption}
             disabled={isProcessing(state)}
             defaultEmail={state.email}
             defaultName={state.fullName}
             onReady={handlePaymentElementReady}
             invalid={cardError}
+            onFocus={reclaimCardLane}
             onChange={(evt) => {
+              paymentElementTypeRef.current = evt.value.type;
               if (evt.complete) setCardError(false);
+              // A change means the buyer is interacting with the element — reclaim the
+              // card/wallet lane from PayPal. Ignore the empty card-form event a freshly
+              // (re)mounted element can emit without any interaction, so a background remount
+              // (e.g. a currency switch) can't silently steal the buyer's PayPal selection.
+              // Also ignore collapsed events: selecting PayPal programmatically collapses the
+              // element (see the collapse effect above), and that collapse's own change event
+              // must not bounce the selection straight back to card.
+              if (!evt.collapsed && (!evt.empty || isWalletPaymentElementType(evt.value.type))) reclaimCardLane();
             }}
           />
         </div>
@@ -795,7 +1028,8 @@ const CreditCardContent = ({
           enableLink
         />
       )}
-      {!useSavedCard && isLoggedIn ? (
+      {paymentMethodsAppendix}
+      {!useSavedCard && isLoggedIn && (!flatPaymentMethodsList || state.paymentMethod === "card") ? (
         <Label className="flex items-center gap-2">
           <Checkbox
             disabled={isProcessing(state)}
@@ -812,9 +1046,13 @@ const CreditCardContent = ({
 const CreditCardPayButtonContent = ({
   disabled = false,
   isTestPurchase,
+  onPayClick,
 }: {
   disabled?: boolean;
   isTestPurchase?: boolean;
+  // Called synchronously in the Pay click, before the submission pipeline starts — used to
+  // capture the click's user-activation for wallet payments (see walletClickSubmitRef).
+  onPayClick?: (() => void) | undefined;
 }) => {
   const [state, dispatch] = useState();
   const payLabel = usePayLabel();
@@ -823,7 +1061,10 @@ const CreditCardPayButtonContent = ({
     <div className="flex flex-col gap-4">
       <Button
         color="primary"
-        onClick={() => dispatch({ type: "offer" })}
+        onClick={() => {
+          onPayClick?.();
+          dispatch({ type: "offer" });
+        }}
         disabled={disabled || isSubmitDisabled(state)}
       >
         {payLabel}
@@ -1144,42 +1385,10 @@ const useStripePaymentRequest = (disabled: boolean) => {
         const state = stateRef.current;
         if (hasShipping(state) && e.shippingAddress) dispatch({ type: "set-value", ...getAddress(e.shippingAddress) });
         if (!hasShipping(state) && e.paymentMethod.billing_details.address?.country) {
-          // Honor the wallet's billing country for ALL countries, not just US. Checkout state
-          // defaults `country` to "US" when the account has no country and geo-detection fails,
-          // so without this a non-US Apple Pay / Google Pay buyer submits taxCountryElection "US"
-          // with an empty ZIP and the server's US-only ZIP validation rejects the purchase with
-          // "You entered a ZIP Code that doesn't exist within your country" — an error the buyer
-          // can't fix because the wallet flow never shows a ZIP field. The billing state/province
-          // is copied too because Canadian tax lookup requires it alongside the country. When the
-          // wallet omits a state we clear the field rather than keep the old value, so a stale
-          // province from a previous selection can't pair with the new country and produce a
-          // wrong tax calculation. For Canada specifically, some wallets share only the postal
-          // code without the province — since every Canadian postal code's first letter maps to
-          // exactly one province or territory, we derive the province from the postal code so
-          // Canadian tax can still be calculated (the wallet flow has no province field the
-          // buyer could fill in manually). If the wallet gives neither a state nor a usable
-          // Canadian postal code, we still must not submit a blank province: Canadian tax is only
-          // calculated when a province is present, so "CA" with an empty province would silently
-          // collect no tax, and the wallet flow gives the buyer no province field to correct it.
-          // In that case we keep the existing checkout state when the wallet's billing country
-          // matches the country checkout already had (it came from the buyer's saved address or
-          // geo-detection for that same country, so it isn't stale). As a true last resort for
-          // Canada — the wallet gave no province, no usable postal code, and checkout had no
-          // prior Canadian province — we elect Alberta. That choice is deliberate, not an
-          // arbitrary list default: Alberta charges only the 5% federal GST, which applies to
-          // buyers in every province and territory. Electing it when the real province is
-          // unknowable means we always collect the federal portion the buyer owes regardless of
-          // where they live, and we never charge them another province's higher HST/PST or remit
-          // provincial tax to a jurisdiction they may not be in.
-          const billingAddress = e.paymentMethod.billing_details.address;
-          const billingState =
-            billingAddress.state ||
-            (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.postal_code) : null) ||
-            (billingAddress.country === state.country ? state.state : null) ||
-            (billingAddress.country === "CA" ? GST_ONLY_FALLBACK_PROVINCE : null);
-          dispatch({ type: "set-value", country: billingAddress.country });
-          dispatch({ type: "set-value", zipCode: billingAddress.postal_code || undefined });
-          dispatch({ type: "set-value", state: billingState ?? "" });
+          // Tax-critical: adopt the wallet sheet's billing address as checkout's tax location.
+          // The rules (and the reasoning behind them) live in applyWalletBillingAddressToCheckout,
+          // which the Payment Element wallet path shares so the two surfaces can't drift.
+          applyWalletBillingAddressToCheckout(e.paymentMethod.billing_details.address, state, dispatch);
         }
         dispatch({ type: "set-value", fullName: e.payerName, ...(state.email ? {} : { email: e.payerEmail }) });
         setPaymentMethodEvent(e);
@@ -1306,6 +1515,45 @@ const StripePaymentRequestPayButton = ({ canPay }: { canPay: boolean }) => {
   return <StripePaymentRequestContent />;
 };
 
+// PayPal rendered as one more row of the flat payment-methods list used when the Payment
+// Element shows wallets (payment_element_wallets — see PaymentMethodsSection). The element's
+// accordion already lists Card / Apple Pay / Google Pay as bordered rounded rows (the
+// ".AccordionItem" appearance rule in PaymentElementInput.tsx), so this row copies that look —
+// same border, radius, and padding — and sits directly below the element, making the whole
+// list read as one selector: Card / wallets / PayPal. The element's rows never change border
+// color when selected (selection shows as the row expanding), so this row keeps the plain
+// border too — selecting PayPal collapses the element's rows (see the collapse effect in
+// CreditCardContent) and surfaces the PayPal button, which is the selection cue.
+const FlatPayPalRow = () => {
+  const [state, dispatch] = useState();
+  const selected = state.paymentMethod === "paypal";
+  const disabled = !selected && isProcessing(state);
+
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      disabled={disabled}
+      className={classNames(
+        // all-unset resets box-sizing to content-box, which would make w-full + padding + border
+        // overflow the parent — box-border restores the border-box sizing every other row uses.
+        "box-border flex w-full cursor-pointer items-center gap-3 rounded border border-border p-4 text-left all-unset",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+      onClick={(e) => {
+        // The surrounding CreditCardContent container treats clicks as "re-select the
+        // card/wallet lane" in this layout; picking PayPal must not bounce straight back.
+        e.stopPropagation();
+        if (state.paymentMethod !== "paypal") dispatch({ type: "set-value", paymentMethod: "paypal" });
+      }}
+    >
+      <Paypal pack="brands" className="size-5" />
+      <span className="font-medium">PayPal</span>
+    </button>
+  );
+};
+
 const PaymentMethodsSection = ({
   isPayPalAvailable,
   isTestPurchase,
@@ -1314,20 +1562,65 @@ const PaymentMethodsSection = ({
   isTestPurchase: boolean;
 }) => {
   const [state] = useState();
-  const { canPay, isGooglePay } = useStripePaymentRequest(state.checkoutPayment.disable_wallets);
+  // The Payment Request Button is disabled when the Payment Element renders wallets itself
+  // (payment_element_wallets — see antiwork/gumroad#5768): showing both would give the buyer two
+  // Apple Pay buttons. Carts on the CardElement fallback lane never mount a Payment Element, and
+  // the presenter always sends payment_element_wallets: false for them, so they keep the button.
+  const { canPay, isGooglePay } = useStripePaymentRequest(
+    state.checkoutPayment.disable_wallets || state.checkoutPayment.payment_element_wallets,
+  );
   const [paymentElementReady, setPaymentElementReady] = React.useState(false);
   const handlePaymentElementReadyChange = React.useCallback((ready: boolean) => setPaymentElementReady(ready), []);
+  // Bridges the card Pay button's click to CreditCardContent's click-time wallet submit — see
+  // walletClickSubmitRef on CreditCardContent for why wallet payments must submit the element
+  // synchronously in the click.
+  const walletClickSubmitRef = React.useRef<(() => void) | null>(null);
+  const handleCardPayClick = React.useCallback(() => walletClickSubmitRef.current?.(), []);
 
   const hasMultiplePaymentMethods = isPayPalAvailable || canPay;
   const usesPaymentElement = canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state);
   const cardPayDisabled = usesPaymentElement && !paymentElementReady;
 
+  // Flat payment-methods list (payment_element_wallets): the element's accordion IS the
+  // payment-method selector — Card and the wallets render as its rows — so the outer "Card"
+  // radio row is dropped entirely and PayPal is appended as one more matching row below the
+  // element (see FlatPayPalRow). No nesting, no duplicate "Card". The element stays mounted
+  // while PayPal is selected (unmounting would wipe entered card details); interacting with it
+  // re-selects the card/wallet lane.
+  if (usesPaymentElement && state.checkoutPayment.payment_element_wallets) {
+    return (
+      <>
+        <CreditCardContent
+          onPaymentElementReadyChange={handlePaymentElementReadyChange}
+          walletClickSubmitRef={walletClickSubmitRef}
+          flatPaymentMethodsList
+          paymentMethodsAppendix={isPayPalAvailable ? <FlatPayPalRow /> : null}
+        />
+        {state.paymentMethod === "paypal" ? <PayPalContent /> : null}
+        {state.paymentMethod === "card" ? (
+          <CreditCardPayButtonContent
+            disabled={cardPayDisabled}
+            isTestPurchase={isTestPurchase}
+            onPayClick={handleCardPayClick}
+          />
+        ) : null}
+      </>
+    );
+  }
+
   if (usesPaymentElement && !hasMultiplePaymentMethods) {
     return (
       <>
-        <CreditCardContent onPaymentElementReadyChange={handlePaymentElementReadyChange} />
+        <CreditCardContent
+          onPaymentElementReadyChange={handlePaymentElementReadyChange}
+          walletClickSubmitRef={walletClickSubmitRef}
+        />
         {state.paymentMethod === "card" ? (
-          <CreditCardPayButtonContent disabled={cardPayDisabled} isTestPurchase={isTestPurchase} />
+          <CreditCardPayButtonContent
+            disabled={cardPayDisabled}
+            isTestPurchase={isTestPurchase}
+            onPayClick={handleCardPayClick}
+          />
         ) : null}
       </>
     );
@@ -1346,7 +1639,10 @@ const PaymentMethodsSection = ({
         )}
         {state.paymentMethod === "card" ? (
           <div className={hasMultiplePaymentMethods ? "bg-body p-4 pt-0" : "bg-body px-4 pb-4"}>
-            <CreditCardContent onPaymentElementReadyChange={handlePaymentElementReadyChange} />
+            <CreditCardContent
+              onPaymentElementReadyChange={handlePaymentElementReadyChange}
+              walletClickSubmitRef={walletClickSubmitRef}
+            />
           </div>
         ) : null}
         {isPayPalAvailable ? (
@@ -1362,7 +1658,11 @@ const PaymentMethodsSection = ({
       </div>
       {state.paymentMethod === "paypal" ? <PayPalContent /> : null}
       {state.paymentMethod === "card" ? (
-        <CreditCardPayButtonContent disabled={cardPayDisabled} isTestPurchase={isTestPurchase} />
+        <CreditCardPayButtonContent
+          disabled={cardPayDisabled}
+          isTestPurchase={isTestPurchase}
+          onPayClick={handleCardPayClick}
+        />
       ) : null}
       <StripePaymentRequestPayButton canPay={canPay} />
     </>

@@ -10,7 +10,6 @@ describe TaxCenterController, type: :controller, inertia: true do
 
   before do
     create(:user_compliance_info, user: seller)
-    Feature.activate_user(:tax_center, seller)
   end
 
   describe "GET index" do
@@ -40,19 +39,6 @@ describe TaxCenterController, type: :controller, inertia: true do
 
       expect(response).to be_successful
       expect(inertia.props).to include(TaxCenterPresenter.new(seller:, year: 2023).props)
-    end
-
-    context "when tax_center feature is disabled" do
-      before do
-        Feature.deactivate_user(:tax_center, seller)
-      end
-
-      it "redirects to dashboard with alert" do
-        get :index
-
-        expect(response).to redirect_to(dashboard_path)
-        expect(flash[:alert]).to eq("Tax center is not enabled for your account.")
-      end
     end
 
     context "when seller is not from the US" do
@@ -222,9 +208,10 @@ describe TaxCenterController, type: :controller, inertia: true do
       end
     end
 
-    context "when tax_center feature is disabled" do
+    context "when seller is not from the US" do
       before do
-        Feature.deactivate_user(:tax_center, seller)
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_singapore, user: seller)
       end
 
       it "redirects to dashboard with alert" do
@@ -315,9 +302,10 @@ describe TaxCenterController, type: :controller, inertia: true do
       end
     end
 
-    context "when tax_center feature is disabled" do
+    context "when seller is not from the US" do
       before do
-        Feature.deactivate_user(:tax_center, seller)
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_singapore, user: seller)
       end
 
       it "redirects to dashboard with alert" do

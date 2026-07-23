@@ -39,7 +39,7 @@ describe ProductPresenter do
         {
           current_seller_currency_code: "usd",
           native_product_types: ["digital", "course", "ebook", "membership", "bundle"],
-          service_product_types: ["call", "coffee"],
+          service_product_types: ["commission", "call", "coffee"],
           release_at_date:,
           show_orientation_text: true,
           eligible_for_service_products: false,
@@ -57,7 +57,7 @@ describe ProductPresenter do
         {
           current_seller_currency_code: "usd",
           native_product_types: ["digital", "course", "ebook", "membership", "bundle"],
-          service_product_types: ["call", "coffee"],
+          service_product_types: ["commission", "call", "coffee"],
           release_at_date:,
           show_orientation_text: false,
           eligible_for_service_products: false,
@@ -65,14 +65,6 @@ describe ProductPresenter do
           ai_promo_dismissed: false,
         }
       )
-    end
-
-    context "commissions are enabled" do
-      before { Feature.activate_user(:commissions, existing_seller) }
-
-      it "includes commission in the native product types" do
-        expect(described_class.new_page_props(current_seller: existing_seller)[:service_product_types]).to include("commission")
-      end
     end
 
     context "physical products are enabled" do
@@ -175,7 +167,6 @@ describe ProductPresenter do
             },
             bundle_products: [],
             public_files: [],
-            audio_previews_enabled: false,
           },
           discount_code: nil,
           purchase: {
@@ -295,7 +286,7 @@ describe ProductPresenter do
     let!(:custom_domain) { create(:custom_domain, :with_product, product:) }
     let(:product_files) do
       product_file = product.product_files.first
-      [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
+      [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
     end
     let(:available_countries) { ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } } }
 
@@ -446,7 +437,6 @@ describe ProductPresenter do
             default_offer_code_id: nil,
             default_offer_code: nil,
             public_files: [],
-            audio_previews_enabled: false,
             community_chat_enabled: nil,
           },
           id: product.external_id,
@@ -727,7 +717,6 @@ describe ProductPresenter do
               default_offer_code_id: nil,
               default_offer_code: nil,
               public_files: [],
-              audio_previews_enabled: false,
               community_chat_enabled: nil,
             },
             id: membership.external_id,
@@ -944,7 +933,6 @@ describe ProductPresenter do
               default_offer_code_id: nil,
               default_offer_code: nil,
               public_files: [],
-              audio_previews_enabled: false,
               community_chat_enabled: nil,
             },
             id: new_product.external_id,
@@ -994,8 +982,6 @@ describe ProductPresenter do
       let!(:public_file3) { create(:public_file, :with_audio, deleted_at: 1.day.ago) }
 
       before do
-        Feature.activate_user(:audio_previews, product.user)
-
         public_file1.file.analyze
       end
 
@@ -1003,7 +989,6 @@ describe ProductPresenter do
         props = described_class.new(product:).edit_props[:product]
 
         expect(props[:public_files].sole).to eq(PublicFilePresenter.new(public_file: public_file1).props)
-        expect(props[:audio_previews_enabled]).to be(true)
       end
     end
 
@@ -1142,7 +1127,7 @@ describe ProductPresenter do
     let(:presenter) { described_class.new(product: product) }
     let(:product_files) do
       product_file = product.product_files.first
-      [{ attached_product_name: product.name,  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
+      [{ attached_product_name: product.name,  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
     end
 
     it "returns existing files" do

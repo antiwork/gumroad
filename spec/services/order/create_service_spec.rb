@@ -173,9 +173,23 @@ describe Order::CreateService, :vcr do
         expect(order.reload.purchases.size).to eq(5)
       end
 
-      it "records a wallet payment as a payment request" do
+      it "records a wallet payment through the Payment Element as a payment_element purchase" do
+        # A wallet PaymentMethod submitted by the Payment Element carries both the wallet marker
+        # and the element's source hint; it must be attributed to the element surface, not the
+        # Payment Request Button (antiwork/gumroad#5768).
         params[:wallet_type] = "apple_pay"
         params[:payment_details_source] = "payment_element"
+        params[:stripe_payment_method_id] = "pm_123"
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        expect(order.reload.purchases.map { _1.purchase_payment_flow.payment_details_source }.uniq).to eq(["payment_element"])
+      end
+
+      it "records a wallet payment without an element source hint as a payment request" do
+        # The Payment Request Button sends wallet_type with no payment_details_source param —
+        # that shape stays attributed to the button.
+        params[:wallet_type] = "apple_pay"
         params[:stripe_payment_method_id] = "pm_123"
 
         order, _ = Order::CreateService.new(params:).perform

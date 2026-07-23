@@ -92,6 +92,62 @@ describe StripeMerchantAccountManager do
       end
     end
 
+    context "when Stripe rejects the tax ID as a disallowed placeholder value" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "Invalid Tax ID. 123456789 is not an allowed value.", nil
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry (expected seller-input error) and re-raises" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "does not record a bank sync failure payout note" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+      end
+    end
+
+    context "when Stripe rejects the phone number" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            '"+15550001" is not a valid phone number', nil
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry (expected seller-input error) and re-raises" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "does not record a bank sync failure payout note" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+      end
+    end
+
     context "when Stripe rejects a Japanese address as unresolvable in its postal directory" do
       before do
         allow(Stripe::Account).to receive(:create).and_raise(
@@ -117,6 +173,46 @@ describe StripeMerchantAccountManager do
         end.to raise_error(Stripe::InvalidRequestError)
 
         expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+      end
+    end
+
+    context "when Stripe rejects a tax-ID param without the message shape" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "Invalid value provided", "individual[id_number]"
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+    end
+
+    context "when Stripe rejects a phone param without the message shape" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "Invalid value provided", "individual[phone]"
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
       end
     end
 
@@ -252,6 +348,37 @@ describe StripeMerchantAccountManager do
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_account_holder_name).with(user.id)
 
       expect(result).to eq(:invalid_account_holder_name)
+      expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
+    end
+  end
+
+  describe "platform-blocked account stays out of the retry loop" do
+    let(:zip_code) { "94107" }
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new(
+          "Gumroad has blocked payments on this account. If you believe this is in error, please reach out to the platform for assistance.",
+          nil
+        )
+      )
+    end
+
+    it "returns :account_blocked_by_platform without paging Sentry, emailing, or leaving a failure note" do
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+
+      expect(result).to eq(:account_blocked_by_platform)
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)).to be_empty
     end
   end

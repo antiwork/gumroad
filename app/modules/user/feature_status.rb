@@ -16,7 +16,12 @@ class User
     end
 
     def paypal_connect_allowed?
-      compliant? && sales_cents_total >= PaypalMerchantAccountManager::MIN_SALES_CENTS_REQ_FOR_PCP && has_completed_payouts?
+      # The only eligibility requirement (beyond country support, which
+      # `paypal_connect_enabled?` checks) is that the seller has set up how they
+      # receive payouts — a bank account, PayPal payout email, or a connected
+      # Stripe/PayPal account. Earlier gates (minimum sales, completed payouts,
+      # compliant status) were removed in #6127; see issue #6118.
+      has_payout_information?
     end
 
     def paypal_disconnect_allowed?
@@ -89,14 +94,6 @@ class User
       timezone_for_gumroad_day = gumroad_day_timezone.presence || timezone
       is_today_gumroad_day = Time.now.in_time_zone(timezone_for_gumroad_day).to_date == $redis.get(RedisKey.gumroad_day_date)&.to_date
       is_today_gumroad_day || Feature.active?(:waive_gumroad_fee_on_new_sales, self)
-    end
-
-    def product_level_support_emails_enabled?
-      Feature.active?(:product_level_support_emails, self)
-    end
-
-    def tax_center_enabled?
-      Feature.active?(:tax_center, self) && from_us?
     end
   end
 end

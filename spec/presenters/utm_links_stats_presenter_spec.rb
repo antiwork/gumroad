@@ -20,10 +20,6 @@ describe UtmLinksStatsPresenter do
   let!(:utm_link2_driven_sale2) { create(:utm_link_driven_sale, utm_link: utm_link2, purchase: test_purchase) }
   let!(:utm_link2_driven_sale3) { create(:utm_link_driven_sale, utm_link: utm_link2, purchase: failed_purchase) }
 
-  before do
-    Feature.activate_user(:utm_links, seller)
-  end
-
   describe "#props" do
     it "returns stats for the requested UTM link IDs" do
       props = described_class.new(seller:, utm_link_ids: [utm_link1.id, utm_link2.id, utm_link3.id, another_seller_utm_link.id]).props

@@ -307,5 +307,21 @@ describe Order do
         order.save
       end
     end
+
+    context "when the order contains only a gift-sender purchase" do
+      # A gift order's checkout line item is the sender's purchase, which can never
+      # be reviewed — but the recipient's linked purchase can, so the reminder is
+      # still scheduled (the job then resolves it to the recipient's purchase).
+      let(:product) { create(:product) }
+      let(:gift) { create(:gift, link: product) }
+      let(:gifter_purchase) { create(:purchase, :gift_sender, link: product, gift_given: gift) }
+      let!(:giftee_purchase) { create(:purchase, :gift_receiver, link: product, gift_received: gift) }
+
+      it "schedules a review reminder" do
+        expect(OrderReviewReminderJob).to receive(:perform_in).with(ProductReview::REVIEW_REMINDER_DELAY, order.id)
+        order.purchases << gifter_purchase
+        order.save
+      end
+    end
   end
 end

@@ -436,8 +436,6 @@ describe User, :vcr do
     let!(:product3) { create(:product, user:, support_email: "3@example.com") }
     let!(:product4) { create(:product, user:, support_email: nil) }
 
-    before { Feature.activate(:product_level_support_emails) }
-
     it "returns the user's product support emails" do
       result = user.product_level_support_emails
 
@@ -452,14 +450,6 @@ describe User, :vcr do
         }
       )
     end
-
-    context "when product_level_support_emails feature is disabled" do
-      before { Feature.deactivate(:product_level_support_emails) }
-
-      it "returns nil" do
-        expect(user.product_level_support_emails).to be_nil
-      end
-    end
   end
 
   describe "#update_product_level_support_emails!" do
@@ -467,10 +457,6 @@ describe User, :vcr do
     let!(:product1) { create(:product, user:, support_email: "old1@example.com") }
     let!(:product2) { create(:product, user:, support_email: "old2@example.com") }
     let!(:product3) { create(:product, user:, support_email: "old3@example.com") }
-
-    before do
-      Feature.activate(:product_level_support_emails)
-    end
 
     it "updates products support emails" do
       user.update_product_level_support_emails!(

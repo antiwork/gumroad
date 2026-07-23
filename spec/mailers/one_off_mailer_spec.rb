@@ -119,6 +119,19 @@ describe OneOffMailer do
       expect(mail.body.encoded).to include(installment.message)
     end
 
+    it "renders the message container with dir=auto so RTL-language content reads right-to-left" do
+      mail = described_class.email_using_installment(email:, installment_external_id:)
+      expect(mail.body.encoded).to include('<div class="rich-text" dir="auto">')
+    end
+
+    it "marks each top-level text block with dir=auto so mixed-language messages resolve direction per paragraph" do
+      installment.update!(message: "<p>English intro</p><p>שלום עולם</p>")
+      mail = described_class.email_using_installment(email:, installment_external_id:)
+
+      paragraphs = Nokogiri::HTML(mail.body.encoded).css("div.rich-text > p")
+      expect(paragraphs.map { |p| p["dir"] }).to eq(%w[auto auto])
+    end
+
     it "sets reply_to header if provided" do
       mail = described_class.email_using_installment(email:, subject:, installment_external_id:, reply_to:)
       expect(mail.reply_to).to include(ApplicationMailer::NOREPLY_EMAIL)

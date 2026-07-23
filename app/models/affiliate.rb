@@ -105,8 +105,13 @@ class Affiliate < ApplicationRecord
     type == GlobalAffiliate.name
   end
 
-  def total_cents_earned_formatted
-    formatted_dollar_amount(total_cents_earned, with_currency: affiliate_user.should_be_shown_currencies_always?)
+  # Accepts an optional pre-computed cents amount so callers that cache the
+  # raw sum (an expensive full-history aggregate) can still format it with
+  # the affiliate user's current currency-display preference on every call,
+  # instead of caching an already-formatted string that would go stale if
+  # that preference changes.
+  def total_cents_earned_formatted(cents = total_cents_earned)
+    formatted_dollar_amount(cents, with_currency: affiliate_user.should_be_shown_currencies_always?)
   end
 
   def total_cents_earned

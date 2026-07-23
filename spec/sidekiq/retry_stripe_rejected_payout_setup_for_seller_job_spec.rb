@@ -48,6 +48,18 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect(note.json_data["retry_count"]).to eq(1)
       expect(note.json_data["last_retried_at"]).to be_present
     end
+
+    it "abandons the retry loop when payments on the Stripe account are blocked at the platform level" do
+      expect(StripeMerchantAccountManager).to receive(:update_bank_account).and_return(:account_blocked_by_platform)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["abandoned_at"]).to be_present
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_ACCOUNT_BLOCKED)
+      expect(note.json_data["retry_count"]).to be_nil
+      expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::ACCOUNT_BLOCKED_NOTE)
+    end
   end
 
   describe "bank account remediation when the seller has no Stripe account yet" do

@@ -9,11 +9,15 @@ import { UserAgentProvider } from "$app/components/UserAgent";
 
 // ResponsiveContainer measures its DOM node, which has no size in a headless test
 // environment, so the chart would render nothing. Replace it with a passthrough that
-// hands the chart a fixed size, keeping everything else in recharts real.
+// hands the chart a fixed size, keeping everything else in recharts real. Tests can
+// shrink `containerWidth` to simulate a mobile viewport before rendering.
+let containerWidth = 800;
 vi.mock("recharts", async (importOriginal) => {
   const recharts = await importOriginal<typeof import("recharts")>();
   const ResponsiveContainer = React.forwardRef(({ children }: { children: React.ReactElement }, _ref) => (
-    <div style={{ width: 800, height: 400 }}>{React.cloneElement(children, { width: 800, height: 400 })}</div>
+    <div style={{ width: containerWidth, height: 400 }}>
+      {React.cloneElement(children, { width: containerWidth, height: 400 })}
+    </div>
   ));
   ResponsiveContainer.displayName = "ResponsiveContainer";
   return { ...recharts, ResponsiveContainer };
@@ -64,6 +68,28 @@ describe("SalesChart projection overlay", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    containerWidth = 800;
+  });
+
+  it("shrinks the projected dot below the desktop radius on a narrow (mobile) viewport", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-16T20:00:00Z"));
+
+    // A month of daily points on a 375px-wide chart gives each point a band of roughly
+    // 12px, so min(bandWidth / 7, 4) must come out well below the 4px desktop cap —
+    // this is the real mobile shape Jordi reported (30-day view on a phone).
+    containerWidth = 375;
+    const monthOfData = Array.from({ length: 26 }, (_, index) =>
+      dailyTotal(`July ${index + 1}`, 1_000 + index * 100),
+    ).concat(data);
+    const { container } = renderChart({ data: monthOfData });
+
+    const projectedDot = container.querySelector("[data-testid='chart-projected-dot']");
+    expect(projectedDot).not.toBeNull();
+    const radius = Number(projectedDot?.getAttribute("r"));
+    expect(radius).toBeGreaterThan(0);
+    expect(radius).toBeLessThan(4);
+    expectNoNaNAttributes(container);
   });
 
   it("renders one faint projected-total circle centered above today's bar, above today's booked total", () => {
@@ -105,6 +131,12 @@ describe("SalesChart projection overlay", () => {
     const lastDot = dots[dots.length - 1];
     expect(lastDot).toBeDefined();
     expect(Number(projectedDot?.getAttribute("cy"))).toBeLessThan(Number(lastDot?.getAttribute("cy")));
+
+    // The marker scales with the bar band (min(bandWidth / 7, 4)) so it stays subtle
+    // at narrow viewports instead of rendering at a fixed 4px that dwarfs the shrunken
+    // line dots on mobile.
+    const bandWidth = Number(todaysBar?.getAttribute("width"));
+    expect(Number(projectedDot?.getAttribute("r"))).toBeCloseTo(Math.min(bandWidth / 7, 4), 5);
 
     // The earlier marker treatments are gone: no dotted tick, no vertical connector
     // line, no shaded background bar (bars in this chart mean counts, not money).

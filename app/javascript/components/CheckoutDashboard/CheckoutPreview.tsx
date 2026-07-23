@@ -44,6 +44,7 @@ export const CheckoutPreview = ({
           fallback_reason: "checkout_preview",
           disable_wallets: false,
           request_apple_pay_merchant_tokens: false,
+          payment_element_wallets: false,
           elements_options: null,
         },
         availablePaymentMethods: [],

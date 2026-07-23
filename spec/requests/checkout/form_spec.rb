@@ -216,6 +216,62 @@ describe("Checkout form page", type: :system, js: true) do
     end
   end
 
+  describe "PayPal Connect" do
+    context "when signed in as the seller (owner)" do
+      before do
+        logout
+        login_as seller
+        create(:user_compliance_info, user: seller)
+      end
+
+      it "shows the PayPal Connect section with a link to payout settings" do
+        seller.update!(payment_address: "")
+
+        visit checkout_form_path
+
+        within_section "PayPal", match: :first do
+          expect(page).to have_text("This is not how you receive payouts")
+          expect(page).to have_link("payout settings", href: settings_payments_path)
+          expect(page).to have_link("Connect with PayPal", inert: true)
+        end
+        expect(page).to have_text("You must set up how you receive payouts in your payout settings before you can connect a PayPal account.")
+      end
+
+      it "enables the connect button when the seller has payout information set up" do
+        visit checkout_form_path
+
+        expect(page).to have_link("Connect with PayPal", inert: false)
+        expect(page).not_to have_text("You must set up how you receive payouts")
+      end
+
+      context "when the seller is in an unsupported country" do
+        before do
+          seller.alive_user_compliance_info.mark_deleted!
+          create(:user_compliance_info, user: seller, country: "India")
+        end
+
+        it "does not show the PayPal Connect section" do
+          visit checkout_form_path
+
+          expect(page).not_to have_link("Connect with PayPal")
+        end
+      end
+    end
+
+    context "when signed in as a team admin" do
+      it "shows the PayPal Connect section like the owner sees" do
+        create(:user_compliance_info, user: seller)
+
+        visit checkout_form_path
+
+        # Team admins can manage payout settings (see
+        # Settings::Payments::UserPolicy#update?), so they see the same
+        # PayPal Connect section as the owner.
+        expect(page).to have_link("Connect with PayPal")
+      end
+    end
+  end
+
   describe "preview" do
     context "when the user has alive products" do
       let!(:product2) { create(:product, user: seller, name: "Product 2", created_at: 2.days.ago) }

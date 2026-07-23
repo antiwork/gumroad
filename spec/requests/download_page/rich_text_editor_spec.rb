@@ -332,16 +332,17 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       visit("/d/#{@url_redirect.token}?display=mobile_app")
 
       within(find_embed(name: "Audio file")) do
-        expect(page).to have_button("Play", disabled: true)
-        expect(page).to_not have_text("MP3")
+        # Duration metadata is analyzed asynchronously after upload; playback must not
+        # be blocked while it is still pending — only the duration detail is omitted.
+        expect(page).to have_button("Play", disabled: false)
+        expect(page).to have_text("MP3")
         expect(page).to_not have_text("0m 46s")
         expect(page).to_not have_text("Audio description")
-        expect(page).to have_text("Processing...")
+        expect(page).to_not have_text("Processing...")
 
         @audio_file.update!(duration: 46)
         expect(page).to have_text("0m 46s", wait: 10)
         expect(page).to have_text("MP3")
-        expect(page).to_not have_text("Processing...")
         expect(page).to have_button("Play")
       end
     end

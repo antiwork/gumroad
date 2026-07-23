@@ -144,7 +144,6 @@ export const ProductTab = () => {
                   setImagesUploading={setImagesUploading}
                   publicFiles={product.public_files}
                   updatePublicFiles={(updater) => updateProduct((product) => updater(product.public_files))}
-                  audioPreviewsEnabled={product.audio_previews_enabled}
                 />
                 <CustomPermalinkInput
                   value={product.custom_permalink}

@@ -12,11 +12,13 @@ import { ProductToAdd } from "$app/components/Checkout/cartState";
 export type PurchasePaymentMethod =
   | AnyPaymentMethodResult
   | { type: "not-applicable" }
-  // Client-confirm cards live in the ConfirmationToken sent to #prepare.
+  // Client-confirm cards live in the ConfirmationToken sent to #prepare. walletType is set when
+  // a wallet (Apple Pay / Google Pay) paid through the Payment Element, for server analytics.
   | {
       type: "payment-element-client-confirm";
       confirmationTokenId: string;
       cardCountry: string | null;
+      walletType: string | null;
       mountCurrency: string;
     };
 
@@ -312,6 +314,12 @@ export const createPurchasesRequestData = (
     data.payment_element_mount_currency = payload.paymentMethod.mountCurrency;
   }
 
+  // Client-confirm wallet payments: the payment details live in the ConfirmationToken, so the
+  // wallet type is the only card-related param this lane reports (for server analytics).
+  if (payload.paymentMethod.type === "payment-element-client-confirm" && payload.paymentMethod.walletType) {
+    data.wallet_type = payload.paymentMethod.walletType;
+  }
+
   if (
     payload.paymentMethod.type !== "saved" &&
     payload.paymentMethod.type !== "not-applicable" &&
@@ -328,6 +336,12 @@ export const createPurchasesRequestData = (
 
         if (paymentParams.type === "payment-request") {
           data.wallet_type = paymentParams.wallet_type;
+        }
+        // A wallet that paid through the Payment Element (server-confirm lane) reports its type
+        // the same way the Payment Request Button does, so analytics can tell wallet purchases
+        // apart from plain cards. Absent for card payments — the param shape is unchanged.
+        if (paymentParams.type === "card" && paymentParams.wallet) {
+          data.wallet_type = paymentParams.wallet.type;
         }
 
         if (paymentParams.reusable) {

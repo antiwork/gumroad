@@ -165,7 +165,6 @@ export type Product = {
     variant: string | null;
   }[];
   public_files: PublicFile[];
-  audio_previews_enabled: boolean;
 };
 export type Purchase = {
   id: string;
@@ -321,7 +320,6 @@ export const Product = ({
   const publicFilesSettings = React.useMemo(
     () => ({
       files: product.public_files,
-      audioPreviewsEnabled: product.audio_previews_enabled,
     }),
     [product.public_files],
   );
@@ -515,12 +513,19 @@ export const Product = ({
         ) : null}
         <section className="border-t border-border p-6">
           <CollapsibleDescription>
+            {/* dir="auto" gives the description a base direction from its first strong
+                character; per-block direction for mixed-language content is handled by
+                the unicode-bidi: plaintext rule in _rich_text.scss (gumroad-private#1244). */}
             {pageLoaded ? (
               <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
-                <EditorContent className="rich-text" editor={descriptionEditor} />
+                <EditorContent className="rich-text" dir="auto" editor={descriptionEditor} />
               </PublicFilesSettingsContext.Provider>
             ) : (
-              <div className="rich-text" dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }} />
+              <div
+                className="rich-text"
+                dir="auto"
+                dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }}
+              />
             )}
           </CollapsibleDescription>
         </section>
@@ -799,7 +804,7 @@ const ExistingPurchaseCard = ({
             </li>
           </CardContent>
         )}
-        {!isPreorder && !isBundle && allowRating ? (
+        {!isPreorder && allowRating ? (
           <ReviewForm
             permalink={permalink}
             purchaseId={purchase.id}

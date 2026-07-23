@@ -29,6 +29,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
   fallback_reason: null,
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -58,6 +59,7 @@ const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
   fallback_reason: null,
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
     currency: "usd",
@@ -73,6 +75,7 @@ const cardElementConfig: CheckoutPaymentConfig = {
   fallback_reason: "stripe_payment_element_flag_disabled",
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
   elements_options: null,
 };
 
@@ -81,6 +84,7 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
   fallback_reason: null,
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -1073,6 +1077,52 @@ describe("reduceCheckoutState", () => {
         expect(next.surcharges).toEqual({ type: "pending" });
         expect(next.status).toEqual({ type: "starting" });
       }
+    });
+
+    // A wallet rendered inside the Payment Element pays through the "card" payment method, so
+    // its billing address can't use plain "set-value" — the total-affecting cancel above would
+    // abort the payment that the address belongs to. The dedicated action invalidates the quote
+    // (the held wallet payment then waits for the reload; see resolveHeldWalletPayment) while
+    // leaving the in-flight status untouched.
+    describe("set-wallet-billing-address", () => {
+      it("invalidates surcharges on a tax-location change without cancelling the starting card payment", () => {
+        for (const action of [
+          { type: "set-wallet-billing-address", country: "CA", zipCode: "H2X 1Y4", state: "QC" } as const,
+          // Any US ZIP change counts, ZIP+4 included — mirrors the "set-value" US ZIP rule.
+          { type: "set-wallet-billing-address", country: "US", zipCode: "94103-1234", state: "CA" } as const,
+        ]) {
+          const next = reduceCheckoutState(state({ status: { type: "starting" } }), action);
+          expect(next.surcharges).toEqual({ type: "pending" });
+          expect(next.status).toEqual({ type: "starting" });
+          expect(next.country).toBe(action.country);
+          expect(next.zipCode).toBe(action.zipCode);
+          expect(next.state).toBe(action.state);
+        }
+      });
+
+      it("aborts an in-flight surcharges request before invalidating", () => {
+        const abort = vi.fn();
+        const next = reduceCheckoutState(state({ surcharges: { type: "loading", requestId: 1, abort } }), {
+          type: "set-wallet-billing-address",
+          country: "CA",
+          zipCode: "H2X 1Y4",
+          state: "QC",
+        });
+        expect(abort).toHaveBeenCalledOnce();
+        expect(next.surcharges).toEqual({ type: "pending" });
+      });
+
+      it("keeps loaded surcharges when the wallet's address matches checkout's tax location", () => {
+        const initial = state({ status: { type: "starting" } });
+        const next = reduceCheckoutState(initial, {
+          type: "set-wallet-billing-address",
+          country: initial.country,
+          zipCode: initial.zipCode,
+          state: initial.state,
+        });
+        expect(next.surcharges).toBe(initial.surcharges);
+        expect(next.status).toEqual({ type: "starting" });
+      });
     });
 
     it("refuses start-payment for card payments while a surcharges refetch is queued", () => {

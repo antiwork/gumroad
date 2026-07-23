@@ -58,10 +58,54 @@ RSpec.describe IsbnValidator do
       expect(model).to be_valid
     end
 
+    it "accepts a valid isbn with an X check digit" do
+      model_class.validates :isbn, isbn: true
+
+      model.isbn = "097522980X"
+
+      expect(model).to be_valid
+    end
+
     it "rejects invalid isbns" do
       model_class.validates :isbn, isbn: true
 
       model.isbn = invalid_value
+
+      expect(model).not_to be_valid
+    end
+  end
+
+  context "when the value contains non-digit characters" do
+    # Regression tests: String#to_i coerces non-digits to 0, so before the
+    # character-grammar guard these all passed the checksum (sum of zeros).
+    before { model_class.validates :isbn, isbn: true }
+
+    it "rejects a 10-character all-letter string" do
+      model.isbn = "helloworld"
+
+      expect(model).not_to be_valid
+    end
+
+    it "rejects a 13-character all-letter string" do
+      model.isbn = "AAAAAAAAAAAAA"
+
+      expect(model).not_to be_valid
+    end
+
+    it "rejects a 10-character punctuation string" do
+      model.isbn = "!!!!!!!!!!"
+
+      expect(model).not_to be_valid
+    end
+
+    it "rejects letters mixed into an otherwise valid isbn" do
+      model.isbn = "03064O6152" # letter O in place of a zero
+
+      expect(model).not_to be_valid
+    end
+
+    it "rejects an ISBN-13 with an X check character" do
+      model.isbn = "978316148410X"
 
       expect(model).not_to be_valid
     end

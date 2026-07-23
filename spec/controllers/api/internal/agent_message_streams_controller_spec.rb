@@ -47,6 +47,37 @@ describe Api::Internal::AgentMessageStreamsController do
     end
 
     context "when authenticated and authorized" do
+      it "commits the stream with a keepalive comment before any event" do
+        # ActionController::Live holds response headers until the first write, and a turn that
+        # opens with silent tool work can go minutes before its first real event — the client
+        # can't start its stall detection until it sees the response begin. The comment must be
+        # the very first thing on the stream.
+        stub_streaming_service(reply: "Hi.", proposed_action: nil, objects: [])
+
+        post :create, params: valid_params, format: :json
+
+        expect(response.body).to start_with(": connected\n\n")
+      end
+
+      it "writes keepalive heartbeats while the turn generates without emitting events" do
+        # Tool-use iterations write nothing to the stream, so without heartbeats a healthy
+        # multi-tool turn looks identical to a dead connection from the client's side.
+        stub_const("Api::Internal::AgentMessageStreamsController::STREAM_HEARTBEAT_INTERVAL", 0.02.seconds)
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming) do |messages:, on_reply_complete: nil, &_blk|
+          sleep 0.15
+          turn = { reply: "Done.", proposed_action: nil, objects: [] }
+          on_reply_complete&.call(turn)
+          turn.merge(suggestions: [])
+        end
+
+        post :create, params: valid_params, format: :json
+
+        expect(response.body).to include(": heartbeat\n\n")
+        expect(response.body).to include("event: done")
+      end
+
       it "persists the turn to a new conversation and emits its id on the done event" do
         stub_streaming_service(reply: "You have 3 products.", proposed_action: nil, objects: [])
 
