@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   cardPaymentMethodParams,
   createPaymentElementConfirmationToken,
+  isElementCollectedBillingPaymentElementType,
   paymentElementBillingDetails,
   preparePaymentElementPaymentMethodData,
 } from "$app/data/card_payment_method_data";
@@ -20,10 +21,11 @@ const buildStripeFixture = () => {
   stripe.createPaymentMethod = vi.fn().mockResolvedValue({
     paymentMethod: { id: "pm_wallet", card: { country: "US" }, type: "card" },
   });
-  stripe.createConfirmationToken = vi.fn().mockResolvedValue({
+  const createConfirmationToken = vi.fn().mockResolvedValue({
     confirmationToken: { id: "ctoken_wallet", payment_method_preview: { card: { country: "US" }, type: "card" } },
   });
-  return { stripe, elements, submit };
+  stripe.createConfirmationToken = createConfirmationToken;
+  return { stripe, elements, submit, createConfirmationToken };
 };
 
 const walletCardData = (stripe: Stripe, elements: StripeElements) => ({
@@ -36,7 +38,7 @@ const walletCardData = (stripe: Stripe, elements: StripeElements) => ({
   state: "NY",
   city: "New York",
   address: "123 Main St",
-  walletSelected: true,
+  elementCollectsBillingDetails: true,
 });
 
 describe("cardPaymentMethodParams", () => {
@@ -155,5 +157,62 @@ describe("pendingSubmit reuse (wallet click-time elements.submit)", () => {
 
     expect(submit).toHaveBeenCalledTimes(1);
     expect(result.status).toBe("success");
+  });
+});
+
+describe("isElementCollectedBillingPaymentElementType", () => {
+  it("covers wallets and UPI, but not card/link/ideal", () => {
+    expect(isElementCollectedBillingPaymentElementType("apple_pay")).toBe(true);
+    expect(isElementCollectedBillingPaymentElementType("google_pay")).toBe(true);
+    // UPI confirms require billing_details.name + a full street address, which checkout's own
+    // form never collects — the element must gather them itself (gumroad-private#933).
+    expect(isElementCollectedBillingPaymentElementType("upi")).toBe(true);
+    expect(isElementCollectedBillingPaymentElementType("card")).toBe(false);
+    expect(isElementCollectedBillingPaymentElementType("link")).toBe(false);
+    expect(isElementCollectedBillingPaymentElementType("ideal")).toBe(false);
+  });
+});
+
+describe("element-collected billing details (wallets, UPI)", () => {
+  it("createPaymentElementConfirmationToken skips the checkout-form billing override when the element collects billing details", async () => {
+    const { stripe, elements, createConfirmationToken } = buildStripeFixture();
+
+    const result = await createPaymentElementConfirmationToken(walletCardData(stripe, elements));
+
+    expect(result.status).toBe("success");
+    // No params at all: passing the form's billing_details would clobber what the wallet sheet
+    // or UPI pane collected (and for UPI the form lacks the required name/street address).
+    expect(createConfirmationToken).toHaveBeenCalledWith({ elements });
+  });
+
+  it("createPaymentElementConfirmationToken passes the checkout form's billing details for card payments", async () => {
+    const { stripe, elements, createConfirmationToken } = buildStripeFixture();
+
+    const result = await createPaymentElementConfirmationToken({
+      ...walletCardData(stripe, elements),
+      elementCollectsBillingDetails: false,
+    });
+
+    expect(result.status).toBe("success");
+    expect(createConfirmationToken).toHaveBeenCalledWith({
+      elements,
+      params: {
+        payment_method_data: {
+          billing_details: {
+            email: "buyer@example.com",
+            name: "Buyer Name",
+            phone: null,
+            address: {
+              city: "New York",
+              country: "US",
+              line1: "123 Main St",
+              line2: null,
+              postal_code: "10001",
+              state: "NY",
+            },
+          },
+        },
+      },
+    });
   });
 });

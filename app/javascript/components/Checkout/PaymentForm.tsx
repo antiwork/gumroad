@@ -17,6 +17,7 @@ import * as React from "react";
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
 import {
   createPaymentElementConfirmationToken,
+  isElementCollectedBillingPaymentElementType,
   isWalletPaymentElementType,
   preparePaymentRequestPaymentMethodData,
 } from "$app/data/card_payment_method_data";
@@ -825,7 +826,7 @@ const CreditCardContent = ({
           state: state.state,
           city: state.city,
           address: state.address,
-          walletSelected: isWalletPaymentElementType(paymentElementTypeRef.current),
+          elementCollectsBillingDetails: isElementCollectedBillingPaymentElementType(paymentElementTypeRef.current),
           pendingSubmit,
         });
         if (tokenResult.status === "error") {
@@ -889,7 +890,7 @@ const CreditCardContent = ({
               state: state.state,
               city: state.city,
               address: state.address,
-              walletSelected: isWalletPaymentElementType(paymentElementTypeRef.current),
+              elementCollectsBillingDetails: isElementCollectedBillingPaymentElementType(paymentElementTypeRef.current),
               pendingSubmit: serverConfirmPendingSubmit,
             }
           : {

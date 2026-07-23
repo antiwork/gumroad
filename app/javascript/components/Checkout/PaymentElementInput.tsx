@@ -8,7 +8,7 @@ import {
 } from "@stripe/stripe-js";
 import * as React from "react";
 
-import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
+import { isElementCollectedBillingPaymentElementType } from "$app/data/card_payment_method_data";
 import { getCheckoutStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
@@ -200,7 +200,7 @@ const PaymentElementControllerInput = ({
   // because it drives the fields option below, which must reach the mounted element via
   // element.update() when the selection flips between card and wallet.
   const [selectedType, setSelectedType] = React.useState("card");
-  const walletTypeSelected = isWalletPaymentElementType(selectedType);
+  const elementCollectsBillingDetails = isElementCollectedBillingPaymentElementType(selectedType);
 
   React.useEffect(() => {
     onReady(stripe && elements && ready ? { stripe, elements } : null);
@@ -233,18 +233,26 @@ const PaymentElementControllerInput = ({
         ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
         // Checkout collects billing details in its own form, so for card payments every field is
         // pinned to "never" and tokenization passes the form's values explicitly (see
-        // paymentElementBillingDetails in card_payment_method_data.ts). Wallet selections flip
-        // the whole block to "auto": the wallet sheet supplies the buyer's verified billing
-        // details and tokenization deliberately passes no override — but Stripe's client-side
-        // validation rejects createPaymentMethod/createConfirmationToken with an
-        // IntegrationError ("You specified "never" for fields.billing_details.name … but did
-        // not pass params.billing_details.name") whenever a field is "never" and no param is
-        // passed, wallets included. "auto" removes that requirement and lets the wallet's own
-        // details flow onto the PaymentMethod. The switch reaches the mounted element through
-        // react-stripe-js's option diffing (element.update) as soon as the change event reports
-        // a wallet row selection — before tokenization, which only starts from the pay click.
+        // paymentElementBillingDetails in card_payment_method_data.ts). Two selection kinds flip
+        // the whole block to "auto":
+        // - Wallets: the wallet sheet supplies the buyer's verified billing details and
+        //   tokenization deliberately passes no override — Stripe's client-side validation
+        //   rejects createPaymentMethod/createConfirmationToken with an IntegrationError
+        //   ("You specified "never" for fields.billing_details.name … but did not pass
+        //   params.billing_details.name") whenever a field is "never" and no param is passed,
+        //   wallets included. "auto" removes that requirement and lets the wallet's own details
+        //   flow onto the PaymentMethod.
+        // - UPI: Stripe requires billing_details.name and a full street address to CONFIRM a UPI
+        //   payment, and checkout's form only collects email + postal code for digital products.
+        //   With the fields pinned to "never" the confirm always failed server-side with
+        //   parameter_missing and no last_payment_error — buyers could never complete a UPI
+        //   purchase (the July 2026 UPI ramp-down, gumroad-private#933). "auto" makes the UPI
+        //   pane itself render and require the inputs the method needs.
+        // The switch reaches the mounted element through react-stripe-js's option diffing
+        // (element.update) as soon as the change event reports the row selection — before
+        // tokenization, which only starts from the pay click.
         fields: {
-          billingDetails: walletTypeSelected
+          billingDetails: elementCollectsBillingDetails
             ? "auto"
             : {
                 name: "never",

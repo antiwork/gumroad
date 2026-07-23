@@ -43,9 +43,10 @@ export type NewPaymentElementSelectedPaymentMethod = {
   state: string;
   city: string;
   address: string;
-  // Whether the buyer paid with a wallet (Apple Pay / Google Pay) inside the Payment Element.
-  // Wallet submissions keep the wallet's own billing details instead of the checkout form's.
-  walletSelected: boolean;
+  // Whether the buyer picked a row whose billing details the Payment Element collects itself
+  // (wallets, UPI — see isElementCollectedBillingPaymentElementType). These submissions keep
+  // the element-supplied billing details instead of the checkout form's.
+  elementCollectsBillingDetails: boolean;
   // Wallet submissions only: the in-flight elements.submit() promise created synchronously in
   // the buyer's click. Safari only opens the Apple Pay sheet inside a user-activation window,
   // so tokenization must await this promise instead of calling elements.submit() again (see
@@ -216,7 +217,7 @@ export async function getPaymentMethodResult(
         state: selected.state,
         city: selected.city,
         address: selected.address,
-        walletSelected: selected.walletSelected,
+        elementCollectsBillingDetails: selected.elementCollectsBillingDetails,
         pendingSubmit: selected.pendingSubmit ?? null,
       });
       if (paymentMethodData.status === "success") {
