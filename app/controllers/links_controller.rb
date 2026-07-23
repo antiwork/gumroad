@@ -876,20 +876,29 @@ class LinksController < ApplicationController
       end
     end
 
-    # Every page description present anywhere in the save payload. Pages created
-    # in the current editor session keep their client-generated ids across saves
-    # (the editor never learns the server's ids), so a resubmitted new page
-    # arrives under an unknown id: matching on content identifies it as a
-    # rewrite rather than a deletion. NOTE: reads the RAW params, not the
-    # permitted ones — by the time the deletion guards run, the permitted
-    # variant params may have been consumed/mutated by earlier steps.
+    # Descriptions of payload pages the server does NOT already know about.
+    # Pages created in the current editor session keep their client-generated
+    # ids across saves (the editor never learns the server's ids), so a
+    # resubmitted new page arrives under an unknown id: matching on content
+    # identifies it as a rewrite rather than a deletion. Pages submitted under
+    # an id the server already has are in-place updates of that page — their
+    # content must NOT unlock deleting a different stored page that happens to
+    # have the same content (two duplicate-content pages, stale tab omits one).
+    # NOTE: reads the RAW params, not the permitted ones — by the time the
+    # deletion guards run, the permitted variant params may have been
+    # consumed/mutated by earlier steps.
     def payload_page_descriptions
       @_payload_page_descriptions ||= begin
         pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
         (params[:variants].is_a?(Array) ? params[:variants] : []).each do |variant|
           pages.concat(variant[:rich_content].to_a) if variant[:rich_content].is_a?(Array)
         end
-        pages.filter_map { |page| page[:description].present? ? page[:description][:content].as_json : nil }
+        known_page_ids = (@product.alive_rich_contents.map(&:external_id) +
+          @product.current_base_variants.flat_map { |variant| variant.alive_rich_contents.map(&:external_id) }).to_set
+        pages.filter_map do |page|
+          next if page[:id].present? && known_page_ids.include?(page[:id])
+          page[:description].present? ? page[:description][:content].as_json : nil
+        end
       end
     end
 

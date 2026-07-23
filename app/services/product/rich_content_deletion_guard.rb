@@ -12,12 +12,14 @@
 # - the page's id appears elsewhere in the same payload (the page moved between
 #   the product level and a variant, e.g. when toggling "use the same content
 #   for all versions"),
-# - the page's exact content appears in the payload under a different id. The
-#   editor keeps client-generated ids for pages created in the current session
-#   (it never learns the server's ids), so the second save of such a page
-#   arrives with an unknown id and the server re-creates it — a rewrite, not a
-#   deletion. A stale-tab wipe doesn't resubmit the content, so it stays
-#   blocked. Or,
+# - the page's exact content appears in the payload under an id the server
+#   doesn't know. The editor keeps client-generated ids for pages created in
+#   the current session (it never learns the server's ids), so the second save
+#   of such a page arrives with an unknown id and the server re-creates it — a
+#   rewrite, not a deletion. A stale-tab wipe doesn't resubmit the content, so
+#   it stays blocked. Matching is count-aware: N identical unknown-id payload
+#   pages can only account for N deleted pages, so a duplicate-content page
+#   omitted by a stale payload can't hide behind its surviving twin. Or,
 # - the seller confirmed the deletion in the editor (delete-page modal, copy
 #   content from another version, discard other versions' content), which the
 #   client reports via confirmed_removed_rich_content_ids.
@@ -30,12 +32,20 @@ class Product::RichContentDeletionGuard
   MESSAGE = "This save would remove content pages that weren't explicitly deleted. Your product may have been updated in another tab — please refresh the page and try again."
 
   def self.ensure_intent!(product:, rich_contents_to_delete:, payload_page_ids:, confirmed_removed_ids:, payload_page_descriptions: [])
-    normalized_payload_descriptions = payload_page_descriptions.map { |description| normalize_description(description) }
+    # Each unknown-id payload page can account for at most one deleted stored
+    # page (the one it rewrites), so track a consumable count per description.
+    rewrite_budget = payload_page_descriptions.map { |description| normalize_description(description) }.tally
     unconfirmed = rich_contents_to_delete.select do |rich_content|
-      rich_content.has_editor_content? &&
-        !payload_page_ids.include?(rich_content.external_id) &&
-        !confirmed_removed_ids.include?(rich_content.external_id) &&
-        !normalized_payload_descriptions.include?(normalize_description(rich_content.description.as_json))
+      next false unless rich_content.has_editor_content?
+      next false if payload_page_ids.include?(rich_content.external_id)
+      next false if confirmed_removed_ids.include?(rich_content.external_id)
+
+      normalized = normalize_description(rich_content.description.as_json)
+      if rewrite_budget[normalized].to_i > 0
+        rewrite_budget[normalized] -= 1
+        next false
+      end
+      true
     end
     return if unconfirmed.empty?
 

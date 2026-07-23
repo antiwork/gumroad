@@ -1217,6 +1217,40 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal false, @version1_page.reload.deleted?
   end
 
+  test "PUT update blocks a stale payload that omits one of two duplicate-content pages" do
+    # Two stored pages can legitimately carry identical content (e.g. the
+    # seller duplicated a page). A stale payload that keeps one twin under its
+    # known id but omits the other must not pass the rewrite allowance — the
+    # kept page is an in-place update of itself, not a rewrite of the omitted
+    # one.
+    setup_guarded_version!
+    duplicate_page = create_rich_content(entity: @version1, description: guard_content_description)
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page 1", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal false, duplicate_page.reload.deleted?
+    assert_equal false, @version1_page.reload.deleted?
+  end
+
+  test "PUT update blocks a stale payload where one unknown-id page matches two omitted duplicate-content pages" do
+    # The rewrite allowance is count-aware: a single resubmitted unknown-id
+    # page can account for at most one omitted stored page. When two stored
+    # duplicate-content pages are both omitted, one unknown-id twin in the
+    # payload must not unlock deleting both.
+    setup_guarded_version!
+    create_rich_content(entity: @version1, description: guard_content_description)
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: "client-generated-uuid", title: "Page 1", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal 2, @version1.reload.alive_rich_contents.count
+  end
+
   test "PUT update allows deleting a page holding only the editor's blank placeholder paragraph without confirmation" do
     setup_guarded_version!
     # The editor initializes every new page with a single empty paragraph,
