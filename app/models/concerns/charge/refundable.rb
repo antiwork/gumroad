@@ -96,7 +96,32 @@ module Charge::Refundable
         else
           charge_refund.flow_of_funds
         end
-        refunded = purchase.refund_purchase!(flow_of_funds, GUMROAD_ADMIN_ID, charge_refund.refund, event.extras[:refund_reason] == "fraudulent")
+        # reload before locking: reading a json_data-backed attribute on a row whose
+        # json_data column is NULL dirties the record in memory, and lock! (inside
+        # with_lock) raises on dirty records. Reloading discards that phantom change.
+        purchase.reload
+        refunded = purchase.with_lock do
+          # Re-check for an already-recorded refund UNDER the purchase row lock. A
+          # seller-initiated refund creates the Stripe refund and the local Refund row
+          # inside one long transaction (emails, search indexing and analytics updates
+          # all happen before it commits), so this webhook can arrive and run the
+          # db_refunds lookup above before that transaction is committed — the lookup
+          # misses the seller's row and this branch would record the same Stripe refund
+          # a second time (a duplicate Refund row, a duplicate seller balance debit and
+          # a duplicate "sale refunded" creator email). The seller's transaction holds
+          # this purchase's row lock (refund_purchase! locks it), so waiting on the lock
+          # and re-querying afterwards is guaranteed to see the committed row. The same
+          # serialization protects against two deliveries of this webhook racing each
+          # other. Scoped to this purchase because one charge-level Stripe refund on a
+          # combined charge legitimately produces one Refund row per charged purchase.
+          # Re-check stripe_refunded? too (with_lock reloaded the row): it covers
+          # a racing full refund whose row predates processor refund ids being stored.
+          if Refund.where(processor_refund_id: stripe_refund_id, purchase_id: purchase.id).exists? || purchase.stripe_refunded?
+            false
+          else
+            purchase.refund_purchase!(flow_of_funds, GUMROAD_ADMIN_ID, charge_refund.refund, event.extras[:refund_reason] == "fraudulent")
+          end
+        end
         next unless refunded
         if event.extras[:refund_reason] == "fraudulent"
           ContactingCreatorMailer.purchase_refunded_for_fraud(purchase.id).deliver_later
