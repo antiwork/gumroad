@@ -104,11 +104,22 @@ const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[])
 export type AnalyticsProps = {
   products: Product[];
   seller_time_zone: string;
+  // Cumulative fraction of a typical day's revenue booked by the end of each hour of
+  // day (24 entries) in the seller's time zone, or null when the seller's recent sales
+  // history is too thin to build a stable curve. Used to weight the end-of-day
+  // projection on the sales chart.
+  hourly_sales_curve: number[] | null;
   country_codes: Record<string, string>;
   state_names: Record<string, string>;
 };
 
-const Analytics = ({ products: initialProducts, seller_time_zone, country_codes, state_names }: AnalyticsProps) => {
+const Analytics = ({
+  products: initialProducts,
+  seller_time_zone,
+  hourly_sales_curve,
+  country_codes,
+  state_names,
+}: AnalyticsProps) => {
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
@@ -205,6 +216,7 @@ const Analytics = ({ products: initialProducts, seller_time_zone, country_codes,
                 endDate={mainData.endDate}
                 aggregateBy={aggregateBy}
                 sellerTimeZone={seller_time_zone}
+                hourlySalesCurve={hourly_sales_curve}
               />
               <ReferrersTable data={mainData.referrerTotal} />
             </>

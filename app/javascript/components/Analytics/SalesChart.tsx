@@ -4,7 +4,11 @@ import { XAxis, YAxis, Bar, Line, Cell } from "recharts";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { type AnalyticsDailyTotal } from "$app/components/Analytics";
-import { fractionOfDayElapsed, projectedEndOfDayTotal } from "$app/components/Analytics/projectedEndOfDayTotal";
+import {
+  expectedSalesFractionOfDay,
+  fractionOfDayElapsed,
+  projectedEndOfDayTotal,
+} from "$app/components/Analytics/projectedEndOfDayTotal";
 import useChartTooltip from "$app/components/Analytics/useChartTooltip";
 import { Chart, xAxisProps, yAxisProps, lineProps, type TickProps } from "$app/components/Chart";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -142,12 +146,14 @@ export const SalesChart = ({
   endDate,
   aggregateBy,
   sellerTimeZone,
+  hourlySalesCurve,
 }: {
   data: AnalyticsDailyTotal[];
   startDate: string;
   endDate: string;
   aggregateBy: "monthly" | "daily" | "hourly";
   sellerTimeZone?: string;
+  hourlySalesCurve?: number[] | null;
 }) => {
   const isDesktop = useIsAboveBreakpoint("lg");
   // Roughly how many x-axis labels fit without crowding; hourly labels are short
@@ -183,16 +189,21 @@ export const SalesChart = ({
 
   // When the range ends today (the backend labels the seller's current day — evaluated
   // in the seller's time zone — as "Today"), overlay a projected end-of-day total above
-  // today's point: current total extrapolated by the fraction of the seller's day
-  // elapsed. Rendered as a faint circle so it clearly reads as an estimate, not booked
-  // revenue.
+  // today's point: current total extrapolated by the seller's historical hourly sales
+  // curve when available (uniform run rate otherwise). Rendered as a faint circle so it
+  // clearly reads as an estimate, not booked revenue.
   const lastDataPoint = dataPoints[dataPoints.length - 1];
   const projection = React.useMemo(() => {
     if (aggregateBy !== "daily" || endDate !== "Today" || !sellerTimeZone || !lastDataPoint) return null;
-    const projectedTotals = projectedEndOfDayTotal(lastDataPoint.totals, fractionOfDayElapsed(sellerTimeZone));
+    const now = new Date();
+    const projectedTotals = projectedEndOfDayTotal(
+      lastDataPoint.totals,
+      fractionOfDayElapsed(sellerTimeZone, now),
+      expectedSalesFractionOfDay(hourlySalesCurve, sellerTimeZone, now),
+    );
     if (projectedTotals === null || projectedTotals <= lastDataPoint.totals) return null;
     return { projectedTotals };
-  }, [aggregateBy, endDate, sellerTimeZone, lastDataPoint]);
+  }, [aggregateBy, endDate, sellerTimeZone, hourlySalesCurve, lastDataPoint]);
 
   const dataPointsWithProjection = React.useMemo(
     () =>

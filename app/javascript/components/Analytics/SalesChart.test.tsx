@@ -166,4 +166,31 @@ describe("SalesChart projection overlay", () => {
     expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
     expectNoNaNAttributes(container);
   });
+
+  it("weights the projection by the seller's historical hourly sales curve when provided", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-16T20:00:00Z")); // 4pm in America/New_York
+
+    // A curve saying this seller has historically booked ALL of a typical day's
+    // revenue by 4pm makes the weighted projection equal today's booked total, which
+    // suppresses the overlay (nothing more is expected today) — proof the curve, not
+    // the elapsed clock fraction, drives the number.
+    const allBookedByFourPm = Array.from({ length: 24 }, (_, hour) => (hour < 15 ? hour / 15 : 1));
+    const { container } = renderChart({ hourlySalesCurve: allBookedByFourPm });
+
+    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
+    expectNoNaNAttributes(container);
+  });
+
+  it("falls back to the uniform run rate when the curve is malformed", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-16T20:00:00Z"));
+
+    // A malformed curve (wrong length) is ignored; the linear extrapolation still
+    // yields a projection above the booked total, so the overlay renders.
+    const { container } = renderChart({ hourlySalesCurve: [0.5, 1] });
+
+    expect(container.querySelectorAll("[data-testid='chart-projected-dot']").length).toBe(1);
+    expectNoNaNAttributes(container);
+  });
 });
