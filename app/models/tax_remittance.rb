@@ -23,14 +23,26 @@ class TaxRemittance < ApplicationRecord
   # on purpose: the money arrived, there is nothing to retry.
   RETRYABLE_STATUSES = %w[failed cancelled].freeze
 
-  # Once a remittance is terminal, its financial identity is frozen — these
-  # fields describe WHAT was (or wasn't) paid and can never be rewritten.
-  FROZEN_WHEN_TERMINAL = %w[authority jurisdiction period currency usd_amount_cents rail attempt status paid_at].freeze
+  # Statuses from which the row describes a real payment: `sent` means money
+  # has already left the account, so even though the row isn't terminal yet,
+  # its payment facts are just as much a matter of record as a completed one.
+  PAYMENT_LOCKED_STATUSES = (["sent"] + TERMINAL_STATUSES).freeze
+  # The only places a `sent` remittance may go: it either lands (completed),
+  # bounces (failed), or the in-flight transfer is recalled (cancelled). It
+  # must never regress to draft/pending_approval/funded — that would make an
+  # already-sent payment look actionable again.
+  SENT_OUTCOME_STATUSES = %w[sent completed failed cancelled].freeze
+
+  # Once money has moved (`sent` or any terminal state), the payment identity
+  # is frozen — these fields describe WHAT was (or wasn't) paid and can never
+  # be rewritten. Status is handled separately: frozen entirely on terminal
+  # rows, restricted to SENT_OUTCOME_STATUSES on sent rows.
+  FROZEN_WHEN_LOCKED = %w[authority jurisdiction period currency usd_amount_cents rail attempt paid_at].freeze
   # Reconciliation fields the Wise statement sync fills in after the fact:
-  # they may go from nil to a value on a terminal row (enrichment), but once
+  # they may go from nil to a value on a locked row (enrichment), but once
   # set they are frozen too — changing a recorded amount or transfer ID on a
-  # completed payment would falsify the record.
-  ENRICHABLE_WHEN_TERMINAL = %w[target_amount_cents transfer_id].freeze
+  # sent/completed payment would falsify the record.
+  ENRICHABLE_WHEN_LOCKED = %w[target_amount_cents transfer_id].freeze
   # qbo_journal_entry_ref and notes stay freely writable: they are annotations
   # about the payment, not the payment itself.
 
@@ -72,7 +84,7 @@ class TaxRemittance < ApplicationRecord
   scope :completed, -> { where(status: "completed") }
   scope :awaiting_approval, -> { where(status: "pending_approval") }
 
-  validate :terminal_rows_immutable, on: :update
+  validate :payment_locked_rows_immutable, on: :update
   validate :single_live_attempt_per_filing
 
   def self.period_for(date)
@@ -118,21 +130,39 @@ class TaxRemittance < ApplicationRecord
   end
 
   private
-    # Once a remittance reaches a terminal state (completed/failed/cancelled),
-    # the row is frozen: a later write rewriting the amount, authority, or
-    # status of a finished payment (a stale webhook, a buggy sync) would
-    # falsify a record finance automation treats as the source of truth —
-    # the same catch class as purchase-status resurrection. Two carve-outs:
-    # reconciliation fields may be filled in where they were nil (the Wise
-    # statement sync learns local amounts and transfer IDs after payment),
-    # and annotations (qbo_journal_entry_ref, notes) stay freely writable.
-    def terminal_rows_immutable
-      return unless status_was.in?(TERMINAL_STATUSES)
+    # Once money has moved — the row is `sent` or in a terminal state
+    # (completed/failed/cancelled) — the payment facts are frozen: a later
+    # write rewriting the amount, authority, or payment date of a payment
+    # that already happened (a stale webhook, a buggy sync) would falsify a
+    # record finance automation treats as the source of truth — the same
+    # catch class as purchase-status resurrection.
+    #
+    # Status rules within the lock: a terminal row's status can never change
+    # at all; a `sent` row may only advance to its real-world outcomes
+    # (completed/failed/cancelled), never regress to draft/pending_approval/
+    # funded — that would make an already-sent payment look actionable again.
+    #
+    # Two carve-outs: reconciliation fields may be filled in where they were
+    # nil (the Wise statement sync learns local amounts and transfer IDs
+    # after payment), and annotations (qbo_journal_entry_ref, notes) stay
+    # freely writable.
+    def payment_locked_rows_immutable
+      return unless status_was.in?(PAYMENT_LOCKED_STATUSES)
+
+      if status_changed?
+        if status_was.in?(TERMINAL_STATUSES)
+          errors.add(:status, "cannot change on a #{status_was} remittance")
+        elsif !status.in?(SENT_OUTCOME_STATUSES)
+          errors.add(:status, "can only move from sent to completed, failed, or cancelled")
+        end
+      end
 
       changed.each do |field|
-        if field.in?(FROZEN_WHEN_TERMINAL)
+        next if field == "status"
+
+        if field.in?(FROZEN_WHEN_LOCKED)
           errors.add(field, "cannot change on a #{status_was} remittance")
-        elsif field.in?(ENRICHABLE_WHEN_TERMINAL) && attribute_was(field).present?
+        elsif field.in?(ENRICHABLE_WHEN_LOCKED) && attribute_was(field).present?
           errors.add(field, "cannot change once set on a #{status_was} remittance")
         end
       end

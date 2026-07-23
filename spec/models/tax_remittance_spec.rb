@@ -163,6 +163,58 @@ describe TaxRemittance do
     end
   end
 
+  describe "sent row immutability" do
+    it "refuses to move a sent remittance back to an actionable status" do
+      remittance = create(:tax_remittance, :sent)
+
+      %w[draft pending_approval funded].each do |regression|
+        remittance.reload.status = regression
+        expect(remittance).not_to be_valid, "expected sent → #{regression} to be rejected"
+        expect(remittance.errors[:status].first).to include("can only move from sent")
+      end
+      expect(remittance.reload.status).to eq("sent")
+    end
+
+    it "allows a sent remittance to advance to its supported outcomes" do
+      %w[completed failed cancelled].each do |outcome|
+        remittance = create(:tax_remittance, :sent, period: "2026-Q#{%w[completed failed cancelled].index(outcome) + 1}")
+
+        remittance.status = outcome
+        expect(remittance).to be_valid, "expected sent → #{outcome} to be allowed"
+        expect(remittance.save).to be(true)
+      end
+    end
+
+    it "freezes the payment identity of a sent remittance" do
+      remittance = create(:tax_remittance, :sent)
+
+      {
+        usd_amount_cents: 1,
+        authority: "IRAS Singapore",
+        period: "2026-Q3",
+        currency: "SGD",
+        rail: "mercury",
+        attempt: 7,
+        paid_at: Time.utc(2027, 1, 1),
+      }.each do |field, value|
+        remittance.reload.assign_attributes(field => value)
+        expect(remittance).not_to be_valid, "expected #{field} to be frozen on a sent remittance"
+        expect(remittance.errors[field]).to be_present
+      end
+    end
+
+    it "still allows reconciliation enrichment and annotations on a sent remittance" do
+      remittance = create(:tax_remittance, :sent, target_amount_cents: nil, transfer_id: nil)
+
+      remittance.update!(target_amount_cents: 20_000_000, transfer_id: "WISE-42", notes: "in flight", qbo_journal_entry_ref: "JE-9")
+
+      # But once set, the reconciliation fields freeze — same as terminal rows.
+      remittance.reload.target_amount_cents = 1
+      expect(remittance).not_to be_valid
+      expect(remittance.errors[:target_amount_cents].first).to include("cannot change once set")
+    end
+  end
+
   describe "#build_retry" do
     it "builds the next attempt for a failed remittance, preserving the failed row" do
       failed = create(:tax_remittance, :failed)

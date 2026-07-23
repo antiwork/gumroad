@@ -10,6 +10,11 @@ FactoryBot.define do
     rail { "wise" }
     status { "draft" }
 
+    trait :sent do
+      status { "sent" }
+      paid_at { Time.utc(2026, 4, 28) }
+    end
+
     trait :completed do
       status { "completed" }
       paid_at { Time.utc(2026, 4, 28) }
