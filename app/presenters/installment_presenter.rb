@@ -66,9 +66,7 @@ class InstallmentPresenter
         full_url: installment.full_url,
         has_been_blasted: installment.has_been_blasted?,
         shown_in_profile_sections: seller.seller_profile_posts_sections.filter_map { _1.external_id if _1.shown_posts.include?(installment.id) },
-        non_opener_resends: installment.blasts.to_non_openers.order(:requested_at).map do |blast|
-          { requested_at: blast.requested_at, delivery_count: blast.delivery_count, completed: blast.completed_at.present? }
-        end,
+        non_opener_resends: non_opener_resend_props,
       )
 
       unless installment.published?
@@ -96,6 +94,45 @@ class InstallmentPresenter
   end
 
   private
+    # Stats for each "resend to non-openers" blast on this post, oldest first.
+    #
+    # Open events don't record which blast delivered the email — open tracking is
+    # aggregated per post. So a resend's opens are approximated by time window: first
+    # opens recorded between this resend's request time and the next resend's request
+    # time (or now) are credited to this resend. A resend only goes to recipients who
+    # hadn't opened yet, so any open in that window comes from exactly that population;
+    # the only skew is a straggler finally opening the original email after the resend
+    # went out, which still answers "did the resend reach people who were not opening".
+    def non_opener_resend_props
+      # Filter the preloaded association in Ruby (rather than a scoped query) so the
+      # Published list page doesn't issue one blasts query per row.
+      resends = installment.blasts.select(&:to_non_openers?).sort_by(&:requested_at)
+
+      resends.map.with_index do |blast, index|
+        completed = blast.completed_at.present?
+        open_count = completed ? resend_open_count(blast, next_blast: resends[index + 1]) : nil
+        open_rate =
+          if open_count.present? && blast.delivery_count > 0
+            [open_count / blast.delivery_count.to_f * 100, 100].min.round(1)
+          end
+
+        {
+          requested_at: blast.requested_at,
+          delivery_count: blast.delivery_count,
+          completed:,
+          open_count:,
+          open_rate:,
+        }
+      end
+    end
+
+    # First opens recorded in this resend's attribution window (see non_opener_resend_props).
+    def resend_open_count(blast, next_blast:)
+      opens = installment.email_infos.where(state: "opened").where("opened_at >= ?", blast.requested_at)
+      opens = opens.where("opened_at < ?", next_blast.requested_at) if next_blast.present?
+      opens.count
+    end
+
     # Resolve the single-customer recipient server-side from the purchase id so the
     # composer never has to carry the customer's email in the page URL.
     def single_customer_recipient_props(purchase_id)
