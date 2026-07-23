@@ -40,6 +40,9 @@ class StripeCharge < BaseProcessorCharge
       billing_details = stripe_charge[:billing_details]
       payment_card = payment_method_details[:card]
       self.card_instance_id = stripe_charge[:payment_method]
+      # Record Stripe's own classification of the method ("card", "upi", "ideal", ...) so
+      # non-card payment volume is measurable from our records without querying Stripe.
+      self.payment_method_type = payment_method_details[:type]
       # Inline non-card methods (e.g. Link on the client-confirmed path) carry no card block, so
       # record what the method exposes instead of dereferencing a nil card.
       if payment_card.nil?
