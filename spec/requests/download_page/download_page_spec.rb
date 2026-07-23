@@ -699,9 +699,12 @@ describe("Download Page", type: :system, js: true) do
       expect(page).to have_text(product.name)
     end
 
-    it "renders the same page if the email is invalid" do
+    it "renders the same page if the email is wrong" do
       expect(page).to have_text("You've viewed this product a few times already")
-      fill_in "Email address", with: "invalid"
+      # A well-formed address that doesn't match the purchase — malformed input
+      # (e.g. "invalid") no longer reaches the server now that the field is
+      # type="email" with native browser validation.
+      fill_in "Email address", with: "wrong@example.com"
       click_on "Confirm email"
       expect(page).to have_alert(text: "Wrong email. Please try again.")
       expect(page).to have_text("You've viewed this product a few times already")
