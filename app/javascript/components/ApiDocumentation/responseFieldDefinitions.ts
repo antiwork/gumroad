@@ -410,12 +410,14 @@ export const SALE_FIELDS: FieldDefinition[] = [
       {
         name: "fx_rate",
         type: "string | null",
-        description: "Exchange rate used for the charge, as a decimal string",
+        description:
+          "Exchange rate used for the charge: USD per 1 unit of `currency` (canonical USD cents were divided by this rate to produce buyer-currency cents). A decimal string to avoid float precision loss; null when no rate was recorded for the charge.",
       },
       {
         name: "refunded_cents",
         type: "number",
-        description: "Amount returned to the buyer so far, in buyer currency cents",
+        description:
+          "Amount returned to the buyer so far, in buyer currency cents. Summed from the buyer-currency amounts snapshotted on each effective refund; refunds recorded without a buyer-currency snapshot contribute 0 (their canonical USD amounts still appear in the top-level refund fields).",
       },
     ],
   },

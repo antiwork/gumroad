@@ -969,7 +969,10 @@ class Purchase < ApplicationRecord
       upsell: upsell_purchase&.as_json,
       paypal_refund_expired: paypal_refund_expired?,
       **(version == 2 ? web_csv_parity_fields : {}),
-      **(version == 2 ? { buyer_presentment: buyer_presentment_api_fields } : {})
+      # Opt-in (Sales API only) so other version-2 serializations — like the audience
+      # customers search, which renders up to 100 purchases without the Sales API
+      # preloads — don't pick up per-purchase presentment/refund queries.
+      **(version == 2 && options[:include_buyer_presentment] ? { buyer_presentment: buyer_presentment_api_fields } : {})
     ).delete_if { |_, v| v.nil? }
 
     json[:card] = {
