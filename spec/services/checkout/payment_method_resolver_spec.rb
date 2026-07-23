@@ -85,6 +85,94 @@ describe Checkout::PaymentMethodResolver do
         expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact", "upi")
       end
 
+      context "with the Klarna launch flag (checkout_local_method_klarna) active for the seller" do
+        before { Feature.activate_user(:checkout_local_method_klarna, seller) }
+        after { Feature.deactivate_user(:checkout_local_method_klarna, seller) }
+
+        it "enables Klarna for a US buyer on a cart inside the USD amount window" do
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).payment_method_types)
+            .to eq(%w[card link cashapp klarna])
+        end
+
+        it "keeps the eligible policy set unchanged — the flag only widens the launched set" do
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).eligible_payment_method_types)
+            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account])
+        end
+
+        it "drops Klarna for a non-US buyer — v1 offers it on the USD lane to US buyers only" do
+          expect(resolve(buyer_country: "GB", cart_total_usd_cents: 10_00).payment_method_types)
+            .to eq(%w[card link])
+        end
+
+        it "drops Klarna when the buyer country is unknown, failing safe" do
+          expect(resolve(buyer_country: nil, cart_total_usd_cents: 10_00).payment_method_types)
+            .to eq(%w[card link])
+        end
+
+        it "drops Klarna below Stripe's USD transaction floor" do
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 99).payment_method_types)
+            .not_to include("klarna")
+        end
+
+        it "offers Klarna at the window edges" do
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 1_00).payment_method_types).to include("klarna")
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 4_000_00).payment_method_types).to include("klarna")
+        end
+
+        it "drops Klarna above Stripe's USD transaction ceiling — fail eligibility closed rather than erroring at confirm" do
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 4_000_01).payment_method_types)
+            .not_to include("klarna")
+        end
+
+        it "drops Klarna when the cart total is unknown, failing safe" do
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: nil).payment_method_types)
+            .not_to include("klarna")
+        end
+
+        it "drops Klarna from the eligible AND launched sets on recurring carts — memberships are excluded from v1" do
+          resolution = resolve(buyer_country: "US", cart_total_usd_cents: 10_00, recurring: true)
+
+          expect(resolution.eligible_payment_method_types).not_to include("klarna")
+        end
+
+        it "drops Klarna on PPP-discounted checkouts — no Stripe-owned funding country to verify pre-charge" do
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00, ppp_discounted: true).payment_method_types)
+            .to eq(%w[card cashapp])
+        end
+
+        it "leaves card/Link/Cash App and the forced-currency methods exactly as before the flag" do
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).payment_method_types)
+            .to include("card", "link", "cashapp")
+          expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).payment_method_types)
+            .not_to include("ideal", "bancontact", "upi", "afterpay_clearpay", "affirm")
+        end
+
+        context "when a forced-currency method surface is active (Stripe test mode, EUR cart)" do
+          before do
+            allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+            Feature.activate_user(:buyer_currency_charging, seller)
+            Feature.activate_user(:buyer_local_currency, seller)
+          end
+
+          after do
+            Feature.deactivate_user(:buyer_currency_charging, seller)
+            Feature.deactivate_user(:buyer_local_currency, seller)
+          end
+
+          it "withholds Klarna whenever a forced-currency method survives — Klarna is vetted for USD intents only" do
+            methods = resolve(buyer_country: "US", cart_product_currency: "eur", cart_total_usd_cents: 10_00).payment_method_types
+
+            expect(methods).to include("ideal", "bancontact")
+            expect(methods).not_to include("klarna")
+          end
+        end
+      end
+
+      it "keeps Klarna off without its launch flag even for an eligible US cart — the 0% default" do
+        expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).payment_method_types)
+          .to eq(%w[card link cashapp])
+      end
+
       context "with the internal buyer-currency flags enabled in Stripe test mode" do
         let(:platform_merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
 

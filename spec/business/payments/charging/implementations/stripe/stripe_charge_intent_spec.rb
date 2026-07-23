@@ -166,7 +166,7 @@ describe StripeChargeIntent, :vcr do
 
     context "when next action type is unsupported" do
       before do
-        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "boleto_display_details"
       end
 
       it "notifies error tracker" do
@@ -178,6 +178,21 @@ describe StripeChargeIntent, :vcr do
     context "when next action type is handled by Stripe.js in the browser" do
       before do
         allow(processor_payment_intent.next_action).to receive(:type).and_return "cashapp_handle_redirect_or_display_qr_code"
+      end
+
+      it "does not notify error tracker" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        described_class.new(payment_intent: processor_payment_intent)
+      end
+
+      it "does not report the action as supported by the server-driven flow" do
+        expect(described_class.new(payment_intent: processor_payment_intent).requires_action?).to eq(false)
+      end
+    end
+
+    context "when next action type is a browser-handled redirect (iDEAL/Klarna abandoned on the provider's site)" do
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
       end
 
       it "does not notify error tracker" do

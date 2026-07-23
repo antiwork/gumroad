@@ -29,8 +29,10 @@ class Checkout::PaymentMethodResolver
   # Afterpay/Clearpay, Affirm, and UPI are one-time, buyer-present only, so a recurring lifecycle
   # drops them. (Recurring carts currently fall back to Lane A before any Stripe method list is
   # built, but the eligible-policy set is logged and intersected by later units, so it must not
-  # claim a recurring-incapable method.)
-  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi].freeze
+  # claim a recurring-incapable method.) Klarna is here as a v1 launch decision, not a Stripe
+  # limitation: Stripe supports Klarna on recurring payments, but memberships/preorders are
+  # excluded from Klarna's first launch (gumroad-private#933) so the policy set must not claim it.
+  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna].freeze
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
   # element flags themselves since Stripe's dashboard payment-method settings are the emergency
@@ -55,6 +57,32 @@ class Checkout::PaymentMethodResolver
   # (the handshake note above).
   SELLER_OPT_IN_PAYMENT_METHOD_TYPES = %w[us_bank_account].freeze
   LINK_PAYMENT_METHOD_TYPE = "link"
+  # Klarna (buy now, pay later; redirect-based) launches behind its own per-seller Flipper flag,
+  # following the per-method launch-flag pattern of the forced-currency local methods
+  # (checkout_local_method_ideal / _upi) so it can ramp and roll back independently
+  # (gumroad-private#933 — Klarna is the top-ranked next method by GMV lift). Unlike iDEAL/UPI,
+  # Klarna does NOT force a presentment currency, so it does not live in
+  # Checkout::BuyerCurrencyEligibility's forced-currency registry: it rides the existing
+  # canonical-USD element/intent lane.
+  KLARNA_PAYMENT_METHOD_TYPE = "klarna"
+  KLARNA_LAUNCH_FEATURE = :checkout_local_method_klarna
+  # v1 offers Klarna to US buyers only. Stripe's cross-border rules for Klarna require the
+  # customer's location currency as the presentment currency (and, for a US business like the
+  # platform account, US customers specifically) — and this lane only creates USD intents, whose
+  # customer-location currency is the US dollar. Offering Klarna to a UK/DE/SE buyer here would
+  # render a method whose confirm Stripe rejects (their location currencies are GBP/EUR/SEK).
+  # Reaching those buyers needs the buyer-currency presentment lane (GBP/EUR intents), which is
+  # a later phase. Deliberately NOT in US_LOCKED_PAYMENT_METHOD_TYPES: that constant feeds the
+  # PPP region-locked allowance, and Klarna stays gated out of PPP checkouts (see
+  # ppp_method_matrix — its funding country is not verifiable pre-charge).
+  KLARNA_SUPPORTED_BUYER_COUNTRY = "US"
+  # Stripe enforces Klarna transaction limits per payment option and country; a cart outside
+  # every option's range fails at confirm with no recoverable buyer action. Fail eligibility
+  # closed instead: only offer Klarna when the cart total sits inside the widest USD window
+  # (Pay in full: 0–4,000 USD; the floor is kept at $1 so near-zero carts, which Klarna's other
+  # options all reject, never render the method). An unknown total also fails closed.
+  KLARNA_MIN_USD_CHARGE_CENTS = 1_00
+  KLARNA_MAX_USD_CHARGE_CENTS = 4_000_00
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
@@ -96,7 +124,14 @@ class Checkout::PaymentMethodResolver
   # Payment Element mounts in that currency (StripePaymentPresenter#method_forced_shape?) and
   # the deferred intent can be created in it. Offering the methods on any other cart puts EUR-only
   # entries on a USD element/intent, which Stripe rejects outright (no element mounts at all).
-  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false, cart_product_currency: nil)
+  #
+  # cart_total_usd_cents: the cart's total in USD cents, or nil when unknown. Only consulted by
+  # the Klarna gate (Stripe enforces per-country transaction limits for Klarna, so carts outside
+  # the window must not render it — see KLARNA_MIN/MAX_USD_CHARGE_CENTS). The presenter passes
+  # the pre-tax item total and prepare passes the final charged total; a cart whose final total
+  # drifts out of the window between mount and prepare fails closed at prepare rather than at
+  # Stripe. Nil fails closed for Klarna only.
+  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false, cart_product_currency: nil, cart_total_usd_cents: nil)
     @sellers = sellers
     @recurring = recurring
     @commission = commission
@@ -104,6 +139,7 @@ class Checkout::PaymentMethodResolver
     @buyer_country = buyer_country
     @ppp_discounted = ppp_discounted
     @cart_product_currency = cart_product_currency
+    @cart_total_usd_cents = cart_total_usd_cents
   end
 
   def resolve
@@ -125,7 +161,7 @@ class Checkout::PaymentMethodResolver
   end
 
   private
-    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country, :ppp_discounted, :cart_product_currency
+    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country, :ppp_discounted, :cart_product_currency, :cart_total_usd_cents
 
     # The client-confirm cart-shape gates (single-seller, non-connect, one-time), owned here and applied
     # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
@@ -174,7 +210,14 @@ class Checkout::PaymentMethodResolver
     def launched_method_set(eligible)
       launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
       launched += seller_opt_in_methods(eligible)
-      launched += forced_currency_methods(eligible)
+      forced = forced_currency_methods(eligible)
+      launched += forced
+      # Klarna never joins a forced-currency element mount: when a forced-currency method (iDEAL/
+      # UPI) survives, the Payment Element mounts in EUR/INR and the deferred intent is created in
+      # that currency — but the Klarna gate below reasons in USD (the amount window, and the US
+      # cross-border rule that ties Klarna on this lane to USD intents). Mixed listings would put
+      # a USD-only-vetted method on a non-USD intent, so the two surfaces stay mutually exclusive.
+      launched += klarna_methods(eligible) if forced.empty?
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched -= IN_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == IN_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
@@ -191,6 +234,33 @@ class Checkout::PaymentMethodResolver
       return [] unless sellers.one? && sellers.first&.ach_payments_enabled?
 
       eligible & SELLER_OPT_IN_PAYMENT_METHOD_TYPES
+    end
+
+    # Klarna's launch gate: offered only when the seller's own launch flag
+    # (checkout_local_method_klarna, the gumroad-private#933 ramp lever) is active. Unlike the
+    # forced-currency methods there is no blanket Stripe-test-mode bypass — the flag is the QA
+    # switch too (activate it for a QA seller on preview/staging), because a test-mode bypass
+    # would silently offer Klarna on every test-keyed checkout regardless of the ramp decision.
+    # On top of the flag, three Klarna-specific cart gates — all fail closed:
+    #   - US buyers only in v1 (see KLARNA_SUPPORTED_BUYER_COUNTRY; unknown GeoIP fails safe),
+    #   - the cart total must sit inside Stripe's Klarna USD transaction window (a cart outside
+    #     it renders a method whose confirm Stripe rejects with no buyer recourse),
+    #   - one-time carts only (recurring is already stripped from `eligible` by
+    #     RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES, which the intersection here inherits).
+    def klarna_methods(eligible)
+      return [] unless sellers.one?
+      return [] unless eligible.include?(KLARNA_PAYMENT_METHOD_TYPE)
+      return [] unless buyer_country == KLARNA_SUPPORTED_BUYER_COUNTRY
+      return [] unless klarna_amount_within_limits?
+      return [] unless Feature.active?(KLARNA_LAUNCH_FEATURE, sellers.first)
+
+      [KLARNA_PAYMENT_METHOD_TYPE]
+    end
+
+    def klarna_amount_within_limits?
+      cart_total_usd_cents.present? &&
+        cart_total_usd_cents >= KLARNA_MIN_USD_CHARGE_CENTS &&
+        cart_total_usd_cents <= KLARNA_MAX_USD_CHARGE_CENTS
     end
 
     # The methods (from our policy-resolved set) that the account the PaymentIntent will be created
@@ -293,9 +363,11 @@ class Checkout::PaymentMethodResolver
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify
     # (card/wallets, later sepa_debit) or whose region lock matches the buyer's country (Cash App
     # Pay / ACH — already region-gated above, so surviving entries match by construction). Methods
-    # with no Stripe-owned funding country (Link today; Klarna/Afterpay/Affirm/PayPal when they
+    # with no Stripe-owned funding country (Link and Klarna today; Afterpay/Affirm/PayPal when they
     # launch) are dropped: `previewed_country` would return nil and the purchase would fail closed
     # at prepare anyway — never render a method that cannot complete the discounted purchase.
+    # Klarna's US buyer gate is a policy country check on GeoIP, not a Stripe-owned funding
+    # country, so it does not qualify for the region-locked allowance.
     def ppp_method_matrix(launched)
       launched & (PPP_VERIFIABLE_PAYMENT_METHOD_TYPES + PPP_REGION_LOCKED_PAYMENT_METHOD_TYPES)
     end

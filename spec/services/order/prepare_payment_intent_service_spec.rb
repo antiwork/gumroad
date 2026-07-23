@@ -521,6 +521,78 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
+      # Klarna joins the intent only when its launch flag is on AND the final charged total sits
+      # inside Stripe's Klarna USD window — the same resolver both the presenter and this service
+      # read, so the Element's list and the intent's list stay equal.
+      it "adds Klarna to the deferred intent for a flagged seller and eligible US cart" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_klarna").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp klarna])
+        expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
+      it "keeps Klarna off the deferred intent when the charged total is outside Stripe's Klarna window" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        expensive_product = create(:product, user: seller, price_cents: 5_000_00)
+        params = { line_items: [{ uid: "unique-id-0", permalink: expensive_product.unique_permalink, perceived_price_cents: expensive_product.price_cents, quantity: 1 }] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_klarna_big").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
+      it "keeps Klarna off the deferred intent without its launch flag — the 0% default" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_no_klarna").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      end
+
       # The presenter derives the Element's Link config from the same resolver output, so the
       # Payment Element and deferred intent both carry "link" with no per-seller flag. Without a
       # resolvable ip_country the US-locked methods stay dropped — Link is not region-gated.

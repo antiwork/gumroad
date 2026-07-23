@@ -158,6 +158,12 @@ class Checkout::StripePaymentPresenter
         # carts pass nil — they always mount the canonical USD element, where forced-currency
         # methods must never appear.
         cart_product_currency: items.one? ? items.first[:product_currency] : nil,
+        # The Klarna amount-window gate's input (see the resolver). Pre-tax item total, the same
+        # basis the STRIPE_PAYMENT_ELEMENT_MINIMUM gate uses — prepare re-checks against the
+        # final charged total, so a total that drifts out of Klarna's window after tax/tip
+        # fails closed there instead of at Stripe. Only meaningful for USD-priced carts;
+        # forced-currency carts never offer Klarna (see the resolver's launched_method_set).
+        cart_total_usd_cents: items.all? { _1[:product_currency] == Currency::USD } ? items.sum { _1[:price_cents].to_i } : nil,
       )
     end
 

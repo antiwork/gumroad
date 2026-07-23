@@ -83,7 +83,7 @@ describe StripeSetupIntent, :vcr do
 
     context "when next action type is unsupported" do
       before do
-        allow(processor_setup_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_setup_intent.next_action).to receive(:type).and_return "boleto_display_details"
       end
 
       it "notifies error tracker" do
@@ -95,6 +95,17 @@ describe StripeSetupIntent, :vcr do
     context "when next action type is handled by Stripe.js in the browser" do
       before do
         allow(processor_setup_intent.next_action).to receive(:type).and_return "cashapp_handle_redirect_or_display_qr_code"
+      end
+
+      it "does not notify error tracker" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        described_class.new(processor_setup_intent)
+      end
+    end
+
+    context "when next action type is a browser-handled redirect" do
+      before do
+        allow(processor_setup_intent.next_action).to receive(:type).and_return "redirect_to_url"
       end
 
       it "does not notify error tracker" do

@@ -439,8 +439,15 @@ class Order::PreparePaymentIntentService
       # The US-locked methods (Cash App Pay, ACH) are also USD-only: Stripe rejects creating an
       # intent in any other currency that lists them. Dropping them here is about currency
       # compatibility, not the buyer's location — a US-GeoIP buyer keeps them on USD intents.
+      # Klarna is dropped for the same reason: its v1 gate vets carts for USD intents only (the
+      # US amount window and cross-border rule), so it must never ride a forced-currency intent —
+      # this is belt-and-braces, since the resolver already withholds Klarna whenever a
+      # forced-currency method is on the cart (see launched_method_set).
       # The remaining launched methods (card, Link) support every currency we can force today.
-      method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES if presentment.presentment_currency != Currency::USD
+      if presentment.presentment_currency != Currency::USD
+        method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
+        method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
+      end
 
       (method_types + [@previewed_payment_method_type]).uniq
     end
@@ -463,7 +470,13 @@ class Order::PreparePaymentIntentService
         # currency, nil for multi-item carts) so both sides resolve identical method sets —
         # the Element's list and the deferred intent's list must match or Stripe rejects
         # the ConfirmationToken.
-        cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil
+        cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil,
+        # Klarna's amount-window input (see the resolver): the final charged USD total. The
+        # presenter gated the element on the pre-tax item total, so a cart whose total drifts
+        # across the Klarna window between mount and prepare resolves a different method set
+        # here — Stripe then rejects the (payment_method_types-scoped) ConfirmationToken and the
+        # purchase fails closed instead of reaching Klarna outside its limits.
+        cart_total_usd_cents: purchases_to_charge.sum(&:total_transaction_cents)
       ).resolve
     end
 

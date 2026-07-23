@@ -621,6 +621,54 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link]))
     end
 
+    describe "Klarna launch flag (checkout_local_method_klarna)" do
+      def klarna_flagged_seller_item(**overrides)
+        item = confirm_flagged_seller_product(**overrides)
+        seller = User.find_by(external_id: item[:product][:creator][:id])
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        item
+      end
+
+      it "mounts the element with Klarna for a US buyer of a flagged seller when the cart is inside the USD window" do
+        stub_geoip_country("104.28.0.1", "United States")
+
+        expect(stripe_payment_props(add_products: [klarna_flagged_seller_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp klarna]))
+      end
+
+      it "keeps Klarna off for a non-US buyer even with the flag on" do
+        stub_geoip_country("2.2.2.2", "United Kingdom")
+
+        expect(stripe_payment_props(add_products: [klarna_flagged_seller_item], ip: "2.2.2.2"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link]))
+      end
+
+      it "keeps Klarna off a cart above Stripe's USD transaction ceiling — eligibility fails closed instead of erroring at confirm" do
+        stub_geoip_country("104.28.0.1", "United States")
+        item = klarna_flagged_seller_item
+        item[:price] = 5_000_00
+
+        expect(stripe_payment_props(add_products: [item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      it "keeps Klarna off recurring (membership) carts — excluded from v1" do
+        stub_geoip_country("104.28.0.1", "United States")
+        item = klarna_flagged_seller_item(recurrence: "monthly")
+
+        props = stripe_payment_props(add_products: [item], ip: "104.28.0.1")
+
+        expect(props[:integration]).not_to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
+      end
+    end
+
+    it "keeps Klarna off without its launch flag — the flag defaults to 0% everywhere" do
+      stub_geoip_country("104.28.0.1", "United States")
+
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+    end
+
     describe "PPP method matrix (U13)" do
       let(:ppp_details) { { country: "Brazil", factor: 0.5, minimum_price: 99 } }
 
