@@ -1027,6 +1027,17 @@ class Subscription < ApplicationRecord
     token
   end
 
+  # Returns the current manage-link token, minting a new one only when the
+  # existing token is missing or expired. Use this in emails that can be sent
+  # several times in quick succession (e.g. repeated duplicate-checkout
+  # attempts): `refresh_token` replaces the subscription's only accepted token,
+  # so calling it from every delivery would invalidate the links in earlier
+  # emails the customer may not have opened yet.
+  def reusable_token
+    return token if token.present? && token_expires_at&.future?
+    refresh_token
+  end
+
   def gift?
     true_original_purchase.is_gift_sender_purchase?
   end

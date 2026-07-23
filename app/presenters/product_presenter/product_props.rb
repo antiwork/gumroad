@@ -183,7 +183,10 @@ class ProductPresenter::ProductProps
           fine_print: seller.refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(seller.refund_policy.fine_print) : nil,
           updated_at: seller.refund_policy.updated_at.to_date,
         }
-      elsif product.product_refund_policy_enabled?
+      elsif product.product_refund_policy_enabled? && product.product_refund_policy.present?
+        # The enabled flag can be out of sync with the underlying record: a product may have
+        # product_refund_policy_enabled set while its ProductRefundPolicy row was deleted or
+        # never created. Product::AsJson applies the same presence guard for this reason.
         {
           title: product.product_refund_policy.title,
           fine_print: product.product_refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(product.product_refund_policy.fine_print) : nil,

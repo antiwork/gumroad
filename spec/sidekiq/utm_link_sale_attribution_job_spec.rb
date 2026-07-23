@@ -9,10 +9,6 @@ describe UtmLinkSaleAttributionJob do
   let!(:utm_link) { create(:utm_link, seller:) }
   let!(:order) { create(:order) }
 
-  before do
-    Feature.activate_user(:utm_links, seller)
-  end
-
   it "attributes purchases to utm link visits within the attribution window" do
     purchase = create(:purchase, link: product, seller:)
     order.purchases << purchase
@@ -88,22 +84,6 @@ describe UtmLinkSaleAttributionJob do
       driven_sale = utm_link.utm_link_driven_sales.sole
       expect(driven_sale.purchase_id).to eq(target_purchase.id)
       expect(driven_sale.utm_link_visit_id).to eq(visit.id)
-    end
-  end
-
-  context "when feature flag is disabled" do
-    before do
-      Feature.deactivate_user(:utm_links, seller)
-    end
-
-    it "does not attribute any purchases" do
-      purchase = create(:purchase, link: product, seller:)
-      order.purchases << purchase
-      create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.day.ago)
-
-      expect do
-        described_class.new.perform(order.id, browser_guid)
-      end.not_to change { utm_link.utm_link_driven_sales.count }
     end
   end
 

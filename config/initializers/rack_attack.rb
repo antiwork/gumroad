@@ -189,6 +189,19 @@ class Rack::Attack
 
   throttle_by_ip_for_period path: "/purchases", requests: 50, period: 1.hour
 
+  # Help Center contact form. Each submission sends an email into the support
+  # inbox, so without a limit a single IP could flood support (and burn email
+  # reputation). Real users send one or two messages; `max_level: 1` skips the
+  # exponential-backoff tiers, which with a 1-minute base period would derive
+  # limits stricter than the base and block legitimate retries. The route is a
+  # Rails `resource`, so it accepts any format suffix (`/help/contact.xml`,
+  # `/help/contact.txt`, ...) — match by regex like the OAuth device-flow
+  # throttles below so no suffix variant bypasses the limit, and key on the IP
+  # alone so every variant shares one counter instead of getting its own budget.
+  throttle_with_exponential_backoff(name: "help_center_contact/ip", requests: 3, period: 60.seconds, max_level: 1) do |req|
+    req.remote_ip if req.path.match?(%r{\A/help/contact(?:\.[^/]+)?\z}) && req.post?
+  end
+
   throttle_with_exponential_backoff(name: "oauth_device_code/ip", requests: 20, period: 60.seconds) do |req|
     req.remote_ip if req.path.match?(%r{\A/oauth/device/code(?:\.[^/]+)?\z}) && req.post?
   end

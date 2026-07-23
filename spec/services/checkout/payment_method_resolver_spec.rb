@@ -24,7 +24,7 @@ describe Checkout::PaymentMethodResolver do
 
       it "resolves the full inline dynamic method set as eligible" do
         expect(resolve.eligible_payment_method_types)
-          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact cashapp us_bank_account])
+          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account])
       end
 
       it "enables the launched methods on Stripe for a US buyer, gating the rest behind later units" do
@@ -82,7 +82,7 @@ describe Checkout::PaymentMethodResolver do
       end
 
       it "still gates the remaining redirect methods behind later units" do
-        expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact")
+        expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact", "upi")
       end
 
       context "with the internal buyer-currency flags enabled in Stripe test mode" do
@@ -94,6 +94,12 @@ describe Checkout::PaymentMethodResolver do
 
         it "surfaces the EUR forced-currency methods for manual presentment QA when the cart is priced in EUR" do
           expect(resolve(cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
+        end
+
+        it "surfaces UPI for manual presentment QA only for Indian buyers when the cart is priced in INR" do
+          expect(resolve(buyer_country: "IN", cart_product_currency: "inr").payment_method_types).to include("upi")
+          expect(resolve(buyer_country: "GB", cart_product_currency: "inr").payment_method_types).not_to include("upi")
+          expect(resolve(buyer_country: nil, cart_product_currency: "inr").payment_method_types).not_to include("upi")
         end
 
         it "keeps them off a USD-priced cart — Stripe rejects an element/intent listing EUR-only methods in USD" do
@@ -123,6 +129,29 @@ describe Checkout::PaymentMethodResolver do
           methods = resolve(cart_product_currency: "eur").payment_method_types
           expect(methods).to include("ideal")
           expect(methods).not_to include("bancontact")
+        end
+
+        it "launches UPI in live mode when its per-method launch flag is on for an Indian buyer, without pulling EUR methods along" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_upi, seller)
+
+          methods = resolve(buyer_country: "IN", cart_product_currency: "inr").payment_method_types
+          expect(methods).to include("upi")
+          expect(methods).not_to include("ideal", "bancontact")
+        end
+
+        it "keeps launched UPI off non-India buyers even when the cart is priced in INR" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_upi, seller)
+
+          expect(resolve(buyer_country: "US", cart_product_currency: "inr").payment_method_types).not_to include("upi")
+        end
+
+        it "retains launched UPI on a PPP-discounted INR checkout from India — region-locked methods pass the U13 matrix" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_upi, seller)
+
+          expect(resolve(buyer_country: "IN", cart_product_currency: "inr", ppp_discounted: true).payment_method_types).to include("upi")
         end
 
         it "keeps a launched method off carts not priced in its forced currency, even in live mode" do
@@ -177,10 +206,10 @@ describe Checkout::PaymentMethodResolver do
     end
 
     context "with a recurring (subscription) lifecycle" do
-      it "disables Afterpay/Clearpay and Affirm in the eligible set" do
+      it "disables Afterpay/Clearpay, Affirm, and UPI in the eligible set — none support recurring or off-session collection" do
         eligible = resolve(recurring: true).eligible_payment_method_types
 
-        expect(eligible).not_to include("afterpay_clearpay", "affirm")
+        expect(eligible).not_to include("afterpay_clearpay", "affirm", "upi")
         expect(eligible).to include("card", "link")
       end
 

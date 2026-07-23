@@ -221,6 +221,17 @@ describe ProductPresenter::ProductProps do
             end
           end
 
+          context "when the refund policy record is missing despite the flag being enabled" do
+            before do
+              product_refund_policy.destroy!
+              product.reload
+            end
+
+            it "returns nil instead of raising" do
+              expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user:)[:product][:refund_policy]).to be_nil
+            end
+          end
+
           context "when account-level refund policy setting is enabled" do
             before do
               seller.update!(refund_policy_enabled: true)

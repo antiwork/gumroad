@@ -30,13 +30,13 @@ module User::Validations
       return if self.errors[:email].present?
       return unless blocked_by_email_domain?
 
-      errors.add(:base, "Something went wrong.")
+      errors.add(:base, :blocked_signup, message: "Something went wrong.")
     end
 
     def account_created_ip_is_not_blocked
       return unless blocked_by_account_created_ip?
 
-      errors.add(:base, "Something went wrong.")
+      errors.add(:base, :blocked_signup, message: "Something went wrong.")
     end
 
     def avatar_is_valid

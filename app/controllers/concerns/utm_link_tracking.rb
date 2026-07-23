@@ -29,7 +29,6 @@ module UtmLinkTracking
       return unless UserCustomDomainConstraint.matches?(request)
       seller = CustomDomain.find_by_host(request.host)&.user || Subdomain.find_seller_by_request(request)
       return if seller.blank?
-      return unless Feature.active?(:utm_links, seller)
 
       target_resource_type, target_resource_id = determine_utm_link_target_resource(seller)
       return if target_resource_type.blank?
@@ -60,7 +59,6 @@ module UtmLinkTracking
 
         auto_create_utm_link(utm_link, seller) if utm_link.new_record?
         return unless utm_link.persisted?
-        return unless Feature.active?(:utm_links, utm_link.seller)
 
         utm_link.utm_link_visits.create!(
           user: current_user,

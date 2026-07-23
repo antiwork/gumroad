@@ -821,6 +821,44 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
+    it "mounts the INR element with UPI for an Indian buyer when UPI's launch flag is on" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "inr", price_cents: 7300)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.10", "India")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.10")).to eq(
+        payment_element_client_confirm_props(
+          currency: "inr",
+          presentment_amount_cents: 7300,
+          payment_method_types: %w[card link upi],
+          disable_wallets: true,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps the canonical USD element for a non-India buyer of an INR product even when UPI's launch flag is on" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "inr", price_cents: 7300)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.11", "United States")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.11"))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
     it "keeps the canonical USD element for a direct-charge seller without an iDEAL capability snapshot" do
       seller = create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 1500)

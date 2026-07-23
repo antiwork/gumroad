@@ -109,4 +109,45 @@ describe User::EmailNormalization do
       end
     end
   end
+
+  describe ".blocked_signup_error?" do
+    before { Feature.activate(:block_gmail_abuse_at_signup) }
+    after do
+      Feature.deactivate(:block_gmail_abuse_at_signup)
+      $redis.del(GmailAbuseFilter::REDIS_KEY)
+    end
+
+    it "returns true for a RecordInvalid raised by the gmail-abuse signup gate" do
+      GmailAbuseFilter.add!("scammer@gmail.com")
+      user = build(:user, email: "scammer+new@gmail.com")
+
+      exception = begin
+        user.save!
+        nil
+      rescue ActiveRecord::RecordInvalid => e
+        e
+      end
+
+      expect(exception).to be_present
+      expect(User.blocked_signup_error?(exception)).to be(true)
+    end
+
+    it "returns false for a RecordInvalid raised by an unrelated validation" do
+      user = build(:user, email: "not-an-email")
+
+      exception = begin
+        user.save!
+        nil
+      rescue ActiveRecord::RecordInvalid => e
+        e
+      end
+
+      expect(exception).to be_present
+      expect(User.blocked_signup_error?(exception)).to be(false)
+    end
+
+    it "returns false for exceptions without a record" do
+      expect(User.blocked_signup_error?(StandardError.new("boom"))).to be(false)
+    end
+  end
 end

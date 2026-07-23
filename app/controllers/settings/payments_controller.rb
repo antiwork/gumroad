@@ -2,6 +2,7 @@
 
 class Settings::PaymentsController < Settings::BaseController
   include ActionView::Helpers::SanitizeHelper
+  include AuditsPayoutSettingsChanges
 
   before_action :authorize
 
@@ -40,6 +41,7 @@ class Settings::PaymentsController < Settings::BaseController
     if updated_country_code.present? && updated_country_code != compliance_info.legal_entity_country_code
       begin
         UpdateUserCountry.new(new_country_code: updated_country_code, user: current_seller).process
+        log_payout_settings_update_by_non_owner
         flash[:notice] = "Your country has been updated!"
         return redirect_to settings_payments_path, status: :see_other
       rescue UpdateUserCountry::PayoutInProcessingError
@@ -85,17 +87,31 @@ class Settings::PaymentsController < Settings::BaseController
 
     return unless update_payout_method
 
+    # Log the audit note as soon as the payout method has actually changed —
+    # not only at the end of the action — so a later validation failure
+    # (compliance info, payout threshold) can't leave a completed payout
+    # method change without an attribution record.
+    log_payout_settings_update_by_non_owner if is_changing_payout_method
+
     return unless update_user_compliance_info
+
+    log_payout_settings_update_by_non_owner if params[:user].present?
 
     if params[:payout_threshold_cents].present? && params[:payout_threshold_cents].to_i < current_seller.minimum_payout_threshold_cents
       return redirect_with_error("Your payout threshold must be greater than the minimum payout amount")
     end
 
-    unless current_seller.update(
-      params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :disable_buyer_local_currency)
-    )
+    payout_preference_params = params.permit(:payouts_paused_by_user, :payout_threshold_cents, :payout_frequency, :disable_buyer_local_currency)
+    unless current_seller.update(payout_preference_params)
       return redirect_with_error(current_seller.errors.full_messages.first)
     end
+
+    # Log right after the settings write succeeds — not at the end of the
+    # action — so a later Stripe merchant-account failure can't leave a
+    # completed change unattributed, and only when a payout preference was
+    # actually submitted, so a request that changed nothing here doesn't
+    # record a false audit entry.
+    log_payout_settings_update_by_non_owner if payout_preference_params.to_h.any?
 
     # Once the user has submitted all their information, and a bank account record was created for them,
     # we can create a stripe merchant account for them if they don't already have one.
@@ -136,6 +152,8 @@ class Settings::PaymentsController < Settings::BaseController
         current_seller.save!
       end
     end
+
+    log_payout_settings_update_by_non_owner("Compliance country set")
   end
 
   def opt_in_to_au_backtax_collection
@@ -148,6 +166,7 @@ class Settings::PaymentsController < Settings::BaseController
                              jurisdiction: BacktaxAgreement::Jurisdictions::AUSTRALIA,
                              signature: params["signature"])
 
+    log_payout_settings_update_by_non_owner("Australia backtax collection agreement signed")
 
     render json: { success: true }
   end
@@ -167,11 +186,14 @@ class Settings::PaymentsController < Settings::BaseController
       send_email_confirmation_notification: false
     )
 
+    log_payout_settings_update_by_non_owner("PayPal account connection updated")
+
     redirect_to settings_payments_path, notice: message
   end
 
   def remove_credit_card
     if current_seller.remove_credit_card
+      log_payout_settings_update_by_non_owner
       head :no_content
     else
       render json: { error: current_seller.errors.full_messages.join(",") }, status: :bad_request
@@ -210,6 +232,17 @@ class Settings::PaymentsController < Settings::BaseController
                                            }).url, allow_other_host: true
   rescue Stripe::StripeError => e
     sync_stripe_disabled_reason(current_seller.stripe_account) if e.is_a?(Stripe::InvalidRequestError) && current_seller.stripe_account.stripe_disabled_reason.blank?
+
+    # Stripe refuses to create account links for rejected accounts. That's an
+    # expected terminal state, not a bug: the Payments page already shows a
+    # rejection banner explaining what happened (and the sync above ensures the
+    # banner has the disabled reason). So for this specific error we skip the
+    # Sentry alert and the "contact support" flash — the seller just lands back
+    # on the page with the explanation.
+    if rejected_account_link_error?(e)
+      redirect_to settings_payments_path and return
+    end
+
     ErrorNotifier.notify(e, context: { user_id: current_seller.id })
     redirect_to settings_payments_path, alert: "We couldn't open the verification page. Please contact support."
   end
@@ -227,7 +260,11 @@ class Settings::PaymentsController < Settings::BaseController
       # We'll get a account.updated webhook event and mark these requests as provided there as well,
       # but doing it here instead of waiting on the webhook, so that the respective compliance request notice is removed
       # from the page immediately.
-      current_seller.user_compliance_info_requests.requested.each(&:mark_provided!)
+      pending_requests = current_seller.user_compliance_info_requests.requested
+      if pending_requests.exists?
+        pending_requests.each(&:mark_provided!)
+        log_payout_settings_update_by_non_owner("Stripe remediation information submitted")
+      end
     end
 
     nothing_open_on_stripe = hard_requirements_clear &&
@@ -302,6 +339,16 @@ class Settings::PaymentsController < Settings::BaseController
       disabled_reason = stripe_account["requirements"]["disabled_reason"]
       merchant_account.update!(stripe_disabled_reason: disabled_reason) if disabled_reason.present?
     rescue Stripe::StripeError, ActiveRecord::ActiveRecordError
+    end
+
+    # Matches Stripe's error for trying to create an account link on a rejected
+    # account ("An account link cannot be created for this account because the
+    # account has been rejected."). Stripe has no error code for this case, so
+    # we have to match on the message text.
+    def rejected_account_link_error?(error)
+      error.is_a?(Stripe::InvalidRequestError) &&
+        error.message.to_s.include?("account link cannot be created") &&
+        error.message.to_s.include?("rejected")
     end
 
     def stripe_account_has_open_requirements?(merchant_account)

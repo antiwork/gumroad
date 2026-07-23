@@ -9,6 +9,8 @@ module Payment::FailureReason
   BANK_ACCOUNT_NOT_FOUND_AT_STRIPE = "bank_account_not_found_at_stripe"
   CURRENCY_MISMATCH = "currency_mismatch"
   DESTINATION_CURRENCY_MISMATCH = "destination_currency_mismatch"
+  BELOW_STRIPE_PAYOUT_MINIMUM = "below_stripe_payout_minimum"
+  STRIPE_INTERVENTION_REQUIRED = "stripe_intervention_required"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   PAYPAL_MASS_PAY = {
@@ -94,6 +96,14 @@ module Payment::FailureReason
     "bank_account_restricted" => {
       reason: "the bank account has restrictions on either the type, or the number, of payouts allowed. This normally indicates that the bank account is a savings or other non-checking account",
       solution: "Confirm the bank account entered in payout settings",
+    },
+    "below_stripe_payout_minimum" => {
+      reason: "the payout amount was below the minimum amount the payout processor can send in your bank account's currency",
+      solution: "No action needed — the balance will roll into your next payout once it grows past the minimum",
+    },
+    "stripe_intervention_required" => {
+      reason: "the payout processor requires additional verification before it can send payouts to this account",
+      solution: "Check your email for a message from Stripe about resolving the outstanding requirements, or complete them in payout settings",
     },
     "cannot_pay" => {
       reason: "Stripe is unable to create payouts to this account",

@@ -7,10 +7,6 @@ require "shared_examples/creator_dashboard_page"
 describe "UTM links", :js, type: :system do
   let(:seller) { create(:user) }
 
-  before do
-    Feature.activate_user(:utm_links, seller)
-  end
-
   describe "dashboard" do
     include_context "with switching account to user as admin for seller"
 
@@ -848,7 +844,6 @@ describe "UTM links", :js, type: :system do
 
     it "attributes all qualified purchases to respective UTM link visits when buying multiple products", :elasticsearch_wait_for_refresh do
       seller2 = create(:user)
-      Feature.activate_user(:utm_links, seller2)
 
       product1 = create(:product, name: "Product 1 by Seller 1", user: seller)
       product2 = create(:product, name: "Product 2 by Seller 1", user: seller)

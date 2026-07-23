@@ -27,13 +27,14 @@ describe User::SocialGoogle do
       expect(User.find_by(google_uid: @data["uid"])).to_not eq(nil)
     end
 
-    it "finds a user using google's uid payload" do
+    it "finds a user using google's uid payload and keeps its existing email" do
       created_user = create(:user, google_uid: @data_copy1["uid"])
+      original_email = created_user.email
       found_user = User.find_or_create_for_google_oauth2(@data_copy1)
 
       expect(found_user.id).to eq(created_user.id)
       expect(created_user.reload.email).to eq(found_user.email)
-      expect(created_user.reload.email).to eq(@data_copy1["info"]["email"])
+      expect(created_user.reload.email).to eq(original_email)
     end
 
     it "finds a user using email when google's uid is missing and fills in uid" do
@@ -134,6 +135,48 @@ describe User::SocialGoogle do
 
       expect(result).to be_nil
     end
+
+    context "when the gmail-abuse signup gate blocks the email" do
+      before do
+        Feature.activate(:block_gmail_abuse_at_signup)
+        GmailAbuseFilter.add!("scammer@gmail.com")
+      end
+
+      after do
+        Feature.deactivate(:block_gmail_abuse_at_signup)
+        $redis.del(GmailAbuseFilter::REDIS_KEY)
+      end
+
+      it "returns nil without alerting Sentry (expected fraud-control rejection)" do
+        blocked_data = @data.deep_dup
+        blocked_data["uid"] = "google-gmail-abuse-blocked-uid"
+        blocked_data["info"]["email"] = "scammer+variant@gmail.com"
+        blocked_data["extra"]["raw_info"]["email"] = "scammer+variant@gmail.com"
+
+        allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        result = User.find_or_create_for_google_oauth2(blocked_data)
+
+        expect(result).to be_nil
+        expect(User.find_by(google_uid: blocked_data["uid"])).to be_nil
+      end
+    end
+
+    it "still alerts Sentry for RecordInvalid raised by other validations" do
+      invalid_data = @data.deep_dup
+      invalid_data["uid"] = "google-other-invalid-uid"
+      invalid_data["info"]["email"] = "not-an-email"
+      invalid_data["extra"]["raw_info"]["email"] = "not-an-email"
+
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+      allow_any_instance_of(User).to receive(:save!).and_raise(ActiveRecord::RecordInvalid.new(User.new.tap { |u| u.errors.add(:base, "some other failure") }))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordInvalid))
+
+      result = User.find_or_create_for_google_oauth2(invalid_data)
+
+      expect(result).to be_nil
+    end
   end
 
   describe ".google_picture_url", :vcr do
@@ -193,11 +236,56 @@ describe User::SocialGoogle do
   end
 
   describe ".query_google" do
-    describe "email change" do
-      it "sets email if the email coming from google is different" do
+    describe "email" do
+      it "sets the email from Google when the account has none yet" do
+        user = User.find_or_create_for_google_oauth2(@data)
+
+        expect(user.email).to eq(@data["info"]["email"])
+      end
+
+      it "does not overwrite the email on subsequent logins" do
         @user = create(:user, email: "spongebob@example.com")
 
-        expect { User.query_google(@user, @data) }.to change { @user.reload.email }.from("spongebob@example.com").to(@data["info"]["email"])
+        expect { User.query_google(@user, @data) }.not_to change { @user.reload.email }
+      end
+
+      context "when the new email from Google already belongs to a different account" do
+        before do
+          @user = create(:user, email: "old-address@example.com", google_uid: @data["uid"])
+          @other_user = create(:user, email: @data["info"]["email"])
+        end
+
+        it "keeps the user's existing email instead of failing the save" do
+          expect { User.query_google(@user, @data) }.not_to change { @user.reload.email }
+        end
+
+        it "does not raise or report to Sentry" do
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          expect { User.query_google(@user, @data) }.not_to raise_error
+        end
+
+        it "still lets the user sign in via find_or_create_for_google_oauth2" do
+          result = User.find_or_create_for_google_oauth2(@data)
+
+          expect(result).to eq(@user)
+          expect(result.reload.email).to eq("old-address@example.com")
+          expect(@other_user.reload.email).to eq(@data["info"]["email"])
+        end
+      end
+
+      context "when a persisted OAuth account has no email and Google reports one owned by another account" do
+        before do
+          @user = create(:user, provider: "google_oauth2", google_uid: @data["uid"], email: "")
+          @other_user = create(:user, email: @data["info"]["email"])
+        end
+
+        it "does not adopt the conflicting email or lock the user out" do
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          expect { User.query_google(@user, @data) }.not_to raise_error
+          expect(@user.reload.email).to be_blank
+        end
       end
 
       context "when the email already exists in a different case" do
@@ -210,7 +298,7 @@ describe User::SocialGoogle do
         end
 
         it "doesn't raise error" do
-          expect { User.query_google(@user, @data) }.not_to raise_error(ActiveRecord::RecordInvalid)
+          expect { User.query_google(@user, @data) }.not_to raise_error
         end
       end
     end

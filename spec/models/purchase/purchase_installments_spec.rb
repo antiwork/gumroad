@@ -46,6 +46,23 @@ describe "PurchaseInstallments", :vcr do
       expect(Purchase.product_installments(purchase_ids: [purchase_2.id])).to eq([installment_2])
     end
 
+    it "returns fully-loaded records for profile-only seller posts" do
+      # The buyer-filter pass over a seller's profile-only posts runs on slim
+      # rows (only the columns the filters read) to avoid materializing every
+      # post's LONGTEXT message body for prolific sellers (#6009). The posts
+      # handed back to callers must still be full records — serializers read
+      # `message` and other unselected columns, which would raise
+      # MissingAttributeError on a slim row.
+      purchase = create(:purchase)
+      post = create(:seller_installment, send_emails: false, shown_on_profile: true, seller: purchase.link.user, published_at: 10.minutes.ago,
+                                         message: "full message body")
+
+      posts = Purchase.product_installments(purchase_ids: [purchase.id])
+
+      expect(posts).to eq([post])
+      expect(posts.first.message).to eq("full message body")
+    end
+
     context "when purchased product(s) have should_show_all_posts enabled" do
       let(:enabled_product) { create(:product, should_show_all_posts: true) }
       let(:enabled_product_variant) { create(:variant, variant_category: create(:variant_category, link: enabled_product)) }

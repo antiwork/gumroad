@@ -150,6 +150,11 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(service.send(:previewed_country, preview)).to eq("US")
       end
 
+      it "verifies a UPI preview as IN via the region lock" do
+        preview = preview_from(type: "upi", upi: {}, card: nil)
+        expect(service.send(:previewed_country, preview)).to eq("IN")
+      end
+
       it "prefers an explicit method-block country over the region lock if Stripe ever exposes one" do
         preview = preview_from(type: "us_bank_account", us_bank_account: { country: "US" }, card: nil)
         expect(service.send(:previewed_country, preview)).to eq("US")
@@ -918,6 +923,74 @@ describe Order::PreparePaymentIntentService, :vcr do
         purchase = order.purchases.first.reload
         expect(purchase).to be_failed
         expect(responses["unique-id-0"][:success]).to eq(false)
+      end
+    end
+
+    context "with a method-forced UPI payment method" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
+      let(:product) { create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 1_499_00) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      before do
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active", "upi_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+
+      def perform_with_upi_preview(order, params)
+        preview = Stripe::StripeObject.construct_from(type: "upi", upi: {}, card: nil)
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_upi", client_secret: "pi_upi_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_upi").perform
+        [create_args, responses]
+      end
+
+      it "prepares a PPP-discounted Indian purchase using the UPI region lock as its funding country" do
+        product.update!(purchasing_power_parity_disabled: false)
+        seller.update!(purchasing_power_parity_enabled: true)
+        PurchasingPowerParityService.new.set_factor("IN", 0.5)
+        order, params = build_order
+        order.purchases.each do |purchase|
+          purchase.update!(ip_country: "India", is_purchasing_power_parity_discounted: true)
+        end
+
+        create_args, responses = perform_with_upi_preview(order, params)
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::INR)
+        expect(create_args[:payment_method_types]).to include("upi")
+        expect(order.purchases.first.reload.card_country).to eq("IN")
+      ensure
+        PurchasingPowerParityService.new.set_factor("IN", 1)
+      end
+
+      it "rejects a UPI token when the server-owned buyer country is outside India" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        create_args, responses = perform_with_upi_preview(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
       end
     end
 

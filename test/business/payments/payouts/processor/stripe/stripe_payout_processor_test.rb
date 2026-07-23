@@ -2937,6 +2937,60 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_includes @user.comments.with_type_payout_note.last.content, "does not match any bank account configured to receive it"
   end
 
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the amount is below Stripe's per-currency payout minimum marks the payment with failure_reason BELOW_STRIPE_PAYOUT_MINIMUM" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new("Amount must be no less than £1.00", "amount"))
+    StripePayoutProcessor.perform_payment(@payment)
+    assert_equal Payment::FailureReason::BELOW_STRIPE_PAYOUT_MINIMUM, @payment.reload.failure_reason
+  end
+
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the amount is below Stripe's per-currency payout minimum stores the Stripe error message on the payment" do
+    setup_perform_payment_error_case
+    message = "Amount must be no less than £1.00"
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new(message, "amount"))
+    StripePayoutProcessor.perform_payment(@payment)
+    assert_equal message, @payment.reload.error_message
+  end
+
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the amount is below Stripe's per-currency payout minimum does not notify the error tracker" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new("Amount must be no less than £1.00", "amount"))
+    ErrorNotifier.expects(:notify).never
+    StripePayoutProcessor.perform_payment(@payment)
+  end
+
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the amount is below Stripe's per-currency payout minimum adds a payout note explaining the balance rolls into the next payout" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new("Amount must be no less than £1.00", "amount"))
+    assert_difference -> { @user.comments.with_type_payout_note.count }, 1 do
+      StripePayoutProcessor.perform_payment(@payment)
+    end
+    assert_includes @user.comments.with_type_payout_note.last.content, "roll into your next payout"
+  end
+
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the account requires further intervention marks the payment with failure_reason STRIPE_INTERVENTION_REQUIRED" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new(intervention_required_error_message, nil))
+    StripePayoutProcessor.perform_payment(@payment)
+    assert_equal Payment::FailureReason::STRIPE_INTERVENTION_REQUIRED, @payment.reload.failure_reason
+  end
+
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the account requires further intervention does not notify the error tracker" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new(intervention_required_error_message, nil))
+    ErrorNotifier.expects(:notify).never
+    StripePayoutProcessor.perform_payment(@payment)
+  end
+
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the account requires further intervention adds a payout note directing the seller to resolve Stripe's outstanding requirements" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new(intervention_required_error_message, nil))
+    assert_difference -> { @user.comments.with_type_payout_note.count }, 1 do
+      StripePayoutProcessor.perform_payment(@payment)
+    end
+    assert_includes @user.comments.with_type_payout_note.last.content, "resolving the outstanding requirements"
+  end
+
   test ".perform_payment Stripe error handling when Stripe raises an unmatched Stripe::InvalidRequestError captures the error message on the payment" do
     setup_perform_payment_error_case
     Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new("Something unexpected.", "param"))
@@ -3010,6 +3064,13 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
                                 stripe_connect_account_id: merchant_account.charge_processor_merchant_id,
                                 currency: "usd", payout_period_end_date: Date.current - 1, correlation_id: nil,
                                 payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+    end
+
+    # Stripe's full "requires further intervention" rejection message. Kept in a helper because
+    # several tests stub Stripe with this exact wording, and the processor matches on it to decide
+    # the payout failed only because the seller must resolve requirements directly with Stripe.
+    def intervention_required_error_message
+      "This account requires further intervention to perform certain actions. Stripe will have recently reached out to resolve this, but if you require further assistance please contact us via https://support.stripe.com/contact"
     end
 
     def capabilities_error

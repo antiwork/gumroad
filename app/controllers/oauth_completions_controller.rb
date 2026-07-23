@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class OauthCompletionsController < ApplicationController
+  include AuditsPayoutSettingsChanges
+
   before_action :authenticate_user!
 
   def stripe
@@ -14,17 +16,24 @@ class OauthCompletionsController < ApplicationController
       return safe_redirect_to settings_payments_path
     end
 
+    merchant_account_owner = if signing_in
+      logged_in_user
+    else
+      authorize [:settings, :payments, current_seller], :stripe_connect?
+      current_seller
+    end
+
     stripe_account = Stripe::Account.retrieve(auth_uid)
 
     merchant_account = MerchantAccount.where(charge_processor_merchant_id: auth_uid).alive
                         .find { |ma| ma.is_a_stripe_connect_account? }
 
-    if merchant_account.present? && merchant_account.user != current_user
+    if merchant_account.present? && merchant_account.user != merchant_account_owner
       flash[:alert] = "This Stripe account has already been linked to a Gumroad account."
       return safe_redirect_to referer
     end
 
-    merchant_account = current_user.merchant_accounts.new unless merchant_account.present?
+    merchant_account = merchant_account_owner.merchant_accounts.new unless merchant_account.present?
 
     merchant_account.charge_processor_id = StripeChargeProcessor.charge_processor_id
     merchant_account.charge_processor_merchant_id = auth_uid
@@ -34,8 +43,8 @@ class OauthCompletionsController < ApplicationController
     merchant_account.meta = { "stripe_connect" => "true" }
 
     if merchant_account.save
-      current_user.check_merchant_account_is_linked = true
-      current_user.save!
+      merchant_account_owner.check_merchant_account_is_linked = true
+      merchant_account_owner.save!
 
       merchant_account.currency = stripe_account.default_currency
       merchant_account.country = stripe_account.country
@@ -46,7 +55,8 @@ class OauthCompletionsController < ApplicationController
     end
 
     if merchant_account.active?
-      current_user.stripe_account&.delete_charge_processor_account!
+      merchant_account_owner.stripe_account&.delete_charge_processor_account!
+      log_payout_settings_update_by_non_owner("Stripe account connected") unless signing_in
       flash[:notice] = signing_in ? "You have successfully signed in with your Stripe account!" : "You have successfully connected your Stripe account!"
     else
       flash[:alert] = "There was an error connecting your Stripe account with Gumroad."
