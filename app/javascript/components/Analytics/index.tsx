@@ -171,6 +171,14 @@ const Analytics = ({
 
   const selectedProducts = products.filter((product) => product.selected).map((product) => product.unique_permalink);
 
+  // The hourly sales curve is built from ALL of the seller's sales, so it only
+  // describes the timing of the charted total when the chart isn't narrowed to a
+  // subset of products. When any live product is filtered out, pass null so the
+  // projection falls back to the uniform run rate instead of dividing the subset's
+  // total by an unrelated distribution (a subset's buyers can cluster in very
+  // different hours from the rest of the catalog).
+  const chartCoversWholeCatalog = products.every((product) => product.selected || !product.alive);
+
   const mainData = React.useMemo(
     () => (data?.byReferral ? formatData(data.byReferral, selectedProducts) : null),
     [data?.byReferral, products],
@@ -216,7 +224,7 @@ const Analytics = ({
                 endDate={mainData.endDate}
                 aggregateBy={aggregateBy}
                 sellerTimeZone={seller_time_zone}
-                hourlySalesCurve={hourly_sales_curve}
+                hourlySalesCurve={chartCoversWholeCatalog ? hourly_sales_curve : null}
               />
               <ReferrersTable data={mainData.referrerTotal} />
             </>

@@ -34,7 +34,8 @@ class CreatorAnalytics::HourlySalesCurve
   def cumulative_fractions
     # Rails.cache.fetch treats a stored nil as a miss, so wrap the result in a hash to
     # also cache the "no stable curve" answer instead of recomputing it every load.
-    Rails.cache.fetch("creator_analytics/hourly_sales_curve/#{seller.id}", expires_in: CACHE_EXPIRES_IN) do
+    # Key is versioned: v2 nets out partial refunds, so a v1 entry must not be reused.
+    Rails.cache.fetch("creator_analytics/hourly_sales_curve/v2/#{seller.id}", expires_in: CACHE_EXPIRES_IN) do
       { curve: compute }
     end[:curve]
   end
@@ -58,19 +59,44 @@ class CreatorAnalytics::HourlySalesCurve
       # weights a projection.
       offset_seconds = window_end.utc_offset.to_i
       local_time_sql = "DATE_ADD(purchases.created_at, INTERVAL #{offset_seconds} SECOND)"
-      revenue_by_day_and_hour = seller.sales
+      local_day_and_hour = [Arel.sql("DATE(#{local_time_sql})"), Arel.sql("HOUR(#{local_time_sql})")]
+
+      countable_sales = seller.sales
         .counts_towards_volume
         .where(created_at: window_start.utc...window_end.utc)
-        .group(Arel.sql("DATE(#{local_time_sql})"), Arel.sql("HOUR(#{local_time_sql})"))
+
+      net_by_day_and_hour = countable_sales
+        .group(*local_day_and_hour)
         .sum(:price_cents)
 
-      days_with_sales = revenue_by_day_and_hour.filter_map { |(day, _hour), cents| day if cents.positive? }.uniq.size
+      # The analytics totals this curve weighs are net of refunds and chargebacks, but
+      # counts_towards_volume only excludes FULLY refunded purchases — a partially
+      # refunded purchase would otherwise keep its full historical weight, and refunds
+      # concentrated in particular hours would skew the divisor. Subtract each
+      # purchase's effectively refunded amount from its original sale hour (the curve
+      # describes when sales happen, so refund money is attributed to the purchase's
+      # hour, not the refund's). Refund.effective is the same "money actually moved"
+      # definition Purchase#amount_refunded_cents uses.
+      Refund.effective
+        .joins(:purchase)
+        .merge(countable_sales)
+        .group(*local_day_and_hour)
+        .sum(:amount_cents)
+        .each do |key, refunded_cents|
+          net_by_day_and_hour[key] = (net_by_day_and_hour[key] || 0) - refunded_cents
+        end
+
+      days_with_sales = net_by_day_and_hour.filter_map { |(day, _hour), cents| day if cents.positive? }.uniq.size
       return nil if days_with_sales < MINIMUM_DAYS_WITH_SALES
 
       hourly_totals = Array.new(24, 0)
-      revenue_by_day_and_hour.each do |(_day, hour), cents|
+      net_by_day_and_hour.each do |(_day, hour), cents|
         hourly_totals[hour] += cents if hour.between?(0, 23)
       end
+      # A refund can't exceed its purchase's price, so buckets shouldn't go negative —
+      # clamp anyway so bad historical data can only flatten the curve, never break
+      # the monotonicity the frontend validates.
+      hourly_totals.map! { |cents| [cents, 0].max }
       total = hourly_totals.sum
       return nil unless total.positive?
 

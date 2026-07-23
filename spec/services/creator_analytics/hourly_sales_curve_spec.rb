@@ -79,6 +79,33 @@ describe CreatorAnalytics::HourlySalesCurve do
       expect(curve[9]).to eq(1.0)
     end
 
+    it "weights partially refunded purchases by their net amount" do
+      # $1 at 09:00 each day, plus one $4 sale at 15:00 that was 75% refunded — its
+      # remaining $1 should weigh the same as one 09:00 sale, not its original $4.
+      described_class::MINIMUM_DAYS_WITH_SALES.times do |i|
+        create_sale(days_ago: i + 1, hour: 9)
+      end
+      partially_refunded = create_sale(days_ago: 1, hour: 15, price_cents: 400)
+      create(:refund, purchase: partially_refunded, amount_cents: 300)
+
+      curve = service.cumulative_fractions
+      expect(curve[9]).to eq(0.875) # $7 of $8 net revenue by end of hour 9
+      expect(curve[15]).to eq(1.0)
+    end
+
+    it "does not subtract refunds that terminally failed and were reversed" do
+      described_class::MINIMUM_DAYS_WITH_SALES.times do |i|
+        create_sale(days_ago: i + 1, hour: 9)
+      end
+      sale = create_sale(days_ago: 1, hour: 15, price_cents: 100)
+      create(:refund, purchase: sale, amount_cents: 100, status: Refund::TERMINAL_FAILURE_STATUSES.first, balance_reversed_on_failure: true)
+
+      curve = service.cumulative_fractions
+      expect(curve[15]).to eq(1.0)
+      expect(curve[14]).to eq(curve[9])
+      expect(curve[15]).to be > curve[14] # the sale still counts at full weight
+    end
+
     it "caches the computed curve" do
       described_class::MINIMUM_DAYS_WITH_SALES.times do |i|
         create_sale(days_ago: i + 1, hour: 9)
@@ -95,7 +122,7 @@ describe CreatorAnalytics::HourlySalesCurve do
 
     it "caches a nil result for sellers without enough history" do
       expect(service.cumulative_fractions).to be_nil
-      expect(Rails.cache.exist?("creator_analytics/hourly_sales_curve/#{seller.id}")).to be(true)
+      expect(Rails.cache.exist?("creator_analytics/hourly_sales_curve/v2/#{seller.id}")).to be(true)
     end
   end
 end
