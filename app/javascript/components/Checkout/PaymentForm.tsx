@@ -54,6 +54,7 @@ import {
   isProcessing,
   isSubmitDisabled,
   PaymentMethodType,
+  paymentElementCollectsFullBillingDetails,
   requiresReusablePaymentMethodForCardCollection,
   requiresPayment,
   requiresReusablePaymentMethod,
@@ -344,8 +345,13 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
       break;
   }
 
-  const showCountryInput = !(hasShipping(state) || !requiresPayment(state));
-  const showFullNameInput = requiresPayment(state) && !hasShipping(state);
+  // When the Payment Element collects the full billing details itself (UPI on digital carts),
+  // its pane asks for the buyer's name and complete address — checkout's own Full name and
+  // Country/ZIP fields hide so nothing is asked for twice, and the pane's country drives the
+  // tax location once the payment tokenizes (see the client-confirm submit effect).
+  const elementCollectsFullBillingDetails = paymentElementCollectsFullBillingDetails(state);
+  const showCountryInput = !(hasShipping(state) || !requiresPayment(state)) && !elementCollectsFullBillingDetails;
+  const showFullNameInput = requiresPayment(state) && !hasShipping(state) && !elementCollectsFullBillingDetails;
 
   return (
     <Card>
@@ -727,8 +733,11 @@ const CreditCardContent = ({
     // selected Apple Pay before a remount would still be recorded as paying by wallet even
     // though the remounted element is showing the card form — and the card submission would then
     // skip the checkout-form billing details it depends on. Reset to the safe default and let
-    // the element's change event re-establish any wallet selection.
+    // the element's change event re-establish any wallet selection. The mirrored checkout state
+    // resets too, so form fields hidden for a UPI selection (see SharedInputs) reappear when a
+    // remount lands the buyer back on the card form.
     paymentElementTypeRef.current = "card";
+    dispatch({ type: "set-value", paymentElementType: "card" });
     setPaymentElementReady(controller !== null);
   }, []);
 
@@ -808,21 +817,12 @@ const CreditCardContent = ({
     (async () => {
       if (!useSavedCard && usesPaymentElement && !paymentElementReady) return;
 
-      // Selections in "element-address" collection mode (UPI on digital carts — see
-      // paymentElementBillingDetailsCollection) confirm with the checkout form's name plus the
-      // element-collected street address. Checkout doesn't normally require the full name for
-      // digital purchases, but Stripe rejects these confirms without billing_details.name — so
-      // require it here, with a pointed message instead of a late generic Stripe failure.
-      if (
-        !useSavedCard &&
-        usesPaymentElement &&
-        paymentElementBillingDetailsCollection(paymentElementTypeRef.current, hasShipping(state)) ===
-          "element-address" &&
-        !state.fullName
-      ) {
-        showAlert("Please enter your full name — it's required for this payment method.", "warning");
-        return dispatch({ type: "cancel" });
-      }
+      // Selections in "element-full" collection mode (UPI on digital carts — see
+      // paymentElementBillingDetailsCollection) have Stripe's pane collect the buyer's name and
+      // full street address itself; checkout's own Full name and Country fields are hidden for
+      // them. Stripe's element-side validation blocks submission until the pane is complete, so
+      // no checkout-side name gate is needed here — elements.submit() inside tokenization
+      // surfaces any missing pane field as a field-level error.
 
       // Client-confirm checkout mints a ConfirmationToken; saved cards stay on server-confirm.
       if (useStripePaymentElementClientConfirm && !useSavedCard) {
@@ -875,6 +875,27 @@ const CreditCardContent = ({
           // resumes it once surcharges reload, and only if the total the buyer approved still
           // matches. `state` here is the pre-change snapshot, so the recorded approved amount is
           // exactly what the wallet sheet displayed.
+          if (taxLocationChanged) {
+            heldWalletPaymentRef.current = {
+              paymentMethod: clientConfirmPaymentMethod,
+              approvedAmount: getStripePaymentElementAmount(state),
+            };
+            return;
+          }
+        }
+        // The element's own pane collected the full billing details (UPI on digital carts):
+        // adopt the address the buyer typed there as checkout's tax location, exactly like a
+        // wallet's billing address above — checkout's country field is hidden for these
+        // selections, so the pane is the buyer's only (and authoritative) address input. The
+        // same held-submission rule applies: a tax-location change invalidates the surcharges
+        // quote, so the tokenized payment waits for the reload and only proceeds if the total
+        // the buyer saw still matches.
+        if (tokenResult.elementBillingAddress && !hasShipping(state)) {
+          const taxLocationChanged = applyWalletBillingAddressToCheckout(
+            tokenResult.elementBillingAddress,
+            state,
+            dispatch,
+          );
           if (taxLocationChanged) {
             heldWalletPaymentRef.current = {
               paymentMethod: clientConfirmPaymentMethod,
@@ -1022,12 +1043,18 @@ const CreditCardContent = ({
             disabled={isProcessing(state)}
             defaultEmail={state.email}
             defaultName={state.fullName}
+            defaultCountry={state.country}
             hasShippingCart={hasShipping(state)}
             onReady={handlePaymentElementReady}
             invalid={cardError}
             onFocus={reclaimCardLane}
             onChange={(evt) => {
               paymentElementTypeRef.current = evt.value.type;
+              // Mirror the selection into checkout state so the form can react to it — the
+              // Full name and Country/ZIP fields hide while a selection has the element
+              // collect the full billing details (UPI on digital carts, see SharedInputs).
+              if (state.paymentElementType !== evt.value.type)
+                dispatch({ type: "set-value", paymentElementType: evt.value.type });
               if (evt.complete) setCardError(false);
               // A change means the buyer is interacting with the element — reclaim the
               // card/wallet lane from PayPal. Ignore the empty card-form event a freshly
