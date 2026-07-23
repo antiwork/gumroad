@@ -143,11 +143,7 @@ describe "Dashboard", js: true, type: :system do
       seller.update!(created_at: 1.year.ago)
     end
 
-    context "when tax_center feature is disabled" do
-      before do
-        Feature.deactivate_user(:tax_center, seller)
-      end
-
+    context "when seller is not US-based (tax center disabled)" do
       it "displays a 1099 form ready notice with a link to download if eligible" do
         download_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/test.pdf"
         allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(true)
@@ -169,10 +165,9 @@ describe "Dashboard", js: true, type: :system do
       end
     end
 
-    context "when tax_center feature is enabled" do
+    context "when seller is US-based (tax center enabled)" do
       before do
         create(:user_compliance_info, user: seller)
-        Feature.activate_user(:tax_center, seller)
       end
 
       it "displays notice with link to tax center when user has tax form for previous year" do

@@ -154,7 +154,18 @@ class LinksController < ApplicationController
                                   ChargeProcessor::DEFAULT_CURRENCY_CODE
     @pay_with_card_enabled = @product.user.pay_with_card_enabled?
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
-    presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
+    presenter_props = {
+      recommended_by: params[:recommended_by],
+      discount_code: params[:offer_code] || params[:code],
+      quantity: (params[:quantity] || 1).to_i,
+      layout: params[:layout],
+      seller_custom_domain_url:,
+      # Review reminder emails link logged-out bundle buyers here with their purchase's
+      # external id and email digest, so the page can recognize the purchase and show
+      # the review form without a signed-in session.
+      purchase_id: params[:purchase_id],
+      purchase_email_digest: params[:purchase_email_digest],
+    }
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])

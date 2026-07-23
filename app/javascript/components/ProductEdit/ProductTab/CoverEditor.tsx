@@ -26,6 +26,12 @@ import { WithTooltip } from "$app/components/WithTooltip";
 const MAX_PREVIEW_COUNT = 8;
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "mov", "m4v", "mpeg", "mpg", "mp4", "wmv"];
+const IMAGE_EXTENSIONS = ["jpeg", "jpg", "png", "gif"];
+// Matches AssetPreview::MAX_IMAGE_FILE_SIZE on the server. Oversized images
+// make cover variant processing slow enough to time out product page loads,
+// so reject them here before wasting the seller's time on an upload.
+const MEGABYTE = 1024 * 1024;
+const MAX_IMAGE_FILE_SIZE = 50 * MEGABYTE;
 
 export const CoverEditor = ({
   covers,
@@ -172,6 +178,16 @@ const CoverUploader = ({
                   const validFiles = Array.from(event.target.files).filter((file) => {
                     if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) {
                       showAlert("Invalid file type.", "error");
+                      return false;
+                    }
+                    if (
+                      FileUtils.isFileNameExtensionAllowed(file.name, IMAGE_EXTENSIONS) &&
+                      file.size > MAX_IMAGE_FILE_SIZE
+                    ) {
+                      showAlert(
+                        `Cover images must be smaller than ${MAX_IMAGE_FILE_SIZE / MEGABYTE} MB. Please resize or compress the image and try again.`,
+                        "error",
+                      );
                       return false;
                     }
                     return true;

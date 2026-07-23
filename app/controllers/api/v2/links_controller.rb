@@ -73,10 +73,6 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "The product type '#{native_type}' is not supported for creation.")
     end
 
-    if native_type == Link::NATIVE_TYPE_COMMISSION && !Feature.active?(:commissions, current_resource_owner)
-      return render_response(false, message: "You do not have access to create commission products.")
-    end
-
     if params[:subscription_duration].present?
       if !Link.subscription_durations.key?(params[:subscription_duration])
         return render_response(false, message: "Invalid subscription duration '#{params[:subscription_duration]}'. Valid values: #{Link.subscription_durations.keys.join(', ')}.")

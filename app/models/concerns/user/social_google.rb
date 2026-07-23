@@ -84,7 +84,11 @@ module User::SocialGoogle
       end
     rescue ActiveRecord::RecordInvalid => e
       logger.error("Error finding or creating user via Google OAuth2: #{e.message}")
-      ErrorNotifier.notify(e)
+      # A rejection from a signup fraud gate (blocked email domain/IP, gmail
+      # variant of a suspended account) is an expected fraud-control outcome —
+      # the visitor sees a generic error — not a bug. Don't page Sentry for it;
+      # anything else is a real validation failure and should alert.
+      ErrorNotifier.notify(e) unless blocked_signup_error?(e)
       nil
     end
 
@@ -101,12 +105,17 @@ module User::SocialGoogle
         user.name = sanitized_name
       end
 
-      # Always update user's email upon log in as it may have changed
-      # on google's side
-      # https://support.google.com/accounts/answer/19870?hl=en
-      if EmailFormatValidator.valid?(email) && user.email&.downcase != email.downcase
-        user.email = email
-      end
+      # Set the user's email from Google only for brand-new accounts. Returning
+      # sign-ins are matched by google_uid, not email, so there's no need to
+      # re-sync — and re-syncing would clobber a deliberate email change or, if
+      # Google now reports an address owned by another account, fail the
+      # "An account already exists with this email." validation and lock the
+      # user out of Google sign-in. We key off new_user rather than a blank
+      # email because provider-backed accounts are allowed to have no email
+      # (email_required? is false when a provider is set), so a blank email on a
+      # returning login must not adopt a conflicting address either. Mirrors the
+      # Apple path.
+      user.email = email if new_user && EmailFormatValidator.valid?(email)
 
       # Set user's avatar if they don't have one
       user.google_picture_url(data) unless user.avatar.attached?

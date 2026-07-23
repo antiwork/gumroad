@@ -40,6 +40,10 @@ class ReviewsPresenter
         permalink: product.unique_permalink,
         thumbnail_url: product.thumbnail_alive&.url,
         native_type: product.native_type,
+        # A bundle buyer sees the bundle itself plus each bundled product as separate
+        # reviewable rows; the flag lets the page label the bundle row so the list
+        # doesn't look like duplicates.
+        is_bundle: product.is_bundle,
         available: !product.deleted?,
         seller: {
           name: seller.display_name,

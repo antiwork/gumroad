@@ -11,6 +11,7 @@ import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
+import PayPalConnectSection, { PayPalConnect } from "$app/components/CheckoutDashboard/PayPalConnectSection";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Select } from "$app/components/Select";
@@ -44,6 +45,7 @@ type FormData = {
     recommendation_type: RecommendationType;
     tipping_enabled: boolean;
     ach_payments_enabled: boolean;
+    gifting_disabled: boolean;
   };
   custom_fields: CustomFieldWithKey[];
 };
@@ -57,20 +59,25 @@ export type FormPageProps = {
     recommendation_type: RecommendationType;
     tipping_enabled: boolean;
     ach_payments_enabled: boolean;
+    gifting_disabled: boolean;
   };
   cart_item: CartItem | null;
   card_product: CardProduct | null;
   custom_fields: CustomField[];
   products: SimpleProduct[];
+  paypal_connect: PayPalConnect;
+  connect_account_fee_info_text: string;
 };
 
 const FormPage = ({
   pages,
-  user: { display_offer_code_field, recommendation_type, tipping_enabled, ach_payments_enabled },
+  user: { display_offer_code_field, recommendation_type, tipping_enabled, ach_payments_enabled, gifting_disabled },
   cart_item,
   card_product,
   custom_fields,
   products,
+  paypal_connect,
+  connect_account_fee_info_text,
 }: FormPageProps) => {
   const loggedInUser = useLoggedInUser();
 
@@ -88,6 +95,7 @@ const FormPage = ({
       recommendation_type,
       tipping_enabled,
       ach_payments_enabled,
+      gifting_disabled,
     },
     custom_fields: custom_fields.map(addKey),
   });
@@ -159,6 +167,7 @@ const FormPage = ({
   const recommendationType = form.data.user.recommendation_type;
   const tippingEnabled = form.data.user.tipping_enabled;
   const achPaymentsEnabled = form.data.user.ach_payments_enabled;
+  const giftingDisabled = form.data.user.gifting_disabled;
 
   const productOptions = React.useMemo(
     () => products.filter((product) => !product.archived).map((product) => ({ id: product.id, label: product.name })),
@@ -409,6 +418,16 @@ const FormPage = ({
           </section>
           <section className="space-y-4 border-b border-border p-4 md:p-8">
             <header>
+              <h2>Gifting</h2>
+            </header>
+            <Switch
+              checked={!giftingDisabled}
+              onChange={(e) => updateUserData({ gifting_disabled: !e.target.checked })}
+              label="Allow customers to purchase your products as gifts"
+            />
+          </section>
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
+            <header>
               <h2>Payment methods</h2>
             </header>
             <Switch
@@ -422,6 +441,12 @@ const FormPage = ({
               States.
             </p>
           </section>
+          {paypal_connect.show_paypal_connect ? (
+            <PayPalConnectSection
+              paypalConnect={paypal_connect}
+              connectAccountFeeInfoText={connect_account_fee_info_text}
+            />
+          ) : null}
         </div>
         <CheckoutPreview
           cartItem={{

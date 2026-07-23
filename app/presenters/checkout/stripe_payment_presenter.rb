@@ -11,6 +11,10 @@ class Checkout::StripePaymentPresenter
   # buyer's card and Gumroad rather than to the physical device — instead of a device token that
   # dies when the buyer wipes or replaces their phone. Rollout flag for antiwork/gumroad#5727.
   APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME = :apple_pay_merchant_tokens
+  # When active for every seller in the cart, the Payment Element renders Apple Pay / Google Pay
+  # natively (instead of the deprecated Payment Request Button rendering them next to it) and the
+  # Payment Request Button is not mounted for that cart. Rollout flag for antiwork/gumroad#5768.
+  PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
@@ -90,6 +94,9 @@ class Checkout::StripePaymentPresenter
         fallback_reason:,
         disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        # CardElement carts never mount a Payment Element, so there is no element wallet surface
+        # to enable — they keep the Payment Request Button regardless of the rollout flag.
+        payment_element_wallets: false,
         elements_options: nil,
       }
     end
@@ -100,6 +107,11 @@ class Checkout::StripePaymentPresenter
         fallback_reason: nil,
         disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        # The disable_wallets constraint is server-owned here for the same reason as in
+        # client_confirm_props: when the cart can't take a wallet payment (the buyer-currency
+        # presentment lane above), the element wallet surface stays off regardless of the
+        # rollout flag, so the client never has to reconcile the two fields.
+        payment_element_wallets: payment_element_wallets? && !disable_wallets,
         elements_options: {
           stripe_elements_mode:,
           currency: "usd",
@@ -157,6 +169,12 @@ class Checkout::StripePaymentPresenter
       sellers.present? && sellers.all? { _1.present? && Feature.active?(APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, _1) }
     end
 
+    # Same seller-complete keying as request_apple_pay_merchant_tokens? and for the same reason:
+    # enabling wallets-in-the-element for one seller must never change another seller's checkout.
+    def payment_element_wallets?
+      sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
+    end
+
     # U13 PPP method matrix input. True when any item offers a PPP discount for this buyer's GeoIP
     # country AND that item's own seller enforces PPP payment verification — the case where prepare
     # will run the funding-country check and a non-verifiable method would fail closed. Item-scoped
@@ -185,6 +203,15 @@ class Checkout::StripePaymentPresenter
       resolution = payment_method_resolver.resolve
       payment_method_types = resolution.payment_method_types
       method_forced = method_forced_shape?(items)
+      # Wallets cannot use the method-forced client-confirm lane safely yet. The Element mounts
+      # with the product's listed amount so Stripe can show the EUR-only methods, while the
+      # deferred intent includes tax, tips, and shipping calculated later. Letting a wallet
+      # stay enabled could show the listed amount but charge that later total. Keep every
+      # forced-currency checkout wallet-free until the wallet flow can carry the same
+      # presentment total. Buyer-currency candidates also stay wallet-free because their
+      # wallets use the canonical USD path while checkout displays buyer-currency totals.
+      # Everyone else keeps wallets enabled, exactly as before.
+      disable_wallets = method_forced || items.any? { buyer_currency_presentment_candidate?(_1) }
       if method_forced
         # The EUR-only methods (iDEAL/Bancontact) never render on a USD-mode Payment Element —
         # Stripe hides methods that can't charge in the element's currency — so this surface
@@ -202,15 +229,12 @@ class Checkout::StripePaymentPresenter
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
-        # Wallets cannot use the method-forced client-confirm lane safely yet. The Element mounts
-        # with the product's listed amount so Stripe can show the EUR-only methods, while the
-        # deferred intent includes tax, tips, and shipping calculated later. Letting a Payment
-        # Request wallet stay enabled could show the listed amount but charge that later total.
-        # Keep every forced-currency checkout wallet-free until the wallet flow can carry the
-        # same presentment total. Buyer-currency candidates also stay wallet-free because their
-        # wallets use the canonical USD path while checkout displays buyer-currency totals.
-        disable_wallets: method_forced || items.any? { buyer_currency_presentment_candidate?(_1) },
+        disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        # The disable_wallets constraint is server-owned: when the cart can't take a wallet
+        # payment (the buyer-currency presentment case above), the element wallet surface stays
+        # off no matter what the rollout flag says — the client never has to reconcile the two.
+        payment_element_wallets: payment_element_wallets? && !disable_wallets,
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: method_forced ? method_forced_element_currency : CLIENT_CONFIRM_CURRENCY,

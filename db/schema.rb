@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000006) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -900,11 +900,13 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
     t.bigint "charge_id"
     t.datetime "formalized_side_effects_finished_at"
     t.index ["charge_id"], name: "index_disputes_on_charge_id"
+    t.index ["event_created_at"], name: "index_disputes_on_event_created_at"
     t.index ["purchase_id"], name: "index_disputes_on_purchase_id"
     t.index ["seller_id", "event_created_at"], name: "index_disputes_on_seller_id_and_event_created_at"
     t.index ["seller_id", "lost_at"], name: "index_disputes_on_seller_id_and_lost_at"
     t.index ["seller_id", "won_at"], name: "index_disputes_on_seller_id_and_won_at"
     t.index ["service_charge_id"], name: "index_disputes_on_service_charge_id"
+    t.index ["won_at"], name: "index_disputes_on_won_at"
   end
 
   create_table "dropbox_files", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2023,6 +2025,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
     t.index ["card_type", "card_visual", "created_at", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_date_fingerprint"
     t.index ["card_type", "card_visual", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_fingerprint"
     t.index ["created_at"], name: "index_purchases_on_created_at"
+    t.index ["email", "link_id"], name: "index_purchases_on_email_and_link_id", length: { email: 191 }
     t.index ["email"], name: "index_purchases_on_email_long", length: 191
     t.index ["full_name"], name: "index_purchases_on_full_name"
     t.index ["ip_address"], name: "index_purchases_on_ip_address"
@@ -2511,6 +2514,27 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000003) do
     t.datetime "updated_at", null: false
     t.integer "recent_sales_count", default: 0
     t.index ["taxonomy_id"], name: "index_taxonomy_stats_on_taxonomy_id"
+  end
+
+  create_table "tax_remittances", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "authority", null: false
+    t.string "jurisdiction", null: false
+    t.string "period", null: false
+    t.string "currency", limit: 3, null: false
+    t.bigint "target_amount_cents"
+    t.bigint "usd_amount_cents", null: false
+    t.string "rail", default: "wise", null: false
+    t.string "transfer_id"
+    t.string "status", default: "draft", null: false
+    t.integer "attempt", default: 1, null: false
+    t.datetime "paid_at"
+    t.string "qbo_journal_entry_ref"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["authority", "period", "attempt"], name: "index_tax_remittances_on_authority_and_period_and_attempt", unique: true
+    t.index ["rail", "transfer_id"], name: "index_tax_remittances_on_rail_and_transfer_id", unique: true
+    t.index ["status", "period"], name: "index_tax_remittances_on_status_and_period"
   end
 
   create_table "team_invitations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

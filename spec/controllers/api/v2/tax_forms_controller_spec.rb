@@ -11,7 +11,6 @@ describe Api::V2::TaxFormsController do
   before do
     travel_to Time.new(2026, 4, 15)
     create(:user_compliance_info, user: seller)
-    Feature.activate_user(:tax_center, seller)
   end
 
   describe "GET 'index'" do
@@ -35,8 +34,9 @@ describe Api::V2::TaxFormsController do
         expect(response.body.strip).to be_empty
       end
 
-      it "returns 403 when tax_center is not enabled for the seller" do
-        Feature.deactivate_user(:tax_center, seller)
+      it "returns 403 when the seller is not US-based (tax center disabled)" do
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_singapore, user: seller)
         get :index, params: @params
 
         expect(response.status).to eq(403)
@@ -44,15 +44,6 @@ describe Api::V2::TaxFormsController do
           success: false,
           message: "Tax center is not enabled for this account."
         }.as_json)
-      end
-
-      it "returns 403 when seller is not US-based" do
-        seller.alive_user_compliance_info.mark_deleted!
-        create(:user_compliance_info_singapore, user: seller)
-
-        get :index, params: @params
-
-        expect(response.status).to eq(403)
       end
 
       it "returns an empty list when the seller has no forms" do
@@ -171,8 +162,9 @@ describe Api::V2::TaxFormsController do
         expect(response.body.strip).to be_empty
       end
 
-      it "returns 403 when tax_center is not enabled" do
-        Feature.deactivate_user(:tax_center, seller)
+      it "returns 403 when the seller is not US-based (tax center disabled)" do
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_singapore, user: seller)
         get :download, params: @params
 
         expect(response.status).to eq(403)

@@ -322,7 +322,6 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
 
     context "when user has TOTP enabled" do
       before do
-        Feature.activate_user(:authenticator_2fa, @user)
         create(:totp_credential, :confirmed, user: @user)
         controller.prepare_for_two_factor_authentication(@user)
       end
@@ -339,7 +338,6 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
 
     context "when method is recovery" do
       before do
-        Feature.activate_user(:authenticator_2fa, @user)
         create(:totp_credential, :confirmed, user: @user)
         controller.prepare_for_two_factor_authentication(@user)
         controller.two_factor_auth_method = "recovery"
@@ -362,7 +360,6 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     end
 
     before do
-      Feature.activate_user(:authenticator_2fa, @user)
       create(:totp_credential, :confirmed, user: @user)
       controller.prepare_for_two_factor_authentication(@user)
     end
@@ -392,7 +389,6 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     end
 
     before do
-      Feature.activate_user(:authenticator_2fa, @user)
       create(:totp_credential, :confirmed, user: @user)
       controller.prepare_for_two_factor_authentication(@user)
     end
@@ -411,7 +407,6 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     end
 
     before do
-      Feature.activate_user(:authenticator_2fa, @user)
       create(:totp_credential, :confirmed, user: @user)
       controller.prepare_for_two_factor_authentication(@user)
       controller.two_factor_auth_method = "email"
@@ -429,7 +424,6 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     let!(:totp_credential) { create(:totp_credential, :with_recovery_codes, user: @user) }
 
     before do
-      Feature.activate_user(:authenticator_2fa, @user)
       controller.prepare_for_two_factor_authentication(@user)
     end
 

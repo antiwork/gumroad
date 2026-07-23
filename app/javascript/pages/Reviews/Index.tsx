@@ -13,6 +13,7 @@ import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewForm } from "$app/components/ReviewForm";
 import { Card } from "$app/components/ui/Card";
+import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "$app/components/ui/Table";
 import { useOnChange } from "$app/components/useOnChange";
@@ -35,6 +36,7 @@ type Product = {
   permalink: string;
   thumbnail_url: string | null;
   native_type: ProductNativeType;
+  is_bundle: boolean;
   available: boolean;
   seller: {
     name: string;
@@ -76,10 +78,24 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
         <div>
           {review.product.available ? (
             <a href={review.product.url} target="_blank" rel="noreferrer">
-              <h4>{review.product.name}</h4>
+              <h4>
+                {review.product.name}
+                {review.product.is_bundle ? (
+                  <Pill size="small" className="ml-2">
+                    Bundle
+                  </Pill>
+                ) : null}
+              </h4>
             </a>
           ) : (
-            <h4>{review.product.name}</h4>
+            <h4>
+              {review.product.name}
+              {review.product.is_bundle ? (
+                <Pill size="small" className="ml-2">
+                  Bundle
+                </Pill>
+              ) : null}
+            </h4>
           )}
           By{" "}
           <a href={review.product.seller.url} target="_blank" rel="noreferrer">
@@ -187,7 +203,14 @@ export default function ReviewsIndex({ reviews: initialReviews, purchases: initi
                   <CartItemMain>
                     <CartItemTitle asChild>
                       <a href={purchase.product.url}>
-                        <h4 className="font-bold">{purchase.product.name}</h4>
+                        <h4 className="font-bold">
+                          {purchase.product.name}
+                          {purchase.product.is_bundle ? (
+                            <Pill size="small" className="ml-2">
+                              Bundle
+                            </Pill>
+                          ) : null}
+                        </h4>
                       </a>
                     </CartItemTitle>
                     <CartItemTitle className="font-normal" asChild>

@@ -100,7 +100,12 @@ class Order < ApplicationRecord
     end
 
     def should_schedule_review_reminder?
-      review_reminder_scheduled_at.nil? && cart.present? && purchases.any?(&:eligible_for_review_reminder?)
+      # Gift-sender purchases are never review-eligible themselves, but the gift
+      # recipient's linked purchase is — resolve each purchase through
+      # `purchase_for_review_reminder` so a fully-gifted order still schedules a
+      # reminder (for the recipient) instead of silently sending none.
+      review_reminder_scheduled_at.nil? && cart.present? &&
+        purchases.any? { _1.purchase_for_review_reminder&.eligible_for_review_reminder? }
     end
 
     def reminder_email_delay

@@ -127,11 +127,19 @@ module S3Retrievable
 
       # Some S3 keys have a different Unicode normalization form in the database than in S3 itself.
       # The only way to know for sure is to try to load the object from S3.
-      # If it's missing for that key, we'll try finding it in the S3 directory,
-      # as it should be the only file here at that time.
+      # If it's missing for that key, we first retry with the other Unicode normalization forms
+      # of the same key (an accented filename can be stored precomposed — NFC — or decomposed —
+      # NFD, which is what macOS uploads produce). Failing that, we try finding it in the S3
+      # directory, as it should be the only file there at that time.
       define_method(:confirm_s3_key!) do
         s3_object.load
       rescue Aws::S3::Errors::NotFound
+        normalized_key = S3KeyUnicodeNormalization.existing_variant(s3_key)
+        if normalized_key
+          update!(url: S3_BASE_URL + normalized_key)
+          return
+        end
+
         files = Aws::S3::Client.new.list_objects(bucket: S3_BUCKET, prefix: s3_directory_uri).first.contents
         return if files.size != 1
 

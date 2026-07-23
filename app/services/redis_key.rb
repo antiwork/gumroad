@@ -27,6 +27,8 @@ class RedisKey
     def ai_request_throttle(user_id) = "ai_request_throttle:#{user_id}"
     def agent_request_throttle(user_id) = "agent_request_throttle:#{user_id}"
     def agent_turn_status(user_id, client_turn_id) = "agent_turn_status:#{user_id}:#{client_turn_id}"
+    def agent_custom_html_preview(user_id, token) = "agent_custom_html_preview:#{user_id}:#{token}"
+    def agent_custom_html_preview_index(user_id) = "agent_custom_html_preview_index:#{user_id}"
     def fraudulent_free_purchases_block_hours = "fraudulent_free_purchases_block_hours"
     def recaptcha_score_threshold(surface) = "recaptcha_score_threshold:#{surface}"
     def sales_related_products_internal_limit = "sales_related_products_internal_limit"
@@ -57,6 +59,10 @@ class RedisKey
     def unreviewed_users_data = "admin:unreviewed_users_data"
     def unreviewed_users_cutoff_date = "admin:unreviewed_users_cutoff_date"
     def paypal_topup_needed = "paypal:topup_needed"
+    # Set (with a TTL) by each weekly payout batch job while it runs, so the
+    # deploy pipeline can ask "is a payout batch in flight right now?" instead
+    # of freezing deploys on a fixed clock window. See HealthcheckController#payouts.
+    def payout_batch_in_flight = "payouts:batch_in_flight"
     def stripe_balance_topup_needed = "stripe:balance_topup_needed"
     def min_successful_purchases_in_last_10_minutes = "healthcheck:min_successful_purchases_in_last_10_minutes"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"

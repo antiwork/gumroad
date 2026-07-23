@@ -92,7 +92,13 @@ const ProjectedDot = ({ x, y, width, height }: { x?: number; y?: number; width?:
     <circle
       cx={x + width / 2}
       cy={y}
-      r={4}
+      // Scale the marker with the bar band so it stays subtle at narrow
+      // viewports. The solid dots on the totals line size themselves as
+      // ~band/7 (see lineProps in Chart.tsx); using the same proportion with
+      // a lower cap keeps this estimate marker visually quieter than the
+      // booked-total dot on every screen size. A fixed 4px radius previously
+      // dwarfed the shrunken line dots on mobile.
+      r={Math.min(width / 7, 4)}
       fill="rgb(var(--accent))"
       fillOpacity={0.5}
       stroke="none"

@@ -16,8 +16,6 @@ class PaypalMerchantAccountManager
     Compliance::Countries::TUR,
   ].map(&:alpha2).freeze
 
-  MIN_SALES_CENTS_REQ_FOR_PCP = 100_00 # $100
-
   def create_partner_referral(user, return_url)
     payment_integration_api = PaypalIntegrationRestApi.new(user, authorization_header:)
 

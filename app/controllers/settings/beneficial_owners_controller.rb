@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Settings::BeneficialOwnersController < Settings::BaseController
+  include AuditsPayoutSettingsChanges
+
   before_action :authorize
   before_action :ensure_eligible
 
@@ -12,6 +14,7 @@ class Settings::BeneficialOwnersController < Settings::BaseController
 
   def create
     owner = StripeBeneficialOwnersManager.create(current_seller, beneficial_owner_params)
+    log_payout_settings_update_by_non_owner("Beneficial owner added")
     render json: { beneficial_owner: owner }, status: :created
   rescue StripeBeneficialOwnersManager::MissingRequiredFieldError => e
     render json: { error: e.message }, status: :unprocessable_entity
@@ -23,6 +26,7 @@ class Settings::BeneficialOwnersController < Settings::BaseController
 
   def update
     owner = StripeBeneficialOwnersManager.update(current_seller, params[:id], beneficial_owner_params)
+    log_payout_settings_update_by_non_owner("Beneficial owner updated")
     render json: { beneficial_owner: owner }
   rescue StripeBeneficialOwnersManager::MissingRequiredFieldError => e
     render json: { error: e.message }, status: :unprocessable_entity
@@ -34,6 +38,7 @@ class Settings::BeneficialOwnersController < Settings::BaseController
 
   def destroy
     result = StripeBeneficialOwnersManager.destroy(current_seller, params[:id])
+    log_payout_settings_update_by_non_owner("Beneficial owner removed")
     render json: result
   rescue StripeBeneficialOwnersManager::RepresentativeNotEditableError
     render json: { error: "This person is the account representative and cannot be removed here." }, status: :forbidden

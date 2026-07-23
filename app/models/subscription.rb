@@ -709,7 +709,42 @@ class Subscription < ApplicationRecord
 
     seconds_since_last_billed = calculate_as_of - last_successful_charge_at
     percent_of_current_period_remaining = [(current_billing_period_seconds - seconds_since_last_billed), 0].max / current_billing_period_seconds
-    (percent_of_current_period_remaining * last_successful_charge.displayed_price_cents).round
+    (percent_of_current_period_remaining * current_period_paid_price_cents).round
+  end
+
+  # The full value the subscriber has paid for the current billing period,
+  # used as the base for the prorated upgrade credit.
+  #
+  # For a regular recurring charge this is simply that charge's price: the
+  # subscriber paid it and it covers the whole period. But when the most
+  # recent charge is a mid-period upgrade, that charge was only the
+  # INCREMENTAL amount — the new plan's price minus the credit for the unused
+  # portion of the old plan. Basing a second upgrade's credit on the
+  # incremental charge would silently drop the credit that was already folded
+  # into the first upgrade, under-crediting the subscriber. After an upgrade
+  # the subscription's (updated) original purchase reflects the current plan's
+  # full price for the period, which is the value the subscriber actually
+  # holds — so use that instead.
+  #
+  # One caveat: a purchase stays in `successful_purchases` even after it has
+  # been fully refunded or charged back. If the most recent upgrade charge was
+  # reversed like that, the subscriber no longer holds the upgraded plan's
+  # full value, so crediting them the full price would over-credit them and
+  # make the next charge too low. In that case fall back to the charge's own
+  # holds — so use that instead.
+  #
+  # A fully refunded or charged-back upgrade still appears in
+  # successful_purchases (refunds and chargebacks are tracked on the purchase,
+  # they don't change its state), but the subscriber no longer holds the
+  # upgraded value — so a reversed upgrade must NOT be credited at the new
+  # plan's full price. In that case fall back to the charge's own price.
+  def current_period_paid_price_cents
+    charge = last_successful_charge
+    if charge.is_upgrade_purchase? && !charge.stripe_refunded? && !charge.chargedback_not_reversed? && original_purchase.present?
+      original_purchase.displayed_price_cents
+    else
+      charge.displayed_price_cents
+    end
   end
 
   def current_billing_period_seconds
@@ -990,6 +1025,17 @@ class Subscription < ApplicationRecord
   def refresh_token
     update!(token: SecureRandom.hex(24), token_expires_at: TOKEN_VALIDITY.from_now)
     token
+  end
+
+  # Returns the current manage-link token, minting a new one only when the
+  # existing token is missing or expired. Use this in emails that can be sent
+  # several times in quick succession (e.g. repeated duplicate-checkout
+  # attempts): `refresh_token` replaces the subscription's only accepted token,
+  # so calling it from every delivery would invalidate the links in earlier
+  # emails the customer may not have opened yet.
+  def reusable_token
+    return token if token.present? && token_expires_at&.future?
+    refresh_token
   end
 
   def gift?

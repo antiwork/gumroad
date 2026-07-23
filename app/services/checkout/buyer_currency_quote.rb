@@ -166,11 +166,12 @@ class Checkout::BuyerCurrencyQuote
                        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
     return unless merchant_account&.stripe_charge_processor?
     return unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
-    return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account)
-
     buyer_currency = buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    # Checked last because the marker is scoped to the presentment currency: a mismatch
+    # learned for EUR must not suppress quoting for GBP buyers of the same seller.
+    return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)
 
     quote = StripeFxQuote.create(
       to_currency: Currency::USD,
@@ -196,12 +197,13 @@ class Checkout::BuyerCurrencyQuote
       line_allocations: line_allocations_for(presentment_total_cents)
     )
   rescue StripeFxQuote::SettlementCurrencyMismatch => e
-    # Expected condition, not a defect: the connected account settles in a non-USD
-    # currency (Stripe multi-currency settlement) even though our stored
-    # merchant_account.currency said USD. Fall back to the canonical USD checkout
-    # quietly — no Sentry notification. Record the mismatch on the merchant account so
-    # subsequent checkouts skip the doomed FX-quote round trip entirely (issue #6011).
-    record_settlement_currency_mismatch(merchant_account)
+    # Expected condition, not a defect: the account settles this currency in itself
+    # (Stripe multi-currency settlement) even though our stored merchant_account.currency
+    # said USD. Fall back to the canonical USD checkout quietly — no Sentry notification.
+    # Record the mismatch for this currency on the merchant account so subsequent
+    # checkouts in it skip the doomed FX-quote round trip entirely (issue #6011); other
+    # currencies keep quoting.
+    record_settlement_currency_mismatch(merchant_account, buyer_currency)
     Rails.logger.info("Buyer currency quote fallback (settlement currency mismatch): #{e.message}")
     nil
   rescue StandardError => e
@@ -218,8 +220,8 @@ class Checkout::BuyerCurrencyQuote
     # Persists the learned mismatch (issue #6011). A persistence failure here must never
     # break the checkout that is already falling back — worst case the next checkout pays
     # the FX-quote latency again.
-    def record_settlement_currency_mismatch(merchant_account)
-      merchant_account&.record_settlement_currency_mismatch!
+    def record_settlement_currency_mismatch(merchant_account, currency)
+      merchant_account&.record_settlement_currency_mismatch!(currency)
     rescue StandardError => e
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
     end

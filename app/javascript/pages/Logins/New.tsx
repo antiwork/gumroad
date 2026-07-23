@@ -17,25 +17,17 @@ import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import {
-  RECAPTCHA_UNAVAILABLE_MESSAGE,
-  RecaptchaCancelledError,
-  RecaptchaUnavailableError,
-  useRecaptcha,
-} from "$app/components/useRecaptcha";
 
 const PASSKEY_ERROR = "We couldn't sign you in with that passkey. Please try again or use your password.";
 
 type PageProps = {
   email: string | null;
   application_name: string | null;
-  recaptcha_site_key: string | null;
   authenticity_token: string;
   show_passkey_login: boolean;
   passkey_login_options: PasskeyAuthenticationOptions | null;
@@ -48,7 +40,6 @@ type FormData = {
     password: string;
   };
   next: string | null;
-  "g-recaptcha-response": string | null;
   authenticity_token: string;
 };
 
@@ -56,7 +47,6 @@ function LoginPage() {
   const {
     email: initialEmail,
     application_name,
-    recaptcha_site_key,
     authenticity_token,
     show_passkey_login,
     passkey_login_options,
@@ -65,7 +55,6 @@ function LoginPage() {
 
   const url = new URL(useOriginalLocation());
   const next = url.searchParams.get("next");
-  const recaptcha = useRecaptcha({ siteKey: recaptcha_site_key });
   const uid = React.useId();
 
   const [passkeyLoading, setPasskeyLoading] = React.useState(false);
@@ -81,29 +70,12 @@ function LoginPage() {
       password: "",
     },
     next,
-    "g-recaptcha-response": null,
     authenticity_token,
   });
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      const recaptchaResponse = recaptcha_site_key !== null ? await recaptcha.execute() : null;
-      form.transform((data) => ({
-        ...data,
-        "g-recaptcha-response": recaptchaResponse,
-      }));
-      form.post(Routes.login_path());
-    } catch (e) {
-      if (e instanceof RecaptchaCancelledError) return;
-      // The reCAPTCHA script being blocked (ad blocker / privacy extension) is fixable by the
-      // user — tell them how instead of failing silently (see gumroad-private#927).
-      if (e instanceof RecaptchaUnavailableError) {
-        showAlert(RECAPTCHA_UNAVAILABLE_MESSAGE, "error");
-        return;
-      }
-      throw e;
-    }
+    form.post(Routes.login_path());
   };
 
   const runPasskeyLogin = React.useCallback(
@@ -195,7 +167,7 @@ function LoginPage() {
       header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>}
       headerActions={<Link href={Routes.signup_path({ next })}>Sign up</Link>}
     >
-      <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={handleSubmit}>
         <SocialAuth />
         <Separator>
           <span>or</span>
@@ -247,7 +219,6 @@ function LoginPage() {
           </div>
         </section>
       </form>
-      {recaptcha.container}
     </Layout>
   );
 }

@@ -167,10 +167,15 @@ module WithFiltering
     end
 
     if exclude_product_ids.present? || not_bought_variants.present?
-      # Memoize per (variants, products, email) signature so multiple posts
-      # sharing the same exclusion criteria do not re-issue the SAME
-      # `seller_sales.where(...).exists?(email:)` SQL once per post.
-      cache_key = [Array(not_bought_variants).sort, exclude_product_ids.sort, email]
+      # Memoize per (seller, variants, products, email) signature so multiple
+      # posts sharing the same exclusion criteria do not re-issue the SAME
+      # `seller_sales.where(...).exists?(email:)` SQL once per post. The seller
+      # id is part of the key because the existence probe runs against THIS
+      # post's seller's sales — a shared cache can span posts from different
+      # sellers (e.g. Purchase.product_installments batches a page of library
+      # purchases), and without the seller id two sellers whose posts target
+      # the same product/variant ids would incorrectly share one result.
+      cache_key = [seller_id, Array(not_bought_variants).sort, exclude_product_ids.sort, email]
       cache = seller_post_filter_cache
       if cache && cache.key?(cache_key)
         return false if cache[cache_key]

@@ -19,7 +19,24 @@ module SignedUrlHelper
       obj = Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key)
       [obj.content_length, obj.public_url]
     rescue Aws::S3::Errors::NotFound => e
-      raise e.exception("Key = #{s3_key}")
+      # The key from the database may use a different Unicode normalization form than the
+      # actual S3 object key (e.g. NFC in the DB vs NFD written by a macOS uploader). Before
+      # telling the user their file is gone, check whether the object exists under an
+      # alternative normalization of the same filename and serve that one instead. We heal the
+      # served URL only (this helper has no reference to the owning record, so the DB row keeps
+      # its original key); genuinely missing files pay for the extra existence probes on every
+      # uncached request, which is acceptable on an already-failing path.
+      normalized_key = S3KeyUnicodeNormalization.existing_variant(s3_key)
+      raise e.exception("Key = #{s3_key}") if normalized_key.nil?
+
+      begin
+        obj = Aws::S3::Resource.new.bucket(S3_BUCKET).object(normalized_key)
+        [obj.content_length, obj.public_url]
+      rescue Aws::S3::Errors::NotFound => race
+        # The variant existed a moment ago but vanished before we could read it — keep the
+        # same descriptive message so these group with the other missing-key errors.
+        raise race.exception("Key = #{s3_key}")
+      end
     end
     public_url_path = URI.parse(public_url_path).path
     s3_path = public_url_path.to_s.sub(%r{^/#{Regexp.escape(S3_BUCKET)}}o, "") # remove the S3 bucket name portion

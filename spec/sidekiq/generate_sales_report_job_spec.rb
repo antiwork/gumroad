@@ -316,7 +316,10 @@ describe GenerateSalesReportJob do
 
       travel_to(@won_time) do
         @chargedback_purchase.update!(chargeback_reversed: true)
-        create(:dispute, purchase: @chargedback_purchase, state: "won", won_at: Time.current)
+        # One Dispute row carries both the formalization date (event_created_at, mirroring
+        # chargeback_date) and the win date (won_at); the tax-period scopes resolve each leg's
+        # window through it.
+        create(:dispute, purchase: @chargedback_purchase, state: "won", event_created_at: @event_time, won_at: Time.current)
       end
     end
 
@@ -383,6 +386,7 @@ describe GenerateSalesReportJob do
                         total_transaction_cents: fully_refunded.total_transaction_cents)
       end
       fully_refunded.update!(chargeback_date: @event_time)
+      create(:dispute, purchase: fully_refunded, event_created_at: @event_time)
 
       csv = perform_and_parse(@event_time.beginning_of_quarter, @event_time.end_of_quarter)
 

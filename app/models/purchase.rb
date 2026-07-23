@@ -707,6 +707,21 @@ class Purchase < ApplicationRecord
     }
   end
 
+  # Purchase ids whose Dispute recorded `date_column` (event_created_at for the chargeback
+  # debit leg, won_at for the reversal leg) inside [starts_at, ends_at], resolved through both
+  # the direct purchase link and the Charge link (multi-purchase carts). Driving the tax-period
+  # chargeback scopes off the small, date-indexed disputes table this way keeps them from
+  # full-scanning the very large purchases table by the unindexed chargeback_date — see
+  # chargebacks_for_tax_period_reporting. The daily/monthly windows hold at most a handful of
+  # disputes, so the resulting id list stays small.
+  def self.purchase_ids_for_disputes_in_window(date_column, starts_at, ends_at)
+    disputes = Dispute.where(date_column => starts_at..ends_at)
+    direct_ids = disputes.where.not(purchase_id: nil).pluck(:purchase_id)
+    charge_ids = disputes.where.not(charge_id: nil).pluck(:charge_id)
+    via_charge_ids = charge_ids.present? ? ChargePurchase.where(charge_id: charge_ids).pluck(:purchase_id) : []
+    (direct_ids + via_charge_ids).uniq
+  end
+
   # The sales-leg chargeback gate for the tax report jobs. Keeps, in addition to everything
   # not_chargedback_or_chargedback_reversed keeps, purchases whose chargeback is reported by
   # event date: those sales stay reported in the purchase's own period, and the chargeback is
@@ -723,32 +738,40 @@ class Purchase < ApplicationRecord
     )
   }
   # Purchases whose chargeback (debit) leg lands in [starts_at, ends_at]: event-dated
-  # chargebacks (see CHARGEBACK_EVENT_DATED_SQL) whose dispute event date —
-  # purchases.chargeback_date has always held the processor's dispute-formalized timestamp —
-  # falls inside the window.
+  # chargebacks (see CHARGEBACK_EVENT_DATED_SQL) whose dispute event date falls inside the
+  # window.
+  #
+  # We resolve the window through the disputes table rather than filtering purchases by
+  # purchases.chargeback_date directly: chargeback_date has no standalone index (only a
+  # seller_id-leading composite), so an all-sellers date range over it forces a full scan of
+  # the very large purchases table. chargeback_date mirrors the dispute's event_created_at
+  # (both are set from the same processor event when the dispute is formalized), so listing
+  # the disputes in the window and mapping them back to purchase ids yields the same set at a
+  # fraction of the cost. Any purchase the old chargeback_date predicate could return has a
+  # real charge — and therefore a Dispute row, its own or its Charge's for multi-item carts;
+  # the $0 gift/bundle child purchases that carry a chargeback_date without a Dispute row have
+  # no stripe_transaction_id and are excluded by every caller. The chargeback_date filter is
+  # kept as well so a purchase with several disputes is only selected when its own recorded
+  # chargeback_date is the one inside the window.
   scope :chargebacks_for_tax_period_reporting, lambda { |starts_at, ends_at|
-    where(chargeback_date: starts_at..ends_at)
+    where(id: purchase_ids_for_disputes_in_window(:event_created_at, starts_at, ends_at))
+      .where(chargeback_date: starts_at..ends_at)
       .where(CHARGEBACK_EVENT_DATED_SQL, **chargeback_event_dated_bind_params)
   }
   # Purchases whose chargeback-reversal (dispute won) leg lands in [starts_at, ends_at]:
   # event-dated chargebacks marked reversed, with a Dispute row — linked directly or through
   # the purchase's Charge (multi-purchase carts) — recording a won_at inside the window.
-  # EXISTS subqueries keep one row per purchase regardless of how many dispute rows match.
-  # Callers emitting per-row output should date the leg with
-  # purchase.chargeback_reversal_reporting_date (which also resolves which dispute row wins
-  # when there are several).
+  #
+  # Same reasoning as the debit scope above: drive off the disputes table's won_at (now
+  # indexed) instead of a correlated EXISTS over every purchase. This matches the old EXISTS
+  # exactly — it already required a Dispute row with won_at in the window — while turning the
+  # per-purchase subquery into one small, date-indexed lookup. Callers emitting per-row output
+  # still date the leg with purchase.chargeback_reversal_reporting_date, which also resolves
+  # which dispute row wins when a purchase has several.
   scope :chargeback_reversals_for_tax_period_reporting, lambda { |starts_at, ends_at|
-    where("purchases.chargeback_date >= ?", Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day)
+    where(id: purchase_ids_for_disputes_in_window(:won_at, starts_at, ends_at))
+      .where("purchases.chargeback_date >= ?", Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day)
       .where("purchases.flags & ? != 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
-      .where(
-        "EXISTS (SELECT 1 FROM disputes WHERE disputes.purchase_id = purchases.id " \
-        "AND disputes.won_at BETWEEN :starts_at AND :ends_at) " \
-        "OR EXISTS (SELECT 1 FROM disputes INNER JOIN charge_purchases " \
-        "ON charge_purchases.charge_id = disputes.charge_id " \
-        "WHERE charge_purchases.purchase_id = purchases.id " \
-        "AND disputes.won_at BETWEEN :starts_at AND :ends_at)",
-        starts_at:, ends_at:
-      )
   }
   scope :not_additional_contribution, -> { where("purchases.flags IS NULL OR purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:is_additional_contribution]) }
   scope :for_products, ->(products) { where(link_id: products) if products.present? }
@@ -968,7 +991,11 @@ class Purchase < ApplicationRecord
       invoice_url: (invoice_url if version == 2 && has_invoice?),
       upsell: upsell_purchase&.as_json,
       paypal_refund_expired: paypal_refund_expired?,
-      **(version == 2 ? web_csv_parity_fields : {})
+      **(version == 2 ? web_csv_parity_fields : {}),
+      # Opt-in (Sales API only) so other version-2 serializations — like the audience
+      # customers search, which renders up to 100 purchases without the Sales API
+      # preloads — don't pick up per-purchase presentment/refund queries.
+      **(version == 2 && options[:include_buyer_presentment] ? { buyer_presentment: buyer_presentment_api_fields } : {})
     ).delete_if { |_, v| v.nil? }
 
     json[:card] = {
@@ -1255,9 +1282,36 @@ class Purchase < ApplicationRecord
   end
 
   def license_key
-    return nil unless link.is_licensed?
+    return nil unless uses_license_key?
 
     license.try(:serial)
+  end
+
+  # Whether this purchase should have a license key generated and shown in
+  # receipts. Licensing is enabled at the product level (link.is_licensed),
+  # but when a product uses per-variant content, only purchases of variants
+  # whose content embeds a license-key block should emit keys. This lets a
+  # seller offer e.g. a free variant without a license key alongside paid
+  # licensed variants: deleting the license-key block from the free variant's
+  # content stops that variant's buyers from receiving unusable keys.
+  def uses_license_key?
+    link.is_licensed? && variant_content_permits_license_key?
+  end
+
+  # The variant-level half of the license-key check: true unless the product
+  # uses per-variant content AND this purchase's variant(s) have rich content
+  # that lacks an embedded license-key block. Product-level content, physical
+  # products, purchases without a recorded variant, and variants with no rich
+  # content at all keep today's behavior (key allowed whenever the product is
+  # licensed) — suppression only kicks in when the seller has authored content
+  # for the purchased variant and deliberately left the license-key block out.
+  def variant_content_permits_license_key?
+    return true if link.has_product_level_rich_content?
+
+    variant_contents = variant_attributes.flat_map(&:alive_rich_contents)
+    return true if variant_contents.empty?
+
+    variant_contents.any?(&:has_license_key?)
   end
 
   def self.purchase_info(url_redirect, link, purchase = nil)
@@ -1325,7 +1379,7 @@ class Purchase < ApplicationRecord
       end
       json[:quantity] = purchase.quantity
       json[:show_quantity] = purchase.quantity > 1
-      json[:license_key] = purchase.license_key if purchase.license.present?
+      json[:license_key] = purchase.license_key if purchase.license_key.present?
       if purchase.shipment.present?
         json[:shipped] = purchase.shipment.shipped?
         json[:tracking_url] = purchase.shipment.calculated_tracking_url
@@ -1873,7 +1927,7 @@ class Purchase < ApplicationRecord
 
   def create_license!
     return if is_gift_sender_purchase
-    return unless link.is_licensed
+    return unless uses_license_key?
     return if license.present?
 
     license = create_license
@@ -2734,10 +2788,23 @@ class Purchase < ApplicationRecord
     variant_ids = BaseVariant.joins(:purchases).where("purchases.id IN (?)", purchase_ids).select("base_variants.id")
     seller_ids = purchases.map(&:seller_id)
 
+    # Posts with "hasn't bought X" targeting run an existence probe against the
+    # seller's purchase history (see WithFiltering#seller_post_passes_filters).
+    # Many posts share the same exclusion criteria, and the mobile library
+    # endpoints call this method for a page of purchases at a time — without a
+    # shared cache the same probe re-runs once per (post, purchase) pair. For
+    # mega-sellers each probe can take seconds (antiwork/gumroad#6009: two
+    # identical probes accounted for 19.9s of a 22s request), so memoize per
+    # unique (seller, targeting criteria, buyer email) signature across the
+    # whole batch. The cache key carries the post's seller id (see
+    # WithFiltering#seller_post_passes_filters), so entries from different
+    # sellers in the same batch can't collide.
+    seller_post_filter_cache = {}
+
     check_filters = lambda do |posts|
       posts.select do |post|
         purchases.reduce(false) do |select_post, purchase|
-          select_post || post.purchase_passes_filters(purchase)
+          select_post || post.purchase_passes_filters(purchase, seller_post_filter_cache:)
         end
       end
     end
@@ -2748,7 +2815,7 @@ class Purchase < ApplicationRecord
           next true if select_post
 
           next false unless purchase.link.should_show_all_posts?
-          next false unless post.purchase_passes_filters(purchase)
+          next false unless post.purchase_passes_filters(purchase, seller_post_filter_cache:)
           # A seller-wide post (no product/variant targeting) is not "targeted at
           # the purchased item", but a should_show_all_posts buyer (e.g. a member)
           # is entitled to the full post history regardless of individual email
@@ -2780,8 +2847,44 @@ class Purchase < ApplicationRecord
                                            .pluck(:id)
     emailed_seller_posts = Installment.seller_with_sent_emails_for_purchases(purchase_ids + purchase_ids_with_same_email)
                                       .select("installments.*, email_infos.sent_at, email_infos.delivered_at, email_infos.opened_at")
-    seller_profile_posts = Installment.profile_only_for_sellers(seller_ids)
-    seller_posts = check_filters.call(emailed_seller_posts + seller_profile_posts)
+    # `profile_only_for_sellers` matches every profile-only seller post the
+    # seller has ever published — for prolific sellers that's thousands of
+    # rows, and `installments.*` drags in each post's LONGTEXT `message` body
+    # just so the Ruby-side buyer filters can look at `json_data`
+    # (antiwork/gumroad#6009: this single fetch was 1.27s of a 2.06s mobile
+    # library search request). Run the filter pass on slim rows carrying just
+    # the columns the pass needs (`json_data` for the filter criteria,
+    # `seller_id` for the "hasn't bought X" sales probe, plus the scope's own
+    # type/flag/timestamp columns), then load
+    # full rows for the few posts the buyer can actually see.
+    slim_seller_profile_posts = Installment.profile_only_for_sellers(seller_ids)
+                                           .select(:id, :seller_id, :installment_type, :link_id, :base_variant_id, :flags, :published_at, :json_data)
+    candidate_seller_profile_post_ids = check_filters.call(slim_seller_profile_posts).map(&:id)
+    # Reload through the same scope so a post mutated between the two queries
+    # (unpublished, flipped to send_emails) is dropped rather than reaching the
+    # sort below with a nil published_at. index_by + filter_map keeps the
+    # scope's row order — the final sort_by is stable only relative to its
+    # input order, so reordering here would change tie-breaking among posts
+    # with equal timestamps.
+    full_seller_profile_posts_by_id = candidate_seller_profile_post_ids.any? ? Installment.profile_only_for_sellers(seller_ids).where(id: candidate_seller_profile_post_ids).index_by(&:id) : {}
+    reloaded_seller_profile_posts = candidate_seller_profile_post_ids.filter_map { |id| full_seller_profile_posts_by_id[id] }
+    # Re-run the buyer-filter pass on the reloaded rows so the visibility
+    # decision is made against the data we actually return. The slim pass
+    # above is only a candidate pre-filter: if a seller edits a post's buyer
+    # filters between the two queries, deciding from the slim snapshot could
+    # hand a now-restricted post to a buyer who no longer passes its filters.
+    # The reloaded set is small (only posts the buyer could see), so the
+    # second pass is cheap.
+    #
+    # The reverse race — a post the slim pass rejected whose filters change
+    # to allow the buyer before the reload — is deliberately left alone: the
+    # post is merely omitted from this one response and shows up on the next
+    # request. That matches the pre-optimization behavior (a single query
+    # also worked from one point-in-time snapshot and couldn't see edits made
+    # after it ran), and closing it would mean reloading full rows for every
+    # rejected post, which is exactly the cost this split avoids.
+    seller_profile_posts = check_filters.call(reloaded_seller_profile_posts)
+    seller_posts = check_filters.call(emailed_seller_posts) + seller_profile_posts
 
     profile_seller_sent_email_posts = installments_with_sent_emails + profile_only_product_posts + profile_only_variant_posts + seller_posts
     should_show_all_posts = purchases.map(&:link).any? { |product| product.should_show_all_posts? }
@@ -3414,12 +3517,25 @@ class Purchase < ApplicationRecord
     FlowOfFunds.new(issued_amount:, settled_amount:, gumroad_amount:, merchant_account_gross_amount:, merchant_account_net_amount:)
   end
 
+  # The purchase whose buyer can actually leave the review. For a gift, the
+  # sender's purchase can never be reviewed — the recipient's linked purchase
+  # owns the review (see Purchase::Reviews#original_product_review) — so review
+  # reminders resolve a gift-sender purchase to the recipient's purchase. That
+  # recipient purchase is not part of the order (order purchases only join
+  # checkout line items), which is why callers can't find it by iterating the
+  # order's purchases directly.
+  def purchase_for_review_reminder
+    is_gift_sender_purchase? ? gift_given&.giftee_purchase : self
+  end
+
   def eligible_for_review_reminder?
-    purchase_state.in?(Purchase::COUNTS_REVIEWS_STATES) &&
-    (is_original_subscription_purchase? || link.not_is_recurring_billing?) &&
-      not_is_bundle_purchase? &&
+    # Delegate to the same gate that decides whether the review form is shown and
+    # the review counted (`Purchase::Reviews#allows_review_to_be_counted?`). If the
+    # two checks drift apart, buyers get a reminder email whose link opens a page
+    # with no review form (e.g. purchases flagged `should_exclude_product_review`
+    # after a charge reversal, or access-revoked free purchases).
+    allows_review_to_be_counted? &&
       product_review.blank? &&
-      !chargedback_not_reversed_or_refunded? &&
       !seller&.disable_review_reminders? &&
       (purchaser.present? ? !purchaser.opted_out_of_review_reminders? : true)
   end
@@ -3571,6 +3687,44 @@ class Purchase < ApplicationRecord
 
     def web_csv_tax_cents
       gumroad_responsible_for_tax? ? gumroad_tax_cents : tax_cents
+    end
+
+    # Sales API v2 buyer-presentment fields (gumroad#5419, Phase 4 / Open Question 8).
+    # Present only when this purchase was charged in the buyer's own currency (a
+    # purchase_presentment row exists — i.e. the processor charge currency differed
+    # from Gumroad's canonical USD accounting path). Strictly additive: canonical
+    # fields like price, tip_cents, and tax_cents keep their existing seller/accounting
+    # meaning, and these amounts are buyer-currency minor units (whole yen for
+    # zero-decimal currencies like JPY), NOT seller revenue.
+    # Returns nil for canonical-USD sales so as_json's delete_if drops the key entirely.
+    def buyer_presentment_api_fields
+      presentment = purchase_presentment
+      return if presentment.nil?
+
+      {
+        currency: presentment.presentment_currency,
+        price_cents: presentment.presentment_price_cents,
+        tip_cents: presentment.presentment_tip_cents,
+        seller_tax_cents: presentment.presentment_seller_tax_cents,
+        gumroad_tax_cents: presentment.presentment_gumroad_tax_cents,
+        shipping_cents: presentment.presentment_shipping_cents,
+        total_cents: presentment.presentment_total_cents,
+        # String to survive JSON round-trips without float precision loss.
+        fx_rate: presentment.charge_presentment&.fx_rate&.to_s,
+        refunded_cents: presentment_refunded_cents_for_api
+      }
+    end
+
+    # Sum of the buyer-currency amounts actually returned to the buyer across this
+    # purchase's effective refunds. Presentment refund amounts intentionally live as
+    # snapshots in refunds.json_data (not a SQL-summable column — see gumroad#5419:
+    # aggregate refunded-presentment reporting must derive it intentionally), so this
+    # walks the refunds association in memory. Uses the same effective?/loaded? pattern
+    # as amount_refunded_cents so API serialization with preloaded refunds issues no
+    # extra queries.
+    def presentment_refunded_cents_for_api
+      effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
+      effective_refunds.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
     end
 
     def web_csv_payment_processor

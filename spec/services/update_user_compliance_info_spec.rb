@@ -761,6 +761,50 @@ describe UpdateUserComplianceInfo do
         expect(stored).to eq("3490731JH")
       end
 
+      it "strips Unicode whitespace such as U+202F narrow no-break space" do
+        user = create_ie_business_user(business_tax_id: "000000000")
+
+        # macOS in French locale inserts U+202F as a thousands separator, so a SIREN
+        # pasted from a document arrives as "912 904 331" with invisible narrow
+        # no-break spaces between the digit groups.
+        params = ActionController::Parameters.new(
+          is_business: true,
+          business_tax_id: "912\u202F904\u202F331",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        stored = user.reload.alive_user_compliance_info.business_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(stored).to eq("912904331")
+      end
+
+      it "strips Unicode whitespace from a submitted individual_tax_id" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info,
+            user: u,
+            country: "France",
+            individual_tax_id: "0000000000000",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: false,
+          individual_tax_id: "12\u00A034\u202F56\u200989",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        stored = user.reload.alive_user_compliance_info.individual_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        expect(stored).to eq("12345689")
+      end
+
       it "collapses internal whitespace in a UK UTR-style business_tax_id" do
         user = create(:user).tap do |u|
           create(

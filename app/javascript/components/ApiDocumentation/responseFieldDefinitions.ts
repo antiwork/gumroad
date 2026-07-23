@@ -393,6 +393,34 @@ export const SALE_FIELDS: FieldDefinition[] = [
     condition: "omitted when the purchase was not driven by a UTM link",
   },
   { name: "subscription_duration", type: "string | null", description: "Subscription billing interval if applicable" },
+  {
+    name: "buyer_presentment",
+    type: "object",
+    description:
+      "What the buyer was actually charged when the sale was charged in their local currency. All amounts are in `currency`'s minor units (cents for most currencies; whole units for zero-decimal currencies such as JPY, where 1441 means ¥1,441), not seller revenue — canonical fields like `price` keep their USD accounting meaning.",
+    condition: "omitted when the buyer was charged in Gumroad's canonical currency (most sales)",
+    children: [
+      { name: "currency", type: "string", description: 'Buyer currency code (e.g. "cad")' },
+      { name: "price_cents", type: "number", description: "Product price in buyer-currency minor units" },
+      { name: "tip_cents", type: "number", description: "Tip in buyer-currency minor units" },
+      { name: "seller_tax_cents", type: "number", description: "Seller-remitted tax in buyer-currency minor units" },
+      { name: "gumroad_tax_cents", type: "number", description: "Gumroad-remitted tax in buyer-currency minor units" },
+      { name: "shipping_cents", type: "number", description: "Shipping in buyer-currency minor units" },
+      { name: "total_cents", type: "number", description: "Total charged to the buyer in buyer-currency minor units" },
+      {
+        name: "fx_rate",
+        type: "string | null",
+        description:
+          "Exchange rate used for the charge: USD per 1 unit of `currency` (canonical USD amounts were divided by this rate to produce the buyer-currency amounts, so the rate is below 1 when the buyer currency is weaker than USD). A decimal string to avoid float precision loss; null when no rate was recorded for the charge.",
+      },
+      {
+        name: "refunded_cents",
+        type: "number",
+        description:
+          "Amount returned to the buyer so far, in buyer-currency minor units. Summed from the buyer-currency amounts snapshotted on each effective refund; refunds recorded without a buyer-currency snapshot contribute 0 (their canonical USD amounts still appear in the top-level refund fields).",
+      },
+    ],
+  },
   { name: "formatted_display_price", type: "string", description: "Human-readable display price" },
   { name: "formatted_total_price", type: "string", description: "Human-readable total price" },
   { name: "currency_symbol", type: "string", description: 'Currency symbol (e.g. "$")' },

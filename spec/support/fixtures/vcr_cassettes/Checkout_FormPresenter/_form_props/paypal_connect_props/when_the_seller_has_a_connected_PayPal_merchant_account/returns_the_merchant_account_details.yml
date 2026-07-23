@@ -1,0 +1,207 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/oauth2/token
+    body:
+      encoding: UTF-8
+      string: grant_type=client_credentials
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      User-Agent:
+      - Ruby
+      Authorization:
+      - Basic dGVzdC1wYXlwYWwtcGFydG5lci1jbGllbnQtaWQ6
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '77'
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 22 Jul 2026 12:19:55 GMT
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - f2aa6bbc14af2
+      Pragma:
+      - no-cache
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000f2aa6bbc14af2-27417f421018c28f-01"
+      Vary:
+      - Accept-Encoding
+      X-Paypal-Token-Service:
+      - IAAS
+      Http-X-Pp-Az-Locator:
+      - ccg18.slc
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"error":"invalid_client","error_description":"Client Authentication
+        failed"}'
+  recorded_at: Wed, 22 Jul 2026 12:19:54 GMT
+- request:
+    method: get
+    uri: https://api.sandbox.paypal.com/v1/customer/partners/<PAYPAL_PARTNER_MERCHANT_ID>/merchant-integrations/B66YJBBNCRW6L
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - ''
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '244'
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 22 Jul 2026 12:19:55 GMT
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - 1b03c75bce616
+      Server-Timing:
+      - traceparent;desc="00-00000000000000000001b03c75bce616-57063f3fbcefcf8d-01"
+      Vary:
+      - Accept-Encoding
+      Http-X-Pp-Az-Locator:
+      - ccg18.slc
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"name":"AUTHENTICATION_FAILURE","message":"Authentication failed due
+        to invalid authentication credentials or a missing Authorization header.","links":[{"href":"https://developer.paypal.com/docs/api/overview/#error","rel":"information_link"}]}'
+  recorded_at: Wed, 22 Jul 2026 12:19:55 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/oauth2/token
+    body:
+      encoding: UTF-8
+      string: grant_type=client_credentials
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      User-Agent:
+      - Ruby
+      Authorization:
+      - Basic dGVzdC1wYXlwYWwtcGFydG5lci1jbGllbnQtaWQ6
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '77'
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 22 Jul 2026 12:19:55 GMT
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - 2906cefd91e3c
+      Pragma:
+      - no-cache
+      Server-Timing:
+      - traceparent;desc="00-00000000000000000002906cefd91e3c-f553eb0c14e79b3d-01"
+      Vary:
+      - Accept-Encoding
+      X-Paypal-Token-Service:
+      - IAAS
+      Http-X-Pp-Az-Locator:
+      - ccg18.slc
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"error":"invalid_client","error_description":"Client Authentication
+        failed"}'
+  recorded_at: Wed, 22 Jul 2026 12:19:55 GMT
+- request:
+    method: get
+    uri: https://api.sandbox.paypal.com/v1/customer/partners/<PAYPAL_PARTNER_MERCHANT_ID>/merchant-integrations/B66YJBBNCRW6L
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - ''
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '244'
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 22 Jul 2026 12:19:55 GMT
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - e1f648c16c889
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000e1f648c16c889-c9c166777b991797-01"
+      Vary:
+      - Accept-Encoding
+      Http-X-Pp-Az-Locator:
+      - ccg18.slc
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"name":"AUTHENTICATION_FAILURE","message":"Authentication failed due
+        to invalid authentication credentials or a missing Authorization header.","links":[{"href":"https://developer.paypal.com/docs/api/overview/#error","rel":"information_link"}]}'
+  recorded_at: Wed, 22 Jul 2026 12:19:55 GMT
+recorded_with: VCR 6.2.0

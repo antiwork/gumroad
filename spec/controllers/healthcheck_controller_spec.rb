@@ -68,6 +68,62 @@ describe HealthcheckController do
     end
   end
 
+  describe "GET 'payouts'" do
+    context "when no payout batch is in flight (Redis key absent)" do
+      it "returns 200" do
+        $redis.del(RedisKey.payout_batch_in_flight)
+
+        get :payouts
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("Payouts: no batch in flight")
+      end
+    end
+
+    context "when a payout batch is in flight (a fresh job entry exists)" do
+      it "returns 503" do
+        $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "job-token")
+
+        get :payouts
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Payouts: batch in flight")
+      ensure
+        $redis.del(RedisKey.payout_batch_in_flight)
+      end
+    end
+
+    context "when the only entries are older than the per-entry TTL (job died mid-batch)" do
+      it "returns 200 and prunes the stale entry" do
+        stale_score = (PerformPayoutsUpToDelayDaysAgoWorker::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(RedisKey.payout_batch_in_flight, stale_score, "dead-job-token")
+
+        get :payouts
+
+        expect(response.status).to eq(200)
+        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(0)
+      ensure
+        $redis.del(RedisKey.payout_batch_in_flight)
+      end
+    end
+
+    context "when a stale entry sits alongside a fresh one" do
+      it "returns 503 and prunes only the stale entry" do
+        stale_score = (PerformPayoutsUpToDelayDaysAgoWorker::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(RedisKey.payout_batch_in_flight, stale_score, "dead-job-token")
+        $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "live-job-token")
+
+        get :payouts
+
+        expect(response.status).to eq(503)
+        expect($redis.zscore(RedisKey.payout_batch_in_flight, "dead-job-token")).to be_nil
+        expect($redis.zscore(RedisKey.payout_batch_in_flight, "live-job-token")).to be_present
+      ensure
+        $redis.del(RedisKey.payout_batch_in_flight)
+      end
+    end
+  end
+
   describe "GET 'paypal_balance'" do
     context "when PayPal topup is not needed (Redis key is false)" do
       before do

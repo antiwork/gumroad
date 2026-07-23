@@ -6,6 +6,13 @@
 # makes are replayed from the shared VCR cassettes (see test/support/vcr.rb).
 require Rails.root.join("spec", "support", "stripe_payment_method_helper")
 
+# StripeMerchantAccountHelper (also spec/support) uploads a verification document
+# and waits for charges to be enabled when building a real Stripe Connect account
+# (see create_merchant_account_stripe). Its only RSpec reference is a debug
+# `puts RSpec.current_example` inside the *recording* branch, which never runs
+# when a cassette is replayed, so it's safe to require in the Minitest suite.
+require Rails.root.join("spec", "support", "stripe_merchant_account_helper")
+
 # Factory-equivalent builders for the Minitest + fixtures suite (#5801).
 #
 # The suite has no FactoryBot, but complex hub models (Installment, Purchase,
@@ -227,7 +234,18 @@ module ModelFactories
   end
 
   def create_variant(variant_category: nil, **attrs)
-    build_variant(variant_category:, **attrs).tap(&:save!)
+    # active_integrations is a has_many-through; it can't be mass-assigned on an
+    # unsaved variant (the join row would validate with a nil base_variant_id),
+    # so assign it after the variant persists, matching the :variant factory's
+    # `active_integrations: [...]` override.
+    active_integrations = attrs.delete(:active_integrations)
+    variant = build_variant(variant_category:, **attrs)
+    variant.save!
+    if active_integrations
+      variant.active_integrations = active_integrations
+      variant.save!
+    end
+    variant
   end
 
   # Mirrors the :installment factories. Product/variant posts hang off a product;
@@ -976,12 +994,316 @@ module ModelFactories
     CreatorContactingCustomersEmailInfo.create!(attrs)
   end
 
+  # A terms-of-service acceptance record (mirrors :tos_agreement). Needed before
+  # a Stripe Connect account can be created for a user.
+  def create_tos_agreement(user: nil, **attrs)
+    TosAgreement.create!({ user: user || create_user, ip: "54.234.242.13" }.merge(attrs))
+  end
+
+  # A user's KYC/compliance record (mirrors :user_compliance_info): a US
+  # individual by default. Pass `country:` (and matching business/personal
+  # fields) for other jurisdictions, the way the parented factories do.
+  def create_user_compliance_info(user: nil, **attrs)
+    UserComplianceInfo.create!({
+      user: user || create_user,
+      first_name: "Chuck",
+      last_name: "Bartowski",
+      street_address: "address_full_match",
+      city: "San Francisco",
+      state: "California",
+      zip_code: "94107",
+      country: "United States",
+      verticals: [Vertical::PUBLISHING],
+      is_business: false,
+      has_sold_before: false,
+      individual_tax_id: "000000000",
+      birthday: Date.new(1901, 1, 1),
+      dba: "Chuckster",
+      phone: "0000000000",
+    }.merge(attrs))
+  end
+
+  # A US bank account (mirrors :ach_account).
+  def create_ach_account(user: nil, **attrs)
+    AchAccount.create!({
+      user: user || create_user,
+      account_number: "1112121234",
+      routing_number: "110000000",
+      account_number_last_four: "1234",
+      account_holder_full_name: "Gumbot Gumstein I",
+      account_type: "checking",
+    }.merge(attrs))
+  end
+
+  # A US bank account whose number Stripe's test mode marks as verifiable
+  # (mirrors :ach_account_stripe_succeed).
+  def create_ach_account_stripe_succeed(user: nil, **attrs)
+    create_ach_account(
+      user:,
+      account_number: "000123456789",
+      account_number_last_four: "6789",
+      account_holder_full_name: "Stripe Test Account",
+      **attrs
+    )
+  end
+
+  # An Indian bank account (mirrors :indian_bank_account).
+  def create_indian_bank_account(user: nil, **attrs)
+    IndianBankAccount.create!({
+      user: user || create_user,
+      account_number: "000123456789",
+      account_number_last_four: "6789",
+      ifsc: "HDFC0004051",
+      account_holder_full_name: "Gumbot Gumstein I",
+    }.merge(attrs))
+  end
+
+  # A payout (mirrors :payment): a processing PayPal payout by default.
+  def create_payment(user: nil, **attrs)
+    Payment.create!({
+      user: user || create_user,
+      state: "processing",
+      processor: PayoutProcessorType::PAYPAL,
+      correlation_id: "12345",
+      amount_cents: 150,
+      payout_period_end_date: Date.yesterday,
+    }.merge(attrs))
+  end
+
+  # A completed payout (mirrors :payment_completed).
+  def create_payment_completed(user: nil, **attrs)
+    create_payment(user:, state: "completed", txn_id: "txn-id", processor_fee_cents: 10, **attrs)
+  end
+
+  # A real Stripe Connect managed account (mirrors :merchant_account_stripe).
+  # Talks to Stripe to create the account, upload a verification document, and
+  # wait for charges to be enabled — so callers must wrap this in a VCR cassette
+  # (the RSpec factory carried the `:vcr` tag implicitly via its examples).
+  def create_merchant_account_stripe(user: nil)
+    user ||= create_user
+    create_tos_agreement(user:)
+    create_user_compliance_info(user:)
+    merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+    StripeMerchantAccountHelper.upload_verification_document(merchant_account.charge_processor_merchant_id)
+    StripeMerchantAccountHelper.ensure_charges_enabled(merchant_account.charge_processor_merchant_id)
+    merchant_account
+  end
+
+  # An OAuth API application (mirrors :oauth_application). Defaults to a fresh
+  # owner, like the factory's `association :owner, factory: :user`.
+  def create_oauth_application(owner: nil, **attrs)
+    OauthApplication.create!({
+      name: "app-#{unique_suffix}",
+      redirect_uri: "https://foo",
+      owner: owner || create_user,
+    }.merge(attrs))
+  end
+
+  # An OAuth access token (mirrors the "doorkeeper/access_token" factory). The
+  # token string is generated by Doorkeeper on create; callers pass the
+  # resource_owner_id and scopes the API method requires.
+  def create_doorkeeper_access_token(application: nil, **attrs)
+    Doorkeeper::AccessToken.create!({ application: application || create_oauth_application }.merge(attrs))
+  end
+
+  # A Korean individual's compliance record (mirrors :user_compliance_info_korea).
+  def create_user_compliance_info_korea(user: nil, **attrs)
+    create_user_compliance_info(user:, zip_code: "10169", country: "Korea, Republic of", **attrs)
+  end
+
+  # A Korean bank account (mirrors :korea_bank_account).
+  def create_korea_bank_account(user: nil, **attrs)
+    KoreaBankAccount.create!({
+      user: user || create_user,
+      account_number: "000123456789",
+      bank_number: "SGSEKRSLXXX",
+      account_number_last_four: "6789",
+      account_holder_full_name: "Gumbot Gumstein I",
+    }.merge(attrs))
+  end
+
+  # A Singaporean bank account (mirrors :singaporean_bank_account).
+  def create_singaporean_bank_account(user: nil, **attrs)
+    SingaporeanBankAccount.create!({
+      user: user || create_user,
+      account_number: "000123456",
+      branch_code: "000",
+      bank_number: "1100",
+      account_number_last_four: "3456",
+      account_holder_full_name: "Gumbot Gumstein I",
+    }.merge(attrs))
+  end
+
+  # A European (IBAN) bank account (mirrors :european_bank_account).
+  def create_european_bank_account(user: nil, **attrs)
+    EuropeanBankAccount.create!({
+      user: user || create_user,
+      account_number: "DE89370400440532013000",
+      account_number_last_four: "3000",
+      account_holder_full_name: "Stripe DE Account",
+      account_type: "checking",
+    }.merge(attrs))
+  end
+
+  # A seller balance row (mirrors :balance). Defaults to $10 USD held in Gumroad's
+  # own Stripe account, unpaid. holding_currency/holding_amount_cents track the
+  # given currency/amount unless overridden, matching the factory's lazy defaults.
+  def create_balance(user: nil, currency: Currency::USD, amount_cents: 10_00, **attrs)
+    Balance.create!({
+      user: user || create_user,
+      merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+      date: Date.today,
+      currency:,
+      amount_cents:,
+      holding_currency: currency,
+      holding_amount_cents: amount_cents,
+      state: "unpaid",
+    }.merge(attrs))
+  end
+
+  # A real Gumroad-managed Stripe Connect account for a Korean seller (mirrors
+  # :merchant_account_stripe_korea). Like create_merchant_account_stripe it makes
+  # live Stripe API calls, so call sites must run inside a VCR.use_cassette block.
+  def create_merchant_account_stripe_korea(user: nil)
+    user ||= create_user
+    create_tos_agreement(user:)
+    create_user_compliance_info_korea(user:)
+    merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+    StripeMerchantAccountHelper.upload_verification_document(merchant_account.charge_processor_merchant_id)
+    StripeMerchantAccountHelper.ensure_charges_enabled(merchant_account.charge_processor_merchant_id)
+    merchant_account
+  end
+
+  # Build `count` records with the same attributes, mirroring FactoryBot's
+  # create_list(:thing, count, **attrs). `factory` is the bare name (e.g.
+  # :product), dispatched to the matching create_<factory> builder.
+  def create_list(factory, count, **attrs)
+    Array.new(count) { public_send("create_#{factory}", **attrs) }
+  end
+
+  # An admin/team-member user (mirrors the :admin_user factory).
+  def create_admin_user(**attrs)
+    create_user(is_team_member: true, **attrs)
+  end
+
+  # A compliant seller with a payout address (mirrors the :recommendable_user
+  # factory, which inherits payment_address from the base :user factory).
+  # Product#recommendable? needs both the compliant risk state and a payout method.
+  def create_recommendable_user(**attrs)
+    create_user(user_risk_state: "compliant", payment_address: "rec-#{unique_suffix}@example.com", **attrs)
+  end
+
+  # A team membership (mirrors the :team_membership factory). The membership's
+  # user needs its own owner self-membership before a non-owner role validates
+  # (owner_membership_must_exist), so ensure it first like the factory does.
+  def create_team_membership(user: nil, seller: nil, role: TeamMembership::ROLE_ADMIN, **attrs)
+    user ||= create_user
+    seller ||= create_user
+    user.create_owner_membership_if_needed!
+    TeamMembership.create!({ user:, seller:, role: }.merge(attrs))
+  end
+
+  # A product with a single readable PDF file (mirrors :product_with_pdf_file).
+  def create_product_with_pdf_file(user: nil, **attrs)
+    product = create_product(user:, **attrs)
+    create_readable_document(link: product, pagelength: 3, size: 50, display_name: "Display Name", description: "Description")
+    product.reload
+    product
+  end
+
+  # A product with a named cover image attached (mirrors
+  # :product_with_file_and_preview). Link#preview= builds the asset preview.
+  def create_product_with_file_and_preview(user: nil, **attrs)
+    create_product(
+      user:,
+      name: "The Wrath of the River",
+      description: "A poem not for the lighthearted, but the heavy. Like lead.",
+      preview: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "kFDzu.png"), "image/png"),
+      **attrs
+    )
+  end
+
+  # A product with two digital versions priced $1 and $2 above base (mirrors
+  # :product_with_digital_versions_with_price_difference_cents).
+  def create_product_with_digital_versions_with_price_difference_cents(user: nil, **attrs)
+    product = create_product(user:, **attrs)
+    category = create_variant_category(link: product, title: "Category")
+    create_variant(variant_category: category, name: "Untitled 1", price_difference_cents: 100)
+    create_variant(variant_category: category, name: "Untitled 2", price_difference_cents: 200)
+    product
+  end
+
+  # Product-level rich content (mirrors :product_rich_content, which is just the
+  # :rich_content factory with a product entity).
+  def create_product_rich_content(entity: nil, description: [], **attrs)
+    create_rich_content(entity: entity || create_product, description:, **attrs)
+  end
+
+  # A profile "posts" section (mirrors :seller_profile_posts_section).
+  def create_seller_profile_posts_section(seller: nil, **attrs)
+    SellerProfilePostsSection.create!({ seller: seller || create_user, shown_posts: [] }.merge(attrs))
+  end
+
+  # A custom domain (mirrors :custom_domain). Callers pass `user: nil` together
+  # with `product:` for product-scoped domains (the :with_product trait).
+  def create_custom_domain(user: :default, **attrs)
+    user = create_user if user == :default
+    CustomDomain.create!({ user:, domain: "example-#{unique_suffix}.com" }.merge(attrs))
+  end
+
+  # A legacy permalink → product mapping (mirrors :legacy_permalink).
+  def create_legacy_permalink(product: nil, permalink: nil, **attrs)
+    LegacyPermalink.create!({ product: product || create_product, permalink: permalink || SecureRandom.hex(15) }.merge(attrs))
+  end
+
+  # A preorder configuration for a product (mirrors :preorder_link).
+  def create_preorder_link(link: nil, **attrs)
+    PreorderLink.create!({ link: link || create_product, release_at: 2.months.from_now }.merge(attrs))
+  end
+
+  # A discover/search tag (mirrors :tag).
+  def create_tag(**attrs)
+    Tag.create!({ name: "tag name #{unique_suffix}" }.merge(attrs))
+  end
+
+  # A shopping cart (mirrors :cart). `user: nil` builds a guest cart.
+  def create_cart(user: :default, **attrs)
+    user = create_user if user == :default
+    Cart.create!({ user:, browser_guid: SecureRandom.uuid, ip_address: unique_ip }.merge(attrs))
+  end
+
+  # A product line in a cart (mirrors :cart_product).
+  def create_cart_product(cart: nil, product: nil, **attrs)
+    cart ||= create_cart
+    product ||= create_product
+    CartProduct.create!({ cart:, product:, price: product.price_cents, quantity: 1, referrer: "direct" }.merge(attrs))
+  end
+
+  # Integration records (mirror the *_integration factories). Used both directly
+  # and via the "modifies an existing integration" shared example, which builds
+  # one with create("#{integration_name}_integration").
+  def create_discord_integration(**attrs)
+    DiscordIntegration.create!({ server_id: "0", server_name: "Gaming", username: "gumbot" }.merge(attrs))
+  end
+
+  def create_zoom_integration(**attrs)
+    ZoomIntegration.create!({ user_id: "0", email: "test@zoom.com", access_token: "test_access_token", refresh_token: "test_refresh_token" }.merge(attrs))
+  end
+
+  def create_google_calendar_integration(**attrs)
+    GoogleCalendarIntegration.create!({ calendar_id: "0", calendar_summary: "Holidays", access_token: "test_access_token", refresh_token: "test_refresh_token", email: "hi@gmail.com" }.merge(attrs))
+  end
+
   private
-    def build_asset_preview(link:, fixture:, content_type:, **attrs)
+    # `attach: false` mirrors the :asset_preview factory's transient — used for
+    # oEmbed/Unsplash previews that carry a URL instead of an uploaded file.
+    def build_asset_preview(link:, fixture:, content_type:, attach: true, **attrs)
       preview = AssetPreview.new({ link: link || create_product }.merge(attrs))
-      preview.file.attach(Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", fixture), content_type))
+      if attach
+        preview.file.attach(Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", fixture), content_type))
+      end
       preview.save!
-      AssetPreviewAnalysisStub.analyze(preview.file)
+      AssetPreviewAnalysisStub.analyze(preview.file) if attach
       preview
     end
 end

@@ -87,6 +87,58 @@ describe SignedUrlHelper do
       end.to raise_error(Aws::S3::Errors::NotFound, /Key = attachments\/missing.txt/)
     end
 
+    it "falls back to the Unicode normalization form under which the S3 object actually exists" do
+      # The DB-derived key uses the precomposed (NFC) "ú", but the object was uploaded under
+      # the decomposed (NFD) form — the mismatch macOS uploaders produce in production.
+      # Real S3 compares keys byte-for-byte; the local test S3 normalizes Unicode keys and
+      # would find the object under either form, so we stub the boundary to reproduce
+      # production behavior.
+      nfc_key = "attachments/#{SecureRandom.hex}/original/m\u00FAsica.pdf"
+      nfd_key = nfc_key.unicode_normalize(:nfd)
+
+      RSpec::Mocks.space.proxy_for(Aws::S3::Resource).reset
+      missing_object = double(:s3_object)
+      allow(missing_object).to receive(:content_length).and_raise(Aws::S3::Errors::NotFound.new(nil, "missing"))
+      # The real SDK percent-encodes the key in public_url; mirror that in the stub.
+      encoded_nfd_key = nfd_key.split("/").map { CGI.escape(_1) }.join("/")
+      existing_object = double(
+        :s3_object,
+        exists?: true,
+        content_length: 1_000,
+        public_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{encoded_nfd_key}"
+      )
+      bucket = double(:bucket)
+      allow(bucket).to receive(:object).with(nfc_key).and_return(missing_object)
+      allow(bucket).to receive(:object).with(nfd_key).and_return(existing_object)
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(:resource, bucket: bucket))
+
+      url = signed_download_url_for_s3_key_and_filename(nfc_key, "m\u00FAsica.pdf")
+      # The URL must point at the object that exists (NFD: "u" + combining acute accent,
+      # percent-encoded as u%CC%81), not at the missing precomposed form (NFC "ú" = %C3%BA).
+      expect(url).to include("u%CC%81")
+      expect(url).not_to include("%C3%BA")
+    end
+
+    it "still raises when no Unicode normalization variant of the key exists" do
+      RSpec::Mocks.space.proxy_for(Aws::S3::Client).reset
+      RSpec::Mocks.space.proxy_for(Aws::S3::Resource).reset
+
+      nfc_key = "attachments/#{SecureRandom.hex}/original/m\u00FAsica.pdf"
+      nfd_key = nfc_key.unicode_normalize(:nfd)
+
+      missing_object = double(:s3_object)
+      allow(missing_object).to receive(:content_length).and_raise(Aws::S3::Errors::NotFound.new(nil, "missing"))
+      absent_variant = double(:s3_object, exists?: false)
+      bucket = double(:bucket)
+      allow(bucket).to receive(:object).with(nfc_key).and_return(missing_object)
+      allow(bucket).to receive(:object).with(nfd_key).and_return(absent_variant)
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(:resource, bucket: bucket))
+
+      expect do
+        signed_download_url_for_s3_key_and_filename(nfc_key, "m\u00FAsica.pdf")
+      end.to raise_error(Aws::S3::Errors::NotFound, /Key = /)
+    end
+
     describe "#file_needs_cache_key?" do
       context "when cache key is needed" do
         it "returns true" do

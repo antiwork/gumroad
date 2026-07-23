@@ -43,6 +43,13 @@ const sentClientTurnId = () => {
   return call?.[3];
 };
 
+// The abort signal streamAgentMessage was called with. Aborting it is how the chat releases a
+// connection the stream's stall timeout abandoned — allowed only once the turn's fate is known.
+const sentAbortSignal = () => {
+  const call = streamAgentMessage.mock.calls[streamAgentMessage.mock.calls.length - 1];
+  return call?.[4];
+};
+
 const interruptedStream = () =>
   streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
     handlers.onToken?.("Your bio currently has thr");
@@ -107,6 +114,7 @@ describe("AgentChat streamed reply reconciliation", () => {
         expect.anything(),
         "conv1",
         expect.any(String),
+        expect.any(AbortSignal),
       ),
     );
   });
@@ -135,6 +143,8 @@ describe("AgentChat streamed reply reconciliation", () => {
     // the "stale proposal from a previous session" dismissed state hydration uses.
     expect(screen.getByText("Confirm")).toBeTruthy();
     expect(screen.getByText("Dismiss")).toBeTruthy();
+    // The turn is recovered — terminal — so the abandoned connection is released.
+    expect(sentAbortSignal()?.aborted).toBe(true);
   });
 
   it("keeps polling while the server reports the turn in progress, then recovers it", async () => {
@@ -181,6 +191,8 @@ describe("AgentChat streamed reply reconciliation", () => {
     expect(fetchAgentTurnStatus).toHaveBeenCalledTimes(1);
     // The partial text that did stream is kept, exactly as before.
     expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
+    // "failed" is a server verdict, so any connection the stall timeout abandoned is released.
+    expect(sentAbortSignal()?.aborted).toBe(true);
   });
 
   it("gives up after consecutive unknown statuses when the turn was never persisted", async () => {
@@ -200,6 +212,31 @@ describe("AgentChat streamed reply reconciliation", () => {
 
       expect(showAlert).toHaveBeenCalled();
       expect(fetchAgentTurnStatus).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
+      // "unknown" is a give-up, not a server verdict — the turn may still be generating, so the
+      // abandoned connection must NOT be aborted yet (that could kill a turn that would yet
+      // persist).
+      expect(sentAbortSignal()?.aborted).toBe(false);
+
+      // The background watch takes over the cleanup, but "unknown" is still not a verdict — after
+      // its first slow poll the connection must remain untouched.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      expect(sentAbortSignal()?.aborted).toBe(false);
+
+      // Once the server records a verdict (the turn persisted after all), the watch releases the
+      // connection — without adopting the late turn into the chat, which has moved on.
+      fetchAgentTurnStatus.mockResolvedValue({
+        status: "persisted",
+        conversation_id: "conv1",
+        message: { role: "assistant", content: PERSISTED_REPLY },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      expect(sentAbortSignal()?.aborted).toBe(true);
+      expect(screen.queryByText(PERSISTED_REPLY)).toBeNull();
       expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
     } finally {
       vi.useRealTimers();
@@ -304,13 +341,17 @@ describe("AgentChat custom-html proposal cards", () => {
 
   it("renders a page preview instead of raw HTML fields", async () => {
     streamTurnWithAction(customHtmlAction);
-    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
 
     render(<AgentChat greeting="Hi" suggestions={[]} />);
     await sendMessage("change my headline");
 
     const iframe = await screen.findByTitle<HTMLIFrameElement>("Preview of your page after this change");
-    expect(iframe.getAttribute("srcdoc")).toContain("<h1>New headline</h1>");
+    // Loaded by URL (never srcdoc) so the staged document's response carries the custom-page CSP
+    // header — inlined via srcdoc it would inherit the dashboard's CSP, which blocks the page's
+    // inline scripts.
+    expect(iframe.getAttribute("src")).toBe("/internal/agent/custom_html_previews/token123");
+    expect(iframe.hasAttribute("srcdoc")).toBe(false);
     // The document renders on an opaque origin, exactly like the live page embed.
     expect(iframe.getAttribute("sandbox")).toBe("allow-scripts allow-forms allow-popups");
     // The raw find/replace rows are gone — the rendered preview is the review surface.
@@ -338,7 +379,7 @@ describe("AgentChat custom-html proposal cards", () => {
     expect(screen.getByText("Dismiss").closest("button")?.disabled).toBe(false);
   });
 
-  it("shows why a preview is unavailable and keeps Confirm disabled", async () => {
+  it("shows why a preview failed as a prominent alert and keeps Confirm disabled", async () => {
     streamTurnWithAction(customHtmlAction);
     fetchCustomHtmlProposalPreview.mockRejectedValue(
       new Error("The snippet to replace no longer appears in the current page."),
@@ -347,11 +388,15 @@ describe("AgentChat custom-html proposal cards", () => {
     render(<AgentChat greeting="Hi" suggestions={[]} />);
     await sendMessage("change my headline");
 
+    // The failure is why Confirm is disabled, so it renders as an alert naming the cause and the
+    // way out — not a muted footnote (gumroad-private#1251).
     await waitFor(() =>
       expect(
-        screen.getByText("Preview unavailable: The snippet to replace no longer appears in the current page."),
+        screen.getByText("This change can't be applied: The snippet to replace no longer appears in the current page."),
       ).toBeTruthy(),
     );
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByText("Ask the agent to re-read the page and propose the change again.")).toBeTruthy();
     // An invalid proposal would fail on apply too — Confirm stays off; Dismiss remains the way out.
     expect(screen.getByText("Confirm").closest("button")?.disabled).toBe(true);
     expect(screen.getByText("Dismiss").closest("button")?.disabled).toBe(false);
@@ -359,7 +404,7 @@ describe("AgentChat custom-html proposal cards", () => {
 
   it("collapses an applied proposal into a compact card with the details behind Review", async () => {
     streamTurnWithAction(customHtmlAction);
-    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
     executeAgentAction.mockResolvedValue({ message: "Done.", object: null });
 
     render(<AgentChat greeting="Hi" suggestions={[]} />);
@@ -400,7 +445,7 @@ describe("AgentChat custom-html proposal cards", () => {
         },
       ],
     });
-    fetchCustomHtmlProposalPreview.mockResolvedValue("<!doctype html><html><body><h1>New headline</h1></body></html>");
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
 
     render(<AgentChat greeting="Hi" suggestions={[]} />);
 

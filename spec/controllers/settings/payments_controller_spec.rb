@@ -1807,8 +1807,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
     before do
       seller.mark_compliant!(author_name: "ContentModeration")
-      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
-      create(:payment_completed, user: seller)
     end
 
     context "when the user has merchant migration enabled" do
@@ -1838,14 +1836,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(merchant_account.meta["isEmailConfirmed"]).to eq("true")
           expect(seller.reload.check_merchant_account_is_linked).to be(true)
 
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
         end
       end
 
       context "when PayPal account connection is not successful" do
         it "redirects user to payments settings path" do
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: nil)
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
         end
 
         it "allows same PayPal account to be connected even when it is already connected to the another Gumroad Account" do
@@ -1858,7 +1856,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         context "when there is some error connecting PayPal account" do
           it "flashes PayPal account connection error" do
             get :paypal_connect, params: paypal_params(paypal_merchant_reference: nil)
-            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to redirect_to(checkout_form_path)
             expect(flash[:notice]).to eq("There was an error connecting your PayPal account with Gumroad.")
           end
         end
@@ -1884,7 +1882,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           end.to change { MerchantAccount.count }.by(1)
 
           expect(seller.reload.check_merchant_account_is_linked).to be(false)
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
         end
       end
     end
@@ -1910,14 +1908,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(merchant_account.meta["isEmailConfirmed"]).to eq("true")
         expect(seller.reload.check_merchant_account_is_linked).to be(false)
 
-        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to redirect_to(checkout_form_path)
       end
     end
 
     context "when PayPal account connection is not successful" do
       it "redirects user to payments settings path" do
         get :paypal_connect, params: paypal_params(paypal_merchant_reference: nil)
-        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to redirect_to(checkout_form_path)
       end
 
       it "allows same PayPal account to be connected even when it is already connected to the another Gumroad Account" do
@@ -1941,7 +1939,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
         it "still connects the paypal account if paypal account is from a supported country" do
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: "A8RLJ7R5E389A")
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
           expect(flash[:notice]).to eq("You have successfully connected your PayPal account with Gumroad.")
           expect(seller.merchant_accounts.count).to eq(1)
         end
@@ -1955,7 +1953,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         it "still connects the paypal account" do
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: "MUWSRAF6QLQJG")
 
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
           expect(flash[:notice]).to eq("You have successfully connected your PayPal account with Gumroad.")
           expect(seller.merchant_accounts.count).to eq(1)
           expect(seller.merchant_accounts.paypal.last.country).to eq("CN")
@@ -1968,7 +1966,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: "U6E6N859GJJYQ")
 
-          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to redirect_to(checkout_form_path)
           expect(flash[:notice]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
           expect(seller.merchant_accounts.alive.count).to eq(0)
         end
@@ -1991,6 +1989,99 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       post :remove_credit_card
       expect(response).to be_successful
       expect(user_with_credit_card.reload.credit_card).to be(nil)
+    end
+  end
+
+  describe "payout settings management by team members" do
+    before do
+      allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).and_return(true)
+    end
+
+    context "when signed in as admin for seller" do
+      include_context "with user signed in as admin for seller"
+
+      it "allows updating the payout threshold" do
+        expect do
+          put :update, params: { payout_threshold_cents: 20_000 }
+        end.to change { seller.reload.payout_threshold_cents.to_i }.to(20_000)
+
+        expect(response).to redirect_to(settings_payments_path)
+      end
+
+      it "creates an audit comment on the seller account attributing the change to the team admin" do
+        expect do
+          put :update, params: { payout_threshold_cents: 20_000 }
+        end.to change { seller.reload.comments.count }.by(1)
+
+        comment = seller.comments.last
+        expect(comment.author_id).to eq(user_with_role_for_seller.id)
+        expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_NOTE)
+        expect(comment.content).to eq("Payout settings updated by team admin #{user_with_role_for_seller.email}")
+      end
+
+      it "does not create an audit comment when the update is rejected" do
+        expect do
+          put :update, params: { payout_threshold_cents: seller.minimum_payout_threshold_cents - 1 }
+        end.not_to change { seller.reload.comments.count }
+      end
+
+      it "does not fail the request when the audit comment cannot be written" do
+        allow_any_instance_of(Comment).to receive(:save!).and_raise(ActiveRecord::RecordInvalid)
+        expect(ErrorNotifier).to receive(:notify)
+
+        expect do
+          put :update, params: { payout_threshold_cents: 20_000 }
+        end.to change { seller.reload.payout_threshold_cents.to_i }.to(20_000)
+
+        expect(response).to redirect_to(settings_payments_path)
+      end
+
+      it "allows removing the saved debit card and logs an audit comment" do
+        seller.update!(credit_card: create(:credit_card))
+        allow_any_instance_of(User).to receive(:requires_credit_card?).and_return(false)
+
+        expect do
+          post :remove_credit_card
+        end.to change { seller.reload.comments.count }.by(1)
+
+        expect(response).to be_successful
+        expect(seller.reload.credit_card).to be(nil)
+        expect(seller.comments.last.content).to eq("Payout settings updated by team admin #{user_with_role_for_seller.email}")
+      end
+    end
+
+    context "when signed in as owner" do
+      it "does not create an audit comment" do
+        expect do
+          put :update, params: { payout_threshold_cents: 20_000 }
+        end.not_to change { seller.reload.comments.count }
+
+        expect(seller.reload.payout_threshold_cents.to_i).to eq(20_000)
+      end
+    end
+
+    %w[marketing support accountant].each do |role|
+      context "when signed in as #{role} for seller" do
+        include_context "with user signed in with given role for seller", role
+
+        it "forbids updating payout settings" do
+          expect do
+            put :update, params: { payout_threshold_cents: 20_000 }
+          end.not_to change { seller.reload.payout_threshold_cents.to_i }
+
+          expect(response).to redirect_to(dashboard_url)
+          expect(flash[:alert]).to eq("Your current role as #{role.humanize} cannot perform this action.")
+        end
+
+        it "forbids removing the saved debit card" do
+          seller.update!(credit_card: create(:credit_card))
+
+          post :remove_credit_card
+
+          expect(response).to redirect_to(dashboard_url)
+          expect(seller.reload.credit_card).not_to be(nil)
+        end
+      end
     end
   end
 
@@ -2142,8 +2233,21 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         )
       end
 
-      it "redirects back to settings with an alert instead of raising" do
+      it "redirects back to settings without alerting Sentry (rejected accounts are an expected terminal state)" do
         stub_stripe_account_retrieve(disabled_reason: "rejected.listed")
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        get :remediation
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(flash[:alert]).to be_nil
+      end
+
+      it "notifies Sentry and shows the support alert for InvalidRequestErrors that are not the rejected-account-link error" do
+        allow(Stripe::AccountLink).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("This account cannot be onboarded.", nil)
+        )
+        stub_stripe_account_retrieve(disabled_reason: nil)
         expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::InvalidRequestError), context: { user_id: user.id })
 
         get :remediation
@@ -2188,16 +2292,16 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(merchant_account.reload.stripe_disabled_reason).to be_nil
       end
 
-      it "still redirects when Stripe::Account.retrieve itself raises" do
+      it "still redirects quietly when Stripe::Account.retrieve itself raises" do
         allow(Stripe::Account).to receive(:retrieve).with("acct_rejected").and_raise(
           Stripe::APIConnectionError.new("Stripe is down")
         )
-        expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::InvalidRequestError), context: { user_id: user.id })
+        expect(ErrorNotifier).not_to receive(:notify)
 
         get :remediation
 
         expect(response).to redirect_to(settings_payments_path)
-        expect(flash[:alert]).to eq("We couldn't open the verification page. Please contact support.")
+        expect(flash[:alert]).to be_nil
         expect(merchant_account.reload.stripe_disabled_reason).to be_nil
       end
     end

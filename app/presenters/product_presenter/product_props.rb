@@ -13,7 +13,7 @@ class ProductPresenter::ProductProps
     @seller = product.user
   end
 
-  def props(seller_custom_domain_url:, request:, pundit_user:, recommended_by: nil, discount_code: nil, quantity: 1, layout: nil)
+  def props(seller_custom_domain_url:, request:, pundit_user:, recommended_by: nil, discount_code: nil, quantity: 1, layout: nil, purchase_id: nil, purchase_email_digest: nil)
     discount_code_result = discount_code_props(discount_code, quantity, pundit_user&.user)
     ppp_details = product.ppp_details(request.remote_ip)
     displayed_price_cents = displayed_price_cents(discount_code_result:, ppp_details:, quantity:)
@@ -33,7 +33,7 @@ class ProductPresenter::ProductProps
         quantity_remaining: product.remaining_for_sale_count,
         long_url: product.long_url,
         is_sales_limited: product.max_purchase_count?,
-        ratings: product.display_product_reviews? ? product.rating_stats : nil,
+        ratings: product.display_product_reviews? ? product.bundle_rating_stats : nil,
         custom_button_text_option: product.custom_button_text_option,
         is_compliance_blocked: product.compliance_blocked(request.remote_ip),
         is_published: !product.draft && product.alive?,
@@ -77,10 +77,9 @@ class ProductPresenter::ProductProps
         refund_policy: refund_policy_props,
         bundle_products: product.bundle_products.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).alive.map { bundle_product_props(_1, request:, recommended_by:, layout:) },
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
-        audio_previews_enabled: Feature.active?(:audio_previews, product.user),
       },
       discount_code: discount_code_result,
-      purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid])),
+      purchase: purchase_props(product.purchase_info_for_product_page(pundit_user&.user, request.cookie_jar[:_gumroad_guid], purchase_id:, purchase_email_digest:)),
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
       ) : [],
@@ -184,7 +183,10 @@ class ProductPresenter::ProductProps
           fine_print: seller.refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(seller.refund_policy.fine_print) : nil,
           updated_at: seller.refund_policy.updated_at.to_date,
         }
-      elsif product.product_refund_policy_enabled?
+      elsif product.product_refund_policy_enabled? && product.product_refund_policy.present?
+        # The enabled flag can be out of sync with the underlying record: a product may have
+        # product_refund_policy_enabled set while its ProductRefundPolicy row was deleted or
+        # never created. Product::AsJson applies the same presence guard for this reason.
         {
           title: product.product_refund_policy.title,
           fine_print: product.product_refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(product.product_refund_policy.fine_print) : nil,

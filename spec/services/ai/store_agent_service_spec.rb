@@ -204,8 +204,36 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to include("never direct them to dashboard settings that don't exist")
         expect(captured[:system]).to include(%(<script id="gumroad-data"))
         expect(captured[:system]).to match(/never hard-code the product list/)
-        expect(captured[:system]).to match(/Never publish a page\s+that drops their products/)
+        expect(captured[:system]).to match(/Never publish a page that drops the creator's products/)
         expect(captured[:system]).to match(/unless\s+you actually called api_write in this same reply/)
+      end
+
+      # Follow-up to gumroad-private#984: with the rules above in place, the agent authored a
+      # page whose script hunted for the creator's name in the gumroad-data JSON (data.user.name)
+      # — a key that doesn't exist there — so the published header fell back to a generic "Store"
+      # and the name and bio never rendered. The prompt must spell out the mechanism, not just
+      # the requirement: say exactly what the injected JSON contains (and that name/bio/avatar
+      # are NOT in it), point at data-gumroad-field elements as the only way to render name and
+      # bio, warn that Pages::Interpolator overwrites placeholder text even when a field is
+      # blank, restrict images to Gumroad-hosted urls the agent actually has, and require an
+      # empty state when the store has no published products so an empty store doesn't read as
+      # a broken page.
+      it "spells out how a page gets the creator's name, bio, and an empty product state" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to match(/does NOT contain the\s+creator's name, bio, avatar/)
+        expect(captured[:system]).to include(%(data-gumroad-field="name"))
+        expect(captured[:system]).to include(%(data-gumroad-field="bio"))
+        expect(captured[:system]).to match(/If the products array is empty,\s+render a visible empty state/)
+        expect(captured[:system]).to match(/Placeholder text you write inside\s+these elements is always overwritten/)
+        expect(captured[:system]).to match(/Only include\s+an avatar, logo, or photo when you have a real Gumroad-hosted image url/)
+        expect(captured[:system]).to match(/Never author an empty image slot/)
       end
 
       it "rejects an unknown endpoint id without calling the API" do

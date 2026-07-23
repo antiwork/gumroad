@@ -165,7 +165,6 @@ export type Product = {
     variant: string | null;
   }[];
   public_files: PublicFile[];
-  audio_previews_enabled: boolean;
 };
 export type Purchase = {
   id: string;
@@ -321,7 +320,6 @@ export const Product = ({
   const publicFilesSettings = React.useMemo(
     () => ({
       files: product.public_files,
-      audioPreviewsEnabled: product.audio_previews_enabled,
     }),
     [product.public_files],
   );
@@ -402,7 +400,13 @@ export const Product = ({
       {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
       <section className="lg:border-r">
         <header className="grid gap-4 p-6 not-first:border-t">
-          <h1 itemProp="name">{product.name}</h1>
+          {/* dir="auto" lets an RTL product name (Hebrew, Arabic) render right-to-left
+              instead of inheriting the document's LTR base direction, which misplaces
+              neutral characters like quotes and digits (gumroad-private#1259; same
+              rationale as the description fix in #6138). */}
+          <h1 itemProp="name" dir="auto">
+            {product.name}
+          </h1>
         </header>
         <section className="grid grid-cols-[auto_1fr] gap-[1px] border-t border-border p-0 sm:grid-cols-[auto_auto_minmax(max-content,1fr)]">
           {showPrice ? (
@@ -515,12 +519,19 @@ export const Product = ({
         ) : null}
         <section className="border-t border-border p-6">
           <CollapsibleDescription>
+            {/* dir="auto" gives the description a base direction from its first strong
+                character; per-block direction for mixed-language content is handled by
+                the unicode-bidi: plaintext rule in _rich_text.scss (gumroad-private#1244). */}
             {pageLoaded ? (
               <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
-                <EditorContent className="rich-text" editor={descriptionEditor} />
+                <EditorContent className="rich-text" dir="auto" editor={descriptionEditor} />
               </PublicFilesSettingsContext.Provider>
             ) : (
-              <div className="rich-text" dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }} />
+              <div
+                className="rich-text"
+                dir="auto"
+                dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }}
+              />
             )}
           </CollapsibleDescription>
         </section>
@@ -799,7 +810,7 @@ const ExistingPurchaseCard = ({
             </li>
           </CardContent>
         )}
-        {!isPreorder && !isBundle && allowRating ? (
+        {!isPreorder && allowRating ? (
           <ReviewForm
             permalink={permalink}
             purchaseId={purchase.id}

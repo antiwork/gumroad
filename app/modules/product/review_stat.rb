@@ -11,6 +11,40 @@ module Product::ReviewStat
     }
   end
 
+  # A bundle's product page shows one combined rating summary: the bundle's own
+  # reviews (buyers can review the bundle itself) plus the reviews earned by the
+  # products inside it. Merging both means a new bundle review visibly updates
+  # the page's star summary and histogram, while the bundle still benefits from
+  # the social proof its contents have earned on their own pages. The per-star
+  # counts are summed, so the math is a review-count-weighted average.
+  # Display-layer only: the bundle's own review stat row is never written to by
+  # this method (it accumulates normally as bundle reviews come in).
+  def bundle_rating_stats
+    return rating_stats unless is_bundle
+
+    counts = Hash.new(0)
+    rating_counts.each { |rating, count| counts[rating] += count.to_i }
+    bundle_products.alive.includes(product: :product_review_stat).each do |bundle_product|
+      product = bundle_product.product
+      next unless product.display_product_reviews?
+      product.rating_counts.each { |rating, count| counts[rating] += count.to_i }
+    end
+
+    # Build an unsaved stat row from the summed per-star counts so we can reuse
+    # ProductReviewStat's percentage math (largest-remainder rounding to 100%).
+    aggregate = ProductReviewStat.new
+    counts.each { |rating, count| aggregate[ProductReviewStat::RATING_COLUMN_MAP[rating]] = count }
+    total = counts.values.sum
+    aggregate.reviews_count = total
+    aggregate.average_rating = total.zero? ? 0 : (counts.sum { |rating, count| rating * count }.to_f / total).round(1)
+
+    {
+      count: aggregate.reviews_count,
+      average: aggregate.average_rating,
+      percentages: aggregate.rating_percentages.values,
+    }
+  end
+
   def update_review_stat_via_rating_change(old_rating, new_rating)
     create_product_review_stat if product_review_stat.nil?
     if old_rating.nil?

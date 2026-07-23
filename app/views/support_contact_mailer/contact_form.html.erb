@@ -1,0 +1,15 @@
+<p><b>New Help Center contact form submission</b></p>
+<p>
+  Category: <%= @category %>
+  <br>
+  From: <%= @email %>
+  <% if @user.present? %>
+    <br>
+    Account: <%= @user.email %> (<%= @user.name.presence || "no name set" %>, id: <%= @user.id %>)
+  <% end %>
+  <% if @referrer_path.present? %>
+    <br>
+    Submitted from: <%= @referrer_path %>
+  <% end %>
+</p>
+<p style="white-space: pre-wrap;"><%= @message %></p>

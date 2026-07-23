@@ -84,14 +84,14 @@ class Charge::MethodForcedPresentment
       quoted_result(decision)
     end
   rescue StripeFxQuote::SettlementCurrencyMismatch => e
-    # Expected condition, not a defect: the connected account settles in a non-USD
-    # currency (Stripe multi-currency settlement) even though our stored
-    # merchant_account.currency said USD. Fall back to the canonical USD intent quietly.
-    # Record the mismatch on the merchant account so subsequent checkouts skip the doomed
-    # FX-quote round trip entirely (issue #6011). A persistence failure must never break
-    # the charge that is already falling back.
+    # Expected condition, not a defect: the account settles this currency in itself
+    # (Stripe multi-currency settlement) even though our stored merchant_account.currency
+    # said USD. Fall back to the canonical USD intent quietly. Record the mismatch for
+    # this currency on the merchant account so subsequent checkouts in it skip the doomed
+    # FX-quote round trip entirely (issue #6011) — other currencies keep quoting. A
+    # persistence failure must never break the charge that is already falling back.
     begin
-      merchant_account&.record_settlement_currency_mismatch!
+      merchant_account&.record_settlement_currency_mismatch!(forced_currency || Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type))
     rescue StandardError => persistence_error
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{persistence_error.class} #{persistence_error.message}")
     end

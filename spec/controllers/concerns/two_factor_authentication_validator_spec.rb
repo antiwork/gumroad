@@ -165,42 +165,22 @@ describe TwoFactorAuthenticationValidator, type: :controller do
         create(:totp_credential, :confirmed, user: @user)
       end
 
-      context "when authenticator_2fa flag is active for the user" do
-        before do
-          Feature.activate_user(:authenticator_2fa, @user)
-        end
+      it "sets the auth method to totp in session" do
+        controller.prepare_for_two_factor_authentication(@user)
 
-        it "sets the auth method to totp in session" do
-          controller.prepare_for_two_factor_authentication(@user)
-
-          expect(controller.two_factor_auth_method).to eq("totp")
-        end
-
-        it "does not send authentication token email" do
-          expect do
-            controller.prepare_for_two_factor_authentication(@user)
-          end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
-        end
-
-        it "does not record a token-sent time" do
-          controller.prepare_for_two_factor_authentication(@user)
-
-          expect(session[:two_factor_auth_token_sent_at]).to be_nil
-        end
+        expect(controller.two_factor_auth_method).to eq("totp")
       end
 
-      context "when authenticator_2fa flag is not active for the user" do
-        it "falls back to email method" do
+      it "does not send authentication token email" do
+        expect do
           controller.prepare_for_two_factor_authentication(@user)
+        end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
+      end
 
-          expect(controller.two_factor_auth_method).to eq("email")
-        end
+      it "does not record a token-sent time" do
+        controller.prepare_for_two_factor_authentication(@user)
 
-        it "sends authentication token email" do
-          expect do
-            controller.prepare_for_two_factor_authentication(@user)
-          end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
-        end
+        expect(session[:two_factor_auth_token_sent_at]).to be_nil
       end
     end
 

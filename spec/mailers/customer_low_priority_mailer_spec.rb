@@ -471,6 +471,46 @@ describe CustomerLowPriorityMailer do
     end
   end
 
+  describe "already_subscribed_checkout_attempt" do
+    it "includes a tokenized link to manage the existing subscription" do
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+
+      mail = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id)
+
+      expect(mail.subject).to eq "Someone tried to purchase a membership you already have"
+      expect(mail.body.encoded).to include "manage your subscription here"
+      expect(mail.body.encoded).to include "/subscriptions/#{subscription.external_id}/manage?token=#{subscription.reload.token}"
+    end
+
+    it "reuses a still-valid token across repeated deliveries so earlier links keep working" do
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+
+      first_body = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id).body.encoded
+      first_token = subscription.reload.token
+
+      second_body = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id).body.encoded
+
+      expect(subscription.reload.token).to eq first_token
+      expect(first_body).to include "token=#{first_token}"
+      expect(second_body).to include "token=#{first_token}"
+    end
+
+    it "mints a new token when the existing one has expired" do
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+      subscription.update!(token: "expired-token", token_expires_at: 1.minute.ago)
+
+      body = CustomerLowPriorityMailer.already_subscribed_checkout_attempt(subscription.id).body.encoded
+
+      new_token = subscription.reload.token
+      expect(new_token).not_to eq "expired-token"
+      expect(subscription.token_expires_at).to be > Time.current
+      expect(body).to include "token=#{new_token}"
+    end
+  end
+
   describe "expiring credit card membership", :vcr do
     it "notifies the customer that their credit card is expiring" do
       expiring_cc_user = create(:user, credit_card: create(:credit_card))
@@ -585,9 +625,22 @@ describe CustomerLowPriorityMailer do
     context "bundle purchase" do
       before { purchase.update!(is_bundle_purchase: true) }
 
-      it "uses the library bundle URL" do
-        mail = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
-        expect(mail.body.encoded).to have_link("Leave a review", href: library_url(bundles: purchase.link.external_id))
+      shared_examples "links to the product page with the purchase credentials" do
+        it "links to the bundle's product page with the purchase credentials for the review form" do
+          mail = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
+          expected_url = "#{purchase.link.long_url}?#{{ purchase_id: purchase.external_id, purchase_email_digest: purchase.email_digest }.to_query}"
+          expect(mail.body.encoded).to have_link("Leave a review", href: expected_url)
+        end
+      end
+
+      context "when the buyer has an account" do
+        before { purchase.update!(purchaser: create(:user)) }
+
+        include_examples "links to the product page with the purchase credentials"
+      end
+
+      context "when the purchase is a guest purchase" do
+        include_examples "links to the product page with the purchase credentials"
       end
     end
 

@@ -3,6 +3,7 @@ import { Stripe, StripeCardElement, StripeElements } from "@stripe/stripe-js";
 import { prepareBraintreePaymentMethodData } from "$app/data/braintree_payment_method_data";
 import {
   confirmCardIfNeeded,
+  type PaymentElementBillingDetailsCollection,
   prepareCardPaymentMethodData,
   preparePaymentElementPaymentMethodData,
   prepareFutureCharges,
@@ -43,6 +44,15 @@ export type NewPaymentElementSelectedPaymentMethod = {
   state: string;
   city: string;
   address: string;
+  // Who collects the buyer's billing details for the selected row (wallets, UPI — see
+  // paymentElementBillingDetailsCollection). Drives which form values tokenization passes and
+  // which the element supplies itself.
+  billingDetailsCollection: PaymentElementBillingDetailsCollection;
+  // Wallet submissions only: the in-flight elements.submit() promise created synchronously in
+  // the buyer's click. Safari only opens the Apple Pay sheet inside a user-activation window,
+  // so tokenization must await this promise instead of calling elements.submit() again (see
+  // PaymentElementCardData.pendingSubmit in card_payment_method_data.ts for the full story).
+  pendingSubmit?: ReturnType<StripeElements["submit"]> | null;
 };
 export type NewPayPalBraintreeSelectedPaymentMethod = {
   type: "paypal-braintree";
@@ -208,6 +218,8 @@ export async function getPaymentMethodResult(
         state: selected.state,
         city: selected.city,
         address: selected.address,
+        billingDetailsCollection: selected.billingDetailsCollection,
+        pendingSubmit: selected.pendingSubmit ?? null,
       });
       if (paymentMethodData.status === "success") {
         return {

@@ -6,7 +6,7 @@ class Checkout::BuyerCurrencyEligibility
   FEATURE_NAME = :buyer_currency_charging
 
   # Some local payment methods only work in a single currency: iDEAL and Bancontact
-  # charges must be made in euros, full stop. When a checkout wants one of these
+  # charges must be made in euros; UPI charges must be made in rupees. When a checkout wants one of these
   # methods, the payment method itself decides the presentment currency — there is
   # nothing to detect from the buyer's location. This registry maps each such
   # payment method (Stripe payment method type string) to the currency it forces.
@@ -14,6 +14,7 @@ class Checkout::BuyerCurrencyEligibility
   FORCED_CURRENCY_PAYMENT_METHODS = {
     "ideal" => Currency::EUR,
     "bancontact" => Currency::EUR,
+    "upi" => Currency::INR,
   }.freeze
 
   # Per-method production launch flags for the forced-currency local methods. Stripe test
@@ -25,6 +26,7 @@ class Checkout::BuyerCurrencyEligibility
   LOCAL_METHOD_LAUNCH_FEATURES = {
     "ideal" => :checkout_local_method_ideal,
     "bancontact" => :checkout_local_method_bancontact,
+    "upi" => :checkout_local_method_upi,
   }.freeze
 
   # `direct_listed_amount` is only set by the method-forced mode: true means the
@@ -95,17 +97,35 @@ class Checkout::BuyerCurrencyEligibility
     merchant_account.is_managed_by_gumroad? || merchant_account.is_a_stripe_connect_account?
   end
 
-  def self.usd_settling_merchant_account?(merchant_account)
-    return false unless merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
+  def self.usd_settling_merchant_account?(merchant_account, presentment_currency:)
+    return false unless usd_holding_merchant_account?(merchant_account)
 
     # The stored currency answers the wrong question for accounts with Stripe
     # multi-currency settlement enabled: it mirrors Stripe's default_currency ("usd"),
-    # but the payment intent's settlement currency can still differ per intent. Stripe's
-    # rejection of an FX quote is the only reliable signal, and once observed it is
-    # recorded on the merchant account — while that marker is fresh, skip the doomed
-    # FX-quote round trip (up to 2s of checkout latency, on every visit) and fall back
-    # to canonical USD immediately.
-    !merchant_account.settlement_currency_mismatch_active?
+    # but the payment intent's settlement currency can still differ per intent — and
+    # Stripe configures it PER CURRENCY (e.g. the platform account settles EUR in EUR
+    # since the iDEAL/SEPA capabilities were enabled, while every other currency still
+    # settles in USD). Stripe's rejection of an FX quote or intent is the only reliable
+    # signal, and once observed it is recorded on the merchant account for that
+    # presentment currency — while that marker is fresh, skip the doomed FX-quote round
+    # trip for that currency (up to 2s of checkout latency, on every visit) and fall
+    # back to canonical USD immediately. Other currencies keep quoting.
+    !merchant_account.settlement_currency_mismatch_active?(presentment_currency)
+  end
+
+  # The weaker of the two settlement questions: does the account HOLD its balance in USD
+  # (per our stored mirror of Stripe's default_currency)? Unlike
+  # usd_settling_merchant_account? this deliberately ignores the learned
+  # settlement-currency-mismatch marker, because the marker only says "an FX quote to USD
+  # for this currency will be rejected" — it does not make a plain forced-currency charge
+  # fail. The direct-listed-amount forced lane (an EUR-priced product paid with iDEAL)
+  # never mints an FX quote, so the marker is irrelevant to it; gating that lane on the
+  # marker is exactly what turned iDEAL dark platform-wide on 2026-07-23 (enabling the
+  # iDEAL/SEPA capabilities made the platform account settle EUR in EUR, the EUR marker
+  # was recorded, and every Gumroad-managed seller lost the iDEAL tab —
+  # gumroad-private#933).
+  def self.usd_holding_merchant_account?(merchant_account)
+    merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
   end
 
   def self.stripe_test_mode?
@@ -127,7 +147,6 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
-    return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?
     return fallback(:wallet_payment_request) if wallet_type.present?
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
@@ -159,6 +178,9 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
     return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    # Checked here (not up top with the other account gates) because the settlement
+    # mismatch marker is scoped to the presentment currency, which isn't known earlier.
+    return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?(buyer_currency)
 
     eligible(currency: buyer_currency)
   end
@@ -199,12 +221,15 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:method_not_launched) unless method_forced_mode_allowed?(payment_method, forced_currency)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
-    # Presentment currency and settlement currency are separate questions: even
-    # when the product is already priced in the forced currency (say EUR), the
-    # seller's merchant account still receives the money, and today the pipeline
-    # only knows how to settle accounts that hold USD. So this check applies to
-    # both the USD-priced and the forced-currency-priced product cases.
-    return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?
+    # Only the stored-currency (USD-holding) half of the settlement question is a
+    # blanket gate here. The learned per-currency mismatch marker is NOT: it predicts
+    # FX-quote rejection, which only matters on the quoted (USD-priced) case below.
+    # The direct-listed-amount case charges the listed price with no FX quote at all,
+    # and the marker being set for the forced currency is in fact the EXPECTED state
+    # once that method's capabilities make the account settle the currency in itself
+    # (2026-07-23 iDEAL dark-ramp, gumroad-private#933) — so it must not withhold the
+    # method.
+    return fallback(:unsupported_settlement_currency) unless self.class.usd_holding_merchant_account?(merchant_account)
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
     return fallback(:multi_item_checkout) unless purchases.one?
@@ -222,6 +247,16 @@ class Checkout::BuyerCurrencyEligibility
     priced_in_forced_currency = product_currency == forced_currency
     unless priced_in_forced_currency || product_currency == Currency::USD
       return fallback(:unsupported_product_currency)
+    end
+
+    # The USD-priced case converts through a Stripe FX quote (forced currency -> USD),
+    # which is exactly the call a fresh mismatch marker predicts Stripe will reject —
+    # and unlike the card path there is no graceful USD fallback for a method that can
+    # only charge in its forced currency. Withhold the method rather than render a tab
+    # that fails at prepare. The direct-listed-amount case skips this on purpose: it
+    # never mints a quote (see the settlement comment above).
+    if !priced_in_forced_currency && !usd_settling_merchant_account?(forced_currency)
+      return fallback(:unsupported_settlement_currency)
     end
 
     # Defensive guard for future registry entries: Gumroad and Stripe must agree
@@ -258,8 +293,8 @@ class Checkout::BuyerCurrencyEligibility
       end
     end
 
-    def usd_settling_merchant_account?
-      self.class.usd_settling_merchant_account?(merchant_account)
+    def usd_settling_merchant_account?(presentment_currency)
+      self.class.usd_settling_merchant_account?(merchant_account, presentment_currency:)
     end
 
     def supported_charge_model?
