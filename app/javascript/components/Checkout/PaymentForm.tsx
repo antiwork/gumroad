@@ -17,8 +17,8 @@ import * as React from "react";
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
 import {
   createPaymentElementConfirmationToken,
-  isElementCollectedBillingPaymentElementType,
   isWalletPaymentElementType,
+  paymentElementBillingDetailsCollection,
   preparePaymentRequestPaymentMethodData,
 } from "$app/data/card_payment_method_data";
 import {
@@ -808,6 +808,22 @@ const CreditCardContent = ({
     (async () => {
       if (!useSavedCard && usesPaymentElement && !paymentElementReady) return;
 
+      // Selections in "element-address" collection mode (UPI on digital carts — see
+      // paymentElementBillingDetailsCollection) confirm with the checkout form's name plus the
+      // element-collected street address. Checkout doesn't normally require the full name for
+      // digital purchases, but Stripe rejects these confirms without billing_details.name — so
+      // require it here, with a pointed message instead of a late generic Stripe failure.
+      if (
+        !useSavedCard &&
+        usesPaymentElement &&
+        paymentElementBillingDetailsCollection(paymentElementTypeRef.current, hasShipping(state)) ===
+          "element-address" &&
+        !state.fullName
+      ) {
+        showAlert("Please enter your full name — it's required for this payment method.", "warning");
+        return dispatch({ type: "cancel" });
+      }
+
       // Client-confirm checkout mints a ConfirmationToken; saved cards stay on server-confirm.
       if (useStripePaymentElementClientConfirm && !useSavedCard) {
         const controller = assertDefined(
@@ -826,7 +842,10 @@ const CreditCardContent = ({
           state: state.state,
           city: state.city,
           address: state.address,
-          elementCollectsBillingDetails: isElementCollectedBillingPaymentElementType(paymentElementTypeRef.current),
+          billingDetailsCollection: paymentElementBillingDetailsCollection(
+            paymentElementTypeRef.current,
+            hasShipping(state),
+          ),
           pendingSubmit,
         });
         if (tokenResult.status === "error") {
@@ -890,7 +909,10 @@ const CreditCardContent = ({
               state: state.state,
               city: state.city,
               address: state.address,
-              elementCollectsBillingDetails: isElementCollectedBillingPaymentElementType(paymentElementTypeRef.current),
+              billingDetailsCollection: paymentElementBillingDetailsCollection(
+                paymentElementTypeRef.current,
+                hasShipping(state),
+              ),
               pendingSubmit: serverConfirmPendingSubmit,
             }
           : {
@@ -1000,6 +1022,7 @@ const CreditCardContent = ({
             disabled={isProcessing(state)}
             defaultEmail={state.email}
             defaultName={state.fullName}
+            hasShippingCart={hasShipping(state)}
             onReady={handlePaymentElementReady}
             invalid={cardError}
             onFocus={reclaimCardLane}

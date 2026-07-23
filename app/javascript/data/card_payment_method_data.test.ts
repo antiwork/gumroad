@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   cardPaymentMethodParams,
   createPaymentElementConfirmationToken,
-  isElementCollectedBillingPaymentElementType,
   paymentElementBillingDetails,
+  paymentElementBillingDetailsCollection,
   preparePaymentElementPaymentMethodData,
 } from "$app/data/card_payment_method_data";
 
@@ -38,7 +38,7 @@ const walletCardData = (stripe: Stripe, elements: StripeElements) => ({
   state: "NY",
   city: "New York",
   address: "123 Main St",
-  elementCollectsBillingDetails: true,
+  billingDetailsCollection: "element" as const,
 });
 
 describe("cardPaymentMethodParams", () => {
@@ -160,16 +160,21 @@ describe("pendingSubmit reuse (wallet click-time elements.submit)", () => {
   });
 });
 
-describe("isElementCollectedBillingPaymentElementType", () => {
-  it("covers wallets and UPI, but not card/link/ideal", () => {
-    expect(isElementCollectedBillingPaymentElementType("apple_pay")).toBe(true);
-    expect(isElementCollectedBillingPaymentElementType("google_pay")).toBe(true);
-    // UPI confirms require billing_details.name + a full street address, which checkout's own
-    // form never collects — the element must gather them itself (gumroad-private#933).
-    expect(isElementCollectedBillingPaymentElementType("upi")).toBe(true);
-    expect(isElementCollectedBillingPaymentElementType("card")).toBe(false);
-    expect(isElementCollectedBillingPaymentElementType("link")).toBe(false);
-    expect(isElementCollectedBillingPaymentElementType("ideal")).toBe(false);
+describe("paymentElementBillingDetailsCollection", () => {
+  it("routes wallets to element, UPI on digital carts to element-address, everything else to form", () => {
+    expect(paymentElementBillingDetailsCollection("apple_pay", false)).toBe("element");
+    expect(paymentElementBillingDetailsCollection("google_pay", false)).toBe("element");
+    expect(paymentElementBillingDetailsCollection("apple_pay", true)).toBe("element");
+    // UPI confirms require billing_details.name + a full street address, which the digital
+    // checkout form never collects — the element must gather the address itself
+    // (gumroad-private#933)...
+    expect(paymentElementBillingDetailsCollection("upi", false)).toBe("element-address");
+    // ...but shippable carts already collect a full address in checkout's own form, so nothing
+    // extra should be asked for inside the element.
+    expect(paymentElementBillingDetailsCollection("upi", true)).toBe("form");
+    expect(paymentElementBillingDetailsCollection("card", false)).toBe("form");
+    expect(paymentElementBillingDetailsCollection("link", false)).toBe("form");
+    expect(paymentElementBillingDetailsCollection("ideal", false)).toBe("form");
   });
 });
 
@@ -181,8 +186,36 @@ describe("element-collected billing details (wallets, UPI)", () => {
 
     expect(result.status).toBe("success");
     // No params at all: passing the form's billing_details would clobber what the wallet sheet
-    // or UPI pane collected (and for UPI the form lacks the required name/street address).
+    // collected.
     expect(createConfirmationToken).toHaveBeenCalledWith({ elements });
+  });
+
+  it("createPaymentElementConfirmationToken passes only the form-owned fields for element-address collection (UPI)", async () => {
+    const { stripe, elements, createConfirmationToken } = buildStripeFixture();
+
+    const result = await createPaymentElementConfirmationToken({
+      ...walletCardData(stripe, elements),
+      billingDetailsCollection: "element-address",
+    });
+
+    expect(result.status).toBe("success");
+    // Email/name/country come from checkout's form (the element doesn't render them); the
+    // street-address fields the buyer typed into the element must survive, so no city/state/
+    // ZIP/line overrides are passed — the form's US ZIP field in particular must never clobber
+    // the element-collected postal code.
+    expect(createConfirmationToken).toHaveBeenCalledWith({
+      elements,
+      params: {
+        payment_method_data: {
+          billing_details: {
+            email: "buyer@example.com",
+            name: "Buyer Name",
+            phone: null,
+            address: { country: "US" },
+          },
+        },
+      },
+    });
   });
 
   it("createPaymentElementConfirmationToken passes the checkout form's billing details for card payments", async () => {
@@ -190,7 +223,7 @@ describe("element-collected billing details (wallets, UPI)", () => {
 
     const result = await createPaymentElementConfirmationToken({
       ...walletCardData(stripe, elements),
-      elementCollectsBillingDetails: false,
+      billingDetailsCollection: "form",
     });
 
     expect(result.status).toBe("success");
