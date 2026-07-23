@@ -198,9 +198,9 @@ class CustomerMailer < ApplicationMailer
         # would email the un-watermarked upload and bypass the seller's
         # stamping setting. The controller only enqueues this mail once the
         # stamped copy exists, so this trips only if the stamped copy was
-        # deleted in between, or for a job enqueued by the pre-url_redirect
-        # version of this mailer (no purchase context to locate the stamped
-        # copy). Dropping the mail is deliberate, but report it so the missed
+        # deleted in between. (Legacy two-argument jobs never reach this
+        # guard — they're diverted above via LEGACY_SEND_TO_KINDLE_CALL.)
+        # Dropping the mail is deliberate, but report it so the missed
         # delivery is visible instead of failing silently.
         ErrorNotifier.notify(
           "CustomerMailer#send_to_kindle: stamped PDF unavailable, not sending",
