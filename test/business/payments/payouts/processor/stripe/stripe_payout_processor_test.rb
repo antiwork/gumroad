@@ -3234,9 +3234,9 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
       refund_bt = mock("refund_bt")
       refund_bt.stubs(:net).returns(-1 * amount_taken_cents)
 
-      Stripe::Transfer.stubs(:retrieve).with("tr_5678").returns(internal_transfer)
-      Stripe::Charge.stubs(:retrieve).with(has_entry(:id, "py_1234"), { stripe_account: STRIPE_CONNECT_ACCOUNT_ID }).returns(destination_payment)
-      Stripe::BalanceTransaction.stubs(:retrieve).with({ id: "txn_1Ects" }, { stripe_account: STRIPE_CONNECT_ACCOUNT_ID }).returns(refund_bt)
+      Stripe::Transfer.expects(:retrieve).with("tr_5678").at_least_once.returns(internal_transfer)
+      Stripe::Charge.expects(:retrieve).with(has_entry(:id, "py_1234"), { stripe_account: STRIPE_CONNECT_ACCOUNT_ID }).at_least_once.returns(destination_payment)
+      Stripe::BalanceTransaction.expects(:retrieve).with({ id: "txn_1Ects" }, { stripe_account: STRIPE_CONNECT_ACCOUNT_ID }).at_least_once.returns(refund_bt)
     end
 
     # The reversal-of-a-payout event: its object references the original payout
