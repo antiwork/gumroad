@@ -421,16 +421,20 @@ describe Api::V2::SalesController do
       end
 
       it "includes buyer_presentment fields when the purchase has a presentment record" do
+        # Values reconcile with the documented fx_rate direction (USD per 1 CAD;
+        # canonical USD divided by the rate gives buyer-currency amounts): the
+        # purchase's canonical 100_00 USD total / 0.8 = 12_500 CAD, and each CAD
+        # component times 0.8 maps back to a whole USD-cent amount.
         presentment = create(:purchase_presentment, purchase: @purchase,
                                                     presentment_currency: Currency::CAD,
-                                                    presentment_price_cents: 21_01,
-                                                    presentment_tip_cents: 1_40,
-                                                    presentment_seller_tax_cents: 2_52,
+                                                    presentment_price_cents: 11_250,
+                                                    presentment_tip_cents: 7_50,
+                                                    presentment_seller_tax_cents: 5_00,
                                                     presentment_gumroad_tax_cents: 0,
                                                     presentment_shipping_cents: 0,
-                                                    presentment_total_cents: 24_93,
-                                                    presentment_gumroad_amount_cents: 2_49)
-        presentment.charge_presentment.update!(fx_rate: BigDecimal("1.400500000000000"))
+                                                    presentment_total_cents: 12_500,
+                                                    presentment_gumroad_amount_cents: 1_250)
+        presentment.charge_presentment.update!(fx_rate: BigDecimal("0.800000000000000"))
 
         # An effective refund carrying a buyer-currency snapshot counts toward
         # refunded_cents; one without a snapshot (pre-feature refund) contributes 0.
@@ -443,13 +447,13 @@ describe Api::V2::SalesController do
 
         expect(response.parsed_body["sale"]["buyer_presentment"]).to eq(
           "currency" => Currency::CAD,
-          "price_cents" => 21_01,
-          "tip_cents" => 1_40,
-          "seller_tax_cents" => 2_52,
+          "price_cents" => 11_250,
+          "tip_cents" => 7_50,
+          "seller_tax_cents" => 5_00,
           "gumroad_tax_cents" => 0,
           "shipping_cents" => 0,
-          "total_cents" => 24_93,
-          "fx_rate" => "1.4005",
+          "total_cents" => 12_500,
+          "fx_rate" => "0.8",
           "refunded_cents" => 7_00
         )
       end

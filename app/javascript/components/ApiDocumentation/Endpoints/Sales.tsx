@@ -202,7 +202,7 @@ export const GetSale = () => (
       "gumroad_tax_cents": 0,
       "shipping_cents": 0,
       "total_cents": 1856,
-      "fx_rate": "1.4005",
+      "fx_rate": "0.7139",
       "refunded_cents": 0
     },
     "subscription_duration": "monthly",

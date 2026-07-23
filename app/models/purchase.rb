@@ -3671,7 +3671,8 @@ class Purchase < ApplicationRecord
     # purchase_presentment row exists — i.e. the processor charge currency differed
     # from Gumroad's canonical USD accounting path). Strictly additive: canonical
     # fields like price, tip_cents, and tax_cents keep their existing seller/accounting
-    # meaning, and these amounts are buyer-side cents, NOT seller revenue.
+    # meaning, and these amounts are buyer-currency minor units (whole yen for
+    # zero-decimal currencies like JPY), NOT seller revenue.
     # Returns nil for canonical-USD sales so as_json's delete_if drops the key entirely.
     def buyer_presentment_api_fields
       presentment = purchase_presentment
