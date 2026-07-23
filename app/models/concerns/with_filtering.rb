@@ -180,11 +180,14 @@ module WithFiltering
       if cache && cache.key?(cache_key)
         return false if cache[cache_key]
       else
-        matched = if seller_post_probe_batch&.covers?(email)
-          # A batch prefetched the buyer's purchase rows for every seller in
-          # this evaluation up front, so the existence check runs in Ruby
-          # against those rows instead of issuing per-seller SQL (see
-          # Purchase::SellerPostProbeBatch for why).
+        matched = if seller_post_probe_batch&.covers?(email:, seller_id:)
+          # A batch prefetched this buyer's purchase rows for this seller (and
+          # the rest of the batch's sellers) up front, so the existence check
+          # runs in Ruby against those rows instead of issuing per-seller SQL
+          # (see Purchase::SellerPostProbeBatch for why). `covers?` requires
+          # BOTH the email and this post's seller to be in the batch — an
+          # uncovered seller means the prefetch never loaded that seller's
+          # rows, so it must use the SQL probe below instead.
           seller_post_probe_batch.matched?(
             seller_id:,
             email:,

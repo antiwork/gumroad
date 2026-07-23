@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 # Answers "has this seller ever sold one of these products/variants to this
-# email?" for a whole page of library purchases using two upfront queries
-# instead of one query per seller.
+# email?" for a whole page of library purchases using a couple of upfront
+# queries instead of one query per seller.
 #
 # Posts with "hasn't bought X" targeting run an existence probe against the
 # post's seller's sales (see WithFiltering#seller_post_passes_filters). The
@@ -16,21 +16,29 @@
 #
 # All of those probes share the same buyer email(s), so instead of asking
 # MySQL once per seller we load the buyer's purchase rows across ALL of the
-# batch's sellers in one query (plus one query for the purchased variant ids)
-# and answer each probe in Ruby against that in-memory set. The row set is
-# small — it is the buyer's own purchases from the sellers in their library.
+# batch's sellers upfront (one query per distinct buyer email — almost always
+# exactly one — plus one query for the purchased variant ids) and answer each
+# probe in Ruby against that in-memory set. The row set is small — it is the
+# buyer's own purchases from the sellers in their library.
 class Purchase::SellerPostProbeBatch
   def initialize(purchases)
     @emails = purchases.filter_map(&:email).uniq
-    @seller_ids = purchases.map(&:seller_id).compact.uniq
-    @covered_emails = @emails.map(&:downcase).to_set
+    @seller_ids = purchases.filter_map(&:seller_id).uniq
+    @covered_emails = @emails.to_set
+    @covered_seller_ids = @seller_ids.to_set
   end
 
-  # The batch can only answer probes for the buyer emails it was built from.
-  # Callers must fall back to the SQL probe for anything else (e.g. a nil
-  # email, which in SQL would match rows with a NULL email column).
-  def covers?(email)
-    email.present? && @covered_emails.include?(email.downcase)
+  # The batch can only answer probes for the exact (seller, email) pairs it
+  # prefetched: the sellers and buyer emails of the purchases it was built
+  # from. Callers must fall back to the SQL probe for anything else — a post
+  # from a seller outside the batch (its rows were never loaded), a nil email
+  # (which in SQL would match rows with a NULL email column), or an email
+  # string that differs from the batch's (probe emails come from the same
+  # purchase objects the batch was built from, so exact string comparison is
+  # the correct pairing; anything else is answered by SQL instead of guessing
+  # at the database collation's equality rules in Ruby).
+  def covers?(email:, seller_id:)
+    email.present? && @covered_emails.include?(email) && @covered_seller_ids.include?(seller_id)
   end
 
   # Mirrors the SQL probe in WithFiltering#seller_post_passes_filters:
@@ -45,7 +53,7 @@ class Purchase::SellerPostProbeBatch
   # one of the variants OR is for one of the products when variant ids are
   # given, and only by product otherwise (Purchase::Targeting).
   def matched?(seller_id:, email:, not_bought_variant_external_ids:, exclude_product_ids:)
-    rows = rows_by_seller_and_email[[seller_id, email.downcase]]
+    rows = rows_by_seller_and_email[[seller_id, email]]
     return false if rows.blank?
 
     if not_bought_variant_external_ids.present?
@@ -81,25 +89,31 @@ class Purchase::SellerPostProbeBatch
       @resolved_variant_ids[external_ids.sort] ||= BaseVariant.by_external_ids(external_ids).pluck(:id).to_set
     end
 
-    # { [seller_id, email.downcase] => [[purchase_id, link_id], ...] }
+    # { [seller_id, batch_email] => [[purchase_id, link_id], ...] }
     # Loaded lazily: most requests have no "hasn't bought X" posts at all, and
     # they shouldn't pay for the prefetch.
+    #
+    # One query per distinct batch email (a page of library purchases almost
+    # always carries a single buyer email) rather than one `email IN (...)`
+    # query. Querying per email lets the DATABASE decide which rows belong to
+    # which batch email: the email comparison uses the column's
+    # case-insensitive Unicode collation (exactly like the SQL probe's
+    # `exists?(email:)`), and re-deriving that pairing in Ruby (e.g. keying by
+    # `String#downcase`) disagrees with the collation for some Unicode
+    # strings, which would file rows under a key the probe never looks up.
     def rows_by_seller_and_email
       @rows_by_seller_and_email ||= begin
-        rows = if @emails.any? && @seller_ids.any?
-          # The email IN (...) comparison uses the column's case-insensitive
-          # collation, exactly like the SQL probe's `exists?(email:)`, so rows
-          # whose stored email differs in case from the batch email are found.
-          Purchase.where(email: @emails, seller_id: @seller_ids)
-                  .not_is_archived_original_subscription_purchase
-                  .not_subscription_or_original_purchase
-                  .pluck(:seller_id, :email, :id, :link_id)
-        else
-          []
+        grouped = {}
+        if @seller_ids.any?
+          @emails.each do |email|
+            Purchase.where(email:, seller_id: @seller_ids)
+                    .not_is_archived_original_subscription_purchase
+                    .not_subscription_or_original_purchase
+                    .pluck(:seller_id, :id, :link_id)
+                    .each { |seller_id, purchase_id, link_id| (grouped[[seller_id, email]] ||= []) << [purchase_id, link_id] }
+          end
         end
-        rows.each_with_object({}) do |(seller_id, email, purchase_id, link_id), grouped|
-          (grouped[[seller_id, email.downcase]] ||= []) << [purchase_id, link_id]
-        end
+        grouped
       end
     end
 

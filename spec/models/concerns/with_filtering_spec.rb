@@ -675,6 +675,24 @@ describe WithFiltering do
           seller_post_probe_batch: batch
         )).to eq(false)
       end
+
+      it "falls back to the SQL probe when the batch covers the email but not the post's seller" do
+        # The batch was built from another seller's purchases, so it never
+        # prefetched @creator's rows. Answering from the (incomplete) batch
+        # would wrongly report "hasn't bought" and show the post; the SQL
+        # probe must run instead and hide it.
+        other_seller = create(:user)
+        other_purchase = create(:free_purchase, link: create(:product, user: other_seller), seller: other_seller, email: @purchase.email)
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        batch = Purchase::SellerPostProbeBatch.new([other_purchase])
+        expect(batch).not_to receive(:matched?)
+
+        expect(post.seller_post_passes_filters(
+          email: @purchase.email,
+          permalink_to_link_id: { @product.unique_permalink => @product.id },
+          seller_post_probe_batch: batch
+        )).to eq(false)
+      end
     end
   end
 

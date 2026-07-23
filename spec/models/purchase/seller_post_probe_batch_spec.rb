@@ -14,19 +14,30 @@ describe Purchase::SellerPostProbeBatch do
   end
 
   describe "#covers?" do
-    it "covers the batch purchases' emails case-insensitively" do
+    it "covers the batch purchases' exact emails for the batch's sellers" do
       batch = batch_for([@purchase])
 
-      expect(batch.covers?(@purchase.email)).to eq(true)
-      expect(batch.covers?(@purchase.email.upcase)).to eq(true)
+      expect(batch.covers?(seller_id: @seller.id, email: @purchase.email)).to eq(true)
+      # Coverage is exact-string on purpose: probe emails come from the same
+      # purchase objects the batch was built from, and anything else (like a
+      # differently-cased string) falls back to the SQL probe rather than
+      # re-implementing the database collation's equality rules in Ruby.
+      expect(batch.covers?(seller_id: @seller.id, email: @purchase.email.upcase)).to eq(false)
     end
 
     it "does not cover other emails or nil" do
       batch = batch_for([@purchase])
 
-      expect(batch.covers?("someone-else@example.com")).to eq(false)
-      expect(batch.covers?(nil)).to eq(false)
-      expect(batch.covers?("")).to eq(false)
+      expect(batch.covers?(seller_id: @seller.id, email: "someone-else@example.com")).to eq(false)
+      expect(batch.covers?(seller_id: @seller.id, email: nil)).to eq(false)
+      expect(batch.covers?(seller_id: @seller.id, email: "")).to eq(false)
+    end
+
+    it "does not cover sellers outside the batch, even for a covered email" do
+      other_seller = create(:user)
+      batch = batch_for([@purchase])
+
+      expect(batch.covers?(seller_id: other_seller.id, email: @purchase.email)).to eq(false)
     end
   end
 
@@ -55,8 +66,12 @@ describe Purchase::SellerPostProbeBatch do
     end
 
     it "does not match against a different seller's sales" do
+      # Both sellers are IN the batch (each contributed a purchase), so this
+      # exercises seller isolation within a covered batch — probing seller B
+      # for a product only ever bought from seller A must not match.
       other_seller = create(:user)
-      batch = batch_for([@purchase])
+      other_purchase = create(:free_purchase, link: create(:product, user: other_seller), seller: other_seller, email: @purchase.email)
+      batch = batch_for([@purchase, other_purchase])
 
       expect(batch.matched?(
         seller_id: other_seller.id,
@@ -120,15 +135,19 @@ describe Purchase::SellerPostProbeBatch do
       )).to eq(false)
     end
 
-    it "finds rows whose stored email differs in case from the probe email" do
+    it "finds rows whose stored email differs in case from the batch email" do
+      # The prefetch queries per batch email, so the database's
+      # case-insensitive collation decides which stored rows belong to it —
+      # exactly like the SQL probe's `exists?(email:)`.
       cased_purchase = create(:free_purchase, link: @product, seller: @seller, email: "Buyer@Example.com")
-      batch = batch_for([cased_purchase])
+      probe_purchase = create(:free_purchase, link: create(:product, user: @seller), seller: @seller, email: "buyer@example.com")
+      batch = batch_for([probe_purchase])
 
       expect(batch.matched?(
         seller_id: @seller.id,
-        email: "buyer@example.com",
+        email: probe_purchase.email,
         not_bought_variant_external_ids: [],
-        exclude_product_ids: [@product.id]
+        exclude_product_ids: [cased_purchase.link_id]
       )).to eq(true)
     end
   end
