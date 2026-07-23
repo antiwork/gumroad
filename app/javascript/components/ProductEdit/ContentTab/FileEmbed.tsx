@@ -679,6 +679,14 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 />
               ) : null}
 
+              {file.is_pdf || file.extension === "EPUB" ? (
+                <Switch
+                  checked={!file.hide_kindle_and_read_buttons}
+                  onChange={(e) => updateFile({ hide_kindle_and_read_buttons: !e.target.checked })}
+                  label='Show "Send to Kindle" and "Read" buttons on the download page'
+                />
+              ) : null}
+
               {file.is_streamable ? (
                 <>
                   <Fieldset>

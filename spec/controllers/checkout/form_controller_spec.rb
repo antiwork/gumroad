@@ -40,7 +40,9 @@ describe Checkout::FormController do
         cart_item: props["cart_item"],
         custom_fields: props["custom_fields"],
         card_product: props["card_product"],
-        products: props["products"]
+        products: props["products"],
+        paypal_connect: props["paypal_connect"].deep_symbolize_keys,
+        connect_account_fee_info_text: props["connect_account_fee_info_text"]
       }
 
       expected_props = Checkout::FormPresenter.new(pundit_user: controller.pundit_user).form_props

@@ -63,5 +63,23 @@ describe CreateLicensesForExistingCustomersWorker do
       end.to change { @product.licenses.count }.from(0).to(4)
       expect(@product.licenses.map(&:purchase_id)).to(match_array([@purchase1.id, @purchase2.id, @purchase3.id, original_subscription_purchase.id]))
     end
+
+    it "skips purchases of variants whose per-variant content has no license-key block" do
+      category = create(:variant_category, link: @product)
+      free_variant = create(:variant, variant_category: category)
+      pro_variant = create(:variant, variant_category: category)
+      create(:rich_content, entity: free_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Free tier content" }] }])
+      create(:rich_content, entity: pro_variant, description: [{ "type" => "licenseKey" }])
+
+      free_purchase = create(:purchase, link: @product, variant_attributes: [free_variant])
+      pro_purchase = create(:purchase, link: @product, variant_attributes: [pro_variant])
+
+      described_class.new.perform(@product.id)
+
+      # @purchase1..3 have no variants, so they keep their licenses; the free
+      # variant purchase is the only one skipped.
+      expect(@product.licenses.map(&:purchase_id)).to match_array([@purchase1.id, @purchase2.id, @purchase3.id, pro_purchase.id])
+      expect(@product.licenses.map(&:purchase_id)).not_to include(free_purchase.id)
+    end
   end
 end

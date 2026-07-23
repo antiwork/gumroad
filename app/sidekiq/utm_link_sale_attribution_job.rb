@@ -34,8 +34,6 @@ class UtmLinkSaleAttributionJob
 
     visits.find_each do |visit|
       utm_link = visit.utm_link
-      next unless Feature.active?(:utm_links, utm_link.seller)
-
       qualified_purchases = purchases_by_seller[utm_link.seller_id]
       next if qualified_purchases.blank?
 

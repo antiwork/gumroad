@@ -155,7 +155,6 @@ export type Product = {
   default_offer_code_id?: string | null;
   default_offer_code: OfferCode | null;
   public_files: PublicFileWithStatus[];
-  audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
 } & (
   | { native_type: "call"; variants: Duration[] }
@@ -233,6 +232,7 @@ export type FileEntry = {
   file_size: null | number;
   is_pdf: boolean;
   pdf_stamp_enabled: boolean;
+  hide_kindle_and_read_buttons: boolean;
   is_streamable: boolean;
   stream_only: boolean;
   is_transcoding_in_progress: boolean;

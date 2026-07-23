@@ -127,8 +127,7 @@ export const PublicFileEmbed = TiptapNode.create({
 
   menuItem: (editor) => {
     const inputRef = React.useRef<HTMLInputElement | null>(null);
-    const { onUpload, audioPreviewsEnabled } = usePublicFilesSettings();
-    if (!audioPreviewsEnabled) return null;
+    const { onUpload } = usePublicFilesSettings();
     return (
       <>
         <MenuItem

@@ -104,7 +104,7 @@ class Charge::CreateService
     # the updated (USD) total — we must never silently charge a different amount than the
     # local-currency total the buyer confirmed.
     if e.message.to_s.match?(StripeFxQuote::SETTLEMENT_MISMATCH_MESSAGE)
-      record_settlement_currency_mismatch
+      record_settlement_currency_mismatch(@presentment_currency_attempted)
       logger.info "Buyer currency settlement mismatch at intent create: #{e.message} in charge: #{charge.external_id}"
       mark_purchases_buyer_currency_quote_invalid
       return nil
@@ -262,6 +262,11 @@ class Charge::CreateService
     # so this must also fail closed rather than silently charge canonical USD.
     raise BuyerCurrencyQuoteInvalid, "presentment orchestration failed" if presentment_result.blank?
 
+    # Remembered for the error handler: when Stripe rejects the intent create with a
+    # settlement-currency mismatch, the marker must be recorded for the currency this
+    # charge actually attempted to present.
+    @presentment_currency_attempted = presentment_result.processor_currency
+
     {
       processor_amount_cents: presentment_result.processor_amount_cents,
       processor_currency: presentment_result.processor_currency,
@@ -299,11 +304,12 @@ class Charge::CreateService
   end
 
   # Persists the learned settlement-currency mismatch (issue #6011) so subsequent checkouts
-  # for this seller skip the doomed FX-quote round trip and present canonical USD. A
-  # persistence failure must never mask the buyer-facing error handling that is already in
-  # progress — worst case the next checkout probes Stripe again.
-  def record_settlement_currency_mismatch
-    merchant_account&.record_settlement_currency_mismatch!
+  # for this seller skip the doomed FX-quote round trip for this presentment currency and
+  # present canonical USD (other currencies keep quoting — Stripe settlement is configured
+  # per currency). A persistence failure must never mask the buyer-facing error handling
+  # that is already in progress — worst case the next checkout probes Stripe again.
+  def record_settlement_currency_mismatch(currency)
+    merchant_account&.record_settlement_currency_mismatch!(currency)
   rescue StandardError => e
     Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
   end

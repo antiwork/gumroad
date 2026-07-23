@@ -2870,6 +2870,89 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal license.serial, Purchase.purchase_info(nil, link, purchase)[:license_key]
   end
 
+  # --- per-variant license keys (#license_key / #create_license! / #uses_license_key?) ---
+
+  test "#create_license! creates a license for a licensed product with product-level content" do
+    product = create_product(is_licensed: true)
+    purchase = create_purchase(link: product)
+
+    purchase.create_license!
+    assert purchase.reload.license.present?
+    assert purchase.license_key.present?
+  end
+
+  test "#create_license! skips purchases of a variant whose per-variant content has no license-key block" do
+    product = create_product(is_licensed: true)
+    category = create_variant_category(link: product)
+    free_variant = create_variant(variant_category: category)
+    pro_variant = create_variant(variant_category: category)
+    create_rich_content(entity: free_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Free tier content" }] }])
+    create_rich_content(entity: pro_variant, description: [{ "type" => "licenseKey" }])
+
+    free_purchase = create_purchase(link: product, variant_attributes: [free_variant])
+    free_purchase.create_license!
+    assert_nil free_purchase.reload.license
+    assert_nil free_purchase.license_key
+
+    pro_purchase = create_purchase(link: product, variant_attributes: [pro_variant])
+    pro_purchase.create_license!
+    assert pro_purchase.reload.license.present?
+    assert pro_purchase.license_key.present?
+  end
+
+  test "#create_license! creates a license for variant purchases when the product uses product-level content" do
+    product = create_product(is_licensed: true, has_same_rich_content_for_all_variants: true)
+    category = create_variant_category(link: product)
+    variant = create_variant(variant_category: category)
+    create_rich_content(entity: product, description: [{ "type" => "licenseKey" }])
+
+    purchase = create_purchase(link: product, variant_attributes: [variant])
+    purchase.create_license!
+    assert purchase.reload.license.present?
+    assert purchase.license_key.present?
+  end
+
+  test "#create_license! creates a license for a purchase without variants on a licensed product" do
+    product = create_product(is_licensed: true)
+    category = create_variant_category(link: product)
+    variant = create_variant(variant_category: category)
+    create_rich_content(entity: variant, description: [{ "type" => "licenseKey" }])
+
+    purchase = create_purchase(link: product)
+    purchase.create_license!
+    assert purchase.reload.license.present?
+  end
+
+  test "#license_key hides an existing license for a variant whose content has no license-key block" do
+    product = create_product(is_licensed: true)
+    category = create_variant_category(link: product)
+    free_variant = create_variant(variant_category: category)
+    pro_variant = create_variant(variant_category: category)
+    create_rich_content(entity: free_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Free tier content" }] }])
+    create_rich_content(entity: pro_variant, description: [{ "type" => "licenseKey" }])
+
+    purchase = create_purchase(link: product, variant_attributes: [free_variant])
+    create_license(link: product, purchase:)
+    assert_nil purchase.reload.license_key
+  end
+
+  test "#uses_license_key? is false when the product is not licensed" do
+    product = create_product(is_licensed: false)
+    purchase = create_purchase(link: product)
+    assert_equal false, purchase.uses_license_key?
+  end
+
+  test "#uses_license_key? is true for a variant with no rich content at all on a licensed product" do
+    product = create_product(is_licensed: true)
+    category = create_variant_category(link: product)
+    bare_variant = create_variant(variant_category: category)
+    licensed_variant = create_variant(variant_category: category)
+    create_rich_content(entity: licensed_variant, description: [{ "type" => "licenseKey" }])
+
+    purchase = create_purchase(link: product, variant_attributes: [bare_variant])
+    assert_equal true, purchase.uses_license_key?
+  end
+
   test "#purchase_info returns should_show_receipt as true if purchase is a received gift" do
     link, _purchase = setup_purchase_info_context
     purchase = create_purchase(is_gift_receiver_purchase: true, purchase_state: "gift_receiver_purchase_successful")
@@ -6512,10 +6595,12 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal false, purchase.eligible_for_review_reminder?
   end
 
-  test "#eligible_for_review_reminder? when purchase is a bundle purchase returns false" do
+  test "#eligible_for_review_reminder? when purchase is a bundle purchase returns true" do
+    # Bundle purchases can review the bundle itself (gumroad-private#1213),
+    # so bundle orders now get a review reminder pointing at the bundle.
     purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
     purchase.update!(is_bundle_purchase: true)
-    assert_equal false, purchase.eligible_for_review_reminder?
+    assert_equal true, purchase.eligible_for_review_reminder?
   end
 
   test "#eligible_for_review_reminder? when product review exists returns false" do
@@ -6545,6 +6630,30 @@ class PurchaseTest < ActiveSupport::TestCase
   test "#eligible_for_review_reminder? when the seller has disabled review reminders returns false" do
     purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
     purchase.seller.update!(disable_review_reminders: true)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
+  test "#eligible_for_review_reminder? when the purchase is excluded from reviews returns false" do
+    # A purchase flagged `should_exclude_product_review` (e.g. after a charge
+    # reversal on a free-trial membership) never shows a review form, so it must
+    # not receive a reminder that deep-links to a page without one.
+    purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
+    purchase.update!(should_exclude_product_review: true)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
+  test "#eligible_for_review_reminder? when access is revoked on an unpaid purchase returns false" do
+    # Access-revoked free purchases can't leave a review, so no reminder either.
+    purchase = create_free_purchase(purchaser: create_user, link: create_product(price_cents: 0))
+    purchase.update!(is_access_revoked: true)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
+  test "#eligible_for_review_reminder? when a chargeback was reversed returns false" do
+    # A reversed chargeback still blocks the review form (`chargeback_date` is
+    # set), so the reminder must stay suppressed to match.
+    purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
+    purchase.update!(chargeback_date: 1.day.ago, chargeback_reversed: true)
     assert_equal false, purchase.eligible_for_review_reminder?
   end
 

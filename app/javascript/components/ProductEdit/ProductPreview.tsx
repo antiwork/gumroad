@@ -155,7 +155,6 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         },
     bundle_products: [],
     public_files: product.public_files,
-    audio_previews_enabled: product.audio_previews_enabled,
   };
 
   const defaultPreview =

@@ -2,16 +2,14 @@
 
 class UtmLinkPolicy < ApplicationPolicy
   def index?
-    Feature.active?(:utm_links, seller) &&
-    (user.role_admin_for?(seller) ||
+    user.role_admin_for?(seller) ||
     user.role_marketing_for?(seller) ||
     user.role_support_for?(seller) ||
-    user.role_accountant_for?(seller))
+    user.role_accountant_for?(seller)
   end
 
   def create?
-    Feature.active?(:utm_links, seller) &&
-    (user.role_admin_for?(seller) || user.role_marketing_for?(seller))
+    user.role_admin_for?(seller) || user.role_marketing_for?(seller)
   end
 
   def new?

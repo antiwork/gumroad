@@ -277,6 +277,7 @@ export default function SubscriptionsManage() {
       fallback_reason: "not_checkout",
       disable_wallets: false,
       request_apple_pay_merchant_tokens,
+      payment_element_wallets: false,
       elements_options: null,
     },
   });

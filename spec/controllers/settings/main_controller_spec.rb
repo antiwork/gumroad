@@ -467,10 +467,6 @@ describe Settings::MainController, type: :controller, inertia: true do
         let(:other_seller) { create(:user) }
         let(:other_product) { create(:product, user: other_seller) }
 
-        before do
-          Feature.activate(:product_level_support_emails)
-        end
-
         it "creates new support emails with associated products" do
           product_level_support_emails = [
             {
@@ -531,25 +527,6 @@ describe Settings::MainController, type: :controller, inertia: true do
           expect(flash[:notice]).to eq("Your account has been updated!")
           expect(product1.reload.support_email).to be_nil
           expect(product2.reload.support_email).to be_nil
-        end
-
-        context "when product_level_support_emails feature is disabled" do
-          before do
-            Feature.deactivate(:product_level_support_emails)
-          end
-
-          it "does not update product support emails" do
-            product_level_support_emails = [
-              { email: "contact@example.com", product_ids: [product1.external_id] }
-            ]
-
-            put :update, params: { user: user_params.merge(product_level_support_emails:) }
-
-            expect(response).to redirect_to(settings_main_path)
-            expect(response).to have_http_status :see_other
-            expect(flash[:notice]).to eq("Your account has been updated!")
-            expect(product1.reload.support_email).to be_nil
-          end
         end
       end
     end

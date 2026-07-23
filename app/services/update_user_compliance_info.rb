@@ -174,8 +174,8 @@ class UpdateUserComplianceInfo
       new_compliance_info.business_zip_code =       compliance_params[:business_zip_code]       if compliance_params[:business_zip_code].present?
       new_compliance_info.business_type =           compliance_params[:business_type]           if compliance_params[:business_type].present?
       new_compliance_info.is_business =             compliance_params[:is_business]             unless compliance_params[:is_business].nil?
-      new_compliance_info.individual_tax_id =       submitted_tax_id_for(:ssn_last_four)        if submitted_tax_id_for(:ssn_last_four).present?
-      new_compliance_info.individual_tax_id =       submitted_tax_id_for(:individual_tax_id)    if submitted_tax_id_for(:individual_tax_id).present?
+      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:ssn_last_four))     if submitted_tax_id_for(:ssn_last_four).present?
+      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:individual_tax_id)) if submitted_tax_id_for(:individual_tax_id).present?
       if submitted_tax_id_for(:business_tax_id).present?
         new_compliance_info.business_tax_id = normalize_business_tax_id(
           submitted_tax_id_for(:business_tax_id),
@@ -258,7 +258,9 @@ class UpdateUserComplianceInfo
     end
 
     def encrypted_compliance_info_changed?(old_compliance_info)
-      submitted_individual_tax_id = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
+      submitted_individual_tax_id = normalize_individual_tax_id(
+        submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
+      )
       return true if submitted_individual_tax_id.present? && encrypted_compliance_info_value(old_compliance_info, :individual_tax_id) != submitted_individual_tax_id
 
       submitted_business_tax_id = normalize_business_tax_id(
@@ -280,7 +282,22 @@ class UpdateUserComplianceInfo
     def normalize_business_tax_id(value, country_code:)
       return nil if value.blank?
       return value.gsub(/\D/, "") if country_code == "US"
-      value.gsub(/[\s-]+/, "")
+      # Sellers paste locale-formatted tax IDs that can contain Unicode whitespace — for
+      # example U+202F (narrow no-break space), which macOS inserts as a thousands
+      # separator in French locale, so a SIREN copied from a document arrives as
+      # "912 904 331" with U+202F between the groups. Ruby's \s only matches ASCII
+      # whitespace, so use the Unicode-aware [[:space:]] class; otherwise the invisible
+      # character survives into the stored value and later breaks byte-based slicing
+      # (see SettingsPresenter#tax_id_last_four).
+      value.gsub(/[[:space:]-]+/, "")
+    end
+
+    def normalize_individual_tax_id(value)
+      return nil if value.blank?
+      # Same Unicode-whitespace hazard as normalize_business_tax_id above. Only strip
+      # whitespace here — dashes can be a meaningful part of individual IDs (for example
+      # Peru DNIs are entered with the verification digit as "12345678-9").
+      value.gsub(/[[:space:]]+/, "")
     end
 
     def peru_individual_dni_error(old_compliance_info)

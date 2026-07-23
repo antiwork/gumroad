@@ -606,6 +606,33 @@ describe WithFiltering do
           seller_sales: @creator.sales
         )).to eq(false)
       end
+
+      it "does not reuse another seller's cached probe result for the same targeting signature and email" do
+        other_seller = create(:user)
+        post_a = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        post_b = create(:seller_installment, seller: other_seller, json_data: { not_bought_products: ["reused-permalink"] })
+        shared_cache = {}
+
+        # Buyer bought @product from @creator, so seller A's post excludes them.
+        # This warms the shared cache with a `true` (matched) entry.
+        expect(post_a.seller_post_passes_filters(
+          email: @purchase.email,
+          permalink_to_link_id: { @product.unique_permalink => @product.id },
+          seller_sales: @creator.sales,
+          seller_post_filter_cache: shared_cache
+        )).to eq(false)
+
+        # Seller B's post resolves to the same product id / variant / email
+        # signature (e.g. a recycled permalink). The buyer has NOT bought
+        # anything from seller B, so B's post must pass — the cache entry from
+        # seller A must not be reused across sellers.
+        expect(post_b.seller_post_passes_filters(
+          email: @purchase.email,
+          permalink_to_link_id: { "reused-permalink" => @product.id },
+          seller_sales: other_seller.sales,
+          seller_post_filter_cache: shared_cache
+        )).to eq(true)
+      end
     end
   end
 

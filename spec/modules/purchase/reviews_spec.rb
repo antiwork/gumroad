@@ -250,7 +250,6 @@ describe Purchase::Reviews do
         create(:disputed_purchase),
         create(:purchase, is_gift_sender_purchase: true),
         create(:purchase, should_exclude_product_review: true),
-        create(:purchase, is_bundle_purchase: true),
         create(:purchase, is_commission_completion_purchase: true),
         create(:purchase, stripe_partially_refunded: true, is_bundle_product_purchase: true)
       ]
@@ -260,6 +259,10 @@ describe Purchase::Reviews do
         create(:free_trial_membership_purchase, should_exclude_product_review: false),
         create(:purchase_2, is_access_revoked: true),
         create(:purchase, stripe_partially_refunded: true),
+        # Bundle purchases used to be structurally excluded from reviews; buyers can now
+        # review the bundle itself, and the products inside it (via the child purchases).
+        create(:purchase, is_bundle_purchase: true),
+        create(:purchase, is_bundle_product_purchase: true),
       ]
 
       true_original_purchase = create(:membership_purchase, is_original_subscription_purchase: true, is_archived_original_subscription_purchase: true)
@@ -281,6 +284,94 @@ describe Purchase::Reviews do
     it "returns true for recurring subscription purchases" do
       @matching_purchases << @recurring_purchase
       expect(@matching_purchases.all?(&:allows_review?)).to eq(true)
+    end
+  end
+
+  describe "bundle purchases" do
+    let(:bundle_purchase) { create(:purchase, link: create(:product, :bundle)) }
+
+    before { bundle_purchase.create_artifacts_and_send_receipt! }
+
+    it "allows the bundle purchase to create a review attached to the bundle's product" do
+      bundle = bundle_purchase.link
+
+      expect(bundle_purchase.allows_review_to_be_counted?).to eq(true)
+      review = bundle_purchase.post_review(rating: 5, message: "Great bundle!")
+
+      expect(review.purchase).to eq(bundle_purchase)
+      expect(review.link).to eq(bundle)
+      expect(bundle.reload.reviews_count).to eq(1)
+      expect(bundle.average_rating).to eq(5)
+    end
+
+    it "keeps the child product purchases reviewable alongside the bundle review" do
+      # Both abilities must coexist on one order: the bundle-level review and each
+      # per-product review land on their own product's stats, with no cross-counting.
+      bundle_purchase.post_review(rating: 5, message: "Great bundle!")
+
+      bundle_purchase.product_purchases.each do |product_purchase|
+        expect(product_purchase.allows_review_to_be_counted?).to eq(true)
+        review = product_purchase.post_review(rating: 4)
+        expect(review.link).to eq(product_purchase.link)
+        expect(product_purchase.link.reload.reviews_count).to eq(1)
+        expect(product_purchase.link.average_rating).to eq(4)
+      end
+
+      expect(bundle_purchase.link.reload.reviews_count).to eq(1)
+      expect(bundle_purchase.link.average_rating).to eq(5)
+    end
+
+    it "keeps the scope and method in sync for bundle purchases" do
+      # Purchase::Reviews warns that `allowing_reviews_to_be_counted` and
+      # `allows_review_to_be_counted?` must agree — pin that for the bundle parent
+      # and its children.
+      order_purchases = [bundle_purchase, *bundle_purchase.product_purchases]
+
+      order_purchases.each do |purchase|
+        expect(purchase.allows_review_to_be_counted?).to eq(true)
+      end
+      expect(Purchase.where(id: order_purchases).allowing_reviews_to_be_counted).to match_array(order_purchases)
+    end
+
+    it "removes the bundle review and stats when the bundle purchase is refunded" do
+      bundle_purchase.post_review(rating: 5)
+      expect(bundle_purchase.link.reload.average_rating).to eq(5)
+
+      bundle_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, bundle_purchase.total_transaction_cents), bundle_purchase.seller.id)
+
+      expect(bundle_purchase.reload.allows_review_to_be_counted?).to eq(false)
+      expect(bundle_purchase.product_review.reload).to be_deleted
+      expect(bundle_purchase.link.reload.reviews_count).to eq(0)
+      expect(bundle_purchase.link.average_rating).to eq(0)
+    end
+
+    it "does not allow reviews on a chargedback bundle purchase" do
+      bundle_purchase.update!(chargeback_date: Time.current)
+
+      expect(bundle_purchase.allows_review_to_be_counted?).to eq(false)
+      expect { bundle_purchase.post_review(rating: 5) }.to raise_error(ProductReview::RestrictedOperationError)
+    end
+
+    context "gifted bundle" do
+      let(:bundle) { create(:product, :bundle) }
+      let(:gift) { create(:gift, link: bundle) }
+      let(:gifter_purchase) { create(:purchase, :gift_sender, link: bundle, gift_given: gift) }
+      let(:giftee_purchase) { create(:purchase, :gift_receiver, link: bundle, is_gift_receiver_purchase: true, gift_received: gift, purchase_state: "gift_receiver_purchase_successful", is_bundle_purchase: true) }
+
+      before { gifter_purchase.update!(is_bundle_purchase: true) }
+
+      it "lets the giftee review the bundle, and resolves the review from either purchase" do
+        expect(giftee_purchase.allows_review_to_be_counted?).to eq(true)
+        expect(gifter_purchase.allows_review_to_be_counted?).to eq(false)
+
+        review = giftee_purchase.post_review(rating: 4, message: "Lovely gift")
+
+        expect(review.purchase).to eq(giftee_purchase)
+        expect(review.link).to eq(bundle)
+        expect(giftee_purchase.original_product_review).to eq(review)
+        expect(gifter_purchase.original_product_review).to eq(review)
+        expect(bundle.reload.reviews_count).to eq(1)
+      end
     end
   end
 

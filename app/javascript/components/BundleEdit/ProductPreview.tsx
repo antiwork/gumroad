@@ -36,7 +36,6 @@ type ProductPreviewBundle = {
   custom_attributes: Attribute[];
   refund_policy: RefundPolicy;
   public_files: PublicFileWithStatus[];
-  audio_previews_enabled: boolean;
   is_published: boolean;
   custom_permalink?: string | null;
   products: BundleProduct[];
@@ -151,7 +150,6 @@ export const ProductPreview = ({
               bundleProduct.variants?.list.find(({ id }) => id === bundleProduct.variants?.selected_id)?.name ?? null,
           })),
           public_files: bundle.public_files,
-          audio_previews_enabled: bundle.audio_previews_enabled,
         }}
         purchase={null}
         selection={{

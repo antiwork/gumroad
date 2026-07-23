@@ -11,6 +11,7 @@ import {
   type StripeErrorParams,
 } from "$app/data/payment_method_params";
 import {
+  getPaymentMethodResult,
   getReusablePaymentMethodResult,
   type NewPaymentElementSelectedPaymentMethod,
 } from "$app/data/payment_method_result";
@@ -82,6 +83,34 @@ const selectedPaymentMethod = (): NewPaymentElementSelectedPaymentMethod => ({
   state: "NY",
   city: "New York",
   address: "123 Main St",
+  walletSelected: false,
+});
+
+describe("getPaymentMethodResult", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("forwards the wallet click-time submit promise into Payment Element tokenization", async () => {
+    vi.mocked(preparePaymentElementPaymentMethodData).mockResolvedValue(cardParams);
+    const pendingSubmit = Promise.resolve({});
+
+    await getPaymentMethodResult({ ...selectedPaymentMethod(), walletSelected: true, pendingSubmit });
+
+    expect(preparePaymentElementPaymentMethodData).toHaveBeenCalledWith(
+      expect.objectContaining({ walletSelected: true, pendingSubmit }),
+    );
+  });
+
+  it("passes a null pendingSubmit for non-wallet Payment Element submissions", async () => {
+    vi.mocked(preparePaymentElementPaymentMethodData).mockResolvedValue(cardParams);
+
+    await getPaymentMethodResult(selectedPaymentMethod());
+
+    expect(preparePaymentElementPaymentMethodData).toHaveBeenCalledWith(
+      expect.objectContaining({ pendingSubmit: null }),
+    );
+  });
 });
 
 describe("getReusablePaymentMethodResult", () => {
@@ -117,6 +146,8 @@ describe("getReusablePaymentMethodResult", () => {
       state: "NY",
       city: "New York",
       address: "123 Main St",
+      walletSelected: false,
+      pendingSubmit: null,
     });
     expect(prepareFutureCharges).toHaveBeenCalledWith({ products: [product], cardParams });
     expect(confirmCardIfNeeded).toHaveBeenCalledWith({ cardParams: reusableCardParams, requiresCardSetup: false });

@@ -42,6 +42,7 @@ class ProductFile < ApplicationRecord
             3 => :analyze_completed,
             4 => :stream_only,
             5 => :pdf_stamp_enabled,
+            6 => :hide_kindle_and_read_buttons, # Seller opt-out (product file settings): hides the "Send to Kindle" and "Read" buttons for this file on the download page, leaving only "Download" (gumroad-private#1191).
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -101,6 +102,7 @@ class ProductFile < ApplicationRecord
       duration:,
       is_pdf: pdf?,
       pdf_stamp_enabled: pdf_stamp_enabled?,
+      hide_kindle_and_read_buttons: hide_kindle_and_read_buttons?,
       is_streamable: streamable?,
       stream_only: stream_only?,
       is_transcoding_in_progress: options[:existing_product_file] ? false : transcoding_in_progress?,

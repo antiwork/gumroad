@@ -463,6 +463,17 @@ class StripePayoutProcessor
       Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
     when /\AAttempting to create a transfer of [a-z]{3} to a destination that supports [a-z]{3}\.\z/
       Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH
+    when /\AAmount must be no less than/
+      # The released balance (for example the $1 floor applied to terminally
+      # rejected accounts) converts to less than Stripe's per-currency payout
+      # minimum. Nothing is wrong: the funds stay on the connected account and
+      # roll into the next payout once the balance grows past the minimum.
+      Payment::FailureReason::BELOW_STRIPE_PAYOUT_MINIMUM
+    when /requires further intervention/
+      # Stripe has frozen actions on the connected account until the seller
+      # resolves outstanding requirements directly with Stripe. Only the
+      # seller can clear this; the payout will succeed once they do.
+      Payment::FailureReason::STRIPE_INTERVENTION_REQUIRED
     end
   end
   private_class_method :stripe_invalid_request_error_failure_reason

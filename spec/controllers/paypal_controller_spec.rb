@@ -66,8 +66,6 @@ describe PaypalController, :vcr do
       create(:user_compliance_info, user: @user)
       sign_in(@user)
       @user.mark_compliant!(author_name: "ContentModeration")
-      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
-      create(:payment_completed, user: @user)
 
       allow_any_instance_of(PaypalMerchantAccountManager)
         .to receive(:create_partner_referral).and_return(partner_referral_success_response)
@@ -106,16 +104,16 @@ describe PaypalController, :vcr do
 
       get :connect
 
-      expect(response).to redirect_to(settings_payments_path)
+      expect(response).to redirect_to(checkout_form_path)
       expect(flash[:alert]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
     end
 
     it "returns an error alert if user is not allowed to connect their PayPal account" do
-      @user.update!(user_risk_state: "not_reviewed")
+      @user.update!(payment_address: "")
 
       get :connect
 
-      expect(response).to redirect_to(settings_payments_path)
+      expect(response).to redirect_to(checkout_form_path)
       expect(flash[:alert]).to eq("Your PayPal account could not be connected because you do not meet the eligibility requirements.")
     end
 
@@ -133,8 +131,8 @@ describe PaypalController, :vcr do
         get :connect
       end
 
-      it "redirects to the payment settings path" do
-        expect(response).to redirect_to(settings_payments_path)
+      it "redirects to the checkout form path" do
+        expect(response).to redirect_to(checkout_form_path)
       end
 
       it "show error in flash" do
@@ -207,12 +205,12 @@ describe PaypalController, :vcr do
       expect(@merchant_account.reload.charge_processor_merchant_id).to eq("PaypalAccountID")
     end
 
-    it "does nothing and redirects to payments settings page if paypal disconnect is not allowed" do
+    it "does nothing and redirects to the checkout form page if paypal disconnect is not allowed" do
       allow_any_instance_of(User).to receive(:paypal_disconnect_allowed?).and_return(false)
 
       post :disconnect
       expect(@user.merchant_account(PaypalChargeProcessor.charge_processor_id).charge_processor_merchant_id).to eq("PaypalAccountID")
-      expect(response).to redirect_to(settings_payments_url)
+      expect(response).to redirect_to(checkout_form_url)
       expect(flash[:notice]).to eq("You cannot disconnect your PayPal account because it is being used for active subscription or preorder payments.")
     end
   end

@@ -348,8 +348,14 @@ class CustomerLowPriorityMailer < ApplicationMailer
     @unsub_link = user_unsubscribe_review_reminders_url if @purchase.purchaser
     @purchaser_name = @purchase.full_name.presence || @purchase.purchaser&.name&.presence
 
+    # For a bundle, the reminder is about reviewing the bundle itself. The bundle's
+    # download page can't be used here because it redirects to the library, which has
+    # no review UI. Link every bundle buyer (account-backed or guest) to the bundle's
+    # product page with the purchase's external id and email digest appended: the page
+    # verifies the digest server-side and shows the review form directly, so the link
+    # works in any browser without a session and without a login wall.
     @review_url = if @purchase.is_bundle_purchase?
-      library_url(bundles: @purchase.link.external_id)
+      "#{@purchase.link.long_url}?#{{ purchase_id: @purchase.external_id, purchase_email_digest: @purchase.email_digest }.to_query}"
     else
       @purchase.url_redirect&.download_page_url || @purchase.link.long_url
     end
@@ -399,6 +405,13 @@ class CustomerLowPriorityMailer < ApplicationMailer
   def already_subscribed_checkout_attempt(subscription_id)
     @subscription = Subscription.find(subscription_id)
     @product = @subscription.link
+    # The checkout error shown to the logged-out visitor promises that this email
+    # contains a link to manage the subscription, so include a tokenized magic
+    # link. `reusable_token` keeps the existing token when it is still valid and
+    # only mints a new one when it is missing or expired — repeated duplicate
+    # checkout attempts can queue several of these emails, and rotating the
+    # token on every delivery would invalidate the links in earlier emails.
+    @manage_url = manage_subscription_url(@subscription.external_id, token: @subscription.reusable_token)
 
     mail(
       to: @subscription.email,

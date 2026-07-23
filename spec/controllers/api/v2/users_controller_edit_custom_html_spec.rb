@@ -95,6 +95,25 @@ describe Api::V2::UsersController do
       expect(@user.reload.custom_html).to include("$8 (sale)")
     end
 
+    it "applies an edit whose find uses a plain space where the page has a non-breaking space" do
+      # Agents reading the page routinely normalize U+00A0 to a plain space when echoing a
+      # snippet back; exact-only matching made such an edit permanently unappliable and left the
+      # proposal's Confirm button disabled forever (gumroad-private#1251). The stored page below
+      # reflects what the sanitizer persists (it inserts newlines after some closing tags) — the
+      # snippet matches it exactly except for the NBSP inside the span.
+      @user.update!(custom_html: "<section><h1>Welcome<span>\u00A0</span></h1><p>Shop my art</p></section>")
+      stored_before = @user.reload.custom_html
+      expect(stored_before).to include("\u00A0")
+
+      post :edit_custom_html, params: {
+        format: :json, access_token: @token.token,
+        find: stored_before.tr("\u00A0", " "), replace: "<h1>Hello</h1>",
+      }
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(@user.reload.custom_html).to include("<h1>Hello</h1>")
+    end
+
     it "inserts the replacement literally even when it contains backslash sequences" do
       post :edit_custom_html, params: {
         format: :json, access_token: @token.token,

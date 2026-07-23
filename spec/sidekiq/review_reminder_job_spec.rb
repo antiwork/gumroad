@@ -44,10 +44,13 @@ describe ReviewReminderJob do
   context "purchase was chargeback reversed" do
     before { purchase.update!(chargeback_date: Time.current, chargeback_reversed: true) }
 
-    it "sends an email" do
+    # Even a reversed chargeback blocks the review form (`allows_reviews` checks
+    # `chargeback_date.nil?`), so sending a reminder would deep-link to a page
+    # without a review form.
+    it "does not send an email" do
       expect do
         described_class.new.perform(purchase.id)
-      end.to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder).with(purchase.id)
+      end.to_not have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
     end
   end
 

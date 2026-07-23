@@ -178,6 +178,30 @@ describe "S3Retrievable" do
       expect(record.s3_key).to eq(s3_directory + "/file.pdf")
     end
 
+    it "heals a Unicode-normalization mismatch when the directory-listing fallback cannot identify the file" do
+      s3_directory = "#{SecureRandom.hex}/#{SecureRandom.hex}/original"
+      # "música.pdf" with the "ú" precomposed (NFC) vs decomposed into "u" + combining accent (NFD)
+      nfc_key = "#{s3_directory}/m\u00FAsica.pdf"
+      nfd_key = nfc_key.unicode_normalize(:nfd)
+
+      record = model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{nfc_key}")
+
+      # Real S3 compares keys byte-for-byte, but the local test S3 normalizes Unicode keys and
+      # would find the object under either form — so we stub the boundary to reproduce
+      # production behavior: the DB's NFC key is missing, the NFD form exists.
+      missing_object = double(:s3_object)
+      allow(missing_object).to receive(:load).and_raise(Aws::S3::Errors::NotFound.new(nil, "missing"))
+      allow(record).to receive(:s3_object).and_return(missing_object)
+
+      existing_object = double(:s3_object, exists?: true)
+      bucket = double(:bucket)
+      allow(bucket).to receive(:object).with(nfd_key).and_return(existing_object)
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(:resource, bucket: bucket))
+
+      record.confirm_s3_key!
+      expect(record.reload.url).to eq(S3_BASE_URL + nfd_key)
+    end
+
     it "does nothing if the file exists on S3" do
       previous_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/sample.mov"
       record = model.create!(url: previous_url)

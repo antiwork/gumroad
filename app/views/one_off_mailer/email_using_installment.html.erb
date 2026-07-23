@@ -1,5 +1,9 @@
 <%= render("shared/preheader_text", text: @installment.truncated_description) %>
 <%= header_section(post_title_displayable(post: @installment)) %>
-<div class="rich-text">
-  <%= raw Rinku.auto_link(@installment.message_with_inline_syntax_highlighting_and_upsells&.html_safe, :all, 'target="_blank" rel="nofollow"') %>
+<%# dir="auto" on the container plus per-block direction below lets email clients pick
+    text direction per paragraph from its first strong character, so Hebrew/Arabic
+    paragraphs read right-to-left even after an English intro, while Latin-script
+    content is unaffected (gumroad-private#1244). %>
+<div class="rich-text" dir="auto">
+  <%= raw with_per_block_text_direction(Rinku.auto_link(@installment.message_with_inline_syntax_highlighting_and_upsells&.html_safe, :all, 'target="_blank" rel="nofollow"')) %>
 </div>

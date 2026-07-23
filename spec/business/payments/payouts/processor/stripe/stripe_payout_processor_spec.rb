@@ -4384,6 +4384,63 @@ describe StripePayoutProcessor, :vcr do
       end
     end
 
+    context "when Stripe rejects the payout because the amount is below Stripe's per-currency payout minimum" do
+      let(:stripe_error_message) do
+        "Amount must be no less than £1.00"
+      end
+
+      before do
+        allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new(stripe_error_message, "amount"))
+      end
+
+      it "marks the payment with failure_reason BELOW_STRIPE_PAYOUT_MINIMUM" do
+        described_class.perform_payment(payment)
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::BELOW_STRIPE_PAYOUT_MINIMUM)
+      end
+
+      it "stores the Stripe error message on the payment" do
+        described_class.perform_payment(payment)
+        expect(payment.reload.error_message).to eq(stripe_error_message)
+      end
+
+      it "does not notify the error tracker" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        described_class.perform_payment(payment)
+      end
+
+      it "adds a payout note explaining the balance rolls into the next payout" do
+        expect { described_class.perform_payment(payment) }
+          .to change { user.comments.with_type_payout_note.count }.by(1)
+        expect(user.comments.with_type_payout_note.last.content).to include("roll into your next payout")
+      end
+    end
+
+    context "when Stripe rejects the payout because the account requires further intervention" do
+      let(:stripe_error_message) do
+        "This account requires further intervention to perform certain actions. Stripe will have recently reached out to resolve this, but if you require further assistance please contact us via https://support.stripe.com/contact"
+      end
+
+      before do
+        allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new(stripe_error_message, nil))
+      end
+
+      it "marks the payment with failure_reason STRIPE_INTERVENTION_REQUIRED" do
+        described_class.perform_payment(payment)
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::STRIPE_INTERVENTION_REQUIRED)
+      end
+
+      it "does not notify the error tracker" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        described_class.perform_payment(payment)
+      end
+
+      it "adds a payout note directing the seller to resolve Stripe's outstanding requirements" do
+        expect { described_class.perform_payment(payment) }
+          .to change { user.comments.with_type_payout_note.count }.by(1)
+        expect(user.comments.with_type_payout_note.last.content).to include("resolving the outstanding requirements")
+      end
+    end
+
     context "when Stripe raises an unmatched Stripe::InvalidRequestError" do
       before do
         allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Something unexpected.", "param"))

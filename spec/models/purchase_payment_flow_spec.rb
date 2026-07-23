@@ -56,6 +56,29 @@ describe PurchasePaymentFlow do
       expect(attributes[:payment_details_source]).to eq("payment_request")
     end
 
+    it "records a wallet paid through the Payment Element (server-confirm lane) as payment_element" do
+      attributes = described_class.attributes_for_checkout_params(
+        wallet_type: "apple_pay",
+        payment_details_source: "payment_element",
+        stripe_payment_method_id: "pm_123"
+      )
+
+      expect(attributes).to eq(
+        payment_details_source: "payment_element",
+        payment_details_transport: "payment_method",
+        stripe_payment_method_type: "card"
+      )
+    end
+
+    it "records a wallet payment without the payment_element hint as a payment request, the PRB shape" do
+      attributes = described_class.attributes_for_checkout_params(
+        wallet_type: "google_pay",
+        stripe_payment_method_id: "pm_123"
+      )
+
+      expect(attributes[:payment_details_source]).to eq("payment_request")
+    end
+
     it "returns nil when no Stripe payment surface is present" do
       expect(described_class.attributes_for_checkout_params({})).to be_nil
     end
@@ -105,14 +128,14 @@ describe PurchasePaymentFlow do
       )
     end
 
-    it "records a client-confirm wallet payment as a payment request over the confirmation_token transport" do
+    it "records a client-confirm wallet payment as payment_element over the confirmation_token transport" do
       attributes = described_class.attributes_for_checkout_params(
         wallet_type: "apple_pay",
         payment_details_source: "payment_element",
         confirmation_token: "ctoken_123"
       )
 
-      expect(attributes[:payment_details_source]).to eq("payment_request")
+      expect(attributes[:payment_details_source]).to eq("payment_element")
       expect(attributes[:payment_details_transport]).to eq("confirmation_token")
     end
 

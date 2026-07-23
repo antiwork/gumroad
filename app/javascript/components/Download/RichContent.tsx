@@ -285,8 +285,17 @@ const useFilesInGroup = (node: ProseMirrorNode | undefined) => {
 const ARCHIVE_FETCH_INTERVAL_DURATION_IN_MS = 5000;
 // The actual archive size limit is 500 MB (524288000B)
 const ARCHIVE_SIZE_LIMIT_IN_BYTES = 500000000;
-const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
-  const [expanded, setExpanded] = React.useState(false);
+const FileEmbedGroupNodeView = ({ node, editor }: NodeViewProps) => {
+  // Count the top-level folders on this page: when there's exactly one, it
+  // starts expanded so buyers aren't left staring at a single closed chevron.
+  const isOnlyTopLevelFolder = React.useMemo(() => {
+    let folderCount = 0;
+    editor.state.doc.forEach((child) => {
+      if (child.type.name === "fileEmbedGroup") folderCount += 1;
+    });
+    return folderCount === 1;
+  }, [editor.state.doc]);
+  const [expanded, setExpanded] = React.useState(node.attrs.expandedByDefault === true || isOnlyTopLevelFolder);
   const ref = React.useRef<HTMLDivElement>(null);
   const downloadInfo = useFilesAndFoldersDownloadInfo();
   const { downloadableFilesInFolder, hasStreamable } = useFilesInGroup(node);
@@ -354,7 +363,15 @@ const FileEmbedGroup = TiptapNode.create({
   selectable: false,
   draggable: true,
   atom: true,
-  addAttributes: () => ({ uid: { default: null }, name: { default: null } }),
+  addAttributes: () => ({
+    uid: { default: null },
+    name: { default: null },
+    // Per-folder seller setting: start this folder expanded on the download page.
+    expandedByDefault: {
+      default: false,
+      parseHTML: (element) => element.getAttribute("expandedByDefault") === "true",
+    },
+  }),
   parseHTML: () => [{ tag: "file-embed-group" }],
   renderHTML: ({ HTMLAttributes }) => ["file-embed-group", HTMLAttributes, 0],
   addNodeView() {

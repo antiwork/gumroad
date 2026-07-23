@@ -80,11 +80,11 @@ describe StripeConnectPaymentMethodAvailabilityService do
 
     it "answers for methods beyond the US-locked pair — future launches read existing snapshots" do
       merchant_account.update!(stripe_capabilities_snapshot: {
-                                 "capabilities" => { "sepa_debit_payments" => "active", "ideal_payments" => "active", "klarna_payments" => "inactive" },
+                                 "capabilities" => { "sepa_debit_payments" => "active", "ideal_payments" => "active", "upi_payments" => "active", "klarna_payments" => "inactive" },
                                  "refreshed_at" => Time.current.iso8601,
                                })
 
-      expect(service.available_payment_method_types(%w[sepa_debit ideal klarna])).to eq(%w[sepa_debit ideal])
+      expect(service.available_payment_method_types(%w[sepa_debit ideal upi klarna])).to eq(%w[sepa_debit ideal upi])
     end
 
     it "fails closed on a method type with no capability mapping" do

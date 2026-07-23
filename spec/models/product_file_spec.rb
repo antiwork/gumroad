@@ -1037,13 +1037,13 @@ describe ProductFile do
       end
 
       it "upcases the string" do
-        file = create(:pdf_product_file, isbn: "978316148410x")
-        expect(file.isbn).to eq("978316148410X")
+        file = create(:pdf_product_file, isbn: "097522980x")
+        expect(file.isbn).to eq("097522980X")
       end
 
       it "strips whitespace from the string" do
-        file = create(:pdf_product_file, isbn: "  978316148410X  ")
-        expect(file.isbn).to eq("978316148410X")
+        file = create(:pdf_product_file, isbn: "  097522980X  ")
+        expect(file.isbn).to eq("097522980X")
       end
 
       it "nullifies isbn if blank or only whitespace" do

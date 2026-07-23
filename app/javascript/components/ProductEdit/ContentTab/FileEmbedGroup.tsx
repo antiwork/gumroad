@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, Dropbox as DropboxIcon, Folder, Pencil } from "@boxicons/react";
+import { Check, ChevronDown, ChevronRight, Cog, Dropbox as DropboxIcon, Folder, Pencil } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
@@ -18,7 +18,9 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Input } from "$app/components/ui/Input";
+import { MenuItem } from "$app/components/ui/Menu";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type FileEntry = {
@@ -148,7 +150,32 @@ const FileEmbedGroupNodeView = ({
       >
         <NodeActionsWrapper selected={selected} isEditable={editor.isEditable} asChild>
           <Row role="treeitem" aria-expanded={expanded}>
-            {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
+            {editor.isEditable ? (
+              <NodeActionsMenu
+                editor={editor}
+                actions={[
+                  {
+                    item: () => (
+                      <>
+                        <Cog className="size-5" />
+                        <span>Settings</span>
+                      </>
+                    ),
+                    menu: () => (
+                      <MenuItem asChild>
+                        <div>
+                          <Switch
+                            checked={node.attrs.expandedByDefault === true}
+                            onChange={(e) => updateAttributes({ ...node.attrs, expandedByDefault: e.target.checked })}
+                            label="Start expanded on the download page"
+                          />
+                        </div>
+                      </MenuItem>
+                    ),
+                  },
+                ]}
+              />
+            ) : null}
             <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
               {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
               <Folder pack="filled" className="type-icon size-5" />
@@ -268,6 +295,12 @@ export const FileEmbedGroup = TiptapNode.create<{ getConfig: () => FileGroupConf
       // to coerce the value automatically and converts `1.0` or `1` to a
       // number.
       parseHTML: (element) => element.getAttribute("name"),
+    },
+    // Seller setting: start this folder expanded on the buyer download page.
+    // Explicitly parse to a Boolean since HTML attributes are strings.
+    expandedByDefault: {
+      default: false,
+      parseHTML: (element) => element.getAttribute("expandedByDefault") === "true",
     },
   }),
   parseHTML: () => [{ tag: "file-embed-group" }],

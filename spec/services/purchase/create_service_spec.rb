@@ -188,6 +188,19 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "when the refund policy record is missing despite the flag being enabled" do
+      it "does not build a purchase refund policy and does not raise" do
+        purchase, error = Purchase::CreateService.new(
+          product:,
+          params:,
+          buyer:
+        ).perform
+
+        expect(error).to be_nil
+        expect(purchase.purchase_refund_policy).to be_nil
+      end
+    end
+
     context "when the refund policy has no fine print" do
       let!(:refund_policy) do
         create(:product_refund_policy, fine_print: "", product:, seller: user)
@@ -2416,6 +2429,19 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "but the seller has disabled gifting at checkout" do
+      it "returns a gifting-disabled error message and creates no gift" do
+        not_giftable = create(:product)
+        not_giftable.user.update!(gifting_disabled: true)
+
+        expect do
+          _, error = Purchase::CreateService.new(product: not_giftable, params: gift_params).perform
+
+          expect(error).to eq "The creator has disabled gifting for their products."
+        end.not_to change { Gift.count }
+      end
+    end
+
     context "but the gift fails to save" do
       it "returns an error message" do
         gift_params[:gift].merge!(giftee_email: nil, gifter_email: nil)
@@ -3704,11 +3730,20 @@ describe Purchase::CreateService, :vcr do
         create_subscription_for(product: membership_product, purchaser: create(:user), email: email)
       end
 
-      it "returns a generic error" do
+      it "returns an explicit already-subscribed error" do
         purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params).perform
 
         expect(purchase).to be_nil
-        expect(error).to eq("Sorry, something went wrong. Please contact support@gumroad.com if the problem persists.")
+        expect(error).to eq("This email address already has an active subscription to this membership. We've emailed it a link to manage the subscription — check your inbox.")
+      end
+
+      it "logs the attempt without reporting to Sentry" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        allow(Rails.logger).to receive(:info).and_call_original
+
+        Purchase::CreateService.new(product: membership_product, params: membership_params).perform
+
+        expect(Rails.logger).to have_received(:info).with(/Existing subscription checkout attempt: subscription_id=\d+ product_id=#{membership_product.id}/)
       end
     end
 

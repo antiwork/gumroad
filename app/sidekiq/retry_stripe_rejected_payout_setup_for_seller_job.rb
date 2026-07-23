@@ -11,6 +11,8 @@ class RetryStripeRejectedPayoutSetupForSellerJob
   ABANDONED_REASON_SWITCHED_OFF_STRIPE = "payout_method_switched_off_stripe"
   CONNECTED_STRIPE_NOTE = "Automated Stripe payout-setup retry stopped: the seller connected their own Stripe account."
   ABANDONED_REASON_CONNECTED_STRIPE = "payout_method_switched_to_connected_stripe"
+  ACCOUNT_BLOCKED_NOTE = "Automated Stripe payout-setup retry stopped: payments on the seller's Stripe account are blocked at the platform level."
+  ABANDONED_REASON_ACCOUNT_BLOCKED = "stripe_account_blocked_by_platform"
 
   def perform(user_id)
     user = User.find_by(id: user_id)
@@ -35,7 +37,12 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     end
 
     remediated = attempt_remediation(user, note)
-    if remediated
+    if remediated == :account_blocked
+      # Gumroad has blocked payments on the seller's Stripe account (platform-level risk
+      # block). No amount of retrying a bank/postal-code sync can succeed until a human
+      # lifts the block, so stop the automated retry loop instead of burning attempts.
+      abandon_stale_notes!(user, reason: ABANDONED_REASON_ACCOUNT_BLOCKED, note_content: ACCOUNT_BLOCKED_NOTE)
+    elsif remediated
       resolve!(user, note)
     elsif note.reload.alive?
       record_attempt!(note)
@@ -81,6 +88,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       if user.stripe_account.present?
         if bank_note?(note)
           result = StripeMerchantAccountManager.update_bank_account(user, passphrase:, notify: false)
+          return :account_blocked if result == :account_blocked_by_platform
           [:synced, :noop_metadata_match].include?(result)
         else
           return false if user.alive_user_compliance_info.nil?

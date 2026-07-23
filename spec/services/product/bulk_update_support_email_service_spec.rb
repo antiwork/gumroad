@@ -11,8 +11,6 @@ describe Product::BulkUpdateSupportEmailService do
 
   let(:other_user_product) { create(:product, support_email: "other@example.com") }
 
-  before { Feature.activate_user(:product_level_support_emails, user) }
-
   describe "#perform" do
     it "updates products support emails according to entries" do
       entries = [
@@ -85,22 +83,6 @@ describe Product::BulkUpdateSupportEmailService do
       expect { service.perform }
         .to change { product1.reload.support_email }.to("new1@example.com")
         .and not_change { other_user_product.reload.support_email }
-    end
-
-    context "when user does not have product_level_support_emails enabled" do
-      before do
-        Feature.deactivate_user(:product_level_support_emails, user)
-      end
-
-      it "does not update any product support emails" do
-        entries = [{ email: "new@example.com", product_ids: [product1.external_id] }]
-        service = described_class.new(user, entries)
-        service.perform
-
-        expect(product1.reload.support_email).to eq("old1@example.com")
-        expect(product2.reload.support_email).to eq("old2@example.com")
-        expect(product3.reload.support_email).to eq("old3@example.com")
-      end
     end
   end
 end

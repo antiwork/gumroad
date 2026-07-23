@@ -80,6 +80,20 @@ describe UrlRedirectPresenter do
                                                                  }])
     end
 
+    it "nulls kindle_data and read_url when the seller has hidden the Kindle and Read buttons for the file" do
+      product = create(:product)
+      create(:readable_document, link: product, display_name: "Readable PDF", hide_kindle_and_read_buttons: true)
+      purchase = create(:purchase, link: product)
+      url_redirect = create(:url_redirect, purchase:)
+      user = create(:user)
+      instance = described_class.new(url_redirect:, logged_in_user: user)
+
+      file_item = instance.download_attributes[:content_items].sole
+      expect(file_item[:kindle_data]).to be_nil
+      expect(file_item[:read_url]).to be_nil
+      expect(file_item[:download_url]).to be_present
+    end
+
     it "omits empty folders" do
       product = create(:product)
 
@@ -222,6 +236,23 @@ describe UrlRedirectPresenter do
 
       @purchase.update!(last_content_page_id: "page_abc123")
       expect(instance.download_page_with_content_props[:content][:last_content_page_id]).to eq("page_abc123")
+    end
+
+    it "round-trips the per-folder 'expandedByDefault' attribute through rich content in props" do
+      product_content = [
+        {
+          "type" => "fileEmbedGroup",
+          "attrs" => { "uid" => "folder-uid-1", "name" => "GOYOW", "expandedByDefault" => true },
+          "content" => [],
+        },
+      ]
+      rich_content = create(:rich_content, entity: @product, title: "Page title", description: product_content)
+      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+
+      pages = instance.download_page_with_content_props[:content][:rich_content_pages]
+      expect(pages.first[:id]).to eq(rich_content.external_id)
+      folder_node = pages.first[:description][:content].first
+      expect(folder_node["attrs"]).to eq("uid" => "folder-uid-1", "name" => "GOYOW", "expandedByDefault" => true)
     end
 
     it "includes 'discord' in props" do

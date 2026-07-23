@@ -317,7 +317,6 @@ describe OrdersController, :vcr do
 
         before do
           cookies[:_gumroad_guid] = browser_guid
-          Feature.activate(:utm_links)
         end
 
         it "attributes the qualified purchase to the matching UTM link having a visit with the same browser guid" do
@@ -358,17 +357,6 @@ describe OrdersController, :vcr do
           create(:utm_link_visit, utm_link:, browser_guid:)
 
           product_1.update!(max_purchase_count: 0)
-
-          expect do
-            post :create, params: single_purchase_params
-          end.not_to change { utm_link.utm_link_driven_sales.count }
-        end
-
-        it "does not attribute a purchase if the :utm_links feature is not active" do
-          utm_link = create(:utm_link, seller: product_1.user)
-          create(:utm_link_visit, utm_link:, browser_guid:)
-
-          Feature.deactivate(:utm_links)
 
           expect do
             post :create, params: single_purchase_params
@@ -2219,7 +2207,6 @@ describe OrdersController, :vcr do
         before do
           product_2.update!(user: seller_2)
           cookies[:_gumroad_guid] = browser_guid
-          Feature.activate(:utm_links)
         end
 
         it "attributes all successful purchases in the order" do

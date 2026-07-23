@@ -3,7 +3,10 @@ export type RequestSettings = {
   url: string;
   abortSignal?: AbortSignal | undefined;
   headers?: Record<string, string> | undefined;
-} & ({ method: "GET" } | { method: "POST" | "PUT" | "PATCH" | "DELETE"; data?: Record<string, unknown> | FormData });
+} & (
+  | { method: "GET" | "HEAD" }
+  | { method: "POST" | "PUT" | "PATCH" | "DELETE"; data?: Record<string, unknown> | FormData }
+);
 
 export class AbortError extends Error {
   constructor() {
@@ -38,7 +41,7 @@ export const defaults: RequestInit = {};
 export const request = async (settings: RequestSettings): Promise<Response> => {
   ++globalThis.__activeRequests;
   const data =
-    settings.method === "GET"
+    settings.method === "GET" || settings.method === "HEAD"
       ? null
       : settings.data instanceof FormData
         ? settings.data
