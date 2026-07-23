@@ -132,18 +132,43 @@ describe User::Risk do
     let(:product) { create(:product, user: seller) }
 
     it "returns a nil rate when the seller has no settled sales" do
-      expect(seller.dispute_rate_stats).to eq({ settled_count: 0, disputed_count: 0, rate: nil })
+      expect(seller.dispute_rate_stats).to eq({ settled_count: 0, settled_buyers_count: 0, disputing_buyers_count: 0, rate: nil })
     end
 
-    it "computes the dispute count rate from settled sales, excluding reversed chargebacks" do
+    it "computes the dispute rate from unique buyers, excluding reversed chargebacks" do
       create_list(:purchase, 2, link: product)
       create(:purchase, link: product, chargeback_date: Time.current)
       create(:purchase, link: product, chargeback_date: Time.current, chargeback_reversed: true)
 
       stats = seller.dispute_rate_stats
       expect(stats[:settled_count]).to eq(4)
-      expect(stats[:disputed_count]).to eq(1)
+      expect(stats[:settled_buyers_count]).to eq(4)
+      expect(stats[:disputing_buyers_count]).to eq(1)
       expect(stats[:rate]).to eq(25.0)
+    end
+
+    it "counts one buyer disputing multiple purchases (e.g. both installments of a course) once" do
+      # The trigger case for #6171: one buyer disputed both installments of a single
+      # course purchase and was previously counted as two disputes.
+      create_list(:purchase, 2, link: product)
+      create_list(:purchase, 2, link: product, email: "unhappy@example.com", chargeback_date: Time.current)
+
+      stats = seller.dispute_rate_stats
+      expect(stats[:settled_count]).to eq(4)
+      expect(stats[:settled_buyers_count]).to eq(3)
+      expect(stats[:disputing_buyers_count]).to eq(1)
+      expect(stats[:rate]).to eq(1 * 100.0 / 3)
+    end
+
+    it "counts a buyer with multiple settled purchases once in the denominator" do
+      create_list(:purchase, 3, link: product, email: "repeat@example.com")
+      create(:purchase, link: product)
+
+      stats = seller.dispute_rate_stats
+      expect(stats[:settled_count]).to eq(4)
+      expect(stats[:settled_buyers_count]).to eq(2)
+      expect(stats[:disputing_buyers_count]).to eq(0)
+      expect(stats[:rate]).to eq(0.0)
     end
   end
 
