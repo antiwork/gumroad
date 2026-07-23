@@ -3283,6 +3283,8 @@ class Purchase < ApplicationRecord
     self.was_zipcode_check_performed = !processor_charge.zip_check_result.nil?
     save!
 
+    record_stripe_payment_method_type(processor_charge)
+
     check_indian_card_mandate_was_registered(processor_charge)
 
     charge.update_charge_details_from_processor!(processor_charge) if charge.present?
@@ -3290,6 +3292,25 @@ class Purchase < ApplicationRecord
 
     load_flow_of_funds(processor_charge)
     true
+  end
+
+  # The purchase_payment_flows row is written at checkout time with a "card" placeholder,
+  # before the charge exists — at that point the server only knows the buyer paid through
+  # the Payment Element, not with which method. Once the processor tells us the real
+  # method family ("upi", "ideal", ...), correct the row so payment-method rollout
+  # metrics don't count every local method as a card. Observability only: never let a
+  # metrics correction break charge processing.
+  def record_stripe_payment_method_type(processor_charge)
+    return unless stripe_charge_processor?
+
+    method_type = processor_charge.payment_method_type
+    return if method_type.blank?
+    return if purchase_payment_flow.nil?
+    return if purchase_payment_flow.stripe_payment_method_type == method_type
+
+    purchase_payment_flow.update!(stripe_payment_method_type: method_type)
+  rescue => e
+    ErrorNotifier.notify(e, purchase: external_id)
   end
 
   # A charge that rebills a card the buyer saved earlier: subscription renewals and
