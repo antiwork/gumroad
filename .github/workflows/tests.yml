@@ -21,9 +21,31 @@ jobs:
     runs-on: ubicloud-standard-2
     # The 'ci-protected' environment approval gate used to sit here for fork-headed
     # pull requests. Removed 2026-07-23 (Sahil): the repo takes no external
-    # contributions, so every fork PR is from a trusted internal account (e.g.
-    # gumclaw's fork) and the manual approve-this-run step only stalled CI.
+    # contributions, so the manual approve-this-run step only stalled CI.
+    #
+    # The repo is still PUBLIC, though, so anyone can fork it and open a PR —
+    # "no external contributions" is policy, not something GitHub enforces for us.
+    # This step enforces it: fork-headed pull_request_target runs proceed only when
+    # the PR author is a trusted internal account. Every test job below depends on
+    # this job, so an untrusted fork PR fails here before any fork code is checked
+    # out or any secrets are exposed. Extend the allowlist if another internal
+    # account ever needs to open fork-headed PRs.
     steps:
+      - name: Verify fork PR author is trusted
+        if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository }}
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          case "$PR_AUTHOR" in
+            gumclaw|slavingia)
+              echo "Fork PR author '$PR_AUTHOR' is a trusted internal account — proceeding."
+              ;;
+            *)
+              echo "Fork PR author '$PR_AUTHOR' is not on the trusted allowlist."
+              echo "This repository does not accept external contributions, so CI does not run fork code from other accounts."
+              exit 1
+              ;;
+          esac
       - run: true
 
   lint_js:
@@ -35,8 +57,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          # Fork heads are trusted here: the repo takes no external contributions (Sahil,
-          # 2026-07-23), so fork-headed PRs only come from internal accounts (gumclaw's fork).
+          # Fork heads are safe to check out here because the ci_gate job (which this
+          # job depends on) fails the run unless the fork PR's author is a trusted
+          # internal account. The repo is public but takes no external contributions
+          # (Sahil, 2026-07-23), and ci_gate is what enforces that for CI.
           allow-unsafe-pr-checkout: true
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -59,8 +83,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          # Fork heads are trusted here: the repo takes no external contributions (Sahil,
-          # 2026-07-23), so fork-headed PRs only come from internal accounts (gumclaw's fork).
+          # Fork heads are safe to check out here because the ci_gate job (which this
+          # job depends on) fails the run unless the fork PR's author is a trusted
+          # internal account. The repo is public but takes no external contributions
+          # (Sahil, 2026-07-23), and ci_gate is what enforces that for CI.
           allow-unsafe-pr-checkout: true
           persist-credentials: false
       - uses: ruby/setup-ruby@v1
@@ -83,8 +109,10 @@ jobs:
         timeout-minutes: 5
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          # Fork heads are trusted here: the repo takes no external contributions (Sahil,
-          # 2026-07-23), so fork-headed PRs only come from internal accounts (gumclaw's fork).
+          # Fork heads are safe to check out here because the ci_gate job (which this
+          # job depends on) fails the run unless the fork PR's author is a trusted
+          # internal account. The repo is public but takes no external contributions
+          # (Sahil, 2026-07-23), and ci_gate is what enforces that for CI.
           allow-unsafe-pr-checkout: true
           persist-credentials: false
       - name: Login to Docker Hub
@@ -361,8 +389,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          # Fork heads are trusted here: the repo takes no external contributions (Sahil,
-          # 2026-07-23), so fork-headed PRs only come from internal accounts (gumclaw's fork).
+          # Fork heads are safe to check out here because the ci_gate job (which this
+          # job depends on) fails the run unless the fork PR's author is a trusted
+          # internal account. The repo is public but takes no external contributions
+          # (Sahil, 2026-07-23), and ci_gate is what enforces that for CI.
           allow-unsafe-pr-checkout: true
           persist-credentials: false
 
@@ -397,8 +427,10 @@ jobs:
         timeout-minutes: 5
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          # Fork heads are trusted here: the repo takes no external contributions (Sahil,
-          # 2026-07-23), so fork-headed PRs only come from internal accounts (gumclaw's fork).
+          # Fork heads are safe to check out here because the ci_gate job (which this
+          # job depends on) fails the run unless the fork PR's author is a trusted
+          # internal account. The repo is public but takes no external contributions
+          # (Sahil, 2026-07-23), and ci_gate is what enforces that for CI.
           allow-unsafe-pr-checkout: true
           persist-credentials: false
       - name: Login to Docker Hub
@@ -583,8 +615,10 @@ jobs:
         timeout-minutes: 5
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          # Fork heads are trusted here: the repo takes no external contributions (Sahil,
-          # 2026-07-23), so fork-headed PRs only come from internal accounts (gumclaw's fork).
+          # Fork heads are safe to check out here because the ci_gate job (which this
+          # job depends on) fails the run unless the fork PR's author is a trusted
+          # internal account. The repo is public but takes no external contributions
+          # (Sahil, 2026-07-23), and ci_gate is what enforces that for CI.
           allow-unsafe-pr-checkout: true
           persist-credentials: false
       - name: Login to Docker Hub
