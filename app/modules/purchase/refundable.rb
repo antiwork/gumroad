@@ -11,6 +11,11 @@ class Purchase
     INSUFFICIENT_FUNDS_STRIPE_BALANCE_ERROR_MESSAGE = "The Stripe account holding the funds does not have sufficient funds to process this refund. Try again later or contact support."
     INSUFFICIENT_FUNDS_CREATOR_STRIPE_BALANCE_ERROR_MESSAGE = "Your connected Stripe account does not have sufficient funds to process this refund."
     INSUFFICIENT_FUNDS_PAYPAL_BALANCE_ERROR_MESSAGE = "Your PayPal account does not have sufficient funds to make this refund."
+    ALREADY_REFUNDED_ERROR_MESSAGE = "The payment processor reports this purchase as already refunded. " \
+                                     "If the refund is not reflected here, contact support."
+    PROCESSOR_REJECTED_REFUND_ERROR_MESSAGE = "The payment processor rejected this refund. " \
+                                              "Try again later or contact support if the problem persists."
+    NOTHING_TO_REFUND_ERROR_MESSAGE = "This purchase has already been refunded or has nothing left to refund."
 
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
     # * reason - free-text explanation of why the sale is being refunded. It is stored on
@@ -41,7 +46,13 @@ class Purchase
     #
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
     def refund_and_save!(refunding_user_id, amount_cents: nil, is_for_fraud: false, reason: nil)
-      return if stripe_transaction_id.blank? || stripe_refunded || amount_refundable_cents <= 0
+      if stripe_transaction_id.blank? || stripe_refunded || amount_refundable_cents <= 0
+        # Returning nil (not false) is deliberate: callers like refund_for_fraud! use nil
+        # to mean "nothing left to refund, skip cleanly". Still populate errors so UIs
+        # that only read errors.full_messages never show a blank failure toast.
+        errors.add :base, NOTHING_TO_REFUND_ERROR_MESSAGE
+        return
+      end
 
       if chargedback_not_reversed?
         errors.add :base, ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
@@ -167,6 +178,7 @@ class Purchase
         refunded
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
+        errors.add :base, ALREADY_REFUNDED_ERROR_MESSAGE
         false
       rescue ChargeProcessorInsufficientFundsError => e
         logger.error "Insufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
@@ -174,6 +186,7 @@ class Purchase
         false
       rescue ChargeProcessorInvalidRequestError => e
         logger.error "Charge refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}. #{e.backtrace_locations}"
+        errors.add :base, PROCESSOR_REJECTED_REFUND_ERROR_MESSAGE
         false
       rescue ChargeProcessorUnavailableError => e
         logger.error "Charge processor unavailable in purchase: #{external_id}. Response: #{e.message}"
@@ -463,12 +476,15 @@ class Purchase
       true
     rescue ChargeProcessorAlreadyRefundedError => e
       logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
+      errors.add :base, Purchase::Refundable::ALREADY_REFUNDED_ERROR_MESSAGE
       false
     rescue ChargeProcessorInsufficientFundsError => e
       logger.error "Insufficient funds to refund Gumroad taxes for purchase: #{external_id}. Response: #{e.message}"
       errors.add :base, insufficient_funds_refund_error_message
       false
-    rescue ChargeProcessorInvalidRequestError
+    rescue ChargeProcessorInvalidRequestError => e
+      logger.error "Tax refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}"
+      errors.add :base, Purchase::Refundable::PROCESSOR_REJECTED_REFUND_ERROR_MESSAGE
       false
     rescue ChargeProcessorUnavailableError => e
       logger.error "Error while refunding a charge: #{e.message} in purchase: #{external_id}"

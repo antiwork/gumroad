@@ -676,19 +676,30 @@ describe "PurchaseRefunds", :vcr do
       expect(@purchase.refund_and_save!(@user.id)).to be(true)
     end
 
-    it "returns false if charge processor indicates request invalid" do
+    it "returns false with a user-facing error if charge processor indicates request invalid" do
       expect(ChargeProcessor).to receive(:refund!).and_raise(ChargeProcessorInvalidRequestError)
       expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      # The dashboard renders errors.full_messages directly; a blank error here shows the
+      # seller an empty toast (gumroad-private#1267), so every failure branch must add one.
+      expect(@purchase.errors.full_messages.to_sentence).to eq(Purchase::Refundable::PROCESSOR_REJECTED_REFUND_ERROR_MESSAGE)
     end
 
-    it "returns false if charge processor unavailable" do
+    it "returns false with a user-facing error if charge processor unavailable" do
       expect(ChargeProcessor).to receive(:refund!).and_raise(ChargeProcessorUnavailableError)
       expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors.full_messages.to_sentence).to eq("There is a temporary problem. Try to refund later.")
     end
 
-    it "returns false if charge processor indicates already refunded" do
+    it "returns false with a user-facing error if charge processor indicates already refunded" do
       expect(ChargeProcessor).to receive(:refund!).and_raise(ChargeProcessorAlreadyRefundedError)
       expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors.full_messages.to_sentence).to eq(Purchase::Refundable::ALREADY_REFUNDED_ERROR_MESSAGE)
+    end
+
+    it "returns nil with a user-facing error when there is nothing left to refund" do
+      @purchase.update!(stripe_refunded: true)
+      expect(@purchase.refund_and_save!(@user.id)).to be_nil
+      expect(@purchase.errors.full_messages.to_sentence).to eq(Purchase::Refundable::NOTHING_TO_REFUND_ERROR_MESSAGE)
     end
 
     describe "notifying the creator when a team member refunds on their behalf" do
