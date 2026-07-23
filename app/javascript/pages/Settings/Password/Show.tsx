@@ -24,7 +24,6 @@ const MAX_PASSWORD_LENGTH = 128;
 type PasswordPageProps = {
   settings_pages: SettingPage[];
   require_old_password: boolean;
-  show_authenticator_app_settings: boolean;
   authenticator_app_enabled: boolean;
   show_passkeys_settings: boolean;
   passkeys: Passkey[];
@@ -160,46 +159,42 @@ export default function PasswordPage() {
           </Fieldset>
         </FormSection>
       </form>
-      {props.show_authenticator_app_settings ? (
-        <FormSection header={<h2>Two-factor authentication</h2>}>
-          {props.authenticator_app_enabled ? null : (
-            <Alert variant="info">
-              Use an authenticator app to get verification codes without waiting for an email.
-            </Alert>
-          )}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="grid gap-2">
-              <div className="font-bold">Authenticator app</div>
-              <FieldsetDescription>Get verification codes from an app on your device.</FieldsetDescription>
-            </div>
-            {props.authenticator_app_enabled ? (
-              <div className="flex shrink-0 gap-2">
-                <Button onClick={handleRegenerateRecoveryCodes} disabled={regenerating || removingAuthenticatorApp}>
-                  {regenerating ? "Regenerating..." : "Regenerate recovery codes"}
-                </Button>
-                <Button
-                  color="danger"
-                  outline
-                  onClick={handleRemoveAuthenticatorApp}
-                  disabled={removingAuthenticatorApp || regenerating}
-                >
-                  {removingAuthenticatorApp ? "Removing..." : "Remove"}
-                </Button>
-              </div>
-            ) : settingUp ? null : (
-              <Button color="accent" onClick={() => setSettingUp(true)}>
-                Set up
-              </Button>
-            )}
+      <FormSection header={<h2>Two-factor authentication</h2>}>
+        {props.authenticator_app_enabled ? null : (
+          <Alert variant="info">Use an authenticator app to get verification codes without waiting for an email.</Alert>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="grid gap-2">
+            <div className="font-bold">Authenticator app</div>
+            <FieldsetDescription>Get verification codes from an app on your device.</FieldsetDescription>
           </div>
-          {settingUp && !props.authenticator_app_enabled ? (
-            <AuthenticatorSetup onCancel={() => setSettingUp(false)} />
-          ) : null}
-          {props.authenticator_app_enabled && regeneratedCodes ? (
-            <RecoveryCodes codes={regeneratedCodes} onDone={() => setRegeneratedCodes(null)} />
-          ) : null}
-        </FormSection>
-      ) : null}
+          {props.authenticator_app_enabled ? (
+            <div className="flex shrink-0 gap-2">
+              <Button onClick={handleRegenerateRecoveryCodes} disabled={regenerating || removingAuthenticatorApp}>
+                {regenerating ? "Regenerating..." : "Regenerate recovery codes"}
+              </Button>
+              <Button
+                color="danger"
+                outline
+                onClick={handleRemoveAuthenticatorApp}
+                disabled={removingAuthenticatorApp || regenerating}
+              >
+                {removingAuthenticatorApp ? "Removing..." : "Remove"}
+              </Button>
+            </div>
+          ) : settingUp ? null : (
+            <Button color="accent" onClick={() => setSettingUp(true)}>
+              Set up
+            </Button>
+          )}
+        </div>
+        {settingUp && !props.authenticator_app_enabled ? (
+          <AuthenticatorSetup onCancel={() => setSettingUp(false)} />
+        ) : null}
+        {props.authenticator_app_enabled && regeneratedCodes ? (
+          <RecoveryCodes codes={regeneratedCodes} onDone={() => setRegeneratedCodes(null)} />
+        ) : null}
+      </FormSection>
       {props.show_passkeys_settings ? (
         <FormSection header={<h2>Passkeys</h2>}>
           <PasskeysSection passkeys={props.passkeys} />

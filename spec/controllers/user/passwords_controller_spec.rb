@@ -111,7 +111,6 @@ describe User::PasswordsController, type: :controller, inertia: true do
     context "when the user has authenticator-app two-factor authentication enabled" do
       before do
         @user = create(:user, skip_enabling_two_factor_authentication: false)
-        Feature.activate_user(:authenticator_2fa, @user)
         create(:totp_credential, :confirmed, user: @user)
       end
 

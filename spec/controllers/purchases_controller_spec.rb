@@ -448,6 +448,31 @@ describe PurchasesController, :vcr do
         expect(response.parsed_body[0]["email"]).to eq "bob@exampleabc.com"
       end
 
+      it "does not serialize buyer_presentment or issue presentment queries" do
+        # Audience search serializes up to 100 purchases with as_json(version: 2) but
+        # without the Sales API preloads, so the Sales-API-only buyer_presentment field
+        # must stay out of this path — both the key and its per-purchase presentment
+        # queries. (Refund SUM queries pre-date the field and are asserted elsewhere.)
+        product = create(:product, user: seller)
+        purchase = create(:purchase, email: "bob@exampleabc.com", link: product, seller: product.user)
+        create(:purchase_presentment, purchase:)
+        index_model_records(Purchase)
+
+        presentment_queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          sql = payload[:sql].to_s
+          presentment_queries << sql if sql.include?("purchase_presentments") || sql.include?("charge_presentments")
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get :search, params: { query: "bob" }
+        end
+
+        expect(response.parsed_body.length).to eq 1
+        expect(response.parsed_body[0]).not_to have_key("buyer_presentment")
+        expect(presentment_queries).to be_empty
+      end
+
       it "returns results sorted by score" do
         product = create(:product, user: seller)
         purchases = [

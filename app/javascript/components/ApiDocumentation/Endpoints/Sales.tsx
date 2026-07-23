@@ -194,6 +194,17 @@ export const GetSale = () => (
     "utm_source": "newsletter",
     "utm_medium": "email",
     "utm_campaign": "launch",
+    "buyer_presentment": {
+      "currency": "cad",
+      "price_cents": 1401,
+      "tip_cents": 280,
+      "seller_tax_cents": 175,
+      "gumroad_tax_cents": 0,
+      "shipping_cents": 0,
+      "total_cents": 1856,
+      "fx_rate": "0.7139",
+      "refunded_cents": 0
+    },
     "subscription_duration": "monthly",
     "formatted_display_price": "$10 a month",
     "formatted_total_price": "$10 a month",

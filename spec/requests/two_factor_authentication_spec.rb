@@ -132,7 +132,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
 
   context "when user has TOTP enabled" do
     before do
-      Feature.activate_user(:authenticator_2fa, user)
       create(:totp_credential, :with_recovery_codes, user: user)
     end
 

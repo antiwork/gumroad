@@ -1150,15 +1150,17 @@ describe Purchase::Blockable do
     let(:product) { create(:product, user: seller) }
     let(:purchase) { create(:purchase, link: product) }
 
-    def stub_dispute_stats(settled_count:, disputed_count:)
-      rate = settled_count > 0 ? disputed_count * 100.0 / settled_count : nil
-      allow(seller).to receive(:dispute_rate_stats).and_return({ settled_count:, disputed_count:, rate: })
+    # settled_buyers_count defaults to settled_count (each purchase from a different buyer)
+    # so existing scenarios read the same; the installment trigger case overrides it.
+    def stub_dispute_stats(settled_count:, disputing_buyers_count:, settled_buyers_count: settled_count)
+      rate = settled_buyers_count > 0 ? disputing_buyers_count * 100.0 / settled_buyers_count : nil
+      allow(seller).to receive(:dispute_rate_stats).and_return({ settled_count:, settled_buyers_count:, disputing_buyers_count:, rate: })
     end
 
     context "when the seller already has an enforced refund policy" do
       before do
         seller.update!(refund_policy_enforced: true)
-        stub_dispute_stats(settled_count: 100, disputed_count: 50)
+        stub_dispute_stats(settled_count: 100, disputing_buyers_count: 50)
       end
 
       it "does not create additional comments" do
@@ -1184,7 +1186,7 @@ describe Purchase::Blockable do
 
     context "when the seller has fewer settled purchases than the minimum" do
       before do
-        stub_dispute_stats(settled_count: 24, disputed_count: 10)
+        stub_dispute_stats(settled_count: 24, disputing_buyers_count: 10)
       end
 
       it "does not enforce the refund policy" do
@@ -1200,9 +1202,9 @@ describe Purchase::Blockable do
       end
     end
 
-    context "when the seller has fewer disputes than the minimum" do
+    context "when the seller has fewer disputing buyers than the minimum" do
       before do
-        stub_dispute_stats(settled_count: 100, disputed_count: 2)
+        stub_dispute_stats(settled_count: 100, disputing_buyers_count: 2)
       end
 
       it "does not enforce the refund policy" do
@@ -1212,9 +1214,30 @@ describe Purchase::Blockable do
       end
     end
 
+    context "when one buyer disputes multiple installments of the same purchase" do
+      before do
+        # The trigger case for #6171: a ~250-sale seller with one buyer who disputed both
+        # installments of a course. As raw purchases that was 2 disputes; as unique buyers
+        # it is 1 disputing buyer, which stays under the 3-buyer minimum, so no enforcement.
+        stub_dispute_stats(settled_count: 250, settled_buyers_count: 249, disputing_buyers_count: 1)
+      end
+
+      it "does not enforce the refund policy" do
+        purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+
+        expect(seller.reload.refund_policy_enforced?).to be(false)
+      end
+
+      it "does not create a comment" do
+        expect do
+          purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+        end.to_not change { seller.comments.count }
+      end
+    end
+
     context "when the dispute rate is exactly 1.0%" do
       before do
-        stub_dispute_stats(settled_count: 300, disputed_count: 3)
+        stub_dispute_stats(settled_count: 300, disputing_buyers_count: 3)
       end
 
       it "does not enforce the refund policy" do
@@ -1232,7 +1255,8 @@ describe Purchase::Blockable do
 
     context "when the dispute rate exceeds 1.0%" do
       before do
-        stub_dispute_stats(settled_count: 100, disputed_count: 3)
+        # Three distinct buyers disputed out of 100 unique buyers: 3% > 1%, so enforce.
+        stub_dispute_stats(settled_count: 100, disputing_buyers_count: 3)
       end
 
       it "sets the refund_policy_enforced flag" do
@@ -1246,7 +1270,7 @@ describe Purchase::Blockable do
 
         comment = seller.comments.last
         expect(comment.content).to include("dispute rate 3.0%")
-        expect(comment.content).to include("3 disputes / 100 settled sales")
+        expect(comment.content).to include("3 disputing buyers / 100 unique buyers")
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("enforce_refund_policy_for_seller_based_on_dispute_rate")
       end

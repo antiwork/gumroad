@@ -3,6 +3,37 @@
 class HomeController < ApplicationController
   layout "home"
 
+  # Static marketing pages served on the root domain. Their content doesn't
+  # depend on who is asking, so we let the CDN (Cloudflare) cache them for
+  # anonymous visitors instead of paying a full origin round trip on every
+  # first visit (cold hits on gumroad.com were measured at ~9.7s vs ~25ms of
+  # actual origin work).
+  #
+  # We only mark a response as publicly cacheable when the request carries NO
+  # cookies at all. That condition is deliberate:
+  # - A signed-in visitor always carries the session cookie
+  #   (_gumroad_app_session, see config/initializers/session_store.rb), so
+  #   they bypass the shared cache and keep seeing the "Dashboard" nav instead
+  #   of a cached "Log in" variant.
+  # - A returning anonymous visitor carries _gumroad_guid; they also bypass.
+  # - The remaining population — first-time, cookie-less visitors — is exactly
+  #   the cold-hit traffic we want served from the edge, and for them the
+  #   session is empty so there is nothing user-specific to leak.
+  #
+  # For those cacheable responses we must not emit Set-Cookie (CDNs refuse to
+  # cache, and a shared cache must never capture a visitor's cookies), so we
+  # skip the session write and the _gumroad_guid analytics cookie. Requests
+  # with UTM parameters are excluded because UTM visit tracking
+  # (UtmLinkTracking) needs the _gumroad_guid cookie to exist.
+  #
+  # Note: these headers are advisory until a Cloudflare Cache Rule makes HTML
+  # eligible for caching; without that rule behavior is unchanged in
+  # production.
+  EDGE_CACHEABLE_ACTIONS = %w[about features features_md pricing terms privacy prohibited dpa hackathon saas small_bets].freeze
+
+  prepend_before_action :prepare_edge_cacheable_response, if: :edge_cacheable_request?
+  after_action :set_edge_cache_headers, if: -> { @edge_cacheable_response }
+
   before_action :hide_layouts
 
   def about
@@ -112,5 +143,58 @@ class HomeController < ApplicationController
   private
     def hide_layouts
       @hide_layouts = true
+    end
+
+    def edge_cacheable_request?
+      request.get? && request.cookies.empty? && !user_signed_in? &&
+        EDGE_CACHEABLE_ACTIONS.include?(action_name) &&
+        params.keys.none? { |key| key.start_with?("utm_") }
+    end
+
+    # Runs before ApplicationController's callbacks (prepend_before_action) so
+    # the session is already marked as skipped by the time callbacks like
+    # set_recommender_model_name and set_signup_referrer try to write to it —
+    # otherwise those writes would emit a Set-Cookie and defeat CDN caching.
+    def prepare_edge_cacheable_response
+      @edge_cacheable_response = true
+      request.session_options[:skip] = true
+    end
+
+    # ApplicationController sets a _gumroad_guid analytics cookie for every
+    # visitor that doesn't have one. Skip it on edge-cacheable responses: a
+    # Set-Cookie header prevents CDN caching, and a shared cache must never
+    # hand one visitor's guid to another. The guid gets assigned on the
+    # visitor's first non-marketing-page request instead.
+    def set_gumroad_guid
+      return if @edge_cacheable_response
+
+      super
+    end
+
+    # inertia_rails adds an after_action that writes an XSRF-TOKEN cookie
+    # whenever forgery protection is on. These marketing pages are GET-only —
+    # the footer's follow form already posts without an authenticity token
+    # (it's static HTML) and relies on the app's null-session forgery
+    # strategy — so on edge-cacheable responses we turn forgery protection
+    # off to keep the response cookie-free. A per-visitor CSRF token baked
+    # into shared cached HTML would be useless anyway: every visitor would
+    # receive the same token.
+    def protect_against_forgery?
+      return false if @edge_cacheable_response
+
+      super
+    end
+
+    def set_edge_cache_headers
+      return unless response.status == 200
+      # Belt and braces: if anything still wrote a cookie, keep the default
+      # private cache behavior rather than letting a shared cache store it.
+      return if response.headers["Set-Cookie"].present?
+
+      # Browsers revalidate after 60s; the CDN keeps a copy for 5 minutes
+      # (s-maxage) and may serve it stale for up to an hour while it refetches
+      # in the background (stale-while-revalidate). Rails serializes this as:
+      # "max-age=60, public, stale-while-revalidate=3600, s-maxage=300".
+      expires_in 1.minute, public: true, "s-maxage": 5.minutes, stale_while_revalidate: 1.hour
     end
 end

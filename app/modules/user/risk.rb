@@ -11,30 +11,52 @@ module User::Risk
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
 
   # Thresholds for automatically forcing a buyer-friendly refund policy on a seller.
-  # The dispute rate here is a COUNT rate (disputed purchases / settled purchases), not a
-  # dollar-volume rate: a seller stonewalling many small refund requests shows up in counts.
+  # The dispute rate here is a rate of UNIQUE BUYERS (buyers with a standing chargeback /
+  # buyers with settled purchases), not raw purchase counts and not dollar volume. It answers
+  # "what share of your customers dispute you?" — so one unhappy buyer who disputes both
+  # installments of the same course still counts once. Counting raw purchases previously let
+  # a single buyer's two installment disputes tip a ~250-sale seller over the line (#6171).
   MAX_DISPUTE_COUNT_RATE_ALLOWED_FOR_CUSTOM_REFUND_POLICY = 1.0
-  # Volume gates so a single unlucky dispute on a brand-new account doesn't trigger enforcement.
+  # Volume gates so a single unlucky dispute on a brand-new account doesn't trigger
+  # enforcement. The settled-purchases gate stays purchase-based (it measures sales volume);
+  # the disputes gate counts distinct disputing buyers (it measures how many separate
+  # customers went to their bank).
   MIN_SETTLED_PURCHASES_FOR_REFUND_POLICY_ENFORCEMENT = 25
-  MIN_DISPUTES_FOR_REFUND_POLICY_ENFORCEMENT = 3
+  MIN_DISPUTING_BUYERS_FOR_REFUND_POLICY_ENFORCEMENT = 3
   # When enforcement bumps a "No refunds allowed" policy, this is the period it becomes.
   ENFORCED_MIN_REFUND_PERIOD_IN_DAYS = 30
 
   REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR = "enforce_refund_policy_for_seller_based_on_dispute_rate"
 
-  # Lifetime dispute stats by COUNT (not dollar volume). Used to decide whether to
-  # auto-enforce a buyer-friendly refund policy on the seller — see
+  # Lifetime dispute stats by UNIQUE BUYER (not raw purchases, not dollar volume). Used to
+  # decide whether to auto-enforce a buyer-friendly refund policy on the seller — see
   # Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!.
-  # A dispute counts only while it stands: reversed (won) chargebacks are excluded,
-  # matching how #lost_chargebacks measures the rate.
+  #
+  # Buyers are keyed by the purchase email, which exists on every purchase (guest checkouts
+  # included), so a buyer disputing several installments, subscription cycles, or cart items
+  # counts once. A dispute counts only while it stands: reversed (won) chargebacks are
+  # excluded, matching how #lost_chargebacks measures the rate.
+  #
+  # settled_count (raw purchases) is still returned because the enforcement volume gate
+  # (MIN_SETTLED_PURCHASES_FOR_REFUND_POLICY_ENFORCEMENT) measures sales volume, which is
+  # inherently a purchase count.
   def dispute_rate_stats
+    # purchases.email has no database-level NOT NULL constraint, so legacy or
+    # validation-bypassing rows can carry a NULL email. COUNT(DISTINCT email) would
+    # silently drop those rows from both the numerator and the denominator. An unknown
+    # buyer can't be de-duplicated, so each null-email purchase falls back to counting
+    # as its own buyer (keyed by the purchase id).
+    buyer_key = Arel.sql("COALESCE(purchases.email, CONCAT('missing-email-', purchases.id))")
+
     settled_count = sales.successful.count
-    disputed_count = sales.successful
-                          .where.not(chargeback_date: nil)
-                          .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
-                          .count
-    rate = settled_count > 0 ? disputed_count * 100.0 / settled_count : nil
-    { settled_count:, disputed_count:, rate: }
+    settled_buyers_count = sales.successful.distinct.count(buyer_key)
+    disputing_buyers_count = sales.successful
+                                  .where.not(chargeback_date: nil)
+                                  .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
+                                  .distinct
+                                  .count(buyer_key)
+    rate = settled_buyers_count > 0 ? disputing_buyers_count * 100.0 / settled_buyers_count : nil
+    { settled_count:, settled_buyers_count:, disputing_buyers_count:, rate: }
   end
 
   def enable_refunds!

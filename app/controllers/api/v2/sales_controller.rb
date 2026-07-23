@@ -14,6 +14,10 @@ class Api::V2::SalesController < Api::V2::BaseController
     :subscription,
     :tip,
     :utm_link,
+    # buyer_presentment fields (v2): presentment row + its charge_presentment (fx_rate)
+    # and refunds (in-memory presentment refunded sum) — avoids per-sale queries.
+    :refunds,
+    { purchase_presentment: :charge_presentment },
     { order: { cart: { sent_abandoned_cart_emails: :installment } } },
   ].freeze
 
@@ -58,9 +62,9 @@ class Api::V2::SalesController < Api::V2::BaseController
           has_next_page = paginated_sales.size > RESULTS_PER_PAGE
           paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
           if has_next_page
-            success_with_object(:sales, paginated_sales.as_json(version: 2), pagination_info(paginated_sales.last))
+            success_with_object(:sales, paginated_sales.as_json(version: 2, include_buyer_presentment: true), pagination_info(paginated_sales.last))
           else
-            success_with_object(:sales, paginated_sales.as_json(version: 2))
+            success_with_object(:sales, paginated_sales.as_json(version: 2, include_buyer_presentment: true))
           end
         end
       rescue WithMaxExecutionTime::QueryTimeoutError
@@ -96,7 +100,7 @@ class Api::V2::SalesController < Api::V2::BaseController
         has_next_page = paginated_sales.size > RESULTS_PER_PAGE
         paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
         additional_response = has_next_page ? pagination_info(paginated_sales.last) : {}
-        success_with_object(:sales, paginated_sales.as_json(version: 2), additional_response)
+        success_with_object(:sales, paginated_sales.as_json(version: 2, include_buyer_presentment: true), additional_response)
       end
     rescue WithMaxExecutionTime::QueryTimeoutError
       error_400("Query timed out. Try narrowing your date range with 'after'/'before' or filtering by product_id.")
@@ -105,7 +109,7 @@ class Api::V2::SalesController < Api::V2::BaseController
 
   def show
     purchase = current_resource_owner.sales.find_by_external_id(params[:id])
-    purchase ? success_with_sale(purchase.as_json(version: 2)) : error_with_sale
+    purchase ? success_with_sale(purchase.as_json(version: 2, include_buyer_presentment: true)) : error_with_sale
   end
 
   def export
@@ -142,7 +146,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     shipment.mark_shipped
-    success_with_sale(purchase.as_json(version: 2))
+    success_with_sale(purchase.as_json(version: 2, include_buyer_presentment: true))
   end
 
   def refund
@@ -157,7 +161,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     amount = params[:amount_cents].to_i / unit_scaling_factor(purchase.displayed_price_currency_type).to_f if params[:amount_cents].present?
 
     if purchase.refund!(refunding_user_id: current_resource_owner.id, amount:)
-      success_with_sale(purchase.as_json(version: 2))
+      success_with_sale(purchase.as_json(version: 2, include_buyer_presentment: true))
     else
       error_with_sale(purchase)
     end
