@@ -40,7 +40,12 @@ end
 
 def create_mobile_purchase(seller:, buyer:, product:)
   existing = Purchase.find_by(link_id: product.id, purchaser_id: buyer.id, purchase_state: "successful")
-  return existing if existing.present?
+  if existing.present?
+    # Databases seeded before url redirects were added here need the redirect backfilled,
+    # otherwise the mobile purchase page has no content to render.
+    existing.create_url_redirect! if existing.url_redirect.blank?
+    return existing
+  end
 
   purchase = Purchase.new(
     link_id: product.id,
