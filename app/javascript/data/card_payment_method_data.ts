@@ -109,7 +109,10 @@ export const paymentElementBillingDetailsCollection = (
 // tax-location logic in checkout (the wallet sheet is the buyer's source of truth for wallet
 // payments), and the wallet type is reported to the server for analytics.
 type WalletPaymentMethodPayload = {
-  billing_details?: { address?: { country: string | null; postal_code: string | null; state: string | null } | null };
+  billing_details?: {
+    name?: string | null;
+    address?: { country: string | null; postal_code: string | null; state: string | null } | null;
+  };
   card?: { wallet?: Record<string, unknown> | null } | null;
 };
 const walletPaymentMethodDetails = (paymentMethod: WalletPaymentMethodPayload): WalletPaymentMethodDetails | null => {
@@ -143,6 +146,13 @@ const elementCollectedBillingAddress = (
   const address = paymentMethod.billing_details?.address;
   return address ? { country: address.country, postal_code: address.postal_code, state: address.state } : null;
 };
+
+// Checkout hides its own Full name field in element-full mode, so preserve the name Stripe
+// collected in the pane for Gumroad's purchase record.
+const elementCollectedBillingFullName = (
+  collection: PaymentElementBillingDetailsCollection,
+  paymentMethod: WalletPaymentMethodPayload,
+): string | null => (collection === "element-full" ? (paymentMethod.billing_details?.name ?? null) : null);
 
 type PaymentElementBillingDetailsData = Pick<
   PaymentElementCardData,
@@ -220,6 +230,10 @@ export const preparePaymentElementPaymentMethodData = async (
     cardData.billingDetailsCollection,
     paymentMethodResult.paymentMethod,
   );
+  const elementBillingFullName = elementCollectedBillingFullName(
+    cardData.billingDetailsCollection,
+    paymentMethodResult.paymentMethod,
+  );
   return {
     ...cardPaymentMethodParams(paymentMethodResult.paymentMethod),
     // When a wallet paid, surface its type and billing address so checkout can update the tax
@@ -227,11 +241,11 @@ export const preparePaymentElementPaymentMethodData = async (
     // The key is omitted entirely for card payments so the params object — which callers
     // spread into server requests (see prepareFutureCharges) — is unchanged for them.
     ...(walletDetails ? { wallet: walletDetails } : {}),
-    // Same for the address the element's own pane collected ("element-full" — UPI on digital
-    // carts): surface it so the server-confirm lane can update checkout's tax location and run
-    // the held-payment total check, exactly like the client-confirm lane does with the
-    // ConfirmationToken preview's address.
+    // Same for the address and name the element's own pane collected ("element-full" — UPI on
+    // digital carts): surface them so the server-confirm lane can update checkout's tax
+    // location, preserve the purchase name, and run the held-payment total check.
     ...(elementBillingAddress ? { elementBillingAddress } : {}),
+    ...(elementBillingFullName ? { elementBillingFullName } : {}),
   };
 };
 
@@ -241,11 +255,10 @@ export type PaymentElementConfirmationTokenResult =
       confirmationTokenId: string;
       cardCountry: string | null;
       wallet: WalletPaymentMethodDetails | null;
-      // The billing address the buyer typed into the element's pane when the element collected
-      // the full billing details itself ("element-full" — UPI on digital carts); null otherwise.
-      // Checkout adopts it as the tax location, same as a wallet's billing address (see the
-      // client-confirm submit effect in PaymentForm.tsx).
+      // The address and name the buyer typed into the element's pane when it collected the full
+      // billing details itself ("element-full" — UPI on digital carts); null otherwise.
       elementBillingAddress: ElementCollectedBillingAddress | null;
+      elementBillingFullName: string | null;
     }
   | StripeErrorParams;
 
@@ -281,6 +294,10 @@ export const createPaymentElementConfirmationToken = async (
     cardCountry: result.confirmationToken.payment_method_preview.card?.country ?? null,
     wallet: walletPaymentMethodDetails(result.confirmationToken.payment_method_preview),
     elementBillingAddress: elementCollectedBillingAddress(
+      cardData.billingDetailsCollection,
+      result.confirmationToken.payment_method_preview,
+    ),
+    elementBillingFullName: elementCollectedBillingFullName(
       cardData.billingDetailsCollection,
       result.confirmationToken.payment_method_preview,
     ),
@@ -355,11 +372,16 @@ export const prepareFutureCharges = async <
 >(
   data: PrepareFutureChargesRequest<CardParams>,
 ): Promise<PrepareFutureChargesResponse<CardParams>> => {
-  // The wallet details and element-collected billing address on the card params are client-side
-  // context (checkout tax location and the wallet_type reported with the purchase) — the
+  // The wallet details and element-collected billing details on the card params are client-side
+  // context (checkout's buyer/tax details and the wallet_type reported with the purchase). The
   // setup-intent endpoint has no contract for them, so keep them out of the request body while
-  // preserving them on the returned reusable params, which the purchase submission still needs.
-  const { wallet: _wallet, elementBillingAddress: _elementBillingAddress, ...setupIntentCardParams } = data.cardParams;
+  // preserving them on the returned reusable params, which purchase submission still needs.
+  const {
+    wallet: _wallet,
+    elementBillingAddress: _elementBillingAddress,
+    elementBillingFullName: _elementBillingFullName,
+    ...setupIntentCardParams
+  } = data.cardParams;
   const response = await request({
     method: "POST",
     url: Routes.stripe_setup_intents_path(),

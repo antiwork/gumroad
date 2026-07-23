@@ -5,8 +5,9 @@ import {
   serializeCardParamsIntoQueryParamsObject,
 } from "$app/data/payment_method_params";
 
-// Regression test for the element-full UPI checkout: `wallet` and `elementBillingAddress` are
-// client-side checkout context (tax location and the wallet type reported with the purchase).
+// Regression test for the element-full UPI checkout: `wallet`, `elementBillingAddress`, and
+// `elementBillingFullName` are client-side checkout context (buyer/tax details and the wallet
+// type reported with the purchase).
 // The account and subscription endpoints fed by this serializer have no contract for them, and
 // a nested unknown object fails their parameter validation — so the serializer must strip them.
 describe("serializeCardParamsIntoQueryParamsObject", () => {
@@ -19,15 +20,17 @@ describe("serializeCardParamsIntoQueryParamsObject", () => {
     card_country_source: "stripe",
   };
 
-  it("strips client-only wallet and elementBillingAddress fields from card params", () => {
+  it("strips client-only wallet and element billing fields from card params", () => {
     const serialized = serializeCardParamsIntoQueryParamsObject({
       ...baseCardParams,
       wallet: { type: "apple_pay", billingAddress: { country: "US", postal_code: "10001", state: "NY" } },
       elementBillingAddress: { country: "IN", postal_code: "560001", state: "KA" },
+      elementBillingFullName: "UPI Buyer",
     });
 
     expect(serialized).not.toHaveProperty("wallet");
     expect(serialized).not.toHaveProperty("elementBillingAddress");
+    expect(serialized).not.toHaveProperty("elementBillingFullName");
     expect(serialized).not.toHaveProperty("status");
     expect(serialized).not.toHaveProperty("type");
     expect(serialized).not.toHaveProperty("reusable");

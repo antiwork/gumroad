@@ -37,6 +37,9 @@ export type CardPaymentMethodParams = {
   // Present only when the element collected the full billing details itself ("element-full" —
   // UPI on digital carts). Omitted otherwise, for the same spread-safety reason as `wallet`.
   elementBillingAddress?: ElementCollectedBillingAddress;
+  // The full name collected alongside elementBillingAddress. Checkout's own name field is
+  // hidden in element-full mode, so this value must be adopted before creating the purchase.
+  elementBillingFullName?: string;
 };
 export type PaymentRequestPaymentMethodParams = {
   wallet_type: string;
@@ -44,6 +47,7 @@ export type PaymentRequestPaymentMethodParams = {
   // key as always-undefined lets code handle the union of both param shapes type-safely.
   wallet?: undefined;
   elementBillingAddress?: undefined;
+  elementBillingFullName?: undefined;
   status: "success";
   type: "payment-request";
   reusable: false;
@@ -60,11 +64,12 @@ export type PayPalNativePaymentMethodParams = {
   paypal_order_id: string;
   visual: string;
   card_country: string;
-  // PayPal params never carry Payment Element wallet details or an element-collected billing
-  // address; declaring the keys as always-undefined lets serializeCardParamsIntoQueryParamsObject
+  // PayPal params never carry Payment Element wallet details or element-collected billing
+  // details; declaring the keys as always-undefined lets serializeCardParamsIntoQueryParamsObject
   // strip them from the whole AnyPaymentMethodParams union type-safely.
   wallet?: undefined;
   elementBillingAddress?: undefined;
+  elementBillingFullName?: undefined;
 };
 
 export type ReusableCardPaymentMethodParams = { stripe_customer_id: string; stripe_setup_intent_id: string } & Omit<
@@ -88,6 +93,7 @@ export type ReusablePayPalBraintreePaymentMethodParams = {
   // Same as PayPalNativePaymentMethodParams above: never present, declared for union safety.
   wallet?: undefined;
   elementBillingAddress?: undefined;
+  elementBillingFullName?: undefined;
 };
 export type ReusablePayPalNativePaymentMethodParams = {
   status: "success";
@@ -100,6 +106,7 @@ export type ReusablePayPalNativePaymentMethodParams = {
   // Same as PayPalNativePaymentMethodParams above: never present, declared for union safety.
   wallet?: undefined;
   elementBillingAddress?: undefined;
+  elementBillingFullName?: undefined;
 };
 
 export type AnyPayPalMethodParams =
@@ -127,11 +134,18 @@ export const serializeCardParamsIntoQueryParamsObject = (
     const { status: _, ...rest } = cardParams;
     return rest;
   }
-  // `wallet` and `elementBillingAddress` are client-side checkout context (tax location and the
-  // wallet type reported with the purchase) — the account and subscription endpoints this
-  // serializer feeds have no contract for them, and a nested unknown object fails their
-  // parameter validation. The purchase path reads them explicitly off the params object instead
-  // of going through this serializer, so dropping them here loses nothing.
-  const { status: _, type: __, reusable: ___, wallet: ____, elementBillingAddress: _____, ...rest } = cardParams;
+  // The wallet and element-collected fields are client-side checkout context (tax location,
+  // purchase name, and the wallet type reported with the purchase). The account and subscription
+  // endpoints this serializer feeds have no contract for them, so strip them before sending the
+  // request. The purchase path reads the values it needs explicitly.
+  const {
+    status: _,
+    type: __,
+    reusable: ___,
+    wallet: ____,
+    elementBillingAddress: _____,
+    elementBillingFullName: ______,
+    ...rest
+  } = cardParams;
   return rest;
 };

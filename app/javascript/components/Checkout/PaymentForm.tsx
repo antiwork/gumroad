@@ -880,13 +880,13 @@ const CreditCardContent = ({
             return;
           }
         }
-        // The element's own pane collected the full billing details (UPI on digital carts):
-        // adopt the address the buyer typed there as checkout's tax location, exactly like a
-        // wallet's billing address above — checkout's country field is hidden for these
-        // selections, so the pane is the buyer's only (and authoritative) address input. The
-        // same held-submission rule applies: a tax-location change invalidates the surcharges
-        // quote, so the tokenized payment waits for the reload and only proceeds if the total
-        // the buyer saw still matches.
+        // Checkout hides its Full name field when the element collects UPI's billing details,
+        // so adopt the pane's value before the purchase payload reads state.fullName.
+        if (tokenResult.elementBillingFullName) {
+          dispatch({ type: "set-value", fullName: tokenResult.elementBillingFullName });
+        }
+        // Adopt the pane's address as checkout's tax location too. The same held-submission rule
+        // applies when it changes the tax location.
         if (tokenResult.elementBillingAddress && !hasShipping(state)) {
           const taxLocationChanged = applyWalletBillingAddressToCheckout(
             tokenResult.elementBillingAddress,
@@ -983,14 +983,19 @@ const CreditCardContent = ({
           return;
         }
       }
-      // The element's own pane collected the full billing details (server-confirm lane,
-      // "element-full" — UPI on digital carts): adopt the address the buyer typed there as
-      // checkout's tax location, mirroring both the wallet block above and the client-confirm
-      // element-full block earlier. Checkout's country/ZIP fields are hidden for these
-      // selections, so without this the purchase would proceed on the stale GeoIP tax location.
-      // The same held-submission rule applies: a tax-location change invalidates the surcharges
-      // quote, so the tokenized payment waits for the reload and only proceeds if the total the
-      // buyer saw still matches.
+      // Preserve the name collected in the UPI pane in this server-confirm lane too. Checkout's
+      // own Full name field was hidden, so state.fullName would otherwise be blank or stale.
+      if (
+        paymentMethod.type === "new" &&
+        paymentMethod.cardParamsResult.type === "cc" &&
+        paymentMethod.cardParamsResult.cardParams.elementBillingFullName
+      ) {
+        dispatch({
+          type: "set-value",
+          fullName: paymentMethod.cardParamsResult.cardParams.elementBillingFullName,
+        });
+      }
+      // Adopt the pane-collected address for tax calculation, matching the client-confirm lane.
       if (
         paymentMethod.type === "new" &&
         paymentMethod.cardParamsResult.type === "cc" &&

@@ -213,14 +213,17 @@ describe("element-collected billing details (wallets, UPI)", () => {
     });
   });
 
-  it("createPaymentElementConfirmationToken reports the pane-collected billing address for element-full collection (UPI)", async () => {
+  it("createPaymentElementConfirmationToken reports the pane-collected billing details for element-full collection (UPI)", async () => {
     const { stripe, elements } = buildStripeFixture();
     stripe.createConfirmationToken = vi.fn().mockResolvedValue({
       confirmationToken: {
         id: "ctoken_upi",
         payment_method_preview: {
           type: "upi",
-          billing_details: { address: { country: "IN", postal_code: "560001", state: "KA" } },
+          billing_details: {
+            name: "UPI Buyer",
+            address: { country: "IN", postal_code: "560001", state: "KA" },
+          },
         },
       },
     });
@@ -230,15 +233,16 @@ describe("element-collected billing details (wallets, UPI)", () => {
       billingDetailsCollection: "element-full",
     });
 
-    // Checkout adopts this address as the tax location (its own country field is hidden for
-    // the selection), mirroring the wallet billing-address path.
+    // Checkout adopts both values because its own name and country fields are hidden for the
+    // selection. The name reaches purchase.full_name and the address becomes the tax location.
     expect(result).toMatchObject({
       status: "success",
       elementBillingAddress: { country: "IN", postal_code: "560001", state: "KA" },
+      elementBillingFullName: "UPI Buyer",
     });
   });
 
-  it("createPaymentElementConfirmationToken reports no element billing address for form collection", async () => {
+  it("createPaymentElementConfirmationToken reports no element billing details for form collection", async () => {
     const { stripe, elements } = buildStripeFixture();
 
     const result = await createPaymentElementConfirmationToken(walletCardData(stripe, elements));
@@ -246,16 +250,23 @@ describe("element-collected billing details (wallets, UPI)", () => {
     // Wallet/card/form selections keep their existing tax-location sources (the wallet details
     // path and checkout's own form respectively) — the element-address adoption is exclusive
     // to element-full.
-    expect(result).toMatchObject({ status: "success", elementBillingAddress: null });
+    expect(result).toMatchObject({
+      status: "success",
+      elementBillingAddress: null,
+      elementBillingFullName: null,
+    });
   });
 
-  it("preparePaymentElementPaymentMethodData surfaces the pane-collected billing address for element-full collection (UPI, server-confirm)", async () => {
+  it("preparePaymentElementPaymentMethodData surfaces the pane-collected billing details for element-full collection (UPI, server-confirm)", async () => {
     const { stripe, elements } = buildStripeFixture();
     stripe.createPaymentMethod = vi.fn().mockResolvedValue({
       paymentMethod: {
         id: "pm_upi",
         type: "upi",
-        billing_details: { address: { country: "IN", postal_code: "560001", state: "KA" } },
+        billing_details: {
+          name: "UPI Buyer",
+          address: { country: "IN", postal_code: "560001", state: "KA" },
+        },
       },
     });
 
@@ -264,16 +275,17 @@ describe("element-collected billing details (wallets, UPI)", () => {
       billingDetailsCollection: "element-full",
     });
 
-    // The server-confirm lane must adopt the element's pane address as checkout's tax location
-    // too — otherwise the purchase would proceed on the stale GeoIP location, since checkout's
-    // own country/ZIP fields are hidden for this selection.
+    // The server-confirm lane must adopt the pane's name and address too. Otherwise the purchase
+    // would lose its full_name and proceed on the stale GeoIP location because checkout hides
+    // its own fields for this selection.
     expect(result).toMatchObject({
       status: "success",
       elementBillingAddress: { country: "IN", postal_code: "560001", state: "KA" },
+      elementBillingFullName: "UPI Buyer",
     });
   });
 
-  it("preparePaymentElementPaymentMethodData omits elementBillingAddress outside element-full collection", async () => {
+  it("preparePaymentElementPaymentMethodData omits element billing details outside element-full collection", async () => {
     const { stripe, elements } = buildStripeFixture();
 
     const result = await preparePaymentElementPaymentMethodData({
@@ -285,6 +297,7 @@ describe("element-collected billing details (wallets, UPI)", () => {
     // Omitted entirely (never null) so spreading these params into server requests stays
     // unchanged for card payments — same contract as the `wallet` key.
     expect("elementBillingAddress" in result).toBe(false);
+    expect("elementBillingFullName" in result).toBe(false);
   });
 
   it("createPaymentElementConfirmationToken passes the checkout form's billing details for card payments", async () => {

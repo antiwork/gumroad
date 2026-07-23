@@ -46,6 +46,7 @@ describe("createPaymentElementConfirmationToken", () => {
       cardCountry: "US",
       wallet: null,
       elementBillingAddress: null,
+      elementBillingFullName: null,
     });
   });
 
@@ -64,6 +65,7 @@ describe("createPaymentElementConfirmationToken", () => {
       cardCountry: null,
       wallet: null,
       elementBillingAddress: null,
+      elementBillingFullName: null,
     });
   });
 
@@ -92,6 +94,7 @@ describe("createPaymentElementConfirmationToken", () => {
       cardCountry: "CA",
       wallet: { type: "apple_pay", billingAddress: { country: "CA", postal_code: "H2X 1Y4", state: "QC" } },
       elementBillingAddress: null,
+      elementBillingFullName: null,
     });
   });
 
@@ -123,6 +126,7 @@ describe("createPaymentElementConfirmationToken", () => {
       cardCountry: "US",
       wallet: null,
       elementBillingAddress: null,
+      elementBillingFullName: null,
     });
   });
 
