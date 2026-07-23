@@ -729,9 +729,12 @@ describe Checkout::StripePaymentPresenter do
 
   describe "method-forced test-mode QA surface (iDEAL/Bancontact)" do
     let(:platform_merchant_account) do
-      # CI databases don't always seed the Gumroad-managed Stripe platform account, so
-      # create it when the lookup comes back empty (same pattern as buyer_currency_quote_spec).
-      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      # CI databases don't always seed the Gumroad-managed Stripe platform account. Make
+      # an existing seed match this test's USD-holding premise too, so its result does not
+      # depend on how another suite configured that shared account.
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
+        account.update!(charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
+      end ||
         create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
     end
 
