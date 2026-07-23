@@ -52,7 +52,6 @@ import {
 import { Receipt } from "$app/components/Checkout/Receipt";
 import { TemporaryLibrary } from "$app/components/Checkout/TemporaryLibrary";
 import { type OfferedUpsell, UpsellModal } from "$app/components/Checkout/UpsellModal";
-import { useFeatureFlags } from "$app/components/FeatureFlags";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { computeOptionPrice } from "$app/components/Product/ConfigurationSelector";
@@ -169,7 +168,6 @@ const CheckoutIndexPage = () => {
     for (const seller of initialCheckout.sellersToTrack) startTrackingForSeller(seller.id, seller.analytics);
     for (const event of initialCheckout.beginCheckoutEvents) trackProductEvent(event.seller_id, event);
   });
-  const { require_email_typo_acknowledgment } = useFeatureFlags();
   const reducer = createReducer({
     country,
     email,
@@ -187,7 +185,9 @@ const CheckoutIndexPage = () => {
     recaptchaScoreBased: recaptcha_score_based,
     paypalClientId: paypal_client_id,
     gift,
-    requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,
+    // Always on since the require_email_typo_acknowledgment rollout flag was removed
+    // (100% enabled in production since 2025-08; see gumroad-private#1208).
+    requireEmailTypoAcknowledgment: true,
     checkoutPayment: checkout_payment,
   });
   const [state, dispatch] = reducer;
