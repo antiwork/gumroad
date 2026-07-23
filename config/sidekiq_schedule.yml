@@ -110,6 +110,11 @@ create_missing_purchase_events_worker: # Duration: 2sec
   cron: "5 10 * * *" # UTC 10:05
   class: CreateMissingPurchaseEventsWorker
   description: Creates yesterday's missing purchase events
+stale_transient_suppression_sweep:
+  cron: "30 4 * * *" # UTC 04:30 — quiet window, off the payout/report hours
+  class: StaleTransientSuppressionSweepJob
+  queue: low
+  description: Clears stale TRANSIENT SendGrid bounce/block suppressions for users active since the failure (bounded, logged; never touches spam reports or unsubscribes)
 purge_old_deleted_asset_previews: # Duration: 1min
   cron: "30 10 * * *" # UTC 10:30
   class: PurgeOldDeletedAssetPreviewsWorker
