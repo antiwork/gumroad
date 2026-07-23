@@ -34,15 +34,28 @@ class CreatorAnalytics::HourlySalesCurve
   def cumulative_fractions
     # Rails.cache.fetch treats a stored nil as a miss, so wrap the result in a hash to
     # also cache the "no stable curve" answer instead of recomputing it every load.
-    # Key is versioned so entries computed under an older formula are never reused:
-    # v2 netted out partial refunds, v3 restricts to live products.
-    Rails.cache.fetch("creator_analytics/hourly_sales_curve/v3/#{seller.id}", expires_in: CACHE_EXPIRES_IN) do
+    Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRES_IN) do
       { curve: compute }
     end[:curve]
   end
 
   private
     attr_reader :seller
+
+    # Key is versioned so entries computed under an older formula are never reused:
+    # v2 netted out partial refunds, v3 restricts to live products.
+    #
+    # The curve is computed over live products only, so if a product is deleted,
+    # banned, disabled, or restored after an entry is cached, the chart immediately
+    # reflects the new live-product set while a plain per-seller key would keep
+    # serving a curve built from the old set for up to CACHE_EXPIRES_IN. Folding a
+    # fingerprint of the live-product ids into the key makes any lifecycle change
+    # invalidate the entry on the next load instead (stale entries are never read
+    # again and simply age out).
+    def cache_key
+      live_product_ids = seller.links.alive.ids.sort
+      "creator_analytics/hourly_sales_curve/v3/#{seller.id}/#{Digest::SHA256.hexdigest(live_product_ids.join(','))}"
+    end
 
     def compute
       time_zone = ActiveSupport::TimeZone.new(seller.timezone_id)

@@ -140,7 +140,31 @@ describe CreatorAnalytics::HourlySalesCurve do
 
     it "caches a nil result for sellers without enough history" do
       expect(service.cumulative_fractions).to be_nil
-      expect(Rails.cache.exist?("creator_analytics/hourly_sales_curve/v3/#{seller.id}")).to be(true)
+      digest = Digest::SHA256.hexdigest(seller.links.alive.ids.sort.join(","))
+      expect(Rails.cache.exist?("creator_analytics/hourly_sales_curve/v3/#{seller.id}/#{digest}")).to be(true)
+    end
+
+    it "recomputes immediately when the live-product set changes" do
+      # The chart reflects a product deletion (or restore) on the next load, so a
+      # cached curve built from the old live-product set must not be served for the
+      # rest of the cache window — the population fingerprint in the key invalidates it.
+      other_product = create(:product, user: seller, price_cents: 100)
+      described_class::MINIMUM_DAYS_WITH_SALES.times do |i|
+        create_sale(days_ago: i + 1, hour: 9)
+      end
+      created_at = (ActiveSupport::TimeZone.new(seller.timezone_id).now.beginning_of_day - 1.day) + 15.hours
+      other_sale = build(:purchase, link: other_product, seller:, price_cents: 700, created_at:)
+      other_sale.save!(validate: false)
+
+      curve_with_both = service.cumulative_fractions
+      expect(curve_with_both[9]).to eq(0.5) # $7 of $14 by end of hour 9
+
+      other_product.update!(deleted_at: Time.current)
+      curve_after_delete = described_class.new(seller:).cumulative_fractions
+      expect(curve_after_delete[9]).to eq(1.0) # the deleted product's sales no longer shape the curve
+
+      other_product.update!(deleted_at: nil)
+      expect(described_class.new(seller:).cumulative_fractions).to eq(curve_with_both)
     end
   end
 end
