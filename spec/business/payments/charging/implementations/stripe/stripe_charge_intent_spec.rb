@@ -193,6 +193,7 @@ describe StripeChargeIntent, :vcr do
     context "when next action type is a browser-handled redirect (iDEAL/Klarna abandoned on the provider's site)" do
       before do
         allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna]
       end
 
       it "does not notify error tracker" do
@@ -202,6 +203,17 @@ describe StripeChargeIntent, :vcr do
 
       it "does not report the action as supported by the server-driven flow" do
         expect(described_class.new(payment_intent: processor_payment_intent).requires_action?).to eq(false)
+      end
+    end
+
+    context "when next action type is redirect_to_url on an intent without a client-redirect method (no browser owns the redirect)" do
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+      end
+
+      it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
+        described_class.new(payment_intent: processor_payment_intent)
       end
     end
   end

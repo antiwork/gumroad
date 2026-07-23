@@ -105,11 +105,35 @@ describe StripeSetupIntent, :vcr do
 
     context "when next action type is a browser-handled redirect" do
       before do
-        allow(processor_setup_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        # Force the requires_action + redirect_to_url shape directly: a bare SetupIntent.create
+        # (no confirm) sits in requires_confirmation, so the validation under test would
+        # otherwise never run (the check would pass vacuously).
+        allow(processor_setup_intent).to receive_messages(
+          status: StripeIntentStatus::REQUIRES_ACTION,
+          next_action: double(type: "redirect_to_url"),
+          payment_method_types: %w[card klarna]
+        )
       end
 
       it "does not notify error tracker" do
         expect(ErrorNotifier).not_to receive(:notify)
+        described_class.new(processor_setup_intent)
+      end
+    end
+
+    context "when next action type is redirect_to_url on an intent without a client-redirect method (no browser owns the redirect)" do
+      before do
+        # Force the requires_action + redirect_to_url shape directly: a bare SetupIntent.create
+        # (no confirm) sits in requires_confirmation, so the validation under test would
+        # otherwise never run. payment_method_types stays the helper's card-only default.
+        allow(processor_setup_intent).to receive_messages(
+          status: StripeIntentStatus::REQUIRES_ACTION,
+          next_action: double(type: "redirect_to_url")
+        )
+      end
+
+      it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
         described_class.new(processor_setup_intent)
       end
     end
