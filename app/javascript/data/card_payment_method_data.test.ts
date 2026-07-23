@@ -249,6 +249,44 @@ describe("element-collected billing details (wallets, UPI)", () => {
     expect(result).toMatchObject({ status: "success", elementBillingAddress: null });
   });
 
+  it("preparePaymentElementPaymentMethodData surfaces the pane-collected billing address for element-full collection (UPI, server-confirm)", async () => {
+    const { stripe, elements } = buildStripeFixture();
+    stripe.createPaymentMethod = vi.fn().mockResolvedValue({
+      paymentMethod: {
+        id: "pm_upi",
+        type: "upi",
+        billing_details: { address: { country: "IN", postal_code: "560001", state: "KA" } },
+      },
+    });
+
+    const result = await preparePaymentElementPaymentMethodData({
+      ...walletCardData(stripe, elements),
+      billingDetailsCollection: "element-full",
+    });
+
+    // The server-confirm lane must adopt the element's pane address as checkout's tax location
+    // too — otherwise the purchase would proceed on the stale GeoIP location, since checkout's
+    // own country/ZIP fields are hidden for this selection.
+    expect(result).toMatchObject({
+      status: "success",
+      elementBillingAddress: { country: "IN", postal_code: "560001", state: "KA" },
+    });
+  });
+
+  it("preparePaymentElementPaymentMethodData omits elementBillingAddress outside element-full collection", async () => {
+    const { stripe, elements } = buildStripeFixture();
+
+    const result = await preparePaymentElementPaymentMethodData({
+      ...walletCardData(stripe, elements),
+      billingDetailsCollection: "form",
+    });
+
+    expect(result.status).toBe("success");
+    // Omitted entirely (never null) so spreading these params into server requests stays
+    // unchanged for card payments — same contract as the `wallet` key.
+    expect("elementBillingAddress" in result).toBe(false);
+  });
+
   it("createPaymentElementConfirmationToken passes the checkout form's billing details for card payments", async () => {
     const { stripe, elements, createConfirmationToken } = buildStripeFixture();
 

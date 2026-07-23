@@ -986,6 +986,33 @@ const CreditCardContent = ({
           return;
         }
       }
+      // The element's own pane collected the full billing details (server-confirm lane,
+      // "element-full" — UPI on digital carts): adopt the address the buyer typed there as
+      // checkout's tax location, mirroring both the wallet block above and the client-confirm
+      // element-full block earlier. Checkout's country/ZIP fields are hidden for these
+      // selections, so without this the purchase would proceed on the stale GeoIP tax location.
+      // The same held-submission rule applies: a tax-location change invalidates the surcharges
+      // quote, so the tokenized payment waits for the reload and only proceeds if the total the
+      // buyer saw still matches.
+      if (
+        paymentMethod.type === "new" &&
+        paymentMethod.cardParamsResult.type === "cc" &&
+        paymentMethod.cardParamsResult.cardParams.elementBillingAddress &&
+        !hasShipping(state)
+      ) {
+        const taxLocationChanged = applyWalletBillingAddressToCheckout(
+          paymentMethod.cardParamsResult.cardParams.elementBillingAddress,
+          state,
+          dispatch,
+        );
+        if (taxLocationChanged) {
+          heldWalletPaymentRef.current = {
+            paymentMethod,
+            approvedAmount: getStripePaymentElementAmount(state),
+          };
+          return;
+        }
+      }
       dispatch({ type: "set-payment-method", paymentMethod });
     })().catch(fail);
   }, [paymentElementReady, state.status.type, usesPaymentElement]);

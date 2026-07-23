@@ -13,6 +13,17 @@ export type WalletPaymentMethodDetails = {
   } | null;
 };
 
+// The billing address the buyer typed into the Payment Element's own pane when the element
+// collected the full billing details itself ("element-full" collection mode — UPI on digital
+// carts). Checkout adopts it as the tax location, exactly like a wallet's billing address:
+// checkout's own country/ZIP fields are hidden for these selections, so the pane is the buyer's
+// only (and authoritative) address input.
+export type ElementCollectedBillingAddress = {
+  country: string | null;
+  postal_code: string | null;
+  state: string | null;
+};
+
 export type CardPaymentMethodParams = {
   status: "success";
   type: "card";
@@ -23,12 +34,16 @@ export type CardPaymentMethodParams = {
   // Present only when the buyer paid with a wallet through the Payment Element. Omitted (never
   // null) for card payments so spreading these params into server requests stays unchanged.
   wallet?: WalletPaymentMethodDetails;
+  // Present only when the element collected the full billing details itself ("element-full" —
+  // UPI on digital carts). Omitted otherwise, for the same spread-safety reason as `wallet`.
+  elementBillingAddress?: ElementCollectedBillingAddress;
 };
 export type PaymentRequestPaymentMethodParams = {
   wallet_type: string;
   // Payment Request Button params never carry Payment Element wallet details; declaring the
   // key as always-undefined lets code handle the union of both param shapes type-safely.
   wallet?: undefined;
+  elementBillingAddress?: undefined;
   status: "success";
   type: "payment-request";
   reusable: false;
