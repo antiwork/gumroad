@@ -266,10 +266,16 @@ class Checkout::PaymentMethodResolver
       end
       return [] if methods_for_cart_currency.empty?
 
-      # The prepare-time eligibility check rejects a forced-currency intent when Stripe
-      # has already shown that this account does not settle the currency to canonical USD.
-      # Remove the method before mounting the Element too; otherwise checkout advertises
-      # iDEAL/Bancontact and then fails generically after the buyer selects it.
+      # The prepare-time eligibility check rejects a forced-currency intent when the
+      # account doesn't HOLD USD (stored-currency check). Mirror only that half here.
+      # Deliberately NOT the marker-aware usd_settling_merchant_account?: the methods
+      # this resolver offers are always the direct-listed-amount shape (single item
+      # priced in the forced currency — the select above), which charges the listed
+      # price with no FX quote, so the learned mismatch marker is irrelevant to them.
+      # Gating on the marker here is what made iDEAL disappear platform-wide on
+      # 2026-07-23: enabling the iDEAL/SEPA capabilities made the platform account
+      # settle EUR in EUR, the EUR marker was recorded, and the tab never rendered for
+      # any Gumroad-managed seller (gumroad-private#933).
       return [] unless forced_currency_settlement_supported?
 
       methods_for_cart_currency.select do |method|
@@ -284,10 +290,7 @@ class Checkout::PaymentMethodResolver
                          MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
       return false if merchant_account.blank?
 
-      Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(
-        merchant_account,
-        presentment_currency: cart_product_currency
-      )
+      Checkout::BuyerCurrencyEligibility.usd_holding_merchant_account?(merchant_account)
     end
 
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify
