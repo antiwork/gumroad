@@ -491,6 +491,34 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
     end
 
+    # Regression test for the 2026-07-23 iDEAL dark-ramp (gumroad-private#933): enabling
+    # the iDEAL/SEPA capabilities makes the account settle EUR in EUR, so an EUR
+    # mismatch marker is the EXPECTED steady state for exactly the accounts that can
+    # take iDEAL. The direct-listed-amount lane charges the listed EUR price without an
+    # FX quote, so the marker must not withhold the method there.
+    it "keeps the method available for a product priced in the forced currency when the mismatch marker is set for that currency" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+      expect(forced_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "withholds the method for a USD-priced product when the mismatch marker is set for the forced currency — the FX quote it needs would be rejected" do
+      merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
+    end
+
+    it "keeps the USD-priced quote path available when the recorded mismatch is for a different currency" do
+      merchant_account.record_settlement_currency_mismatch!(Currency::GBP)
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.direct_listed_amount?).to eq(false)
+    end
+
     it "withholds the method for future-charge setups such as save-card checkouts" do
       save_card_decision = described_class.new(order:,
                                                seller:,

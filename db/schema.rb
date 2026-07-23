@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000007) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000009) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -900,11 +900,13 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000007) do
     t.bigint "charge_id"
     t.datetime "formalized_side_effects_finished_at"
     t.index ["charge_id"], name: "index_disputes_on_charge_id"
+    t.index ["event_created_at"], name: "index_disputes_on_event_created_at"
     t.index ["purchase_id"], name: "index_disputes_on_purchase_id"
     t.index ["seller_id", "event_created_at"], name: "index_disputes_on_seller_id_and_event_created_at"
     t.index ["seller_id", "lost_at"], name: "index_disputes_on_seller_id_and_lost_at"
     t.index ["seller_id", "won_at"], name: "index_disputes_on_seller_id_and_won_at"
     t.index ["service_charge_id"], name: "index_disputes_on_service_charge_id"
+    t.index ["won_at"], name: "index_disputes_on_won_at"
   end
 
   create_table "dropbox_files", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2018,7 +2020,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000007) do
     t.bigint "price_id"
     t.string "recommended_by"
     t.datetime "deleted_at", precision: nil
-    t.index ["affiliate_id", "purchase_state", "price_cents", "stripe_refunded", "chargeback_date", "flags", "affiliate_credit_cents"], name: "idx_purchases_on_affiliate_earnings_sum"
     t.index ["affiliate_id", "created_at"], name: "index_purchases_on_affiliate_id_and_created_at"
     t.index ["browser_guid"], name: "index_purchases_on_browser_guid"
     t.index ["card_type", "card_visual", "created_at", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_date_fingerprint"
