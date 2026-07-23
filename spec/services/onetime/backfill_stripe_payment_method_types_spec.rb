@@ -135,6 +135,10 @@ describe Onetime::BackfillStripePaymentMethodTypes do
       stats = described_class.process(dry_run: false)
 
       expect(stats[:errors]).to eq(1)
+      # The rolled-back card_type write must not be counted as fixed — stats only
+      # count writes whose transaction committed.
+      expect(stats[:fixed_card_type]).to eq(0)
+      expect(stats[:fixed_flow]).to eq(0)
       # card_type must roll back too — otherwise the purchase drops out of the candidate
       # scope and the flow row stays stuck at "card" forever.
       expect(purchase.reload.card_type).to be_nil

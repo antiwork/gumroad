@@ -95,10 +95,18 @@ module Onetime
         # card_type was already corrected would drop the purchase out of the candidate
         # scope (its card_type is no longer nil/generic), leaving the flow row stuck at
         # its "card" placeholder with no rerun able to repair it.
+        #
+        # The fix methods return the stat key describing what happened instead of
+        # counting it themselves: incrementing inside the transaction would leave the
+        # in-memory stats claiming a write that the rollback then undid. Only after the
+        # block exits (i.e. the transaction committed) do the outcomes get counted; a
+        # raise skips the counting entirely and the caller records the error instead.
+        outcomes = []
         ApplicationRecord.transaction do
-          fix_card_type(purchase, mapped_card_type)
-          fix_payment_flow(purchase, method_type)
+          outcomes << fix_card_type(purchase, mapped_card_type)
+          outcomes << fix_payment_flow(purchase, method_type)
         end
+        outcomes.each { |outcome| tick(outcome) }
       end
 
       def payment_method_type_for(purchase)
@@ -112,22 +120,24 @@ module Onetime
         end
       end
 
+      # Each fix_* method returns the stat key for what it did (or would do / skipped);
+      # backfill counts the keys only after the surrounding transaction commits.
       def fix_card_type(purchase, mapped_card_type)
-        return tick(:card_type_already_set) if purchase.card_type == mapped_card_type
-        return tick(:would_fix_card_type) if @dry_run
+        return :card_type_already_set if purchase.card_type == mapped_card_type
+        return :would_fix_card_type if @dry_run
 
         purchase.update_column(:card_type, mapped_card_type)
-        tick(:fixed_card_type)
+        :fixed_card_type
       end
 
       def fix_payment_flow(purchase, method_type)
         flow = purchase.purchase_payment_flow
-        return tick(:no_payment_flow_row) if flow.nil?
-        return tick(:flow_already_set) if flow.stripe_payment_method_type == method_type
-        return tick(:would_fix_flow) if @dry_run
+        return :no_payment_flow_row if flow.nil?
+        return :flow_already_set if flow.stripe_payment_method_type == method_type
+        return :would_fix_flow if @dry_run
 
         flow.update!(stripe_payment_method_type: method_type)
-        tick(:fixed_flow)
+        :fixed_flow
       end
 
       def tick(key)
