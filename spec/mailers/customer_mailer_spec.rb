@@ -1451,6 +1451,60 @@ describe CustomerMailer do
       expect(mail.subject).to eq("convert")
       expect(mail.attachments.first.filename).to eq(product_file.s3_filename)
     end
+
+    context "when the file is stamp-enabled" do
+      let(:purchase) { create(:free_purchase, link: product) }
+      let(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+      before do
+        product_file.update!(pdf_stamp_enabled: true)
+      end
+
+      it "attaches the stamped PDF instead of the original file" do
+        stamped_pdf = create(:stamped_pdf, url_redirect:, product_file:)
+
+        expect_any_instance_of(StampedPdf).to receive(:s3_object).and_call_original
+        expect(product_file).to_not receive(:s3_object)
+        allow(ProductFile).to receive(:find).with(product_file.id).and_return(product_file)
+
+        mail = CustomerMailer.send_to_kindle("kindle@kindle.com", product_file.id, url_redirect.id)
+        expect(mail.to).to eq(["kindle@kindle.com"])
+        expect(mail.attachments.first.filename).to eq(product_file.s3_filename)
+        expect(stamped_pdf.reload).to be_present
+      end
+
+      it "does not send the email when the stamped PDF is missing" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          "CustomerMailer#send_to_kindle: stamped PDF unavailable, not sending",
+          product_file_id: product_file.id,
+          url_redirect_id: url_redirect.id
+        )
+
+        mail = CustomerMailer.send_to_kindle("kindle@kindle.com", product_file.id, url_redirect.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "does not send the email without url_redirect context" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          "CustomerMailer#send_to_kindle: stamped PDF unavailable, not sending",
+          product_file_id: product_file.id,
+          url_redirect_id: nil
+        )
+
+        mail = CustomerMailer.send_to_kindle("kindle@kindle.com", product_file.id, nil)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "attaches the original file for legacy two-argument jobs queued before the stamping change" do
+        # Jobs enqueued before this code shipped serialize only two arguments;
+        # they must keep the old behavior instead of silently sending nothing.
+        expect_any_instance_of(ProductFile).to receive(:s3_object).and_call_original
+
+        mail = CustomerMailer.send_to_kindle("kindle@kindle.com", product_file.id)
+        expect(mail.to).to eq(["kindle@kindle.com"])
+        expect(mail.attachments.first.filename).to eq(product_file.s3_filename)
+      end
+    end
   end
 
   describe "#files_ready_for_download" do

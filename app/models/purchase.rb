@@ -707,6 +707,21 @@ class Purchase < ApplicationRecord
     }
   end
 
+  # Purchase ids whose Dispute recorded `date_column` (event_created_at for the chargeback
+  # debit leg, won_at for the reversal leg) inside [starts_at, ends_at], resolved through both
+  # the direct purchase link and the Charge link (multi-purchase carts). Driving the tax-period
+  # chargeback scopes off the small, date-indexed disputes table this way keeps them from
+  # full-scanning the very large purchases table by the unindexed chargeback_date — see
+  # chargebacks_for_tax_period_reporting. The daily/monthly windows hold at most a handful of
+  # disputes, so the resulting id list stays small.
+  def self.purchase_ids_for_disputes_in_window(date_column, starts_at, ends_at)
+    disputes = Dispute.where(date_column => starts_at..ends_at)
+    direct_ids = disputes.where.not(purchase_id: nil).pluck(:purchase_id)
+    charge_ids = disputes.where.not(charge_id: nil).pluck(:charge_id)
+    via_charge_ids = charge_ids.present? ? ChargePurchase.where(charge_id: charge_ids).pluck(:purchase_id) : []
+    (direct_ids + via_charge_ids).uniq
+  end
+
   # The sales-leg chargeback gate for the tax report jobs. Keeps, in addition to everything
   # not_chargedback_or_chargedback_reversed keeps, purchases whose chargeback is reported by
   # event date: those sales stay reported in the purchase's own period, and the chargeback is
@@ -723,32 +738,40 @@ class Purchase < ApplicationRecord
     )
   }
   # Purchases whose chargeback (debit) leg lands in [starts_at, ends_at]: event-dated
-  # chargebacks (see CHARGEBACK_EVENT_DATED_SQL) whose dispute event date —
-  # purchases.chargeback_date has always held the processor's dispute-formalized timestamp —
-  # falls inside the window.
+  # chargebacks (see CHARGEBACK_EVENT_DATED_SQL) whose dispute event date falls inside the
+  # window.
+  #
+  # We resolve the window through the disputes table rather than filtering purchases by
+  # purchases.chargeback_date directly: chargeback_date has no standalone index (only a
+  # seller_id-leading composite), so an all-sellers date range over it forces a full scan of
+  # the very large purchases table. chargeback_date mirrors the dispute's event_created_at
+  # (both are set from the same processor event when the dispute is formalized), so listing
+  # the disputes in the window and mapping them back to purchase ids yields the same set at a
+  # fraction of the cost. Any purchase the old chargeback_date predicate could return has a
+  # real charge — and therefore a Dispute row, its own or its Charge's for multi-item carts;
+  # the $0 gift/bundle child purchases that carry a chargeback_date without a Dispute row have
+  # no stripe_transaction_id and are excluded by every caller. The chargeback_date filter is
+  # kept as well so a purchase with several disputes is only selected when its own recorded
+  # chargeback_date is the one inside the window.
   scope :chargebacks_for_tax_period_reporting, lambda { |starts_at, ends_at|
-    where(chargeback_date: starts_at..ends_at)
+    where(id: purchase_ids_for_disputes_in_window(:event_created_at, starts_at, ends_at))
+      .where(chargeback_date: starts_at..ends_at)
       .where(CHARGEBACK_EVENT_DATED_SQL, **chargeback_event_dated_bind_params)
   }
   # Purchases whose chargeback-reversal (dispute won) leg lands in [starts_at, ends_at]:
   # event-dated chargebacks marked reversed, with a Dispute row — linked directly or through
   # the purchase's Charge (multi-purchase carts) — recording a won_at inside the window.
-  # EXISTS subqueries keep one row per purchase regardless of how many dispute rows match.
-  # Callers emitting per-row output should date the leg with
-  # purchase.chargeback_reversal_reporting_date (which also resolves which dispute row wins
-  # when there are several).
+  #
+  # Same reasoning as the debit scope above: drive off the disputes table's won_at (now
+  # indexed) instead of a correlated EXISTS over every purchase. This matches the old EXISTS
+  # exactly — it already required a Dispute row with won_at in the window — while turning the
+  # per-purchase subquery into one small, date-indexed lookup. Callers emitting per-row output
+  # still date the leg with purchase.chargeback_reversal_reporting_date, which also resolves
+  # which dispute row wins when a purchase has several.
   scope :chargeback_reversals_for_tax_period_reporting, lambda { |starts_at, ends_at|
-    where("purchases.chargeback_date >= ?", Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day)
+    where(id: purchase_ids_for_disputes_in_window(:won_at, starts_at, ends_at))
+      .where("purchases.chargeback_date >= ?", Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day)
       .where("purchases.flags & ? != 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
-      .where(
-        "EXISTS (SELECT 1 FROM disputes WHERE disputes.purchase_id = purchases.id " \
-        "AND disputes.won_at BETWEEN :starts_at AND :ends_at) " \
-        "OR EXISTS (SELECT 1 FROM disputes INNER JOIN charge_purchases " \
-        "ON charge_purchases.charge_id = disputes.charge_id " \
-        "WHERE charge_purchases.purchase_id = purchases.id " \
-        "AND disputes.won_at BETWEEN :starts_at AND :ends_at)",
-        starts_at:, ends_at:
-      )
   }
   scope :not_additional_contribution, -> { where("purchases.flags IS NULL OR purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:is_additional_contribution]) }
   scope :for_products, ->(products) { where(link_id: products) if products.present? }

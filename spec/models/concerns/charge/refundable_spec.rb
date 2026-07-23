@@ -345,6 +345,72 @@ describe Charge::Refundable do
       end
     end
 
+    describe "deduplication against already-recorded refunds" do
+      # A seller-initiated refund creates the Stripe refund and the local Refund row
+      # inside one long transaction, so the webhook's initial Refund lookup can run
+      # before that transaction commits and miss the row. These specs simulate that
+      # race: the initial lookup comes back empty, but by the time the handler holds
+      # the purchase row lock the seller's row is visible.
+      def build_event_for(refund_id, refunded_amount_cents:)
+        event = ChargeEvent.new
+        event.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        event.charge_id = purchase.stripe_transaction_id
+        event.refund_id = refund_id
+        event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+        event.extras = { refund_status: "succeeded", refunded_amount_cents:, refund_reason: nil }
+        event
+      end
+
+      def simulate_initial_lookup_missing(refund_id)
+        # First `Refund.where(processor_refund_id:)` call (the handler's entry lookup)
+        # returns empty, as if the seller's transaction had not committed yet; later
+        # calls (the re-check under the purchase row lock) hit the real database.
+        calls = 0
+        allow(Refund).to receive(:where).and_wrap_original do |m, *args, **kwargs|
+          if args == [{ processor_refund_id: refund_id }] || kwargs == { processor_refund_id: refund_id }
+            calls += 1
+            next Refund.none if calls == 1
+          end
+          m.call(*args, **kwargs)
+        end
+      end
+
+      it "does not re-record a partial refund the seller already recorded" do
+        refund_id = "re_dup_#{SecureRandom.hex(6)}"
+        # Partial refund: stripe_refunded stays false, so before the locked re-check
+        # this handler would have recorded the same Stripe refund a second time.
+        seller_refund = create(:refund, purchase:, processor_refund_id: refund_id,
+                                        amount_cents: 3_00, total_transaction_cents: 3_00)
+        purchase.update!(stripe_partially_refunded: true)
+        simulate_initial_lookup_missing(refund_id)
+        stub_stripe_refund(presentment_cents: 3_00, currency: Currency::USD)
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+
+        expect do
+          purchase.handle_event_refund_updated!(build_event_for(refund_id, refunded_amount_cents: 3_00))
+        end.not_to change { purchase.reload.refunds.count }
+
+        expect(purchase.refunds).to eq([seller_refund])
+        expect(BalanceTransaction.where(refund_id: seller_refund.id)).to be_empty
+      end
+
+      it "does not re-record the refund when Stripe redelivers the webhook after the row is visible" do
+        # Second delivery of the same refund id once the Refund row IS visible: the
+        # handler's entry lookup finds it and takes the status-update branch instead
+        # of recording money again.
+        stub_stripe_refund(presentment_cents: 10_00, currency: Currency::USD)
+        event = build_event(refunded_amount_cents: 10_00)
+        purchase.handle_event_refund_updated!(event)
+        expect(purchase.reload.refunds.count).to eq(1)
+
+        expect(ContactingCreatorMailer).not_to receive(:purchase_refunded)
+        expect do
+          purchase.handle_event_refund_updated!(event)
+        end.not_to change { purchase.reload.refunds.count }
+      end
+    end
+
     describe "combined charges with multiple purchases" do
       let(:purchase_one) { create(:purchase, price_cents: 10_00, total_transaction_cents: 10_00, is_part_of_combined_charge: true) }
       let(:purchase_two) { create(:purchase, price_cents: 5_00, total_transaction_cents: 5_00, is_part_of_combined_charge: true) }
