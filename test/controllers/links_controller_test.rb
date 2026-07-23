@@ -1186,6 +1186,37 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal true, blank_page.reload.deleted?
   end
 
+  test "PUT update allows replacing a page when its content is resubmitted under a new id" do
+    # Pages created in the current editor session keep their client-generated
+    # ids across saves (the editor never learns the server's ids), so the
+    # second save of such a page arrives under an unknown id and the server
+    # re-creates it. That's a rewrite, not a deletion — the guard must let it
+    # through even though the stored page's id is missing from the payload.
+    setup_guarded_version!
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: "client-generated-uuid", title: "Page 1", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal 1, @version1.reload.alive_rich_contents.count
+    assert_equal guard_content_description, @version1.alive_rich_contents.sole.description
+  end
+
+  test "PUT update still blocks a stale payload that resubmits different content under a new id" do
+    # The rewrite allowance matches on CONTENT — a stale tab that submits its
+    # own (different) page under a fresh id must not unlock deleting the
+    # stored content-bearing page.
+    setup_guarded_version!
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: "client-generated-uuid", title: "Other page", description: { type: "doc", content: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Unrelated stale content" }] }] } }] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal false, @version1_page.reload.deleted?
+  end
+
   test "PUT update allows deleting a page holding only the editor's blank placeholder paragraph without confirmation" do
     setup_guarded_version!
     # The editor initializes every new page with a single empty paragraph,

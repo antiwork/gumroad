@@ -3,7 +3,7 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
-  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids
+  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :payload_page_descriptions
   attr_accessor :variant_category
 
   delegate :price_currency_type,
@@ -27,12 +27,13 @@ class Product::VariantCategoryUpdaterService
     product_files
   ].freeze
 
-  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [])
+  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], payload_page_descriptions: [])
     @product = product
     @category_params = category_params
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
     @payload_page_ids = Array.wrap(payload_page_ids)
     @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
+    @payload_page_descriptions = Array.wrap(payload_page_descriptions)
   end
 
   # Blocks deleting variants that still carry seller content (rich content pages
@@ -201,7 +202,8 @@ class Product::VariantCategoryUpdaterService
         product:,
         rich_contents_to_delete:,
         payload_page_ids:,
-        confirmed_removed_ids: confirmed_removed_rich_content_ids
+        confirmed_removed_ids: confirmed_removed_rich_content_ids,
+        payload_page_descriptions:
       )
       rich_contents_to_delete.map(&:mark_deleted!)
     end

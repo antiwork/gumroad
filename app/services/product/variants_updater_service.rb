@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :payload_page_descriptions
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -17,13 +17,14 @@ class Product::VariantsUpdaterService
   # version tree (it happened three times in one week on a single product).
   # payload_page_ids / confirmed_removed_rich_content_ids feed the analogous
   # guard for page deletions (Product::RichContentDeletionGuard).
-  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [])
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], payload_page_descriptions: [])
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
     @payload_page_ids = Array.wrap(payload_page_ids)
     @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
+    @payload_page_descriptions = Array.wrap(payload_page_descriptions)
   end
 
   def perform
@@ -38,7 +39,8 @@ class Product::VariantsUpdaterService
         category_params: category,
         confirmed_removed_variant_ids:,
         payload_page_ids:,
-        confirmed_removed_rich_content_ids:
+        confirmed_removed_rich_content_ids:,
+        payload_page_descriptions:
       )
       variant_category = variant_category_updater.perform
       keep_categories << variant_category if category[:id].present?

@@ -475,7 +475,8 @@ class LinksController < ApplicationController
           product: @product,
           rich_contents_to_delete: product_rich_contents_to_delete,
           payload_page_ids:,
-          confirmed_removed_ids: confirmed_removed_rich_content_ids
+          confirmed_removed_ids: confirmed_removed_rich_content_ids,
+          payload_page_descriptions:
         )
         product_rich_contents_to_delete.each(&:mark_deleted!)
 
@@ -825,6 +826,7 @@ class LinksController < ApplicationController
           confirmed_removed_variant_ids:,
           payload_page_ids:,
           confirmed_removed_rich_content_ids:,
+          payload_page_descriptions:,
         ).perform
       elsif variant_category.present?
         Product::VariantsUpdaterService.new(
@@ -838,6 +840,7 @@ class LinksController < ApplicationController
           confirmed_removed_variant_ids:,
           payload_page_ids:,
           confirmed_removed_rich_content_ids:,
+          payload_page_descriptions:,
         ).perform
       end
     end
@@ -870,6 +873,23 @@ class LinksController < ApplicationController
           ids.concat(variant_pages.map { _1[:id] }) if variant_pages.is_a?(Array)
         end
         ids.compact
+      end
+    end
+
+    # Every page description present anywhere in the save payload. Pages created
+    # in the current editor session keep their client-generated ids across saves
+    # (the editor never learns the server's ids), so a resubmitted new page
+    # arrives under an unknown id: matching on content identifies it as a
+    # rewrite rather than a deletion. NOTE: reads the RAW params, not the
+    # permitted ones — by the time the deletion guards run, the permitted
+    # variant params may have been consumed/mutated by earlier steps.
+    def payload_page_descriptions
+      @_payload_page_descriptions ||= begin
+        pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
+        (params[:variants].is_a?(Array) ? params[:variants] : []).each do |variant|
+          pages.concat(variant[:rich_content].to_a) if variant[:rich_content].is_a?(Array)
+        end
+        pages.filter_map { |page| page[:description].present? ? page[:description][:content].as_json : nil }
       end
     end
 

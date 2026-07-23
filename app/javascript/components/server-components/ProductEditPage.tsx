@@ -166,8 +166,22 @@ type PendingDeletions = {
 };
 
 const findPendingDeletions = (product: Product, lastSavedProduct: Product): PendingDeletions => {
+  // Deletions the seller already confirmed one-by-one (the per-row "Yes,
+  // remove" / delete-page modals record ids here) don't need re-confirming —
+  // this summary modal exists to catch deletions the seller DIDN'T ask for
+  // (e.g. a stale tab about to overwrite newer state), mirroring the
+  // server-side deletion guard.
+  const confirmedVariantIds = new Set(product.confirmed_removed_variant_ids ?? []);
+  const confirmedPageIds = new Set(product.confirmed_removed_rich_content_ids ?? []);
+
   const currentVariantIds = new Set(product.variants.map(({ id }) => id));
-  const removedVariants = lastSavedProduct.variants.filter(({ id }) => !currentVariantIds.has(id));
+  // Only content-bearing variants warrant the scary confirmation — mirroring
+  // the server-side guard. Contentless variants (e.g. a coffee product's
+  // "suggested amounts", an empty just-added version) delete without fuss.
+  const removedVariants = lastSavedProduct.variants.filter(
+    ({ id, rich_content }) =>
+      !currentVariantIds.has(id) && !confirmedVariantIds.has(id) && rich_content.some(pageHasVisibleContent),
+  );
 
   // A page id that still appears anywhere in the current state (product-level
   // or under any variant) is a MOVE (e.g. toggling "use the same content for
@@ -181,7 +195,8 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
     ...lastSavedProduct.rich_content,
     ...lastSavedProduct.variants.flatMap((variant) => variant.rich_content),
   ]) {
-    if (!currentPageIds.has(page.id) && pageHasVisibleContent(page)) removedPagesById.set(page.id, page);
+    if (!currentPageIds.has(page.id) && !confirmedPageIds.has(page.id) && pageHasVisibleContent(page))
+      removedPagesById.set(page.id, page);
   }
 
   return {
