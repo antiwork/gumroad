@@ -81,6 +81,42 @@ describe Api::Internal::Installments::NonOpenerResendsController do
       expect(response).to be_successful
       expect(response.parsed_body).to eq({ "count" => nil, "recently_resent" => false, "audience_filtered_out" => false })
     end
+
+    it "gives later preview queries only the remaining time budget, not a fresh cap each" do
+      seconds_used = []
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).and_wrap_original do |original, seconds:, &block|
+        seconds_used << seconds
+        original.call(seconds:, &block)
+      end
+
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+      expect(seconds_used.size).to eq(2)
+      expect(seconds_used.first).to be <= described_class::COUNT_PREVIEW_TOTAL_BUDGET_SECONDS
+      expect(seconds_used.second).to be < seconds_used.first
+    end
+
+    it "returns a null count when the budget runs out partway through the preview queries" do
+      calls = 0
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).and_wrap_original do |original, seconds:, &block|
+        calls += 1
+        raise WithMaxExecutionTime::QueryTimeoutError, "maximum statement execution time exceeded" if calls == 2
+        original.call(seconds:, &block)
+      end
+
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq({ "count" => nil, "recently_resent" => false, "audience_filtered_out" => false })
+    end
+
+    it "raises the timeout error without running a query when the budget is already spent" do
+      expect(WithMaxExecutionTime).not_to receive(:timeout_queries)
+      spent_deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) - 1
+
+      expect do
+        controller.send(:within_preview_budget, spent_deadline) { raise "should not run" }
+      end.to raise_error(WithMaxExecutionTime::QueryTimeoutError)
+    end
   end
 
   describe "POST create" do

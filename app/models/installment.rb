@@ -779,8 +779,11 @@ class Installment < ApplicationRecord
     emailed_emails - opened_emails
   end
 
-  def resendable_to_non_openers_emails
-    candidates = unopened_recipient_emails.to_set
+  # Accepts a precomputed `candidates` list so callers that already have the unopened
+  # recipient emails (e.g. the resend preview endpoint) don't pay for the expensive
+  # email-diffing pipeline a second time.
+  def resendable_to_non_openers_emails(candidates: unopened_recipient_emails)
+    candidates = candidates.to_set
     return [] if candidates.empty?
 
     AudienceMember
@@ -791,8 +794,8 @@ class Installment < ApplicationRecord
       .select { candidates.include?(_1) }
   end
 
-  def unopened_recipients_count
-    resendable_to_non_openers_emails.size
+  def unopened_recipients_count(candidates: unopened_recipient_emails)
+    resendable_to_non_openers_emails(candidates:).size
   end
 
   # Whether a "resend to non-openers" blast is applicable to this post.
