@@ -12,19 +12,22 @@ class Tag < ApplicationRecord
                       maximum: 20, too_long: "A tag is too long. Please try again with a shorter one, under 20 characters." },
             format: { with: /\A[^#,][^,]+\z/, message: "A tag cannot start with hashes or contain commas." }
 
+  # Powers tag autocomplete (fires on every keystroke in the tag input).
+  # Ranks matches by the taggings_count counter cache instead of joining and
+  # counting product_taggings per request — short prefixes like "m%" match
+  # thousands of tags, and the old LEFT JOIN + GROUP BY recomputed every
+  # tag's usage count just to pick the top 10 (p99 was ~4.8s in production).
+  # The "uses" alias is kept because the frontend reads it.
   scope :by_text, lambda { |text: "", limit: 10|
-    select("tags.*, COUNT(product_taggings.id) AS uses")
+    select("tags.*, tags.taggings_count AS uses")
       .where("tags.name LIKE ?", "#{text.downcase}%")
-      .joins("LEFT OUTER JOIN product_taggings ON product_taggings.tag_id = tags.id")
-      .order("uses DESC")
-      .order("tags.name ASC")
-      .group("tags.id")
+      .order(taggings_count: :desc, name: :asc)
       .limit(limit)
   }
 
   def as_json(opts = {})
     if opts[:admin]
-      { name:, humanized_name:, flagged: flagged?, id:, uses: product_taggings.count }
+      { name:, humanized_name:, flagged: flagged?, id:, uses: taggings_count }
     else
       super(opts)
     end

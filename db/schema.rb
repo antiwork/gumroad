@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000007) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2486,6 +2486,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000005) do
     t.datetime "updated_at", precision: nil
     t.string "humanized_name", limit: 191
     t.datetime "flagged_at", precision: nil
+    t.integer "taggings_count", default: 0, null: false
+    t.index ["name", "taggings_count"], name: "index_tags_on_name_and_taggings_count"
     t.index ["name"], name: "index_tags_on_name"
   end
 

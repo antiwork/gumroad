@@ -112,6 +112,40 @@ describe Tag do
     end.to change { Tag.count }.by(4)
   end
 
+  describe "taggings_count counter cache" do
+    it "increments and decrements as products are tagged and untagged" do
+      @product.tag!("Capybara")
+      tag = Tag.find_by(name: "capybara")
+      expect(tag.taggings_count).to eq(1)
+
+      second_product = create(:product)
+      second_product.tag!("Capybara")
+      expect(tag.reload.taggings_count).to eq(2)
+
+      second_product.untag!("Capybara")
+      expect(tag.reload.taggings_count).to eq(1)
+    end
+  end
+
+  describe ".by_text" do
+    it "ranks prefix matches by usage without joining product_taggings" do
+      3.times { create(:product).tag!("Lemur") }
+      create(:product).tag!("Leopard")
+      create(:tag, name: "lemming")
+      create(:tag, name: "walrus")
+
+      results = Tag.by_text(text: "le")
+      expect(results.map(&:name)).to eq(%w[lemur leopard lemming])
+      expect(results.map { |tag| tag["uses"] }).to eq([3, 1, 0])
+      expect(Tag.by_text(text: "le").to_sql).not_to include("product_taggings")
+    end
+
+    it "respects the limit" do
+      %w[quail quokka quoll].each { |name| create(:tag, name:) }
+      expect(Tag.by_text(text: "q", limit: 2).length).to eq(2)
+    end
+  end
+
   it "Flags" do
     tag = create(:tag)
     expect { tag.flag! }.to change { tag.flagged? }.from(false).to(true)
