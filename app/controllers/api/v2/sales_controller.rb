@@ -14,6 +14,10 @@ class Api::V2::SalesController < Api::V2::BaseController
     :subscription,
     :tip,
     :utm_link,
+    # buyer_presentment fields (v2): presentment row + its charge_presentment (fx_rate)
+    # and refunds (in-memory presentment refunded sum) — avoids per-sale queries.
+    :refunds,
+    { purchase_presentment: :charge_presentment },
     { order: { cart: { sent_abandoned_cart_emails: :installment } } },
   ].freeze
 

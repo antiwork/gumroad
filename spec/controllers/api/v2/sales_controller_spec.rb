@@ -55,6 +55,29 @@ describe Api::V2::SalesController do
         end
       end
 
+      it "serializes buyer_presentment on index without per-sale presentment or refund queries" do
+        create(:purchase_presentment, purchase: @purchase)
+        create(:purchase_presentment, purchase: @free_trial_purchase)
+
+        per_row_queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          sql = payload[:sql].to_s
+          if sql.include?("purchase_presentments") || sql.include?("charge_presentments") || sql.include?("FROM `refunds`")
+            # IN-lists are the batched preload; equality probes are the N+1 shape.
+            per_row_queries << sql if sql.match?(/purchase_id`? = /)
+          end
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get :index, params: @params
+        end
+
+        expect(response.parsed_body["success"]).to eq true
+        presentment_sales = response.parsed_body["sales"].select { |sale| sale["buyer_presentment"].present? }
+        expect(presentment_sales.size).to eq(2)
+        expect(per_row_queries).to be_empty
+      end
+
       it "includes web CSV parity fields in the response" do
         add_web_csv_api_fields(@purchase)
 
@@ -389,6 +412,60 @@ describe Api::V2::SalesController do
           "processor_transaction_id" => "ch_123",
           "sent_abandoned_cart_email" => true
         )
+      end
+
+      it "omits buyer_presentment for canonical-currency sales" do
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]).not_to have_key("buyer_presentment")
+      end
+
+      it "includes buyer_presentment fields when the purchase has a presentment record" do
+        presentment = create(:purchase_presentment, purchase: @purchase,
+                                                    presentment_currency: Currency::CAD,
+                                                    presentment_price_cents: 21_01,
+                                                    presentment_tip_cents: 1_40,
+                                                    presentment_seller_tax_cents: 2_52,
+                                                    presentment_gumroad_tax_cents: 0,
+                                                    presentment_shipping_cents: 0,
+                                                    presentment_total_cents: 24_93,
+                                                    presentment_gumroad_amount_cents: 2_49)
+        presentment.charge_presentment.update!(fx_rate: BigDecimal("1.400500000000000"))
+
+        # An effective refund carrying a buyer-currency snapshot counts toward
+        # refunded_cents; one without a snapshot (pre-feature refund) contributes 0.
+        create(:refund, purchase: @purchase, amount_cents: 5_00).update!(
+          json_data: { presentment_currency: Currency::CAD, presentment_amount_cents: 7_00 }
+        )
+        create(:refund, purchase: @purchase, amount_cents: 1_00)
+
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]["buyer_presentment"]).to eq(
+          "currency" => Currency::CAD,
+          "price_cents" => 21_01,
+          "tip_cents" => 1_40,
+          "seller_tax_cents" => 2_52,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+          "total_cents" => 24_93,
+          "fx_rate" => "1.4005",
+          "refunded_cents" => 7_00
+        )
+      end
+
+      it "excludes terminally-failed reversed refunds from buyer_presentment refunded_cents" do
+        create(:purchase_presentment, purchase: @purchase)
+        refund = create(:refund, purchase: @purchase, amount_cents: 5_00, status: "failed")
+        refund.update!(json_data: (refund.json_data || {}).merge(
+          "presentment_currency" => Currency::CAD,
+          "presentment_amount_cents" => 7_00,
+          "balance_reversed_on_failure" => true
+        ))
+
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]["buyer_presentment"]["refunded_cents"]).to eq(0)
       end
 
       it "includes license_uses in the response for a purchase with a license key" do
