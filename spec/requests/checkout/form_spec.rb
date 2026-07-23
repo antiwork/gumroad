@@ -258,13 +258,16 @@ describe("Checkout form page", type: :system, js: true) do
       end
     end
 
-    context "when signed in as a non-owner team member" do
-      it "does not show the PayPal Connect section" do
+    context "when signed in as a team admin" do
+      it "shows the PayPal Connect section like the owner sees" do
         create(:user_compliance_info, user: seller)
 
         visit checkout_form_path
 
-        expect(page).not_to have_link("Connect with PayPal")
+        # Team admins can manage payout settings (see
+        # Settings::Payments::UserPolicy#update?), so they see the same
+        # PayPal Connect section as the owner.
+        expect(page).to have_link("Connect with PayPal")
       end
     end
   end
