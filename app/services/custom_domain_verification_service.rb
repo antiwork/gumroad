@@ -42,6 +42,26 @@ class CustomDomainVerificationService
     pointed_domains
   end
 
+  # Variants whose A records actually resolve to Gumroad — i.e. the addresses a
+  # Let's Encrypt HTTP-01 challenge will connect to. This is stricter than
+  # #domains_pointed_to_gumroad, which also accepts a name that merely carries a
+  # CNAME *record* pointing at CUSTOM_DOMAIN_CNAME even when the name's A record
+  # resolves somewhere else — e.g. a lapsed apex now served by a registrar
+  # parking page while a stale CNAME record lingers in the zone. Ordering a
+  # certificate for such a name makes ACME validation fail every time, and
+  # repeated failures get Let's Encrypt to pause the whole account for those
+  # hostnames (issue #6184). Only certificate ordering uses this; domain
+  # verification deliberately keeps the lenient CNAME-or-ALIAS check so that
+  # transient DNS blips don't flap a seller's domain to unverified.
+  def domains_resolving_to_gumroad
+    @_domains_resolving_to_gumroad ||= domains_pointed_to_gumroad.select do |domain_variant|
+      alias_is_setup_correctly?(domain_variant)
+    rescue => e
+      Rails.logger.info("ALIAS resolution check error for custom domain '#{domain}' (variant '#{domain_variant}'). Error: #{e.inspect}")
+      false
+    end
+  end
+
   def has_valid_ssl_certificates?
     domains_pointed_to_gumroad.all? do |domain|
       ssl_cert_check_redis_namespace.get(ssl_cert_check_cache_key(domain)) || has_valid_ssl_certificate?(domain)
