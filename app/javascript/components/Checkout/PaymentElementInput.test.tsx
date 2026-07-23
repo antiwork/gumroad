@@ -15,7 +15,7 @@ const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | und
 // Captures the options the PaymentElement was last rendered with, plus its onChange handler so
 // tests can simulate the buyer selecting a payment-method row inside the element.
 const paymentElementRender = vi.hoisted<{
-  options: { fields?: { billingDetails?: unknown } } | null;
+  options: { fields?: { billingDetails?: unknown }; defaultValues?: unknown } | null;
   onChange: ((event: { value: { type: string }; complete: boolean; empty: boolean }) => void) | null;
   onFocus: (() => void) | null;
 }>(() => ({ options: null, onChange: null, onFocus: null }));
@@ -87,6 +87,7 @@ const props = {
   disabled: false,
   defaultEmail: "buyer@example.com",
   defaultName: "Buyer",
+  defaultCountry: "IN",
   hasShippingCart: false,
   invalid: false,
   onReady: vi.fn<(controller: PaymentElementController | null) => void>(),
@@ -178,29 +179,36 @@ describe("PaymentElementInput", () => {
     });
   });
 
-  it("renders only the street-address fields inside the UPI pane on a digital cart", () => {
+  it("has the element collect the full billing details (except email) inside the UPI pane on a digital cart", () => {
     render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
 
     // The buyer selects the UPI row. Stripe requires billing_details.name + a full street
     // address to confirm UPI, and the digital checkout form has no street-address fields — so
-    // the element's address fields open up. Name/email/country stay "never": checkout's own
-    // form already collects those and must remain the only place asking for them
-    // (gumroad-private#933 — the UI should not repeat questions the form already asked).
+    // Stripe's pane collects everything itself (name + full address, localized + validated),
+    // and checkout's own Full name/Country fields hide for the selection (see SharedInputs in
+    // PaymentForm.tsx) so nothing is asked for twice. Only email stays "never": it is
+    // checkout's receipt contact and tokenization passes it alongside
+    // (gumroad-private#933).
     act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
     expect(paymentElementRender.options?.fields).toEqual({
       billingDetails: {
-        name: "never",
+        name: "auto",
         email: "never",
         phone: "never",
-        address: {
-          country: "never",
-          postalCode: "auto",
-          state: "auto",
-          city: "auto",
-          line1: "auto",
-          line2: "auto",
-        },
+        address: "auto",
       },
+    });
+  });
+
+  it("prefills the UPI pane with the name and country checkout already knows", () => {
+    render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
+
+    // Checkout may already know the buyer's name (typed before switching to UPI, or from their
+    // account) and the GeoIP-detected country — hand both to the pane as defaultValues so the
+    // buyer doesn't retype them and the address form opens on the right country's format.
+    act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
+    expect(paymentElementRender.options?.defaultValues).toEqual({
+      billingDetails: { name: "Buyer", address: { country: "IN" } },
     });
   });
 

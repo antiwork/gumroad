@@ -54,6 +54,7 @@ export const PaymentElementInput = ({
   disabled,
   defaultEmail,
   defaultName,
+  defaultCountry,
   hasShippingCart,
   invalid,
   onReady,
@@ -84,6 +85,11 @@ export const PaymentElementInput = ({
   disabled?: boolean | undefined;
   defaultEmail: string;
   defaultName: string;
+  // Prefill for the country the Payment Element's own address form starts on when a selection
+  // has the element collect the full billing details ("element-full" — UPI on digital carts).
+  // Checkout's GeoIP-detected country is the best guess, and prefilling it means the buyer's
+  // pane opens on the right country's address format instead of Stripe's default.
+  defaultCountry: string;
   // Whether the cart requires shipping, i.e. whether checkout's own form is collecting a full
   // street address. Drives which billing-details fields the element renders for methods that
   // need an address (see paymentElementBillingDetailsCollection).
@@ -157,6 +163,7 @@ export const PaymentElementInput = ({
             applePayOption={applePayOption}
             defaultEmail={linkPrefillContact.email}
             defaultName={linkPrefillContact.name}
+            defaultCountry={defaultCountry}
             hasShippingCart={hasShippingCart}
             onReady={onReady}
             onChange={onChange}
@@ -181,6 +188,7 @@ const PaymentElementControllerInput = ({
   applePayOption,
   defaultEmail,
   defaultName,
+  defaultCountry,
   hasShippingCart,
   onReady,
   onChange,
@@ -194,6 +202,7 @@ const PaymentElementControllerInput = ({
   applePayOption?: PaymentElementApplePayOption | undefined;
   defaultEmail: string;
   defaultName: string;
+  defaultCountry: string;
   hasShippingCart: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
@@ -229,6 +238,19 @@ const PaymentElementControllerInput = ({
     return Object.keys(billingDetails).length > 0 ? { billingDetails } : undefined;
   }, [defaultEmail, defaultName, stripeLinkEnabled]);
 
+  // On "element-full" (UPI on digital carts) Stripe's pane collects the buyer's name and full
+  // address itself, so prefill it with what checkout already knows — the name the buyer may
+  // have typed into checkout's (now hidden) Full name field, and the GeoIP-detected country —
+  // instead of making them retype it. Falls back to the Link prefill (email + name) otherwise.
+  const defaultValues = React.useMemo<StripePaymentElementOptions["defaultValues"] | undefined>(() => {
+    if (billingDetailsCollection !== "element-full") return linkDefaultValues;
+    const billingDetails = {
+      ...(defaultName ? { name: defaultName } : {}),
+      ...(defaultCountry ? { address: { country: defaultCountry } } : {}),
+    };
+    return Object.keys(billingDetails).length > 0 ? { billingDetails } : undefined;
+  }, [billingDetailsCollection, defaultCountry, defaultName, linkDefaultValues]);
+
   return (
     <PaymentElement
       options={{
@@ -238,7 +260,7 @@ const PaymentElementControllerInput = ({
         // wallets disabled we keep the tabs layout, whose tabs are hidden via the ".Tab" appearance
         // rule in StripePaymentElementProvider — the exact pre-flag behavior.
         layout: walletsEnabled ? { type: "accordion", radios: false, spacedAccordionItems: true } : { type: "tabs" },
-        ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
+        ...(defaultValues ? { defaultValues } : {}),
         // Checkout collects billing details in its own form, so each element field is only shown
         // when checkout does NOT already ask for it — nothing should be asked for twice. The
         // collection mode (see paymentElementBillingDetailsCollection) decides per selection:
@@ -252,15 +274,19 @@ const PaymentElementControllerInput = ({
         // - "element" (wallets): the whole block is "auto" — the wallet sheet supplies the
         //   buyer's verified billing details and tokenization deliberately passes no override.
         //   Nothing extra renders on the page (the sheet is its own surface).
-        // - "element-address" (UPI on digital carts): Stripe requires billing_details.name and a
+        // - "element-full" (UPI on digital carts): Stripe requires billing_details.name and a
         //   full street address to CONFIRM a UPI payment, and checkout's digital form has no
         //   street-address fields. With everything pinned to "never" the confirm always failed
         //   server-side with parameter_missing and no last_payment_error — buyers could never
-        //   complete a UPI purchase (the July 2026 UPI ramp-down, gumroad-private#933). Only the
-        //   street-address fields render inside the UPI pane (the one thing the form doesn't
-        //   have); name/email/country stay "never" because checkout's form already collects
-        //   those, and tokenization passes them alongside. On shippable carts the form collects
-        //   the full address itself, so UPI stays on "form" and no element fields appear.
+        //   complete a UPI purchase (the July 2026 UPI ramp-down, gumroad-private#933). On this
+        //   mode Stripe's pane collects everything it needs itself — name plus the full address
+        //   — with its own localized labels and validation, and checkout's form hides its Full
+        //   name and Country fields for the selection (see SharedInputs in PaymentForm.tsx) so
+        //   nothing is asked for twice. Only email stays "never": it is checkout's
+        //   receipt/delivery contact, not just a billing field, and Stripe does not need it to
+        //   confirm UPI — tokenization passes the form's email alongside. On shippable carts the
+        //   form collects the full address itself, so UPI stays on "form" and no element fields
+        //   appear.
         // The switch reaches the mounted element through react-stripe-js's option diffing
         // (element.update) as soon as the change event reports the row selection — before
         // tokenization, which only starts from the pay click.
@@ -268,29 +294,21 @@ const PaymentElementControllerInput = ({
           billingDetails:
             billingDetailsCollection === "element"
               ? "auto"
-              : {
-                  name: "never",
-                  email: "never",
-                  phone: "never",
-                  address:
-                    billingDetailsCollection === "element-address"
-                      ? {
-                          country: "never",
-                          postalCode: "auto",
-                          state: "auto",
-                          city: "auto",
-                          line1: "auto",
-                          line2: "auto",
-                        }
-                      : {
-                          country: "never",
-                          postalCode: "never",
-                          state: "never",
-                          city: "never",
-                          line1: "never",
-                          line2: "never",
-                        },
-                },
+              : billingDetailsCollection === "element-full"
+                ? { name: "auto", email: "never", phone: "never", address: "auto" }
+                : {
+                    name: "never",
+                    email: "never",
+                    phone: "never",
+                    address: {
+                      country: "never",
+                      postalCode: "never",
+                      state: "never",
+                      city: "never",
+                      line1: "never",
+                      line2: "never",
+                    },
+                  },
         },
         wallets: paymentElementWallets(stripeLinkEnabled, walletsEnabled),
         // The recurring declaration attaches to the PaymentElement's own options (that's where
