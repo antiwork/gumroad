@@ -25,7 +25,6 @@ import {
   getTotalPrice,
 } from "$app/components/Checkout/payment";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
-import { useFeatureFlags } from "$app/components/FeatureFlags";
 import {
   Option,
   PriceSelection,
@@ -250,7 +249,6 @@ export default function SubscriptionsManage() {
     canGift: false,
   };
   const payLabel = restartable ? `Restart ${subscriptionEntity}` : `Update ${subscriptionEntity}`;
-  const { require_email_typo_acknowledgment } = useFeatureFlags();
   const reducer = createReducer({
     country: contact_info.country,
     email: contact_info.email,
@@ -268,7 +266,9 @@ export default function SubscriptionsManage() {
     recaptchaKey: recaptcha_key,
     paypalClientId: paypal_client_id,
     gift: null,
-    requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,
+    // Always on since the require_email_typo_acknowledgment rollout flag was removed
+    // (100% enabled in production since 2025-08; see gumroad-private#1208).
+    requireEmailTypoAcknowledgment: true,
     // This page uses the CardElement integration (the createReducer default); only the Apple Pay
     // merchant-token rollout flag is threaded through, so a payment-method update via Apple Pay
     // declares the subscription's recurring agreement (see paymentProduct above).

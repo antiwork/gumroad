@@ -4,6 +4,15 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
   RESEND_THROTTLE = 24.hours
   MAX_RESENDS = 3
   IN_FLIGHT_GRACE = 1.hour
+  # Computing the non-opener count means scanning every emailed recipient, every open
+  # event, and the seller's full audience. For very large sends (hundreds of thousands
+  # of recipients) that cannot finish inside a web request, so the whole preview shares
+  # one total time budget and the endpoint degrades to "count unavailable" instead of
+  # erroring the whole page. The budget is enforced as a shrinking per-statement cap:
+  # each query runs under whatever is LEFT of the budget (not a fresh 10 seconds), so
+  # several individually-fast statements can't add up past the budget and hit the HTTP
+  # request deadline instead.
+  COUNT_PREVIEW_TOTAL_BUDGET_SECONDS = 10
 
   before_action :authenticate_user!
   before_action :set_installment
@@ -12,8 +21,30 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
   def show
     authorize @installment, :resend_to_non_openers?
 
-    count = @installment.unopened_recipients_count
-    audience_filtered_out = count.zero? && @installment.unopened_recipient_emails.any?
+    count = nil
+    audience_filtered_out = false
+    begin
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + COUNT_PREVIEW_TOTAL_BUDGET_SECONDS
+
+      unopened_emails = within_preview_budget(deadline) { @installment.unopened_recipient_emails }
+      if unopened_emails.empty?
+        count = 0
+      else
+        # Reuse the emails computed above rather than letting the model recompute them —
+        # they are the expensive part, and running them twice would double the time spent.
+        count = within_preview_budget(deadline) do
+          @installment.resendable_to_non_openers_emails(candidates: unopened_emails).size
+        end
+        audience_filtered_out = count.zero?
+      end
+    rescue WithMaxExecutionTime::QueryTimeoutError
+      # The audience is too large to count within the budget. A null count tells the
+      # UI to offer the resend without a recipient number — the actual send happens in
+      # a background job, so a missing preview count doesn't block anything.
+      count = nil
+      audience_filtered_out = false
+    end
+
     render json: { count:, recently_resent: recently_resent?, audience_filtered_out: }
   end
 
@@ -33,17 +64,6 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
         next
       end
 
-      @count = @installment.unopened_recipients_count
-      if @count.zero?
-        message = if @installment.unopened_recipient_emails.any?
-          "There are no non-openers left to email — the remaining unopened recipients are no longer eligible for this email's audience."
-        else
-          "Everyone who was emailed has already opened this."
-        end
-        error_response = [{ success: false, error: message }, :unprocessable_entity]
-        next
-      end
-
       blast = PostEmailBlast.create!(
         post: @installment,
         requested_at: Time.current,
@@ -56,11 +76,27 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
       return render json:, status:
     end
 
+    # Recipient eligibility is intentionally NOT computed here: for large audiences
+    # that computation takes minutes and used to time the request out before the blast
+    # was even created. The job resolves the recipient list itself, and a blast that
+    # turns out to have zero eligible recipients simply completes with delivery_count 0
+    # (which doesn't count toward the resend cap or the 24h throttle).
     SendPostBlastEmailsJob.perform_async(blast.id)
-    render json: { success: true, count: @count }
+    render json: { success: true }
   end
 
   private
+    # Runs the block under a MySQL statement cap equal to the time REMAINING until
+    # `deadline`, so consecutive queries share one overall budget instead of each
+    # getting the full amount. A budget that is already spent raises the same
+    # QueryTimeoutError a slow statement would, keeping one degrade path.
+    def within_preview_budget(deadline, &block)
+      remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      raise WithMaxExecutionTime::QueryTimeoutError, "count preview budget exhausted" if remaining <= 0
+
+      WithMaxExecutionTime.timeout_queries(seconds: remaining, &block)
+    end
+
     def set_installment
       @installment = current_seller.installments.alive.find_by_external_id(params[:id])
       (skip_authorization and e404_json) unless @installment&.resendable_to_non_openers?

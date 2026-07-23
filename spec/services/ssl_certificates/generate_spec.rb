@@ -99,14 +99,13 @@ describe SslCertificates::Generate do
       end
     end
 
-    describe "CNAME/ALIAS check" do
+    describe "DNS resolution check" do
       before do
-        allow_any_instance_of(CustomDomain).to receive(:cname_is_setup_correctly?).and_return(false)
-        allow_any_instance_of(CustomDomain).to receive(:alias_is_setup_correctly?).and_return(false)
+        allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_resolving_to_gumroad).and_return([])
       end
 
-      it "returns false when no domains are pointed to Gumroad" do
-        expect(@obj.send(:can_order_certificates?)).to eq [false, "No domains pointed to Gumroad"]
+      it "returns false when no domains resolve to Gumroad" do
+        expect(@obj.send(:can_order_certificates?)).to eq [false, "No domains resolve to Gumroad"]
       end
     end
   end
@@ -145,17 +144,17 @@ describe SslCertificates::Generate do
 
     context "when the certificate is successfully created" do
       before do
-        @domains_pointed_to_gumroad = ["example.com", "www.example.com"]
+        @resolving_domains = ["example.com", "www.example.com"]
         allow(@obj).to receive(:can_order_certificates?).and_return(true)
-        allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_pointed_to_gumroad).and_return(@domains_pointed_to_gumroad)
+        allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_resolving_to_gumroad).and_return(@resolving_domains)
 
-        @domains_pointed_to_gumroad.each do |domain|
+        @resolving_domains.each do |domain|
           allow(@obj).to receive(:generate_certificate).with(domain).and_return(true)
         end
       end
 
       it "set ssl_certificate_issued_at and logs a message" do
-        @domains_pointed_to_gumroad.each do |domain|
+        @resolving_domains.each do |domain|
           expect(@obj).to receive(:generate_certificate).with(domain)
           expect(@obj).to receive(:log_message).with(domain, "Issued SSL certificate.")
         end
@@ -173,7 +172,7 @@ describe SslCertificates::Generate do
       before do
         allow_any_instance_of(described_class).to receive(:can_order_certificates?).and_return(true)
         allow_any_instance_of(described_class).to receive(:generate_certificate).and_return(false)
-        allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_pointed_to_gumroad).and_return([@custom_domain.domain])
+        allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_resolving_to_gumroad).and_return([@custom_domain.domain])
 
         @custom_domain.set_ssl_certificate_issued_at!
       end
@@ -188,6 +187,70 @@ describe SslCertificates::Generate do
         @obj.process
 
         expect(@custom_domain.reload.ssl_certificate_issued_at).to be_nil
+      end
+    end
+
+    # Regression for issue #6184: a lapsed apex can keep a CNAME record pointing
+    # at CUSTOM_DOMAIN_CNAME while its A record now resolves to a registrar
+    # parking page. Such a name passes the lenient CNAME check but fails ACME
+    # validation every time, and repeated failures get Let's Encrypt to pause
+    # the whole account for those hostnames — so ordering must skip any variant
+    # that doesn't actually resolve to Gumroad.
+    context "when a variant only carries a stale CNAME record and no longer resolves to Gumroad" do
+      let(:custom_domain) { create(:custom_domain, domain: "cook-example.com") }
+      let(:obj) { described_class.new(custom_domain) }
+
+      let(:gumroad_ips) { ["100.0.0.1", "100.0.0.2", "100.0.0.3"] }
+      let(:static_ips)  { ["100.0.0.10", "100.0.0.20"] }
+      let(:parking_ips) { ["162.0.0.9"] }
+
+      def stub_a_record(host, ips)
+        allow_any_instance_of(Resolv::DNS)
+          .to receive(:getresources)
+          .with(host, Resolv::DNS::Resource::IN::A)
+          .and_return(ips.map { |ip| double(address: ip) })
+      end
+
+      before do
+        # Both apex and www advertise a CNAME record to CUSTOM_DOMAIN_CNAME, so
+        # the lenient #domains_pointed_to_gumroad returns both.
+        allow_any_instance_of(Resolv::DNS)
+          .to receive(:getresources)
+          .with(anything, Resolv::DNS::Resource::IN::CNAME)
+          .and_return([double(name: CUSTOM_DOMAIN_CNAME)])
+
+        stub_a_record(CUSTOM_DOMAIN_CNAME, gumroad_ips)
+        stub_a_record(CUSTOM_DOMAIN_STATIC_IP_HOST, static_ips)
+      end
+
+      context "when only the www variant resolves to Gumroad" do
+        before do
+          stub_a_record("cook-example.com", parking_ips)     # lapsed apex -> parking page
+          stub_a_record("www.cook-example.com", gumroad_ips) # www still points at us
+        end
+
+        it "orders a certificate only for the resolving variant" do
+          expect(obj).to receive(:generate_certificate).with("www.cook-example.com").and_return(true)
+          expect(obj).not_to receive(:generate_certificate).with("cook-example.com")
+
+          obj.process
+
+          expect(custom_domain.reload.ssl_certificate_issued_at).to be_present
+        end
+      end
+
+      context "when neither variant resolves to Gumroad" do
+        before do
+          stub_a_record("cook-example.com", parking_ips)
+          stub_a_record("www.cook-example.com", parking_ips)
+        end
+
+        it "orders no certificate and reports that no domains resolve to Gumroad" do
+          expect(obj).not_to receive(:generate_certificate)
+          expect(obj).to receive(:log_message).with("cook-example.com", "No domains resolve to Gumroad")
+
+          obj.process
+        end
       end
     end
   end

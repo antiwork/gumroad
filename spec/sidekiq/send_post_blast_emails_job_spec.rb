@@ -370,6 +370,17 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
       expect(SentPostEmail.where(post:).count).to eq(3)
     end
+
+    it "resolves the unopened-recipient emails under the raised statement execution cap" do
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+
+      # Once for the audience load, once for the unopened-recipient email resolution.
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 1.hour.to_i).twice.and_call_original
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 2
+      expect(blast.reload.completed_at).to be_present
+    end
   end
 
   describe "audience load statement timeout" do

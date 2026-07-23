@@ -73,6 +73,50 @@ describe Api::Internal::Installments::NonOpenerResendsController do
       get :show, params: { id: draft.external_id }
       expect(response).to have_http_status(:not_found)
     end
+
+    it "returns a null count instead of erroring when the count queries time out" do
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).and_raise(WithMaxExecutionTime::QueryTimeoutError.new("maximum statement execution time exceeded"))
+
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq({ "count" => nil, "recently_resent" => false, "audience_filtered_out" => false })
+    end
+
+    it "gives later preview queries only the remaining time budget, not a fresh cap each" do
+      seconds_used = []
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).and_wrap_original do |original, seconds:, &block|
+        seconds_used << seconds
+        original.call(seconds:, &block)
+      end
+
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+      expect(seconds_used.size).to eq(2)
+      expect(seconds_used.first).to be <= described_class::COUNT_PREVIEW_TOTAL_BUDGET_SECONDS
+      expect(seconds_used.second).to be < seconds_used.first
+    end
+
+    it "returns a null count when the budget runs out partway through the preview queries" do
+      calls = 0
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).and_wrap_original do |original, seconds:, &block|
+        calls += 1
+        raise WithMaxExecutionTime::QueryTimeoutError, "maximum statement execution time exceeded" if calls == 2
+        original.call(seconds:, &block)
+      end
+
+      get :show, params: { id: installment.external_id }
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq({ "count" => nil, "recently_resent" => false, "audience_filtered_out" => false })
+    end
+
+    it "raises the timeout error without running a query when the budget is already spent" do
+      expect(WithMaxExecutionTime).not_to receive(:timeout_queries)
+      spent_deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) - 1
+
+      expect do
+        controller.send(:within_preview_budget, spent_deadline) { raise "should not run" }
+      end.to raise_error(WithMaxExecutionTime::QueryTimeoutError)
+    end
   end
 
   describe "POST create" do
@@ -93,31 +137,26 @@ describe Api::Internal::Installments::NonOpenerResendsController do
         .and change { SendPostBlastEmailsJob.jobs.size }.by(1)
 
       expect(response).to be_successful
-      expect(response.parsed_body).to eq({ "success" => true, "count" => 1 })
+      expect(response.parsed_body).to eq({ "success" => true })
     end
 
-    it "returns 422 when everyone who was emailed has already opened" do
+    it "does not compute the recipient count in the request (large audiences would time out)" do
+      expect_any_instance_of(Installment).not_to receive(:unopened_recipients_count)
+      expect_any_instance_of(Installment).not_to receive(:unopened_recipient_emails)
+
+      post :create, params: { id: installment.external_id }
+      expect(response).to be_successful
+    end
+
+    it "still creates a blast when everyone who was emailed has already opened (job completes it with zero deliveries)" do
       create(:creator_contacting_customers_email_info_opened, installment: installment, purchase: unopened_sale)
 
       expect do
         post :create, params: { id: installment.external_id }
-      end.not_to change { PostEmailBlast.where(post: installment).count }
+      end.to change { PostEmailBlast.to_non_openers.where(post: installment).count }.by(1)
+        .and change { SendPostBlastEmailsJob.jobs.size }.by(1)
 
-      expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body["success"]).to eq(false)
-      expect(response.parsed_body["error"]).to include("already opened")
-    end
-
-    it "returns a distinct 422 message when unopened recipients exist but no longer match the audience filter" do
-      not_bought_product = create(:product, user: seller)
-      installment.update!(not_bought_products: [product.unique_permalink], bought_products: [not_bought_product.unique_permalink])
-
-      expect do
-        post :create, params: { id: installment.external_id }
-      end.not_to change { PostEmailBlast.where(post: installment).count }
-
-      expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body["error"]).to include("no longer eligible")
+      expect(response).to be_successful
     end
 
     it "throttles a second resend within the window" do

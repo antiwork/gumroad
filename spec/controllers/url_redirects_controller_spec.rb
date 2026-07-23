@@ -1734,7 +1734,7 @@ describe UrlRedirectsController, inertia: true do
             id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
           }
         end.to change(ConsumptionEvent, :count).by(1)
-      end.to have_enqueued_mail(CustomerMailer, :send_to_kindle).with("dude@kindle.com", product_file.id)
+      end.to have_enqueued_mail(CustomerMailer, :send_to_kindle).with("dude@kindle.com", product_file.id, url_redirect.id)
 
       event = ConsumptionEvent.last
       expect(event.event_type).to eq(ConsumptionEvent::EVENT_TYPE_READ)
@@ -1743,6 +1743,43 @@ describe UrlRedirectsController, inertia: true do
       expect(event.purchase_id).to eq purchase.id
       expect(event.link_id).to eq product.id
       expect(event.platform).to eq Platform::WEB
+    end
+
+    context "when the file is stamp-enabled" do
+      before do
+        product_file.update!(pdf_stamp_enabled: true)
+      end
+
+      context "when the stamped PDF exists" do
+        let!(:stamped_pdf) { create(:stamped_pdf, url_redirect:, product_file:) }
+
+        it "queues send_to_kindle with the url_redirect" do
+          expect do
+            post :send_to_kindle, params: {
+              id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+            }
+          end.to have_enqueued_mail(CustomerMailer, :send_to_kindle).with("dude@kindle.com", product_file.id, url_redirect.id)
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      context "when the stamped PDF does not exist yet" do
+        it "enqueues stamping and does not send the email" do
+          expect do
+            expect do
+              post :send_to_kindle, params: {
+                id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+              }
+            end.to_not have_enqueued_mail(CustomerMailer, :send_to_kindle)
+          end.to_not change { ConsumptionEvent.count }
+
+          expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id, true)
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["error"]).to eq("We are preparing the file. Please try again in a few minutes.")
+        end
+      end
     end
 
     context "when file_external_id belongs to a different product" do

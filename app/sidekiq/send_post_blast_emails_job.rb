@@ -19,7 +19,13 @@ class SendPostBlastEmailsJob
     @members = load_audience_members
 
     if @blast.to_non_openers?
-      keep_emails = @post.unopened_recipient_emails.to_set
+      # Resolving who was emailed and who opened plucks hundreds of thousands of rows
+      # for large sends — the same query shape that can exceed the database's default
+      # statement cap. Run it under the same raised, Redis-tunable cap the audience
+      # load above uses so a huge blast doesn't die on a 5-minute statement timeout.
+      keep_emails = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+        @post.unopened_recipient_emails.to_set
+      end
       @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
       remove_members_already_sent_in_this_blast
     else

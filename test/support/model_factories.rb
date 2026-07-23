@@ -1106,6 +1106,74 @@ module ModelFactories
     Doorkeeper::AccessToken.create!({ application: application || create_oauth_application }.merge(attrs))
   end
 
+  # A Korean individual's compliance record (mirrors :user_compliance_info_korea).
+  def create_user_compliance_info_korea(user: nil, **attrs)
+    create_user_compliance_info(user:, zip_code: "10169", country: "Korea, Republic of", **attrs)
+  end
+
+  # A Korean bank account (mirrors :korea_bank_account).
+  def create_korea_bank_account(user: nil, **attrs)
+    KoreaBankAccount.create!({
+      user: user || create_user,
+      account_number: "000123456789",
+      bank_number: "SGSEKRSLXXX",
+      account_number_last_four: "6789",
+      account_holder_full_name: "Gumbot Gumstein I",
+    }.merge(attrs))
+  end
+
+  # A Singaporean bank account (mirrors :singaporean_bank_account).
+  def create_singaporean_bank_account(user: nil, **attrs)
+    SingaporeanBankAccount.create!({
+      user: user || create_user,
+      account_number: "000123456",
+      branch_code: "000",
+      bank_number: "1100",
+      account_number_last_four: "3456",
+      account_holder_full_name: "Gumbot Gumstein I",
+    }.merge(attrs))
+  end
+
+  # A European (IBAN) bank account (mirrors :european_bank_account).
+  def create_european_bank_account(user: nil, **attrs)
+    EuropeanBankAccount.create!({
+      user: user || create_user,
+      account_number: "DE89370400440532013000",
+      account_number_last_four: "3000",
+      account_holder_full_name: "Stripe DE Account",
+      account_type: "checking",
+    }.merge(attrs))
+  end
+
+  # A seller balance row (mirrors :balance). Defaults to $10 USD held in Gumroad's
+  # own Stripe account, unpaid. holding_currency/holding_amount_cents track the
+  # given currency/amount unless overridden, matching the factory's lazy defaults.
+  def create_balance(user: nil, currency: Currency::USD, amount_cents: 10_00, **attrs)
+    Balance.create!({
+      user: user || create_user,
+      merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+      date: Date.today,
+      currency:,
+      amount_cents:,
+      holding_currency: currency,
+      holding_amount_cents: amount_cents,
+      state: "unpaid",
+    }.merge(attrs))
+  end
+
+  # A real Gumroad-managed Stripe Connect account for a Korean seller (mirrors
+  # :merchant_account_stripe_korea). Like create_merchant_account_stripe it makes
+  # live Stripe API calls, so call sites must run inside a VCR.use_cassette block.
+  def create_merchant_account_stripe_korea(user: nil)
+    user ||= create_user
+    create_tos_agreement(user:)
+    create_user_compliance_info_korea(user:)
+    merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+    StripeMerchantAccountHelper.upload_verification_document(merchant_account.charge_processor_merchant_id)
+    StripeMerchantAccountHelper.ensure_charges_enabled(merchant_account.charge_processor_merchant_id)
+    merchant_account
+  end
+
   # Build `count` records with the same attributes, mirroring FactoryBot's
   # create_list(:thing, count, **attrs). `factory` is the bare name (e.g.
   # :product), dispatched to the matching create_<factory> builder.

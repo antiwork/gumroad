@@ -172,11 +172,54 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
-  def send_to_kindle(kindle_email, product_file_id)
+  # The default is a sentinel (not nil) so we can tell "queued before this
+  # code shipped, with only two arguments" apart from "queued by the current
+  # code with no UrlRedirect". Legacy jobs still in the queue at deploy time
+  # deserialize with two arguments and must keep the old behavior (attach the
+  # original file) — otherwise they'd hit the stamped-copy guard below and
+  # the buyer would silently receive no email at all.
+  LEGACY_SEND_TO_KINDLE_CALL = :__legacy_two_argument_call__
+
+  def send_to_kindle(kindle_email, product_file_id, url_redirect_id = LEGACY_SEND_TO_KINDLE_CALL)
     product_file = ProductFile.find(product_file_id)
+    legacy_call = url_redirect_id == LEGACY_SEND_TO_KINDLE_CALL
+    url_redirect_id = nil if legacy_call
+
+    # For stamp-enabled PDFs, attach the buyer-specific stamped copy instead
+    # of the original upload — emailing the original would bypass the
+    # seller's PDF stamping (watermarking) setting. The stamped copy lives on
+    # the buyer's UrlRedirect, so we need that context to find it.
+    s3_retrievable = product_file
+    # Legacy two-argument jobs deliberately skip this branch: they carry no
+    # purchase context, so there is no stamped copy to look up. Attaching the
+    # original is exactly what the pre-deploy code would have sent for the
+    # same job, so this adds no new exposure — it only exists for the
+    # seconds-long window while pre-deploy jobs drain from the queue.
+    if product_file.must_be_pdf_stamped? && !legacy_call
+      url_redirect = url_redirect_id ? UrlRedirect.find_by(id: url_redirect_id) : nil
+      stamped_pdf = url_redirect&.alive_stamped_pdfs&.find_by(product_file_id: product_file.id)
+      if stamped_pdf.nil?
+        # Never fall back to the original file for a stamp-enabled PDF — that
+        # would email the un-watermarked upload and bypass the seller's
+        # stamping setting. The controller only enqueues this mail once the
+        # stamped copy exists, so this trips only if the stamped copy was
+        # deleted in between. (Legacy two-argument jobs never reach this
+        # guard — they're diverted above via LEGACY_SEND_TO_KINDLE_CALL.)
+        # Dropping the mail is deliberate, but report it so the missed
+        # delivery is visible instead of failing silently.
+        ErrorNotifier.notify(
+          "CustomerMailer#send_to_kindle: stamped PDF unavailable, not sending",
+          product_file_id: product_file.id,
+          url_redirect_id: url_redirect_id
+        )
+        return
+      end
+
+      s3_retrievable = stamped_pdf
+    end
 
     temp_file = Tempfile.new
-    product_file.s3_object.download_file(temp_file.path)
+    s3_retrievable.s3_object.download_file(temp_file.path)
     temp_file.rewind
     attachments[product_file.s3_filename] = temp_file.read
 
