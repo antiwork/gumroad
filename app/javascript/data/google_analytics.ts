@@ -18,10 +18,41 @@ function shouldTrack() {
   return document.querySelector('meta[property="gr:google_analytics:enabled"]')?.getAttribute("content") === "true";
 }
 
+// Query parameters that carry single-use secrets. If these reach an analytics
+// provider, anyone with access to the analytics property (or a network
+// intercept of the collect request) can read a live credential — e.g. a
+// password reset link (gumroad-private#1260, external security report).
+const SENSITIVE_QUERY_PARAMS = ["reset_password_token", "confirmation_token", "invitation_token", "unlock_token"];
+
+// GA4 auto-collects the full browser URL as page_location unless we override
+// it. This builds the URL GA should see instead: the real URL with any
+// secret-bearing query parameters removed (the parameter is dropped entirely,
+// not blanked, so the value can never appear in the collect request).
+export function sanitizedPageLocation(url: string = window.location.href): string {
+  try {
+    const parsed = new URL(url);
+    for (const param of SENSITIVE_QUERY_PARAMS) parsed.searchParams.delete(param);
+    return parsed.toString();
+  } catch {
+    // An unparseable URL shouldn't break analytics init; send nothing rather
+    // than risk forwarding a token we failed to strip.
+    return "";
+  }
+}
+
+// Same stripping for the relative "page" values we attach to seller/Gumroad
+// events (pathname + search).
+export function sanitizedPagePath(): string {
+  const location = sanitizedPageLocation();
+  if (location === "") return window.location.pathname;
+  const parsed = new URL(location);
+  return parsed.pathname + parsed.search;
+}
+
 export function trackProductEvent(config: AnalyticsConfig | undefined, data: ProductAnalyticsEvent) {
   if (!shouldTrack() || typeof gtag === "undefined") return;
 
-  const page = window.location.pathname + window.location.search;
+  const page = sanitizedPagePath();
   const payload = { page, title: ProductEventsTitles[data.action] };
 
   switch (data.action) {
@@ -110,7 +141,7 @@ export function trackProfilePageView(config: AnalyticsConfig) {
   if (!shouldTrack() || !config.googleAnalyticsId || typeof gtag === "undefined") return;
 
   logSellerEvent(config.id, "page_view", {
-    page: window.location.pathname + window.location.search,
+    page: sanitizedPagePath(),
     title: "viewed profile",
   });
 }
@@ -123,6 +154,9 @@ export function startTrackingForSeller(data: AnalyticsConfig) {
     groups: `seller${data.id}`,
     cookie_flags: "SameSite=None; Secure",
     send_page_view: false,
+    // Never let GA auto-collect a URL that could carry a secret token
+    // (gumroad-private#1260).
+    page_location: sanitizedPageLocation(),
   });
 }
 
@@ -136,5 +170,9 @@ export function startTrackingForGumroad() {
     groups: "gumroad",
     cookie_flags: "SameSite=None; Secure",
     dimension1: isLoggedIn ? "Logged in" : "Not logged in",
+    // Override GA4's automatic page_location so secret-bearing query params
+    // (e.g. reset_password_token on the password reset page) are never sent
+    // to Google Analytics (gumroad-private#1260).
+    page_location: sanitizedPageLocation(),
   });
 }
