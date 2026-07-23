@@ -45,7 +45,10 @@ describe("Resend to non-openers flow", :js, type: :system) do
       click_on "Resend"
     end
 
-    expect(page).to have_alert(text: "Resending to 2 people who haven't opened this yet.")
+    # The success alert intentionally doesn't include a recipient count anymore — the
+    # count is no longer computed inside the resend request (it could time out for
+    # large audiences); the job resolves the recipient list in the background.
+    expect(page).to have_alert(text: "Resending to everyone who hasn't opened this yet. This may take a while.")
 
     resend_blast = installment.blasts.where(recipient_filter: "unopened").sole
     expect(resend_blast.recipient_filter).to eq("unopened")

@@ -107,6 +107,9 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   const [loadingCount, setLoadingCount] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const [count, setCount] = React.useState<number | null>(null);
+  // Distinguishes "count is null because the audience was too large to count in time"
+  // from "count hasn't loaded yet" — the resend still works without a count.
+  const [countUnavailable, setCountUnavailable] = React.useState(false);
   const [recentlyResent, setRecentlyResent] = React.useState(false);
   const [audienceFilteredOut, setAudienceFilteredOut] = React.useState(false);
   const [resending, setResending] = React.useState(false);
@@ -121,6 +124,7 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
         audience_filtered_out,
       } = await getNonOpenerCount(installment.external_id);
       setCount(nonOpenerCount);
+      setCountUnavailable(nonOpenerCount === null);
       setRecentlyResent(recently_resent);
       setAudienceFilteredOut(audience_filtered_out);
       setConfirming(true);
@@ -135,11 +139,8 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   const handleResend = asyncVoid(async () => {
     setResending(true);
     try {
-      const { count: sentCount } = await resendToNonOpeners(installment.external_id);
-      showAlert(
-        `Resending to ${formatStatNumber({ value: sentCount })} people who haven't opened this yet.`,
-        "success",
-      );
+      await resendToNonOpeners(installment.external_id);
+      showAlert("Resending to everyone who hasn't opened this yet. This may take a while.", "success");
       setRecentlyResent(true);
       setConfirming(false);
       router.reload();
@@ -151,7 +152,7 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
     }
   });
 
-  const disableResend = resending || recentlyResent || count === null || count === 0;
+  const disableResend = resending || recentlyResent || (!countUnavailable && (count === null || count === 0));
 
   return (
     <>
@@ -159,7 +160,7 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
         <Envelope pack="filled" className="size-5" />
         {loadingCount ? "Loading..." : "Resend to non-openers"}
       </Button>
-      {confirming && count !== null ? (
+      {confirming ? (
         <Modal
           open
           allowClose={!resending}
@@ -179,11 +180,13 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
           <h4>
             {recentlyResent
               ? "You've already resent this to non-openers recently. Try again in 24 hours."
-              : count === 0
-                ? audienceFilteredOut
-                  ? "The remaining unopened recipients are no longer eligible for this email's audience."
-                  : "Everyone who was emailed has already opened this."
-                : `This will resend "${installment.name}" to ${formatStatNumber({ value: count })} people who were emailed but haven't opened it yet.`}
+              : countUnavailable
+                ? `This will resend "${installment.name}" to everyone who was emailed but hasn't opened it yet. Your audience is too large to preview an exact count.`
+                : count === 0
+                  ? audienceFilteredOut
+                    ? "The remaining unopened recipients are no longer eligible for this email's audience."
+                    : "Everyone who was emailed has already opened this."
+                  : `This will resend "${installment.name}" to ${formatStatNumber({ value: count ?? 0 })} people who were emailed but haven't opened it yet.`}
           </h4>
         </Modal>
       ) : null}
