@@ -18,8 +18,8 @@ function HelpCenterHeader({ showSearchButton = false }: { showSearchButton?: boo
     <div className="flex gap-2">
       {showSearchButton ? (
         <Button asChild>
-          <Link href={Routes.help_center_root_path()} aria-label="Search" title="Search">
-            <Search className="size-5" />
+          <Link href={Routes.help_center_root_path()} aria-label="Search">
+            <Search className="size-5" aria-hidden="true" />
           </Link>
         </Button>
       ) : (
