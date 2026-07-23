@@ -359,17 +359,24 @@ describe CreateVatReportJob do
       end
 
       @legacy_purchase.update!(chargeback_date: cutover - 10.days)
+      create(:dispute, purchase: @legacy_purchase, event_created_at: cutover - 10.days)
 
       travel_to(@event_quarter_time) do
         @event_dated_purchase.update!(chargeback_date: Time.current)
         @won_purchase.update!(chargeback_date: Time.current)
         @undated_reversal_purchase.update!(chargeback_date: Time.current, chargeback_reversed: true)
         @partially_refunded_purchase.update!(chargeback_date: Time.current)
+        # chargeback_date mirrors the dispute's event_created_at, so give each formalized
+        # chargeback its Dispute row — the tax-period scopes resolve the event quarter through
+        # them. @won_purchase's row is created in the won quarter below carrying both dates.
+        create(:dispute, purchase: @event_dated_purchase, event_created_at: Time.current)
+        create(:dispute, purchase: @undated_reversal_purchase, event_created_at: Time.current)
+        create(:dispute, purchase: @partially_refunded_purchase, event_created_at: Time.current)
       end
 
       travel_to(@won_quarter_time) do
         @won_purchase.update!(chargeback_reversed: true)
-        create(:dispute, purchase: @won_purchase, state: "won", won_at: Time.current)
+        create(:dispute, purchase: @won_purchase, state: "won", event_created_at: @event_quarter_time, won_at: Time.current)
       end
     end
 

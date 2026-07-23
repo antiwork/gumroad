@@ -304,6 +304,9 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
     it "pushes a chargeback as a refund transaction dated by the dispute event date" do
       event_day = cutover + 5
       @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12))
+      # chargeback_date mirrors the dispute's event_created_at in production; the tax-period
+      # scope resolves the window through disputes, so the purchase needs its Dispute row.
+      create(:dispute, purchase: @purchase, event_created_at: @purchase.chargeback_date)
 
       refund_kwargs = nil
       allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction) do |_instance, **kwargs|
@@ -337,6 +340,7 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
       end
       event_day = cutover + 5
       @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12))
+      create(:dispute, purchase: @purchase, event_created_at: @purchase.chargeback_date)
 
       refund_kwargs = nil
       allow_any_instance_of(TaxjarApi).to receive(:create_refund_transaction) do |_instance, **kwargs|
@@ -355,6 +359,9 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
     it "does not push legs for pre-cutover chargebacks" do
       event_day = cutover - 5
       @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12))
+      # A real Dispute row exists, but its event date is before the cutover, so the leg is
+      # still skipped — the exclusion comes from the cutover gate, not a missing dispute.
+      create(:dispute, purchase: @purchase, event_created_at: @purchase.chargeback_date)
       expect_any_instance_of(TaxjarApi).not_to receive(:create_refund_transaction)
       allow_any_instance_of(TaxjarApi).to receive(:create_order_transaction).and_return({})
 
@@ -364,6 +371,9 @@ describe UploadUsStatesSalesTaxToTaxjarJob do
     it "does not push legs for a reversed chargeback with no dispute row dating the win" do
       event_day = cutover + 5
       @purchase.update!(chargeback_date: event_day.to_time(:utc).change(hour: 12), chargeback_reversed: true)
+      # The formalization dispute exists (event date in the window) but records no won_at, so
+      # neither the debit leg (reversed with no win) nor the re-add leg (no reversal date) fires.
+      create(:dispute, purchase: @purchase, event_created_at: @purchase.chargeback_date)
       expect_any_instance_of(TaxjarApi).not_to receive(:create_refund_transaction)
       expect_any_instance_of(TaxjarApi).not_to receive(:create_order_transaction)
 

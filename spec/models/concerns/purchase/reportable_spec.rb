@@ -372,19 +372,41 @@ describe "chargeback event-date reporting" do
 
   describe "Purchase.chargebacks_for_tax_period_reporting" do
     it "selects event-dated chargebacks whose event date falls in the window" do
+      # In production a chargeback_date is always mirrored by a Dispute row's event_created_at
+      # (both are set from the same processor event when the dispute is formalized), and the
+      # scope now resolves the window through disputes, so give each charged-back purchase its
+      # matching dispute — directly, or on its Charge for a multi-purchase cart.
       in_window = create(:purchase, chargeback_date: cutover + 5.days)
+      create(:dispute, purchase: in_window, event_created_at: cutover + 5.days)
+
+      charge_in_window = create(:purchase, chargeback_date: cutover + 6.days)
+      charge = create(:charge)
+      charge.purchases << charge_in_window
+      create(:dispute_on_charge, charge:, event_created_at: cutover + 6.days)
+
       after_window = create(:purchase, chargeback_date: cutover + 40.days)
+      create(:dispute, purchase: after_window, event_created_at: cutover + 40.days)
+
       legacy = create(:purchase, chargeback_date: cutover - 1.day)
+      create(:dispute, purchase: legacy, event_created_at: cutover - 1.day)
+
       undated_reversal = create(:purchase, chargeback_date: cutover + 5.days, chargeback_reversed: true)
+      create(:dispute, purchase: undated_reversal, event_created_at: cutover + 5.days)
+
       dated_reversal = create(:purchase, chargeback_date: cutover + 5.days, chargeback_reversed: true)
-      create(:dispute, purchase: dated_reversal, state: "won", won_at: cutover + 60.days)
+      create(:dispute, purchase: dated_reversal, state: "won", event_created_at: cutover + 5.days, won_at: cutover + 60.days)
+
+      # A chargeback_date carried without any Dispute row belongs only to the $0 gift/bundle
+      # child purchases, which every caller already excludes; the disputes-driven scope leaves
+      # it out (this is what the old chargeback_date-only scan would have wrongly included).
+      dispute_less = create(:purchase, chargeback_date: cutover + 5.days)
 
       result = Purchase.chargebacks_for_tax_period_reporting(cutover, cutover + 30.days)
 
       # The undated reversal emits no debit leg — with no real won_at its re-add leg could
       # never balance it, so it keeps the legacy treatment entirely.
-      expect(result).to include(in_window, dated_reversal)
-      expect(result).not_to include(after_window, legacy, undated_reversal)
+      expect(result).to include(in_window, charge_in_window, dated_reversal)
+      expect(result).not_to include(after_window, legacy, undated_reversal, dispute_less)
     end
   end
 
