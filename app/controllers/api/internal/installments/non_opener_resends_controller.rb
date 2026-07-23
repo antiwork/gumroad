@@ -4,6 +4,11 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
   RESEND_THROTTLE = 24.hours
   MAX_RESENDS = 3
   IN_FLIGHT_GRACE = 1.hour
+  # Computing the non-opener count means scanning every emailed recipient, every open
+  # event, and the seller's full audience. For very large sends (hundreds of thousands
+  # of recipients) that cannot finish inside a web request, so each query is capped and
+  # the endpoint degrades to "count unavailable" instead of erroring the whole page.
+  COUNT_PREVIEW_QUERY_TIMEOUT_SECONDS = 10
 
   before_action :authenticate_user!
   before_action :set_installment
@@ -12,8 +17,21 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
   def show
     authorize @installment, :resend_to_non_openers?
 
-    count = @installment.unopened_recipients_count
-    audience_filtered_out = count.zero? && @installment.unopened_recipient_emails.any?
+    count = nil
+    audience_filtered_out = false
+    begin
+      WithMaxExecutionTime.timeout_queries(seconds: COUNT_PREVIEW_QUERY_TIMEOUT_SECONDS) do
+        count = @installment.unopened_recipients_count
+        audience_filtered_out = count.zero? && @installment.unopened_recipient_emails.any?
+      end
+    rescue WithMaxExecutionTime::QueryTimeoutError
+      # The audience is too large to count within the request. A null count tells the
+      # UI to offer the resend without a recipient number — the actual send happens in
+      # a background job, so a missing preview count doesn't block anything.
+      count = nil
+      audience_filtered_out = false
+    end
+
     render json: { count:, recently_resent: recently_resent?, audience_filtered_out: }
   end
 
@@ -33,17 +51,6 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
         next
       end
 
-      @count = @installment.unopened_recipients_count
-      if @count.zero?
-        message = if @installment.unopened_recipient_emails.any?
-          "There are no non-openers left to email — the remaining unopened recipients are no longer eligible for this email's audience."
-        else
-          "Everyone who was emailed has already opened this."
-        end
-        error_response = [{ success: false, error: message }, :unprocessable_entity]
-        next
-      end
-
       blast = PostEmailBlast.create!(
         post: @installment,
         requested_at: Time.current,
@@ -56,8 +63,13 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
       return render json:, status:
     end
 
+    # Recipient eligibility is intentionally NOT computed here: for large audiences
+    # that computation takes minutes and used to time the request out before the blast
+    # was even created. The job resolves the recipient list itself, and a blast that
+    # turns out to have zero eligible recipients simply completes with delivery_count 0
+    # (which doesn't count toward the resend cap or the 24h throttle).
     SendPostBlastEmailsJob.perform_async(blast.id)
-    render json: { success: true, count: @count }
+    render json: { success: true }
   end
 
   private
