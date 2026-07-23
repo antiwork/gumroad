@@ -234,7 +234,18 @@ module ModelFactories
   end
 
   def create_variant(variant_category: nil, **attrs)
-    build_variant(variant_category:, **attrs).tap(&:save!)
+    # active_integrations is a has_many-through; it can't be mass-assigned on an
+    # unsaved variant (the join row would validate with a nil base_variant_id),
+    # so assign it after the variant persists, matching the :variant factory's
+    # `active_integrations: [...]` override.
+    active_integrations = attrs.delete(:active_integrations)
+    variant = build_variant(variant_category:, **attrs)
+    variant.save!
+    if active_integrations
+      variant.active_integrations = active_integrations
+      variant.save!
+    end
+    variant
   end
 
   # Mirrors the :installment factories. Product/variant posts hang off a product;
@@ -1095,12 +1106,136 @@ module ModelFactories
     Doorkeeper::AccessToken.create!({ application: application || create_oauth_application }.merge(attrs))
   end
 
+  # Build `count` records with the same attributes, mirroring FactoryBot's
+  # create_list(:thing, count, **attrs). `factory` is the bare name (e.g.
+  # :product), dispatched to the matching create_<factory> builder.
+  def create_list(factory, count, **attrs)
+    Array.new(count) { public_send("create_#{factory}", **attrs) }
+  end
+
+  # An admin/team-member user (mirrors the :admin_user factory).
+  def create_admin_user(**attrs)
+    create_user(is_team_member: true, **attrs)
+  end
+
+  # A compliant seller with a payout address (mirrors the :recommendable_user
+  # factory, which inherits payment_address from the base :user factory).
+  # Product#recommendable? needs both the compliant risk state and a payout method.
+  def create_recommendable_user(**attrs)
+    create_user(user_risk_state: "compliant", payment_address: "rec-#{unique_suffix}@example.com", **attrs)
+  end
+
+  # A team membership (mirrors the :team_membership factory). The membership's
+  # user needs its own owner self-membership before a non-owner role validates
+  # (owner_membership_must_exist), so ensure it first like the factory does.
+  def create_team_membership(user: nil, seller: nil, role: TeamMembership::ROLE_ADMIN, **attrs)
+    user ||= create_user
+    seller ||= create_user
+    user.create_owner_membership_if_needed!
+    TeamMembership.create!({ user:, seller:, role: }.merge(attrs))
+  end
+
+  # A product with a single readable PDF file (mirrors :product_with_pdf_file).
+  def create_product_with_pdf_file(user: nil, **attrs)
+    product = create_product(user:, **attrs)
+    create_readable_document(link: product, pagelength: 3, size: 50, display_name: "Display Name", description: "Description")
+    product.reload
+    product
+  end
+
+  # A product with a named cover image attached (mirrors
+  # :product_with_file_and_preview). Link#preview= builds the asset preview.
+  def create_product_with_file_and_preview(user: nil, **attrs)
+    create_product(
+      user:,
+      name: "The Wrath of the River",
+      description: "A poem not for the lighthearted, but the heavy. Like lead.",
+      preview: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "kFDzu.png"), "image/png"),
+      **attrs
+    )
+  end
+
+  # A product with two digital versions priced $1 and $2 above base (mirrors
+  # :product_with_digital_versions_with_price_difference_cents).
+  def create_product_with_digital_versions_with_price_difference_cents(user: nil, **attrs)
+    product = create_product(user:, **attrs)
+    category = create_variant_category(link: product, title: "Category")
+    create_variant(variant_category: category, name: "Untitled 1", price_difference_cents: 100)
+    create_variant(variant_category: category, name: "Untitled 2", price_difference_cents: 200)
+    product
+  end
+
+  # Product-level rich content (mirrors :product_rich_content, which is just the
+  # :rich_content factory with a product entity).
+  def create_product_rich_content(entity: nil, description: [], **attrs)
+    create_rich_content(entity: entity || create_product, description:, **attrs)
+  end
+
+  # A profile "posts" section (mirrors :seller_profile_posts_section).
+  def create_seller_profile_posts_section(seller: nil, **attrs)
+    SellerProfilePostsSection.create!({ seller: seller || create_user, shown_posts: [] }.merge(attrs))
+  end
+
+  # A custom domain (mirrors :custom_domain). Callers pass `user: nil` together
+  # with `product:` for product-scoped domains (the :with_product trait).
+  def create_custom_domain(user: :default, **attrs)
+    user = create_user if user == :default
+    CustomDomain.create!({ user:, domain: "example-#{unique_suffix}.com" }.merge(attrs))
+  end
+
+  # A legacy permalink → product mapping (mirrors :legacy_permalink).
+  def create_legacy_permalink(product: nil, permalink: nil, **attrs)
+    LegacyPermalink.create!({ product: product || create_product, permalink: permalink || SecureRandom.hex(15) }.merge(attrs))
+  end
+
+  # A preorder configuration for a product (mirrors :preorder_link).
+  def create_preorder_link(link: nil, **attrs)
+    PreorderLink.create!({ link: link || create_product, release_at: 2.months.from_now }.merge(attrs))
+  end
+
+  # A discover/search tag (mirrors :tag).
+  def create_tag(**attrs)
+    Tag.create!({ name: "tag name #{unique_suffix}" }.merge(attrs))
+  end
+
+  # A shopping cart (mirrors :cart). `user: nil` builds a guest cart.
+  def create_cart(user: :default, **attrs)
+    user = create_user if user == :default
+    Cart.create!({ user:, browser_guid: SecureRandom.uuid, ip_address: unique_ip }.merge(attrs))
+  end
+
+  # A product line in a cart (mirrors :cart_product).
+  def create_cart_product(cart: nil, product: nil, **attrs)
+    cart ||= create_cart
+    product ||= create_product
+    CartProduct.create!({ cart:, product:, price: product.price_cents, quantity: 1, referrer: "direct" }.merge(attrs))
+  end
+
+  # Integration records (mirror the *_integration factories). Used both directly
+  # and via the "modifies an existing integration" shared example, which builds
+  # one with create("#{integration_name}_integration").
+  def create_discord_integration(**attrs)
+    DiscordIntegration.create!({ server_id: "0", server_name: "Gaming", username: "gumbot" }.merge(attrs))
+  end
+
+  def create_zoom_integration(**attrs)
+    ZoomIntegration.create!({ user_id: "0", email: "test@zoom.com", access_token: "test_access_token", refresh_token: "test_refresh_token" }.merge(attrs))
+  end
+
+  def create_google_calendar_integration(**attrs)
+    GoogleCalendarIntegration.create!({ calendar_id: "0", calendar_summary: "Holidays", access_token: "test_access_token", refresh_token: "test_refresh_token", email: "hi@gmail.com" }.merge(attrs))
+  end
+
   private
-    def build_asset_preview(link:, fixture:, content_type:, **attrs)
+    # `attach: false` mirrors the :asset_preview factory's transient — used for
+    # oEmbed/Unsplash previews that carry a URL instead of an uploaded file.
+    def build_asset_preview(link:, fixture:, content_type:, attach: true, **attrs)
       preview = AssetPreview.new({ link: link || create_product }.merge(attrs))
-      preview.file.attach(Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", fixture), content_type))
+      if attach
+        preview.file.attach(Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", fixture), content_type))
+      end
       preview.save!
-      AssetPreviewAnalysisStub.analyze(preview.file)
+      AssetPreviewAnalysisStub.analyze(preview.file) if attach
       preview
     end
 end
