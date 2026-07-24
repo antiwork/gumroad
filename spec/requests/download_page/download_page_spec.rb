@@ -85,7 +85,6 @@ describe("Download Page", type: :system, js: true) do
       end
 
       it "adds customer to discord if oauth successful", billy: true do
-        # TODO: Use the below commented out line instead, after removing the :custom_domain_download feature flag (curtiseinsmann)
         proxy.stub("https://www.discord.com:443/api/oauth2/authorize").and_return(redirect_to: oauth_redirect_integrations_discord_index_url(code: "test_code", host: UrlService.domain_with_protocol))
         # proxy.stub("https://www.discord.com:443/api/oauth2/authorize").and_return(redirect_to: oauth_redirect_integrations_discord_index_url(code: "test_code", host: product.user.subdomain_with_protocol))
 
@@ -118,7 +117,6 @@ describe("Download Page", type: :system, js: true) do
       end
 
       it "shows error if oauth fails while adding customer to discord", billy: true do
-        # TODO: Use the below commented out line instead, after removing the :custom_domain_download feature flag (curtiseinsmann)
         proxy.stub("https://www.discord.com:443/api/oauth2/authorize").and_return(redirect_to: oauth_redirect_integrations_discord_index_url(error: "error_message", host: UrlService.domain_with_protocol))
         # proxy.stub("https://www.discord.com:443/api/oauth2/authorize").and_return(redirect_to: oauth_redirect_integrations_discord_index_url(error: "error_message", host: product.user.subdomain_with_protocol))
 
@@ -133,7 +131,6 @@ describe("Download Page", type: :system, js: true) do
       end
 
       it "shows error if adding customer to discord fails", billy: true do
-        # TODO: Use the below commented out line instead, after removing the :custom_domain_download feature flag (curtiseinsmann)
         proxy.stub("https://www.discord.com:443/api/oauth2/authorize").and_return(redirect_to: oauth_redirect_integrations_discord_index_url(code: "test_code", host: UrlService.domain_with_protocol))
         # proxy.stub("https://www.discord.com:443/api/oauth2/authorize").and_return(redirect_to: oauth_redirect_integrations_discord_index_url(code: "test_code", host: product.user.subdomain_with_protocol))
 
