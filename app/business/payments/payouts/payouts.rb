@@ -15,6 +15,11 @@ class Payouts
   HOLDING_BALANCE_ID_BATCH_SIZE = 25_000
   # Max ids per `User.where(id: ...)` lookup, so the IN() list stays on MySQL's PK range plan.
   USER_LOOKUP_BATCH_SIZE = 1_000
+  # How long a batch's resume cursor survives. Long enough for a run to be retried or
+  # re-enqueued across the same payout day (including the PayPal retry job), short enough
+  # that an abandoned cursor cannot outlive its payout period. The key is also scoped by
+  # date, so expiry is a backstop rather than the correctness guarantee.
+  BATCH_CURSOR_TTL = 2.days
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -82,21 +87,33 @@ class Payouts
 
   def self.create_payments_for_balances_up_to_date(date, processor_type)
     # Walk the holding-balance cohort in bounded id slices, enqueueing each slice's
-    # payments as we go — the same shape as the bank-account-type path below. The old
-    # `User.holding_balance` relation evaluated the whole ~200k-user cohort in one
-    # `users × balances` GROUP BY and then iterated every user before enqueueing a
-    # single payment. On Fridays (PayPal + Stripe Connect, no bank-account-type
-    # filter) that single pass ran for ~110 minutes; any worker restart mid-pass
-    # (deploys, instance recycling) threw ALL progress away, and sidekiq-pro's
-    # orphan recovery restarted it from the top until the job was buried in the
-    # dead set with the whole cohort unpaid (gumroad-private#1021, 2026-07-10).
-    # Slicing makes progress durable: payments for completed slices are already
-    # enqueued, so a killed pass only re-walks users whose payments were not yet
-    # created — and Payouts.create_payment no-ops once a user's balances leave
-    # `unpaid`, so overlap is safe.
-    holding_balance_user_ids = self.holding_balance_user_ids
+    # payments as we go — the same shape as the bank-account-type path below — and
+    # record how far we got in Redis so a killed run RESUMES instead of restarting.
+    #
+    # Both halves are needed, which is what the 2026-07-24 PayPal incident showed
+    # (gumroad-private#1284, a recurrence of #1021). Slicing alone (#5797) makes each
+    # completed slice's payments durable, but a restarted job still began again at the
+    # lowest user id: the cohort takes ~130 minutes to walk at ~1,570 sellers/min,
+    # longer than a worker process reliably lives (deploys, instance recycling), so
+    # every restart re-walked the same early sellers — whose payments were already
+    # enqueued, hence no visible progress — and the tail of the cohort was never
+    # reached. Sidekiq's orphan recovery kept relaunching from the top until the job
+    # was buried in the dead set with most of the cohort unpaid.
+    #
+    # With a cursor, each restart picks up after the last fully-enqueued slice, so the
+    # run finishes across however many restarts it takes. Re-walking the interrupted
+    # slice is safe: Payouts.create_payment no-ops once a user's balances leave
+    # `unpaid`, so an overlapping user is skipped rather than paid twice.
+    cursor_key = RedisKey.payout_batch_cursor(date, processor_type)
+    # A cursor is only meaningful for the payout period it was recorded in, and the key
+    # is scoped by date, so a stale key can never make a later period skip sellers.
+    resume_after_user_id = $redis.get(cursor_key).to_i
 
-    holding_balance_user_ids.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
+    if resume_after_user_id > 0
+      Rails.logger.info("AUTOMATED PAYOUTS: #{processor_type} resuming after user #{resume_after_user_id}")
+    end
+
+    holding_balance_user_ids(starting_after: resume_after_user_id).each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
       users = User.where(id: user_ids_batch)
 
       if processor_type == PayoutProcessorType::STRIPE
@@ -107,16 +124,36 @@ class Payouts
       end
 
       self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true)
+
+      # Only advance once the slice's payments are enqueued: if the job dies partway
+      # through a slice, the cursor still points at the last COMPLETE slice and that
+      # slice is redone (harmlessly) rather than skipped. Ids come back ascending, so
+      # the last id of the slice is its high-water mark.
+      $redis.set(cursor_key, user_ids_batch.last, ex: BATCH_CURSOR_TTL.to_i)
     end
+
+    # The run walked the whole cohort, so the next run for this period (the PayPal
+    # retry job, or a manual re-enqueue) should start from the top again.
+    $redis.del(cursor_key)
   end
 
   def self.create_payments_for_balances_up_to_date_for_bank_account_types(date, processor_type, bank_account_types)
     # Materialize holding-balance user ids, then look up bank accounts in user_id chunks.
     # The old single join (users × balances × bank_accounts) full-scanned bank_accounts
     # and blew the statement timeout; splitting it keeps each piece cheap.
-    holding_balance_user_ids = self.holding_balance_user_ids
-
     bank_account_types.each do |bank_account_type|
+      # Resume where a previous killed run stopped, for the same reason as the
+      # no-bank-type path above (gumroad-private#1284). The cursor is per bank account
+      # type because these run as separate fanned-out jobs with separate lifetimes.
+      cursor_key = RedisKey.payout_batch_cursor(date, "#{processor_type}:#{bank_account_type}")
+      resume_after_user_id = $redis.get(cursor_key).to_i
+
+      if resume_after_user_id > 0
+        Rails.logger.info("AUTOMATED PAYOUTS: #{processor_type} #{bank_account_type} resuming after user #{resume_after_user_id}")
+      end
+
+      holding_balance_user_ids = self.holding_balance_user_ids(starting_after: resume_after_user_id)
+
       user_ids = holding_balance_user_ids.each_slice(BANK_ACCOUNT_LOOKUP_BATCH_SIZE).flat_map do |user_ids_batch|
         BankAccount.alive.where(user_id: user_ids_batch, type: bank_account_type).distinct.pluck(:user_id)
       end
@@ -125,10 +162,19 @@ class Payouts
       # cohort exceeds MySQL's range_optimizer_max_mem_size and full-scans the users
       # table, blowing the statement timeout (gumroad-private#955); slicing keeps each
       # lookup on the PK range plan. Enqueue is per-user, so slicing changes nothing.
-      user_ids.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
+      #
+      # `pluck` above does not promise ordering, so sort before slicing: the cursor is
+      # only a valid resume point if slices advance monotonically through the ids.
+      user_ids.sort.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
         users = User.where(id: user_ids_batch)
         self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
+
+        # Advance only after the slice is enqueued, so an interrupted slice is redone
+        # (harmlessly — create_payment no-ops for already-paid balances) not skipped.
+        $redis.set(cursor_key, user_ids_batch.last, ex: BATCH_CURSOR_TTL.to_i)
       end
+
+      $redis.del(cursor_key)
     end
   end
 
@@ -143,9 +189,13 @@ class Payouts
   # (state, user_id, amount_cents) covering index and stops. Grouping by user_id never
   # splits a user's SUM, so the union is exactly SUM > 0. Reads only balances, so ids for
   # deleted users may appear; callers resolve them via User.where(id:), which drops them.
-  def self.holding_balance_user_ids
+  #
+  # `starting_after` lets a resumed batch skip the sellers a previous run already
+  # enqueued, instead of re-walking them from the start (gumroad-private#1284). Ids come
+  # back in ascending order, which is what makes a single id a valid resume point.
+  def self.holding_balance_user_ids(starting_after: 0)
     user_ids = []
-    last_user_id = 0
+    last_user_id = starting_after
 
     loop do
       batch = Balance.unpaid

@@ -64,6 +64,10 @@ class RedisKey
     # deploy pipeline can ask "is a payout batch in flight right now?" instead
     # of freezing deploys on a fixed clock window. See HealthcheckController#payouts.
     def payout_batch_in_flight = "payouts:batch_in_flight"
+    # How far through the seller cohort a payout batch has already got, so a batch
+    # that gets killed mid-run resumes where it stopped instead of starting over.
+    # Scoped per payout period and processor. See Payouts.create_payments_for_balances_up_to_date.
+    def payout_batch_cursor(date, processor_type) = "payouts:batch_cursor:#{date}:#{processor_type}"
     def stripe_balance_topup_needed = "stripe:balance_topup_needed"
     def min_successful_purchases_in_last_10_minutes = "healthcheck:min_successful_purchases_in_last_10_minutes"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"

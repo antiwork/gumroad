@@ -362,6 +362,88 @@ describe Payouts do
 
       described_class.create_payments_for_balances_up_to_date(payout_date, PayoutProcessorType::STRIPE)
     end
+
+    describe "resuming an interrupted batch" do
+      # Regression tests for gumroad-private#1284. Slicing alone (#5797) was not enough:
+      # a restarted job still began at the lowest user id, so on a cohort that takes
+      # longer to walk than a worker process lives, every restart re-walked the same
+      # early sellers and the tail was never reached.
+      let(:cursor_key) { RedisKey.payout_batch_cursor(payout_date, payout_processor_type) }
+
+      before { stub_const("Payouts::USER_LOOKUP_BATCH_SIZE", 2) }
+      after { $redis.del(cursor_key) }
+
+      it "records how far it got so a killed run does not restart from the beginning" do
+        users = create_list(:user, 5, unpaid_balance_cents: 100).sort_by(&:id)
+        allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users)
+
+        described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
+
+        # The run completed, so the cursor is cleared and the next run starts from the top.
+        expect($redis.get(cursor_key)).to be_nil
+        expect(users.size).to eq(5)
+      end
+
+      it "advances the cursor only after each slice's payments are enqueued" do
+        users = create_list(:user, 5, unpaid_balance_cents: 100).sort_by(&:id)
+        cursor_at_each_call = []
+
+        allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do
+          # An interrupted slice must be redone, not skipped: when the Nth slice is being
+          # enqueued, the cursor still points at the end of slice N-1.
+          cursor_at_each_call << $redis.get(cursor_key)&.to_i
+        end
+
+        described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
+
+        expect(cursor_at_each_call).to eq([nil, users[1].id, users[3].id])
+      end
+
+      it "resumes after the last fully-enqueued slice instead of re-walking the whole cohort" do
+        users = create_list(:user, 5, unpaid_balance_cents: 100).sort_by(&:id)
+        # Simulate a previous run that died after enqueueing the first two sellers.
+        $redis.set(cursor_key, users[1].id)
+
+        enqueued = []
+        allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor, slice_users, **|
+          enqueued.concat(slice_users.to_a)
+        end
+
+        described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
+
+        expect(enqueued).to match_array(users[2..])
+      end
+
+      it "walks the whole cohort when a previous run left no cursor" do
+        users = create_list(:user, 5, unpaid_balance_cents: 100)
+
+        enqueued = []
+        allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor, slice_users, **|
+          enqueued.concat(slice_users.to_a)
+        end
+
+        described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
+
+        expect(enqueued).to match_array(users)
+      end
+
+      it "does not let one payout period's cursor affect another period's run" do
+        users = create_list(:user, 5, unpaid_balance_cents: 100).sort_by(&:id)
+        # A cursor left behind by a different payout period must not skip sellers here.
+        $redis.set(RedisKey.payout_batch_cursor(payout_date - 7, payout_processor_type), users[3].id)
+
+        enqueued = []
+        allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor, slice_users, **|
+          enqueued.concat(slice_users.to_a)
+        end
+
+        described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
+
+        expect(enqueued).to match_array(users)
+      ensure
+        $redis.del(RedisKey.payout_batch_cursor(payout_date - 7, payout_processor_type))
+      end
+    end
   end
 
   describe "create_instant_payouts_for_balances_up_to_date" do
@@ -559,6 +641,45 @@ describe Payouts do
       expect(loaded_batches.map(&:size)).to all(be <= 1)
       expect(loaded_batches.flatten).to match_array([u1_2, u2_2])
     end
+
+    it "resumes after the last fully-enqueued slice when a previous run was killed" do
+      # gumroad-private#1284: a restarted fan-out job used to re-walk the cohort from the
+      # lowest user id, so on a long cohort the tail was never reached.
+      stub_const("Payouts::USER_LOOKUP_BATCH_SIZE", 1)
+      allow(Payouts).to receive(:is_user_payable).and_return(true)
+      cursor_key = RedisKey.payout_batch_cursor(payout_date, "#{payout_processor_type}:#{AustralianBankAccount.name}")
+      first_australian, second_australian = [u1_2, u2_2].sort_by(&:id)
+      $redis.set(cursor_key, first_australian.id)
+
+      enqueued = []
+      allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor, users, **_options|
+        enqueued.concat(users.to_a)
+      end
+
+      described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
+
+      expect(enqueued).to eq([second_australian])
+      # Cohort fully walked, so the next run for this period starts from the top.
+      expect($redis.get(cursor_key)).to be_nil
+    ensure
+      $redis.del(RedisKey.payout_batch_cursor(payout_date, "#{payout_processor_type}:#{AustralianBankAccount.name}"))
+    end
+
+    it "keeps each bank account type's resume cursor separate" do
+      # The multi-type batch fans out to concurrent per-type jobs with independent
+      # lifetimes, so one type's progress must never move another type's starting point.
+      allow(Payouts).to receive(:is_user_payable).and_return(true)
+      allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users)
+      australian_cursor = RedisKey.payout_batch_cursor(payout_date, "#{payout_processor_type}:#{AustralianBankAccount.name}")
+      canadian_cursor = RedisKey.payout_batch_cursor(payout_date, "#{payout_processor_type}:#{CanadianBankAccount.name}")
+
+      expect(australian_cursor).not_to eq(canadian_cursor)
+
+      described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name, CanadianBankAccount.name])
+
+      expect($redis.get(australian_cursor)).to be_nil
+      expect($redis.get(canadian_cursor)).to be_nil
+    end
   end
 
   describe ".holding_balance_user_ids" do
@@ -600,6 +721,17 @@ describe Payouts do
       stub_const("Payouts::HOLDING_BALANCE_ID_BATCH_SIZE", 1)
 
       expect(described_class.holding_balance_user_ids.sort).to eq(User.holding_balance.ids.sort)
+    end
+
+    it "skips ids at or below starting_after so a resumed batch does not re-walk them" do
+      all_ids = described_class.holding_balance_user_ids.sort
+      resume_after = all_ids[1]
+
+      expect(described_class.holding_balance_user_ids(starting_after: resume_after)).to eq(all_ids[2..])
+    end
+
+    it "returns the whole cohort when starting_after is the default" do
+      expect(described_class.holding_balance_user_ids(starting_after: 0)).to match_array(described_class.holding_balance_user_ids)
     end
 
     it "never splits a user's balance aggregation across batches" do
