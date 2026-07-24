@@ -1252,8 +1252,11 @@ class SubscriptionTest < ActiveSupport::TestCase
       create_purchase_with_balance(link: product, price_cents: product.price_cents, is_original_subscription_purchase: true,
                                    subscription:, variant_attributes: [variant], created_at: 1.day.ago)
 
+      # Reload the sold-out variant: its inventory counter cache was bumped in
+      # the database via update_all (see Purchase#sync_inventory_counter_caches_on_create),
+      # so the in-memory instance is stale (inventory_counter_cache flag removal, gp#1208).
       purchase = create_purchase(link: product, price_cents: product.price_cents, is_original_subscription_purchase: true,
-                                 subscription:, variant_attributes: [variant], created_at: Time.current)
+                                 subscription:, variant_attributes: [variant.reload], created_at: Time.current)
       assert_predicate purchase.errors[:base], :present?
       assert_equal PurchaseErrorCode::VARIANT_SOLD_OUT, purchase.error_code
     end

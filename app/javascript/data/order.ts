@@ -297,6 +297,14 @@ export const startClientConfirmOrderCreation = async (
     });
 
     if (confirmResult.error) {
+      // Redirect-based methods (iDEAL, Bancontact) leave the page to authenticate at the
+      // buyer's bank, so a rejected confirm here is invisible server-side: no charge exists
+      // yet, no payment_failed webhook ever fires, and the purchase just sits in_progress
+      // until the abandonment sweeper cancels it. Report the error so production failures on
+      // this leg are debuggable (the 2026-07-23 iDEAL ramp-down produced zero completions
+      // with zero server-side evidence of why — gumroad-private#933). Fire-and-forget: the
+      // buyer-facing failure below must render whether or not the report lands.
+      void reportClientConfirmError(order.id, "confirm", confirmResult.error);
       return translateOrderFailureResponseIntoLineItemFailures(requestData, {
         success: false,
         error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
@@ -336,6 +344,28 @@ export const startClientConfirmOrderCreation = async (
     // captured. Surface it as a pending outcome; a pre-confirmation error is a normal failure.
     if (confirmedReturnUrl) throw new PaymentConfirmedError(confirmedReturnUrl);
     return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: [] });
+  }
+};
+
+// Reports a client-side confirm failure to the server, which is otherwise blind to it (see the
+// call site above). Best-effort: swallow every failure — error reporting must never break the
+// checkout error path it instruments.
+const reportClientConfirmError = async (orderId: string, stage: string, error: StripeError): Promise<void> => {
+  try {
+    await request({
+      method: "POST",
+      url: Routes.confirm_error_order_path(orderId),
+      accept: "json",
+      data: {
+        stage,
+        stripe_error_type: error.type,
+        stripe_error_code: error.code ?? null,
+        stripe_error_message: error.message ?? null,
+        payment_method_type: error.payment_method?.type ?? null,
+      },
+    });
+  } catch {
+    // Intentionally ignored.
   }
 };
 

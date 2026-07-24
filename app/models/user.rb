@@ -1201,6 +1201,37 @@ class User < ApplicationRecord
     has_completed_payouts?
   end
 
+  # Devise routes every confirmation *resend* through this method — the public
+  # "resend confirmation" form, the Settings resend button, and the library
+  # gate all land here. A prior transient delivery failure may have left the
+  # target address on SendGrid's bounce/block suppression list, which silently
+  # drops every later send including this one, so we clear those suppressions
+  # before re-sending (see ResendConfirmationEmailJob for the full rationale).
+  #
+  # Initial-signup sends go through send_confirmation_instructions instead, so
+  # this override adds no suppression lookups to the signup path. We keep
+  # Devise's pending_any_confirmation guard so an already-confirmed address
+  # still gets the usual "already confirmed" error rather than a pointless send.
+  #
+  # We stamp confirmation_sent_at here, at enqueue time, because the callers that
+  # throttle resends (e.g. the library gate) read it synchronously — if it only
+  # updated when the low-priority job actually sends, every request in between
+  # would see a stale timestamp and enqueue another duplicate resend.
+  #
+  # The one-minute floor bounds double-clicks and the public "resend confirmation"
+  # form (which has no rack_attack throttle): each enqueue costs SendGrid
+  # suppression-API calls in the job, so an unbounded per-user enqueue rate would
+  # hand an attacker who knows an unconfirmed address a free API-hammering lever.
+  RESEND_CONFIRMATION_ENQUEUE_FLOOR = 1.minute
+
+  def resend_confirmation_instructions
+    pending_any_confirmation do
+      return if confirmation_sent_at.present? && confirmation_sent_at > RESEND_CONFIRMATION_ENQUEUE_FLOOR.ago
+      update_column(:confirmation_sent_at, Time.current)
+      ResendConfirmationEmailJob.perform_async(id)
+    end
+  end
+
   protected
     def after_confirmation
       # The password reset link sent to the old email should be invalidated

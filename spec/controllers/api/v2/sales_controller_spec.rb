@@ -993,7 +993,7 @@ describe Api::V2::SalesController do
 
           expect(response.parsed_body).to eq({
             success: false,
-            message: "The sale was unable to be modified."
+            message: Purchase::Refundable::PROCESSOR_REJECTED_REFUND_ERROR_MESSAGE
           }.as_json)
         end
 
@@ -1098,7 +1098,7 @@ describe Api::V2::SalesController do
 
         expect(response.parsed_body).to eq({
           success: false,
-          message: "The sale was unable to be modified."
+          message: Purchase::Refundable::PROCESSOR_REJECTED_REFUND_ERROR_MESSAGE
         }.as_json)
       end
 
@@ -1109,7 +1109,7 @@ describe Api::V2::SalesController do
 
         expect(response.parsed_body).to eq({
           success: false,
-          message: "The sale was unable to be modified."
+          message: Purchase::Refundable::NOTHING_TO_REFUND_ERROR_MESSAGE
         }.as_json)
       end
 

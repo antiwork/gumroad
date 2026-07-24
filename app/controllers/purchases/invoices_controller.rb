@@ -55,9 +55,15 @@ class Purchases::InvoicesController < ApplicationController
           note: address_fields.to_json,
           business_vat_id: refundable_vat_id
         )
-        if !tax_refunded && @chargeable.errors.present?
-          message = @chargeable.errors.full_messages.to_sentence.presence || "Sorry, something went wrong."
-          return redirect_to new_purchase_invoice_path(@purchase.external_id, email: invoice_params[:email]), alert: message
+        if !tax_refunded
+          # An already-refunded / nothing-left VAT state is expected here (the buyer may
+          # regenerate the invoice after their VAT was refunded) and must not block invoice
+          # generation, so filter out that specific message. Any other refund error is real
+          # and should stop the flow with a visible explanation.
+          blocking_messages = @chargeable.errors.full_messages - [Purchase::Refundable::NO_TAX_TO_REFUND_ERROR_MESSAGE]
+          if blocking_messages.any?
+            return redirect_to new_purchase_invoice_path(@purchase.external_id, email: invoice_params[:email]), alert: blocking_messages.to_sentence
+          end
         end
       end
 

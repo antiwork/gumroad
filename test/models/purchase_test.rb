@@ -535,7 +535,11 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out doesn't allow purchase once sold out" do
     link = create_product(max_purchase_count: 1)
     create_purchase(link:, seller: link.user)
-    p2 = create_purchase(link:, purchase_state: "in_progress")
+    # The inventory counter cache is synced in the database via update_all
+    # (see Purchase#sync_inventory_counter_caches_on_create), so the in-memory
+    # `link` still holds the pre-purchase column value. Reload to read the
+    # synced count (inventory_counter_cache flag removal, gp#1208).
+    p2 = create_purchase(link: link.reload, purchase_state: "in_progress")
     assert p2.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, p2.error_code
   end
@@ -543,9 +547,10 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out doesn't count failed purchases towards the sold-out count" do
     link = create_product(max_purchase_count: 1)
     create_purchase(link:, purchase_state: "failed")
-    p2 = create_purchase(link:)
+    p2 = create_purchase(link: link.reload)
     assert p2.valid?
-    p3 = create_purchase(link:, purchase_state: "in_progress")
+    # Reload again: p2's counter-cache bump happened via update_all in the DB.
+    p3 = create_purchase(link: link.reload, purchase_state: "in_progress")
     assert p3.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, p3.error_code
   end
@@ -560,9 +565,9 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out doesn't count additional contributions toward max_purchase_count" do
     link = create_product(max_purchase_count: 1)
     create_purchase(link:, seller: link.user)
-    p2 = create_purchase(link:, is_additional_contribution: true)
+    p2 = create_purchase(link: link.reload, is_additional_contribution: true)
     assert p2.valid?
-    p3 = create_purchase(link:)
+    p3 = create_purchase(link: link.reload)
     assert p3.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, p3.error_code
   end
@@ -570,7 +575,8 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out doesn't allow purchase once sold out (product variant naming)" do
     product = create_product(max_purchase_count: 1)
     create_purchase(link: product)
-    purchase_2 = create_purchase(link: product, purchase_state: "in_progress")
+    # Reload: the counter cache was bumped in the DB via update_all.
+    purchase_2 = create_purchase(link: product.reload, purchase_state: "in_progress")
     assert purchase_2.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, purchase_2.error_code
   end
@@ -594,7 +600,8 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out subscriptions does count original_subscription_purchase towards max_purchase_count" do
     product = create_membership_product(subscription_duration: :monthly, max_purchase_count: 1)
     create_purchase(link: product, subscription: create_subscription(link: product), is_original_subscription_purchase: true)
-    purchase = create_purchase(link: product, subscription: create_subscription, is_original_subscription_purchase: true)
+    # Reload: the counter cache was bumped in the DB via update_all.
+    purchase = create_purchase(link: product.reload, subscription: create_subscription, is_original_subscription_purchase: true)
     assert purchase.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, purchase.error_code
   end
@@ -635,7 +642,9 @@ class PurchaseTest < ActiveSupport::TestCase
     variant1 = create_variant(variant_category:, max_purchase_count: 2)
     variant2 = create_variant(variant_category:)
     create_purchase(link: product, variant_attributes: [variant1], quantity: 2)
-    purchase = create_purchase(link: product, variant_attributes: [variant1, variant2])
+    # Reload the sold-out variant: its counter cache was bumped in the DB via
+    # update_all, so the in-memory instance is stale (gp#1208).
+    purchase = create_purchase(link: product, variant_attributes: [variant1.reload, variant2])
     assert_includes purchase.errors.full_messages, "Sold out, please go back and pick another option."
   end
 
@@ -661,7 +670,9 @@ class PurchaseTest < ActiveSupport::TestCase
     variant3 = create_variant(variant_category:, max_purchase_count: 1)
     create_purchase(link: product, variant_attributes: [variant3])
 
-    purchase = build_purchase(link: product, variant_attributes: [variant1, variant2, variant3])
+    # Reload the sold-out variant: its counter cache was bumped in the DB via
+    # update_all, so the in-memory instance is stale (gp#1208).
+    purchase = build_purchase(link: product, variant_attributes: [variant1, variant2, variant3.reload])
     purchase.original_variant_attributes = [variant1, variant2]
     purchase.save
     assert_includes purchase.errors.full_messages, "Sold out, please go back and pick another option."

@@ -93,6 +93,9 @@ describe Product::Recommendations, :elasticsearch_wait_for_refresh do
     @product.update_attribute(:max_purchase_count, 1)
     create(:purchase, :with_review, link: @product, created_at: 1.week.ago)
 
+    # Reload picks up the counter-cache column synced by purchase callbacks — it's now
+    # the only source for sales_count_for_inventory (gp#1208).
+    @product.reload
     expect(@product.recommendable_reasons[:not_sold_out]).to be(false)
     expect(@product.recommendable_reasons.except(:not_sold_out).values).to all(be true)
     expect(@product.recommendable?).to be(false)
