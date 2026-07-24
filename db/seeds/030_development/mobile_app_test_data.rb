@@ -4,7 +4,11 @@
 
 def create_mobile_user(email:, name:, username:)
   user = User.find_by(email:)
-  return user if user.present?
+  if user.present?
+    user.password = "password"
+    user.save!(validate: false)
+    return user
+  end
 
   user = User.create!(
     email:,
@@ -67,18 +71,17 @@ def create_mobile_purchase(seller:, buyer:, product:)
   purchase
 end
 
-# The mobile app's audio-playback e2e flow (gumroad-mobile .maestro/audio-playback.yaml) needs a
-# purchased product with a playable audio file. Uploads a small MP3 fixture to the dev S3 bucket
-# and attaches it to the product so the purchase page renders a native play button.
-def create_mobile_audio_file(product:)
-  existing = product.product_files.alive.find_by(filegroup: "audio")
+def create_mobile_product_file(product:, fixture_name:, file_name:)
+  s3_key = "attachments/mobile_e2e/#{file_name}"
+  url = "#{S3_BASE_URL}#{s3_key}"
+  existing = product.product_files.alive.find_by(url:)
   return existing if existing.present?
 
-  s3_key = "attachments/mobile_e2e/Mobile Test Audio.mp3"
   s3_object = Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key)
-  s3_object.upload_file(Rails.root.join("spec", "support", "fixtures", "magic.mp3").to_s) unless s3_object.exists?
+  fixture = Rails.root.join("spec", "support", "fixtures", fixture_name)
+  s3_object.upload_file(fixture.to_s) unless s3_object.exists?
 
-  product_file = product.product_files.create!(url: "#{S3_BASE_URL}#{s3_key}")
+  product_file = product.product_files.create!(url:)
   product_file.analyze
   product_file
 end
@@ -115,7 +118,21 @@ product2 = create_mobile_product(
   permalink: "secondmobileproduct"
 )
 
-create_mobile_audio_file(product: product1)
+create_mobile_product_file(
+  product: product1,
+  fixture_name: "magic.mp3",
+  file_name: "Mobile Test Audio.mp3"
+)
+create_mobile_product_file(
+  product: product1,
+  fixture_name: "Big Buck Bunny - Trailer.mp4",
+  file_name: "Mobile Test Video.mp4"
+)
+create_mobile_product_file(
+  product: product1,
+  fixture_name: "Alice's Adventures in Wonderland.pdf",
+  file_name: "Mobile Test PDF.pdf"
+)
 
 create_mobile_purchase(seller: seller2, buyer: seller1, product: product2)
 
