@@ -884,24 +884,11 @@ describe StripeChargeProcessor, :vcr do
               allow(subject).to receive(:get_mandate_id_from_chargeable).with(chargeable, merchant_account).and_return(nil)
             end
 
-            it "reports the missing mandate and still submits the charge when the fail-fast flag is off" do
-              payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
-
+            it "reports the missing mandate and fails fast without calling Stripe" do
               expect(ErrorNotifier).to receive(:notify).with(
                 "Off-session charge on an Indian card has no e-mandate to reference",
-                reference: "reference",
-                fail_fast: false
+                reference: "reference"
               )
-              expect(Stripe::PaymentIntent).to receive(:create).with(hash_excluding(:mandate)).and_return(payment_intent)
-
-              charge_intent = subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true, mandate_expected: true)
-              expect(charge_intent).to be_a(StripeChargeIntent)
-            end
-
-            it "fails fast without calling Stripe when the fail-fast flag is on" do
-              Feature.activate(:fail_india_recurring_charge_without_mandate)
-
-              expect(ErrorNotifier).to receive(:notify)
               expect(Stripe::PaymentIntent).not_to receive(:create)
 
               expect do
@@ -909,14 +896,11 @@ describe StripeChargeProcessor, :vcr do
               end.to raise_error(ChargeProcessorCardError) do |error|
                 expect(error.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING)
               end
-            ensure
-              Feature.deactivate(:fail_india_recurring_charge_without_mandate)
             end
 
-            it "does not report or fail fast when no mandate is expected, even with the flag on" do
+            it "does not report or fail fast when no mandate is expected" do
               # First-time checkout charges (e.g. multi-seller carts) also run off-session but
               # are not rebills of a previously registered mandate — they must submit as-is.
-              Feature.activate(:fail_india_recurring_charge_without_mandate)
               payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_checkout", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
 
               expect(ErrorNotifier).not_to receive(:notify)
@@ -924,8 +908,6 @@ describe StripeChargeProcessor, :vcr do
 
               charge_intent = subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
               expect(charge_intent).to be_a(StripeChargeIntent)
-            ensure
-              Feature.deactivate(:fail_india_recurring_charge_without_mandate)
             end
           end
         end

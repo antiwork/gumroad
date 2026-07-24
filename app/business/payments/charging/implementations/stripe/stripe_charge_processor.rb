@@ -286,28 +286,23 @@ class StripeChargeProcessor
         # The saved card has no registered mandate to reference. This happens when the original
         # purchase completed but Stripe never created a Mandate object for it. Indian issuers
         # decline mandate-less recurring charges (as "transaction_not_allowed"), so submitting
-        # this charge would just burn a guaranteed decline. Report it so we can see how often
-        # registration silently produces no mandate, and — when the flag is on — fail fast with
-        # our own error code so the buyer is asked to re-authorize their card (which registers
-        # a fresh mandate) instead of receiving an issuer decline they can't act on.
+        # this charge would just burn a guaranteed decline. Instead, report it and fail fast
+        # with our own error code so the buyer is asked to re-authorize their card (which
+        # registers a fresh mandate) instead of receiving an issuer decline they can't act on.
         #
         # This is gated on `mandate_expected` (subscription renewals and preorder release
         # charges) because `off_session` alone does not mean "rebill of a saved card":
         # multi-seller cart checkouts also charge off-session, and those first-time charges
         # can legitimately have no mandate to reference — failing them here would block
         # valid checkouts, and reporting them would pollute the renewal-prevalence data.
-        fail_fast = Feature.active?(:fail_india_recurring_charge_without_mandate)
         ErrorNotifier.notify(
           "Off-session charge on an Indian card has no e-mandate to reference",
-          reference:,
-          fail_fast:
+          reference:
         )
-        if fail_fast
-          raise ChargeProcessorCardError.new(
-            PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
-            "Your card's recurring payment authorization is missing. Please re-enter your payment method to complete this payment."
-          )
-        end
+        raise ChargeProcessorCardError.new(
+          PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
+          "Your card's recurring payment authorization is missing. Please re-enter your payment method to complete this payment."
+        )
       end
     end
 
