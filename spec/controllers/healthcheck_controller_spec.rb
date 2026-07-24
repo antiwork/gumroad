@@ -95,7 +95,7 @@ describe HealthcheckController do
 
     context "when the only entries are older than the per-entry TTL (job died mid-batch)" do
       it "returns 200 and prunes the stale entry" do
-        stale_score = (PerformPayoutsUpToDelayDaysAgoWorker::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        stale_score = (PayoutBatchInFlightTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
         $redis.zadd(RedisKey.payout_batch_in_flight, stale_score, "dead-job-token")
 
         get :payouts
@@ -109,7 +109,7 @@ describe HealthcheckController do
 
     context "when a stale entry sits alongside a fresh one" do
       it "returns 503 and prunes only the stale entry" do
-        stale_score = (PerformPayoutsUpToDelayDaysAgoWorker::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        stale_score = (PayoutBatchInFlightTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
         $redis.zadd(RedisKey.payout_batch_in_flight, stale_score, "dead-job-token")
         $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "live-job-token")
 

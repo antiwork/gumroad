@@ -75,7 +75,7 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
 
         allow($redis).to receive(:eval).and_call_original
         expect($redis).to receive(:eval)
-          .with(described_class::RAISE_IN_FLIGHT_FLAG_SCRIPT, any_args)
+          .with(PayoutBatchInFlightTracking::RAISE_IN_FLIGHT_FLAG_SCRIPT, any_args)
           .and_raise(Redis::TimeoutError)
 
         expect do
@@ -141,6 +141,18 @@ describe PerformPayoutsUpToDelayDaysAgoWorker do
 
     it "retries on failure instead of dead-lettering immediately" do
       expect(described_class.get_sidekiq_options["retry"]).to eq(3)
+    end
+
+    it "only reads seller ids, leaving the per-seller work to slice jobs" do
+      # gumroad-private#1284: this job must stay short-lived. If it ever evaluates
+      # eligibility itself again, it will outlive its worker on the Friday cohort and be
+      # restarted from zero until it is buried in the dead set with the cohort unpaid.
+      create(:user, unpaid_balance_cents: 100_00)
+      allow(PerformPayoutsForUserSliceWorker).to receive(:perform_in)
+
+      expect(Payouts).not_to receive(:create_payments_for_balances_up_to_date_for_users)
+
+      described_class.new.perform(payout_processor_type)
     end
   end
 
