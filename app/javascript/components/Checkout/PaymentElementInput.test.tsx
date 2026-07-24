@@ -15,7 +15,12 @@ const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | und
 // Captures the options the PaymentElement was last rendered with, plus its onChange handler so
 // tests can simulate the buyer selecting a payment-method row inside the element.
 const paymentElementRender = vi.hoisted<{
-  options: { fields?: { billingDetails?: unknown }; defaultValues?: unknown; layout?: unknown; wallets?: unknown } | null;
+  options: {
+    fields?: { billingDetails?: unknown };
+    defaultValues?: unknown;
+    layout?: unknown;
+    wallets?: unknown;
+  } | null;
   onChange: ((event: { value: { type: string }; complete: boolean; empty: boolean }) => void) | null;
   onFocus: (() => void) | null;
 }>(() => ({ options: null, onChange: null, onFocus: null }));
