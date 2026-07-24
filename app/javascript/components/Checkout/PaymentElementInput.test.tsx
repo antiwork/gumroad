@@ -281,6 +281,21 @@ describe("PaymentElementInput", () => {
     });
   });
 
+  it("reports a null controller when the element unmounts, even mid-UPI-selection", () => {
+    // PaymentForm relies on this contract to un-hide its Country/ZIP fields when the buyer
+    // switches away from the element while UPI is selected — e.g. clicking "Use saved card"
+    // unmounts this whole subtree, and the resulting onReady(null) is what resets the
+    // mirrored paymentElementType back to "card" (see handlePaymentElementReady in
+    // PaymentForm.tsx). Without the unmount notification the UPI field-hiding would strand.
+    const { unmount } = render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
+
+    act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
+    expect(props.onReady.mock.lastCall?.[0]).not.toBeNull();
+
+    unmount();
+    expect(props.onReady).toHaveBeenLastCalledWith(null);
+  });
+
   it("forwards element focus to onFocus, alongside the Link-prefill touch tracking", () => {
     // The flat payment-methods layout (flat_payment_methods) re-selects the card/wallet lane
     // from PayPal when the buyer interacts with the element. Clicks inside the element's iframe
