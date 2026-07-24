@@ -45,34 +45,68 @@ class Product::VariantCategoryUpdaterService
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
   end
 
-  # Blocks deleting variants that still carry seller content (rich content pages
-  # or attached files) unless the seller explicitly confirmed each removal in
-  # the editor. A save payload built from outdated or incomplete data (see
+  # Blocks deleting variants the seller has invested in — ones that carry
+  # content (rich content pages or attached files), have been purchased, or
+  # have non-default configuration (custom price, quantity cap, duration,
+  # pay-what-you-want, integrations, recurring prices, description) — unless
+  # the seller explicitly confirmed each removal in the editor. A save payload
+  # built from outdated or incomplete data (see
   # Product::RichContentDeletionGuard for the incident history) would otherwise
   # treat every missing variant as "removed" and soft-delete the seller's
-  # entire version tree along with its content. Purchased variants are already
-  # protected separately; this covers content-bearing ones.
+  # entire version tree. Truly blank rows (no content, no purchases, all
+  # defaults) stay freely deletable so ordinary create-and-discard editor
+  # flows keep working without extra confirmations.
   def self.ensure_deletion_intent!(product:, variants:, confirmed_removed_variant_ids:, diagnostics: {})
     unconfirmed = variants.reject do |variant|
-      confirmed_removed_variant_ids.include?(variant.external_id) || !variant_has_content?(variant)
+      confirmed_removed_variant_ids.include?(variant.external_id) || !variant_requires_deletion_intent?(variant)
     end
     return if unconfirmed.empty?
 
     ErrorNotifier.notify(
-      "Blocked product save that would delete content-bearing variants without confirmation",
+      "Blocked product save that would delete configured, purchased, or content-bearing variants without confirmation",
       product_id: product.id,
       variant_ids: unconfirmed.map(&:id),
       **diagnostics
     )
-    message = "This save would remove versions that still have content, which weren't explicitly removed in the editor. The version list shown may be out of date — please refresh the page and try again."
+    message = "This save would remove versions that still have content, settings, or sales, which weren't explicitly removed in the editor. The version list shown may be out of date — please refresh the page and try again."
     product.errors.add(:base, message)
     raise Link::LinkInvalid, message
+  end
+
+  def self.variant_requires_deletion_intent?(variant)
+    variant_has_content?(variant) ||
+      variant_has_purchases?(variant) ||
+      variant_has_non_default_configuration?(variant)
   end
 
   def self.variant_has_content?(variant)
     # has_editor_content? (not description.present?) so a variant whose only
     # page is the editor's blank placeholder paragraph stays freely deletable.
     variant.alive_rich_contents.any?(&:has_editor_content?) || variant.has_files?
+  end
+
+  # Any successful purchase means buyers rely on this variant existing (their
+  # library and receipts reference it), so deleting it must be an explicit
+  # seller decision. This closes the gap where
+  # VariantCategory#has_alive_grouping_variants_with_purchases? only shielded
+  # the category-deletion path, and only when the variant also had files —
+  # per-variant deletions of purchased, contentless variants were unguarded.
+  def self.variant_has_purchases?(variant)
+    variant.purchases.all_success_states.exists?
+  end
+
+  # A variant with settings that differ from a freshly-added blank row
+  # represents real seller setup (pricing tiers configured before content is
+  # added, for example) and must not be silently deletable by a stale payload.
+  def self.variant_has_non_default_configuration?(variant)
+    variant.price_difference_cents.to_i != 0 ||
+      variant.customizable_price? ||
+      variant.max_purchase_count.present? ||
+      variant.duration_in_minutes.present? ||
+      variant.description.present? ||
+      variant.apply_price_changes_to_existing_memberships? ||
+      variant.active_integrations.exists? ||
+      (variant.respond_to?(:prices) && variant.prices.alive.where("price_cents > 0").exists?)
   end
 
   def perform

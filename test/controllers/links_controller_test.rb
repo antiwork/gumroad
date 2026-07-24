@@ -1155,6 +1155,47 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal false, @version1.reload.deleted?
   end
 
+  test "PUT update blocks a save whose payload omits a configured contentless variant" do
+    setup_guarded_version!
+    # No content pages or files, but a real custom price — the kind of
+    # configured-but-contentless variant gumroad-private#1296 covers.
+    priced_version = create_variant(variant_category: @category, name: "Priced version", price_difference_cents: 500)
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal false, priced_version.reload.deleted?
+  end
+
+  test "PUT update blocks a save whose payload omits a purchased contentless variant" do
+    setup_guarded_version!
+    purchased_version = create_variant(variant_category: @category, name: "Purchased version")
+    purchase = create_purchase(link: @product, purchase_state: "successful")
+    purchase.variant_attributes << purchased_version
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal false, purchased_version.reload.deleted?
+  end
+
+  test "PUT update allows removing a configured contentless variant when the seller confirmed the removal" do
+    setup_guarded_version!
+    priced_version = create_variant(variant_category: @category, name: "Priced version", price_difference_cents: 500)
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }],
+      confirmed_removed_variant_ids: [priced_version.external_id]
+    ), format: :json
+
+    assert_response :success
+    assert_equal true, priced_version.reload.deleted?
+  end
+
   test "PUT update blocks a save whose payload omits a content-bearing page" do
     setup_guarded_version!
     page2 = create_rich_content(entity: @version1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Page 2" }] }])
@@ -1345,7 +1386,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
     post :update, params: @params.merge(variants: []), format: :json
 
-    assert notified.any? { |message, context| message == "Blocked product save that would delete content-bearing variants without confirmation" && context[:product_id] == @product.id },
+    assert notified.any? { |message, context| message == "Blocked product save that would delete configured, purchased, or content-bearing variants without confirmation" && context[:product_id] == @product.id },
            "Expected ErrorNotifier to be notified about the blocked wipe (got: #{notified.inspect})"
   end
 
@@ -1633,7 +1674,9 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
     post :update, params: {
       id: coffee_product.unique_permalink,
-      variants: [{ price_difference_cents: 300 }, { price_difference_cents: 500 }, { price_difference_cents: 100 }]
+      # Address the auto-created suggested amount by id, like the editor does —
+      # blindly omitting it would trip the configured-variant deletion guard.
+      variants: [{ id: coffee_product.alive_variants.first.external_id, price_difference_cents: 300 }, { price_difference_cents: 500 }, { price_difference_cents: 100 }]
     }, as: :json
 
     assert_response :success
@@ -1646,7 +1689,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
     post :update, params: {
       id: coffee_product.unique_permalink,
-      variants: [{ price_difference_cents: 10000 }, { price_difference_cents: nil }]
+      # Address the auto-created suggested amount by id, like the editor does.
+      variants: [{ id: coffee_product.alive_variants.first.external_id, price_difference_cents: 10000 }, { price_difference_cents: nil }]
     }, as: :json
 
     assert_response :success
@@ -1862,7 +1906,9 @@ class LinksControllerUpdateTest < ActionController::TestCase
     variant2 = create_variant(variant_category: category, name: "medium", price_difference_cents: 300)
 
     variants = [{ name: "small", id: variant1.external_id, price_difference_cents: 200, max_purchase_count: 100 }]
-    post :update, params: { id: @product.unique_permalink, variants: }, as: :json
+    # variant2 has a custom price, so its removal must be explicitly confirmed
+    # (the configured-variant deletion guard blocks blind omissions).
+    post :update, params: { id: @product.unique_permalink, variants:, confirmed_removed_variant_ids: [variant2.external_id] }, as: :json
 
     assert_equal 1, @product.reload.variant_categories.count
     assert_equal 1, @product.alive_variants.count
@@ -1876,10 +1922,12 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
   test "PUT update removes the category when all variants are removed" do
     category = create_variant_category(title: "sizes", link: @product)
-    create_variant(variant_category: category, name: "small", price_difference_cents: 200, max_purchase_count: 100)
+    variant = create_variant(variant_category: category, name: "small", price_difference_cents: 200, max_purchase_count: 100)
 
     assert_difference -> { @product.reload.variant_categories_alive.count }, -1 do
-      post :update, params: { id: @product.unique_permalink, variants: [] }, as: :json
+      # The variant has a custom price and quantity cap, so removing it
+      # requires explicit confirmation from the seller.
+      post :update, params: { id: @product.unique_permalink, variants: [], confirmed_removed_variant_ids: [variant.external_id] }, as: :json
     end
   end
 
@@ -1998,6 +2046,10 @@ class LinksControllerUpdateTest < ActionController::TestCase
       variants: [
         {
           name: "First Tier",
+          # Update the auto-created default tier in place — it carries a
+          # recurring price, so blindly omitting its id would trip the
+          # configured-variant deletion guard.
+          id: @product.default_tier.external_id,
           recurrence_price_values: {
             monthly: { enabled: true, price_cents: 2000 },
             quarterly: { enabled: true, price_cents: 4500 },
@@ -2156,6 +2208,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
       variants: [
         {
           name: "First Tier",
+          # Update the auto-created default tier in place (see setup_recurring_prices!).
+          id: @product.default_tier.external_id,
           customizable_price: true,
           recurrence_price_values: {
             monthly: { enabled: true, price_cents: 2000, suggested_price_cents: 2200 },
@@ -3788,7 +3842,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
     @seller.update!(created_at: (User::MIN_AGE_FOR_SERVICE_PRODUCTS + 1.day).ago)
     product = create_product(user: @seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 1000)
 
-    post :update, params: { id: product.unique_permalink, community_chat_enabled: true, variants: [{ price_difference_cents: 1000 }] }, as: :json
+    # Address the auto-created suggested amount by id, like the editor does.
+    post :update, params: { id: product.unique_permalink, community_chat_enabled: true, variants: [{ id: product.alive_variants.first.external_id, price_difference_cents: 1000 }] }, as: :json
     assert_response :success
     assert_equal false, product.reload.community_chat_enabled?
     assert_nil product.reload.active_community

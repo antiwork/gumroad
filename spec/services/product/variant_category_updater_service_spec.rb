@@ -183,6 +183,58 @@ describe Product::VariantCategoryUpdaterService do
       end
     end
 
+    context "when deleting configured or purchased variants without content" do
+      before do
+        @product = create(:product)
+        @variant_category = create(:variant_category, link: @product)
+      end
+
+      def perform_deletion(confirmed_removed_variant_ids: [])
+        Product::VariantCategoryUpdaterService.new(
+          product: @product,
+          category_params: { id: @variant_category.external_id, title: "" },
+          confirmed_removed_variant_ids:,
+        ).perform
+      end
+
+      it "refuses to delete a contentless variant with a custom price when its removal wasn't confirmed" do
+        variant = create(:variant, variant_category: @variant_category, price_difference_cents: 500)
+
+        # Simulates a save built from a payload that never loaded this variant
+        # (blind omission) — the variant is simply missing, not confirmed removed.
+        expect { perform_deletion }.to raise_error(Link::LinkInvalid, /weren't explicitly removed in the editor/)
+        expect(variant.reload.deleted_at).to be_nil
+      end
+
+      it "refuses to delete a contentless variant with a quantity cap when its removal wasn't confirmed" do
+        variant = create(:variant, variant_category: @variant_category, max_purchase_count: 10)
+
+        expect { perform_deletion }.to raise_error(Link::LinkInvalid, /weren't explicitly removed in the editor/)
+        expect(variant.reload.deleted_at).to be_nil
+      end
+
+      it "refuses to delete a purchased contentless variant when its removal wasn't confirmed" do
+        variant = create(:variant, variant_category: @variant_category)
+        create(:free_purchase, link: @product, variant_attributes: [variant])
+
+        expect { perform_deletion }.to raise_error(Link::LinkInvalid, /weren't explicitly removed in the editor/)
+        expect(variant.reload.deleted_at).to be_nil
+      end
+
+      it "deletes a configured variant when the seller explicitly confirmed the removal" do
+        variant = create(:variant, variant_category: @variant_category, price_difference_cents: 500)
+
+        expect { perform_deletion(confirmed_removed_variant_ids: [variant.external_id]) }
+          .to change { variant.reload.deleted_at }.from(nil)
+      end
+
+      it "still deletes untouched default variants without any confirmation" do
+        variant = create(:variant, variant_category: @variant_category)
+
+        expect { perform_deletion }.to change { variant.reload.deleted_at }.from(nil)
+      end
+    end
+
     context "when deleting multiple obsolete variants" do
       before do
         @product = create(:product)
@@ -253,7 +305,11 @@ describe Product::VariantCategoryUpdaterService do
               description: nil,
               price_difference: nil,
               max_purchase_count: 10,
-              id: nil,
+              # Update the product's auto-created default tier in place — it
+              # carries a recurring price, so silently dropping it (id: nil for
+              # every option) would now be blocked by the deletion-intent guard,
+              # just like a stale editor payload would be.
+              id: @product.default_tier.external_id,
               url: "http://tier1.com",
               apply_price_changes_to_existing_memberships: true,
               subscription_price_change_effective_date: @effective_date.strftime("%Y-%m-%d"),
@@ -554,11 +610,27 @@ describe Product::VariantCategoryUpdaterService do
               Product::VariantCategoryUpdaterService.new(
                 product: @product,
                 category_params: { id: @product.tier_category.external_id, title: "Monthly" },
+                # Tiers carry recurring prices, so the deletion-intent guard
+                # requires the seller to have confirmed each removal.
+                confirmed_removed_variant_ids: [tier.external_id],
                 ).perform
             end.to change { tier.reload.deleted_at }.from(nil).to(Time.current)
 
             expect(DeleteProductRichContentWorker).to have_enqueued_sidekiq_job(@product.id, tier.id)
           end
+        end
+
+        it "refuses to remove a priced tier whose removal wasn't confirmed" do
+          tier = @product.tier_category.variants.first
+
+          expect do
+            Product::VariantCategoryUpdaterService.new(
+              product: @product,
+              category_params: { id: @product.tier_category.external_id, title: "Monthly" },
+              ).perform
+          end.to raise_error(Link::LinkInvalid, /weren't explicitly removed in the editor/)
+
+          expect(tier.reload.deleted_at).to be_nil
         end
       end
     end
