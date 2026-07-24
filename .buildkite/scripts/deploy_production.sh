@@ -8,10 +8,15 @@ logger() {
 }
 
 # Hold deploys only while a payout batch is ACTUALLY running, by asking the app
-# (PerformPayoutsUpToDelayDaysAgoWorker maintains a Redis flag; /healthcheck/payouts
-# returns 503 while any per-type batch job is in flight). Poll for up to 45 minutes —
-# batches complete in 10-30 min (measured July 2026) — then proceed with a warning
-# rather than dropping the deploy silently.
+# (every payout batch job registers a Redis token while it runs — see
+# PayoutBatchInFlightTracking; /healthcheck/payouts returns 503 while any of them is in
+# flight). Note this tracks jobs that are RUNNING, not slices still scheduled to start, so
+# a deploy can land in a gap between slices. That is safe: scheduled slices survive in
+# Redis, and a recycled running slice is re-run by Sidekiq (re-running is idempotent —
+# sellers whose payouts were already created are skipped).
+# Poll for up to 45 minutes, then proceed with a warning rather than dropping the deploy
+# silently. The Friday batch dispatches its slices over roughly the first half hour and the
+# slices drain after that, so a 503 can persist for a while on Fridays.
 # Fallback: if the healthcheck is unreachable (non-200/503 answer), fall back to the
 # static window (Tue-Fri UTC 10:00-10:59, when weekly batches are enqueued) so a
 # broken healthcheck can never let a deploy land mid-batch.

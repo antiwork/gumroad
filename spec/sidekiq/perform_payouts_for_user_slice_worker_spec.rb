@@ -38,6 +38,12 @@ describe PerformPayoutsForUserSliceWorker do
       expect(described_class.get_sidekiq_options["retry"]).to eq(3)
     end
 
+    it "runs off the critical queue so a slow payout run cannot delay buyer-facing work" do
+      # Several slices run concurrently, each holding a thread for tens of seconds of
+      # eligibility queries. :critical is where purchase receipts live.
+      expect(described_class.get_sidekiq_options["queue"]).to eq(:default)
+    end
+
     describe "the in-flight deploy-freeze flag" do
       before { $redis.del(RedisKey.payout_batch_in_flight) }
       after  { $redis.del(RedisKey.payout_batch_in_flight) }
@@ -74,13 +80,17 @@ describe PerformPayoutsForUserSliceWorker do
   end
 
   describe "sidekiq_retries_exhausted" do
-    it "notifies Sentry and emails accounting so an unpaid slice cannot go unnoticed" do
+    it "sends the slice-specific alert so the blast radius is not overstated" do
       job = { "args" => [PayoutProcessorType::STRIPE, payout_date.to_s, user_ids, "AchAccount"] }
       exception = ActiveRecord::StatementTimeout.new("Mysql2::Error: maximum statement execution time exceeded")
 
       mailer_double = double("mailer")
-      expect(AccountingMailer).to receive(:payout_batch_failed)
-        .with(PayoutProcessorType::STRIPE, "AchAccount", "ActiveRecord::StatementTimeout", exception.message)
+      # Deliberately NOT payout_batch_failed: that email claims the whole processor bucket is
+      # unpaid and prescribes a cohort-wide re-run, which would duplicate payout notes for
+      # every ineligible seller.
+      expect(AccountingMailer).not_to receive(:payout_batch_failed)
+      expect(AccountingMailer).to receive(:payout_batch_slice_failed)
+        .with(PayoutProcessorType::STRIPE, "AchAccount", user_ids.size, "ActiveRecord::StatementTimeout", exception.message)
         .and_return(mailer_double)
       expect(mailer_double).to receive(:deliver_later)
       expect(ErrorNotifier).to receive(:notify)

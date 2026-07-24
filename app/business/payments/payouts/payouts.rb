@@ -108,11 +108,18 @@ class Payouts
 
   # Hand slices of seller ids to PerformPayoutsForUserSliceWorker, spaced slightly apart.
   #
-  # The spacing keeps the rate at which payout jobs reach the processors close to what it
-  # was when slices ran one after another inside a single job. Without it, every slice
-  # would start at once and PayPal — which takes up to PaypalPayoutProcessor::
-  # PAYOUT_RECIPIENTS_PER_JOB recipients per API call and is already spaced out inside a
-  # slice — would see a burst many times its usual call rate.
+  # The spacing is a throttle, not rate parity. When slices ran one after another inside a
+  # single job, one 1,000-seller slice completed roughly every 38 seconds (measured at about
+  # 1,570 sellers a minute), so payout jobs reached the processors at that pace. Releasing a
+  # slice every 10 seconds is deliberately faster — the whole point is that sellers get paid
+  # early in the run rather than after a two-hour walk — which means a handful of slices are
+  # in flight at a time instead of one. That is a bounded, intentional increase: the slice
+  # jobs run on the :default queue so they cannot crowd out buyer-facing work, and PayPal
+  # calls are still spaced inside each slice by PaypalPayoutProcessor.enqueue_payments.
+  #
+  # Without any spacing, all ~195 Friday slices would be pushed at once, and PayPal — which
+  # takes up to PaypalPayoutProcessor::PAYOUT_RECIPIENTS_PER_JOB recipients per API call —
+  # would see a burst many times its usual call rate.
   def self.enqueue_user_slices(date, processor_type, user_ids, bank_account_type: nil)
     date_string = date.to_s
 

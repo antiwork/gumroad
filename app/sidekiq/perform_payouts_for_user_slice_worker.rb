@@ -21,7 +21,13 @@ class PerformPayoutsForUserSliceWorker
 
   # Slices are independent, so a transient failure (statement timeout, PayPal blip) should
   # retry this slice rather than leaving its sellers unpaid for the week.
-  sidekiq_options retry: 3, queue: :critical
+  #
+  # These run on :default rather than :critical, matching PayoutUsersWorker (the per-seller
+  # payout job this one enqueues). Several slices run at once, each holding a thread for
+  # roughly half a minute of eligibility queries, and :critical is where purchase receipts
+  # and other buyer-facing work live — a slow payout Friday must not be able to delay a
+  # buyer's receipt. Nothing here is latency-sensitive: the batch has a multi-hour window.
+  sidekiq_options retry: 3, queue: :default
 
   # A slice is USER_LOOKUP_BATCH_SIZE sellers, so it needs far less than the whole batch's
   # budget — but it still runs several queries per seller inside the contended batch window,
@@ -30,7 +36,9 @@ class PerformPayoutsForUserSliceWorker
 
   sidekiq_retries_exhausted do |job, exception|
     payout_processor_type, _date_string, user_ids, bank_account_type = job["args"]
-    AccountingMailer.payout_batch_failed(payout_processor_type, bank_account_type, exception.class.name, exception.message).deliver_later
+    # A slice-specific alert, not the whole-batch one: only this slice's sellers are unpaid,
+    # and the fix is to retry this dead job rather than re-run the entire processor bucket.
+    AccountingMailer.payout_batch_slice_failed(payout_processor_type, bank_account_type, user_ids&.size, exception.class.name, exception.message).deliver_later
     ErrorNotifier.notify(exception, payout_processor_type:, bank_account_type:, user_ids_count: user_ids&.size)
   end
 

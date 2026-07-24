@@ -13,6 +13,12 @@
 # (a stale "in flight" that stalls deploys) or risk decrementing a concurrent job's count
 # (letting a deploy land mid-batch). With per-job tokens, cleanup is removing our OWN token:
 # idempotent, safe no matter how registration ended, and it can never touch a sibling's entry.
+#
+# Coverage is per RUNNING job, not per batch: a slice that is scheduled but hasn't started
+# yet holds no token, so the healthcheck can report "nothing in flight" in a gap between
+# slices. That is deliberate — a deploy landing in such a gap is harmless, because scheduled
+# slices sit in Redis and survive it, and a slice killed mid-run is re-run by Sidekiq without
+# double-paying anyone.
 module PayoutBatchInFlightTracking
   # How long a job's entry stays valid. This is the crash safety net: if a job dies without
   # its ensure block running (or Redis is unreachable during cleanup), the entry stops
