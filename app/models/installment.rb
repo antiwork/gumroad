@@ -745,13 +745,29 @@ class Installment < ApplicationRecord
     end
   end
 
-  # Rows are read (and emails are looked up) in chunks of this size. A post sent to a
-  # six-figure audience has just as many email_infos rows, and asking the database for
-  # all of them — or for the emails of all their purchases — in a single statement is
-  # what used to blow past the statement execution cap and kill the resend job. Reading
-  # in primary-key-bounded chunks keeps every individual statement small and quick,
-  # at the cost of more round trips.
-  RECIPIENT_LOOKUP_BATCH_SIZE = 10_000
+  # How many email_infos rows to read per statement when walking a post's open-tracking
+  # rows. A post sent to a six-figure audience has just as many rows, and asking for all
+  # of them in one statement is what used to blow past the statement execution cap and
+  # kill the resend job. `in_batches` walks by primary key, so each statement stays small.
+  # 10,000 is safe here because the walk is a primary-key range on email_infos and never
+  # builds a large `IN (...)` list.
+  EMAIL_INFO_SCAN_BATCH_SIZE = 10_000
+
+  # How many ids to put in a single `Purchase.where(id: ...)` lookup. This one is much
+  # smaller than the scan size above, and the difference matters more than it looks.
+  #
+  # MySQL's range optimizer has a memory budget (`range_optimizer_max_mem_size`, 8 MB on
+  # our servers). When it estimates that representing an `IN (...)` list as primary-key
+  # ranges would exceed that budget, it silently abandons the primary-key plan and falls
+  # back to reading the whole table — no error, no warning, just a query that suddenly
+  # examines every row in `purchases` (over 300 million) instead of the few thousand it
+  # was asked about. Measured on production, the flip happens between 2,000 and 2,500 ids
+  # for this table, and it costs the difference between ~350 ms and "does not finish in
+  # two minutes" per chunk.
+  #
+  # 1,000 leaves roughly 2x headroom under that threshold so a differently shaped id list
+  # can't tip over it, and it measures no slower per id than larger chunks do.
+  PURCHASE_ID_LOOKUP_BATCH_SIZE = 1_000
 
   # Purchase ids of recipients this post was emailed to, backed by the open-tracking
   # CreatorContactingCustomersEmailInfo rows that are created when a post email is sent.
@@ -1143,13 +1159,13 @@ class Installment < ApplicationRecord
 
     # Collects the distinct purchase ids of an email_infos scope without asking the
     # database for every row in one statement. `in_batches` walks the table by primary
-    # key, so each statement touches at most RECIPIENT_LOOKUP_BATCH_SIZE rows and
+    # key, so each statement touches at most EMAIL_INFO_SCAN_BATCH_SIZE rows and
     # finishes quickly even when the post was emailed to hundreds of thousands of
     # people. De-duplication happens in Ruby because DISTINCT across the whole table
     # is exactly the expensive part we're avoiding.
     def batched_distinct_purchase_ids(scope)
       ids = Set.new
-      scope.in_batches(of: RECIPIENT_LOOKUP_BATCH_SIZE) do |batch|
+      scope.in_batches(of: EMAIL_INFO_SCAN_BATCH_SIZE) do |batch|
         ids.merge(batch.pluck(:purchase_id))
       end
       ids.to_a
@@ -1157,10 +1173,12 @@ class Installment < ApplicationRecord
 
     # Downcased emails for the given purchase ids, looked up in chunks so a six-figure
     # id list becomes many small `WHERE id IN (...)` statements instead of one enormous
-    # one. Returns a Set because every caller only needs membership/difference.
+    # one. The chunk size is deliberately small — see PURCHASE_ID_LOOKUP_BATCH_SIZE for
+    # why a bigger list silently stops using the primary key. Returns a Set because
+    # every caller only needs membership/difference.
     def purchase_emails_for(purchase_ids)
       emails = Set.new
-      purchase_ids.each_slice(RECIPIENT_LOOKUP_BATCH_SIZE) do |ids_slice|
+      purchase_ids.each_slice(PURCHASE_ID_LOOKUP_BATCH_SIZE) do |ids_slice|
         emails.merge(Purchase.where(id: ids_slice).pluck(:email).compact.map(&:downcase))
       end
       emails

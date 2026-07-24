@@ -88,4 +88,44 @@ describe "InstallmentTracking"  do
       expect(unique_open_count).to eq 3
     end
   end
+
+  describe "#unopened_recipient_emails" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:post) { create(:product_post, :published, seller:, link: product, bought_products: [product.unique_permalink]) }
+    let!(:opened_sale) { create(:purchase, link: product, seller:) }
+    let!(:unopened_sale) { create(:purchase, link: product, seller:) }
+    let!(:second_unopened_sale) { create(:purchase, link: product, seller:) }
+
+    before do
+      create(:creator_contacting_customers_email_info_opened, installment: post, purchase: opened_sale)
+      create(:creator_contacting_customers_email_info_sent, installment: post, purchase: unopened_sale)
+      create(:creator_contacting_customers_email_info_sent, installment: post, purchase: second_unopened_sale)
+    end
+
+    it "returns the emails of recipients who never opened the post" do
+      expect(post.unopened_recipient_emails).to match_array([unopened_sale.email, second_unopened_sale.email])
+    end
+
+    it "looks purchases up in id slices small enough that MySQL keeps using the primary key" do
+      # A `WHERE id IN (...)` list past a few thousand entries makes MySQL's range
+      # optimizer give up on the primary key and read the entire purchases table
+      # instead — silently, with no error. So the lookup must always chunk, no matter
+      # how many recipients the post had.
+      stub_const("Installment::PURCHASE_ID_LOOKUP_BATCH_SIZE", 1)
+
+      slice_sizes = []
+      allow(Purchase).to receive(:where).and_wrap_original do |original, *args, **kwargs|
+        # `where(id: ids)` arrives as keyword arguments on Ruby 3, but callers elsewhere
+        # pass a plain hash — accept either shape.
+        ids = kwargs[:id] || (args.first.is_a?(Hash) ? args.first[:id] : nil)
+        slice_sizes << ids.size if ids.is_a?(Array)
+        original.call(*args, **kwargs)
+      end
+
+      expect(post.unopened_recipient_emails).to match_array([unopened_sale.email, second_unopened_sale.email])
+      expect(slice_sizes).to be_present
+      expect(slice_sizes).to all(eq(1))
+    end
+  end
 end
