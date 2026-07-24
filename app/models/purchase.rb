@@ -362,11 +362,6 @@ class Purchase < ApplicationRecord
   before_save :assign_default_rental_expired
   before_save :truncate_referrer
 
-  after_commit :attach_credit_card_to_purchaser,
-               on: :update,
-               if: -> (purchase) { Feature.active?(:attach_credit_card_to_purchaser) && purchase.previous_changes[:purchaser_id].present? && purchase.purchaser &&
-                                   purchase.subscription }
-
   after_commit :enqueue_update_sales_related_products_infos_job, if: -> (purchase) {
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
@@ -4952,18 +4947,6 @@ class Purchase < ApplicationRecord
 
     def subscription_duration
       price_for_recurrence&.recurrence
-    end
-
-    def attach_credit_card_to_purchaser
-      return if purchaser.credit_card
-
-      latest_successful_purchase =
-        purchaser.purchases.successful.with_credit_card_id.order(created_at: :desc).first
-
-      return unless latest_successful_purchase
-
-      purchaser.credit_card_id = latest_successful_purchase.credit_card_id
-      purchaser.save!
     end
 
     def assign_default_rental_expired

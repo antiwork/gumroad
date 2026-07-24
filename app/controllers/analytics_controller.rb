@@ -24,22 +24,14 @@ class AnalyticsController < Sellers::BaseController
   def data_by_date
     authorize :analytics, :index?
 
-    if Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_date
-    else
-      data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :date)
-    end
+    data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :date)
     render json: data
   end
 
   def data_by_state
     authorize :analytics, :index?
 
-    if Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_state
-    else
-      data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :state)
-    end
+    data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :state)
     render json: data
   end
 
@@ -55,8 +47,6 @@ class AnalyticsController < Sellers::BaseController
       # Hourly data bypasses CreatorAnalytics::CachingProxy, which only stores
       # day-keyed data; the range is at most 7 days so the live query is cheap.
       data = creator_analytics_web(interval: "hour").by_referral
-    elsif Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_referral
     else
       data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :referral)
     end

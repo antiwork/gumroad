@@ -175,7 +175,6 @@ class User < ApplicationRecord
 
   attr_json_data_accessor :background_opacity_percent, default: 100
   attr_json_data_accessor :payout_date_of_last_payment_failure_email
-  attr_json_data_accessor :last_ping_failure_notification_at
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
@@ -346,7 +345,6 @@ class User < ApplicationRecord
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :remove_follows_for_suspended_account!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
-    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :send_suspension_email
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation],
                      :do => :add_to_gmail_abuse_filter
 
