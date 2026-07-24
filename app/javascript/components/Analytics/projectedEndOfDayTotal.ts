@@ -1,9 +1,9 @@
 // Helpers for the "projected end-of-day total" overlay on the analytics sales chart.
 //
 // When the selected date range ends today, we extrapolate today's sales total to the
-// end of the day. Preferred path: divide by the cumulative fraction of a typical day's
-// revenue the seller has historically booked by this time of day (the backend ships a
-// 24-entry cumulative curve built from the trailing weeks of sales). This corrects the
+// end of the day. Preferred path: divide by the fraction of a typical day's revenue
+// the seller has historically booked by this time of day (the backend computes it
+// from the trailing weeks of sales). This corrects the
 // systematic low bias of a uniform run rate for sellers whose buyers cluster in
 // specific hours — e.g. a seller whose overnight hours produce almost nothing would
 // otherwise see a projection that reads far too low until late in the day.
@@ -85,15 +85,15 @@ export const fractionOfDayElapsed = (timeZone: string, now: Date = new Date()): 
 // when a projection wouldn't be meaningful: no sales yet, too little of the day
 // elapsed, or the day is already over.
 //
-// `expectedFraction` — the cumulative share of a typical day's revenue this seller has
-// historically booked by now (see expectedSalesFractionOfDay) — is used as the divisor
-// when available, weighting the projection by the seller's own hourly sales pattern.
-// When it's null (thin history, invalid curve) or too small to divide by safely (a
-// near-zero expected fraction would explode the estimate exactly like a tiny elapsed
-// fraction does), we fall back to the uniform run rate. The MINIMUM_ELAPSED_DAY_FRACTION
-// gate always applies to the clock fraction, keeping early-morning projections
-// suppressed regardless of which divisor is used. The result is clamped to never fall
-// below what's already booked (both divisors are ≤ 1 so this is belt-and-braces).
+// `expectedFraction` — the share of a typical day's revenue this seller has
+// historically booked by now, computed by the backend from the trailing weeks of
+// sales — is used as the divisor when available, weighting the projection by the
+// seller's own hourly sales pattern. When it's null (thin history) or too small to
+// divide by safely (a near-zero expected fraction would explode the estimate exactly
+// like a tiny elapsed fraction does), we fall back to the uniform run rate. The
+// MINIMUM_ELAPSED_DAY_FRACTION gate always applies to the clock fraction, keeping
+// early-morning projections suppressed regardless of which divisor is used. The
+// result is clamped to never fall below what's already booked.
 export const projectedEndOfDayTotal = (
   totalSoFarCents: number,
   elapsedFraction: number | null,
@@ -101,50 +101,10 @@ export const projectedEndOfDayTotal = (
 ): number | null => {
   if (elapsedFraction === null || elapsedFraction < MINIMUM_ELAPSED_DAY_FRACTION || elapsedFraction >= 1) return null;
   if (totalSoFarCents <= 0) return null;
-  // A curve fraction of 1 means the seller's sales for a typical day are already fully
-  // booked — capping the divisor at 1 makes the projection equal today's actual total.
-  const divisor =
-    expectedFraction !== null && expectedFraction >= MINIMUM_ELAPSED_DAY_FRACTION
-      ? Math.min(expectedFraction, 1)
-      : elapsedFraction;
+  // An expected fraction of 1 means the seller's sales for a typical day are already
+  // fully booked — capping the divisor at 1 makes the projection equal today's total.
+  const useExpected =
+    expectedFraction !== null && Number.isFinite(expectedFraction) && expectedFraction >= MINIMUM_ELAPSED_DAY_FRACTION;
+  const divisor = useExpected ? Math.min(expectedFraction, 1) : elapsedFraction;
   return Math.max(Math.round(totalSoFarCents / divisor), totalSoFarCents);
-};
-
-// Returns the cumulative share of a typical day's revenue this seller has historically
-// booked by the current wall-clock time in their time zone, interpolated from the
-// backend's 24-entry cumulative hourly curve (curve[h] = fraction booked by the END of
-// hour h, ending at 1). Returns null when the curve is missing or malformed —
-// callers then fall back to the uniform run rate. Indexing is by wall-clock hour, which
-// keeps the lookup aligned with the curve on daylight-saving days (the curve's buckets
-// are wall-clock hours too).
-export const expectedSalesFractionOfDay = (
-  curve: number[] | null | undefined,
-  timeZone: string,
-  now: Date = new Date(),
-): number | null => {
-  if (!curve || curve.length !== 24) return null;
-  const isValid = curve.every(
-    (value, index) =>
-      Number.isFinite(value) && value >= 0 && value <= 1 && value >= (index > 0 ? (curve[index - 1] ?? 0) : 0),
-  );
-  if (!isValid || curve[23] !== 1) return null;
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hourCycle: "h23",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).formatToParts(now);
-    const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
-    const hour = get("hour");
-    const minute = get("minute");
-    if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23) return null;
-    // Linear interpolation within the current hour: at minute 0 we've booked the
-    // previous hour's cumulative fraction, at minute 60 this hour's.
-    const previous = hour > 0 ? (curve[hour - 1] ?? 0) : 0;
-    const current = curve[hour] ?? previous;
-    return previous + (current - previous) * (minute / 60);
-  } catch {
-    return null;
-  }
 };

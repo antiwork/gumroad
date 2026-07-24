@@ -1,20 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  expectedSalesFractionOfDay,
-  fractionOfDayElapsed,
-  MINIMUM_ELAPSED_DAY_FRACTION,
-  projectedEndOfDayTotal,
-} from "./projectedEndOfDayTotal";
-
-// A curve where all of a typical day's revenue arrives between noon and 6 PM,
-// uniformly ($1/6 of the day's revenue per hour). curve[h] = cumulative fraction
-// booked by the END of hour h.
-const afternoonCurve = Array.from({ length: 24 }, (_, hour) => {
-  if (hour < 12) return 0;
-  if (hour >= 18) return 1;
-  return (hour - 11) / 6;
-});
+import { fractionOfDayElapsed, MINIMUM_ELAPSED_DAY_FRACTION, projectedEndOfDayTotal } from "./projectedEndOfDayTotal";
 
 describe("fractionOfDayElapsed", () => {
   it("returns the elapsed fraction of the day in the given time zone", () => {
@@ -75,72 +61,26 @@ describe("projectedEndOfDayTotal", () => {
   });
 
   it("falls back to the elapsed clock fraction when the expected fraction is null or near zero", () => {
-    // Null curve fraction → uniform run rate.
+    // Null expected fraction (thin history) → uniform run rate.
     expect(projectedEndOfDayTotal(100000, 0.5, null)).toBe(200000);
     // A near-zero expected fraction would explode the estimate; fall back instead.
     expect(projectedEndOfDayTotal(100000, 0.5, 0.001)).toBe(200000);
+    // A non-finite value is ignored rather than trusted.
+    expect(projectedEndOfDayTotal(100000, 0.5, Number.NaN)).toBe(200000);
   });
 
   it("projects today's actual total once the expected fraction reaches 1", () => {
     // Historically the day's sales are fully booked by now — nothing more expected.
     expect(projectedEndOfDayTotal(100000, 0.9, 1)).toBe(100000);
+    // A fraction above 1 (bad input) is capped, never inflating below-total division.
+    expect(projectedEndOfDayTotal(100000, 0.9, 1.5)).toBe(100000);
   });
 
   it("never projects below today's booked total", () => {
     expect(projectedEndOfDayTotal(100000, 0.5, 0.99)).toBeGreaterThanOrEqual(100000);
   });
 
-  it("still suppresses projections in the first hour of the day regardless of the curve", () => {
+  it("still suppresses projections in the first hour of the day regardless of the expected fraction", () => {
     expect(projectedEndOfDayTotal(100000, MINIMUM_ELAPSED_DAY_FRACTION - 0.001, 0.5)).toBeNull();
-  });
-});
-
-describe("expectedSalesFractionOfDay", () => {
-  it("interpolates the cumulative fraction from the curve at the current local time", () => {
-    // 14:30 in UTC: end of hour 13 is 2/6, end of hour 14 is 3/6 → halfway between.
-    expect(expectedSalesFractionOfDay(afternoonCurve, "UTC", new Date("2026-07-16T14:30:00Z"))).toBeCloseTo(
-      2 / 6 + (1 / 6) * 0.5,
-    );
-    // Same instant is 07:30 in Los Angeles — before this seller's sales start.
-    expect(expectedSalesFractionOfDay(afternoonCurve, "America/Los_Angeles", new Date("2026-07-16T14:30:00Z"))).toBe(0);
-  });
-
-  it("reaches 1 by the end of the day", () => {
-    expect(expectedSalesFractionOfDay(afternoonCurve, "UTC", new Date("2026-07-16T23:59:00Z"))).toBeCloseTo(1, 2);
-  });
-
-  it("returns null for missing or malformed curves", () => {
-    expect(expectedSalesFractionOfDay(null, "UTC")).toBeNull();
-    expect(expectedSalesFractionOfDay(undefined, "UTC")).toBeNull();
-    expect(expectedSalesFractionOfDay([0.5, 1], "UTC")).toBeNull();
-    // Not monotonically non-decreasing.
-    expect(expectedSalesFractionOfDay([...afternoonCurve.slice(0, 23), 0.5], "UTC")).toBeNull();
-    // Doesn't end at 1.
-    expect(
-      expectedSalesFractionOfDay(
-        Array.from({ length: 24 }, (_, hour) => hour / 48),
-        "UTC",
-      ),
-    ).toBeNull();
-    // Out-of-range values.
-    expect(
-      expectedSalesFractionOfDay(
-        Array.from({ length: 24 }, () => Number.NaN),
-        "UTC",
-      ),
-    ).toBeNull();
-  });
-
-  it("returns null for an unknown time zone", () => {
-    expect(expectedSalesFractionOfDay(afternoonCurve, "Not/AZone")).toBeNull();
-  });
-
-  it("indexes by wall-clock hour on DST transition days", () => {
-    // US DST starts 2026-03-08 in Los Angeles; 19:00 UTC is local noon (PDT). The
-    // curve is wall-clock indexed, so local noon reads the hour-12 bucket as usual.
-    expect(expectedSalesFractionOfDay(afternoonCurve, "America/Los_Angeles", new Date("2026-03-08T19:00:00Z"))).toBe(0);
-    expect(
-      expectedSalesFractionOfDay(afternoonCurve, "America/Los_Angeles", new Date("2026-03-08T20:00:00Z")),
-    ).toBeCloseTo(1 / 6);
   });
 });

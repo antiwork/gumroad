@@ -41,13 +41,12 @@ describe AnalyticsPresenter do
       expect(presenter.page_props[:seller_time_zone]).to eq("America/Los_Angeles")
       # No sales history → no stable hourly curve; the frontend falls back to the
       # uniform run-rate projection.
-      expect(presenter.page_props[:hourly_sales_curve]).to be_nil
+      expect(presenter.page_props[:expected_sales_fraction_of_day]).to be_nil
     end
 
-    it "includes the seller's hourly sales curve when history is deep enough" do
-      curve = Array.new(24) { |hour| ((hour + 1) / 24.0).round(4) }
-      allow_any_instance_of(CreatorAnalytics::HourlySalesCurve).to receive(:cumulative_fractions).and_return(curve)
-      expect(presenter.page_props[:hourly_sales_curve]).to eq(curve)
+    it "includes the seller's expected sales fraction when history is deep enough" do
+      allow_any_instance_of(CreatorAnalytics::HourlySalesCurve).to receive(:expected_fraction_of_day).and_return(0.42)
+      expect(presenter.page_props[:expected_sales_fraction_of_day]).to eq(0.42)
     end
 
     it "returns the seller's own time zone as an IANA identifier" do

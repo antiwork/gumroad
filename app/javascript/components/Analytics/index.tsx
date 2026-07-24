@@ -104,11 +104,10 @@ const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[])
 export type AnalyticsProps = {
   products: Product[];
   seller_time_zone: string;
-  // Cumulative fraction of a typical day's revenue booked by the end of each hour of
-  // day (24 entries) in the seller's time zone, or null when the seller's recent sales
-  // history is too thin to build a stable curve. Used to weight the end-of-day
-  // projection on the sales chart.
-  hourly_sales_curve: number[] | null;
+  // Fraction (0..1) of a typical day's revenue this seller has historically booked by
+  // the time the page rendered, or null when recent sales history is too thin. Used
+  // to weight the projected end-of-day total on the sales chart.
+  expected_sales_fraction_of_day: number | null;
   country_codes: Record<string, string>;
   state_names: Record<string, string>;
 };
@@ -116,7 +115,7 @@ export type AnalyticsProps = {
 const Analytics = ({
   products: initialProducts,
   seller_time_zone,
-  hourly_sales_curve,
+  expected_sales_fraction_of_day,
   country_codes,
   state_names,
 }: AnalyticsProps) => {
@@ -171,16 +170,6 @@ const Analytics = ({
 
   const selectedProducts = products.filter((product) => product.selected).map((product) => product.unique_permalink);
 
-  // The hourly sales curve is built from the sales of the seller's LIVE products, so
-  // it only describes the timing of the charted total when the chart shows exactly
-  // that set — every live product selected, every deleted/archived product (which can
-  // still appear here when it has historical sales) unselected. That's the page's
-  // default selection. Any other selection charts a different mix of sales than the
-  // curve summarizes, so pass null and let the projection fall back to the uniform run
-  // rate instead of dividing one distribution's total by another's curve (a subset's
-  // buyers can cluster in very different hours from the rest of the catalog).
-  const chartMatchesCurvePopulation = products.every((product) => product.selected === product.alive);
-
   const mainData = React.useMemo(
     () => (data?.byReferral ? formatData(data.byReferral, selectedProducts) : null),
     [data?.byReferral, products],
@@ -226,7 +215,7 @@ const Analytics = ({
                 endDate={mainData.endDate}
                 aggregateBy={aggregateBy}
                 sellerTimeZone={seller_time_zone}
-                hourlySalesCurve={chartMatchesCurvePopulation ? hourly_sales_curve : null}
+                expectedSalesFraction={expected_sales_fraction_of_day}
               />
               <ReferrersTable data={mainData.referrerTotal} />
             </>
