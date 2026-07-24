@@ -4,8 +4,9 @@
 class StripeSetupIntent < SetupIntent
   delegate :id, :client_secret, to: :setup_intent
 
-  def initialize(setup_intent)
+  def initialize(setup_intent, merchant_account: nil)
     self.setup_intent = setup_intent
+    @merchant_account = merchant_account
     validate_next_action
   end
 
@@ -43,10 +44,17 @@ class StripeSetupIntent < SetupIntent
       # to the offered menu only when NOTHING is attached; a failed lookup returns a sentinel
       # that keeps the alert alive instead (see StripeIntentStatus). On a
       # server-confirmed (e.g. card-only mandate setup) intent no browser owns the redirect,
-      # so it still alerts. Setup intents are always platform-account today (no
-      # direct-Connect scope needed for the lookup).
+      # so it still alerts. The connected-account scope matters for direct-Connect merchants,
+      # whose payment methods aren't visible from the platform account: both callers
+      # (StripeChargeProcessor#get_setup_intent and #setup_future_charges!) already scope their
+      # own Stripe call to that account, so the lookup here has to be scoped the same way or it
+      # would fail and degrade to the lookup-failed sentinel — turning an ordinary abandoned
+      # redirect into a false "unsupported action" page.
       attempted_type = if next_action_type == StripeIntentStatus::ACTION_TYPE_REDIRECT_TO_URL
-        StripeIntentStatus.attempted_payment_method_type(setup_intent)
+        StripeIntentStatus.attempted_payment_method_type(
+          setup_intent,
+          stripe_account: @merchant_account&.is_a_stripe_connect_account? ? @merchant_account.charge_processor_merchant_id : nil
+        )
       end
       return if StripeIntentStatus.client_handled_next_action?(
         next_action_type,

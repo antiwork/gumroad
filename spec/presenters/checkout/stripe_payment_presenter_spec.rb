@@ -662,6 +662,24 @@ describe Checkout::StripePaymentPresenter do
           .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
       end
 
+      # The example above covers the buy-now/upsell path, which carries quantity in the
+      # add_products hash. The shopping-cart path reads it from the CartProduct row instead, so
+      # it needs its own pin: without it, dropping quantity from the cart branch would price a
+      # 100 × $50 cart as $50 and render Klarna on a $5,000 cart while every other spec passed.
+      it "counts CartProduct quantities toward the window on the shopping-cart path" do
+        stub_geoip_country("104.28.0.1", "United States")
+        seller = create(:user)
+        product = create(:product, user: seller, price_cents: 50_00)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        cart = create(:cart, :guest)
+        create(:cart_product, cart:, product:, price: 50_00, quantity: 100)
+
+        expect(stripe_payment_props(cart:, ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
       # Multi-item single-seller carts are Klarna-eligible (the gate is sellers.one?, not
       # items.one?) and the window input must be the SUM across items — these branches decide
       # real eligibility, so pin them rather than leaving the derivation to the resolver

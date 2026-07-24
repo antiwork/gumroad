@@ -142,5 +142,35 @@ describe StripeSetupIntent, :vcr do
         described_class.new(processor_setup_intent)
       end
     end
+
+    context "when next action type is redirect_to_url on a direct-Connect merchant's setup intent" do
+      let(:connect_merchant_account) do
+        create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_connect_klarna")
+      end
+
+      before do
+        # payment_method is the unexpanded ID string a plain retrieve returns (rather than the
+        # expanded object a fresh confirm carries), so resolving the attempted method has to make
+        # a real PaymentMethod lookup — the only shape where the connected-account scope matters.
+        allow(processor_setup_intent).to receive_messages(
+          status: StripeIntentStatus::REQUIRES_ACTION,
+          next_action: double(type: "redirect_to_url"),
+          payment_method: "pm_klarna",
+          payment_method_types: %w[card klarna]
+        )
+      end
+
+      it "scopes the attempted-method retrieve to the connected account — payment methods created there are invisible from the platform" do
+        # Pin the derivation itself, mirroring the StripeChargeIntent example: without the
+        # connected account's ID the lookup fails, degrades to the lookup-failed sentinel, and
+        # turns an ordinary abandoned redirect into a false "unsupported action" page.
+        expect(Stripe::PaymentMethod).to receive(:retrieve)
+          .with("pm_klarna", { stripe_account: "acct_connect_klarna" })
+          .and_return(Stripe::StripeObject.construct_from(id: "pm_klarna", type: "klarna"))
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        described_class.new(processor_setup_intent, merchant_account: connect_merchant_account)
+      end
+    end
   end
 end
