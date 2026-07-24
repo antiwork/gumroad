@@ -41,7 +41,9 @@ class Settings::MainController < Settings::BaseController
 
   def resend_confirmation_email
     if current_seller.unconfirmed_email.present? || !current_seller.confirmed?
-      current_seller.send_confirmation_instructions
+      # resend_confirmation_instructions (not send_) clears any stale SendGrid
+      # suppression on the address first, so a resend can't be silently dropped.
+      current_seller.resend_confirmation_instructions
       return redirect_to settings_main_path, status: :see_other, notice: "Confirmation email resent!"
     end
     redirect_to settings_main_path, alert: "Sorry, something went wrong. Please try again."

@@ -74,7 +74,9 @@ class LibraryController < Sellers::BaseController
       return if logged_in_user.confirmed?
 
       if logged_in_user.confirmation_sent_at.blank? || logged_in_user.confirmation_sent_at < RESEND_CONFIRMATION_EMAIL_TIME_LIMIT.ago
-        logged_in_user.send_confirmation_instructions
+        # resend_confirmation_instructions clears any stale SendGrid suppression
+        # on the address first, so this resend can't be silently dropped.
+        logged_in_user.resend_confirmation_instructions
       end
 
       flash[:warning] = "Please check your email to confirm your address before you can see that."

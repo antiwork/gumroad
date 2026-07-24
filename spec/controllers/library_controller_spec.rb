@@ -125,7 +125,7 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
       shared_examples "sends confirmation instructions" do
         it "disallows access and sends confirmation instructions" do
           allow(controller).to receive(:current_user).and_return(user)
-          expect(user).to receive(:send_confirmation_instructions)
+          expect(user).to receive(:resend_confirmation_instructions)
 
           get :index
 
@@ -161,7 +161,7 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
 
         it "doesn't send duplicate confirmation instructions" do
           allow(controller).to receive(:current_user).and_return(user)
-          expect(user).not_to receive(:send_confirmation_instructions)
+          expect(user).not_to receive(:resend_confirmation_instructions)
 
           get :index
         end

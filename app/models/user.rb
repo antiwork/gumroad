@@ -1201,6 +1201,23 @@ class User < ApplicationRecord
     has_completed_payouts?
   end
 
+  # Devise routes every confirmation *resend* through this method — the public
+  # "resend confirmation" form, the Settings resend button, and the library
+  # gate all land here. A prior transient delivery failure may have left the
+  # target address on SendGrid's bounce/block suppression list, which silently
+  # drops every later send including this one, so we clear those suppressions
+  # before re-sending (see ResendConfirmationEmailJob for the full rationale).
+  #
+  # Initial-signup sends go through send_confirmation_instructions instead, so
+  # this override adds no suppression lookups to the signup path. We keep
+  # Devise's pending_any_confirmation guard so an already-confirmed address
+  # still gets the usual "already confirmed" error rather than a pointless send.
+  def resend_confirmation_instructions
+    pending_any_confirmation do
+      ResendConfirmationEmailJob.perform_async(id)
+    end
+  end
+
   protected
     def after_confirmation
       # The password reset link sent to the old email should be invalidated

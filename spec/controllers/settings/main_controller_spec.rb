@@ -535,9 +535,12 @@ describe Settings::MainController, type: :controller, inertia: true do
   describe "POST resend_confirmation_email" do
     shared_examples_for "resends email confirmation" do
       it "resends email confirmation" do
+        # The resend clears any stale SendGrid suppression first, so it runs in
+        # the background via ResendConfirmationEmailJob rather than sending inline.
         expect { post :resend_confirmation_email }
-          .to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+          .to change { ResendConfirmationEmailJob.jobs.size }.by(1)
 
+        expect(ResendConfirmationEmailJob).to have_enqueued_sidekiq_job(seller.id)
         expect(response).to redirect_to(settings_main_path)
         expect(response).to have_http_status :see_other
         expect(flash[:notice]).to eq("Confirmation email resent!")
@@ -547,7 +550,7 @@ describe Settings::MainController, type: :controller, inertia: true do
     shared_examples_for "doesn't resend email confirmation" do
       it "doesn't resend email confirmation" do
         expect { post :resend_confirmation_email }
-          .not_to have_enqueued_mail(UserSignupMailer)
+          .not_to change { ResendConfirmationEmailJob.jobs.size }
 
         expect(response).to redirect_to(settings_main_path)
         expect(response).to have_http_status :found
