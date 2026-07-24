@@ -145,8 +145,13 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
       expect(product.reload.has_same_rich_content_for_all_variants?).to be(true)
     end
 
-    it "keeps the version content and deletes the shared pages when the seller chooses to keep version content" do
-      hidden_page = create(:rich_content, entity: @variant_option, title: "Hidden guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hidden version content" }] }])
+    it "keeps the version content and its embedded files when the seller chooses to keep version content" do
+      hidden_file = @variant_option.product_files.alive.first
+      hidden_description = [
+        { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hidden version content" }] },
+        { "type" => "fileEmbed", "attrs" => { "id" => hidden_file.external_id, "uid" => "hidden-version-file" } },
+      ]
+      hidden_page = create(:rich_content, entity: @variant_option, title: "Hidden guide", description: hidden_description)
       shared_page = create(:product_rich_content, entity: product, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level shared content" }] }])
       product.update!(has_same_rich_content_for_all_variants: true)
 
@@ -164,7 +169,9 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
       expect(page).to have_text("Hidden version content")
 
       expect(hidden_page.reload).not_to be_deleted
-      expect(hidden_page.description.to_s).to include("Hidden version content")
+      expect(hidden_page.description).to eq(hidden_description)
+      expect(hidden_file.reload).not_to be_deleted
+      expect(@variant_option.reload.product_files.alive).to contain_exactly(hidden_file)
       expect(shared_page.reload).to be_deleted
       expect(product.reload.has_same_rich_content_for_all_variants?).to be(false)
     end

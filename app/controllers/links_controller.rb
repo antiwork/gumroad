@@ -516,10 +516,11 @@ class LinksController < ApplicationController
       # The fail-closed inconsistent-content case: hidden version-level pages
       # AND real product-level content both exist, so the save must not pick a
       # winner. Return the hidden pages so the editor can present the seller
-      # an explicit choice (delete them and keep the product-level content, or
-      # cancel). The guard raises on the first version it inspects, so list
-      # every hidden version page here (fresh from the rolled-back state) —
-      # one choice must cover all of them, not one modal round per version.
+      # an explicit choice between keeping the product-level content and
+      # keeping the version-level content. The guard raises on the first version
+      # it inspects, so list every hidden version page here (fresh from the
+      # rolled-back state) — one choice must cover all of them, not one dialog
+      # per version.
       return render json: {
         error_message: e.message,
         error_code: "hidden_variant_content_conflict",

@@ -33,6 +33,12 @@ export class HiddenVariantContentConflictError extends Error {
   }
 }
 
+export const filesForSave = <T extends { id: string }>(
+  files: T[],
+  embeddedFileIds: Set<unknown>,
+  keepAllFiles: boolean,
+) => (keepAllFiles ? files : files.filter((file) => embeddedFileIds.has(file.id)));
+
 export const saveProduct = async (
   permalink: string,
   id: string,
@@ -59,7 +65,12 @@ export const saveProduct = async (
     ),
   );
   editor.destroy();
-  if (!options.keepAllFiles) product.files = product.files.filter((file) => fileIds.has(file.id));
+  // Do not mutate the editor state here. If this request returns a hidden
+  // content conflict, the seller's choice retries the save with the same
+  // in-memory product. Removing files from it on the failed first attempt
+  // would make "Keep version content" delete files embedded in the hidden
+  // pages even though that retry asks us to preserve every file.
+  const files = filesForSave(product.files, fileIds, options.keepAllFiles ?? false);
   const { custom_html: _customHtml, ...productParams } = product;
   const response = await request({
     method: "POST",
@@ -67,6 +78,7 @@ export const saveProduct = async (
     url: Routes.link_path(permalink),
     data: {
       ...productParams,
+      files,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),
       // Variants created in this session are sent with id: null (the server

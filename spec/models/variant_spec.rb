@@ -913,7 +913,13 @@ describe Variant do
         variant.link.update!(has_same_rich_content_for_all_variants: true)
       end
 
-      it "returns empty array" do
+      it "returns associated variant-level rich content when the product level is blank" do
+        expect(variant.rich_content_json).to contain_exactly(hash_including(id: rich_content.external_id))
+      end
+
+      it "returns empty array when the product has its own rich content" do
+        create(:product_rich_content, entity: variant.link, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "text" => "Shared content", "type" => "text" }] }])
+
         expect(variant.rich_content_json).to eq([])
       end
     end
