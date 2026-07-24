@@ -745,13 +745,32 @@ class Installment < ApplicationRecord
     end
   end
 
-  # Rows are read (and emails are looked up) in chunks of this size. A post sent to a
-  # six-figure audience has just as many email_infos rows, and asking the database for
-  # all of them — or for the emails of all their purchases — in a single statement is
-  # what used to blow past the statement execution cap and kill the resend job. Reading
-  # in primary-key-bounded chunks keeps every individual statement small and quick,
-  # at the cost of more round trips.
-  RECIPIENT_LOOKUP_BATCH_SIZE = 10_000
+  # How many email_infos rows to read at a time when working out who a post was emailed
+  # to. A post sent to a six-figure audience has just as many rows, and asking for all of
+  # them in one statement is what used to blow past the statement execution cap and kill
+  # the resend job. This walk is bounded by the email_infos primary key and only touches
+  # that table, so it stays fast at a large chunk size: measured at 11-20ms per chunk
+  # against a 350k-recipient post in production.
+  EMAIL_INFO_BATCH_SIZE = 10_000
+
+  # How many purchase ids to put in a single `WHERE id IN (...)` when looking up those
+  # recipients' email addresses. This has to stay much smaller than the chunk size above,
+  # for a reason that is not obvious and produces no error when you get it wrong.
+  #
+  # MySQL's range optimizer has a memory budget (`range_optimizer_max_mem_size`, 8MB on
+  # our servers). To use the primary key for a long `IN` list it first has to build an
+  # in-memory representation of all those id ranges. If that estimate exceeds the budget,
+  # it does not fail or warn — it silently throws away the range plan and falls back to
+  # scanning the whole table. On production `purchases` that is ~327 million rows, so the
+  # query goes from milliseconds to not finishing inside a 120-second statement window.
+  #
+  # Measured against the same 350k-recipient post: at 2,000 ids the plan is still
+  # `range` on PRIMARY; by 2,500 it has flipped to `ALL` with 327M rows examined. Per-id
+  # throughput is flat (~0.35ms) as long as the plan holds, so there is nothing to gain
+  # from sailing close to that limit. 1,000 leaves 2x headroom, which matters because the
+  # threshold depends on how the ids are distributed, not just how many there are: a
+  # sparser list needs more ranges to describe and so tips over sooner.
+  PURCHASE_LOOKUP_BATCH_SIZE = 1_000
 
   # Purchase ids of recipients this post was emailed to, backed by the open-tracking
   # CreatorContactingCustomersEmailInfo rows that are created when a post email is sent.
@@ -1143,13 +1162,13 @@ class Installment < ApplicationRecord
 
     # Collects the distinct purchase ids of an email_infos scope without asking the
     # database for every row in one statement. `in_batches` walks the table by primary
-    # key, so each statement touches at most RECIPIENT_LOOKUP_BATCH_SIZE rows and
-    # finishes quickly even when the post was emailed to hundreds of thousands of
-    # people. De-duplication happens in Ruby because DISTINCT across the whole table
-    # is exactly the expensive part we're avoiding.
+    # key, so each statement touches at most EMAIL_INFO_BATCH_SIZE rows and finishes
+    # quickly even when the post was emailed to hundreds of thousands of people.
+    # De-duplication happens in Ruby because DISTINCT across the whole table is exactly
+    # the expensive part we're avoiding.
     def batched_distinct_purchase_ids(scope)
       ids = Set.new
-      scope.in_batches(of: RECIPIENT_LOOKUP_BATCH_SIZE) do |batch|
+      scope.in_batches(of: EMAIL_INFO_BATCH_SIZE) do |batch|
         ids.merge(batch.pluck(:purchase_id))
       end
       ids.to_a
@@ -1157,10 +1176,13 @@ class Installment < ApplicationRecord
 
     # Downcased emails for the given purchase ids, looked up in chunks so a six-figure
     # id list becomes many small `WHERE id IN (...)` statements instead of one enormous
-    # one. Returns a Set because every caller only needs membership/difference.
+    # one. The chunk size is deliberately much smaller than the one above — see the
+    # comment on PURCHASE_LOOKUP_BATCH_SIZE for why an oversized `IN` list makes MySQL
+    # quietly abandon the primary key and scan the entire purchases table. Returns a Set
+    # because every caller only needs membership/difference.
     def purchase_emails_for(purchase_ids)
       emails = Set.new
-      purchase_ids.each_slice(RECIPIENT_LOOKUP_BATCH_SIZE) do |ids_slice|
+      purchase_ids.each_slice(PURCHASE_LOOKUP_BATCH_SIZE) do |ids_slice|
         emails.merge(Purchase.where(id: ids_slice).pluck(:email).compact.map(&:downcase))
       end
       emails
