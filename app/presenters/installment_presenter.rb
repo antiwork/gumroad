@@ -135,10 +135,19 @@ class InstallmentPresenter
     # of resends on each post. Opens that fall outside every completed resend's
     # window bucket to NULL and are dropped; windows with no opens are simply
     # absent from the returned hash (callers default them to 0).
+    #
+    # A window ends at the next COMPLETED resend's requested_at, skipping any
+    # in-progress resends in between. In-progress resends don't get stats (and
+    # aren't shown as list rows), so ending the previous window at an in-progress
+    # resend's request time would make opens after that moment vanish from every
+    # displayed rate. Instead they stay credited to the last completed resend;
+    # once the in-progress resend completes, its window starts and those later
+    # opens are re-attributed to it on the next render.
     def resend_open_counts(resends)
       windows = resends.each_with_index.filter_map do |blast, index|
         next if blast.completed_at.blank?
-        [index, blast.requested_at, resends[index + 1]&.requested_at]
+        next_completed = resends[(index + 1)..].find { _1.completed_at.present? }
+        [index, blast.requested_at, next_completed&.requested_at]
       end
       return {} if windows.empty?
 
