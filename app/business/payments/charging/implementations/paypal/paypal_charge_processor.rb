@@ -768,8 +768,21 @@ class PaypalChargeProcessor
     def item_refund_cents_from_paypal(purchase_unit, purchase, amount_cents)
       permalink = purchase.link&.unique_permalink
       return nil if permalink.blank?
-      item = purchase_unit.items&.find { |i| i.sku == permalink }
-      return nil unless item
+      matching_items = (purchase_unit.items || []).select { |i| i.sku == permalink }
+      # A PayPal order can list the same sku more than once — most commonly when a free ($0)
+      # sibling purchase of the same product sits on the same order as the paid one. A
+      # zero-value line can never be the paid item being refunded, so drop those before
+      # picking. (Real incident: `items.find` returned the €0.00 line first, computed a
+      # refund of 0, and the fully-unrefunded purchase was wrongly reported as "no remaining
+      # balance to refund".)
+      if matching_items.size > 1
+        matching_items = matching_items.reject { |i| BigDecimal(i.unit_amount.value).zero? }
+      end
+      # If the sku still matches multiple paid lines we cannot tell which one this purchase
+      # is; return nil so the caller falls back to the USD→merchant-currency conversion
+      # instead of guessing an item and refunding the wrong amount.
+      return nil unless matching_items.size == 1
+      item = matching_items.first
 
       scale = paypal_cents_scale(purchase_unit.amount&.currency_code)
       total_unit_value = purchase_unit.items.sum { |i| BigDecimal(i.unit_amount.value) * scale * i.quantity.to_i }
@@ -812,6 +825,11 @@ class PaypalChargeProcessor
       captured = (BigDecimal(capture.amount.value) * scale).to_i
       refunded = (purchase_unit.payments.refunds || []).sum do |r|
         next 0 unless refund_belongs_to_capture?(r, capture_id)
+        # A FAILED or CANCELLED refund never moved money, so it must not consume the
+        # capture's refundable balance — counting it would block a legitimate retry of
+        # that refund forever. Refunds without a status (older payloads) stay counted.
+        status = r.respond_to?(:status) ? r.status.to_s.upcase : ""
+        next 0 if %w[FAILED CANCELLED].include?(status)
         (BigDecimal(r.amount.value) * scale).to_i
       end
       captured - refunded
