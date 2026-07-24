@@ -98,6 +98,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   surcharges: loadedSurcharges(0),
   availablePaymentMethods: [],
   paymentMethod: "card",
+  paymentElementType: "card",
   willSaveCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,

@@ -155,6 +155,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   },
   availablePaymentMethods: [],
   paymentMethod: "card",
+  paymentElementType: "card",
   willSaveCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
