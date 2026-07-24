@@ -449,7 +449,24 @@ class Order::PreparePaymentIntentService
     # append (deduped below) keeps the confirmed method on the intent if the resolver's inputs
     # drift after the Element mounts, including in Stripe test mode.
     def intent_payment_method_types(presentment)
-      method_types = resolved_payment_method_types
+      # The previewed-method append runs on EVERY lane, including the plain USD one (nil
+      # presentment): it is the safety net that keeps the buyer's actual selection on the
+      # intent when the resolver's inputs drift between the Element mounting and prepare
+      # running (a flag flip, a GeoIP re-eval, an amount-basis divergence for Klarna's
+      # window). Without it, a buyer who selected a method the re-run resolver dropped
+      # fails at confirm with no recourse — Stripe rejects a payment_method_types-scoped
+      # ConfirmationToken whose type is missing from the intent. The append runs BEFORE
+      # the currency-compatibility strip below so that strip is final — the confirmed
+      # method must never re-enter an intent whose currency it cannot charge in. For the
+      # same reason the append itself is currency-gated: a forced-currency method (iDEAL,
+      # Bancontact, UPI) is only appended when the intent is being created in its currency —
+      # appending it to a USD intent (e.g. its launch flag rolled back mid-checkout, so no
+      # presentment was built) would make Stripe reject the intent CREATE itself; leaving
+      # it off keeps the flag-off USD lane byte-for-byte and fails the stale token closed
+      # at confirm instead. (Klarna's US-only launch gate is separately enforced
+      # fail-closed, before this method runs, by
+      # block_region_locked_payment_method_country_mismatch.)
+      method_types = (resolved_payment_method_types + [appendable_previewed_payment_method_type(presentment)]).compact.uniq
       # The US-locked methods (Cash App Pay, ACH) are also USD-only: Stripe rejects creating an
       # intent in any other currency that lists them. Dropping them here is about currency
       # compatibility, not the buyer's location — a US-GeoIP buyer keeps them on USD intents.
@@ -458,30 +475,27 @@ class Order::PreparePaymentIntentService
       # this is belt-and-braces, since the resolver already withholds Klarna whenever a
       # forced-currency method is on the cart (see launched_method_set).
       # The remaining launched methods (card, Link) support every currency we can force today.
-      currency_incompatible_types = []
       if presentment.present? && presentment.presentment_currency != Currency::USD
-        currency_incompatible_types = Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES +
-          [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
-        method_types -= currency_incompatible_types
+        method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
+        method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
       end
 
-      # The previewed-method append runs on EVERY lane, including the plain USD one (nil
-      # presentment): it is the safety net that keeps the buyer's actual selection on the
-      # intent when the resolver's inputs drift between the Element mounting and prepare
-      # running (a flag flip, a GeoIP re-eval, an amount-basis divergence for Klarna's
-      # window). Without it, a buyer who selected a method the re-run resolver dropped
-      # fails at confirm with no recourse — Stripe rejects a payment_method_types-scoped
-      # ConfirmationToken whose type is missing from the intent. The compact drops the nil
-      # when no method preview was supplied (e.g. saved-card charges).
-      # The append must NOT resurrect a method the currency drop just removed: re-adding
-      # Klarna would put it on a non-USD intent Stripe may well ACCEPT (Klarna supports EUR
-      # etc.), silently charging through a lane the v1 gate never vetted. Skipping the append
-      # here fails closed instead — Stripe rejects the mismatched ConfirmationToken at
-      # confirm, and no charge happens (the US-locked methods fail even earlier, at intent
-      # create). A buyer holding such a token could never legitimately confirm on this lane
-      # anyway.
-      previewed_type = currency_incompatible_types.include?(@previewed_payment_method_type) ? nil : @previewed_payment_method_type
-      (method_types + [previewed_type]).compact.uniq
+      method_types
+    end
+
+    # The previewed method, or nil when it must not ride this intent: nil when no method
+    # preview was supplied (saved-card charges), and nil when the method forces a currency
+    # the intent is not being created in — that token can never confirm against this intent
+    # anyway, and listing the method would make Stripe reject the intent create outright.
+    def appendable_previewed_payment_method_type(presentment)
+      method_type = @previewed_payment_method_type
+      return nil if method_type.blank?
+
+      forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
+      return method_type if forced_currency.blank?
+
+      intent_currency = presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+      forced_currency == intent_currency ? method_type : nil
     end
 
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied

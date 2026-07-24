@@ -155,6 +155,14 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(service.send(:previewed_country, preview)).to eq("IN")
       end
 
+      # Klarna's US-only rule is a launch decision, not a Stripe funding-country lock: its preview
+      # exposes no verifiable funding country, so PPP verification must NOT treat a Klarna payment
+      # as US-funded — a nil country here means a PPP-discounted Klarna purchase fails closed.
+      it "returns nil for a Klarna preview — the launch lock is not a funding country" do
+        preview = preview_from(type: "klarna", klarna: {}, card: nil)
+        expect(service.send(:previewed_country, preview)).to be_nil
+      end
+
       it "prefers an explicit method-block country over the region lock if Stripe ever exposes one" do
         preview = preview_from(type: "us_bank_account", us_bank_account: { country: "US" }, card: nil)
         expect(service.send(:previewed_country, preview)).to eq("US")
@@ -674,14 +682,15 @@ describe Order::PreparePaymentIntentService, :vcr do
       # mismatch that fails the whole cart at confirm.
       it "computes the Klarna window from the buyer's chosen PWYW amount, not the product floor, when an offer code is cached" do
         Feature.activate_user(:checkout_local_method_klarna, seller)
-        # Floor $0.99 (below Klarna's $1 minimum), buyer chooses $20, 50%-off code → pays $10.
-        # Chosen pre-discount basis: $20 → inside the window → Klarna rides the intent,
-        # matching the Element the presenter mounted from the same $20. The floor basis
-        # ($0.99) would wrongly drop it.
-        pwyw_product = create(:product, user: seller, price_cents: 99, customizable_price: true)
+        # Floor $2 (the smallest floor a 50%-off code's post-discount-≥-$0.99 validation
+        # allows), buyer chooses $4,500 — above Klarna's $4,000 window maximum — and pays
+        # $2,250 after the code. Chosen pre-discount basis: $4,500 → OUTSIDE the window →
+        # Klarna stays off the intent, matching the Element the presenter mounted from the
+        # same $4,500. The floor basis ($2, inside the window) would wrongly add it.
+        pwyw_product = create(:product, user: seller, price_cents: 2_00, customizable_price: true)
         offer_code = create(:percentage_offer_code, user: seller, products: [pwyw_product], amount_percentage: 50)
         params = {
-          line_items: [{ uid: "unique-id-0", permalink: pwyw_product.unique_permalink, perceived_price_cents: 20_00, quantity: 1,
+          line_items: [{ uid: "unique-id-0", permalink: pwyw_product.unique_permalink, perceived_price_cents: 2_250_00, quantity: 1,
                          discount_code: offer_code.code }]
         }.merge(common_params)
         order, order_responses = Order::CreateService.new(params:).perform
@@ -701,7 +710,8 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_pwyw_klarna").perform
 
-        expect(create_args[:payment_method_types]).to include("klarna")
+        expect(create_args[:payment_method_types]).not_to include("klarna")
+        expect(create_args[:payment_method_types]).to include("card")
       ensure
         Feature.deactivate_user(:checkout_local_method_klarna, seller)
       end
