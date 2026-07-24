@@ -34,6 +34,16 @@ class StripeIntentStatus
   # card/mandate intents, so they never carry these methods and keep alerting.
   CLIENT_REDIRECT_PAYMENT_METHOD_TYPES = %w[ideal bancontact klarna cashapp afterpay_clearpay affirm].freeze
 
+  # Sentinel returned by attempted_payment_method_type when a payment method IS attached but
+  # the lookup failed (Stripe error after retries). It is deliberately distinct from nil ("no
+  # method attached"): nil falls back to the offered-menu heuristic, while a failed lookup
+  # must NOT — cashapp sits in both LAUNCHED and client-redirect sets, so the menu fallback
+  # would swallow a stray redirect on essentially every US intent, silencing the
+  # misconfiguration alert exactly during a Stripe outage (the only time this fires, given
+  # max_network_retries). Better a rare duplicate page for an abandoned redirect than a dead
+  # alert.
+  PAYMENT_METHOD_LOOKUP_FAILED = :payment_method_lookup_failed
+
   # True when a requires_action next_action of `type` is expected to be resolved by
   # Stripe.js in the buyer's browser, meaning the server should not alert on it. Shared by
   # StripeChargeIntent and StripeSetupIntent.
@@ -42,12 +52,15 @@ class StripeIntentStatus
   # (`payment_method_type`, from the intent's attached payment method) — never on the intent's
   # whole offered menu: a menu-based check would swallow a stray redirect on the dominant card
   # path whenever the intent merely OFFERED a redirect method alongside card, losing the alert
-  # that pages on genuine misconfigurations. When the attempted type is unavailable (the
-  # intent was retrieved without expanding payment_method, or none attached yet), fall back to
-  # the offered menu so a legitimately-abandoned redirect doesn't page.
+  # that pages on genuine misconfigurations. When the attempted type is unavailable because
+  # nothing is attached yet (or the intent wasn't expanded and carried no ID), fall back to
+  # the offered menu so a legitimately-abandoned redirect doesn't page. When the type is
+  # unavailable because the LOOKUP FAILED (see PAYMENT_METHOD_LOOKUP_FAILED), keep alerting —
+  # a failure is not evidence the redirect was client-owned.
   def self.client_handled_next_action?(type, payment_method_types, payment_method_type: nil)
     return true if type.in?(CLIENT_HANDLED_ACTION_TYPES)
     return false unless type == ACTION_TYPE_REDIRECT_TO_URL
+    return false if payment_method_type == PAYMENT_METHOD_LOOKUP_FAILED
 
     if payment_method_type.present?
       payment_method_type.in?(CLIENT_REDIRECT_PAYMENT_METHOD_TYPES)
@@ -62,8 +75,13 @@ class StripeIntentStatus
   # PaymentMethod retrieve — this only ever runs on the rare requires_action +
   # redirect_to_url combination, so it adds no API traffic to the normal charge paths.
   # `stripe_account` scopes the lookup for direct-Connect merchants (payment methods created
-  # on a connected account are not visible from the platform). Returns nil when the lookup
-  # fails or nothing is attached, and callers then fall back to the intent's offered menu.
+  # on a connected account are not visible from the platform). Returns nil when nothing is
+  # attached (callers then fall back to the intent's offered menu) and
+  # PAYMENT_METHOD_LOOKUP_FAILED when a method IS attached but the retrieve failed — the two
+  # cases must stay distinguishable so a lookup failure keeps the stray-redirect alert alive
+  # instead of silently degrading to the menu heuristic (see the sentinel's comment). The
+  # failure itself is also reported: with the client's retries exhausted it usually means a
+  # Stripe incident, which is worth knowing about in its own right.
   # Uses [] access because Stripe::StripeObject raises on a missing attribute reader but
   # returns nil for an absent key.
   def self.attempted_payment_method_type(intent, stripe_account: nil)
@@ -73,8 +91,9 @@ class StripeIntentStatus
     if payment_method.is_a?(String)
       begin
         payment_method = Stripe::PaymentMethod.retrieve(payment_method, { stripe_account: }.compact)
-      rescue Stripe::StripeError
-        return nil
+      rescue Stripe::StripeError => e
+        ErrorNotifier.notify(e, payment_method_id: payment_method, stripe_account:)
+        return PAYMENT_METHOD_LOOKUP_FAILED
       end
     end
 

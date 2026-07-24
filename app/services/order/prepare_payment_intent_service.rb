@@ -532,19 +532,38 @@ class Order::PreparePaymentIntentService
     end
 
     # The previewed method, or nil when it must not ride this intent: nil when no method
-    # preview was supplied (saved-card charges), nil for a klarna token when the seller's
-    # launch flag is off (the append is a drift safety net for LAUNCHED methods, never a
-    # way for an unlaunched method's token to enable itself past the rollout gate), and
-    # nil when the method forces a currency the intent is not being created in — that
-    # token can never confirm against this intent anyway, and listing the method would
-    # make Stripe reject the intent create outright.
+    # preview was supplied (saved-card charges), and nil unless the method is one this
+    # seller could legitimately have been offered right now — the append is a drift
+    # safety net for methods the resolver COULD list, never a way for a client-supplied
+    # (stale or crafted) token type to enable a method past its rollout gate. Without
+    # this allowlist, a us_bank_account token would re-add ACH for a seller who never
+    # opted in (the intent create succeeds, so the buyer actually pays by a method the
+    # platform withdrew — gumroad-private#1143), and an afterpay/affirm token would make
+    # Stripe reject the whole intent create (gumroad-private#1026). Also nil when the
+    # method forces a currency the intent is not being created in — that token can never
+    # confirm against this intent anyway, and listing the method would make Stripe reject
+    # the intent create outright.
     def appendable_previewed_payment_method_type(presentment)
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
 
-      if method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE
-        return nil unless Feature.active?(Checkout::PaymentMethodResolver::KLARNA_LAUNCH_FEATURE, seller)
-      end
+      # The allowlist mirrors the resolver's four sources of offerable methods: always-on
+      # launched methods, the seller's ACH opt-in, Klarna's launch flag + account gate, and
+      # the forced-currency local methods (their currency gate is below). Anything else —
+      # unlaunched, opted-out, or unknown types — must fail closed at confirm rather than
+      # ride the intent. The Klarna clause is load-bearing: it unconditionally re-adds
+      # klarna for flag-on sellers so the final-amount strip in intent_payment_method_types
+      # stays the single authority on Klarna's amount window (see the tips/rounding
+      # divergence notes on the PR). It re-checks the merchant-account gate too, not just
+      # the flag: capability/account drift after the Element mounts must not re-append
+      # klarna onto a non-US connected account's intent, where the incompatible entry
+      # fails the whole intent create (gumroad-private#1026).
+      return nil unless method_type.in?(Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES) ||
+        (method_type.in?(Checkout::PaymentMethodResolver::SELLER_OPT_IN_PAYMENT_METHOD_TYPES) && seller.ach_payments_enabled?) ||
+        (method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE &&
+          Feature.active?(Checkout::PaymentMethodResolver::KLARNA_LAUNCH_FEATURE, seller) &&
+          Checkout::PaymentMethodResolver.klarna_supported_merchant_account?(seller)) ||
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).present?
 
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
       return method_type if forced_currency.blank?

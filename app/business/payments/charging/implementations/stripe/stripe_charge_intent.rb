@@ -55,7 +55,8 @@ class StripeChargeIntent < ChargeIntent
       # when the method the buyer actually attempted is a client-redirect method — resolved
       # ONLY for redirect_to_url, because resolving it can cost a PaymentMethod retrieve on a
       # plain (unexpanded) intent, and the other action types decide without it. Falls back
-      # to the offered menu when the attempted method can't be resolved. On a
+      # to the offered menu only when NOTHING is attached; a failed lookup returns a sentinel
+      # that keeps the alert alive instead (see StripeIntentStatus). On a
       # server-confirmed (e.g. card-only off-session) intent no browser owns the redirect,
       # so it still alerts. The connected-account scope matters for direct-Connect
       # merchants, whose payment methods aren't visible from the platform account.

@@ -117,6 +117,21 @@ class Checkout::PaymentMethodResolver
     def client_confirm_eligible? = client_confirm_eligible
   end
 
+  # Whether Klarna can be listed on an intent created for this seller's account. Platform-account
+  # (Gumroad-managed) sellers always pass — the platform account is US-based. Direct-charge
+  # sellers pass only when their connected account's country is US: Stripe's Klarna cross-border
+  # rule applies to the account the intent is created on, and an incompatible
+  # payment_method_types entry fails the ENTIRE intent create, taking card down with it
+  # (gumroad-private#1026). An unknown country fails closed. Exposed at class level because the
+  # previewed-method append in Order::PreparePaymentIntentService must re-check the SAME
+  # account gate before re-adding a klarna token — capability/account drift between the Element
+  # mounting and prepare running must not re-append a method the resolver correctly dropped.
+  def self.klarna_supported_merchant_account?(seller)
+    return true unless seller&.has_stripe_account_connected?
+
+    seller.stripe_connect_account&.country == KLARNA_SUPPORTED_BUYER_COUNTRY
+  end
+
   # cart_product_currency: the ISO code (lowercase, e.g. "eur") the cart's single item is priced
   # in, or nil for multi-item carts / unknown. Only consulted by the forced-currency
   # gate below: a forced-currency method (iDEAL/Bancontact) is offered only when the cart is
@@ -279,9 +294,7 @@ class Checkout::PaymentMethodResolver
     # sellers pass only when their connected account's country is US — see klarna_methods'
     # fourth gate. An unknown country fails closed.
     def klarna_supported_merchant_account?
-      return true unless direct_charge_seller?
-
-      sellers.first.stripe_connect_account&.country == KLARNA_SUPPORTED_BUYER_COUNTRY
+      self.class.klarna_supported_merchant_account?(sellers.first)
     end
 
     # The methods (from our policy-resolved set) that the account the PaymentIntent will be created

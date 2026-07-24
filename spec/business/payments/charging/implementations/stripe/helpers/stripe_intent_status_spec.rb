@@ -25,6 +25,10 @@ describe StripeIntentStatus do
         expect(described_class.client_handled_next_action?("redirect_to_url", %w[card klarna])).to eq(true)
         expect(described_class.client_handled_next_action?("redirect_to_url", %w[card link])).to eq(false)
       end
+
+      it "keeps alerting when the attempted-method lookup FAILED — a lookup failure is not evidence the redirect was client-owned, and the menu fallback would swallow it (cashapp is on nearly every US menu)" do
+        expect(described_class.client_handled_next_action?("redirect_to_url", %w[card klarna cashapp], payment_method_type: described_class::PAYMENT_METHOD_LOOKUP_FAILED)).to eq(false)
+      end
     end
   end
 
@@ -52,11 +56,13 @@ describe StripeIntentStatus do
       expect(described_class.attempted_payment_method_type(intent, stripe_account: "acct_1")).to eq("card")
     end
 
-    it "returns nil when the payment method lookup fails, so callers fall back to the offered menu" do
+    it "returns the lookup-failed sentinel (never nil) when the retrieve fails, so the redirect alert stays alive instead of degrading to the menu fallback, and reports the failure" do
       intent = Stripe::StripeObject.construct_from(payment_method: "pm_123")
-      expect(Stripe::PaymentMethod).to receive(:retrieve).and_raise(Stripe::InvalidRequestError.new("nope", "payment_method"))
+      error = Stripe::InvalidRequestError.new("nope", "payment_method")
+      expect(Stripe::PaymentMethod).to receive(:retrieve).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, payment_method_id: "pm_123", stripe_account: nil)
 
-      expect(described_class.attempted_payment_method_type(intent)).to be_nil
+      expect(described_class.attempted_payment_method_type(intent)).to eq(described_class::PAYMENT_METHOD_LOOKUP_FAILED)
     end
 
     it "returns nil when no payment method is attached" do

@@ -241,5 +241,46 @@ describe StripeChargeIntent, :vcr do
         described_class.new(payment_intent: processor_payment_intent)
       end
     end
+
+    context "when next action type is redirect_to_url and the attempted-method lookup fails" do
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        # The menu offers a client-redirect method (as nearly every US intent does via
+        # cashapp), so the OLD nil-and-fall-back behavior would have swallowed the alert.
+        allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna cashapp]
+        allow(Stripe::PaymentMethod).to receive(:retrieve)
+          .and_raise(Stripe::APIConnectionError.new("stripe is down"))
+      end
+
+      it "still notifies error tracker — a lookup failure must not degrade to the menu fallback and silence the alert during a Stripe outage" do
+        # Two notifies: the lookup failure itself, then the unsupported-action alert.
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIConnectionError), anything)
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
+        described_class.new(payment_intent: processor_payment_intent)
+      end
+    end
+
+    context "when next action type is redirect_to_url on a direct-Connect merchant's intent" do
+      let(:connect_merchant_account) do
+        create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_connect_klarna")
+      end
+
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna]
+      end
+
+      it "scopes the attempted-method retrieve to the connected account — payment methods created there are invisible from the platform" do
+        # Pin the derivation itself: StripeChargeIntent must pass the connected account's ID
+        # through to the lookup, or direct-Connect Klarna sellers' abandoned redirects would
+        # fail the lookup (and page) every time.
+        expect(Stripe::PaymentMethod).to receive(:retrieve)
+          .with(processor_payment_intent.payment_method, { stripe_account: "acct_connect_klarna" })
+          .and_return(Stripe::StripeObject.construct_from(id: processor_payment_intent.payment_method, type: "klarna"))
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        described_class.new(payment_intent: processor_payment_intent, merchant_account: connect_merchant_account)
+      end
+    end
   end
 end

@@ -40,7 +40,8 @@ class StripeSetupIntent < SetupIntent
       # when the method the buyer actually attempted is a client-redirect method — resolved
       # ONLY for redirect_to_url, because resolving it can cost a PaymentMethod retrieve on a
       # plain (unexpanded) intent, and the other action types decide without it. Falls back
-      # to the offered menu when the attempted method can't be resolved. On a
+      # to the offered menu only when NOTHING is attached; a failed lookup returns a sentinel
+      # that keeps the alert alive instead (see StripeIntentStatus). On a
       # server-confirmed (e.g. card-only mandate setup) intent no browser owns the redirect,
       # so it still alerts. Setup intents are always platform-account today (no
       # direct-Connect scope needed for the lookup).

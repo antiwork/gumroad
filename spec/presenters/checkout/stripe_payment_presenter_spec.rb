@@ -661,6 +661,48 @@ describe Checkout::StripePaymentPresenter do
         expect(stripe_payment_props(add_products: [item], ip: "104.28.0.1"))
           .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
       end
+
+      # Multi-item single-seller carts are Klarna-eligible (the gate is sellers.one?, not
+      # items.one?) and the window input must be the SUM across items — these branches decide
+      # real eligibility, so pin them rather than leaving the derivation to the resolver
+      # spec's injected totals.
+      it "offers Klarna on a multi-item single-seller USD cart whose summed total is inside the window" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        second_product = create(:product, user: seller, price_cents: 20_00)
+        second_item = checkout_product_for(second_product)
+
+        expect(stripe_payment_props(add_products: [first_item, second_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp klarna]))
+      end
+
+      it "keeps Klarna off a multi-item single-seller cart whose SUMMED total crosses the ceiling, even though each item alone is inside the window" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        first_item[:price] = 3_000_00
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        second_product = create(:product, user: seller, price_cents: 3_000_00)
+        second_item = checkout_product_for(second_product)
+
+        expect(stripe_payment_props(add_products: [first_item, second_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      # A cart containing any non-USD-priced item nils the window input, which fails closed
+      # for Klarna — Stripe's Klarna window is defined on USD amounts, so a total we cannot
+      # express in USD must never render the method.
+      it "keeps Klarna off a cart with a non-USD-priced item — the window input is nil and fails closed" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: "eur")
+        eur_item = checkout_product_for(eur_product)
+
+        props = stripe_payment_props(add_products: [first_item, eur_item], ip: "104.28.0.1")
+
+        expect(props[:elements_options][:payment_method_types]).not_to include("klarna")
+      end
     end
 
     it "keeps Klarna off without its launch flag — the flag defaults to 0% everywhere" do

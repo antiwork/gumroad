@@ -631,8 +631,9 @@ describe Order::PreparePaymentIntentService, :vcr do
 
       # With the flag ON, the append is the drift safety net it was built to be: a launched
       # seller's klarna token stays on the intent even if the re-run resolver's OTHER inputs
-      # drift (here the merchant-account capability check answers differently at prepare than
-      # it did when the Element mounted).
+      # drift (any of them — here the drift is simulated at the resolver's public boundary by
+      # having resolve return a set without klarna, rather than stubbing a private gate that
+      # can't actually answer false for this platform-account seller).
       it "appends a launched seller's klarna token to the USD intent when the re-run resolver drops it" do
         Feature.activate_user(:checkout_local_method_klarna, seller)
         order, params = build_order
@@ -644,8 +645,15 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         # Simulate resolver-input drift: the resolver drops klarna at prepare even though the
         # Element offered it (and the buyer confirmed with it) when it mounted.
-        allow_any_instance_of(Checkout::PaymentMethodResolver)
-          .to receive(:klarna_supported_merchant_account?).and_return(false)
+        allow_any_instance_of(Checkout::PaymentMethodResolver).to receive(:resolve).and_return(
+          Checkout::PaymentMethodResolver::Resolution.new(
+            client_confirm_eligible: true,
+            payment_method_types: %w[card link cashapp],
+            eligible_payment_method_types: %w[card link cashapp],
+            fallback_reason: nil,
+            stripe_connect_account_id: nil
+          )
+        )
 
         charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
         create_args = nil
@@ -659,6 +667,110 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(%w[card link cashapp klarna])
       ensure
         Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
+      # The append re-checks the resolver's merchant-account gate, not just the launch flag:
+      # a klarna entry on a non-US connected account's intent fails the ENTIRE intent create
+      # (Stripe's cross-border rule — the gumroad-private#1026 failure mode), so capability or
+      # account drift after the Element mounts must fail the stale token closed at confirm
+      # instead of re-appending the method.
+      it "does not append a klarna token when the seller's connected account is not US-based, even with the launch flag on" do
+        connect_seller = create(:user, check_merchant_account_is_linked: true)
+        create(:merchant_account_stripe_connect, user: connect_seller, country: "DE")
+        Feature.activate_user(:checkout_local_method_klarna, connect_seller)
+        connect_product = create(:product, user: connect_seller, price_cents: 10_00)
+        params = { line_items: [{ uid: "unique-id-0", permalink: connect_product.unique_permalink, perceived_price_cents: connect_product.price_cents, quantity: 1 }] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "klarna", klarna: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_klarna_de_acct").perform
+
+        expect(create_args[:payment_method_types]).not_to include("klarna")
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, connect_seller)
+      end
+
+      # The append is allowlisted to methods this seller could legitimately be offered — it
+      # must never let a client-supplied token type re-enable a method past its policy gate.
+      # ACH is the sharpest case: the capability is still active at Stripe (the withdrawal in
+      # gumroad-private#1143 is policy-level), so without the allowlist the intent create
+      # SUCCEEDS and the buyer actually pays by a method the seller never opted into.
+      it "does not append a us_bank_account token to the USD intent for a seller who has not opted into ACH" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "us_bank_account", us_bank_account: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_ach_not_opted_in").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      end
+
+      it "appends a us_bank_account token when the seller HAS opted into ACH — the drift safety net still covers the opt-in method" do
+        seller.update!(ach_payments_enabled: true)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "us_bank_account", us_bank_account: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_ach_opted_in").perform
+
+        expect(create_args[:payment_method_types]).to include("us_bank_account")
+      ensure
+        seller.update!(ach_payments_enabled: false)
+      end
+
+      # Unlaunched BNPL types (afterpay_clearpay, affirm) are excluded from Klarna's first
+      # launch; listing one would make Stripe reject the whole intent create
+      # (gumroad-private#1026). The allowlist drops them and the stale token fails closed
+      # at confirm.
+      it "does not append an unlaunched BNPL token (afterpay_clearpay) to the USD intent" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "afterpay_clearpay", afterpay_clearpay: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_afterpay").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
       # Klarna is US-only in v1 but deliberately lives outside US_LOCKED_PAYMENT_METHOD_TYPES
