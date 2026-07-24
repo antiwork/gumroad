@@ -939,11 +939,7 @@ class Installment < ApplicationRecord
   end
 
   def audience_members_count(limit = nil)
-    if Feature.active?(:audience_count_from_elasticsearch, seller)
-      AudienceMember.filter_count(seller_id:, params: audience_members_filter_params, limit:)
-    else
-      AudienceMember.filter(seller_id:, params: audience_members_filter_params).limit(limit).count
-    end
+    AudienceMember.filter_count(seller_id:, params: audience_members_filter_params, limit:)
   end
 
   def api_audience_members_count
