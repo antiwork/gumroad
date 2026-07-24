@@ -565,11 +565,42 @@ class Order::PreparePaymentIntentService
           Checkout::PaymentMethodResolver.klarna_supported_merchant_account?(seller)) ||
         Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).present?
 
+      # The policy allowlist above is not enough on its own: it mirrors the resolver's four
+      # POLICY sources but the resolver's final step is an intersection with what the charged
+      # ACCOUNT can accept (launched & account_supported_methods). For a direct-charge seller
+      # whose capability snapshot dropped a method (link/cashapp/us_bank_account deactivated
+      # after the Element mounted), re-appending the token's type puts an incompatible entry
+      # on the intent and Stripe rejects the ENTIRE intent create — failing the whole cart,
+      # cards included (the gumroad-private#1026 failure mode). Re-check the same gate here so
+      # capability drift fails the stale token closed at confirm instead.
+      return nil unless account_supports_previewed_method?(method_type)
+
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
       return method_type if forced_currency.blank?
 
       intent_currency = presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       forced_currency == intent_currency ? method_type : nil
+    end
+
+    # Mirrors the resolver's account_supported_methods for the single previewed method: the
+    # append must never re-add a method the account the intent is created on cannot accept.
+    # Platform-account (Gumroad-managed) sellers always pass — every launched method is
+    # activated on the platform account. Direct-charge sellers pass only when the cached
+    # capability snapshot says the method's capability is active; card is exempt (the baseline
+    # capability of any chargeable account, same carve-out as the resolver's
+    # ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES). A missing snapshot fails closed — the
+    # resolver already resolved this same checkout to card-only and enqueued the background
+    # refresh, so the Element never offered the method anyway and there is no drift to protect.
+    def account_supports_previewed_method?(method_type)
+      return true unless seller.has_stripe_account_connected?
+      return true if method_type.in?(Checkout::PaymentMethodResolver::ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES)
+
+      connect_account = seller.stripe_connect_account
+      return false if connect_account.nil?
+
+      available = StripeConnectPaymentMethodAvailabilityService.new(connect_account)
+        .available_payment_method_types([method_type])
+      available.present? && available.include?(method_type)
     end
 
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied

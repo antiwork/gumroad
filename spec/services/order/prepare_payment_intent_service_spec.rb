@@ -731,6 +731,113 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(:checkout_local_method_klarna, connect_seller)
       end
 
+      # The append also re-checks the per-account CAPABILITY intersection, not just the
+      # resolver's policy sources: for a direct-charge seller whose capability snapshot
+      # dropped a launched method (link_payments deactivated after the Element mounted),
+      # re-appending the token's type would put an incompatible payment_method_types entry
+      # on the intent and Stripe rejects the ENTIRE intent create — failing card checkout
+      # for that seller too (the gumroad-private#1026 failure mode). The stale token must
+      # fail closed at confirm instead.
+      it "does not re-append a launched method the connected account's capability snapshot does not support" do
+        connect_seller = create(:user, check_merchant_account_is_linked: true)
+        connect_account = create(:merchant_account_stripe_connect, user: connect_seller, country: "US")
+        # link_payments is deliberately absent: the snapshot says this account cannot take Link.
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "cashapp_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        connect_product = create(:product, user: connect_seller, price_cents: 10_00)
+        params = { line_items: [{ uid: "unique-id-0", permalink: connect_product.unique_permalink, perceived_price_cents: connect_product.price_cents, quantity: 1 }] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "link", link: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_link_no_capability").perform
+
+        expect(create_args[:payment_method_types]).not_to include("link")
+      end
+
+      # And the positive half: when the snapshot DOES carry the capability, the append stays
+      # the drift safety net — a supported method the re-run resolver dropped for any other
+      # reason is kept on the intent so the buyer's confirmed token can still charge.
+      it "re-appends a launched method the connected account's capability snapshot supports when the resolver drops it" do
+        connect_seller = create(:user, check_merchant_account_is_linked: true)
+        connect_account = create(:merchant_account_stripe_connect, user: connect_seller, country: "US")
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        connect_product = create(:product, user: connect_seller, price_cents: 10_00)
+        params = { line_items: [{ uid: "unique-id-0", permalink: connect_product.unique_permalink, perceived_price_cents: connect_product.price_cents, quantity: 1 }] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "link", link: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        # Simulate resolver drift: the re-run resolver returns a set without link even though
+        # the Element offered it when it mounted.
+        allow_any_instance_of(Checkout::PaymentMethodResolver).to receive(:resolve).and_return(
+          Checkout::PaymentMethodResolver::Resolution.new(
+            client_confirm_eligible: true,
+            payment_method_types: %w[card],
+            eligible_payment_method_types: %w[card],
+            fallback_reason: nil,
+            stripe_connect_account_id: connect_account.charge_processor_merchant_id
+          )
+        )
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_link_with_capability").perform
+
+        expect(create_args[:payment_method_types]).to include("link")
+      end
+
+      # A connected account with NO capability snapshot fails the append closed: the resolver
+      # resolved this same checkout to card-only (its nil-snapshot fallback), so the Element
+      # never offered the method — there is no legitimate drift to protect, and appending
+      # anyway would gamble the intent create on an unverified capability.
+      it "does not re-append a non-card method for a connected account with no capability snapshot" do
+        connect_seller = create(:user, check_merchant_account_is_linked: true)
+        create(:merchant_account_stripe_connect, user: connect_seller, country: "US")
+        connect_product = create(:product, user: connect_seller, price_cents: 10_00)
+        params = { line_items: [{ uid: "unique-id-0", permalink: connect_product.unique_permalink, perceived_price_cents: connect_product.price_cents, quantity: 1 }] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "link", link: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_link_no_snapshot").perform
+
+        expect(create_args[:payment_method_types]).not_to include("link")
+      end
+
       # The append is allowlisted to methods this seller could legitimately be offered — it
       # must never let a client-supplied token type re-enable a method past its policy gate.
       # ACH is the sharpest case: the capability is still active at Stripe (the withdrawal in
