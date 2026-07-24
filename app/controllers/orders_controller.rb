@@ -97,6 +97,9 @@ class OrdersController < ApplicationController
   # evidence of why). The order token proves the caller owns a real prepared order, and the
   # payload is size-capped below, so this can't be used to spam Sentry with arbitrary junk.
   def confirm_error
+    # `prepare` just created this order, so the replica can be behind when Stripe returns an error.
+    ActiveRecord::Base.connection.stick_to_primary!
+
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
