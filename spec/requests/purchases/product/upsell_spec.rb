@@ -336,6 +336,49 @@ describe("Product checkout with upsells", type: :system, js: true) do
       end
     end
 
+    context "when the replacement cross-sell offers a bundle and an earlier add-on cross-sell added one of the bundle's products" do
+      let(:bundle) { create(:product, user: seller, name: "Complete bundle", is_bundle: true, price_cents: 500) }
+      let!(:bundle_product1) { create(:bundle_product, bundle:, product: selected_product1) }
+      let!(:bundle_product2) { create(:bundle_product, bundle:, product: addon_product) }
+      let(:addon_product) { create(:product, user: seller, name: "Add-on product", price_cents: 100) }
+      let!(:addon_cross_sell) { create(:upsell, text: "Add-on cross-sell", seller:, product: addon_product, selected_products: [selected_product1], cross_sell: true, replace_selected_products: false) }
+      let!(:bundle_cross_sell) { create(:upsell, text: "Bundle cross-sell", seller:, product: bundle, selected_products: [selected_product1], cross_sell: true, replace_selected_products: true) }
+      let!(:replacement_cross_sell) { nil } # Override so only this context's cross-sells fire
+
+      it "removes the add-on product from the cart along with the selected products" do
+        visit selected_product1.long_url
+        add_to_cart(selected_product1)
+
+        fill_checkout_form(selected_product1)
+        click_on "Pay"
+
+        within_modal "Add-on cross-sell" do
+          expect(page).to have_section("Add-on product")
+          click_on "Add to cart"
+        end
+
+        within_modal "Bundle cross-sell" do
+          expect(page).to have_section("Complete bundle")
+          click_on "Upgrade"
+        end
+
+        # The bundle replaces both the originally selected product and the
+        # add-on product it contains — the buyer must not buy duplicate content.
+        expect(page).to have_section("Complete bundle")
+        expect(page).to_not have_section("Selected product 1")
+        expect(page).to_not have_section("Add-on product")
+
+        expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+        bundle_purchase = bundle.sales.last
+        expect(bundle_purchase.upsell_purchase.upsell).to eq(bundle_cross_sell)
+        expect(bundle_purchase.upsell_purchase.selected_product).to eq(selected_product1)
+        # No standalone purchase of the add-on product (only the bundle-content copy)
+        expect(addon_product.sales.not_is_bundle_product_purchase).to be_empty
+        expect(selected_product1.sales.not_is_bundle_product_purchase).to be_empty
+      end
+    end
+
     context "selected product is free and offered product is paid" do
       before do
         selected_product1.update!(price_cents: 0)
