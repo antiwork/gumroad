@@ -1,5 +1,5 @@
 import { TwitterX } from "@boxicons/react";
-import { router, usePage } from "@inertiajs/react";
+import { Link, router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
@@ -446,7 +446,11 @@ export default function SettingsPage() {
               <section className="p-4! md:p-8!">
                 <Alert role="status" variant="warning">
                   Pages are a legacy way to lay out your profile and are being phased out. To customize your profile,
-                  build a custom page from the Share tab — your agent designs and publishes it for you.
+                  edit your{" "}
+                  <Link href={Routes.edit_page_path("profile")} className="underline">
+                    Home page under Pages
+                  </Link>{" "}
+                  — your agent designs and publishes it for you.
                 </Alert>
               </section>
               <section aria-label="Profile section editor">
