@@ -127,10 +127,14 @@ class Checkout::PaymentMethodResolver
   #
   # cart_total_usd_cents: the cart's total in USD cents, or nil when unknown. Only consulted by
   # the Klarna gate (Stripe enforces per-country transaction limits for Klarna, so carts outside
-  # the window must not render it — see KLARNA_MIN/MAX_USD_CHARGE_CENTS). The presenter passes
-  # the pre-tax item total and prepare passes the final charged total; a cart whose final total
-  # drifts out of the window between mount and prepare fails closed at prepare rather than at
-  # Stripe. Nil fails closed for Klarna only.
+  # the window must not render it — see KLARNA_MIN/MAX_USD_CHARGE_CENTS). BOTH callers (the
+  # presenter and Order::PreparePaymentIntentService) pass the same pre-tax, pre-discount item
+  # total, so the Element's method list and the deferred intent's resolve identically. Stripe,
+  # however, enforces the limit against the intent's FINAL amount (tax and discounts included),
+  # which can drift out of the window after the Element mounts — that case is handled by
+  # prepare's own final-amount gate (see Order::PreparePaymentIntentService
+  # #block_klarna_final_amount_outside_window), not by this resolver input. Nil fails closed
+  # for Klarna only.
   def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false, cart_product_currency: nil, cart_total_usd_cents: nil)
     @sellers = sellers
     @recurring = recurring

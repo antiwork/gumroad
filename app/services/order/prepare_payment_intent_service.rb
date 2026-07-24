@@ -209,6 +209,35 @@ class Order::PreparePaymentIntentService
       fail_all_purchases_when_any_errored
     end
 
+    # Stripe enforces Klarna's transaction limits against the PaymentIntent's FINAL amount —
+    # the charged total with tax, discounts, tips and shipping applied — not the pre-tax item
+    # total both the presenter and the prepare-time resolver gate on (they share that basis so
+    # the Element's method list and the intent's stay equal; see payment_method_resolution).
+    # A cart that mounted Klarna at, say, $3,900 pre-tax can cross $4,000 once tax lands, and
+    # creating an intent that lists klarna above the limit makes Stripe reject the CREATE (or
+    # the confirm) with no recoverable buyer action. When the buyer actually confirmed with
+    # Klarna, fail the order closed here, before any charge or intent exists — the token can
+    # only ever confirm as Klarna, so there is no method list that saves it. (When the buyer
+    # picked another method, klarna is instead silently dropped from the intent's method list —
+    # see intent_payment_method_types — and their card/Link confirm proceeds untouched.)
+    # Runs after resolve_merchant_account_and_fees because amount_cents needs the recomputed fees.
+    def block_klarna_final_amount_outside_window
+      return false unless @previewed_payment_method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE
+      return false if klarna_final_amount_within_window?
+
+      Rails.logger.error("Klarna payment blocked for order #{order.id}: final charged amount #{amount_cents} is outside Stripe's Klarna USD window")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
+    end
+
+    # The final charged USD total sits inside Stripe's Klarna window. This is the intent-amount
+    # check (what Stripe validates at create/confirm); the resolver's cart_total_usd_cents gate
+    # is the display-parity check on the pre-tax basis. Both must pass for klarna to ride an intent.
+    def klarna_final_amount_within_window?
+      amount_cents >= Checkout::PaymentMethodResolver::KLARNA_MIN_USD_CHARGE_CENTS &&
+        amount_cents <= Checkout::PaymentMethodResolver::KLARNA_MAX_USD_CHARGE_CENTS
+    end
+
     # Server-confirm checkout runs this at charge time; client-confirm combined charges skip it at
     # create time, so run it before creating the PaymentIntent.
     def block_purchases_with_blocked_customer_emails
@@ -236,6 +265,7 @@ class Order::PreparePaymentIntentService
     def prepare_unconfirmed_charge
       resolve_merchant_account_and_fees
       return if fail_all_purchases_when_any_errored
+      return if block_klarna_final_amount_outside_window
 
       charge = build_charge
       presentment = method_forced_presentment_for(charge)
@@ -480,6 +510,16 @@ class Order::PreparePaymentIntentService
         method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
       end
 
+      # Klarna is also amount-locked: Stripe validates its transaction limits against the
+      # intent's FINAL amount at create, while the resolver gates on the pre-tax item basis
+      # (deliberately — the Element and the intent must resolve the same list; see
+      # payment_method_resolution). When tax/discount drift pushes the charged total outside
+      # the window, listing klarna would make Stripe reject the intent CREATE and fail the
+      # whole cart — including a buyer who picked card. Drop it instead; the buyer who
+      # actually confirmed WITH Klarna never reaches here (block_klarna_final_amount_outside_window
+      # already failed the order closed).
+      method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE] unless klarna_final_amount_within_window?
+
       method_types
     end
 
@@ -524,10 +564,13 @@ class Order::PreparePaymentIntentService
         # a payment_method_types-scoped ConfirmationToken against a mismatched intent): passing
         # the tax-inclusive charged total, or a real USD total for a non-USD-priced cart the
         # presenter nil'ed out, would make the two sides resolve different Klarna answers near
-        # the window edges and fail carts that never touched Klarna. Residual drift (a stale
+        # the window edges and fail carts that never touched Klarna. Stripe validates Klarna's
+        # limits against the intent's FINAL amount though, so the drift between this pre-tax
+        # basis and the charged total is separately fail-closed by
+        # block_klarna_final_amount_outside_window (Klarna tokens) and the final-amount strip
+        # in intent_payment_method_types (other methods). Residual method-list drift (a stale
         # Element, flag flips mid-checkout) is covered by the previewed-method append in
-        # intent_payment_method_types, which now runs on every lane including this USD one —
-        # the buyer's actual selection always rides the intent.
+        # intent_payment_method_types, which runs on every lane including this USD one.
         cart_total_usd_cents: purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == Currency::USD } ? purchases_to_charge.sum { klarna_window_price_cents(_1) } : nil
       ).resolve
     end

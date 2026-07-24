@@ -716,6 +716,75 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(:checkout_local_method_klarna, seller)
       end
 
+      # Stripe validates Klarna's transaction limits against the intent's FINAL amount, while
+      # the resolver (deliberately) gates on the pre-tax, pre-discount basis for Element/intent
+      # method-set parity. When the two diverge across the window edge — here a 50%-off code
+      # drops a $1.98 cart (inside the window on the pre-discount basis both sides resolve on)
+      # to a $0.99 charge (below Klarna's $1 floor) — a Klarna confirmation must fail closed
+      # before any intent exists: an intent listing klarna at that amount is rejected by Stripe
+      # at create with no recoverable buyer action.
+      it "fails closed before creating an intent when the final charged amount leaves Klarna's window" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        discounted_product = create(:product, user: seller, price_cents: 1_98)
+        offer_code = create(:percentage_offer_code, user: seller, products: [discounted_product], amount_percentage: 50)
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: discounted_product.unique_permalink, perceived_price_cents: 99, quantity: 1,
+                         discount_code: offer_code.code }]
+        }.merge(common_params)
+        order, order_responses = Order::CreateService.new(params:).perform
+        expect(order_responses.values).to all(include(success: true))
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "klarna", klarna: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_klarna_final_drift").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
+      # Same amount drift, but the buyer confirmed with CARD: their purchase must proceed —
+      # klarna is silently dropped from the intent's method list (listing it above/below
+      # Stripe's Klarna limit fails the intent CREATE itself, taking the card buyer down with
+      # it) while the confirmed method rides untouched.
+      it "drops Klarna from a card buyer's intent when the final charged amount leaves the window, instead of failing the create" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        discounted_product = create(:product, user: seller, price_cents: 1_98)
+        offer_code = create(:percentage_offer_code, user: seller, products: [discounted_product], amount_percentage: 50)
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: discounted_product.unique_permalink, perceived_price_cents: 99, quantity: 1,
+                         discount_code: offer_code.code }]
+        }.merge(common_params)
+        order, order_responses = Order::CreateService.new(params:).perform
+        expect(order_responses.values).to all(include(success: true))
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_klarna_drift").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(true)
+        expect(create_args[:payment_method_types]).not_to include("klarna")
+        expect(create_args[:payment_method_types]).to include("card")
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
       # The presenter derives the Element's Link config from the same resolver output, so the
       # Payment Element and deferred intent both carry "link" with no per-seller flag. Without a
       # resolvable ip_country the US-locked methods stay dropped — Link is not region-gated.
