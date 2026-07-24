@@ -582,7 +582,15 @@ class Order::PreparePaymentIntentService
       # "setup + charge" product type not flagged as free-trial/preorder, pass setup_for_future here.
       @payment_method_resolution ||= Checkout::PaymentMethodResolver.new(
         sellers: [seller],
-        recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
+        # An installment-plan purchase counts as recurring here even though its product is not
+        # a recurring-billing (membership) product: the first installment charges now and the
+        # rest charge off-session later, so it needs the same future-charge card machinery as a
+        # subscription. The presenter already keeps installment carts off the client-confirm
+        # lane entirely (its "setup_or_installment_flow" fallback), so this only matters for a
+        # crafted #prepare request — without it, such a request would resolve the one-time
+        # method set (Klarna included, for a flagged seller) and mint a deferred intent that
+        # cannot fund the later installments.
+        recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? || _1.is_installment_payment? },
         commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION },
         buyer_country: buyer_country_alpha2,
         ppp_discounted: ppp_verification_applies?,

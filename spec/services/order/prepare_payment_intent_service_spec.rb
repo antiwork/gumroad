@@ -414,6 +414,36 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    # An installment-plan purchase charges only its first installment now and the rest off-session
+    # later, so it must resolve as recurring — the one-time set (Klarna included, for a flagged
+    # seller) can never fund the later installments. The presenter already keeps installment carts
+    # off the client-confirm lane (its setup_or_installment_flow fallback), so this pins the
+    # server-side re-check against a crafted #prepare request.
+    context "with an installment-plan purchase" do
+      before { create(:merchant_account, user: seller) }
+
+      it "resolves as recurring and fails closed instead of minting a one-time deferred intent" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        installment_plan = create(:product_installment_plan, link: product)
+        # Installment purchases charge the first installment now, so the perceived price the
+        # buyer confirms is that first installment, not the full product price.
+        first_installment_cents = installment_plan.calculate_installment_payment_price_cents(product.price_cents)
+        order, params = build_order(line_item_overrides: { pay_in_installments: true, perceived_price_cents: first_installment_cents })
+        expect(order.purchases.first.is_installment_payment).to eq(true)
+
+        expect(Stripe::ConfirmationToken).not_to receive(:retrieve)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_installment").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+    end
+
     context "with a direct-charge (Stripe Connect) seller" do
       let(:seller) { create(:user, check_merchant_account_is_linked: true) }
       let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
