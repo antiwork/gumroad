@@ -2581,7 +2581,7 @@ describe OrdersController, :vcr do
       order, = Order::CreateService.new(params:).perform
 
       expect(ErrorNotifier).to receive(:notify).with(
-        "Client-confirm browser error: payment_intent_unexpected_state",
+        "Client-confirm browser error",
         hash_including(
           order_id: order.id,
           stage: "confirm",
@@ -2629,6 +2629,22 @@ describe OrdersController, :vcr do
       expect do
         post :confirm_error, params: { id: "invalid-token", stripe_error_code: "anything" }
       end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "stops notifying (but keeps responding OK) once the per-order rate limit is hit" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+
+      limit = described_class::CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER
+      expect(ErrorNotifier).to receive(:notify).exactly(limit).times
+
+      (limit + 2).times do
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+        expect(response.parsed_body["success"]).to be(true)
+      end
     end
   end
 end
