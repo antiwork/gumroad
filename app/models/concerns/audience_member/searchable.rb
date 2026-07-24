@@ -87,6 +87,13 @@ module AudienceMember::Searchable
 
   class_methods do
     def filter_count(seller_id:, params: {}, limit: nil)
+      # Installments can exist without a seller (legacy product-owned posts delegate
+      # ownership to the product). The SQL twin of this method (AudienceMember.filter)
+      # treats a nil seller_id as "matches nobody" and returns an empty relation, whereas
+      # Elasticsearch rejects a null term filter outright with a 400. Preserve the
+      # SQL behavior so callers don't have to special-case seller-less records.
+      return 0 if seller_id.blank?
+
       options = {
         index: index_name,
         body: { query: filter_query(seller_id:, params:) },
