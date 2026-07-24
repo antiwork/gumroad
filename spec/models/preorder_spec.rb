@@ -629,7 +629,10 @@ describe Preorder, :vcr do
       expect(charge_purchase.variant_attributes).to include variant
       expect(charge_purchase.price_cents).to eq 900
       authorization_purchase = build(:purchase, link: @product, chargeable: @good_card, purchase_state: "in_progress", is_preorder_authorization: true)
-      authorization_purchase.variant_attributes << variant
+      # Reload the variant: its inventory counter cache was bumped in the database
+      # via update_all when the charge purchase succeeded, so the in-memory instance
+      # is stale (inventory_counter_cache flag removal, gp#1208).
+      authorization_purchase.variant_attributes << variant.reload
       preorder = @preorder_product.build_preorder(authorization_purchase)
       preorder.authorize!
       expect(preorder.errors).to be_present
@@ -651,7 +654,10 @@ describe Preorder, :vcr do
       expect(charge_purchase.purchase_state).to eq "successful"
       expect(charge_purchase.price_cents).to eq 600
 
-      authorization_purchase = build(:purchase, link: @product, chargeable: @good_card, purchase_state: "in_progress", is_preorder_authorization: true)
+      # Reload the product: its inventory counter cache was bumped in the database
+      # via update_all when the charge purchase succeeded, so the in-memory instance
+      # is stale (inventory_counter_cache flag removal, gp#1208).
+      authorization_purchase = build(:purchase, link: @product.reload, chargeable: @good_card, purchase_state: "in_progress", is_preorder_authorization: true)
       preorder = @preorder_product.build_preorder(authorization_purchase)
       preorder.authorize!
       expect(preorder.errors).to be_present
