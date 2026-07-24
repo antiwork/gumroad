@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Backfills the recorded payment method for Stripe purchases paid with a local (non-card)
-# method — UPI today, iDEAL when it launches — that completed BEFORE the recording fix
+# Backfills the recorded payment method for Stripe purchases paid with a non-card method —
+# UPI today, iDEAL and Klarna when they launch — that completed BEFORE the recording fix
 # (#6201) reached production.
 #
 # Before that fix, a UPI purchase left no queryable trace of its payment method:
