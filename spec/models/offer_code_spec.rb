@@ -1100,6 +1100,43 @@ describe OfferCode do
       expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
     end
 
+    it "returns the standard discount when the buyer's only qualifying purchase was made as a guest under the same email" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: nil, email: buyer.email, link: @product, seller:, price_cents: @product.price_cents)
+
+      expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+    end
+
+    it "ignores a guest purchase made under a different email" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: nil, email: "someone-else@example.com", link: @product, seller:, price_cents: @product.price_cents)
+
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
+    it "ignores a guest purchase matching an unconfirmed account email" do
+      unconfirmed_buyer = create(:unconfirmed_user)
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: nil, email: unconfirmed_buyer.email, link: @product, seller:, price_cents: @product.price_cents)
+
+      expect(offer_code.evaluate_for_buyer(unconfirmed_buyer)).to be_nil
+    end
+
+    it "still honors an account-linked purchase for a buyer whose email is unconfirmed" do
+      unconfirmed_buyer = create(:unconfirmed_user)
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: unconfirmed_buyer, link: @product, seller:, price_cents: @product.price_cents)
+
+      expect(offer_code.evaluate_for_buyer(unconfirmed_buyer)).to include(type: "percent", percents: 30)
+    end
+
+    it "treats a refunded guest purchase as not qualifying" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: nil, email: buyer.email, link: @product, seller:, price_cents: @product.price_cents, stripe_refunded: true)
+
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
     it "treats refunded purchases as not qualifying" do
       offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
       create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, stripe_refunded: true)
@@ -1180,6 +1217,11 @@ describe OfferCode do
           create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents, created_at: 1.year.ago)
           expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
         end
+      end
+
+      it "uses a guest purchase under the buyer's email to determine ownership duration" do
+        create(:purchase, purchaser: nil, email: buyer.email, link: @product, seller:, price_cents: @product.price_cents, created_at: 24.months.ago)
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 50)
       end
 
       it "uses the OLDEST qualifying purchase to determine ownership duration" do

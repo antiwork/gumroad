@@ -271,9 +271,26 @@ class OfferCode < ApplicationRecord
     discount
   end
 
+  # A purchase belongs to a buyer either because it is attached to their account
+  # (purchases.purchaser_id) or because they bought it as a guest, in which case
+  # the purchase only carries the checkout email and purchaser_id stays NULL
+  # until the buyer claims it. Both count as ownership here, matching how the
+  # buyer's library and community access already resolve their purchases
+  # (User#accessible_communities_ids does the same purchaser_id-OR-email match).
+  #
+  # The email leg requires a confirmed account email: an unconfirmed address has
+  # not been proven to belong to the signed-in user, so trusting it would let
+  # someone sign up with a stranger's email and inherit that stranger's
+  # existing-customer discounts.
   def ownership_months_for(buyer, products)
     return nil if buyer.nil?
     return nil if products.blank?
+
+    ownership_condition = if buyer.email.present? && buyer.confirmed?
+      ["purchases.purchaser_id = ? OR purchases.email = ?", buyer.id, buyer.email]
+    else
+      ["purchases.purchaser_id = ?", buyer.id]
+    end
 
     oldest = Purchase
       .all_success_states
@@ -283,7 +300,8 @@ class OfferCode < ApplicationRecord
       .not_fully_refunded
       .not_chargedback_or_chargedback_reversed
       .not_is_access_revoked
-      .where(purchaser_id: buyer.id, link_id: products.map(&:id))
+      .where(link_id: products.map(&:id))
+      .where(*ownership_condition)
       .order(:created_at)
       .pick(:created_at)
     months_since(oldest)
