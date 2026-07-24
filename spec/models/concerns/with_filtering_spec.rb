@@ -634,6 +634,66 @@ describe WithFiltering do
         )).to eq(true)
       end
     end
+
+    describe "with a seller post probe batch" do
+      before do
+        @product = create(:product, user: @creator)
+        @purchase = create(:free_purchase, link: @product, seller: @creator)
+      end
+
+      it "answers the probe from the batch without issuing the per-seller SQL probe" do
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        batch = Purchase::SellerPostProbeBatch.new([@purchase])
+        expect(batch).to receive(:matched?).with(hash_including(seller_id: @creator.id, email: @purchase.email)).and_call_original
+
+        result = nil
+        queries = []
+        callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          result = post.seller_post_passes_filters(
+            email: @purchase.email,
+            permalink_to_link_id: { @product.unique_permalink => @product.id },
+            seller_post_probe_batch: batch
+          )
+        end
+
+        expect(result).to eq(false)
+        # The batch prefetch queries purchases via `email IN (...)`; the
+        # per-seller probe it replaces is an existence check with `LIMIT 1`
+        # and a `seller_id` equality — none of those should run.
+        expect(queries.grep(/SELECT\s+1.*purchases.*LIMIT 1/m)).to be_empty
+      end
+
+      it "falls back to the SQL probe when the batch does not cover the probe email" do
+        other_buyer = create(:free_purchase, link: @product, seller: @creator)
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        batch = Purchase::SellerPostProbeBatch.new([@purchase])
+
+        expect(post.seller_post_passes_filters(
+          email: other_buyer.email,
+          permalink_to_link_id: { @product.unique_permalink => @product.id },
+          seller_post_probe_batch: batch
+        )).to eq(false)
+      end
+
+      it "falls back to the SQL probe when the batch covers the email but not the post's seller" do
+        # The batch was built from another seller's purchases, so it never
+        # prefetched @creator's rows. Answering from the (incomplete) batch
+        # would wrongly report "hasn't bought" and show the post; the SQL
+        # probe must run instead and hide it.
+        other_seller = create(:user)
+        other_purchase = create(:free_purchase, link: create(:product, user: other_seller), seller: other_seller, email: @purchase.email)
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        batch = Purchase::SellerPostProbeBatch.new([other_purchase])
+        expect(batch).not_to receive(:matched?)
+
+        expect(post.seller_post_passes_filters(
+          email: @purchase.email,
+          permalink_to_link_id: { @product.unique_permalink => @product.id },
+          seller_post_probe_batch: batch
+        )).to eq(false)
+      end
+    end
   end
 
   describe "#affiliate_passes_filters" do

@@ -108,6 +108,7 @@ export const ProductTab = () => {
               <Input
                 id={`${uid}-name`}
                 type="text"
+                dir="auto"
                 value={product.name}
                 onChange={(evt) => updateProduct({ name: evt.target.value })}
               />

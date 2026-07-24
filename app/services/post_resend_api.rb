@@ -152,16 +152,26 @@ class PostResendApi
     end
 
     def build_seller_update_reason(recipient)
+      # Recipients who got the product for free ($0 purchase, free download, PWYW at $0)
+      # never "purchased" anything, so the footer uses "got"/"downloaded" wording for them.
+      free_purchase = recipient[:purchase]&.free_purchase?
       if @post.seller_type?
-        "You've received this email because you've purchased a product from #{@post.seller.name.presence || @post.seller.email || "Gumroad"}."
+        seller_name = @post.seller.name.presence || @post.seller.email || "Gumroad"
+        free_purchase ?
+          "You've received this email because you got a product from #{seller_name}." :
+          "You've received this email because you've purchased a product from #{seller_name}."
       elsif @post.product_or_variant_type?
         product_name = recipient[:product_name] || @cache[@post][:sanitized_product_name]
         download_url_or_product_url = recipient[:url_redirect]&.download_page_url || @post.link.long_url
-        @post.member_cancellation_trigger? ?
-          "You've received this email because you cancelled your membership to <a href=\"#{download_url_or_product_url}\">#{product_name}</a>." :
-          @post.link.is_recurring_billing ?
-          "You've received this email because you subscribed to <a href=\"#{download_url_or_product_url}\">#{product_name}</a>." :
+        if @post.member_cancellation_trigger?
+          "You've received this email because you cancelled your membership to <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
+        elsif @post.link.is_recurring_billing
+          "You've received this email because you subscribed to <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
+        elsif free_purchase
+          "You've received this email because you downloaded <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
+        else
           "You've received this email because you've purchased <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
+        end
       end
     end
 

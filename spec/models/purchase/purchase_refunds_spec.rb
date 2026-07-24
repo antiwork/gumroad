@@ -676,19 +676,30 @@ describe "PurchaseRefunds", :vcr do
       expect(@purchase.refund_and_save!(@user.id)).to be(true)
     end
 
-    it "returns false if charge processor indicates request invalid" do
+    it "returns false with a user-facing error if charge processor indicates request invalid" do
       expect(ChargeProcessor).to receive(:refund!).and_raise(ChargeProcessorInvalidRequestError)
       expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      # The dashboard renders errors.full_messages directly; a blank error here shows the
+      # seller an empty toast (gumroad-private#1267), so every failure branch must add one.
+      expect(@purchase.errors.full_messages.to_sentence).to eq(Purchase::Refundable::PROCESSOR_REJECTED_REFUND_ERROR_MESSAGE)
     end
 
-    it "returns false if charge processor unavailable" do
+    it "returns false with a user-facing error if charge processor unavailable" do
       expect(ChargeProcessor).to receive(:refund!).and_raise(ChargeProcessorUnavailableError)
       expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors.full_messages.to_sentence).to eq("There is a temporary problem. Try to refund later.")
     end
 
-    it "returns false if charge processor indicates already refunded" do
+    it "returns false with a user-facing error if charge processor indicates already refunded" do
       expect(ChargeProcessor).to receive(:refund!).and_raise(ChargeProcessorAlreadyRefundedError)
       expect(@purchase.refund_and_save!(@user.id)).to be(false)
+      expect(@purchase.errors.full_messages.to_sentence).to eq(Purchase::Refundable::ALREADY_REFUNDED_ERROR_MESSAGE)
+    end
+
+    it "returns nil with a user-facing error when there is nothing left to refund" do
+      @purchase.update!(stripe_refunded: true)
+      expect(@purchase.refund_and_save!(@user.id)).to be_nil
+      expect(@purchase.errors.full_messages.to_sentence).to eq(Purchase::Refundable::NOTHING_TO_REFUND_ERROR_MESSAGE)
     end
 
     describe "notifying the creator when a team member refunds on their behalf" do
@@ -1011,7 +1022,7 @@ describe "PurchaseRefunds", :vcr do
           expect(@purchase.reload.stripe_refunded).to be(true)
         end
 
-        it "does not refund anything if purchase is already refunded" do
+        it "does not refund anything and adds a user-facing error if purchase is already refunded" do
           expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, anything).and_call_original
 
           expect(@purchase.refund_and_save!(@user.id)).to be(true)
@@ -1019,20 +1030,22 @@ describe "PurchaseRefunds", :vcr do
           refund_count = Refund.count
 
           expect(ChargeProcessor).to_not receive(:refund!)
-          @purchase.refund_gumroad_taxes!(refunding_user_id: nil)
+          expect(@purchase.refund_gumroad_taxes!(refunding_user_id: nil)).to be(false)
 
           expect(Refund.count).to eq(refund_count)
+          expect(@purchase.errors[:base]).to include(Purchase::Refundable::NO_TAX_TO_REFUND_ERROR_MESSAGE)
         end
 
-        it "does not refund anything if purchase already stripe refunded" do
+        it "does not refund anything and adds a user-facing error if purchase already stripe refunded" do
           @purchase.stripe_refunded = true
           @purchase.save!
           refund_count = Refund.count
 
           expect(ChargeProcessor).to_not receive(:refund!)
-          @purchase.refund_gumroad_taxes!(refunding_user_id: nil)
+          expect(@purchase.refund_gumroad_taxes!(refunding_user_id: nil)).to be(false)
 
           expect(Refund.count).to eq(refund_count)
+          expect(@purchase.errors[:base]).to include(Purchase::Refundable::NO_TAX_TO_REFUND_ERROR_MESSAGE)
         end
 
         it "saves business vat id along with refund information" do

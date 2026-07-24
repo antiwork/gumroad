@@ -110,7 +110,10 @@ export const ProductsPageMembershipsTable = (props: {
               <TableCell hideLabel>
                 {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
-                  <h4 className="font-bold">{membership.name}</h4>
+                  {/* dir="auto" lets RTL product names render right-to-left (gumroad-private#1259). */}
+                  <h4 className="font-bold" dir="auto">
+                    {membership.name}
+                  </h4>
                 </a>
                 <a href={membership.url} title={membership.url} target="_blank" rel="noreferrer">
                   <small className="block">{membership.url_without_protocol}</small>

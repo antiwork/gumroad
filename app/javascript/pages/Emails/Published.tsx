@@ -78,60 +78,88 @@ export default function EmailsPublished() {
               </TableHeader>
               <TableBody>
                 {installments.map((installment) => (
-                  <TableRow
-                    key={installment.external_id}
-                    selected={installment.external_id === selectedInstallmentId}
-                    onClick={() => setSelectedInstallmentId(installment.external_id)}
-                  >
-                    <TableCell>{installment.name}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {new Date(installment.published_at).toLocaleDateString(userAgentInfo.locale, {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                        timeZone: currentSeller.timeZone.name,
-                      })}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {installment.send_emails ? formatStatNumber({ value: installment.sent_count }) : "n/a"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {installment.send_emails
-                        ? formatStatNumber({ value: installment.open_rate, suffix: "%" })
-                        : "n/a"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {installment.clicked_urls.length > 0 ? (
-                        <WithTooltip
-                          tooltipProps={{ className: "w-[20rem] p-0" }}
-                          tip={
-                            <Table>
-                              <TableBody>
-                                {installment.clicked_urls.map(({ url, count }) => (
-                                  <TableRow key={`${installment.external_id}-${url}`} className="bg-transparent">
-                                    <TableHead scope="row" className="max-w-56 whitespace-break-spaces">
-                                      {url}
-                                    </TableHead>
-                                    <TableCell>{formatStatNumber({ value: count })}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          }
+                  <React.Fragment key={installment.external_id}>
+                    <TableRow
+                      selected={installment.external_id === selectedInstallmentId}
+                      onClick={() => setSelectedInstallmentId(installment.external_id)}
+                    >
+                      <TableCell>{installment.name}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {new Date(installment.published_at).toLocaleDateString(userAgentInfo.locale, {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          timeZone: currentSeller.timeZone.name,
+                        })}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {installment.send_emails ? formatStatNumber({ value: installment.sent_count }) : "n/a"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {installment.send_emails
+                          ? formatStatNumber({ value: installment.open_rate, suffix: "%" })
+                          : "n/a"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {installment.clicked_urls.length > 0 ? (
+                          <WithTooltip
+                            tooltipProps={{ className: "w-[20rem] p-0" }}
+                            tip={
+                              <Table>
+                                <TableBody>
+                                  {installment.clicked_urls.map(({ url, count }) => (
+                                    <TableRow key={`${installment.external_id}-${url}`} className="bg-transparent">
+                                      <TableHead scope="row" className="max-w-56 whitespace-break-spaces">
+                                        {url}
+                                      </TableHead>
+                                      <TableCell>{formatStatNumber({ value: count })}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            }
+                          >
+                            {formatStatNumber({ value: installment.click_count })}
+                          </WithTooltip>
+                        ) : (
+                          formatStatNumber({ value: installment.click_count })
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {formatStatNumber({
+                          value: installment.view_count,
+                          placeholder: "n/a",
+                        })}
+                      </TableCell>
+                    </TableRow>
+                    {installment.non_opener_resends
+                      .filter((resend) => resend.completed)
+                      .map((resend) => (
+                        <TableRow
+                          key={`${installment.external_id}-resend-${resend.requested_at}`}
+                          selected={installment.external_id === selectedInstallmentId}
+                          onClick={() => setSelectedInstallmentId(installment.external_id)}
                         >
-                          {formatStatNumber({ value: installment.click_count })}
-                        </WithTooltip>
-                      ) : (
-                        formatStatNumber({ value: installment.click_count })
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {formatStatNumber({
-                        value: installment.view_count,
-                        placeholder: "n/a",
-                      })}
-                    </TableCell>
-                  </TableRow>
+                          <TableCell className="pl-8 text-muted">↳ Resend to non-openers</TableCell>
+                          <TableCell className="whitespace-nowrap text-muted">
+                            {new Date(resend.requested_at).toLocaleDateString(userAgentInfo.locale, {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              timeZone: currentSeller.timeZone.name,
+                            })}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted">
+                            {formatStatNumber({ value: resend.delivery_count })}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted">
+                            {formatStatNumber({ value: resend.open_rate, suffix: "%", placeholder: "n/a" })}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted">n/a</TableCell>
+                          <TableCell className="whitespace-nowrap text-muted">n/a</TableCell>
+                        </TableRow>
+                      ))}
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -185,7 +213,11 @@ export default function EmailsPublished() {
                               timeZone: currentSeller.timeZone.name,
                             })}
                             {resend.completed
-                              ? ` — ${formatStatNumber({ value: resend.delivery_count })} emailed`
+                              ? ` — ${formatStatNumber({ value: resend.delivery_count })} emailed${
+                                  resend.open_rate !== null
+                                    ? `, ${formatStatNumber({ value: resend.open_rate, suffix: "%" })} opened`
+                                    : ""
+                                }`
                               : " — in progress"}
                           </li>
                         ))}

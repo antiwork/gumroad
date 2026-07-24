@@ -223,8 +223,72 @@ describe InstallmentPresenter do
         props = described_class.new(seller:, installment:).props
 
         expect(props[:non_opener_resends]).to eq([
-                                                   { requested_at: older.requested_at, delivery_count: 5, completed: true },
-                                                   { requested_at: newer.requested_at, delivery_count: 0, completed: false }
+                                                   { requested_at: older.requested_at, delivery_count: 5, completed: true, open_count: 0, open_rate: 0.0 },
+                                                   { requested_at: newer.requested_at, delivery_count: 0, completed: false, open_count: nil, open_rate: nil }
+                                                 ])
+      end
+
+      it "attributes first opens to a resend by time window and computes the open rate" do
+        resend_one = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: 3.days.ago, delivery_count: 4)
+        resend_two = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: 1.day.ago, delivery_count: 2)
+
+        # Opened before any resend — belongs to the original send, not attributed to either resend.
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 5.days.ago)
+        # Opened between resend one and resend two — attributed to resend one.
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 2.days.ago)
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 2.days.ago)
+        # Opened after resend two — attributed to resend two.
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 1.hour.ago)
+        # Sent but never opened — counted nowhere.
+        create(:creator_contacting_customers_email_info_sent, installment:, purchase: create(:free_purchase, link: product))
+
+        props = described_class.new(seller:, installment:).props
+
+        expect(props[:non_opener_resends]).to eq([
+                                                   { requested_at: resend_one.requested_at, delivery_count: 4, completed: true, open_count: 2, open_rate: 50.0 },
+                                                   { requested_at: resend_two.requested_at, delivery_count: 2, completed: true, open_count: 1, open_rate: 50.0 }
+                                                 ])
+      end
+
+      it "returns a nil open rate when a completed resend delivered zero emails" do
+        blast = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: 1.day.ago, delivery_count: 0)
+
+        props = described_class.new(seller:, installment:).props
+
+        expect(props[:non_opener_resends]).to eq([
+                                                   { requested_at: blast.requested_at, delivery_count: 0, completed: true, open_count: 0, open_rate: nil }
+                                                 ])
+      end
+
+      it "does not truncate a completed resend's window at a following in-progress resend" do
+        completed = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: 3.days.ago, delivery_count: 4)
+        in_progress = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: nil, delivery_count: 0)
+
+        # Opened between the completed resend and the in-progress one.
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 2.days.ago)
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 2.days.ago)
+        # Opened AFTER the in-progress resend's request time — still credited to the
+        # completed resend, since the in-progress one has no stats yet.
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 2.hours.ago)
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 1.hour.ago)
+
+        props = described_class.new(seller:, installment:).props
+
+        expect(props[:non_opener_resends]).to eq([
+                                                   { requested_at: completed.requested_at, delivery_count: 4, completed: true, open_count: 4, open_rate: 100.0 },
+                                                   { requested_at: in_progress.requested_at, delivery_count: 0, completed: false, open_count: nil, open_rate: nil }
+                                                 ])
+      end
+
+      it "caps the open rate at 100 when straggler original-email opens exceed the resend's deliveries" do
+        blast = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: 1.day.ago, delivery_count: 1)
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 2.hours.ago)
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 1.hour.ago)
+
+        props = described_class.new(seller:, installment:).props
+
+        expect(props[:non_opener_resends]).to eq([
+                                                   { requested_at: blast.requested_at, delivery_count: 1, completed: true, open_count: 2, open_rate: 100.0 }
                                                  ])
       end
     end

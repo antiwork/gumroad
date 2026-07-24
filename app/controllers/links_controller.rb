@@ -1031,6 +1031,33 @@ class LinksController < ApplicationController
       checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
       title = ERB::Util.h(product.name.to_s)
       canonical = ERB::Util.h(product.long_url.to_s)
+      # The wrapper is what search engines see at the canonical /l/<permalink>
+      # URL — the seller's HTML lives in a sandboxed, opaque-origin iframe whose
+      # content crawlers generally do NOT attribute to this page. Without the
+      # tags below, going custom made a product invisible to search (no meta
+      # description, no structured data, empty body). Mirror the standard
+      # product page's SEO signals here: same description source
+      # (PageMeta::Product) and the same JSON-LD (Product::StructuredData).
+      # All of this is trusted, Gumroad-authored data rendered in the trusted
+      # wrapper — none of it comes from the seller's custom HTML.
+      # `.presence` on the plaintext (not the raw description) so markup-only
+      # descriptions like "<p><br></p>" — present as raw HTML but empty once
+      # stripped to text — still fall back instead of emitting empty tags.
+      description = product.plaintext_description.presence || "Available on Gumroad"
+      # plaintext_description comes back from the Rails sanitizer, which strips
+      # tags and entity-encodes &/</> for text context but does NOT escape
+      # double quotes — and ERB::Util.h passes html_safe strings through
+      # untouched. Escape quotes explicitly so a description containing `"`
+      # can't break out of the meta tag's attribute value.
+      description_attr = description.gsub('"', "&quot;")
+      structured_data = product.structured_data
+      # json_escape keeps the JSON valid while escaping <, >, & so a
+      # description containing "</script>" can't break out of the script tag.
+      structured_data_tag = if structured_data.any?
+        %(<script type="application/ld+json">#{ERB::Util.json_escape(structured_data.to_json)}</script>)
+      else
+        ""
+      end
       # Thumbnail first (the wrapper's original image source, kept as the
       # winner), then the standard product page's fallback chain — cover image,
       # then the thumbnail of a video/oembed cover — via
@@ -1052,15 +1079,22 @@ class LinksController < ApplicationController
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>#{title}</title>
             <link rel="canonical" href="#{canonical}">
+            <meta name="description" content="#{description_attr}">
             <meta property="og:title" content="#{title}">
+            <meta property="og:description" content="#{description_attr}">
             <meta property="og:type" content="product">
             <meta property="og:url" content="#{canonical}">
             #{share_image_tags}
+            #{structured_data_tag}
             <meta name="csrf-token" content="#{ERB::Util.h(form_authenticity_token)}">
             #{custom_html_analytics_head(product)}
-            <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
+            <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}.seo-summary{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>
           </head>
           <body>
+            <div class="seo-summary">
+              <h1>#{title}</h1>
+              <p>#{description}</p>
+            </div>
             <iframe
               id="gumroad-landing-frame"
               src="#{iframe_src}"
