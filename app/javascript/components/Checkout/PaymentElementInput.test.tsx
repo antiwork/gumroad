@@ -15,7 +15,7 @@ const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | und
 // Captures the options the PaymentElement was last rendered with, plus its onChange handler so
 // tests can simulate the buyer selecting a payment-method row inside the element.
 const paymentElementRender = vi.hoisted<{
-  options: { fields?: { billingDetails?: unknown } } | null;
+  options: { fields?: { billingDetails?: unknown }; layout?: unknown; wallets?: unknown } | null;
   onChange: ((event: { value: { type: string }; complete: boolean; empty: boolean }) => void) | null;
   onFocus: (() => void) | null;
 }>(() => ({ options: null, onChange: null, onFocus: null }));
@@ -249,12 +249,12 @@ describe("PaymentElementInput", () => {
     // list — Apple Pay/Google Pay rows simply never appear.
     render(<PaymentElementInput {...props} flatLayout amount={1_000} mountCurrency="usd" />);
 
-    const options = paymentElementRender.options as {
-      layout?: { type: string };
-      wallets?: { applePay: string; googlePay: string };
-    } | null;
-    expect(options?.layout).toEqual({ type: "accordion", radios: false, spacedAccordionItems: true });
-    expect(options?.wallets).toEqual({ applePay: "never", googlePay: "never", link: "auto" });
+    expect(paymentElementRender.options?.layout).toEqual({
+      type: "accordion",
+      radios: false,
+      spacedAccordionItems: true,
+    });
+    expect(paymentElementRender.options?.wallets).toEqual({ applePay: "never", googlePay: "never", link: "auto" });
   });
 
   it("keeps the legacy tabs layout when the flat list is off", () => {
@@ -262,7 +262,6 @@ describe("PaymentElementInput", () => {
     // layout, tabs hidden by the appearance rules) — the pre-flat-list behavior, byte-identical.
     render(<PaymentElementInput {...props} amount={1_000} mountCurrency="usd" />);
 
-    const options = paymentElementRender.options as { layout?: { type: string } } | null;
-    expect(options?.layout).toEqual({ type: "tabs" });
+    expect(paymentElementRender.options?.layout).toEqual({ type: "tabs" });
   });
 });
