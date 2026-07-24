@@ -308,29 +308,15 @@ const ProductsTable = ({ sales }: TableProps) => {
 
 const GETTING_STARTED_MINIMIZED_KEY = "dashboardGettingStartedMinimized";
 
-// Per-session (not per-account) so the reminder comes back next visit — an
-// unconfirmed email keeps blocking publishing, payouts, and API access until
-// it's fixed, so the banner shouldn't be dismissible forever.
-const EMAIL_CONFIRMATION_BANNER_DISMISSED_KEY = "dashboardEmailConfirmationBannerDismissed";
-
+// Deliberately not dismissible: an unconfirmed email keeps blocking publishing,
+// payouts, and API access until it's fixed, so the reminder stays up until the
+// seller actually confirms.
 const EmailConfirmationBanner = ({
   email_confirmation,
 }: {
   email_confirmation: NonNullable<DashboardPageProps["email_confirmation"]>;
 }) => {
-  const [dismissed, setDismissed] = React.useState(true);
   const [resendState, setResendState] = React.useState<"initial" | "sending" | "sent">("initial");
-
-  // Read sessionStorage after mount (not during render) so server-side rendering
-  // and the first client render agree on the markup.
-  useRunOnce(() => {
-    setDismissed(window.sessionStorage.getItem(EMAIL_CONFIRMATION_BANNER_DISMISSED_KEY) === "true");
-  });
-
-  const dismiss = () => {
-    window.sessionStorage.setItem(EMAIL_CONFIRMATION_BANNER_DISMISSED_KEY, "true");
-    setDismissed(true);
-  };
 
   const resendConfirmationEmail = async () => {
     setResendState("sending");
@@ -358,38 +344,31 @@ const EmailConfirmationBanner = ({
     }
   };
 
-  if (dismissed) return null;
-
   return (
     <Alert variant="warning">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span>
-          Please confirm your email address (<b>{email_confirmation.email}</b>) — some features are unavailable until
-          you do.
-          {email_confirmation.can_resend ? (
-            <>
-              {" "}
-              {resendState === "sent" ? (
-                "Confirmation email sent!"
-              ) : (
-                <button
-                  className="cursor-pointer underline all-unset"
-                  disabled={resendState === "sending"}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void resendConfirmationEmail();
-                  }}
-                >
-                  {resendState === "sending" ? "Resending..." : "Resend confirmation email"}
-                </button>
-              )}
-            </>
-          ) : null}
-        </span>
-        <button className="cursor-pointer all-unset" aria-label="Dismiss" onClick={dismiss}>
-          <X className="size-[1lh]!" aria-hidden="true" />
-        </button>
-      </div>
+      <span>
+        Please confirm your email address (<b>{email_confirmation.email}</b>) — some features are unavailable until you
+        do.
+        {email_confirmation.can_resend ? (
+          <>
+            {" "}
+            {resendState === "sent" ? (
+              "Confirmation email sent!"
+            ) : (
+              <button
+                className="cursor-pointer underline all-unset"
+                disabled={resendState === "sending"}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void resendConfirmationEmail();
+                }}
+              >
+                {resendState === "sending" ? "Resending..." : "Resend confirmation email"}
+              </button>
+            )}
+          </>
+        ) : null}
+      </span>
     </Alert>
   );
 };
