@@ -50,6 +50,7 @@ export const PaymentElementInput = ({
   mountCurrency,
   elementsOptions,
   walletsEnabled,
+  flatLayout,
   applePayOption,
   disabled,
   defaultEmail,
@@ -75,6 +76,13 @@ export const PaymentElementInput = ({
   // Per-seller rollout flag (payment_element_wallets): show Apple Pay/Google Pay inside the
   // Payment Element instead of via the separate Payment Request Button.
   walletsEnabled: boolean;
+  // Render the element with the accordion layout so it acts as checkout's payment-method
+  // selector (the flat payment-methods list — see PaymentMethodsSection in PaymentForm.tsx).
+  // Independent of walletsEnabled since the layout was decoupled from the wallet rollout:
+  // a wallet-suppressed cart (disable_wallets) still renders the flat accordion, just without
+  // wallet rows. When false the element is purely an internal card form (tabs layout, tabs
+  // hidden) — the pre-flat-list behavior.
+  flatLayout: boolean;
   // Apple Pay recurring declaration (merchant-token rollout): describes the cart's recurring
   // agreement on the Apple Pay sheet so Apple issues a device-independent merchant token. The
   // caller derives it from cart state (see paymentElementApplePayOption.ts) and memoizes it on
@@ -91,7 +99,7 @@ export const PaymentElementInput = ({
   invalid?: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
-  // Fires when the buyer focuses any field inside the element. Used by the flat wallets layout
+  // Fires when the buyer focuses any field inside the element. Used by the flat payment-methods layout
   // (see PaymentMethodsSection in PaymentForm.tsx) to re-select the card/wallet lane when the
   // buyer returns to the element after picking PayPal — clicks inside the element's iframe never
   // reach the surrounding DOM, so this Stripe event is the only reliable interaction signal.
@@ -138,22 +146,23 @@ export const PaymentElementInput = ({
       // shifting the element's content 4px left and leaving it 8px narrower than the container —
       // which made the accordion rows visibly narrower than the flat PayPal row below. Lift the
       // clamp for the element's iframes so Stripe's intended geometry (content edges flush with
-      // the container) applies. Scoped to walletsEnabled to leave the flag-off card form
+      // the container) applies. Scoped to flatLayout to leave the legacy card form
       // byte-identical to production.
-      className={walletsEnabled ? "[&_iframe]:max-w-none" : undefined}
+      className={flatLayout ? "[&_iframe]:max-w-none" : undefined}
     >
       {elementsOptions.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT || mountedAmount !== null ? (
         <StripePaymentElementProvider
           amount={mountedAmount}
           currencyOverride={mountedCurrency}
           elementsOptions={elementsOptions}
-          walletsEnabled={walletsEnabled}
+          flatLayout={flatLayout}
         >
           <PaymentElementControllerInput
             amount={mountedAmount}
             disabled={disabled}
             stripeLinkEnabled={elementsOptions.stripe_link_enabled}
             walletsEnabled={walletsEnabled}
+            flatLayout={flatLayout}
             applePayOption={applePayOption}
             defaultEmail={linkPrefillContact.email}
             defaultName={linkPrefillContact.name}
@@ -178,6 +187,7 @@ const PaymentElementControllerInput = ({
   disabled,
   stripeLinkEnabled,
   walletsEnabled,
+  flatLayout,
   applePayOption,
   defaultEmail,
   defaultName,
@@ -191,6 +201,7 @@ const PaymentElementControllerInput = ({
   disabled?: boolean | undefined;
   stripeLinkEnabled: boolean;
   walletsEnabled: boolean;
+  flatLayout: boolean;
   applePayOption?: PaymentElementApplePayOption | undefined;
   defaultEmail: string;
   defaultName: string;
@@ -233,11 +244,12 @@ const PaymentElementControllerInput = ({
     <PaymentElement
       options={{
         readOnly: disabled ?? false,
-        // With wallets enabled the element must actually show its payment-method surface, so we
-        // use the accordion layout (wallet buttons render as express-checkout-style rows). With
-        // wallets disabled we keep the tabs layout, whose tabs are hidden via the ".Tab" appearance
-        // rule in StripePaymentElementProvider — the exact pre-flag behavior.
-        layout: walletsEnabled ? { type: "accordion", radios: false, spacedAccordionItems: true } : { type: "tabs" },
+        // On the flat payment-methods list the element must actually show its payment-method
+        // surface, so we use the accordion layout (each method — card, wallets when enabled,
+        // local methods — renders as a row). Off the flat list the element is purely an internal
+        // card form: it keeps the tabs layout, whose tabs are hidden via the ".Tab" appearance
+        // rule in StripePaymentElementProvider — the exact pre-flat-list behavior.
+        layout: flatLayout ? { type: "accordion", radios: false, spacedAccordionItems: true } : { type: "tabs" },
         ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
         // Checkout collects billing details in its own form, so each element field is only shown
         // when checkout does NOT already ask for it — nothing should be asked for twice. The
@@ -318,13 +330,13 @@ const StripePaymentElementProvider = ({
   amount,
   currencyOverride,
   elementsOptions,
-  walletsEnabled,
+  flatLayout,
   children,
 }: {
   amount: number | null;
   currencyOverride?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
-  walletsEnabled: boolean;
+  flatLayout: boolean;
   children: React.ReactNode;
 }) => {
   const [stripePromise] = React.useState(() =>
@@ -381,11 +393,11 @@ const StripePaymentElementProvider = ({
           focusBoxShadow: "none",
         },
         rules: {
-          // With wallets disabled the element uses the tabs layout purely as an internal card
-          // form, so the tabs themselves are hidden. With wallets enabled the element switches to
-          // the accordion layout and must show its payment-method rows, so the tabs rule is
-          // dropped and the accordion items are styled to match our inputs.
-          ...(walletsEnabled
+          // Off the flat payment-methods list the element uses the tabs layout purely as an
+          // internal card form, so the tabs themselves are hidden. On the flat list the element
+          // switches to the accordion layout and must show its payment-method rows, so the tabs
+          // rule is dropped and the accordion items are styled to match our inputs.
+          ...(flatLayout
             ? {
                 ".AccordionItem": {
                   borderColor,
@@ -435,7 +447,7 @@ const StripePaymentElementProvider = ({
       fontFamily,
       initialAmount,
       placeholderColor,
-      walletsEnabled,
+      flatLayout,
     ],
   );
 

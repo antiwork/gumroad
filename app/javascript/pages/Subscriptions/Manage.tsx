@@ -278,6 +278,7 @@ export default function SubscriptionsManage() {
       disable_wallets: false,
       request_apple_pay_merchant_tokens,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: null,
     },
   });

@@ -27,12 +27,15 @@ const paymentElementConfig: CheckoutPaymentConfig = {
   fallback_reason: null,
   disable_wallets: true,
   request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
+  flat_payment_methods: true,
   elements_options: {
     stripe_elements_mode: "payment",
     currency: "usd",
     buyer_currency_presentment: true,
     payment_method_types: ["card"],
     payment_method_creation: "manual",
+    stripe_link_enabled: true,
   },
 };
 
