@@ -66,9 +66,7 @@ class InstallmentPresenter
         full_url: installment.full_url,
         has_been_blasted: installment.has_been_blasted?,
         shown_in_profile_sections: seller.seller_profile_posts_sections.filter_map { _1.external_id if _1.shown_posts.include?(installment.id) },
-        non_opener_resends: installment.blasts.to_non_openers.order(:requested_at).map do |blast|
-          { requested_at: blast.requested_at, delivery_count: blast.delivery_count, completed: blast.completed_at.present? }
-        end,
+        non_opener_resends: non_opener_resend_props,
       )
 
       unless installment.published?
@@ -96,6 +94,81 @@ class InstallmentPresenter
   end
 
   private
+    # Stats for each "resend to non-openers" blast on this post, oldest first.
+    #
+    # Open events don't record which blast delivered the email — open tracking is
+    # aggregated per post. So a resend's opens are approximated by time window: first
+    # opens recorded between this resend's request time and the next resend's request
+    # time (or now) are credited to this resend. A resend only goes to recipients who
+    # hadn't opened yet, so any open in that window comes from exactly that population;
+    # the only skew is a straggler finally opening the original email after the resend
+    # went out, which still answers "did the resend reach people who were not opening".
+    def non_opener_resend_props
+      # Filter the preloaded association in Ruby (rather than a scoped query) so the
+      # Published list page doesn't issue one blasts query per row.
+      resends = installment.blasts.select(&:to_non_openers?).sort_by(&:requested_at)
+      open_counts = resend_open_counts(resends)
+
+      resends.map.with_index do |blast, index|
+        completed = blast.completed_at.present?
+        open_count = completed ? open_counts.fetch(index, 0) : nil
+        open_rate =
+          if open_count.present? && blast.delivery_count > 0
+            [open_count / blast.delivery_count.to_f * 100, 100].min.round(1)
+          end
+
+        {
+          requested_at: blast.requested_at,
+          delivery_count: blast.delivery_count,
+          completed:,
+          open_count:,
+          open_rate:,
+        }
+      end
+    end
+
+    # First opens recorded in each completed resend's attribution window (see
+    # non_opener_resend_props), keyed by the resend's index in the sorted list.
+    # All the windows are counted in ONE grouped query — a CASE expression buckets
+    # each open into its resend's window — instead of one COUNT query per resend,
+    # so the Published emails list doesn't multiply its query count by the number
+    # of resends on each post. Opens that fall outside every completed resend's
+    # window bucket to NULL and are dropped; windows with no opens are simply
+    # absent from the returned hash (callers default them to 0).
+    #
+    # A window ends at the next COMPLETED resend's requested_at, skipping any
+    # in-progress resends in between. In-progress resends don't get stats (and
+    # aren't shown as list rows), so ending the previous window at an in-progress
+    # resend's request time would make opens after that moment vanish from every
+    # displayed rate. Instead they stay credited to the last completed resend;
+    # once the in-progress resend completes, its window starts and those later
+    # opens are re-attributed to it on the next render.
+    def resend_open_counts(resends)
+      windows = resends.each_with_index.filter_map do |blast, index|
+        next if blast.completed_at.blank?
+        next_completed = resends[(index + 1)..].find { _1.completed_at.present? }
+        [index, blast.requested_at, next_completed&.requested_at]
+      end
+      return {} if windows.empty?
+
+      when_clauses = windows.map do |index, starts_at, ends_at|
+        if ends_at.present?
+          ActiveRecord::Base.sanitize_sql_array(["WHEN opened_at >= ? AND opened_at < ? THEN ?", starts_at, ends_at, index])
+        else
+          ActiveRecord::Base.sanitize_sql_array(["WHEN opened_at >= ? THEN ?", starts_at, index])
+        end
+      end
+      window_bucket = Arel.sql("CASE #{when_clauses.join(' ')} END")
+
+      installment.email_infos
+        .where(state: "opened")
+        .where("opened_at >= ?", windows.first[1])
+        .group(window_bucket)
+        .count
+        .except(nil)
+        .transform_keys(&:to_i)
+    end
+
     # Resolve the single-customer recipient server-side from the purchase id so the
     # composer never has to carry the customer's email in the page URL.
     def single_customer_recipient_props(purchase_id)

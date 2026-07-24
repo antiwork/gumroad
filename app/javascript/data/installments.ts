@@ -53,7 +53,13 @@ export type PublishedInstallment = SavedInstallment & {
   open_rate: number | null;
   view_count: number | null;
   published_at: string;
-  non_opener_resends: { requested_at: string; delivery_count: number; completed: boolean }[];
+  non_opener_resends: {
+    requested_at: string;
+    delivery_count: number;
+    completed: boolean;
+    open_count: number | null;
+    open_rate: number | null;
+  }[];
 };
 
 export type ScheduledInstallment = SavedInstallment & {
