@@ -2563,4 +2563,71 @@ describe OrdersController, :vcr do
       end.to raise_error(ActionController::RoutingError)
     end
   end
+
+  describe "POST confirm_error" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 10_00) }
+    let(:line_items) { [{ uid: "unique-id-0", permalink: product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 }] }
+    let(:common_params) do
+      {
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Edgar Gumstein", street_address: "123 Gum Road", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" }
+      }
+    end
+
+    it "reports the browser-side confirm failure to the error notifier" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Client-confirm browser error: payment_intent_unexpected_state",
+        hash_including(
+          order_id: order.id,
+          stage: "confirm",
+          payment_method_type: "ideal",
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_unexpected_state",
+          stripe_error_message: "Bad state.",
+        )
+      )
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        stage: "confirm",
+        payment_method_type: "ideal",
+        stripe_error_type: "invalid_request_error",
+        stripe_error_code: "payment_intent_unexpected_state",
+        stripe_error_message: "Bad state.",
+      }
+
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "truncates oversized values so the endpoint cannot be used to flood the notifier" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+
+      expect(ErrorNotifier).to receive(:notify) do |_message, **context|
+        expect(context[:stripe_error_message].length).to eq(500)
+        expect(context[:stripe_error_code].length).to eq(100)
+      end
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        stripe_error_code: "x" * 5_000,
+        stripe_error_message: "y" * 50_000,
+      }
+
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "raises not-found for an unknown order token" do
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        post :confirm_error, params: { id: "invalid-token", stripe_error_code: "anything" }
+      end.to raise_error(ActionController::RoutingError)
+    end
+  end
 end

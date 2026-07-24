@@ -100,6 +100,7 @@ describe("startClientConfirmOrderCreation", () => {
     vi.stubGlobal("Routes", {
       prepare_orders_path: () => "/orders/prepare",
       finalize_order_path: (id: string) => `/orders/${id}/finalize`,
+      confirm_error_order_path: (id: string) => `/orders/${id}/confirm_error`,
       checkout_return_url: (id: string) => `https://gumroad.test/checkout/returns/${id}`,
     });
     requestMock.mockReset();
@@ -193,5 +194,33 @@ describe("startClientConfirmOrderCreation", () => {
     );
 
     await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toBeInstanceOf(PaymentConfirmedError);
+  });
+
+  it("reports a confirm failure to the server so redirect-method errors are visible in production", async () => {
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ success: true }));
+    const stripe: Stripe = Object.create(null);
+    stripe.confirmPayment = vi.fn().mockResolvedValue({
+      error: { type: "invalid_request_error", code: "payment_intent_unexpected_state", message: "Bad state." },
+    });
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123");
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        url: "/orders/order-token/confirm_error",
+        data: expect.objectContaining({
+          stage: "confirm",
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_unexpected_state",
+          stripe_error_message: "Bad state.",
+        }),
+      }),
+    );
+    // The buyer still sees the failure — reporting must not change the outcome.
+    expect(Object.values(result.lineItems).every((lineItem) => !lineItem.success)).toBe(true);
   });
 });

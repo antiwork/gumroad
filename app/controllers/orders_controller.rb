@@ -86,6 +86,34 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }
   end
 
+  # Records a client-side stripe.confirmPayment failure so redirect-based payment methods
+  # (iDEAL, Bancontact — methods that leave the page to authenticate at the buyer's bank) are
+  # debuggable in production. The browser is the ONLY place that ever sees these errors: a
+  # rejected confirm on a redirect method happens before any charge exists, so no
+  # payment_failed webhook fires and the purchase just sits in_progress until the abandonment
+  # sweeper cancels it — server-side, a buyer who hit a hard confirm error is
+  # indistinguishable from one who simply closed the tab (the failure mode behind the
+  # 2026-07-23 iDEAL ramp-down, gumroad-private#933: zero completions and zero server-side
+  # evidence of why). The order token proves the caller owns a real prepared order, and the
+  # payload is size-capped below, so this can't be used to spam Sentry with arbitrary junk.
+  def confirm_error
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
+    e404 unless order
+
+    error_details = {
+      order_id: order.id,
+      stage: params[:stage].to_s.first(50),
+      payment_method_type: params[:payment_method_type].to_s.first(50),
+      stripe_error_type: params[:stripe_error_type].to_s.first(100),
+      stripe_error_code: params[:stripe_error_code].to_s.first(100),
+      stripe_error_message: params[:stripe_error_message].to_s.first(500),
+    }
+    Rails.logger.error("Client-confirm browser error for order #{order.id}: #{error_details.inspect}")
+    ErrorNotifier.notify("Client-confirm browser error: #{error_details[:stripe_error_code].presence || error_details[:stripe_error_type].presence || "unknown"}", **error_details)
+
+    render json: { success: true }
+  end
+
   private
     def build_order_params
       permitted_order_params.merge!(
