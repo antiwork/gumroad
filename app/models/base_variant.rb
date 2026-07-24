@@ -144,7 +144,16 @@ class BaseVariant < ApplicationRecord
     # The counter-cache column is kept in sync by Purchase/Subscription callbacks and has been
     # the production source since 2026-04 (the inventory_counter_cache flag was 100% on; removed
     # via gp#1208). The live SUM fallback is gone with the flag.
-    sales_count_for_inventory_cache
+    #
+    # Read the column fresh from the database rather than trusting this instance's loaded
+    # attribute: the callbacks bump the counter with `update_all` (no in-memory sync), so a
+    # variant loaded before a concurrent purchase would otherwise report a stale count.
+    # Inventory protection (Purchase validations under the per-product semaphore) depends on
+    # seeing the committed value. This is a primary-key point read — still far cheaper than
+    # the SUM over purchases it replaced.
+    return sales_count_for_inventory_cache unless persisted?
+
+    self.class.where(id: id).pick(:sales_count_for_inventory_cache)
   end
 
   def is_downloadable?
