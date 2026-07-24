@@ -75,8 +75,6 @@ module Purchase::Risk
     end
 
     def chargebacks_within_grace_period?(chargebacked_purchases)
-      return false if Feature.inactive?(:chargeback_grace_period)
-
       unique_chargebacked_purchases = chargebacked_purchases.uniq do |purchase|
         purchase.bundle_purchase&.id || purchase.id
       end
