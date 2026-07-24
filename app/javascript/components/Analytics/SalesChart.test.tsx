@@ -166,4 +166,30 @@ describe("SalesChart projection overlay", () => {
     expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
     expectNoNaNAttributes(container);
   });
+
+  it("weights the projection by the seller's historical expected fraction when provided", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-16T20:00:00Z")); // 4pm in America/New_York
+
+    // An expected fraction of 1 means this seller has historically booked ALL of a
+    // typical day's revenue by now, so the weighted projection equals today's booked
+    // total, which suppresses the overlay (nothing more is expected today) — proof the
+    // expected fraction, not the elapsed clock fraction, drives the number.
+    const { container } = renderChart({ expectedSalesFraction: 1 });
+
+    expect(container.querySelector("[data-testid='chart-projected-dot']")).toBeNull();
+    expectNoNaNAttributes(container);
+  });
+
+  it("falls back to the uniform run rate when the expected fraction is missing", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-16T20:00:00Z"));
+
+    // With no expected fraction the linear extrapolation still yields a projection
+    // above the booked total, so the overlay renders.
+    const { container } = renderChart({ expectedSalesFraction: null });
+
+    expect(container.querySelectorAll("[data-testid='chart-projected-dot']").length).toBe(1);
+    expectNoNaNAttributes(container);
+  });
 });

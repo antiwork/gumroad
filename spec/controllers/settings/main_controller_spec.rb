@@ -593,5 +593,38 @@ describe Settings::MainController, type: :controller, inertia: true do
 
       it_behaves_like "doesn't resend email confirmation"
     end
+
+    # The dashboard's confirm-your-email banner posts as JSON so the seller isn't
+    # redirected to the Settings page mid-flow.
+    context "when requesting JSON" do
+      context "when the user is unconfirmed" do
+        before do
+          seller.update_columns(confirmed_at: nil)
+        end
+
+        it "resends email confirmation and renders success" do
+          expect { post :resend_confirmation_email, format: :json }
+            .to change { ResendConfirmationEmailJob.jobs.size }.by(1)
+
+          expect(ResendConfirmationEmailJob).to have_enqueued_sidekiq_job(seller.id)
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to eq("success" => true)
+        end
+      end
+
+      context "when the user is confirmed" do
+        before do
+          seller.confirm
+        end
+
+        it "doesn't resend email confirmation and renders failure" do
+          expect { post :resend_confirmation_email, format: :json }
+            .not_to change { ResendConfirmationEmailJob.jobs.size }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to eq("success" => false)
+        end
+      end
+    end
   end
 end

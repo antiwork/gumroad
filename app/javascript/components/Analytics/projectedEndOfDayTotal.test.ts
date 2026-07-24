@@ -53,4 +53,34 @@ describe("projectedEndOfDayTotal", () => {
   it("returns null when there are no sales yet", () => {
     expect(projectedEndOfDayTotal(0, 0.5)).toBeNull();
   });
+
+  it("divides by the expected historical fraction when provided", () => {
+    // $6,000 booked when the seller has historically booked 40% of a day's revenue
+    // projects to $15,000 — even though only 25% of the clock day has elapsed.
+    expect(projectedEndOfDayTotal(600000, 0.25, 0.4)).toBe(1500000);
+  });
+
+  it("falls back to the elapsed clock fraction when the expected fraction is null or near zero", () => {
+    // Null expected fraction (thin history) → uniform run rate.
+    expect(projectedEndOfDayTotal(100000, 0.5, null)).toBe(200000);
+    // A near-zero expected fraction would explode the estimate; fall back instead.
+    expect(projectedEndOfDayTotal(100000, 0.5, 0.001)).toBe(200000);
+    // A non-finite value is ignored rather than trusted.
+    expect(projectedEndOfDayTotal(100000, 0.5, Number.NaN)).toBe(200000);
+  });
+
+  it("projects today's actual total once the expected fraction reaches 1", () => {
+    // Historically the day's sales are fully booked by now — nothing more expected.
+    expect(projectedEndOfDayTotal(100000, 0.9, 1)).toBe(100000);
+    // A fraction above 1 (bad input) is capped, never inflating below-total division.
+    expect(projectedEndOfDayTotal(100000, 0.9, 1.5)).toBe(100000);
+  });
+
+  it("never projects below today's booked total", () => {
+    expect(projectedEndOfDayTotal(100000, 0.5, 0.99)).toBeGreaterThanOrEqual(100000);
+  });
+
+  it("still suppresses projections in the first hour of the day regardless of the expected fraction", () => {
+    expect(projectedEndOfDayTotal(100000, MINIMUM_ELAPSED_DAY_FRACTION - 0.001, 0.5)).toBeNull();
+  });
 });
