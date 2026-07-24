@@ -73,6 +73,20 @@ class CreatorHomePresenter
       end
     end
 
+    # Unconfirmed sellers hit invisible walls all over the product (publishing,
+    # payouts, API access all require a confirmed email), but until now the only
+    # places offering a resend were the Settings page and a few gated flows. The
+    # dashboard is where sellers land, so surface the recovery path here. Only the
+    # account owner can trigger the resend (same policy as the Settings button), so
+    # team members see the notice without the CTA.
+    email_confirmation = nil
+    if seller.has_unconfirmed_email?
+      email_confirmation = {
+        email: seller.unconfirmed_email.presence || seller.email,
+        can_resend: Pundit.policy!(pundit_user, [:settings, :main, seller]).resend_confirmation_email?,
+      }
+    end
+
     tax_center_enabled = seller.tax_center_enabled?
     if tax_center_enabled
       tax_forms = []
@@ -104,6 +118,7 @@ class CreatorHomePresenter
       sales:,
       activity_items:,
       stripe_verification_message:,
+      email_confirmation:,
       tax_forms:,
       show_1099_download_notice:,
       tax_center_enabled:

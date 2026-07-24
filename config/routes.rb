@@ -216,6 +216,7 @@ Rails.application.routes.draw do
       member do
         post :confirm
         post :finalize
+        post :confirm_error
       end
       collection do
         post :prepare
@@ -721,6 +722,7 @@ Rails.application.routes.draw do
       member do
         post :confirm
         post :finalize
+        post :confirm_error
       end
       collection do
         post :prepare

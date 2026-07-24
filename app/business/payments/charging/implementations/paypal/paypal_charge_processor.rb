@@ -153,24 +153,34 @@ class PaypalChargeProcessor
     # human review). Whole-capture events like PAYMENT.CAPTURE.DENIED mean the entire capture
     # failed and must keep unwinding unconditionally.
     if skip_if_capture_shared
-      sibling_scope = Purchase.where.not(id: purchase.id).where(stripe_transaction_id: capture_id)
-      if purchase.paypal_order_id.present?
-        sibling_scope = sibling_scope.or(
-          Purchase.where.not(id: purchase.id)
-                  .where(paypal_order_id: purchase.paypal_order_id)
-                  .where(stripe_transaction_id: [nil, "", capture_id])
-        )
-      end
       # Free ($0) siblings can never be what the refund belongs to, so they don't make the
       # capture ambiguous. Keep siblings whose price is NULL, though: price_cents is a
       # nullable column, and an unknown price tells us nothing about whether money moved
       # for that row — excluding NULLs (a bare price_cents > 0) would let the refund
       # auto-apply in exactly the rows we can't attribute. Unknown price stays ambiguous
       # and fails toward manual review.
-      sibling_scope = sibling_scope.where("price_cents IS NULL OR price_cents > 0")
-      # A single pluck drives both the "any siblings?" check and the notification payload, so
-      # the ids a human needs to attribute the refund always match the rows that blocked it.
-      sibling_purchase_ids = sibling_scope.pluck(:id)
+      paid_or_unknown_price = "price_cents IS NULL OR price_cents > 0"
+      # Run the capture-id lookup and the order-id lookup as two separate queries instead
+      # of one relation combined with `.or`. The combined OR made MySQL give up on both
+      # secondary indexes and range-scan the purchases PRIMARY key (~165M rows in
+      # production), which blew the 5-minute statement timeout every time — so the refund
+      # webhook could never record a refund for any purchase with a PayPal order id.
+      # Queried separately, each lookup uses its own index
+      # (index_purchases_on_stripe_transaction_id / index_purchases_on_paypal_order_id)
+      # and returns in milliseconds. The Ruby-side union keeps the result identical.
+      sibling_purchase_ids = Purchase.where.not(id: purchase.id)
+                                     .where(stripe_transaction_id: capture_id)
+                                     .where(paid_or_unknown_price)
+                                     .pluck(:id)
+      if purchase.paypal_order_id.present?
+        # Siblings from the same PayPal order with no capture of their own (failed rows)
+        # or with this same capture id are the ambiguous ones; see the comment above.
+        sibling_purchase_ids |= Purchase.where.not(id: purchase.id)
+                                        .where(paypal_order_id: purchase.paypal_order_id)
+                                        .where(stripe_transaction_id: [nil, "", capture_id])
+                                        .where(paid_or_unknown_price)
+                                        .pluck(:id)
+      end
       if sibling_purchase_ids.any?
         ErrorNotifier.notify(
           "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
@@ -768,8 +778,21 @@ class PaypalChargeProcessor
     def item_refund_cents_from_paypal(purchase_unit, purchase, amount_cents)
       permalink = purchase.link&.unique_permalink
       return nil if permalink.blank?
-      item = purchase_unit.items&.find { |i| i.sku == permalink }
-      return nil unless item
+      matching_items = (purchase_unit.items || []).select { |i| i.sku == permalink }
+      # A PayPal order can list the same sku more than once — most commonly when a free ($0)
+      # sibling purchase of the same product sits on the same order as the paid one. A
+      # zero-value line can never be the paid item being refunded, so drop those before
+      # picking. (Real incident: `items.find` returned the €0.00 line first, computed a
+      # refund of 0, and the fully-unrefunded purchase was wrongly reported as "no remaining
+      # balance to refund".)
+      if matching_items.size > 1
+        matching_items = matching_items.reject { |i| BigDecimal(i.unit_amount.value).zero? }
+      end
+      # If the sku still matches multiple paid lines we cannot tell which one this purchase
+      # is; return nil so the caller falls back to the USD→merchant-currency conversion
+      # instead of guessing an item and refunding the wrong amount.
+      return nil unless matching_items.size == 1
+      item = matching_items.first
 
       scale = paypal_cents_scale(purchase_unit.amount&.currency_code)
       total_unit_value = purchase_unit.items.sum { |i| BigDecimal(i.unit_amount.value) * scale * i.quantity.to_i }
@@ -812,6 +835,11 @@ class PaypalChargeProcessor
       captured = (BigDecimal(capture.amount.value) * scale).to_i
       refunded = (purchase_unit.payments.refunds || []).sum do |r|
         next 0 unless refund_belongs_to_capture?(r, capture_id)
+        # A FAILED or CANCELLED refund never moved money, so it must not consume the
+        # capture's refundable balance — counting it would block a legitimate retry of
+        # that refund forever. Refunds without a status (older payloads) stay counted.
+        status = r.respond_to?(:status) ? r.status.to_s.upcase : ""
+        next 0 if %w[FAILED CANCELLED].include?(status)
         (BigDecimal(r.amount.value) * scale).to_i
       end
       captured - refunded

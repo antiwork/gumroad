@@ -38,15 +38,22 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
 
         within_table "Published" do
           expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "1", "Opened" => "100%", "Clicks" => "123", "Views" => "n/a" })
-          cell = find(:table_cell, "Clicks", text: "123", visible: :all).find("[aria-describedby]", visible: :all)
-          expect(cell).to have_tooltip(text: url1, visible: false)
-          expect(cell).to have_tooltip(text: url2.truncate(70), visible: false)
           expect(page).to have_table_row({ "Subject" => "Email 3 (sent)", "Emailed" => "--", "Opened" => "--", "Clicks" => "0", "Views" => "0" })
           expect(page).to_not have_table_row({ "Subject" => "Email 2 (draft)" })
           expect(page).to_not have_table_row({ "Subject" => "Email 4 (draft)" })
           expect(page).to_not have_table_row({ "Subject" => "Email 5 (scheduled)" })
           expect(page).to_not have_table_row({ "Subject" => "Email 6 (scheduled)" })
         end
+
+        # Clicking the click count opens a modal listing the full clicked URLs with per-URL counts
+        click_on "View clicked URLs for Email 1 (sent)"
+        within_modal "Clicked URLs" do
+          expect(page).to have_text("Email 1 (sent)")
+          expect(page).to have_table_row({ "URL" => url1, "Clicks" => "100" })
+          expect(page).to have_table_row({ "URL" => url2, "Clicks" => "23" })
+          click_on "Close"
+        end
+        expect(page).to_not have_text("Clicked URLs")
 
         # Opens a sidebar drawer with additional information of the selected email
         find(:table_row, { "Subject" => "Email 1 (sent)" }).click

@@ -10,7 +10,6 @@ class UrlRedirectsController < ApplicationController
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file subtitle_file_vtt read download_archive download_product_files
   ]
-  before_action :redirect_to_custom_domain_if_needed, only: :download_page
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
@@ -372,28 +371,14 @@ class UrlRedirectsController < ApplicationController
       @url_redirect.enqueue_job_to_regenerate_deleted_transcoded_videos
     end
 
-    def redirect_to_custom_domain_if_needed
-      return if Feature.inactive?(:custom_domain_download)
-
-      creator_subdomain_with_protocol = @url_redirect.seller.subdomain_with_protocol
-      target_host = !@is_user_custom_domain && creator_subdomain_with_protocol.present? ? creator_subdomain_with_protocol : request.host
-      return if target_host == request.host
-
-      redirect_to(
-        custom_domain_download_page_url(@url_redirect.token, host: target_host, receipt: params[:receipt]),
-        status: :moved_permanently,
-        allow_other_host: true
-      )
-    end
-
     def redirect_bundle_purchase_to_library_if_needed
       return unless @url_redirect.purchase&.is_bundle_purchase?
 
-      # Build the library URL on the main app domain explicitly. This redirect can run after
-      # redirect_to_custom_domain_if_needed has already moved the request onto the seller's
-      # subdomain (or custom domain), and /library requires authentication. A signed-out buyer
-      # would get bounced to /login on the seller's host, which isn't routed there and 404s.
-      # Pinning the host to the app domain keeps the login redirect on a host that routes it.
+      # Build the library URL on the main app domain explicitly. This request can arrive on
+      # the seller's subdomain (or custom domain), and /library requires authentication. A
+      # signed-out buyer would get bounced to /login on the seller's host, which isn't routed
+      # there and 404s. Pinning the host to the app domain keeps the login redirect on a host
+      # that routes it.
       redirect_to library_url(
         bundles: @url_redirect.purchase.link.external_id,
         purchase_id: params[:receipt] && @url_redirect.purchase.external_id,

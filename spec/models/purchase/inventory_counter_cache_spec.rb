@@ -254,25 +254,23 @@ describe "Purchase inventory counter cache" do
     end
   end
 
-  describe "reader gating on Feature flag" do
+  describe "reader" do
     let(:purchase) { create(:purchase, link: product, variant_attributes: [variant], purchase_state: "successful", quantity: 4) }
 
     before { purchase }
 
-    it "returns the SUM when flag is off" do
-      Feature.deactivate(:inventory_counter_cache)
-      expect(variant.reload.sales_count_for_inventory).to eq(4)
-      expect(product.reload.sales_count_for_inventory).to eq(4)
-    end
-
-    it "returns the cached column when flag is on" do
-      Feature.activate(:inventory_counter_cache)
+    # The inventory_counter_cache flag was removed (100% on in prod since 2026-04 — gp#1208):
+    # the cached column is now the only source for sales_count_for_inventory.
+    it "returns the cached column" do
       variant.update_columns(sales_count_for_inventory_cache: 99)
       product.update_columns(sales_count_for_inventory_cache: 99)
       expect(variant.reload.sales_count_for_inventory).to eq(99)
       expect(product.reload.sales_count_for_inventory).to eq(99)
-    ensure
-      Feature.deactivate(:inventory_counter_cache)
+    end
+
+    it "reflects synced purchases" do
+      expect(variant.reload.sales_count_for_inventory).to eq(4)
+      expect(product.reload.sales_count_for_inventory).to eq(4)
     end
   end
 end

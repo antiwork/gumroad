@@ -16,6 +16,14 @@ describe("Email Creation Flow", :js, type: :system) do
 
   include_context "with switching account to user as admin for seller"
 
+  # The audience counts shown on the email form are served from Elasticsearch
+  # (unconditional since the audience_count_from_elasticsearch flag removal,
+  # gp#1208 / #6232), and the indexing jobs the fixtures enqueue stay in the fake
+  # Sidekiq queue, so import the members into the index before loading the page.
+  def index_audience_members_into_elasticsearch
+    index_model_records(AudienceMember)
+  end
+
   it "creates a product-type email with images and attachments" do
     product = create(:product, name: "Sample product", user: seller)
     another_product = create(:product, name: "Another product", user: seller)
@@ -24,6 +32,7 @@ describe("Email Creation Flow", :js, type: :system) do
     create(:purchase, link: product, email: "john@example.com")
     create(:purchase, link: another_product, email: "john@example.com")
     create(:active_follower, user: product.user)
+    index_audience_members_into_elasticsearch
 
     visit emails_path
 
@@ -175,6 +184,7 @@ describe("Email Creation Flow", :js, type: :system) do
     variant1 = create(:variant, name: "V1", variant_category:)
     create(:variant, name: "V2", variant_category:)
     create(:purchase, seller:, link: product, country: "Italy", variant_attributes: [variant1])
+    index_audience_members_into_elasticsearch
 
     visit emails_path
 
@@ -232,6 +242,7 @@ describe("Email Creation Flow", :js, type: :system) do
     create(:product, user: product.user, name: "Another product")
     create(:purchase, link: product)
     create_list(:active_follower, 2, user: product.user)
+    index_audience_members_into_elasticsearch
 
     visit emails_path
 
@@ -293,6 +304,7 @@ describe("Email Creation Flow", :js, type: :system) do
     create(:product, user: product.user, name: "Another product")
     create(:purchase, link: product)
     create_list(:active_follower, 2, user: product.user)
+    index_audience_members_into_elasticsearch
 
     visit emails_path
 
@@ -326,6 +338,7 @@ describe("Email Creation Flow", :js, type: :system) do
     create_list(:purchase, 2, link: product)
     affiliate = create(:direct_affiliate, seller: product.user)
     affiliate.products << product
+    index_audience_members_into_elasticsearch
 
     visit emails_path
 

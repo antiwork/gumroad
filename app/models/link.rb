@@ -711,8 +711,19 @@ class Link < ApplicationRecord
   end
 
   def sales_count_for_inventory
-    return sales_count_for_inventory_cache if Feature.active?(:inventory_counter_cache)
-    sales.counts_towards_inventory.sum(:quantity)
+    # The counter-cache column is kept in sync by Purchase/Subscription callbacks and has been
+    # the production source since 2026-04 (the inventory_counter_cache flag was 100% on; removed
+    # via gp#1208). The live SUM fallback is gone with the flag.
+    #
+    # Read the column fresh from the database rather than trusting this instance's loaded
+    # attribute: the callbacks bump the counter with `update_all` (no in-memory sync), so a
+    # Link object loaded before a concurrent purchase would otherwise report a stale count.
+    # Inventory protection (Purchase#sold_out under the per-product semaphore) depends on
+    # seeing the committed value. This is a primary-key point read — still far cheaper than
+    # the SUM over purchases it replaced.
+    return sales_count_for_inventory_cache unless persisted?
+
+    self.class.where(id: id).pick(:sales_count_for_inventory_cache)
   end
 
   def variants_available?

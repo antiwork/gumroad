@@ -541,19 +541,29 @@ describe WithFiltering do
       end
 
       describe "bought variants only" do
+        # The stored bought_variants must be real variant external ids: saving an
+        # installment validates the seller's sending limit with an Elasticsearch
+        # audience count (unconditional since the audience_count_from_elasticsearch
+        # flag removal, gp#1208 / #6232), and made-up ids decrypt to nil, which
+        # produces an invalid ES terms query. The external ids passed to
+        # seller_post_passes_filters are only string-matched in memory, so
+        # arbitrary values are still fine there.
+        let(:variant_a) { create(:variant, variant_category: create(:variant_category, link: create(:product, user: @creator))) }
+        let(:variant_b) { create(:variant, variant_category: create(:variant_category, link: create(:product, user: @creator))) }
+
         it "returns false when passed filters are missing" do
-          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: ["a"] })
+          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: [variant_a.external_id] })
           expect(post.seller_post_passes_filters).to eq(false)
         end
 
-        it "returns false when product permalinks don't match the bought_products filter" do
-          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: %w[a b] })
+        it "returns false when variant external ids don't match the bought_variants filter" do
+          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: [variant_a.external_id, variant_b.external_id] })
           expect(post.seller_post_passes_filters(variant_external_ids: %w[c d e])).to eq(false)
         end
 
-        it "returns true when one product permalink matches the bought_products filter" do
-          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: %w[a b] })
-          expect(post.seller_post_passes_filters(variant_external_ids: %w[b c d])).to eq(true)
+        it "returns true when one variant external id matches the bought_variants filter" do
+          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: [variant_a.external_id, variant_b.external_id] })
+          expect(post.seller_post_passes_filters(variant_external_ids: [variant_b.external_id, "c", "d"])).to eq(true)
         end
       end
     end

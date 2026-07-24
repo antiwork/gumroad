@@ -20,6 +20,12 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     recreate_model_indices(Purchase)
     index_model_records(Purchase)
 
+    # The audience counts shown on the email form are served from Elasticsearch
+    # (unconditional since the audience_count_from_elasticsearch flag removal,
+    # gp#1208 / #6232), and the indexing jobs the fixtures enqueue stay in the
+    # fake Sidekiq queue, so import the members into the index up front.
+    index_model_records(AudienceMember)
+
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
     create(:payment_completed, user: seller)
   end

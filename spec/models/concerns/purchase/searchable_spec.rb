@@ -267,7 +267,12 @@ describe Purchase::Searchable do
     it "updates related purchases when deactivated_at changes" do
       @subscription.deactivate!
 
-      expect(ElasticsearchIndexerWorker.jobs.size).to eq(2)
+      # Deactivating also removes the buyer from the seller's audience, which
+      # enqueues an AudienceMember index job of its own (unconditional since the
+      # index_audience_members flag removal, gp#1208 / #6232), so only count the
+      # Purchase re-index jobs here.
+      purchase_jobs = ElasticsearchIndexerWorker.jobs.select { |job| job["args"][1]["class_name"] == "Purchase" }
+      expect(purchase_jobs.size).to eq(2)
       expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", "record_id" => @purchase_1.id, "class_name" => "Purchase", "fields" => ["subscription_deactivated_at"])
       expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", "record_id" => @purchase_2.id, "class_name" => "Purchase", "fields" => ["subscription_deactivated_at"])
     end
