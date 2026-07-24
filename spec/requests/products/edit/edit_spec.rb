@@ -372,6 +372,88 @@ describe("Product Edit Scenario", type: :system, js: true) do
     )
   end
 
+  # gumroad-private#1295: the editor submits the full product on every save,
+  # so a session working from a stale snapshot resubmits existing page/variant
+  # ids carrying old data — plain in-place updates that the deletion guards
+  # never see. The server rejects these with a structured conflict; the editor
+  # shows a reload modal. Each spec here simulates the second session by
+  # updating the row server-side after this session's editor loaded.
+  describe "two-session stale-save conflicts" do
+    it "blocks a save that would overwrite a content page another session updated, and offers a reload" do
+      product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
+      product_page = create(:rich_content, entity: product, title: "Guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Original content" }] }])
+
+      visit edit_link_path(product.unique_permalink)
+      select_tab "Content"
+
+      # Session B saves newer content after this editor session loaded.
+      travel_to(1.minute.from_now) do
+        product_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Session B's newer content" }] }])
+      end
+
+      set_rich_text_editor_input(find("[aria-label='Content editor']"), to_text: "Session A's stale rewrite")
+      click_on "Save changes"
+      wait_for_ajax
+
+      within_modal "This product changed since you opened it" do
+        expect(page).to have_text("Saving now would overwrite their changes")
+        expect(page).to have_text("Guide")
+        expect(page).to have_button("Reload page")
+        click_on "Keep editing"
+      end
+
+      # Nothing was overwritten.
+      expect(product_page.reload.description).to eq(
+        [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Session B's newer content" }] }]
+      )
+    end
+
+    it "blocks a save that would revert a variant another session updated" do
+      product = create(:product_with_digital_versions, user: seller)
+      variant = product.alive_variants.first
+
+      visit edit_link_path(product.unique_permalink)
+
+      # Session B renames the variant after this editor session loaded.
+      travel_to(1.minute.from_now) do
+        variant.update!(name: "Session B's newer name")
+      end
+
+      fill_in "Amount", with: "12"
+      click_on "Save changes"
+      wait_for_ajax
+
+      within_modal "This product changed since you opened it" do
+        expect(page).to have_text("Session B's newer name")
+        expect(page).to have_button("Reload page")
+        click_on "Keep editing"
+      end
+
+      expect(variant.reload.name).to eq("Session B's newer name")
+    end
+
+    it "does not conflict a session with itself across consecutive saves" do
+      product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
+      create(:rich_content, entity: product, title: "Guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Original content" }] }])
+
+      visit edit_link_path(product.unique_permalink)
+      select_tab "Content"
+
+      set_rich_text_editor_input(find("[aria-label='Content editor']"), to_text: "First edit")
+      save_change
+
+      # The save response refreshed the session's snapshot timestamps, so the
+      # follow-up save must not be rejected as stale by the session's own
+      # previous save.
+      set_rich_text_editor_input(find("[aria-label='Content editor']"), to_text: "Second edit")
+      save_change
+
+      expect(product.reload.alive_rich_contents.sole.description).to eq(
+        [{ "type" => "paragraph", "content" => [{ "text" => "Second edit", "type" => "text" }] }]
+      )
+    end
+  end
+
   it "displays video transcoding notice" do
     product = create(:product_with_video_file, user: seller)
     video_file = product.product_files.first

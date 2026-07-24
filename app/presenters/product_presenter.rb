@@ -159,6 +159,10 @@ class ProductPresenter
             id: variant.external_id,
             name: variant.name || "",
             description: variant.description || "",
+            # The variant's snapshot timestamp. The editor echoes it back with
+            # each save so the server can reject writes built from a stale
+            # snapshot (see Product::StaleContentWriteGuard).
+            updated_at: variant.updated_at,
             max_purchase_count: variant.max_purchase_count,
             integrations: Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? },
             rich_content: variant.rich_content_json,
