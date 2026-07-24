@@ -113,6 +113,11 @@ describe StripeSetupIntent, :vcr do
           next_action: double(type: "redirect_to_url"),
           payment_method_types: %w[card klarna]
         )
+        # The validation resolves the attempted method for redirect_to_url via a
+        # PaymentMethod retrieve; answer it in-process (the buyer attempted Klarna)
+        # so the spec stays offline under VCR's :none record mode.
+        allow(Stripe::PaymentMethod).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(id: "pm_stub", type: "klarna"))
       end
 
       it "does not notify error tracker" do
