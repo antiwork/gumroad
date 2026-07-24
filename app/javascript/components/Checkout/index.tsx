@@ -695,7 +695,8 @@ const CartItemComponent = ({
           per line. */}
       <CartItemMain className="min-w-2/5">
         <CartItemTitle>
-          <a href={item.product.url} className="no-underline">
+          {/* dir="auto" lets RTL product names render right-to-left (gumroad-private#1259). */}
+          <a href={item.product.url} className="no-underline" dir="auto">
             {item.product.name}
           </a>
         </CartItemTitle>

@@ -97,6 +97,9 @@ class Checkout::StripePaymentPresenter
         # CardElement carts never mount a Payment Element, so there is no element wallet surface
         # to enable — they keep the Payment Request Button regardless of the rollout flag.
         payment_element_wallets: false,
+        # And with no Payment Element there is no accordion to act as the payment-method
+        # selector, so the CardElement lane always renders the legacy nested radio-row list.
+        flat_payment_methods: false,
         elements_options: nil,
       }
     end
@@ -112,6 +115,7 @@ class Checkout::StripePaymentPresenter
         # presentment lane above), the element wallet surface stays off regardless of the
         # rollout flag, so the client never has to reconcile the two fields.
         payment_element_wallets: payment_element_wallets? && !disable_wallets,
+        flat_payment_methods: flat_payment_methods?(disable_wallets),
         elements_options: {
           stripe_elements_mode:,
           currency: "usd",
@@ -175,6 +179,25 @@ class Checkout::StripePaymentPresenter
       sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
     end
 
+    # Whether the checkout renders the flat payment-methods list (the Payment Element's
+    # accordion IS the payment-method selector — no outer "Card" radio row — with PayPal
+    # appended as one more matching row). Introduced with the element-wallets rollout
+    # (antiwork/gumroad#5768) and now decoupled from it so every Payment Element cart gets one
+    # layout: carts whose wallets are suppressed (the buyer-currency presentment lane,
+    # disable_wallets) render the same flat list with the wallet rows simply absent, instead of
+    # falling back to the legacy nested layout.
+    #
+    # The one deliberate exception: a cart that COULD take wallet payments while the
+    # payment_element_wallets flag is off (an emergency ramp-down of that flag) keeps the
+    # legacy layout, because that layout is where the deprecated Payment Request Button
+    # renders — ramping the flag to 0 must restore the previous wallet surface, not remove
+    # Apple Pay/Google Pay from checkout entirely. At the flag's steady state (100% since
+    # July 2026) this method is true for every Payment Element cart. Server-owned so the
+    # client never composes flags itself.
+    def flat_payment_methods?(disable_wallets)
+      payment_element_wallets? || disable_wallets
+    end
+
     # U13 PPP method matrix input. True when any item offers a PPP discount for this buyer's GeoIP
     # country AND that item's own seller enforces PPP payment verification — the case where prepare
     # will run the funding-country check and a non-verifiable method would fail closed. Item-scoped
@@ -235,6 +258,7 @@ class Checkout::StripePaymentPresenter
         # payment (the buyer-currency presentment case above), the element wallet surface stays
         # off no matter what the rollout flag says — the client never has to reconcile the two.
         payment_element_wallets: payment_element_wallets? && !disable_wallets,
+        flat_payment_methods: flat_payment_methods?(disable_wallets),
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: method_forced ? method_forced_element_currency : CLIENT_CONFIRM_CURRENCY,

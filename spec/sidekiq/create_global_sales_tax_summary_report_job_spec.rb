@@ -265,7 +265,10 @@ describe CreateGlobalSalesTaxSummaryReportJob do
 
         travel_to(@won_time) do
           @chargedback_purchase.update!(chargeback_reversed: true)
-          create(:dispute, purchase: @chargedback_purchase, state: "won", won_at: Time.current)
+          # One Dispute row carries both the formalization date (event_created_at, mirroring
+          # chargeback_date) and the win date (won_at); the tax-period scopes resolve each
+          # leg's window through it.
+          create(:dispute, purchase: @chargedback_purchase, state: "won", event_created_at: @event_time, won_at: Time.current)
         end
       end
 

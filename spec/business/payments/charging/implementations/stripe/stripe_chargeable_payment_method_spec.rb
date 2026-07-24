@@ -66,6 +66,44 @@ describe StripeChargeablePaymentMethod, :vcr do
     end
   end
 
+  describe "#card_type" do
+    context "with a non-card payment method (UPI)" do
+      let(:payment_method_id) { "pm_test_upi" }
+      let(:stripe_payment_method_object) do
+        OpenStruct.new(id: payment_method_id, type: "upi", customer: nil, card: nil,
+                       billing_details: { address: { postal_code: nil } })
+      end
+      let(:chargeable) { StripeChargeablePaymentMethod.new(payment_method_id, zip_code: nil, product_permalink: "xx") }
+
+      before do
+        allow(Stripe::PaymentMethod).to receive(:retrieve).with(payment_method_id).and_return(stripe_payment_method_object)
+      end
+
+      it "records the method's own type instead of leaving card_type nil" do
+        chargeable.prepare!
+        expect(chargeable.card_type).to eq(CardType::UPI)
+      end
+    end
+
+    context "with a non-card payment method Gumroad does not recognize" do
+      let(:payment_method_id) { "pm_test_other" }
+      let(:stripe_payment_method_object) do
+        OpenStruct.new(id: payment_method_id, type: "some_future_method", customer: nil, card: nil,
+                       billing_details: { address: { postal_code: nil } })
+      end
+      let(:chargeable) { StripeChargeablePaymentMethod.new(payment_method_id, zip_code: nil, product_permalink: "xx") }
+
+      before do
+        allow(Stripe::PaymentMethod).to receive(:retrieve).with(payment_method_id).and_return(stripe_payment_method_object)
+      end
+
+      it "keeps the historical nil rather than recording generic_card" do
+        chargeable.prepare!
+        expect(chargeable.card_type).to be_nil
+      end
+    end
+  end
+
   describe "#stripe_charge_params" do
     it "returns the original customer and payment method details if merchant account is not a stripe connect account" do
       allow_any_instance_of(StripeChargeablePaymentMethod).to receive(:get_merchant_account).and_return(create(:merchant_account))

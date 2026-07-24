@@ -77,13 +77,10 @@ describe AudienceMember::Searchable, :freeze_time do
   end
 
   describe "indexing callbacks" do
-    it "enqueues indexing jobs on create, update, and destroy when the seller's indexing flag is on" do
-      seller = create(:user)
-      Feature.activate_user(:index_audience_members, seller)
-
+    it "enqueues indexing jobs on create, update, and destroy" do
       member = nil
       expect do
-        member = create(:audience_member, seller:, purchases: [{ "id" => 1 }])
+        member = create(:audience_member, purchases: [{ "id" => 1 }])
       end.to change { ElasticsearchIndexerWorker.jobs.size }.by(2)
       expect(ElasticsearchIndexerWorker.jobs.last["args"]).to eq(["index", { "record_id" => member.id, "class_name" => "AudienceMember" }])
 
@@ -101,50 +98,21 @@ describe AudienceMember::Searchable, :freeze_time do
       end.to change { ElasticsearchIndexerWorker.jobs.size }.by(1)
       expect(ElasticsearchIndexerWorker.jobs.last["args"]).to eq(["delete", { "record_id" => member.id, "class_name" => "AudienceMember" }])
     end
-
-    it "enqueues indexing jobs when only the count flag is on" do
-      seller = create(:user)
-      Feature.activate_user(:audience_count_from_elasticsearch, seller)
-
-      expect do
-        create(:audience_member, seller:, purchases: [{ "id" => 1 }])
-      end.to change { ElasticsearchIndexerWorker.jobs.size }.by(2)
-    end
-
-    it "enqueues nothing when the seller's flags are off" do
-      member = nil
-      expect do
-        member = create(:audience_member, purchases: [{ "id" => 1 }])
-        member.details["purchases"] << { "id" => 2, "product_id" => 2, "price_cents" => 200, "created_at" => 1.day.ago.iso8601 }
-        member.save!
-        member.destroy!
-      end.not_to change { ElasticsearchIndexerWorker.jobs.size }
-    end
   end
 
-  describe ".count_for_seller" do
+  describe ".count_for_seller", :sidekiq_inline, :elasticsearch_wait_for_refresh do
     let(:seller) { create(:user) }
 
-    it "counts from MySQL when the seller's flag is off" do
-      create_list(:audience_member, 2, seller:)
-
-      expect(AudienceMember).not_to receive(:filter_count)
-      expect(AudienceMember.count_for_seller(seller)).to eq(2)
+    before do
+      recreate_model_index(AudienceMember)
     end
 
-    context "when the seller's flag is on", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-      before do
-        recreate_model_index(AudienceMember)
-        Feature.activate_user(:audience_count_from_elasticsearch, seller)
-      end
+    it "counts the seller's members from Elasticsearch" do
+      create_list(:audience_member, 2, seller:)
+      create(:audience_member)
 
-      it "counts from Elasticsearch" do
-        create_list(:audience_member, 2, seller:)
-        create(:audience_member)
-
-        expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
-        expect(AudienceMember.count_for_seller(seller)).to eq(2)
-      end
+      expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
+      expect(AudienceMember.count_for_seller(seller)).to eq(2)
     end
   end
 
@@ -154,7 +122,6 @@ describe AudienceMember::Searchable, :freeze_time do
 
     before do
       recreate_model_index(AudienceMember)
-      Feature.activate_user(:audience_count_from_elasticsearch, seller)
     end
 
     it "counts all members of the seller with no params" do

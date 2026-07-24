@@ -14,11 +14,6 @@ describe UrlRedirectsController, inertia: true do
   end
 
   describe "GET 'download_page'", inertia: true do
-    before do
-      # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
-      # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
-    end
-
     it "adds X-Robots-Tag response header to avoid page indexing" do
       get :download_page, params: { id: @token }
       expect(response.headers["X-Robots-Tag"]).to eq("noindex")
@@ -1488,8 +1483,6 @@ describe UrlRedirectsController, inertia: true do
         @product.save!
         @url_redirect = create(:url_redirect, link: @product, purchase: nil)
         allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
-        # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
-        # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
       end
 
       it "show the proper download page for multiple files" do
@@ -1734,7 +1727,7 @@ describe UrlRedirectsController, inertia: true do
             id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
           }
         end.to change(ConsumptionEvent, :count).by(1)
-      end.to have_enqueued_mail(CustomerMailer, :send_to_kindle).with("dude@kindle.com", product_file.id)
+      end.to have_enqueued_mail(CustomerMailer, :send_to_kindle).with("dude@kindle.com", product_file.id, url_redirect.id)
 
       event = ConsumptionEvent.last
       expect(event.event_type).to eq(ConsumptionEvent::EVENT_TYPE_READ)
@@ -1743,6 +1736,43 @@ describe UrlRedirectsController, inertia: true do
       expect(event.purchase_id).to eq purchase.id
       expect(event.link_id).to eq product.id
       expect(event.platform).to eq Platform::WEB
+    end
+
+    context "when the file is stamp-enabled" do
+      before do
+        product_file.update!(pdf_stamp_enabled: true)
+      end
+
+      context "when the stamped PDF exists" do
+        let!(:stamped_pdf) { create(:stamped_pdf, url_redirect:, product_file:) }
+
+        it "queues send_to_kindle with the url_redirect" do
+          expect do
+            post :send_to_kindle, params: {
+              id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+            }
+          end.to have_enqueued_mail(CustomerMailer, :send_to_kindle).with("dude@kindle.com", product_file.id, url_redirect.id)
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      context "when the stamped PDF does not exist yet" do
+        it "enqueues stamping and does not send the email" do
+          expect do
+            expect do
+              post :send_to_kindle, params: {
+                id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+              }
+            end.to_not have_enqueued_mail(CustomerMailer, :send_to_kindle)
+          end.to_not change { ConsumptionEvent.count }
+
+          expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id, true)
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["error"]).to eq("We are preparing the file. Please try again in a few minutes.")
+        end
+      end
     end
 
     context "when file_external_id belongs to a different product" do
@@ -1963,8 +1993,6 @@ describe UrlRedirectsController, inertia: true do
         @purchase = create(:purchase, link: @product, purchaser: create(:user))
         @url_redirect = create(:url_redirect, purchase: @purchase)
         @token = @url_redirect.token
-        # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
-        # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
       end
 
       context "when user is not signed in" do
@@ -2059,8 +2087,6 @@ describe UrlRedirectsController, inertia: true do
         @url_redirect = create(:installment_url_redirect, installment: @post)
         @token = @url_redirect.token
         sign_in(follower)
-        # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
-        # @request.host = URI.parse(creator.subdomain_with_protocol).host
       end
 
       it "has a readable Product File for a PDF installment with no associated product" do

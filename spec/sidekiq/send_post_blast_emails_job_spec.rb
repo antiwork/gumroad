@@ -370,6 +370,17 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
       expect(SentPostEmail.where(post:).count).to eq(3)
     end
+
+    it "resolves the unopened-recipient emails under the raised statement execution cap" do
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+
+      # Once for the audience load, once for the unopened-recipient email resolution.
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 1.hour.to_i).twice.and_call_original
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 2
+      expect(blast.reload.completed_at).to be_present
+    end
   end
 
   describe "audience load statement timeout" do
@@ -430,6 +441,24 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 1
       expect(blast.reload.completed_at).to be_present
       expect($redis.exists?(snapshot_key)).to eq(false)
+    ensure
+      $redis.del(snapshot_key)
+    end
+
+    it "revalidates the snapshot under the raised statement execution cap" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush(snapshot_key, AudienceMember.where(seller_id: post.seller_id).pluck(:id))
+
+      # The id-restricted revalidation still joins large tables per slice and can exceed
+      # the database's default statement cap on huge audiences — the retry path must use
+      # the same raised cap as the fresh audience load.
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 1.hour.to_i).and_call_original
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
     ensure
       $redis.del(snapshot_key)
     end

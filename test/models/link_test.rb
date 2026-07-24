@@ -1442,7 +1442,11 @@ class LinkTest < ActiveSupport::TestCase
     create_purchase(link: product)
     create_purchase(link: product)
     create_purchase(link: product, purchase_state: "failed")
-    assert_equal 48, product.remaining_for_sale_count
+    # The inventory counter cache is synced in the database via update_all
+    # (see Purchase#sync_inventory_counter_caches_on_create), so the product
+    # instance loaded before these purchases holds a stale column value.
+    # Reload to read the synced count (inventory_counter_cache flag removal, gp#1208).
+    assert_equal 48, product.reload.remaining_for_sale_count
   end
 
   test "remaining_for_sale_count returns the minimum across a bundle and its bundled products" do

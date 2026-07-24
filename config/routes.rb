@@ -18,6 +18,7 @@ end
 Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
+  get "/healthcheck/payouts" => "healthcheck#payouts"
   get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
   get "/healthcheck/stripe_balance" => "healthcheck#stripe_balance"
   get "/healthcheck/purchases" => "healthcheck#purchases"
@@ -215,6 +216,7 @@ Rails.application.routes.draw do
       member do
         post :confirm
         post :finalize
+        post :confirm_error
       end
       collection do
         post :prepare
@@ -720,6 +722,7 @@ Rails.application.routes.draw do
       member do
         post :confirm
         post :finalize
+        post :confirm_error
       end
       collection do
         post :prepare

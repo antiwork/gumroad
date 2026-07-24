@@ -36,8 +36,6 @@ describe "Checkout payment", :js, type: :system do
   end
 
   context "email typo suggestions" do
-    before { Feature.activate(:require_email_typo_acknowledgment) }
-
     it "disables the payment button until typo suggestion is resolved" do
       visit @product.long_url
       add_to_cart(@product)
@@ -99,22 +97,6 @@ describe "Checkout payment", :js, type: :system do
 
       expect(page).to have_text "Did you mean hi@concast.com?"
       expect(page).to have_button "Pay", disabled: true
-    end
-
-    context "feature flag is off" do
-      before { Feature.deactivate(:require_email_typo_acknowledgment) }
-
-      it "does not block the payment button" do
-        visit @product.long_url
-        add_to_cart(@product)
-
-        expect(page).to have_button "Pay", disabled: false
-
-        fill_in "Email address", with: "hi@gnail.com"
-        unfocus
-        expect(page).to have_text "Did you mean hi@gmail.com?"
-        expect(page).to have_button "Pay", disabled: false
-      end
     end
   end
 end

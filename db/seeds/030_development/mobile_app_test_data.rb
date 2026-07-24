@@ -40,7 +40,12 @@ end
 
 def create_mobile_purchase(seller:, buyer:, product:)
   existing = Purchase.find_by(link_id: product.id, purchaser_id: buyer.id, purchase_state: "successful")
-  return existing if existing.present?
+  if existing.present?
+    # Databases seeded before url redirects were added here need the redirect backfilled,
+    # otherwise the mobile purchase page has no content to render.
+    existing.create_url_redirect! if existing.url_redirect.blank?
+    return existing
+  end
 
   purchase = Purchase.new(
     link_id: product.id,
@@ -58,7 +63,24 @@ def create_mobile_purchase(seller:, buyer:, product:)
   purchase.send(:calculate_fees)
   purchase.save!
   purchase.update_columns(purchase_state: "successful", succeeded_at: Time.current)
+  purchase.create_url_redirect!
   purchase
+end
+
+# The mobile app's audio-playback e2e flow (gumroad-mobile .maestro/audio-playback.yaml) needs a
+# purchased product with a playable audio file. Uploads a small MP3 fixture to the dev S3 bucket
+# and attaches it to the product so the purchase page renders a native play button.
+def create_mobile_audio_file(product:)
+  existing = product.product_files.alive.find_by(filegroup: "audio")
+  return existing if existing.present?
+
+  s3_key = "attachments/mobile_e2e/Mobile Test Audio.mp3"
+  s3_object = Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key)
+  s3_object.upload_file(Rails.root.join("spec", "support", "fixtures", "magic.mp3").to_s) unless s3_object.exists?
+
+  product_file = product.product_files.create!(url: "#{S3_BASE_URL}#{s3_key}")
+  product_file.analyze
+  product_file
 end
 
 seller1 = create_mobile_user(
@@ -92,6 +114,8 @@ product2 = create_mobile_product(
   price_cents: 1000,
   permalink: "secondmobileproduct"
 )
+
+create_mobile_audio_file(product: product1)
 
 create_mobile_purchase(seller: seller2, buyer: seller1, product: product2)
 

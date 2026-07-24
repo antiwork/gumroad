@@ -153,4 +153,48 @@ describe PurchasePaymentFlow do
       expect(described_class.attributes_for_checkout_params(payment_details_source: "payment_element", confirmation_token: "ctoken_123", paypal_order_id: "PAY-123")).to be_nil
     end
   end
+
+  # The row is created with a "card" placeholder before the charge exists; the real method
+  # type is corrected from the processor charge in Purchase#save_charge_data.
+  describe "correcting stripe_payment_method_type from the processor charge" do
+    let(:purchase) { create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+    let!(:flow) { create(:purchase_payment_flow, purchase:) }
+
+    def processor_charge(payment_method_type)
+      charge = StripeCharge.new(nil, nil, nil, nil, nil)
+      charge.payment_method_type = payment_method_type
+      charge
+    end
+
+    it "rewrites the placeholder when the charge was paid with a local method" do
+      purchase.send(:record_stripe_payment_method_type, processor_charge("upi"))
+      expect(flow.reload.stripe_payment_method_type).to eq("upi")
+    end
+
+    it "leaves the row untouched for a card charge" do
+      expect do
+        purchase.send(:record_stripe_payment_method_type, processor_charge("card"))
+      end.not_to change { flow.reload.updated_at }
+    end
+
+    it "is a no-op when the charge does not report a method type" do
+      purchase.send(:record_stripe_payment_method_type, processor_charge(nil))
+      expect(flow.reload.stripe_payment_method_type).to eq("card")
+    end
+
+    it "is a no-op when the purchase has no payment flow row" do
+      purchase_without_flow = create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      expect do
+        purchase_without_flow.send(:record_stripe_payment_method_type, processor_charge("upi"))
+      end.not_to raise_error
+    end
+
+    it "never lets a failure break charge processing" do
+      allow(purchase.purchase_payment_flow).to receive(:update!).and_raise(ActiveRecord::StatementInvalid)
+      expect(ErrorNotifier).to receive(:notify)
+      expect do
+        purchase.send(:record_stripe_payment_method_type, processor_charge("upi"))
+      end.not_to raise_error
+    end
+  end
 end

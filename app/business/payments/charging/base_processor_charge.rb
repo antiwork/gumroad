@@ -5,7 +5,13 @@ class BaseProcessorCharge
                 :card_fingerprint, :card_instance_id,
                 :card_last4, :card_number_length, :card_expiry_month, :card_expiry_year, :card_zip_code,
                 :card_type, :card_country, :zip_check_result,
-                :flow_of_funds, :risk_level, :card_mandate
+                :flow_of_funds, :risk_level, :card_mandate,
+                # The processor's own name for the payment method family ("card", "upi",
+                # "ideal", ...). Unlike card_type — which mixes card brands and non-card
+                # methods for display — this is the raw classification, recorded so
+                # payment-method volume can be measured from our database instead of by
+                # walking the processor's API. Only Stripe populates it today.
+                :payment_method_type
 
   # Public: Access attributes of BaseProcessorCharge via charge[:attribute].
   # Historically the code base used the Stripe::Charge object which

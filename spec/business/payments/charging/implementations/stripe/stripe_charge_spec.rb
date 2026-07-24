@@ -167,6 +167,73 @@ describe StripeCharge, :vcr do
       end
     end
 
+    describe "with a stripe charge paid with a local bank-transfer method (UPI)" do
+      let(:stripe_charge_hash) do
+        {
+          id: "ch_test_upi",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          currency: "inr",
+          amount: 100_00,
+          payment_method_details: { type: "upi", upi: { vpa: "buyer@upi" } },
+          billing_details: { address: { postal_code: nil } },
+          payment_method: "pm_test_upi",
+          outcome: { risk_level: "normal" },
+        }
+      end
+
+      let(:stripe_charge_balance_transaction) do
+        {
+          currency: "inr",
+          amount: 100_00,
+          fee_details: [{ type: "stripe_fee", currency: "inr", amount: 3_00 }],
+        }
+      end
+
+      let(:subject) { described_class.new(Stripe::Charge.construct_from(stripe_charge_hash), stripe_charge_balance_transaction, nil, nil, nil) }
+
+      it "records the real method type instead of a generic card" do
+        expect(subject.card_type).to eq(CardType::UPI)
+        expect(subject.payment_method_type).to eq("upi")
+        expect(subject.card_instance_id).to eq("pm_test_upi")
+        expect(subject.card_last4).to be_nil
+        expect(subject.card_fingerprint).to eq("pm_test_upi")
+      end
+    end
+
+    describe "with a stripe charge paid with iDEAL" do
+      let(:stripe_charge_hash) do
+        {
+          id: "ch_test_ideal",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          currency: "eur",
+          amount: 10_00,
+          payment_method_details: { type: "ideal", ideal: { bank: "ing" } },
+          billing_details: { address: { postal_code: "1011" } },
+          payment_method: "pm_test_ideal",
+          outcome: { risk_level: "normal" },
+        }
+      end
+
+      let(:stripe_charge_balance_transaction) do
+        {
+          currency: "eur",
+          amount: 10_00,
+          fee_details: [{ type: "stripe_fee", currency: "eur", amount: 30 }],
+        }
+      end
+
+      let(:subject) { described_class.new(Stripe::Charge.construct_from(stripe_charge_hash), stripe_charge_balance_transaction, nil, nil, nil) }
+
+      it "records the real method type instead of a generic card" do
+        expect(subject.card_type).to eq(CardType::IDEAL)
+        expect(subject.payment_method_type).to eq("ideal")
+      end
+    end
+
     describe "with a destination charge but nil destination payment balance transaction" do
       let(:stripe_charge_hash) do
         {

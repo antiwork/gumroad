@@ -23,9 +23,34 @@ WebMock.disable_net_connect!(allow_localhost: true)
 # Executor wrapper) and crashes the whole suite with AllConnectionsBlacklisted.
 require "elasticsearch"
 fake_es = Object.new
-fake_es.define_singleton_method(:method_missing) do |name, *_args, **_kwargs|
+# Real Elasticsearch echoes every requested aggregation back with a computed
+# value; the empty-data equivalent is a zero. Stats code (User#sales_cents_total,
+# Product#monthly_recurring_revenue, …) reads `result.aggregations.<name>.value`
+# unconditionally, so a response with no "aggregations" key crashes with
+# "undefined method 'value' for nil". Build a zeroed skeleton mirroring the
+# requested aggs so those reads return 0 the way real ES would on an empty index.
+# Only added when aggs are actually requested, so responses that never touched
+# aggregations keep their previous shape exactly.
+fake_es_zero_aggs = lambda do |aggs|
+  aggs.each_with_object({}) do |(name, definition), result|
+    definition = definition.is_a?(Hash) ? definition.transform_keys(&:to_s) : {}
+    sub = definition["aggs"] || definition["aggregations"]
+    node = { "value" => 0, "doc_count" => 0, "buckets" => [] }
+    node.merge!(fake_es_zero_aggs.call(sub)) if sub.is_a?(Hash)
+    result[name.to_s] = node
+  end
+end
+fake_es.define_singleton_method(:method_missing) do |name, *args, **kwargs|
   case name
-  when :count, :search, :msearch then { "count" => 0, "hits" => { "hits" => [], "total" => { "value" => 0 } } }
+  when :count, :search, :msearch
+    response = { "count" => 0, "hits" => { "hits" => [], "total" => { "value" => 0 } } }
+    # The Elasticsearch Ruby client passes its arguments as a single positional
+    # hash (client.search({ index:, body: })), not as keywords, so look in both.
+    options = kwargs.any? ? kwargs : (args.first.is_a?(Hash) ? args.first : {})
+    body = options[:body] || options["body"]
+    requested_aggs = body.is_a?(Hash) ? (body[:aggs] || body["aggs"] || body[:aggregations] || body["aggregations"]) : nil
+    response["aggregations"] = fake_es_zero_aggs.call(requested_aggs) if requested_aggs.is_a?(Hash) && requested_aggs.any?
+    response
   when :indices then self
   when :exists?, :exists then false
   when :index, :update, :delete, :delete_by_query, :create, :put, :put_alias, :put_mapping, :put_settings, :scroll, :clear_scroll, :update_by_query then { "result" => "noop", "_shards" => { "successful" => 0 }, "hits" => { "hits" => [] } }

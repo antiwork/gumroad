@@ -25,5 +25,19 @@ describe SendableToKindle do
       expect { @product_file.send_to_kindle("ExAmple-123@KINDLE.com") }.to_not raise_error(ArgumentError)
       expect { @product_file.send_to_kindle("ExAmple--123@KINDLE.com") }.to_not raise_error(ArgumentError)
     end
+
+    it "passes the url_redirect id to the mailer when given" do
+      url_redirect = create(:url_redirect, purchase: create(:free_purchase))
+
+      expect do
+        @product_file.send_to_kindle("example@kindle.com", url_redirect:)
+      end.to have_enqueued_mail(CustomerMailer, :send_to_kindle).with("example@kindle.com", @product_file.id, url_redirect.id)
+    end
+
+    it "passes a nil url_redirect id to the mailer when not given" do
+      expect do
+        @product_file.send_to_kindle("example@kindle.com")
+      end.to have_enqueued_mail(CustomerMailer, :send_to_kindle).with("example@kindle.com", @product_file.id, nil)
+    end
   end
 end

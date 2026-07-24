@@ -59,6 +59,10 @@ class RedisKey
     def unreviewed_users_data = "admin:unreviewed_users_data"
     def unreviewed_users_cutoff_date = "admin:unreviewed_users_cutoff_date"
     def paypal_topup_needed = "paypal:topup_needed"
+    # Set (with a TTL) by each weekly payout batch job while it runs, so the
+    # deploy pipeline can ask "is a payout batch in flight right now?" instead
+    # of freezing deploys on a fixed clock window. See HealthcheckController#payouts.
+    def payout_batch_in_flight = "payouts:batch_in_flight"
     def stripe_balance_topup_needed = "stripe:balance_topup_needed"
     def min_successful_purchases_in_last_10_minutes = "healthcheck:min_successful_purchases_in_last_10_minutes"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"

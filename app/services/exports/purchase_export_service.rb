@@ -24,6 +24,16 @@ class Exports::PurchaseExportService
   ].freeze
   SYNCHRONOUS_EXPORT_THRESHOLD = 2_000
 
+  # Human-readable labels for the non-card payment methods stored in purchases.card_type.
+  # Anything not listed here (visa, mastercard, Link, ...) is charged as a card, so the
+  # export falls back to "Card". Without this, local bank-transfer methods like UPI and
+  # iDEAL would be mislabeled as card payments in creators' sales CSVs.
+  PAYMENT_TYPE_LABELS = {
+    CardType::PAYPAL => "PayPal",
+    CardType::UPI => "UPI",
+    CardType::IDEAL => "iDEAL",
+  }.freeze
+
   def initialize(purchases)
     @purchases = purchases
   end
@@ -181,7 +191,7 @@ class Exports::PurchaseExportService
         "License Key" => main_or_giftee_purchase&.license_key,
         "License Key Activation Count" => main_or_giftee_purchase&.license&.uses,
         "License Key Enabled?" => main_or_giftee_purchase&.license&.then { |l| l.disabled? ? 0 : 1 },
-        "Payment Type" => ((purchase.card_type == "paypal" ? "PayPal" : "Card") if purchase.card_type.present?),
+        "Payment Type" => payment_type_label(purchase.card_type),
         "PayPal Transaction ID" => (purchase.stripe_transaction_id if purchase.paypal_order_id?),
         "PayPal Fee Amount" => (purchase.processor_fee_dollars if purchase.paypal_order_id?),
         "PayPal Fee Currency" => (purchase.processor_fee_cents_currency if purchase.paypal_order_id?),
@@ -201,6 +211,11 @@ class Exports::PurchaseExportService
       raise "This data is not JSON safe: #{data.inspect}" if !Rails.env.production? && !data.eql?(JSON.load(JSON.dump(data)))
 
       [data, custom_fields_data]
+    end
+
+    def payment_type_label(card_type)
+      return if card_type.blank?
+      PAYMENT_TYPE_LABELS.fetch(card_type, "Card")
     end
 
     def pseudo_transliterate(string)

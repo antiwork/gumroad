@@ -147,6 +147,13 @@ describe PostSendgridApi, :freeze_time do
       expect(sent_email_content).to include("You've received this post because you've purchased a product from #{@post.seller.name}.")
     end
 
+    it "avoids 'purchased' wording when installment_type='seller' and the recipient's purchase was free" do
+      @post.update!(installment_type: Installment::SELLER_TYPE)
+      purchase = create(:free_purchase, link: create(:product, user: @seller))
+      send_emails(recipients: [{ email: "c1@example.com", purchase: }])
+      expect(sent_email_content).to include("You've received this post because you got a product from #{@post.seller.name}.")
+    end
+
     context "when installment_type='product' or 'variant'" do
       before do
         @product = create(:product, user: @seller)
@@ -184,6 +191,12 @@ describe PostSendgridApi, :freeze_time do
         url_redirect = create(:url_redirect, installment: @post)
         send_emails(recipients: [{ email: "c1@example.com", url_redirect: }])
         expect(sent_email_content).to include("You've received this email because you've purchased <a href=\"#{url_redirect.download_page_url}\">#{@post.link.name}</a>.")
+      end
+
+      it "says 'downloaded' instead of 'purchased' when the recipient's purchase was free" do
+        purchase = create(:free_purchase, link: @product)
+        send_emails(recipients: [{ email: "c1@example.com", purchase: }])
+        expect(sent_email_content).to include("You've received this email because you downloaded <a href=\"#{@post.link.long_url}\">#{@post.link.name}</a>.")
       end
     end
   end

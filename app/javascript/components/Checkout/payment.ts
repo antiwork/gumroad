@@ -79,6 +79,12 @@ export type PaymentElementClientConfirmConfig = {
 // renders Apple Pay/Google Pay natively and the separate Payment Request Button is not mounted
 // for that cart (antiwork/gumroad#5768). It is always false on the card_element fallback lane,
 // which has no Payment Element to render wallets in.
+// `flat_payment_methods` selects the flat payment-methods list (the element's accordion is the
+// payment-method selector; PayPal appends as one more row — see PaymentMethodsSection in
+// PaymentForm.tsx). Server-owned and independent of `payment_element_wallets` since the layout
+// was decoupled from the wallet rollout: wallet-suppressed carts (disable_wallets) get the same
+// flat list without wallet rows. Always false on the card_element lane, which has no element to
+// act as the selector.
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
@@ -86,6 +92,7 @@ export type CheckoutPaymentConfig =
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
       payment_element_wallets: boolean;
+      flat_payment_methods: boolean;
       elements_options: null;
     }
   | {
@@ -94,6 +101,7 @@ export type CheckoutPaymentConfig =
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
       payment_element_wallets: boolean;
+      flat_payment_methods: boolean;
       elements_options: PaymentElementConfig;
     }
   | {
@@ -102,6 +110,7 @@ export type CheckoutPaymentConfig =
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
       payment_element_wallets: boolean;
+      flat_payment_methods: boolean;
       elements_options: PaymentElementClientConfirmConfig;
     };
 
@@ -931,6 +940,7 @@ export function createReducer(initial: {
         disable_wallets: false,
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
+        flat_payment_methods: false,
         elements_options: null,
       },
       paymentMethod: "card",

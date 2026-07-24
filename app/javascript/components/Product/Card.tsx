@@ -35,7 +35,9 @@ export const Card = ({
       {product.quantity_remaining != null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
       <ProductCardHeader>
         <StretchedLink href={product.url}>
-          <h4 itemProp="name" className="line-clamp-4 lg:text-xl">
+          {/* dir="auto" on product names lets RTL text (Hebrew, Arabic) pick its own
+              base direction (gumroad-private#1259). */}
+          <h4 itemProp="name" dir="auto" className="line-clamp-4 lg:text-xl">
             {product.name}
           </h4>
         </StretchedLink>
@@ -91,11 +93,11 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
         <ProductCardHeader className="lg:border-b-0 lg:p-0">
           <StretchedLink href={product.url} draggable="false">
             {big ? (
-              <h2 itemProp="name" className="line-clamp-3 gap-3">
+              <h2 itemProp="name" dir="auto" className="line-clamp-3 gap-3">
                 {product.name}
               </h2>
             ) : (
-              <h3 itemProp="name" className="truncate">
+              <h3 itemProp="name" dir="auto" className="truncate">
                 {product.name}
               </h3>
             )}

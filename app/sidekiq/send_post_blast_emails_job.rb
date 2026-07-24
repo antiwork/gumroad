@@ -19,7 +19,13 @@ class SendPostBlastEmailsJob
     @members = load_audience_members
 
     if @blast.to_non_openers?
-      keep_emails = @post.unopened_recipient_emails.to_set
+      # Resolving who was emailed and who opened plucks hundreds of thousands of rows
+      # for large sends — the same query shape that can exceed the database's default
+      # statement cap. Run it under the same raised, Redis-tunable cap the audience
+      # load above uses so a huge blast doesn't die on a 5-minute statement timeout.
+      keep_emails = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+        @post.unopened_recipient_emails.to_set
+      end
       @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
       remove_members_already_sent_in_this_blast
     else
@@ -110,9 +116,18 @@ class SendPostBlastEmailsJob
     # send uses current emails and current purchase/follower/affiliate ids rather than
     # anything stale from the first attempt.
     def revalidate_snapshotted_members(snapshotted_ids)
-      members = snapshotted_ids.each_slice(10_000).flat_map do |ids_slice|
-        AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
-          .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+      # Even though each slice is primary-key-bounded, the audience filter still joins
+      # several large tables per slice, and for six-figure audiences a slice can exceed
+      # the database's default statement cap. Every RETRY of a large blast goes through
+      # this path (the first attempt wrote the snapshot), so an unraised cap here means
+      # retries fail deterministically and the job dead-sets even though the fresh-load
+      # path above is protected. Run the revalidation under the same raised,
+      # Redis-tunable cap the fresh load uses.
+      members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+        snapshotted_ids.each_slice(10_000).flat_map do |ids_slice|
+          AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
+            .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+        end
       end
 
       dropped = snapshotted_ids.size - members.size

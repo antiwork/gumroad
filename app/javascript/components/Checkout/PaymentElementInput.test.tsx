@@ -15,7 +15,7 @@ const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | und
 // Captures the options the PaymentElement was last rendered with, plus its onChange handler so
 // tests can simulate the buyer selecting a payment-method row inside the element.
 const paymentElementRender = vi.hoisted<{
-  options: { fields?: { billingDetails?: unknown }; defaultValues?: unknown } | null;
+  options: { fields?: { billingDetails?: unknown }; defaultValues?: unknown; layout?: unknown; wallets?: unknown } | null;
   onChange: ((event: { value: { type: string }; complete: boolean; empty: boolean }) => void) | null;
   onFocus: (() => void) | null;
 }>(() => ({ options: null, onChange: null, onFocus: null }));
@@ -84,6 +84,7 @@ const elementsOptions: PaymentElementConfig = {
 const props = {
   elementsOptions,
   walletsEnabled: false,
+  flatLayout: false,
   disabled: false,
   defaultEmail: "buyer@example.com",
   defaultName: "Buyer",
@@ -133,7 +134,7 @@ describe("PaymentElementInput", () => {
   });
 
   it("relaxes billingDetails collection to auto while a wallet row is selected, and restores never on card", () => {
-    render(<PaymentElementInput {...props} walletsEnabled amount={1_000} mountCurrency="usd" />);
+    render(<PaymentElementInput {...props} walletsEnabled flatLayout amount={1_000} mountCurrency="usd" />);
 
     // Card is the default selection: every billing-details field is pinned to "never" because
     // checkout's own form collects them and tokenization passes them explicitly.
@@ -180,7 +181,7 @@ describe("PaymentElementInput", () => {
   });
 
   it("has the element collect the full billing details (except email) inside the UPI pane on a digital cart", () => {
-    render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
+    render(<PaymentElementInput {...props} walletsEnabled flatLayout amount={100_000} mountCurrency="inr" />);
 
     // The buyer selects the UPI row. Stripe requires billing_details.name + a full street
     // address to confirm UPI, and the digital checkout form has no street-address fields — so
@@ -213,7 +214,9 @@ describe("PaymentElementInput", () => {
   });
 
   it("keeps every UPI billing field on the checkout form for shippable carts", () => {
-    render(<PaymentElementInput {...props} hasShippingCart walletsEnabled amount={100_000} mountCurrency="inr" />);
+    render(
+      <PaymentElementInput {...props} hasShippingCart walletsEnabled flatLayout amount={100_000} mountCurrency="inr" />,
+    );
 
     // Shippable carts collect the full street address in checkout's shipping form, so the
     // element must not ask for the address a second time — everything stays "never" and
@@ -237,7 +240,7 @@ describe("PaymentElementInput", () => {
   });
 
   it("forwards element focus to onFocus, alongside the Link-prefill touch tracking", () => {
-    // The flat payment-methods layout (payment_element_wallets) re-selects the card/wallet lane
+    // The flat payment-methods layout (flat_payment_methods) re-selects the card/wallet lane
     // from PayPal when the buyer interacts with the element. Clicks inside the element's iframe
     // never reach the surrounding DOM, so PaymentForm relies on this callback being wired
     // through to the underlying PaymentElement's focus event.
@@ -246,5 +249,27 @@ describe("PaymentElementInput", () => {
 
     act(() => paymentElementRender.onFocus?.());
     expect(onFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the flat accordion with wallets pinned to never when the cart suppresses wallets", () => {
+    // The flat layout is decoupled from the wallet rollout: a wallet-suppressed cart (e.g. the
+    // buyer-currency presentment lane, disable_wallets) still renders the accordion payment-method
+    // list — Apple Pay/Google Pay rows simply never appear.
+    render(<PaymentElementInput {...props} flatLayout amount={1_000} mountCurrency="usd" />);
+
+    expect(paymentElementRender.options?.layout).toEqual({
+      type: "accordion",
+      radios: false,
+      spacedAccordionItems: true,
+    });
+    expect(paymentElementRender.options?.wallets).toEqual({ applePay: "never", googlePay: "never", link: "auto" });
+  });
+
+  it("keeps the legacy tabs layout when the flat list is off", () => {
+    // The CardElement-adjacent legacy shape: the element is purely an internal card form (tabs
+    // layout, tabs hidden by the appearance rules) — the pre-flat-list behavior, byte-identical.
+    render(<PaymentElementInput {...props} amount={1_000} mountCurrency="usd" />);
+
+    expect(paymentElementRender.options?.layout).toEqual({ type: "tabs" });
   });
 });
