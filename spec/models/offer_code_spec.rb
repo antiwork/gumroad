@@ -1114,6 +1114,14 @@ describe OfferCode do
       expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
     end
 
+    it "ignores a guest purchase of a product the code does not require" do
+      other_product = create(:product, user: seller, price_cents: 500)
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: nil, email: buyer.email, link: other_product, seller:, price_cents: other_product.price_cents)
+
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
     it "ignores a guest purchase matching an unconfirmed account email" do
       unconfirmed_buyer = create(:unconfirmed_user)
       offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)

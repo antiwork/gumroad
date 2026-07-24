@@ -274,9 +274,12 @@ class OfferCode < ApplicationRecord
   # A purchase belongs to a buyer either because it is attached to their account
   # (purchases.purchaser_id) or because they bought it as a guest, in which case
   # the purchase only carries the checkout email and purchaser_id stays NULL
-  # until the buyer claims it. Both count as ownership here, matching how the
-  # buyer's library and community access already resolve their purchases
-  # (User#accessible_communities_ids does the same purchaser_id-OR-email match).
+  # until the buyer claims it. Both count as ownership here, resolved the same
+  # way the buyer's library and community access resolve it — purchaser_id OR
+  # the account email (see User#accessible_communities_ids). This path stays
+  # stricter about which purchases qualify: the not_* scopes below drop refunded,
+  # charged-back, gifted and access-revoked purchases, which the community query
+  # does not do.
   #
   # The email leg requires a confirmed account email: an unconfirmed address has
   # not been proven to belong to the signed-in user, so trusting it would let
