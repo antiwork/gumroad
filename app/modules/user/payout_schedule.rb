@@ -99,6 +99,13 @@ module User::PayoutSchedule
 
   # Public: Returns the upcoming payout date, not taking a user into account.
   #
+  # This is the platform's payout RUN date — the Friday the payout job fires — and it is
+  # deliberately seller-agnostic. An individual seller can be on a daily, weekly, monthly,
+  # or quarterly frequency, so anything a seller sees must come from the per-seller
+  # #next_payout_date above (which branches on payout_frequency), never from here. The
+  # weekly run only actually pays a seller whose own next payout date has come up; see the
+  # per-user check in Payouts.
+  #
   # Scheduled payouts run every Friday, so this is simply the next Friday (today, if
   # today is a Friday). It used to be computed by starting at a hardcoded 2012 date and
   # stepping forward a week at a time until the result caught up to today, which meant

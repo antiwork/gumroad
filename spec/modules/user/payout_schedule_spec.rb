@@ -133,6 +133,78 @@ describe User::PayoutSchedule do
     end
   end
 
+  describe ".next_scheduled_payout_date" do
+    # These use a local-time midday so the frozen clock lands on the intended calendar
+    # day regardless of the machine's timezone — the method reads Date.today, which is
+    # the system date rather than the Rails-zone date.
+    it "returns today when today is already a Friday" do
+      travel_to(Time.local(2026, 7, 24, 12)) do
+        expect(described_class.next_scheduled_payout_date).to eq Date.new(2026, 7, 24)
+      end
+    end
+
+    it "returns the coming Friday on every other day of the week" do
+      {
+        Time.local(2026, 7, 25, 12) => Date.new(2026, 7, 31), # Saturday
+        Time.local(2026, 7, 26, 12) => Date.new(2026, 7, 31), # Sunday
+        Time.local(2026, 7, 27, 12) => Date.new(2026, 7, 31), # Monday
+        Time.local(2026, 7, 28, 12) => Date.new(2026, 7, 31), # Tuesday
+        Time.local(2026, 7, 29, 12) => Date.new(2026, 7, 31), # Wednesday
+        Time.local(2026, 7, 30, 12) => Date.new(2026, 7, 31), # Thursday
+      }.each do |today, expected_payout_date|
+        travel_to(today) do
+          expect(described_class.next_scheduled_payout_date).to eq expected_payout_date
+        end
+      end
+    end
+
+    it "crosses month and year boundaries" do
+      travel_to(Time.local(2026, 12, 31, 12)) do # Thursday
+        expect(described_class.next_scheduled_payout_date).to eq Date.new(2027, 1, 1)
+      end
+    end
+
+    # This method describes the platform-wide payout run (the Friday cron), not any
+    # individual seller's schedule. A seller on a monthly or quarterly frequency is paid
+    # on their own date, which comes from the per-seller #next_payout_date below. Nothing
+    # shown to a seller should be derived from this method — see the spec that follows.
+    it "describes the platform-wide Friday run, not an individual seller's payout date" do
+      travel_to(Time.local(2026, 7, 22, 12)) do # Wednesday
+        monthly_seller = create(:user, payment_address: "monthly@example.com")
+        monthly_seller.update!(payout_frequency: User::PayoutSchedule::MONTHLY)
+        create(:balance, user: monthly_seller, amount_cents: 10_000, date: Date.new(2026, 7, 1))
+
+        expect(described_class.next_scheduled_payout_date).to eq Date.new(2026, 7, 24)
+        expect(monthly_seller.next_payout_date).to eq Date.new(2026, 7, 31)
+      end
+    end
+  end
+
+  describe "seller-facing payout dates respect the seller's own frequency" do
+    # Guards the accuracy concern raised on the change that made
+    # .next_scheduled_payout_date compute from the current week: everything a seller
+    # sees (Payouts page, settings, emails, admin "next payout date") reads
+    # #next_payout_date, which branches on the seller's payout_frequency.
+    it "returns a different date per frequency for the same balance and clock" do
+      travel_to(Time.local(2026, 7, 22, 12)) do # Wednesday
+        balances_for = lambda do |frequency, email|
+          create(:user, payment_address: email).tap do |seller|
+            seller.update!(payout_frequency: frequency)
+            create(:balance, user: seller, amount_cents: 10_000, date: Date.new(2026, 7, 1))
+          end
+        end
+
+        weekly_seller = balances_for.call(User::PayoutSchedule::WEEKLY, "weekly@example.com")
+        monthly_seller = balances_for.call(User::PayoutSchedule::MONTHLY, "monthly@example.com")
+        quarterly_seller = balances_for.call(User::PayoutSchedule::QUARTERLY, "quarterly@example.com")
+
+        expect(weekly_seller.next_payout_date).to eq Date.new(2026, 7, 24)
+        expect(monthly_seller.next_payout_date).to eq Date.new(2026, 7, 31)
+        expect(quarterly_seller.next_payout_date).to eq Date.new(2026, 9, 25)
+      end
+    end
+  end
+
   describe ".manual_payout_end_date" do
     it "returns the date upto which creators are expected to have been automatically paid out till now" do
       today = Date.today
