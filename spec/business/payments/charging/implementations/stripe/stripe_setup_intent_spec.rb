@@ -107,17 +107,15 @@ describe StripeSetupIntent, :vcr do
       before do
         # Force the requires_action + redirect_to_url shape directly: a bare SetupIntent.create
         # (no confirm) sits in requires_confirmation, so the validation under test would
-        # otherwise never run (the check would pass vacuously).
+        # otherwise never run (the check would pass vacuously). payment_method is the EXPANDED
+        # object shape a fresh confirm response carries (the buyer attempted Klarna), so the
+        # attempted-method resolution reads it inline — no PaymentMethod retrieve happens.
         allow(processor_setup_intent).to receive_messages(
           status: StripeIntentStatus::REQUIRES_ACTION,
           next_action: double(type: "redirect_to_url"),
+          payment_method: Stripe::StripeObject.construct_from(id: "pm_klarna", type: "klarna"),
           payment_method_types: %w[card klarna]
         )
-        # The validation resolves the attempted method for redirect_to_url via a
-        # PaymentMethod retrieve; answer it in-process (the buyer attempted Klarna)
-        # so the spec stays offline under VCR's :none record mode.
-        allow(Stripe::PaymentMethod).to receive(:retrieve)
-          .and_return(Stripe::StripeObject.construct_from(id: "pm_stub", type: "klarna"))
       end
 
       it "does not notify error tracker" do
@@ -130,15 +128,13 @@ describe StripeSetupIntent, :vcr do
       before do
         # Force the requires_action + redirect_to_url shape directly: a bare SetupIntent.create
         # (no confirm) sits in requires_confirmation, so the validation under test would
-        # otherwise never run. payment_method_types stays the helper's card-only default.
+        # otherwise never run. payment_method_types stays the helper's card-only default, and
+        # payment_method is the expanded attached card, read inline without a retrieve.
         allow(processor_setup_intent).to receive_messages(
           status: StripeIntentStatus::REQUIRES_ACTION,
-          next_action: double(type: "redirect_to_url")
+          next_action: double(type: "redirect_to_url"),
+          payment_method: Stripe::StripeObject.construct_from(id: "pm_card", type: "card")
         )
-        # The validation resolves the attempted method for redirect_to_url; keep the spec
-        # offline by answering the targeted PaymentMethod retrieve with the attached card.
-        allow(Stripe::PaymentMethod).to receive(:retrieve)
-          .and_return(Stripe::StripeObject.construct_from(id: "pm_stub", type: "card"))
       end
 
       it "notifies error tracker" do
