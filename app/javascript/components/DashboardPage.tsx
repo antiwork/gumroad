@@ -22,6 +22,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PasskeySetupPrompt } from "$app/components/PasskeySetupPrompt";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
+import { showAlert } from "$app/components/server-components/Alert";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { Alert } from "$app/components/ui/Alert";
@@ -68,6 +69,10 @@ export type DashboardPageProps = {
   };
   activity_items: ActivityItem[];
   stripe_verification_message?: string | null;
+  email_confirmation?: {
+    email: string;
+    can_resend: boolean;
+  } | null;
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
   tax_center_enabled: boolean;
@@ -302,6 +307,82 @@ const ProductsTable = ({ sales }: TableProps) => {
 
 const GETTING_STARTED_MINIMIZED_KEY = "dashboardGettingStartedMinimized";
 
+// Per-session (not per-account) so the reminder comes back next visit — an
+// unconfirmed email keeps blocking publishing, payouts, and API access until
+// it's fixed, so the banner shouldn't be dismissible forever.
+const EMAIL_CONFIRMATION_BANNER_DISMISSED_KEY = "dashboardEmailConfirmationBannerDismissed";
+
+const EmailConfirmationBanner = ({
+  email_confirmation,
+}: {
+  email_confirmation: NonNullable<DashboardPageProps["email_confirmation"]>;
+}) => {
+  const [dismissed, setDismissed] = React.useState(true);
+  const [resendState, setResendState] = React.useState<"initial" | "sending" | "sent">("initial");
+
+  // Read sessionStorage after mount (not during render) so server-side rendering
+  // and the first client render agree on the markup.
+  useRunOnce(() => {
+    setDismissed(window.sessionStorage.getItem(EMAIL_CONFIRMATION_BANNER_DISMISSED_KEY) === "true");
+  });
+
+  const dismiss = () => {
+    window.sessionStorage.setItem(EMAIL_CONFIRMATION_BANNER_DISMISSED_KEY, "true");
+    setDismissed(true);
+  };
+
+  const resendConfirmationEmail = async () => {
+    setResendState("sending");
+    try {
+      const response = await request({
+        method: "POST",
+        url: Routes.resend_confirmation_email_settings_main_path(),
+        accept: "json",
+      });
+      if (!response.ok) throw new Error();
+      setResendState("sent");
+    } catch {
+      setResendState("initial");
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    }
+  };
+
+  if (dismissed) return null;
+
+  return (
+    <Alert variant="warning">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span>
+          Please confirm your email address (<b>{email_confirmation.email}</b>) — some features are unavailable until
+          you do.
+          {email_confirmation.can_resend ? (
+            <>
+              {" "}
+              {resendState === "sent" ? (
+                "Confirmation email sent!"
+              ) : (
+                <button
+                  className="cursor-pointer underline all-unset"
+                  disabled={resendState === "sending"}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void resendConfirmationEmail();
+                  }}
+                >
+                  {resendState === "sending" ? "Resending..." : "Resend confirmation email"}
+                </button>
+              )}
+            </>
+          ) : null}
+        </span>
+        <button className="cursor-pointer all-unset" aria-label="Dismiss" onClick={dismiss}>
+          <X className="size-[1lh]!" aria-hidden="true" />
+        </button>
+      </div>
+    </Alert>
+  );
+};
+
 export const DashboardPage = ({
   getting_started_stats,
   getting_started_dismissed,
@@ -309,6 +390,7 @@ export const DashboardPage = ({
   activity_items,
   balances,
   stripe_verification_message,
+  email_confirmation,
   tax_forms,
   show_1099_download_notice,
   tax_center_enabled,
@@ -359,8 +441,9 @@ export const DashboardPage = ({
         className="border-b-0 sm:border-b"
       />
       <PasskeySetupPrompt />
-      {stripe_verification_message || show_1099_download_notice ? (
+      {email_confirmation || stripe_verification_message || show_1099_download_notice ? (
         <div className="grid gap-4 px-4 pt-4 md:px-8 md:pt-8">
+          {email_confirmation ? <EmailConfirmationBanner email_confirmation={email_confirmation} /> : null}
           {stripe_verification_message ? (
             <Alert variant="warning">
               {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
