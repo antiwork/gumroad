@@ -153,6 +153,12 @@ class LinkPolicy < ApplicationPolicy
       rich_content:,
       confirmed_removed_variant_ids: [],
       confirmed_removed_rich_content_ids: [],
+      # External ids of version-level pages the seller chose to KEEP in the
+      # hidden-content conflict dialog ("Keep version content"). They are
+      # hidden from the editor by the shared-content flag, so they can't
+      # appear in the payload — this list tells the server their absence is
+      # not a deletion.
+      preserved_rich_content_ids: [],
       files: [:id, :display_name, :description, :folder_id, :size, :position, :url, :isbn,
               :extension, :stream_only, :pdf_stamp_enabled, :hide_kindle_and_read_buttons, :modified, subtitle_files: [:url, :language], thumbnail: [:signed_id]],
       call_limitation_info: [:minimum_notice_in_minutes, :maximum_calls_per_day],

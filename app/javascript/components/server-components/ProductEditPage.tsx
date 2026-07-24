@@ -274,7 +274,7 @@ const ProductEditPage = (props: Props) => {
   // explicit choice (see HiddenVariantContentConflictError). Non-null while
   // the choice modal is open.
   const [hiddenContentConflict, setHiddenContentConflict] = React.useState<
-    { id: string; title: string | null }[] | null
+    { id: string; title: string | null; variant_name: string | null }[] | null
   >(null);
   // Client-generated id → canonical server id, accumulated from save
   // responses; exposed via context so components holding an id in local state
@@ -285,24 +285,53 @@ const ProductEditPage = (props: Props) => {
   // preview) use this to stay put when the save failed or the seller cancelled
   // the deletion confirmation.
   //
-  // extraConfirmedRemovedPageIds: page ids the seller just confirmed deleting
-  // in the hidden-content conflict modal — merged into the payload without
-  // waiting for a state round-trip.
-  const performSave = async (extraConfirmedRemovedPageIds?: string[]): Promise<boolean> => {
+  // conflictResolution: the seller's choice from the hidden-content conflict
+  // dialog ("Choose which content to keep"):
+  // - keep_shared: delete the listed hidden version pages (their ids go into
+  //   confirmed_removed_rich_content_ids) and keep the product-level content.
+  // - keep_version: delete the product-level pages, turn off "use the same
+  //   content for all versions", and preserve the hidden version pages (their
+  //   ids go into preserved_rich_content_ids — they can't appear in the
+  //   payload because this editor session never loaded them).
+  const performSave = async (conflictResolution?: {
+    choice: "keep_shared" | "keep_version";
+    hiddenPageIds: string[];
+  }): Promise<boolean> => {
     let saved = false;
-    const productToSave = extraConfirmedRemovedPageIds?.length
-      ? {
-          ...product,
-          confirmed_removed_rich_content_ids: [
-            ...(product.confirmed_removed_rich_content_ids ?? []),
-            ...extraConfirmedRemovedPageIds,
-          ],
-        }
-      : product;
+    let productToSave = product;
+    if (conflictResolution?.choice === "keep_shared") {
+      productToSave = {
+        ...product,
+        confirmed_removed_rich_content_ids: [
+          ...(product.confirmed_removed_rich_content_ids ?? []),
+          ...conflictResolution.hiddenPageIds,
+        ],
+      };
+    } else if (conflictResolution?.choice === "keep_version") {
+      productToSave = {
+        ...product,
+        has_same_rich_content_for_all_variants: false,
+        rich_content: [],
+        confirmed_removed_rich_content_ids: [
+          ...(product.confirmed_removed_rich_content_ids ?? []),
+          ...product.rich_content.map(({ id }) => id),
+        ],
+        preserved_rich_content_ids: conflictResolution.hiddenPageIds,
+      };
+    }
     try {
       setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, productToSave, currencyType);
+      const response = await saveProduct(props.unique_permalink, props.id, productToSave, currencyType, {
+        keepAllFiles: conflictResolution?.choice === "keep_version",
+      });
       saved = true;
+      // The version pages the seller chose to keep were never loaded into this
+      // editor session (the shared-content flag hid them), so the in-memory
+      // state can't render the outcome. Reload to pick up the kept content.
+      if (conflictResolution?.choice === "keep_version") {
+        window.location.reload();
+        return true;
+      }
       // Compute the changed-content diff before the baseline moves.
       const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
         product,
@@ -509,37 +538,47 @@ const ProductEditPage = (props: Props) => {
           <Modal
             open
             onClose={() => setHiddenContentConflict(null)}
-            title="Resolve conflicting content?"
+            title="Choose which content to keep"
             footer={
               <>
-                <Button onClick={() => setHiddenContentConflict(null)}>No, cancel</Button>
+                <Button onClick={() => setHiddenContentConflict(null)}>Cancel</Button>
                 <Button
                   color="danger"
                   onClick={() => {
-                    const pageIds = hiddenContentConflict.map(({ id }) => id);
+                    const hiddenPageIds = hiddenContentConflict.map(({ id }) => id);
                     setHiddenContentConflict(null);
-                    void performSave(pageIds);
+                    void performSave({ choice: "keep_shared", hiddenPageIds });
                   }}
                 >
-                  Delete them and save
+                  Keep shared content
+                </Button>
+                <Button
+                  color="danger"
+                  onClick={() => {
+                    const hiddenPageIds = hiddenContentConflict.map(({ id }) => id);
+                    setHiddenContentConflict(null);
+                    void performSave({ choice: "keep_version", hiddenPageIds });
+                  }}
+                >
+                  Keep {variantLabel} content
                 </Button>
               </>
             }
           >
             <div className="flex flex-col gap-4">
-              <p>
-                Your {variantLabel}s still have their own content pages from a previous configuration. They aren't shown
-                in the editor because this product is set to use the same content for all {variantLabel}s, but they
-                still exist:
-              </p>
+              <p>This product has shared content and separate content for these {variantLabel}s:</p>
               <ul className="list-disc pl-6">
-                {hiddenContentConflict.map(({ id, title }) => (
-                  <li key={id}>{titleWithFallback(title)}</li>
+                {hiddenContentConflict.map(({ id, title, variant_name }) => (
+                  <li key={id}>
+                    {variant_name ? `${variant_name}: ` : null}
+                    {titleWithFallback(title)}
+                  </li>
                 ))}
               </ul>
               <p>
-                Saving requires deleting them permanently. If you want to review or keep this content instead, cancel
-                and contact support.
+                Gumroad will permanently delete the content you don't keep. "Keep shared content" deletes the{" "}
+                {variantLabel} pages listed above. "Keep {variantLabel} content" deletes the shared pages and turns off
+                "Use the same content for all {variantLabel}s."
               </p>
             </div>
           </Modal>

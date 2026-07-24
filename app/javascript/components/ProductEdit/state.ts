@@ -167,6 +167,11 @@ export type Product = {
   // outdated or blind payload that would otherwise silently wipe content.
   confirmed_removed_variant_ids?: string[];
   confirmed_removed_rich_content_ids?: string[];
+  // External ids of version-level pages the seller chose to KEEP in the
+  // hidden-content conflict dialog ("Keep version content"). They're hidden
+  // from this editor session by the shared-content flag, so they can't appear
+  // in the payload — this tells the server their absence is not a deletion.
+  preserved_rich_content_ids?: string[];
 } & (
   | { native_type: "call"; variants: Duration[] }
   | { native_type: "membership"; variants: Tier[] }

@@ -27,7 +27,7 @@ export type SaveProductResponse = {
 export class HiddenVariantContentConflictError extends Error {
   constructor(
     message: string,
-    public hiddenPages: { id: string; title: string | null }[],
+    public hiddenPages: { id: string; title: string | null; variant_name: string | null }[],
   ) {
     super(message);
   }
@@ -38,6 +38,11 @@ export const saveProduct = async (
   id: string,
   product: Product,
   currencyType: CurrencyCode,
+  // The "keep version content" conflict resolution submits NO rich content
+  // (the kept pages were never loaded into this session), so filtering files
+  // by the file-embeds found in the submitted content would wrongly delete
+  // every file — including the ones the kept pages embed. Skip the filter.
+  options: { keepAllFiles?: boolean } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
@@ -54,7 +59,7 @@ export const saveProduct = async (
     ),
   );
   editor.destroy();
-  product.files = product.files.filter((file) => fileIds.has(file.id));
+  if (!options.keepAllFiles) product.files = product.files.filter((file) => fileIds.has(file.id));
   const { custom_html: _customHtml, ...productParams } = product;
   const response = await request({
     method: "POST",
@@ -72,6 +77,7 @@ export const saveProduct = async (
       ),
       confirmed_removed_variant_ids: product.confirmed_removed_variant_ids ?? [],
       confirmed_removed_rich_content_ids: product.confirmed_removed_rich_content_ids ?? [],
+      preserved_rich_content_ids: product.preserved_rich_content_ids ?? [],
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
         newlyAdded ? { ...availability, id: null } : availability,
       ),
@@ -82,7 +88,7 @@ export const saveProduct = async (
     const error = typia.assert<{
       error_message: string;
       error_code?: string;
-      hidden_variant_pages?: { id: string; title: string | null }[];
+      hidden_variant_pages?: { id: string; title: string | null; variant_name: string | null }[];
     }>(await response.json());
     if (error.error_code === "hidden_variant_content_conflict")
       throw new HiddenVariantContentConflictError(error.error_message, error.hidden_variant_pages ?? []);

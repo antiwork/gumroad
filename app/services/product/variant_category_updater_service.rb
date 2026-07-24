@@ -3,7 +3,7 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
-  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings
+  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings
   attr_accessor :variant_category
 
   delegate :price_currency_type,
@@ -33,12 +33,13 @@ class Product::VariantCategoryUpdaterService
   # pages with a client-generated page id; the mappings tell the editor which
   # canonical server ids they got, so its next save addresses the same records
   # instead of re-creating them (and tripping the deletion guards).
-  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil)
+  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil)
     @product = product
     @category_params = category_params
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
     @payload_page_ids = Array.wrap(payload_page_ids)
     @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
+    @preserved_rich_content_ids = Array.wrap(preserved_rich_content_ids)
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
@@ -219,7 +220,8 @@ class Product::VariantCategoryUpdaterService
         # addresses this page instead of re-creating it.
         id_mappings[:rich_content][variant_rich_content[:id]] = rich_content.external_id if variant_rich_content[:id].present? && variant_rich_content[:id] != rich_content.external_id
       end
-      rich_contents_to_delete = existing_rich_contents - rich_contents_to_keep
+      rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
+        .reject { preserved_rich_content_ids.include?(_1.external_id) }
       Product::RichContentDeletionGuard.ensure_intent!(
         product:,
         rich_contents_to_delete:,

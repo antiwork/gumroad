@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -20,6 +20,9 @@ class Product::VariantsUpdaterService
   # for the full history.
   # payload_page_ids / confirmed_removed_rich_content_ids feed the analogous
   # guard for page deletions (Product::RichContentDeletionGuard).
+  # preserved_rich_content_ids: version-level pages the seller chose to KEEP in
+  # the hidden-content conflict dialog — absent from the payload (the
+  # shared-content flag hides them from the editor) but never to be deleted.
   # rewrite_budget: the SHARED request-wide rewrite allowance built once by
   # Product::RichContentDeletionGuard.build_rewrite_budget — pass the same hash
   # to every service in the save so a resubmitted page can only authorize one
@@ -28,13 +31,14 @@ class Product::VariantsUpdaterService
   # mutated anything, attached to every blocked-save notification.
   # id_mappings: per-request accumulator of client id → canonical server id for
   # newly created variants and pages, returned to the editor after the save.
-  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil)
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil)
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
     @payload_page_ids = Array.wrap(payload_page_ids)
     @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
+    @preserved_rich_content_ids = Array.wrap(preserved_rich_content_ids)
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
@@ -53,6 +57,7 @@ class Product::VariantsUpdaterService
         confirmed_removed_variant_ids:,
         payload_page_ids:,
         confirmed_removed_rich_content_ids:,
+        preserved_rich_content_ids:,
         rewrite_budget:,
         deletion_guard_diagnostics:,
         id_mappings:

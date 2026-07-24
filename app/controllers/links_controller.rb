@@ -426,7 +426,8 @@ class LinksController < ApplicationController
           :community_chat_enabled,
           :default_offer_code_id,
           :confirmed_removed_variant_ids,
-          :confirmed_removed_rich_content_ids
+          :confirmed_removed_rich_content_ids,
+          :preserved_rich_content_ids
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -479,7 +480,8 @@ class LinksController < ApplicationController
           # next save addresses this page instead of re-creating it.
           save_id_mappings[:rich_content][product_rich_content[:id]] = rich_content.external_id if product_rich_content[:id].present? && product_rich_content[:id] != rich_content.external_id
         end
-        product_rich_contents_to_delete = existing_rich_contents - rich_contents_to_keep
+        product_rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
+          .reject { preserved_rich_content_ids.include?(_1.external_id) }
         Product::RichContentDeletionGuard.ensure_intent!(
           product: @product,
           rich_contents_to_delete: product_rich_contents_to_delete,
@@ -854,6 +856,7 @@ class LinksController < ApplicationController
           confirmed_removed_variant_ids:,
           payload_page_ids:,
           confirmed_removed_rich_content_ids:,
+          preserved_rich_content_ids:,
           rewrite_budget: page_rewrite_budget,
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
@@ -870,6 +873,7 @@ class LinksController < ApplicationController
           confirmed_removed_variant_ids:,
           payload_page_ids:,
           confirmed_removed_rich_content_ids:,
+          preserved_rich_content_ids:,
           rewrite_budget: page_rewrite_budget,
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
@@ -890,6 +894,15 @@ class LinksController < ApplicationController
     # versions'-content).
     def confirmed_removed_rich_content_ids
       Array.wrap(product_permitted_params[:confirmed_removed_rich_content_ids])
+    end
+
+    # External ids of version-level pages the seller chose to KEEP in the
+    # hidden-content conflict dialog ("Keep version content"). Those pages are
+    # hidden from the editor by the shared-content flag, so they can never
+    # appear in the save payload — this list tells the server their absence is
+    # deliberate preservation, not deletion.
+    def preserved_rich_content_ids
+      Array.wrap(product_permitted_params[:preserved_rich_content_ids])
     end
 
     # Every page id present anywhere in the save payload (product-level and
@@ -956,6 +969,11 @@ class LinksController < ApplicationController
         submitted_page_count: submitted_page_count,
         alive_page_count: @product.alive_rich_contents.count + @product.current_base_variants.sum { |variant| variant.alive_rich_contents.count },
         persisted_has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants?,
+        # Whether the product level had visible content BEFORE this save
+        # touched anything. The hidden-content guard classifies conflicts from
+        # this (not from the live rows, which the transaction has already
+        # mutated by the time the per-variant guards run).
+        persisted_product_level_has_editor_content: @product.alive_rich_contents.any?(&:has_editor_content?),
         submitted_has_same_rich_content_for_all_variants: params.key?(:has_same_rich_content_for_all_variants) ? ActiveModel::Type::Boolean.new.cast(params[:has_same_rich_content_for_all_variants]) : nil,
       }
     end
@@ -989,8 +1007,10 @@ class LinksController < ApplicationController
       @product.current_base_variants.flat_map do |variant|
         variant.alive_rich_contents.select(&:has_editor_content?)
       end.reject do |rich_content|
-        payload_page_ids.include?(rich_content.external_id) || confirmed_removed_rich_content_ids.include?(rich_content.external_id)
-      end.map { { id: _1.external_id, title: _1.title } }
+        payload_page_ids.include?(rich_content.external_id) ||
+          confirmed_removed_rich_content_ids.include?(rich_content.external_id) ||
+          preserved_rich_content_ids.include?(rich_content.external_id)
+      end.map { { id: _1.external_id, title: _1.title, variant_name: _1.entity.name } }
     end
 
     def update_custom_domain

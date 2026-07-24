@@ -112,32 +112,61 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
       expect(restored_page.description.to_s).to include("Restored version content")
     end
 
-    it "asks for an explicit choice before deleting version content hidden behind real product-level content" do
+    it "asks for an explicit choice before deleting version content hidden behind real product-level content, and keeps the shared content when chosen" do
       # Fail-closed counterpart of the recovery above: when the product level
       # ALSO has visible content, the editor keeps the shared view and an
       # ordinary save must not silently pick a winner — the seller decides.
       hidden_page = create(:rich_content, entity: @variant_option, title: "Hidden guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hidden version content" }] }])
-      create(:product_rich_content, entity: product, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level shared content" }] }])
+      shared_page = create(:product_rich_content, entity: product, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level shared content" }] }])
       product.update!(has_same_rich_content_for_all_variants: true)
 
       visit "#{edit_link_path(product.unique_permalink)}/content"
       expect(page).to have_text("Product-level shared content")
 
+      # Cancel keeps everything.
       click_on "Save changes"
-      within_modal "Resolve conflicting content?" do
+      within_modal "Choose which content to keep" do
         expect(page).to have_text("Hidden guide")
-        click_on "No, cancel"
+        click_on "Cancel"
       end
       expect(hidden_page.reload).not_to be_deleted
+      expect(shared_page.reload).not_to be_deleted
 
+      # "Keep shared content" deletes the listed version pages, keeps the
+      # product-level pages, and leaves the shared-content flag on.
       click_on "Save changes"
-      within_modal "Resolve conflicting content?" do
-        click_on "Delete them and save"
+      within_modal "Choose which content to keep" do
+        click_on "Keep shared content"
       end
       wait_for_ajax
       expect(page).to have_alert(text: "Changes saved!")
       expect(hidden_page.reload).to be_deleted
+      expect(shared_page.reload).not_to be_deleted
       expect(product.reload.has_same_rich_content_for_all_variants?).to be(true)
+    end
+
+    it "keeps the version content and deletes the shared pages when the seller chooses to keep version content" do
+      hidden_page = create(:rich_content, entity: @variant_option, title: "Hidden guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hidden version content" }] }])
+      shared_page = create(:product_rich_content, entity: product, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level shared content" }] }])
+      product.update!(has_same_rich_content_for_all_variants: true)
+
+      visit "#{edit_link_path(product.unique_permalink)}/content"
+      expect(page).to have_text("Product-level shared content")
+
+      # "Keep version content" deletes the product-level pages, turns off
+      # "Use the same content for all versions", and preserves the hidden
+      # version pages. The editor reloads to show the kept content.
+      click_on "Save changes"
+      within_modal "Choose which content to keep" do
+        expect(page).to have_text("Hidden guide")
+        click_on "Keep version content"
+      end
+      expect(page).to have_text("Hidden version content")
+
+      expect(hidden_page.reload).not_to be_deleted
+      expect(hidden_page.description.to_s).to include("Hidden version content")
+      expect(shared_page.reload).to be_deleted
+      expect(product.reload.has_same_rich_content_for_all_variants?).to be(false)
     end
 
     it "keeps addressing the same version across repeated saves after adding one, without a reload" do

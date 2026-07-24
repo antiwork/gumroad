@@ -1542,10 +1542,44 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :unprocessable_entity
     assert_equal Product::RichContentDeletionGuard::HIDDEN_CONTENT_CONFLICT_MESSAGE, response.parsed_body["error_message"]
     assert_equal "hidden_variant_content_conflict", response.parsed_body["error_code"]
-    assert_equal [{ "id" => @version1_page.external_id, "title" => nil }, { "id" => version2_page.external_id, "title" => "Winter guide" }].to_set,
+    assert_equal [{ "id" => @version1_page.external_id, "title" => nil, "variant_name" => "Summer Sale" }, { "id" => version2_page.external_id, "title" => "Winter guide", "variant_name" => "Winter Sale" }].to_set,
                  response.parsed_body["hidden_variant_pages"].to_set
     assert_equal false, @version1_page.reload.deleted?
     assert_equal false, version2_page.reload.deleted?
+  end
+
+  test "PUT update classifies the conflict from the pre-save state when the same save clears the product-level content" do
+    # Regression: the conflict/recoverable classification must come from the
+    # pre-save state (deletion_guard_diagnostics), not the live rows. A save
+    # that CLEARED the product-level content used to make the live rows look
+    # blank by the time the per-variant guards ran, so a real conflict was
+    # misclassified as "recoverable" — then the transaction rolled back,
+    # restored the product-level content, and the advised refresh returned the
+    # seller to the exact same broken state forever.
+    setup_guarded_version!
+    product_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }])
+    @product.update!(has_same_rich_content_for_all_variants: true)
+
+    # The seller clears the shared page's content in the editor and saves: the
+    # page is still in the payload (emptied in place), so the product-level
+    # rows are blank by the time the per-variant guards run.
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: true,
+      rich_content: [{ id: product_page.external_id, title: nil, description: { type: "doc", content: [{ type: "paragraph" }] } }],
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "hidden_variant_content_conflict", response.parsed_body["error_code"]
+    assert_equal Product::RichContentDeletionGuard::HIDDEN_CONTENT_CONFLICT_MESSAGE, response.parsed_body["error_message"]
+
+    # Both content sets remain intact — the rollback restored the cleared
+    # product-level page (content included) and the hidden version page was
+    # never touched.
+    assert_equal false, product_page.reload.deleted?
+    assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }], product_page.description
+    assert_equal false, @version1_page.reload.deleted?
+    assert_equal guard_content_description, @version1_page.description
   end
 
   test "PUT update deletes the hidden version content once the seller makes the explicit choice" do
@@ -1564,6 +1598,31 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal true, @version1_page.reload.deleted?
     assert_equal false, product_page.reload.deleted?
     assert_equal true, @product.reload.has_same_rich_content_for_all_variants?
+  end
+
+  test "PUT update keeps the hidden version content and deletes the product-level pages when the seller chooses to keep version content" do
+    # The "Keep version content" conflict choice: the hidden version pages
+    # never made it into this editor session (the shared-content flag hid
+    # them), so the payload carries them as preserved_rich_content_ids instead
+    # of resubmitting them; the product-level pages are confirmed removed and
+    # the shared-content flag turns off.
+    setup_guarded_version!
+    product_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }])
+    @product.update!(has_same_rich_content_for_all_variants: true)
+
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: false,
+      rich_content: [],
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }],
+      confirmed_removed_rich_content_ids: [product_page.external_id],
+      preserved_rich_content_ids: [@version1_page.external_id]
+    ), format: :json
+
+    assert_response :success
+    assert_equal true, product_page.reload.deleted?
+    assert_equal false, @version1_page.reload.deleted?
+    assert_equal guard_content_description, @version1_page.description
+    assert_equal false, @product.reload.has_same_rich_content_for_all_variants?
   end
 
   # --- coffee products --------------------------------------------------------

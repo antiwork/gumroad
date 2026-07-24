@@ -103,10 +103,14 @@ class Product::RichContentDeletionGuard
       diagnostics[:persisted_has_same_rich_content_for_all_variants] ? unconfirmed.select { |rich_content| rich_content.entity.is_a?(BaseVariant) } : []
 
     if hidden_variant_pages.any?
-      # The product-level pages of this save are already applied by the time
-      # the per-variant guards run, so the live rows tell us whether real
-      # product-level content exists alongside the hidden version pages.
-      product_side_has_content = product.alive_rich_contents.reset.any?(&:has_editor_content?)
+      # Classify from the PRE-SAVE state captured in the diagnostics, never
+      # from the live rows: by the time the per-variant guards run, the save's
+      # transaction has already applied the product-level page changes, so a
+      # save that CLEARED the product-level content would make the live rows
+      # look blank and misclassify a real conflict as "recoverable". The
+      # transaction then rolls back, restores the product-level content, and a
+      # refresh returns the seller to the exact same dead end.
+      product_side_has_content = diagnostics[:persisted_product_level_has_editor_content]
       if product_side_has_content
         block_save!(product:, unconfirmed:, diagnostics:,
                     error_name: "Blocked product save that would delete version content hidden by the shared-content flag (conflicting product-level content)",
