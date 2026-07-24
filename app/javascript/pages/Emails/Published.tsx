@@ -131,12 +131,40 @@ export default function EmailsPublished() {
                           placeholder: "n/a",
                         })}
                       </TableCell>
+                      {/* On mobile every table row renders as its own bordered card, which made each
+                          resend sub-row look like a separate email. Below lg we fold the resends into
+                          the parent email's card instead; the dedicated sub-rows below stay desktop-only. */}
+                      {installment.non_opener_resends.some((resend) => resend.completed) ? (
+                        <TableCell className="lg:hidden">
+                          <div className="grid gap-1 text-sm text-muted">
+                            {installment.non_opener_resends
+                              .filter((resend) => resend.completed)
+                              .map((resend) => (
+                                <div key={`${installment.external_id}-resend-mobile-${resend.requested_at}`}>
+                                  ↳ Resend to non-openers —{" "}
+                                  {new Date(resend.requested_at).toLocaleDateString(userAgentInfo.locale, {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                    timeZone: currentSeller.timeZone.name,
+                                  })}
+                                  {" · "}
+                                  {formatStatNumber({ value: resend.delivery_count })} emailed
+                                  {" · "}
+                                  {formatStatNumber({ value: resend.open_rate, suffix: "%", placeholder: "n/a" })}{" "}
+                                  opened
+                                </div>
+                              ))}
+                          </div>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                     {installment.non_opener_resends
                       .filter((resend) => resend.completed)
                       .map((resend) => (
                         <TableRow
                           key={`${installment.external_id}-resend-${resend.requested_at}`}
+                          className="max-lg:hidden"
                           selected={installment.external_id === selectedInstallmentId}
                           onClick={() => setSelectedInstallmentId(installment.external_id)}
                         >
