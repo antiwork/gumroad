@@ -153,24 +153,34 @@ class PaypalChargeProcessor
     # human review). Whole-capture events like PAYMENT.CAPTURE.DENIED mean the entire capture
     # failed and must keep unwinding unconditionally.
     if skip_if_capture_shared
-      sibling_scope = Purchase.where.not(id: purchase.id).where(stripe_transaction_id: capture_id)
-      if purchase.paypal_order_id.present?
-        sibling_scope = sibling_scope.or(
-          Purchase.where.not(id: purchase.id)
-                  .where(paypal_order_id: purchase.paypal_order_id)
-                  .where(stripe_transaction_id: [nil, "", capture_id])
-        )
-      end
       # Free ($0) siblings can never be what the refund belongs to, so they don't make the
       # capture ambiguous. Keep siblings whose price is NULL, though: price_cents is a
       # nullable column, and an unknown price tells us nothing about whether money moved
       # for that row — excluding NULLs (a bare price_cents > 0) would let the refund
       # auto-apply in exactly the rows we can't attribute. Unknown price stays ambiguous
       # and fails toward manual review.
-      sibling_scope = sibling_scope.where("price_cents IS NULL OR price_cents > 0")
-      # A single pluck drives both the "any siblings?" check and the notification payload, so
-      # the ids a human needs to attribute the refund always match the rows that blocked it.
-      sibling_purchase_ids = sibling_scope.pluck(:id)
+      paid_or_unknown_price = "price_cents IS NULL OR price_cents > 0"
+      # Run the capture-id lookup and the order-id lookup as two separate queries instead
+      # of one relation combined with `.or`. The combined OR made MySQL give up on both
+      # secondary indexes and range-scan the purchases PRIMARY key (~165M rows in
+      # production), which blew the 5-minute statement timeout every time — so the refund
+      # webhook could never record a refund for any purchase with a PayPal order id.
+      # Queried separately, each lookup uses its own index
+      # (index_purchases_on_stripe_transaction_id / index_purchases_on_paypal_order_id)
+      # and returns in milliseconds. The Ruby-side union keeps the result identical.
+      sibling_purchase_ids = Purchase.where.not(id: purchase.id)
+                                     .where(stripe_transaction_id: capture_id)
+                                     .where(paid_or_unknown_price)
+                                     .pluck(:id)
+      if purchase.paypal_order_id.present?
+        # Siblings from the same PayPal order with no capture of their own (failed rows)
+        # or with this same capture id are the ambiguous ones; see the comment above.
+        sibling_purchase_ids |= Purchase.where.not(id: purchase.id)
+                                        .where(paypal_order_id: purchase.paypal_order_id)
+                                        .where(stripe_transaction_id: [nil, "", capture_id])
+                                        .where(paid_or_unknown_price)
+                                        .pluck(:id)
+      end
       if sibling_purchase_ids.any?
         ErrorNotifier.notify(
           "PayPal refund webhook: capture is shared by multiple purchases; skipping automatic refund attribution",
