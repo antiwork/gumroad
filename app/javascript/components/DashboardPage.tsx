@@ -2,6 +2,7 @@ import { CheckCircle, ChevronsDownUp, ChevronsUpDown, Circle, X } from "@boxicon
 import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
+import typia from "typia";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { request } from "$app/utils/request";
@@ -340,6 +341,11 @@ const EmailConfirmationBanner = ({
         accept: "json",
       });
       if (!response.ok) throw new Error();
+      // The endpoint replies 200 with { success: false } when the resend was
+      // rejected (e.g. the email was confirmed in another tab while the banner
+      // was still up), so HTTP status alone isn't enough to claim success.
+      const responseData = typia.assert<{ success: boolean }>(await response.json());
+      if (!responseData.success) throw new Error();
       setResendState("sent");
     } catch {
       setResendState("initial");
