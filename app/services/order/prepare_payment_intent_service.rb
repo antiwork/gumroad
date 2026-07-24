@@ -173,12 +173,28 @@ class Order::PreparePaymentIntentService
     # ConfirmationToken can reach prepare after that decision. Enforce the same lock against the
     # purchase's server-owned GeoIP country before the selected method is appended to the intent.
     def block_region_locked_payment_method_country_mismatch
-      required_country = region_locked_country(@previewed_payment_method_type)
+      required_country = buyer_country_lock(@previewed_payment_method_type)
       return false if required_country.blank? || buyer_country_alpha2 == required_country
 
       Rails.logger.error("Region-locked #{@previewed_payment_method_type} payment blocked for order #{order.id}: buyer country #{buyer_country_alpha2.inspect} does not match #{required_country}")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       true
+    end
+
+    # The buyer-location lock for the method the buyer actually confirmed with. This is a
+    # superset of region_locked_country: Klarna is US-only in v1 (the resolver only offers it
+    # to US buyers) but deliberately lives outside US_LOCKED_PAYMENT_METHOD_TYPES, because that
+    # constant also feeds previewed_country's PPP funding-country fallback and Klarna's funding
+    # country is not verifiable before the charge. The location lock must still be enforced
+    # here: without it, a non-US buyer's Klarna ConfirmationToken would slip past this gate and
+    # the previewed-method append in intent_payment_method_types would put klarna back on a USD
+    # intent the v1 gate never vetted — Stripe would then reject the confirm instead of the
+    # order failing closed before the intent is created. An unknown GeoIP country fails closed,
+    # matching the resolver.
+    def buyer_country_lock(method_type)
+      return Checkout::PaymentMethodResolver::KLARNA_SUPPORTED_BUYER_COUNTRY if method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE
+
+      region_locked_country(method_type)
     end
 
     def region_locked_country(method_type)
@@ -442,9 +458,11 @@ class Order::PreparePaymentIntentService
       # this is belt-and-braces, since the resolver already withholds Klarna whenever a
       # forced-currency method is on the cart (see launched_method_set).
       # The remaining launched methods (card, Link) support every currency we can force today.
+      currency_incompatible_types = []
       if presentment.present? && presentment.presentment_currency != Currency::USD
-        method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
-        method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
+        currency_incompatible_types = Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES +
+          [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
+        method_types -= currency_incompatible_types
       end
 
       # The previewed-method append runs on EVERY lane, including the plain USD one (nil
@@ -455,7 +473,15 @@ class Order::PreparePaymentIntentService
       # fails at confirm with no recourse — Stripe rejects a payment_method_types-scoped
       # ConfirmationToken whose type is missing from the intent. The compact drops the nil
       # when no method preview was supplied (e.g. saved-card charges).
-      (method_types + [@previewed_payment_method_type]).compact.uniq
+      # The append must NOT resurrect a method the currency drop just removed: re-adding
+      # Klarna would put it on a non-USD intent Stripe may well ACCEPT (Klarna supports EUR
+      # etc.), silently charging through a lane the v1 gate never vetted. Skipping the append
+      # here fails closed instead — Stripe rejects the mismatched ConfirmationToken at
+      # confirm, and no charge happens (the US-locked methods fail even earlier, at intent
+      # create). A buyer holding such a token could never legitimately confirm on this lane
+      # anyway.
+      previewed_type = currency_incompatible_types.include?(@previewed_payment_method_type) ? nil : @previewed_payment_method_type
+      (method_types + [previewed_type]).compact.uniq
     end
 
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied

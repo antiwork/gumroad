@@ -620,6 +620,52 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(%w[card link cashapp klarna])
       end
 
+      # Klarna is US-only in v1 but deliberately lives outside US_LOCKED_PAYMENT_METHOD_TYPES
+      # (that constant also feeds the PPP funding-country fallback, and Klarna's funding country
+      # is not verifiable pre-charge) — so the region-lock gate must cover it explicitly. Without
+      # that, a non-US buyer's Klarna ConfirmationToken would slip past the gate and the
+      # previewed-method append would put klarna on a USD intent the v1 gate never vetted;
+      # Stripe would then reject the confirm instead of the order failing closed here.
+      it "fails closed before creating an intent when a non-US buyer confirms with Klarna" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "France") }
+
+        preview = Stripe::StripeObject.construct_from(type: "klarna", klarna: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_klarna_fr").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
+      # Same gate, unknown GeoIP: an unresolvable buyer country fails closed for Klarna,
+      # matching the resolver (which never offers Klarna without a US GeoIP answer).
+      it "fails closed for a Klarna token when the buyer's country cannot be resolved" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: nil) }
+
+        preview = Stripe::StripeObject.construct_from(type: "klarna", klarna: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_klarna_unknown").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
       # PWYW + offer-code regression: the presenter's Klarna window input is the buyer's
       # CHOSEN pre-discount amount (cart_product.price), so prepare must reconstruct that
       # same basis. displayed_price_cents_before_offer_code would instead return the
