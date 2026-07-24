@@ -359,23 +359,26 @@ describe("Product checkout with upsells", type: :system, js: true) do
 
         within_modal "Bundle cross-sell" do
           expect(page).to have_section("Complete bundle")
+          # The cart still holds the selected product and the add-on at this point;
+          # accepting the replace-type offer is what must drop both.
           click_on "Upgrade"
         end
 
-        # The bundle replaces both the originally selected product and the
-        # add-on product it contains — the buyer must not buy duplicate content.
-        expect(page).to have_section("Complete bundle")
-        expect(page).to_not have_section("Selected product 1")
-        expect(page).to_not have_section("Add-on product")
-
         expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
 
+        # What the buyer was actually charged for is the invariant that matters: one bundle,
+        # and no standalone purchase of anything the bundle already contains. (The success
+        # page legitimately lists "Selected product 1" and "Add-on product" as the bundle's
+        # contents, so asserting their ABSENCE on screen would contradict correct behavior.)
+        expect(bundle.sales.count).to eq(1)
         bundle_purchase = bundle.sales.last
         expect(bundle_purchase.upsell_purchase.upsell).to eq(bundle_cross_sell)
         expect(bundle_purchase.upsell_purchase.selected_product).to eq(selected_product1)
-        # No standalone purchase of the add-on product (only the bundle-content copy)
         expect(addon_product.sales.not_is_bundle_product_purchase).to be_empty
         expect(selected_product1.sales.not_is_bundle_product_purchase).to be_empty
+        # The contained products are still delivered — as bundle-content purchases, not sales.
+        expect(addon_product.sales.is_bundle_product_purchase.count).to eq(1)
+        expect(selected_product1.sales.is_bundle_product_purchase.count).to eq(1)
       end
     end
 
