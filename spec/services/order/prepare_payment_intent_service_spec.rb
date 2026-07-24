@@ -593,6 +593,73 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
+      # The safety net for resolver drift on the plain USD lane: the Element offered Klarna
+      # (the buyer selected it and minted a Klarna ConfirmationToken), but by the time prepare
+      # re-runs the resolver its inputs changed — here the launch flag flipped off
+      # mid-checkout. The buyer's selection must still ride the intent or Stripe rejects the
+      # payment_method_types-scoped token and the confirm fails with no recourse.
+      it "appends the buyer's previewed method to the USD intent even when the re-run resolver drops it" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "klarna", klarna: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        # The Klarna flag is OFF for this seller, so the resolver omits klarna — only the
+        # previewed-method append can keep the buyer's selection on the intent.
+        described_class.new(order:, params:, confirmation_token: "ctoken_klarna_drift").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp klarna])
+      end
+
+      # PWYW + offer-code regression: the presenter's Klarna window input is the buyer's
+      # CHOSEN pre-discount amount (cart_product.price), so prepare must reconstruct that
+      # same basis. displayed_price_cents_before_offer_code would instead return the
+      # product's FLOOR price for a cached offer code, and a buyer paying above floor could
+      # then get Klarna from one side but not the other — an Element/intent method-set
+      # mismatch that fails the whole cart at confirm.
+      it "computes the Klarna window from the buyer's chosen PWYW amount, not the product floor, when an offer code is cached" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        # Floor $0.99 (below Klarna's $1 minimum), buyer chooses $20, 50%-off code → pays $10.
+        # Chosen pre-discount basis: $20 → inside the window → Klarna rides the intent,
+        # matching the Element the presenter mounted from the same $20. The floor basis
+        # ($0.99) would wrongly drop it.
+        pwyw_product = create(:product, user: seller, price_cents: 99, customizable_price: true)
+        offer_code = create(:percentage_offer_code, user: seller, products: [pwyw_product], amount_percentage: 50)
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: pwyw_product.unique_permalink, perceived_price_cents: 20_00, quantity: 1,
+                         discount_code: offer_code.code }]
+        }.merge(common_params)
+        order, order_responses = Order::CreateService.new(params:).perform
+        expect(order_responses.values).to all(include(success: true))
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_pwyw_klarna").perform
+
+        expect(create_args[:payment_method_types]).to include("klarna")
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
       # The presenter derives the Element's Link config from the same resolver output, so the
       # Payment Element and deferred intent both carry "link" with no per-seller flag. Without a
       # resolvable ip_country the US-locked methods stay dropped — Link is not region-gated.

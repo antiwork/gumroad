@@ -212,9 +212,31 @@ describe StripeChargeIntent, :vcr do
     context "when next action type is redirect_to_url on an intent without a client-redirect method (no browser owns the redirect)" do
       before do
         allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        # The intent carries only the payment method's ID (a plain retrieve doesn't expand
+        # it), so the validation resolves the attempted method with a targeted
+        # PaymentMethod retrieve — stub it to the card the SCA helper attached.
+        allow(Stripe::PaymentMethod).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(id: processor_payment_intent.payment_method, type: "card"))
       end
 
       it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
+        described_class.new(payment_intent: processor_payment_intent)
+      end
+    end
+
+    context "when next action type is redirect_to_url and the attempted method (resolved via a PaymentMethod retrieve) is card, even though the offered menu includes a client-redirect method" do
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna]
+        # payment_method stays the unexpanded ID string a plain retrieve returns; the
+        # validation must resolve the real attempted type instead of silently falling back
+        # to the offered menu (which would wrongly swallow a stray redirect on the card path).
+        allow(Stripe::PaymentMethod).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(id: processor_payment_intent.payment_method, type: "card"))
+      end
+
+      it "still notifies error tracker — a stray redirect on the card path must keep alerting" do
         expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
         described_class.new(payment_intent: processor_payment_intent)
       end

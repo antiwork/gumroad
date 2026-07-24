@@ -56,14 +56,27 @@ class StripeIntentStatus
     end
   end
 
-  # The attempted payment method's type from an intent, when the API response carries it.
-  # `payment_method` is an expandable field: a plain retrieve returns the ID string, an
-  # expanded retrieve (or a fresh confirm response) returns the full object with `type`.
+  # The attempted payment method's type from an intent. A fresh confirm response carries the
+  # full payment method object inline; a plain retrieve (the checkout return path, the
+  # abandonment sweeper) returns only the ID string. In that case we make one targeted
+  # PaymentMethod retrieve — this only ever runs on the rare requires_action +
+  # redirect_to_url combination, so it adds no API traffic to the normal charge paths.
+  # `stripe_account` scopes the lookup for direct-Connect merchants (payment methods created
+  # on a connected account are not visible from the platform). Returns nil when the lookup
+  # fails or nothing is attached, and callers then fall back to the intent's offered menu.
   # Uses [] access because Stripe::StripeObject raises on a missing attribute reader but
   # returns nil for an absent key.
-  def self.attempted_payment_method_type(intent)
+  def self.attempted_payment_method_type(intent, stripe_account: nil)
     payment_method = intent.try(:payment_method)
-    return nil if payment_method.blank? || payment_method.is_a?(String)
+    return nil if payment_method.blank?
+
+    if payment_method.is_a?(String)
+      begin
+        payment_method = Stripe::PaymentMethod.retrieve(payment_method, { stripe_account: }.compact)
+      rescue Stripe::StripeError
+        return nil
+      end
+    end
 
     payment_method[:type]
   end

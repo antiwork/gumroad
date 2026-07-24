@@ -29,14 +29,32 @@ describe StripeIntentStatus do
   end
 
   describe ".attempted_payment_method_type" do
-    it "reads the type from an expanded payment_method object" do
+    it "reads the type from an expanded payment_method object without calling the API" do
       intent = Stripe::StripeObject.construct_from(payment_method: { type: "klarna" })
 
+      expect(Stripe::PaymentMethod).not_to receive(:retrieve)
       expect(described_class.attempted_payment_method_type(intent)).to eq("klarna")
     end
 
-    it "returns nil for an unexpanded payment_method (the ID string)" do
+    it "retrieves the payment method when the intent carries only the ID string" do
       intent = Stripe::StripeObject.construct_from(payment_method: "pm_123")
+      expect(Stripe::PaymentMethod).to receive(:retrieve).with("pm_123", {})
+        .and_return(Stripe::StripeObject.construct_from(id: "pm_123", type: "ideal"))
+
+      expect(described_class.attempted_payment_method_type(intent)).to eq("ideal")
+    end
+
+    it "scopes the retrieve to the connected account when given one" do
+      intent = Stripe::StripeObject.construct_from(payment_method: "pm_123")
+      expect(Stripe::PaymentMethod).to receive(:retrieve).with("pm_123", { stripe_account: "acct_1" })
+        .and_return(Stripe::StripeObject.construct_from(id: "pm_123", type: "card"))
+
+      expect(described_class.attempted_payment_method_type(intent, stripe_account: "acct_1")).to eq("card")
+    end
+
+    it "returns nil when the payment method lookup fails, so callers fall back to the offered menu" do
+      intent = Stripe::StripeObject.construct_from(payment_method: "pm_123")
+      expect(Stripe::PaymentMethod).to receive(:retrieve).and_raise(Stripe::InvalidRequestError.new("nope", "payment_method"))
 
       expect(described_class.attempted_payment_method_type(intent)).to be_nil
     end

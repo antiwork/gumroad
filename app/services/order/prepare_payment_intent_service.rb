@@ -433,8 +433,6 @@ class Order::PreparePaymentIntentService
     # append (deduped below) keeps the confirmed method on the intent if the resolver's inputs
     # drift after the Element mounts, including in Stripe test mode.
     def intent_payment_method_types(presentment)
-      return resolved_payment_method_types if presentment.nil?
-
       method_types = resolved_payment_method_types
       # The US-locked methods (Cash App Pay, ACH) are also USD-only: Stripe rejects creating an
       # intent in any other currency that lists them. Dropping them here is about currency
@@ -444,12 +442,20 @@ class Order::PreparePaymentIntentService
       # this is belt-and-braces, since the resolver already withholds Klarna whenever a
       # forced-currency method is on the cart (see launched_method_set).
       # The remaining launched methods (card, Link) support every currency we can force today.
-      if presentment.presentment_currency != Currency::USD
+      if presentment.present? && presentment.presentment_currency != Currency::USD
         method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
         method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
       end
 
-      (method_types + [@previewed_payment_method_type]).uniq
+      # The previewed-method append runs on EVERY lane, including the plain USD one (nil
+      # presentment): it is the safety net that keeps the buyer's actual selection on the
+      # intent when the resolver's inputs drift between the Element mounting and prepare
+      # running (a flag flip, a GeoIP re-eval, an amount-basis divergence for Klarna's
+      # window). Without it, a buyer who selected a method the re-run resolver dropped
+      # fails at confirm with no recourse — Stripe rejects a payment_method_types-scoped
+      # ConfirmationToken whose type is missing from the intent. The compact drops the nil
+      # when no method preview was supplied (e.g. saved-card charges).
+      (method_types + [@previewed_payment_method_type]).compact.uniq
     end
 
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied
@@ -479,10 +485,31 @@ class Order::PreparePaymentIntentService
         # the tax-inclusive charged total, or a real USD total for a non-USD-priced cart the
         # presenter nil'ed out, would make the two sides resolve different Klarna answers near
         # the window edges and fail carts that never touched Klarna. Residual drift (a stale
-        # Element, flag flips mid-checkout) is covered by the previewed-method append below —
+        # Element, flag flips mid-checkout) is covered by the previewed-method append in
+        # intent_payment_method_types, which now runs on every lane including this USD one —
         # the buyer's actual selection always rides the intent.
-        cart_total_usd_cents: purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == Currency::USD } ? purchases_to_charge.sum { _1.displayed_price_cents_before_offer_code } : nil
+        cart_total_usd_cents: purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == Currency::USD } ? purchases_to_charge.sum { klarna_window_price_cents(_1) } : nil
       ).resolve
+    end
+
+    # The Klarna amount-window basis for one purchase: the buyer's chosen pre-discount,
+    # quantity-inclusive amount — the same thing the presenter summed from cart_product.price
+    # when it mounted the Element. This deliberately does NOT use
+    # displayed_price_cents_before_offer_code: for a cached offer code that helper routes
+    # through pre_discount_minimum_price_cents, the PRODUCT FLOOR — which diverges from the
+    # buyer's chosen amount on a pay-what-you-want product priced above floor, making the two
+    # sides resolve different Klarna answers near the window edges (an Element/intent
+    # method-set mismatch that fails the whole cart at confirm). Instead we reconstruct the
+    # chosen pre-discount amount from the purchase's own displayed price by inverting the
+    # offer code, mirroring the presenter's basis. A 100%-off code can't be inverted
+    # (original_price returns nil); fall back to the discounted amount, which is 0 and fails
+    # closed out of Klarna's >= $1 window on both sides anyway.
+    def klarna_window_price_cents(purchase)
+      offer_code = purchase.original_offer_code
+      return purchase.displayed_price_cents if offer_code.blank?
+
+      original_per_unit = offer_code.original_price(purchase.displayed_price_per_unit_cents)
+      original_per_unit.present? ? original_per_unit * purchase.quantity : purchase.displayed_price_cents
     end
 
     # U13: mirrors the presenter's PPP input so the deferred intent's method set equals the Payment

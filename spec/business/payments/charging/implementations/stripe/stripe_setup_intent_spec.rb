@@ -130,6 +130,10 @@ describe StripeSetupIntent, :vcr do
           status: StripeIntentStatus::REQUIRES_ACTION,
           next_action: double(type: "redirect_to_url")
         )
+        # The validation resolves the attempted method for redirect_to_url; keep the spec
+        # offline by answering the targeted PaymentMethod retrieve with the attached card.
+        allow(Stripe::PaymentMethod).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(id: "pm_stub", type: "card"))
       end
 
       it "notifies error tracker" do
