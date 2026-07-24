@@ -81,10 +81,6 @@ class LibraryController < Sellers::BaseController
 
       flash[:warning] = "Please check your email to confirm your address before you can see that."
 
-      if Feature.active?(:custom_domain_download)
-        redirect_to settings_main_url(host: DOMAIN), allow_other_host: true
-      else
-        redirect_to settings_main_path
-      end
+      redirect_to settings_main_path
     end
 end

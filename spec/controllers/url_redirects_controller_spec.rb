@@ -14,11 +14,6 @@ describe UrlRedirectsController, inertia: true do
   end
 
   describe "GET 'download_page'", inertia: true do
-    before do
-      # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
-      # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
-    end
-
     it "adds X-Robots-Tag response header to avoid page indexing" do
       get :download_page, params: { id: @token }
       expect(response.headers["X-Robots-Tag"]).to eq("noindex")
@@ -1488,8 +1483,6 @@ describe UrlRedirectsController, inertia: true do
         @product.save!
         @url_redirect = create(:url_redirect, link: @product, purchase: nil)
         allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
-        # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
-        # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
       end
 
       it "show the proper download page for multiple files" do
@@ -2000,8 +1993,6 @@ describe UrlRedirectsController, inertia: true do
         @purchase = create(:purchase, link: @product, purchaser: create(:user))
         @url_redirect = create(:url_redirect, purchase: @purchase)
         @token = @url_redirect.token
-        # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
-        # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
       end
 
       context "when user is not signed in" do
@@ -2096,8 +2087,6 @@ describe UrlRedirectsController, inertia: true do
         @url_redirect = create(:installment_url_redirect, installment: @post)
         @token = @url_redirect.token
         sign_in(follower)
-        # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
-        # @request.host = URI.parse(creator.subdomain_with_protocol).host
       end
 
       it "has a readable Product File for a PDF installment with no associated product" do

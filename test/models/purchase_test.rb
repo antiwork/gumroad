@@ -32,10 +32,6 @@ class PurchaseTest < ActiveSupport::TestCase
   end
 
   teardown do
-    # Flipper state is process-global and not rolled back with the test transaction, so a
-    # feature turned on by the attach_credit_card "enabled" cases would leak into the "not
-    # called" cases. Reset it to match RSpec's per-example Flipper state.
-    Feature.deactivate(:attach_credit_card_to_purchaser)
     # "new flat fee / on Gumroad day" writes RedisKey.gumroad_day_date; Redis isn't rolled
     # back between tests. Clear it so a leaked Gumroad-day date doesn't waive the fee later.
     $redis.del(RedisKey.gumroad_day_date)
@@ -4409,107 +4405,6 @@ class PurchaseTest < ActiveSupport::TestCase
     create_purchase(link: product_2, email: buyer_email, seller:)
 
     assert AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).where(email: buyer_email).present?
-  end
-
-  # ---- #attach_credit_card_to_purchaser ----
-
-  test "#attach_credit_card_to_purchaser the method is not called when the purchaser_id is not updated" do
-    user = create_user
-    subscription = create_subscription(user:)
-    purchase = create_purchase(purchaser: user, subscription:, is_original_subscription_purchase: true)
-
-    purchase.expects(:attach_credit_card_to_purchaser).never
-
-    purchase.email = "buyer-#{unique_suffix}@example.com"
-    purchase.save!
-  end
-
-  test "#attach_credit_card_to_purchaser the method is not called when the purchaser_id is set to nil" do
-    user = create_user
-    subscription = create_subscription(user:)
-    purchase = create_purchase(purchaser: user, subscription:, is_original_subscription_purchase: true)
-
-    purchase.expects(:attach_credit_card_to_purchaser).never
-
-    purchase.purchaser_id = nil
-    purchase.save!
-  end
-
-  test "#attach_credit_card_to_purchaser the method is not called for non-subscription purchases" do
-    purchase = create_purchase(purchaser: create_user)
-
-    purchase.expects(:attach_credit_card_to_purchaser).never
-
-    purchase.purchaser_id = create_user.id
-    purchase.save!
-  end
-
-  test "#attach_credit_card_to_purchaser when changing the purchaser id when feature is disabled does not call the method" do
-    user = create_user
-    subscription = create_subscription(user:)
-    purchase = create_purchase(purchaser: user, subscription:, is_original_subscription_purchase: true)
-
-    purchase.expects(:attach_credit_card_to_purchaser).never
-
-    purchase.purchaser_id = create_user.id
-    purchase.save!
-  end
-
-  test "#attach_credit_card_to_purchaser when changing the purchaser id when feature is enabled calls the method" do
-    Feature.activate(:attach_credit_card_to_purchaser)
-    user = create_user
-    subscription = create_subscription(user:)
-    purchase = create_purchase(purchaser: user, subscription:, is_original_subscription_purchase: true)
-
-    assert_receives_and_calls_original(purchase, :attach_credit_card_to_purchaser) do
-      purchase.purchaser_id = create_user.id
-      purchase.save!
-    end
-  end
-
-  test "#attach_credit_card_to_purchaser when changing the purchaser id when feature is enabled attaches the credit card of the latest successful purchase to the purchaser" do
-    VCR.use_cassette("Purchase/_attach_credit_card_to_purchaser/when_changing_the_purchaser_id/when_attach_credit_card_to_purchaser_feature_is_enabled/attaches_the_credit_card_of_the_latest_successful_purchase_to_the_purchaser") do
-      Feature.activate(:attach_credit_card_to_purchaser)
-      user = create_user
-      subscription = create_subscription(user:)
-
-      latest_eligible_cc = create_credit_card
-
-      purchase = create_purchase(subscription:, credit_card: create_credit_card,
-                                 is_original_subscription_purchase: true, created_at: 30.minutes.ago)
-      create_purchase(purchaser: user, credit_card: create_credit_card, created_at: 25.minutes.ago)
-      create_purchase(purchaser: user, credit_card: latest_eligible_cc, created_at: 20.minutes.ago)
-      create_purchase(purchaser: user, created_at: 15.minutes.ago)
-      create_purchase(purchaser: user, purchase_state: "failed", credit_card: create_credit_card, created_at: 10.minutes.ago)
-      create_purchase(credit_card: create_credit_card, created_at: 5.minutes.ago)
-
-      assert_nil user.reload.credit_card
-
-      assert_receives_and_calls_original(purchase, :attach_credit_card_to_purchaser) do
-        purchase.purchaser = user
-        purchase.save!
-      end
-
-      assert_equal latest_eligible_cc, user.reload.credit_card
-    end
-  end
-
-  test "#attach_credit_card_to_purchaser when changing the purchaser id when feature is enabled does not attempt to attach a credit card to the purchaser if one already exists" do
-    VCR.use_cassette("Purchase/_attach_credit_card_to_purchaser/when_changing_the_purchaser_id/when_attach_credit_card_to_purchaser_feature_is_enabled/does_not_attempt_to_attach_a_credit_card_to_the_purchaser_if_one_already_exists") do
-      Feature.activate(:attach_credit_card_to_purchaser)
-      subscription = create_subscription(user: create_user)
-
-      user = create_user(credit_card: create_credit_card)
-      purchase = create_purchase(subscription:, credit_card: create_credit_card,
-                                 is_original_subscription_purchase: true)
-
-      before_cc = user.reload.credit_card
-      assert_receives_and_calls_original(purchase, :attach_credit_card_to_purchaser) do
-        purchase.purchaser = user
-        purchase.save!
-      end
-      assert_equal before_cc, user.reload.credit_card
-    end
   end
 
   # ---- #update_rental_expired ----
