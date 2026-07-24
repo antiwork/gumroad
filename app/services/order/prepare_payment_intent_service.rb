@@ -314,15 +314,14 @@ class Order::PreparePaymentIntentService
 
     # The currency the Payment Element was mounted in when it differs from USD, derived
     # from the same basis as Checkout::StripePaymentPresenter#method_forced_shape?
-    # (seller flags + a resolver result that exposes a capability-eligible local method + a
-    # single purchase whose product is priced in a currency some payment method forces). Nil
-    # everywhere else — flags off, no launched method for the currency in live mode, USD-priced
-    # or multi-item carts — which keeps every other checkout on the canonical USD intent.
+    # (seller flags + a resolver result that exposes a capability-eligible local method +
+    # purchases all priced in the same currency some payment method forces). Nil everywhere else —
+    # flags off, no launched method for the currency in live mode, USD-priced or mixed-currency
+    # carts — which keeps every other checkout on the canonical USD intent.
     def element_mount_forced_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-      return nil unless purchases_to_charge.one?
 
-      product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
+      product_currency = uniform_method_forced_purchase_currency
       return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
       return nil unless payment_method_resolution.payment_method_types.any? do |payment_method_type|
         Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == product_currency
@@ -356,9 +355,8 @@ class Order::PreparePaymentIntentService
     # this shape check still prevents us from creating a USD intent that Stripe will reject.
     def client_reported_mount_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-      return nil unless purchases_to_charge.one?
 
-      product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
+      product_currency = uniform_method_forced_purchase_currency
       return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
       return nil unless params[:payment_element_mount_currency].to_s.downcase == product_currency
 
@@ -459,12 +457,24 @@ class Order::PreparePaymentIntentService
         commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION },
         buyer_country: buyer_country_alpha2,
         ppp_discounted: ppp_verification_applies?,
-        # Same basis as the presenter's cart_product_currency (the single item's pricing
-        # currency, nil for multi-item carts) so both sides resolve identical method sets —
-        # the Element's list and the deferred intent's list must match or Stripe rejects
-        # the ConfirmationToken.
-        cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil
+        # Same basis as the presenter's cart_product_currency (a uniform forced pricing currency,
+        # nil for mixed-currency/non-forced carts) so both sides resolve identical method sets —
+        # the Element's list and the deferred intent's list must match or Stripe rejects the
+        # ConfirmationToken.
+        cart_product_currency: uniform_method_forced_purchase_currency
       ).resolve
+    end
+
+    def uniform_method_forced_purchase_currency
+      return nil if purchases_to_charge.empty?
+
+      currencies = purchases_to_charge.map { _1.link.price_currency_type.to_s.downcase }.uniq
+      return nil unless currencies.one?
+
+      currency = currencies.first
+      return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+
+      currency
     end
 
     # U13: mirrors the presenter's PPP input so the deferred intent's method set equals the Payment

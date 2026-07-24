@@ -889,6 +889,34 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
+    it "mounts the INR element with UPI for a multi-item INR cart" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "inr", price_cents: 7300)
+      other_product = create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.12", "India")
+
+      expect(
+        stripe_payment_props(
+          add_products: [checkout_product_for(product), checkout_product_for(other_product)],
+          ip: "203.0.113.12"
+        )
+      ).to eq(
+        payment_element_client_confirm_props(
+          currency: "inr",
+          presentment_amount_cents: 14600,
+          payment_method_types: %w[card link upi],
+          disable_wallets: true,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
     it "keeps the canonical USD element for a non-India buyer of an INR product even when UPI's launch flag is on" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: "inr", price_cents: 7300)
       activate_buyer_currency_flags(seller)
@@ -971,7 +999,7 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
-    it "keeps the USD element for a two-item cart — the QA surface only supports a single item" do
+    it "mounts the forced-currency element for a two-item cart uniformly priced in that currency" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       other_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
       activate_buyer_currency_flags(seller)
@@ -979,8 +1007,8 @@ describe Checkout::StripePaymentPresenter do
 
       props = stripe_payment_props(add_products: [checkout_product_for(product), checkout_product_for(other_product)])
 
-      expect(props[:elements_options][:currency]).to eq("usd")
-      expect(props[:elements_options][:presentment_amount_cents]).to be_nil
+      expect(props[:elements_options][:currency]).to eq("eur")
+      expect(props[:elements_options][:presentment_amount_cents]).to eq(3000)
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end

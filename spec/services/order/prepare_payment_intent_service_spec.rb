@@ -690,6 +690,32 @@ describe Order::PreparePaymentIntentService, :vcr do
                                                                    presentment_total_cents: 15_00)
         end
 
+        it "prepares one forced-currency intent for a multi-item cart uniformly priced in the forced currency" do
+          expect(StripeFxQuote).not_to receive(:create)
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_multi_direct")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(22_00)
+          expect(create_args[:stripe_fx_quote_id]).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(responses["unique-id-1"][:success]).to eq(true)
+
+          charge = order.charges.last
+          expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::EUR,
+                                                               presentment_total_cents: 22_00,
+                                                               stripe_fx_quote_id: nil)
+          expect(order.purchases.map { _1.reload.purchase_presentment.presentment_total_cents }).to contain_exactly(15_00, 7_00)
+        end
+
         it "keys the intent on the charge external id and currency (no quote), scoped to the confirmation token" do
           order, params = build_order
           create_args, = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_direct")
