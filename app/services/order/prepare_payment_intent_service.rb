@@ -8,6 +8,10 @@ class Order::PreparePaymentIntentService
   # The browser's resolved card country is more trustworthy than a client-supplied field.
   CARD_COUNTRY_SOURCE = "stripe"
   GENERIC_CHARGE_ERROR = "There is a temporary problem, please try again (your card was not charged)."
+  # A Klarna amount-window rejection is deterministic — retrying Klarna on the same cart can
+  # never succeed — so it must not reuse the retry-oriented generic message above. Tell the
+  # buyer the one action that works: pick a different payment method.
+  KLARNA_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Klarna supports. Please choose a different payment method (you have not been charged)."
 
   def initialize(order:, params:, confirmation_token:)
     @order = order
@@ -226,7 +230,7 @@ class Order::PreparePaymentIntentService
       return false if klarna_final_amount_within_window?
 
       Rails.logger.error("Klarna payment blocked for order #{order.id}: final charged amount #{amount_cents} is outside Stripe's Klarna USD window")
-      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      fail_purchases_with(KLARNA_AMOUNT_INELIGIBLE_MESSAGE)
       true
     end
 

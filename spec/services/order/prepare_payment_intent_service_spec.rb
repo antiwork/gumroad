@@ -744,6 +744,10 @@ describe Order::PreparePaymentIntentService, :vcr do
         responses = described_class.new(order:, params:, confirmation_token: "ctoken_klarna_final_drift").perform
 
         expect(responses["unique-id-0"][:success]).to eq(false)
+        # The rejection is deterministic — retrying Klarna on the same cart can never succeed —
+        # so the buyer must get the actionable "choose a different payment method" message, not
+        # the retry-oriented generic one.
+        expect(responses["unique-id-0"][:error_message]).to eq(described_class::KLARNA_AMOUNT_INELIGIBLE_MESSAGE)
         expect(order.purchases.first.reload).to be_failed
       ensure
         Feature.deactivate_user(:checkout_local_method_klarna, seller)
