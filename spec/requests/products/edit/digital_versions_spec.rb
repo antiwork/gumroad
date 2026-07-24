@@ -91,6 +91,36 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
       expect(product.variant_categories.first.variants.reload.alive.in_order.pluck(:name)).to eq ["Basic Bundle", "First Product Files Grouping", "Second version"]
     end
 
+    it "keeps addressing the same version across repeated saves after adding one, without a reload" do
+      visit edit_link_path(product.unique_permalink)
+      page.scroll_to version_rows[0], align: :center
+
+      click_on "Add version"
+      within version_rows[0] do
+        within version_option_rows[2] do
+          fill_in "Name", with: "Third version"
+        end
+      end
+      save_change
+
+      third_version = product.variant_categories.first.variants.reload.alive.find_by!(name: "Third version")
+
+      # Regression: before the save response returned canonical ids, the
+      # editor resubmitted the new version with id: null on every save, so a
+      # second save re-created it (a different record each time) instead of
+      # updating it — and 422'd outright once the version carried content.
+      within version_rows[0] do
+        within version_option_rows[2] do
+          fill_in "Name", with: "Third version renamed"
+        end
+      end
+      save_change
+
+      expect(third_version.reload.deleted_at).to be_nil
+      expect(third_version.name).to eq("Third version renamed")
+      expect(product.variant_categories.first.variants.reload.alive.count).to eq(3)
+    end
+
     it "has a valid share URL" do
       visit edit_link_path(product.unique_permalink)
 
@@ -191,6 +221,41 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
         expect(page).to have_alert(text: "Changes saved!")
 
         expect(@variant_option.reload).to be_deleted
+      end
+
+      it "shows the save-time deletion summary when unpublishing and aborts the unpublish on cancel" do
+        visit edit_link_path(product.unique_permalink)
+
+        within version_rows[0] do
+          within version_option_rows[0] do
+            click_on "Remove version"
+          end
+        end
+        within_modal "Remove First Product Files Grouping?" do
+          click_on "Yes, remove"
+        end
+
+        # Unpublishing saves first, so it must pass through the same summary
+        # confirmation — publish/unpublish used to skip it entirely.
+        click_on "Unpublish"
+        within_modal "Save and delete content?" do
+          expect(page).to have_text("First Product Files Grouping")
+          click_on "No, cancel"
+        end
+
+        # Cancelling aborted the whole action: nothing was deleted and the
+        # product is still published.
+        expect(page).to have_button("Unpublish")
+        expect(@variant_option.reload).not_to be_deleted
+
+        click_on "Unpublish"
+        within_modal "Save and delete content?" do
+          click_on "Yes, save and delete"
+        end
+        expect(page).to have_alert(text: "Unpublished!")
+
+        expect(@variant_option.reload).to be_deleted
+        expect(product.reload.purchase_disabled_at).not_to be_nil
       end
 
       it "deletes a variant option with only test purchases" do

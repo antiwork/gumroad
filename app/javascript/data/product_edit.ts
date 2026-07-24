@@ -9,7 +9,36 @@ import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Product } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
-export const saveProduct = async (permalink: string, id: string, product: Product, currencyType: CurrencyCode) => {
+export type SaveProductResponse = {
+  warning_message?: string;
+  // Client-generated id → canonical server id for variants/pages this save
+  // created. The editor swaps its ids for these so the next save updates the
+  // created records instead of re-creating them (re-creation trips the
+  // server's content deletion guard and duplicates variants).
+  variant_id_mappings?: Record<string, string>;
+  rich_content_id_mappings?: Record<string, string>;
+};
+
+// The server's fail-closed answer when a save would delete version-level pages
+// that are hidden by the "use the same content for all versions" flag while
+// real product-level content also exists: neither side can be picked
+// automatically, so the seller must make an explicit choice. Carries the
+// hidden pages so the editor can present that choice.
+export class HiddenVariantContentConflictError extends Error {
+  constructor(
+    message: string,
+    public hiddenPages: { id: string; title: string | null }[],
+  ) {
+    super(message);
+  }
+}
+
+export const saveProduct = async (
+  permalink: string,
+  id: string,
+  product: Product,
+  currencyType: CurrencyCode,
+): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
   const richContents =
@@ -35,7 +64,12 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
       ...productParams,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),
-      variants: product.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
+      // Variants created in this session are sent with id: null (the server
+      // assigns the canonical id) plus the client's own id as client_id so
+      // the response can map one to the other.
+      variants: product.variants.map(({ newlyAdded, ...variant }) =>
+        newlyAdded ? { ...variant, id: null, client_id: variant.id } : variant,
+      ),
       confirmed_removed_variant_ids: product.confirmed_removed_variant_ids ?? [],
       confirmed_removed_rich_content_ids: product.confirmed_removed_rich_content_ids ?? [],
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
@@ -44,8 +78,16 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
       installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     },
   });
-  if (!response.ok)
-    throw new ResponseError(typia.assert<{ error_message: string }>(await response.json()).error_message);
+  if (!response.ok) {
+    const error = typia.assert<{
+      error_message: string;
+      error_code?: string;
+      hidden_variant_pages?: { id: string; title: string | null }[];
+    }>(await response.json());
+    if (error.error_code === "hidden_variant_content_conflict")
+      throw new HiddenVariantContentConflictError(error.error_message, error.hidden_variant_pages ?? []);
+    throw new ResponseError(error.error_message);
+  }
   if (response.status === 204) return {};
-  return typia.assert<{ warning_message?: string }>(await response.json());
+  return typia.assert<SaveProductResponse>(await response.json());
 };

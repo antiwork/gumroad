@@ -4,7 +4,7 @@ import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
 import typia from "typia";
 
-import { saveProduct } from "$app/data/product_edit";
+import { HiddenVariantContentConflictError, SaveProductResponse, saveProduct } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
@@ -118,6 +118,7 @@ const createContextValue = (props: Props) => ({
   availableCountries: props.available_countries,
   saving: false,
   save: () => Promise.resolve(false),
+  serverIdMappings: {},
   googleClientId: props.google_client_id,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
@@ -145,6 +146,9 @@ const nodeHasContent = (node: unknown): boolean => {
 };
 
 const pageHasVisibleContent = (page: Page) => {
+  // A titled page is seller-authored work even with an empty body — the title
+  // renders in the buyer's page list (mirrors the server-side rule).
+  if (page.title?.trim()) return true;
   const description: unknown = page.description;
   return (
     typeof description === "object" &&
@@ -205,6 +209,27 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
   };
 };
 
+// Swaps the editor's client-generated ids for the canonical server ids a save
+// response reports (variants and pages created by that save). Without this,
+// the next save would submit the same records under ids the server doesn't
+// know — re-creating them and tripping the content deletion guard (see the
+// server's Product::RichContentDeletionGuard).
+const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
+  const variantMappings = response.variant_id_mappings ?? {};
+  const pageMappings = response.rich_content_id_mappings ?? {};
+  for (const variant of product.variants) {
+    const canonicalId = variantMappings[variant.id];
+    if (canonicalId) {
+      variant.id = canonicalId;
+      // The variant exists server-side now; later saves must address it by id
+      // instead of asking for another creation.
+      delete variant.newlyAdded;
+    }
+    for (const page of variant.rich_content) page.id = pageMappings[page.id] ?? page.id;
+  }
+  for (const page of product.rich_content) page.id = pageMappings[page.id] ?? page.id;
+};
+
 const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   const contentUpdatedVariantIds = product.variants
     .filter((variant) => {
@@ -245,28 +270,83 @@ const ProductEditPage = (props: Props) => {
   // continue") settle once the seller decides.
   const [pendingDeletions, setPendingDeletions] = React.useState<PendingDeletions | null>(null);
   const pendingSaveRef = React.useRef<((saved: boolean) => void) | null>(null);
+  // Hidden version-level pages the server refused to delete without an
+  // explicit choice (see HiddenVariantContentConflictError). Non-null while
+  // the choice modal is open.
+  const [hiddenContentConflict, setHiddenContentConflict] = React.useState<
+    { id: string; title: string | null }[] | null
+  >(null);
+  // Client-generated id → canonical server id, accumulated from save
+  // responses; exposed via context so components holding an id in local state
+  // (the content tab's selection) can follow the swap.
+  const [serverIdMappings, setServerIdMappings] = React.useState<Record<string, string>>({});
   // Resolves true only when the save request actually succeeded — callers that
   // chain follow-up actions on save() (navigating to the next tab, opening the
   // preview) use this to stay put when the save failed or the seller cancelled
   // the deletion confirmation.
-  const performSave = async (): Promise<boolean> => {
+  //
+  // extraConfirmedRemovedPageIds: page ids the seller just confirmed deleting
+  // in the hidden-content conflict modal — merged into the payload without
+  // waiting for a state round-trip.
+  const performSave = async (extraConfirmedRemovedPageIds?: string[]): Promise<boolean> => {
     let saved = false;
+    const productToSave = extraConfirmedRemovedPageIds?.length
+      ? {
+          ...product,
+          confirmed_removed_rich_content_ids: [
+            ...(product.confirmed_removed_rich_content_ids ?? []),
+            ...extraConfirmedRemovedPageIds,
+          ],
+        }
+      : product;
     try {
       setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, product, currencyType);
+      const response = await saveProduct(props.unique_permalink, props.id, productToSave, currencyType);
       saved = true;
+      // Compute the changed-content diff before the baseline moves.
+      const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
+        product,
+        lastSavedProductRef.current,
+      );
+
+      // Adopt the canonical ids the server assigned to records this save
+      // created, both in the live state and in the new baseline, and drop the
+      // confirmed-removal ids this save consumed (the deletions are now
+      // persisted; keeping them could authorize a future unintended deletion).
+      // Runs for warning responses too — the save succeeded, so the baseline
+      // must move or the next save would re-confirm (and re-report) changes
+      // that are already persisted.
+      const sentConfirmedVariantIds = new Set(productToSave.confirmed_removed_variant_ids ?? []);
+      const sentConfirmedPageIds = new Set(productToSave.confirmed_removed_rich_content_ids ?? []);
+      const reconciled = structuredClone(product);
+      applyCanonicalIds(reconciled, response);
+      reconciled.confirmed_removed_variant_ids = [];
+      reconciled.confirmed_removed_rich_content_ids = [];
+      lastSavedProductRef.current = reconciled;
+      setServerIdMappings((previous) => ({
+        ...previous,
+        ...response.variant_id_mappings,
+        ...response.rich_content_id_mappings,
+      }));
+      updateProduct((current) => {
+        applyCanonicalIds(current, response);
+        current.confirmed_removed_variant_ids = (current.confirmed_removed_variant_ids ?? []).filter(
+          (id) => !sentConfirmedVariantIds.has(id),
+        );
+        current.confirmed_removed_rich_content_ids = (current.confirmed_removed_rich_content_ids ?? []).filter(
+          (id) => !sentConfirmedPageIds.has(id),
+        );
+      });
+
       if (response.warning_message) showAlert(response.warning_message, "warning");
       else {
-        const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
-          product,
-          lastSavedProductRef.current,
-        );
         const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
 
         if (props.successful_sales_count > 0 && contentUpdated) {
           const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
             ? [props.unique_permalink]
-            : contentUpdatedVariantIds;
+            : // Report canonical ids for variants created by this very save.
+              contentUpdatedVariantIds.map((id) => response.variant_id_mappings?.[id] ?? id);
 
           setContentUpdates({
             uniquePermalinkOrVariantIds,
@@ -274,11 +354,14 @@ const ProductEditPage = (props: Props) => {
         } else {
           showAlert("Changes saved!", "success");
         }
-        lastSavedProductRef.current = structuredClone(product);
       }
     } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
+      if (e instanceof HiddenVariantContentConflictError) {
+        setHiddenContentConflict(e.hiddenPages);
+      } else {
+        assertResponseError(e);
+        showAlert(e.message, "error");
+      }
     }
     setSaving(false);
     return saved;
@@ -328,11 +411,12 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
+      serverIdMappings,
       contentUpdates,
       setContentUpdates,
       filesById,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles, filesById],
+    [product, updateProduct, existingFiles, setExistingFiles, filesById, serverIdMappings],
   );
 
   const imageSettings = React.useMemo(
@@ -418,6 +502,45 @@ const ProductEditPage = (props: Props) => {
                 </div>
               ) : null}
               <p>Customers who purchased this content will lose access to it.</p>
+            </div>
+          </Modal>
+        ) : null}
+        {hiddenContentConflict ? (
+          <Modal
+            open
+            onClose={() => setHiddenContentConflict(null)}
+            title="Resolve conflicting content?"
+            footer={
+              <>
+                <Button onClick={() => setHiddenContentConflict(null)}>No, cancel</Button>
+                <Button
+                  color="danger"
+                  onClick={() => {
+                    const pageIds = hiddenContentConflict.map(({ id }) => id);
+                    setHiddenContentConflict(null);
+                    void performSave(pageIds);
+                  }}
+                >
+                  Delete them and save
+                </Button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <p>
+                Your {variantLabel}s still have their own content pages from a previous configuration. They aren't shown
+                in the editor because this product is set to use the same content for all {variantLabel}s, but they
+                still exist:
+              </p>
+              <ul className="list-disc pl-6">
+                {hiddenContentConflict.map(({ id, title }) => (
+                  <li key={id}>{titleWithFallback(title)}</li>
+                ))}
+              </ul>
+              <p>
+                Saving requires deleting them permanently. If you want to review or keep this content instead, cancel
+                and contact support.
+              </p>
             </div>
           </Modal>
         ) : null}

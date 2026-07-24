@@ -167,8 +167,17 @@ const FileUploadMenu = ({
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
-    useProductEditContext();
+  const {
+    id,
+    product,
+    updateProduct,
+    save,
+    existingFiles,
+    setExistingFiles,
+    uniquePermalink,
+    filesById,
+    serverIdMappings,
+  } = useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -209,7 +218,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     setSelectedPageId(page.id);
     return page;
   };
-  const [selectedPageId, setSelectedPageId] = React.useState(pages[0]?.id);
+  const [rawSelectedPageId, setSelectedPageId] = React.useState(pages[0]?.id);
+  // A successful save swaps the client-generated ids of pages created this
+  // session for their canonical server ids — follow the mapping so the
+  // selection keeps pointing at the same page instead of falling back to the
+  // first one.
+  const selectedPageId =
+    rawSelectedPageId == null ? rawSelectedPageId : (serverIdMappings[rawSelectedPageId] ?? rawSelectedPageId);
   const selectedPage = pages.find((page) => page.id === selectedPageId);
   if ((selectedPageId || pages.length) && !selectedPage) setSelectedPageId(pages[0]?.id);
   const [renamingPageId, setRenamingPageId] = React.useState<string | null>(null);
@@ -1149,8 +1164,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
 //TODO inline this once all the crazy providers are gone
 export const ContentTab = () => {
-  const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink } = useProductEditContext();
-  const [selectedVariantId, setSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
+  const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink, serverIdMappings } =
+    useProductEditContext();
+  const [rawSelectedVariantId, setSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
+  // A successful save swaps the client-generated ids of variants created this
+  // session for their canonical server ids — follow the mapping so the
+  // selection keeps pointing at the same variant instead of silently falling
+  // back to the product-level pages.
+  const selectedVariantId =
+    rawSelectedVariantId == null ? null : (serverIdMappings[rawSelectedVariantId] ?? rawSelectedVariantId);
   const [confirmingDiscardVariantContent, setConfirmingDiscardVariantContent] = React.useState(false);
   const selectedVariant = product.variants.find((variant) => variant.id === selectedVariantId);
 

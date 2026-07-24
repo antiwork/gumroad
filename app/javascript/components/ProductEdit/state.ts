@@ -163,8 +163,8 @@ export type Product = {
   community_chat_enabled: boolean | null;
   // External ids of variants / content pages the seller explicitly deleted in
   // this editor session (via the respective confirmation modals). Sent with the
-  // save payload so the server can tell an intentional deletion apart from a
-  // stale payload that would otherwise silently wipe content.
+  // save payload so the server can tell an intentional deletion apart from an
+  // outdated or blind payload that would otherwise silently wipe content.
   confirmed_removed_variant_ids?: string[];
   confirmed_removed_rich_content_ids?: string[];
 } & (
@@ -210,6 +210,12 @@ export const ProductEditContext = React.createContext<{
   // request failure or when the seller cancels the deletion confirmation) —
   // callers chaining navigation on save() must check it before proceeding.
   save: () => Promise<boolean>;
+  // Client-generated id → canonical server id for variants/pages created in
+  // this session, accumulated from save responses. Successful saves rewrite
+  // the ids in the product state itself; components holding an id in their
+  // own state (e.g. the content tab's selection) use this map to follow the
+  // swap instead of losing their reference.
+  serverIdMappings: Record<string, string>;
   googleClientId: string;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
