@@ -91,6 +91,55 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
       expect(product.variant_categories.first.variants.reload.alive.in_order.pluck(:name)).to eq ["Basic Bundle", "First Product Files Grouping", "Second version"]
     end
 
+    it "recovers per-version content hidden by the shared-content flag and persists the recovery on save" do
+      # The July 21, 2026 incident state (gumroad-private#1230): support
+      # restored per-version pages while has_same_rich_content_for_all_variants
+      # stayed on, and the product level held only a blank placeholder — a
+      # fresh editor load used to show NO content and its next save wiped the
+      # restored pages. The editor must now load the real per-version pages
+      # and an ordinary save must keep them, turning the flag off for good.
+      restored_page = create(:rich_content, entity: @variant_option, title: "Restored guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Restored version content" }] }])
+      create(:product_rich_content, entity: product, description: [{ "type" => "paragraph" }])
+      product.update!(has_same_rich_content_for_all_variants: true)
+
+      visit "#{edit_link_path(product.unique_permalink)}/content"
+      expect(page).to have_text("Restored version content")
+
+      save_change
+
+      expect(product.reload.has_same_rich_content_for_all_variants?).to be(false)
+      expect(restored_page.reload).not_to be_deleted
+      expect(restored_page.description.to_s).to include("Restored version content")
+    end
+
+    it "asks for an explicit choice before deleting version content hidden behind real product-level content" do
+      # Fail-closed counterpart of the recovery above: when the product level
+      # ALSO has visible content, the editor keeps the shared view and an
+      # ordinary save must not silently pick a winner — the seller decides.
+      hidden_page = create(:rich_content, entity: @variant_option, title: "Hidden guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hidden version content" }] }])
+      create(:product_rich_content, entity: product, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level shared content" }] }])
+      product.update!(has_same_rich_content_for_all_variants: true)
+
+      visit "#{edit_link_path(product.unique_permalink)}/content"
+      expect(page).to have_text("Product-level shared content")
+
+      click_on "Save changes"
+      within_modal "Resolve conflicting content?" do
+        expect(page).to have_text("Hidden guide")
+        click_on "No, cancel"
+      end
+      expect(hidden_page.reload).not_to be_deleted
+
+      click_on "Save changes"
+      within_modal "Resolve conflicting content?" do
+        click_on "Delete them and save"
+      end
+      wait_for_ajax
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(hidden_page.reload).to be_deleted
+      expect(product.reload.has_same_rich_content_for_all_variants?).to be(true)
+    end
+
     it "keeps addressing the same version across repeated saves after adding one, without a reload" do
       visit edit_link_path(product.unique_permalink)
       page.scroll_to version_rows[0], align: :center

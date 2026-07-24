@@ -515,11 +515,13 @@ class LinksController < ApplicationController
       # AND real product-level content both exist, so the save must not pick a
       # winner. Return the hidden pages so the editor can present the seller
       # an explicit choice (delete them and keep the product-level content, or
-      # cancel).
+      # cancel). The guard raises on the first version it inspects, so list
+      # every hidden version page here (fresh from the rolled-back state) —
+      # one choice must cover all of them, not one modal round per version.
       return render json: {
         error_message: e.message,
         error_code: "hidden_variant_content_conflict",
-        hidden_variant_pages: e.hidden_pages,
+        hidden_variant_pages: all_hidden_variant_pages,
       }, status: :unprocessable_entity
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       if @product.errors.details[:custom_fields].present?
@@ -976,6 +978,19 @@ class LinksController < ApplicationController
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
       }
+    end
+
+    # Every content-bearing version-level page the submitted save didn't
+    # account for — the full set a hidden-content conflict asks the seller to
+    # decide about. Queried fresh (current_base_variants builds a new relation)
+    # because the failed save's transaction has been rolled back and cached
+    # associations may still carry its in-memory deletions.
+    def all_hidden_variant_pages
+      @product.current_base_variants.flat_map do |variant|
+        variant.alive_rich_contents.select(&:has_editor_content?)
+      end.reject do |rich_content|
+        payload_page_ids.include?(rich_content.external_id) || confirmed_removed_rich_content_ids.include?(rich_content.external_id)
+      end.map { { id: _1.external_id, title: _1.title } }
     end
 
     def update_custom_domain

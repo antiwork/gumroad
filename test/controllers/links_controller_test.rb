@@ -1520,24 +1520,32 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
   test "PUT update fails closed with an explicit-choice error when hidden version content conflicts with real product-level content" do
     setup_guarded_version!
+    version2 = create_variant(variant_category: @category, name: "Winter Sale")
+    version2_page = create_rich_content(entity: version2, title: "Winter guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Winter content" }] }])
     product_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }])
     @product.update!(has_same_rich_content_for_all_variants: true)
 
     # An ordinary save of the shared-content view: the product-level page is
-    # kept, and the (hidden) version page is absent from the payload. Neither
+    # kept, and the (hidden) version pages are absent from the payload. Neither
     # side can be picked automatically — the save must fail closed and name
-    # the hidden pages so the editor can ask for an explicit choice.
+    # EVERY hidden page (across all versions, not only the first one the guard
+    # inspected) so the editor can ask for one explicit choice covering all.
     post :update, params: @params.merge(
       has_same_rich_content_for_all_variants: true,
       rich_content: [{ id: product_page.external_id, title: nil, description: { type: "doc", content: product_page.description } }],
-      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }]
+      variants: [
+        { id: @version1.external_id, name: @version1.name, rich_content: [] },
+        { id: version2.external_id, name: version2.name, rich_content: [] },
+      ]
     ), format: :json
 
     assert_response :unprocessable_entity
     assert_equal Product::RichContentDeletionGuard::HIDDEN_CONTENT_CONFLICT_MESSAGE, response.parsed_body["error_message"]
     assert_equal "hidden_variant_content_conflict", response.parsed_body["error_code"]
-    assert_equal [{ "id" => @version1_page.external_id, "title" => nil }], response.parsed_body["hidden_variant_pages"]
+    assert_equal [{ "id" => @version1_page.external_id, "title" => nil }, { "id" => version2_page.external_id, "title" => "Winter guide" }].to_set,
+                 response.parsed_body["hidden_variant_pages"].to_set
     assert_equal false, @version1_page.reload.deleted?
+    assert_equal false, version2_page.reload.deleted?
   end
 
   test "PUT update deletes the hidden version content once the seller makes the explicit choice" do
