@@ -170,8 +170,9 @@ export const PaymentElementInput = ({
             walletsEnabled={walletsEnabled}
             flatLayout={flatLayout}
             applePayOption={applePayOption}
-            defaultEmail={linkPrefillContact.email}
-            defaultName={linkPrefillContact.name}
+            linkPrefillEmail={linkPrefillContact.email}
+            linkPrefillName={linkPrefillContact.name}
+            defaultName={defaultName}
             defaultCountry={defaultCountry}
             hasShippingCart={hasShippingCart}
             onReady={onReady}
@@ -196,7 +197,8 @@ const PaymentElementControllerInput = ({
   walletsEnabled,
   flatLayout,
   applePayOption,
-  defaultEmail,
+  linkPrefillEmail,
+  linkPrefillName,
   defaultName,
   defaultCountry,
   hasShippingCart,
@@ -211,7 +213,16 @@ const PaymentElementControllerInput = ({
   walletsEnabled: boolean;
   flatLayout: boolean;
   applePayOption?: PaymentElementApplePayOption | undefined;
-  defaultEmail: string;
+  // The debounce-frozen contact snapshot for Link's prefill (see linkPrefillContact in
+  // PaymentElementInput): deliberately stops following checkout's fields once the buyer
+  // touches the element, so Link's own UI isn't disrupted mid-interaction.
+  linkPrefillEmail: string;
+  linkPrefillName: string;
+  // The LIVE name from checkout's Full name field (state.fullName), not the frozen Link
+  // snapshot. The element-full prefill (UPI on digital carts) must track what the buyer
+  // actually typed right up to the moment they switch to UPI — with the frozen snapshot, a
+  // buyer who touched the element first (e.g. clicked the Card row) and THEN typed their
+  // name would get an empty Name field in the UPI pane and have to retype it.
   defaultName: string;
   defaultCountry: string;
   hasShippingCart: boolean;
@@ -243,11 +254,11 @@ const PaymentElementControllerInput = ({
     if (!stripeLinkEnabled) return undefined;
 
     const billingDetails = {
-      ...(defaultEmail ? { email: defaultEmail } : {}),
-      ...(defaultName ? { name: defaultName } : {}),
+      ...(linkPrefillEmail ? { email: linkPrefillEmail } : {}),
+      ...(linkPrefillName ? { name: linkPrefillName } : {}),
     };
     return Object.keys(billingDetails).length > 0 ? { billingDetails } : undefined;
-  }, [defaultEmail, defaultName, stripeLinkEnabled]);
+  }, [linkPrefillEmail, linkPrefillName, stripeLinkEnabled]);
 
   // On "element-full" (UPI on digital carts) Stripe's pane collects the buyer's name and full
   // address itself, so prefill it with what checkout already knows — the name the buyer may

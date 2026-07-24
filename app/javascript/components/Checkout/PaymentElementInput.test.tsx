@@ -218,6 +218,29 @@ describe("PaymentElementInput", () => {
     });
   });
 
+  it("prefills the UPI pane with a name typed AFTER the buyer touched the element", () => {
+    // Regression (PR #6191 review): the buyer clicks into the element (Card row) first, THEN
+    // types their name into checkout's Full name field, then switches to UPI. Link's contact
+    // prefill deliberately freezes once the element is touched — but the element-full prefill
+    // must keep tracking the live form value, or the UPI pane's Name field opens empty and the
+    // buyer has to retype a name checkout already knows.
+    const { rerender } = render(
+      <PaymentElementInput {...props} defaultName="" walletsEnabled amount={100_000} mountCurrency="inr" />,
+    );
+
+    // Buyer interacts with the element first — this freezes the Link prefill snapshot.
+    act(() => paymentElementRender.onFocus?.());
+    // Then types their name into checkout's Full name field.
+    rerender(
+      <PaymentElementInput {...props} defaultName="Priya Sharma" walletsEnabled amount={100_000} mountCurrency="inr" />,
+    );
+    // Then switches to UPI: the pane must open with the just-typed name, not the frozen snapshot.
+    act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
+    expect(paymentElementRender.options?.defaultValues).toEqual({
+      billingDetails: { name: "Priya Sharma", address: { country: "IN" } },
+    });
+  });
+
   it("keeps every UPI billing field on the checkout form for shippable carts", () => {
     render(
       <PaymentElementInput {...props} hasShippingCart walletsEnabled flatLayout amount={100_000} mountCurrency="inr" />,
