@@ -19,13 +19,7 @@ class SendPostBlastEmailsJob
     @members = load_audience_members
 
     if @blast.to_non_openers?
-      # Resolving who was emailed and who opened plucks hundreds of thousands of rows
-      # for large sends — the same query shape that can exceed the database's default
-      # statement cap. Run it under the same raised, Redis-tunable cap the audience
-      # load above uses so a huge blast doesn't die on a 5-minute statement timeout.
-      keep_emails = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
-        @post.unopened_recipient_emails.to_set
-      end
+      keep_emails = load_non_opener_emails
       @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
       remove_members_already_sent_in_this_blast
     else
@@ -153,6 +147,57 @@ class SendPostBlastEmailsJob
       $redis.rename(tmp_key, snapshot_key)
     end
 
+    # Resolves which of the post's original recipients never opened it — the audience a
+    # "resend to non-openers" blast targets.
+    #
+    # For a post emailed to hundreds of thousands of people this computation is the
+    # slowest part of the whole job (it reads every open-tracking row for the post and
+    # then looks up those buyers' emails), and it used to be repeated in full by every
+    # attempt. That made large resends effectively un-sendable: each attempt needed
+    # roughly an hour before the first email went out, and any deploy or worker recycle
+    # in that window killed it and sent the next attempt back to the start.
+    #
+    # So the resolved set is checkpointed in Redis keyed by blast id, the same way the
+    # audience snapshot is. A restarted attempt reads the checkpoint and proceeds
+    # straight to sending. The set is still a point-in-time answer: someone who opens
+    # the original email after the checkpoint is written may still receive the resend.
+    # That was already true within a single attempt, and it is a far better outcome than
+    # a blast that never sends at all.
+    def load_non_opener_emails
+      checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
+      if $redis.exists?(checkpoint_key)
+        emails = $redis.smembers(checkpoint_key).to_set
+        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from non-opener checkpoint (#{emails.size} emails)")
+        return emails
+      end
+
+      # The underlying queries read in primary-key-bounded batches, but the raised,
+      # Redis-tunable statement cap stays as a second line of defence: it covers the
+      # audience-filter query inside the same phase and any single batch that is slower
+      # than expected on a heavily loaded replica.
+      emails = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+        @post.unopened_recipient_emails.to_set
+      end
+      write_non_opener_checkpoint(checkpoint_key, emails)
+      emails
+    end
+
+    # Same atomic write as the audience snapshot: build the set under a temporary key and
+    # rename it into place, so an attempt killed partway through the write can never
+    # leave a partial set that a later attempt would mistake for the complete answer and
+    # send to a fraction of the non-openers.
+    def write_non_opener_checkpoint(checkpoint_key, emails)
+      return if emails.empty?
+
+      tmp_key = "#{checkpoint_key}:tmp"
+      $redis.del(tmp_key)
+      emails.each_slice(10_000) do |slice|
+        $redis.sadd(tmp_key, slice)
+      end
+      $redis.expire(tmp_key, AUDIENCE_SNAPSHOT_TTL.to_i)
+      $redis.rename(tmp_key, checkpoint_key)
+    end
+
     def prepare_recipients(members)
       members_with_specifics = members.index_with { { email: _1.email } }
       enrich_with_gathered_records(members_with_specifics)
@@ -263,11 +308,13 @@ class SendPostBlastEmailsJob
 
     def mark_blast_as_completed
       @blast.update!(completed_at: Time.current)
-      # The blast is done, so the retry-resume snapshot has served its purpose. Also
-      # remove the temporary write-in-progress key in case a previous attempt died
-      # mid-write (it carries a TTL, but no reason to keep it around).
+      # The blast is done, so the retry-resume snapshot and the non-opener checkpoint
+      # have served their purpose. Also remove the temporary write-in-progress keys in
+      # case a previous attempt died mid-write (they carry a TTL, but no reason to keep
+      # them around).
       snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
-      $redis.del(snapshot_key, "#{snapshot_key}:tmp")
+      checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
+      $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp")
     end
 
     # Stores email addresses in SentPostEmail, just before sending the emails.

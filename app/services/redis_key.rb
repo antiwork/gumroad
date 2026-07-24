@@ -36,6 +36,7 @@ class RedisKey
     def blast_recipients_slice_size = "blast:recipients_slice_size"
     def blast_sent_emails(blast_id) = "blast:#{blast_id}:sent_emails"
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
+    def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
     def audience_member_load_max_execution_time_seconds = "audience_member_load:max_execution_time_seconds"
     def impersonated_user(admin_user_id) = "impersonated_user_by_admin_#{admin_user_id}"
     def gumroad_day_date = "gumroad_day_date"

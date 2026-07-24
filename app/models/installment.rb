@@ -745,15 +745,23 @@ class Installment < ApplicationRecord
     end
   end
 
+  # Rows are read (and emails are looked up) in chunks of this size. A post sent to a
+  # six-figure audience has just as many email_infos rows, and asking the database for
+  # all of them — or for the emails of all their purchases — in a single statement is
+  # what used to blow past the statement execution cap and kill the resend job. Reading
+  # in primary-key-bounded chunks keeps every individual statement small and quick,
+  # at the cost of more round trips.
+  RECIPIENT_LOOKUP_BATCH_SIZE = 10_000
+
   # Purchase ids of recipients this post was emailed to, backed by the open-tracking
   # CreatorContactingCustomersEmailInfo rows that are created when a post email is sent.
   def emailed_recipient_purchase_ids
-    email_infos.where.not(purchase_id: nil).distinct.pluck(:purchase_id)
+    batched_distinct_purchase_ids(email_infos.where.not(purchase_id: nil))
   end
 
   # Purchase ids of recipients who have opened this post's email at least once.
   def opened_recipient_purchase_ids
-    email_infos.where(state: "opened").where.not(purchase_id: nil).distinct.pluck(:purchase_id)
+    batched_distinct_purchase_ids(email_infos.where(state: "opened").where.not(purchase_id: nil))
   end
 
   # Purchase ids of original recipients who have not opened this post's email yet.
@@ -774,9 +782,9 @@ class Installment < ApplicationRecord
     emailed_ids = emailed_recipient_purchase_ids
     return [] if emailed_ids.empty?
 
-    emailed_emails = Purchase.where(id: emailed_ids).distinct.pluck(:email).compact.map(&:downcase)
-    opened_emails = Purchase.where(id: opened_recipient_purchase_ids).distinct.pluck(:email).compact.map(&:downcase)
-    emailed_emails - opened_emails
+    emailed_emails = purchase_emails_for(emailed_ids)
+    opened_emails = purchase_emails_for(opened_recipient_purchase_ids)
+    (emailed_emails - opened_emails).to_a
   end
 
   # Accepts a precomputed `candidates` list so callers that already have the unopened
@@ -1131,5 +1139,30 @@ class Installment < ApplicationRecord
         .gsub(/([^[:alnum:]\s])/, ' \1 ')
         .squish
         .titleize
+    end
+
+    # Collects the distinct purchase ids of an email_infos scope without asking the
+    # database for every row in one statement. `in_batches` walks the table by primary
+    # key, so each statement touches at most RECIPIENT_LOOKUP_BATCH_SIZE rows and
+    # finishes quickly even when the post was emailed to hundreds of thousands of
+    # people. De-duplication happens in Ruby because DISTINCT across the whole table
+    # is exactly the expensive part we're avoiding.
+    def batched_distinct_purchase_ids(scope)
+      ids = Set.new
+      scope.in_batches(of: RECIPIENT_LOOKUP_BATCH_SIZE) do |batch|
+        ids.merge(batch.pluck(:purchase_id))
+      end
+      ids.to_a
+    end
+
+    # Downcased emails for the given purchase ids, looked up in chunks so a six-figure
+    # id list becomes many small `WHERE id IN (...)` statements instead of one enormous
+    # one. Returns a Set because every caller only needs membership/difference.
+    def purchase_emails_for(purchase_ids)
+      emails = Set.new
+      purchase_ids.each_slice(RECIPIENT_LOOKUP_BATCH_SIZE) do |ids_slice|
+        emails.merge(Purchase.where(id: ids_slice).pluck(:email).compact.map(&:downcase))
+      end
+      emails
     end
 end
