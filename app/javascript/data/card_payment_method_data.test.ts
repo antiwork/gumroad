@@ -190,7 +190,7 @@ describe("element-collected billing details (wallets, UPI)", () => {
     expect(createConfirmationToken).toHaveBeenCalledWith({ elements });
   });
 
-  it("createPaymentElementConfirmationToken passes only the form's email for element-full collection (UPI)", async () => {
+  it("createPaymentElementConfirmationToken passes the form's email and name for element-full collection (UPI)", async () => {
     const { stripe, elements, createConfirmationToken } = buildStripeFixture();
 
     const result = await createPaymentElementConfirmationToken({
@@ -199,15 +199,15 @@ describe("element-collected billing details (wallets, UPI)", () => {
     });
 
     expect(result.status).toBe("success");
-    // The element's pane collected the name and the full street address itself (checkout's own
-    // fields are hidden for this selection) — only the email, which checkout's form still owns,
-    // is passed. No name/country/address overrides: they would clobber what the buyer typed
-    // into the pane.
+    // The element's pane collected the full street address itself — email and name, which
+    // checkout's form still owns (the pane's name field is pinned to "never"), are passed
+    // alongside. No country/address overrides: they would clobber what the buyer typed into
+    // the pane.
     expect(createConfirmationToken).toHaveBeenCalledWith({
       elements,
       params: {
         payment_method_data: {
-          billing_details: { email: "buyer@example.com", phone: null },
+          billing_details: { email: "buyer@example.com", name: "Buyer Name", phone: null },
         },
       },
     });

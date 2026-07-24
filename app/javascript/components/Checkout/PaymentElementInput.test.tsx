@@ -185,20 +185,21 @@ describe("PaymentElementInput", () => {
     });
   });
 
-  it("has the element collect the full billing details (except email) inside the UPI pane on a digital cart", () => {
+  it("has the element collect the street address (not name or email) inside the UPI pane on a digital cart", () => {
     render(<PaymentElementInput {...props} walletsEnabled flatLayout amount={100_000} mountCurrency="inr" />);
 
     // The buyer selects the UPI row. Stripe requires billing_details.name + a full street
     // address to confirm UPI, and the digital checkout form has no street-address fields — so
-    // Stripe's pane collects everything itself (name + full address, localized + validated),
-    // and checkout's own Full name/Country fields hide for the selection (see SharedInputs in
-    // PaymentForm.tsx) so nothing is asked for twice. Only email stays "never": it is
-    // checkout's receipt contact and tokenization passes it alongside
-    // (gumroad-private#933).
+    // Stripe's pane collects the address itself (localized + validated) while checkout's
+    // Country/ZIP fields hide for the selection (see SharedInputs in PaymentForm.tsx) so
+    // nothing is asked for twice. Name and email stay "never": both remain checkout's own
+    // fields — moving name into the pane would lose a name typed before switching (the pane
+    // only applies defaultValues present when its fields first render — PR #6191 review) —
+    // and tokenization passes them alongside (gumroad-private#933).
     act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
     expect(paymentElementRender.options?.fields).toEqual({
       billingDetails: {
-        name: "auto",
+        name: "never",
         email: "never",
         phone: "never",
         address: "auto",
@@ -206,39 +207,52 @@ describe("PaymentElementInput", () => {
     });
   });
 
-  it("prefills the UPI pane with the name and country checkout already knows", () => {
+  it("prefills the UPI pane's address form with the country checkout already knows", () => {
     render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
 
-    // Checkout may already know the buyer's name (typed before switching to UPI, or from their
-    // account) and the GeoIP-detected country — hand both to the pane as defaultValues so the
-    // buyer doesn't retype them and the address form opens on the right country's format.
+    // The GeoIP-detected country and the buyer's known name/email ride along as defaultValues
+    // from mount, so the pane's address form opens on the right country's format. (Name and
+    // email render nothing in the pane — both fields are pinned to "never" — but Stripe ignores
+    // defaults for unrendered fields, so passing them is harmless and keeps Link's email
+    // prefill working.)
     act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
     expect(paymentElementRender.options?.defaultValues).toEqual({
-      billingDetails: { name: "Buyer", address: { country: "IN" } },
+      billingDetails: { email: "buyer@example.com", name: "Buyer", address: { country: "IN" } },
     });
   });
 
-  it("prefills the UPI pane with a name typed AFTER the buyer touched the element", () => {
+  it("keeps tracking a name typed AFTER the buyer touched the element", () => {
     // Regression (PR #6191 review): the buyer clicks into the element (Card row) first, THEN
-    // types their name into checkout's Full name field, then switches to UPI. Link's contact
-    // prefill deliberately freezes once the element is touched — but the element-full prefill
-    // must keep tracking the live form value, or the UPI pane's Name field opens empty and the
-    // buyer has to retype a name checkout already knows.
-    const { rerender } = render(
-      <PaymentElementInput {...props} defaultName="" walletsEnabled amount={100_000} mountCurrency="inr" />,
-    );
+    // types their name into checkout's Full name field. Link's email prefill deliberately
+    // freezes once the element is touched — but the name default must keep tracking the live
+    // form value rather than freeze with it.
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(
+        <PaymentElementInput {...props} defaultName="" walletsEnabled amount={100_000} mountCurrency="inr" />,
+      );
 
-    // Buyer interacts with the element first — this freezes the Link prefill snapshot.
-    act(() => paymentElementRender.onFocus?.());
-    // Then types their name into checkout's Full name field.
-    rerender(
-      <PaymentElementInput {...props} defaultName="Priya Sharma" walletsEnabled amount={100_000} mountCurrency="inr" />,
-    );
-    // Then switches to UPI: the pane must open with the just-typed name, not the frozen snapshot.
-    act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
-    expect(paymentElementRender.options?.defaultValues).toEqual({
-      billingDetails: { name: "Priya Sharma", address: { country: "IN" } },
-    });
+      // Buyer interacts with the element first — this freezes the Link email prefill.
+      act(() => paymentElementRender.onFocus?.());
+      // Then types their name into checkout's Full name field.
+      rerender(
+        <PaymentElementInput
+          {...props}
+          defaultName="Priya Sharma"
+          walletsEnabled
+          amount={100_000}
+          mountCurrency="inr"
+        />,
+      );
+      act(() => vi.advanceTimersByTime(1_000)); // past the prefill debounce
+      // The element's options must carry the just-typed name, not a frozen snapshot.
+      act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
+      expect(paymentElementRender.options?.defaultValues).toEqual({
+        billingDetails: { email: "buyer@example.com", name: "Priya Sharma", address: { country: "IN" } },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps every UPI billing field on the checkout form for shippable carts", () => {

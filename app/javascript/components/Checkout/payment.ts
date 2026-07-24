@@ -604,11 +604,13 @@ export const hasShipping = (state: State) => state.products.some((item) => item.
 // paymentElementBillingDetailsCollection in card_payment_method_data.ts). Mirrors that rule
 // instead of importing it: card_payment_method_data.ts already imports from this module, and a
 // value import back would create a module cycle. When this is true, checkout's own form hides
-// its Full name and Country/ZIP fields (the element's pane asks for name + full address with
-// Stripe's localized labels and validation) and the ZIP requirement for US buyers is waived —
-// the buyer types their postal code into the element instead. Guarded on the card/element lane
-// being checkout's active payment method: a buyer who selected UPI inside the element and then
-// switched to PayPal pays with PayPal's own flow, and the form's fields must come back.
+// its Country/ZIP fields (the element's pane asks for the full street address with Stripe's
+// localized labels and validation) and the ZIP requirement for US buyers is waived — the buyer
+// types their postal code into the element instead. The Full name field stays visible: the
+// pane's name field is pinned to "never" and tokenization passes the form's name (see
+// paymentElementBillingDetailsOverride). Guarded on the card/element lane being checkout's
+// active payment method: a buyer who selected UPI inside the element and then switched to
+// PayPal pays with PayPal's own flow, and the form's fields must come back.
 export const paymentElementCollectsFullBillingDetails = (state: State) =>
   state.paymentMethod === "card" &&
   state.paymentElementType === "upi" &&
@@ -677,6 +679,13 @@ function validatePaymentMethodIndependentFields(state: State) {
     !paymentElementCollectsFullBillingDetails(state)
   )
     errors.add("zipCode");
+  // Stripe requires billing_details.name to confirm a UPI payment, and on the element-full
+  // mode the pane's own name field is pinned to "never" — checkout's Full name field is the
+  // only source (see paymentElementBillingDetailsOverride). Without this gate a blank name
+  // reaches Stripe's confirm and fails server-side with parameter_missing and no
+  // last_payment_error — the un-actionable failure shape of gumroad-private#933.
+  if (requiresPayment(state) && paymentElementCollectsFullBillingDetails(state) && !state.fullName)
+    errors.add("fullName");
   if (state.gift?.type === "normal" && !isValidEmail(state.gift.email)) errors.add("gift");
   return errors;
 }

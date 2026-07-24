@@ -345,13 +345,17 @@ const SharedInputs = () => {
       break;
   }
 
-  // When the Payment Element collects the full billing details itself (UPI on digital carts),
-  // its pane asks for the buyer's name and complete address — checkout's own Full name and
-  // Country/ZIP fields hide so nothing is asked for twice, and the pane's country drives the
-  // tax location once the payment tokenizes (see the client-confirm submit effect).
+  // When the Payment Element collects the buyer's full street address itself (UPI on digital
+  // carts), checkout's own Country/ZIP fields hide so nothing is asked for twice, and the
+  // pane's country drives the tax location once the payment tokenizes (see the client-confirm
+  // submit effect). The Full name field stays visible: name remains checkout's own field for
+  // every selection — the pane's name field is pinned to "never" (a name typed before switching
+  // to UPI cannot be carried into the pane's defaultValues after it renders, so moving the
+  // field would force the buyer to retype it — PR #6191 review) and tokenization passes the
+  // form's name alongside.
   const elementCollectsFullBillingDetails = paymentElementCollectsFullBillingDetails(state);
   const showCountryInput = !(hasShipping(state) || !requiresPayment(state)) && !elementCollectsFullBillingDetails;
-  const showFullNameInput = requiresPayment(state) && !hasShipping(state) && !elementCollectsFullBillingDetails;
+  const showFullNameInput = requiresPayment(state) && !hasShipping(state);
 
   // These fields render inside the same box as the "Pay with" section (one card: email address,
   // then the payment methods right below) rather than a separate "Contact information" card, so
@@ -815,11 +819,12 @@ const CreditCardContent = ({
       if (!useSavedCard && usesPaymentElement && !paymentElementReady) return;
 
       // Selections in "element-full" collection mode (UPI on digital carts — see
-      // paymentElementBillingDetailsCollection) have Stripe's pane collect the buyer's name and
-      // full street address itself; checkout's own Full name and Country fields are hidden for
-      // them. Stripe's element-side validation blocks submission until the pane is complete, so
-      // no checkout-side name gate is needed here — elements.submit() inside tokenization
-      // surfaces any missing pane field as a field-level error.
+      // paymentElementBillingDetailsCollection) have Stripe's pane collect the buyer's full
+      // street address itself; checkout's Country/ZIP fields are hidden for them. The Full
+      // name field stays checkout's own (validated in
+      // validatePaymentMethodIndependentFields) and Stripe's element-side validation blocks
+      // submission until the pane's address is complete — elements.submit() inside
+      // tokenization surfaces any missing pane field as a field-level error.
 
       // Client-confirm checkout mints a ConfirmationToken; saved cards stay on server-confirm.
       if (useStripePaymentElementClientConfirm && !useSavedCard) {
@@ -880,8 +885,10 @@ const CreditCardContent = ({
             return;
           }
         }
-        // Checkout hides its Full name field when the element collects UPI's billing details,
-        // so adopt the pane's value before the purchase payload reads state.fullName.
+        // The name on the tokenized payment method is checkout's own form name (the pane's name
+        // field is pinned to "never" — see paymentElementBillingDetailsOverride). Echo whatever
+        // actually landed on the PaymentMethod back into state so the purchase payload always
+        // matches it.
         if (tokenResult.elementBillingFullName) {
           dispatch({ type: "set-value", fullName: tokenResult.elementBillingFullName });
         }
@@ -983,8 +990,8 @@ const CreditCardContent = ({
           return;
         }
       }
-      // Preserve the name collected in the UPI pane in this server-confirm lane too. Checkout's
-      // own Full name field was hidden, so state.fullName would otherwise be blank or stale.
+      // Same PaymentMethod-name echo as the client-confirm lane above (the name is checkout's
+      // own form value passed at tokenization — see paymentElementBillingDetailsOverride).
       if (
         paymentMethod.type === "new" &&
         paymentMethod.cardParamsResult.type === "cc" &&

@@ -147,8 +147,10 @@ const elementCollectedBillingAddress = (
   return address ? { country: address.country, postal_code: address.postal_code, state: address.state } : null;
 };
 
-// Checkout hides its own Full name field in element-full mode, so preserve the name Stripe
-// collected in the pane for Gumroad's purchase record.
+// The name on the tokenized payment method in element-full mode. The pane's name field is
+// pinned to "never" and tokenization passes checkout's own form name, so normally this echoes
+// state.fullName back — kept so the purchase record always carries whatever name actually
+// landed on the PaymentMethod.
 const elementCollectedBillingFullName = (
   collection: PaymentElementBillingDetailsCollection,
   paymentMethod: WalletPaymentMethodPayload,
@@ -178,17 +180,19 @@ export const paymentElementBillingDetails = (cardData: PaymentElementBillingDeta
 // - "form": the full checkout-form values — required, because every element field is "never".
 // - "element": no override at all — the wallet sheet's verified details must survive, and
 //   passing any value would clobber them on the resulting PaymentMethod.
-// - "element-full": only the email — the single field checkout's form still owns on this mode.
-//   Stripe merges it with the name and street address the element collected. No name, country,
-//   or address components are passed: the buyer typed all of those into the element's pane
-//   (checkout's own fields are hidden for this selection), and overriding any of them with the
-//   form's — possibly stale — values would corrupt what the buyer actually entered.
+// - "element-full": the email and name — the fields checkout's form still owns on this mode
+//   (the Full name field stays visible for UPI; only the street-address fields moved into the
+//   element's pane — see paymentElementBillingDetailsCollection). Stripe requires
+//   billing_details.name to confirm UPI and the pane's name field is pinned to "never", so the
+//   override must carry it, exactly like "form" mode. No country or address components are
+//   passed: the buyer typed those into the element's pane, and overriding them with the form's
+//   — possibly stale — values would corrupt what the buyer actually entered.
 const paymentElementBillingDetailsOverride = (cardData: PaymentElementCardData) => {
   switch (cardData.billingDetailsCollection) {
     case "element":
       return null;
     case "element-full":
-      return { email: cardData.email, phone: null };
+      return { email: cardData.email, name: cardData.fullName || null, phone: null };
     case "form":
       return paymentElementBillingDetails(cardData);
   }
