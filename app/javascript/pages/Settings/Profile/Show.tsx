@@ -122,6 +122,10 @@ export default function SettingsPage() {
 
   const [isSaving, setIsSaving] = React.useState(false);
   const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !isSaving;
+  // Whether this user can actually build the replacement custom page. The legacy-Pages alert
+  // links to the Home page editor, but that editor only offers the agent panel to roles that
+  // pass PagePolicy#create? — accountant and support can see profile settings without it.
+  const canBuildPages = Boolean(loggedInUser?.policies.page.create);
   const isDirty =
     !isEqual(profileSettings, lastSavedSettings.current) ||
     !isEqual(editableProfile.sections, lastSavedProfile.current.sections) ||
@@ -446,11 +450,21 @@ export default function SettingsPage() {
               <section className="p-4! md:p-8!">
                 <Alert role="status" variant="warning">
                   Pages are a legacy way to lay out your profile and are being phased out. To customize your profile,
-                  edit your{" "}
-                  <Link href={Routes.edit_page_path("profile")} className="underline">
-                    Home page under Pages
-                  </Link>{" "}
-                  — your agent designs and publishes it for you.
+                  {canBuildPages ? (
+                    <>
+                      {" "}
+                      edit your{" "}
+                      <Link href={Routes.edit_page_path("profile")} className="underline">
+                        Home page under Pages
+                      </Link>{" "}
+                      — your agent designs and publishes it for you.
+                    </>
+                  ) : (
+                    // Accountant and support roles can view this page but can't build pages, so
+                    // linking them to the Home page editor would dead-end: that editor only shows
+                    // the agent panel to roles that pass PagePolicy#create?.
+                    " your Home page under Pages has to be edited by a teammate with the admin or marketing role."
+                  )}
                 </Alert>
               </section>
               <section aria-label="Profile section editor">
