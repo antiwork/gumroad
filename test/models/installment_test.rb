@@ -495,20 +495,18 @@ const b = 2;</code></pre>
 
   # --- #audience_members_count -----------------------------------------------
 
-  test "audience_members_count returns the number of audience members" do
-    assert_equal 0, @post.audience_members_count
-    2.times { create_purchase(link: create_product(user: @post.seller), seller: @post.seller) }
+  test "audience_members_count counts audience members through Elasticsearch" do
+    # The count is always served from Elasticsearch since the
+    # audience_count_from_elasticsearch flag removal (gp#1208 / #6232). The
+    # Minitest harness stubs EsClient globally (see test_helper.rb), so a live
+    # count can't run faithfully here; assert the delegation to
+    # AudienceMember.filter_count instead. The real ES-backed count is exercised
+    # in the RSpec suite (spec/models/concerns/audience_member/searchable_spec.rb).
+    AudienceMember.expects(:filter_count).with(seller_id: @post.seller_id, params: @post.audience_members_filter_params, limit: nil).returns(2)
     assert_equal 2, @post.audience_members_count
-    assert_equal 1, @post.audience_members_count(1) # supports a limit for performance
-  end
 
-  test "audience_members_count counts through Elasticsearch when the feature is active" do
-    # Documented skip: this path needs a live Elasticsearch index
-    # (recreate_model_index + wait-for-refresh), but the Minitest harness stubs
-    # EsClient globally (see test_helper.rb), so the ES-backed count can't run
-    # faithfully here. Kept as a marked skip rather than dropped silently; the
-    # SQL-backed count above covers the non-ES path.
-    skip "Elasticsearch is stubbed in the Minitest harness; ES-backed audience count is exercised in the RSpec suite"
+    AudienceMember.expects(:filter_count).with(seller_id: @post.seller_id, params: @post.audience_members_filter_params, limit: 1).returns(1)
+    assert_equal 1, @post.audience_members_count(1) # supports a limit for performance
   end
 
   # --- #send_preview_email ---------------------------------------------------
