@@ -84,6 +84,7 @@ const elementsOptions: PaymentElementConfig = {
 const props = {
   elementsOptions,
   walletsEnabled: false,
+  flatLayout: false,
   disabled: false,
   defaultEmail: "buyer@example.com",
   defaultName: "Buyer",
@@ -132,7 +133,7 @@ describe("PaymentElementInput", () => {
   });
 
   it("relaxes billingDetails collection to auto while a wallet row is selected, and restores never on card", () => {
-    render(<PaymentElementInput {...props} walletsEnabled amount={1_000} mountCurrency="usd" />);
+    render(<PaymentElementInput {...props} walletsEnabled flatLayout amount={1_000} mountCurrency="usd" />);
 
     // Card is the default selection: every billing-details field is pinned to "never" because
     // checkout's own form collects them and tokenization passes them explicitly.
@@ -179,7 +180,7 @@ describe("PaymentElementInput", () => {
   });
 
   it("renders only the street-address fields inside the UPI pane on a digital cart", () => {
-    render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
+    render(<PaymentElementInput {...props} walletsEnabled flatLayout amount={100_000} mountCurrency="inr" />);
 
     // The buyer selects the UPI row. Stripe requires billing_details.name + a full street
     // address to confirm UPI, and the digital checkout form has no street-address fields — so
@@ -205,7 +206,9 @@ describe("PaymentElementInput", () => {
   });
 
   it("keeps every UPI billing field on the checkout form for shippable carts", () => {
-    render(<PaymentElementInput {...props} hasShippingCart walletsEnabled amount={100_000} mountCurrency="inr" />);
+    render(
+      <PaymentElementInput {...props} hasShippingCart walletsEnabled flatLayout amount={100_000} mountCurrency="inr" />,
+    );
 
     // Shippable carts collect the full street address in checkout's shipping form, so the
     // element must not ask for the address a second time — everything stays "never" and
@@ -238,5 +241,28 @@ describe("PaymentElementInput", () => {
 
     act(() => paymentElementRender.onFocus?.());
     expect(onFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the flat accordion with wallets pinned to never when the cart suppresses wallets", () => {
+    // The flat layout is decoupled from the wallet rollout: a wallet-suppressed cart (e.g. the
+    // buyer-currency presentment lane, disable_wallets) still renders the accordion payment-method
+    // list — Apple Pay/Google Pay rows simply never appear.
+    render(<PaymentElementInput {...props} flatLayout amount={1_000} mountCurrency="usd" />);
+
+    const options = paymentElementRender.options as {
+      layout?: { type: string };
+      wallets?: { applePay: string; googlePay: string };
+    } | null;
+    expect(options?.layout).toEqual({ type: "accordion", radios: false, spacedAccordionItems: true });
+    expect(options?.wallets).toEqual({ applePay: "never", googlePay: "never", link: "auto" });
+  });
+
+  it("keeps the legacy tabs layout when the flat list is off", () => {
+    // The CardElement-adjacent legacy shape: the element is purely an internal card form (tabs
+    // layout, tabs hidden by the appearance rules) — the pre-flat-list behavior, byte-identical.
+    render(<PaymentElementInput {...props} amount={1_000} mountCurrency="usd" />);
+
+    const options = paymentElementRender.options as { layout?: { type: string } } | null;
+    expect(options?.layout).toEqual({ type: "tabs" });
   });
 });

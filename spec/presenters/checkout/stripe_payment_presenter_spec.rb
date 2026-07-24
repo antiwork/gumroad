@@ -42,19 +42,20 @@ describe Checkout::StripePaymentPresenter do
   end
 
   def card_element_fallback(reason, request_apple_pay_merchant_tokens: false)
-    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, payment_element_wallets: false, elements_options: nil }
+    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, payment_element_wallets: false, flat_payment_methods: false, elements_options: nil }
   end
 
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
       payment_element_wallets:,
+      flat_payment_methods:,
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency:,
@@ -66,13 +67,14 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
       payment_element_wallets:,
+      flat_payment_methods:,
       elements_options: {
         stripe_elements_mode:,
         currency: "usd",
@@ -200,6 +202,7 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -234,6 +237,7 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -266,6 +270,7 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -301,6 +306,7 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -370,6 +376,7 @@ describe Checkout::StripePaymentPresenter do
       # CardElement fallbacks never mount a Payment Element, so the wallets-in-the-element
       # rollout flag can't apply — this branch's presenter reports the surface as off.
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -1019,6 +1026,7 @@ describe Checkout::StripePaymentPresenter do
         disable_wallets: true,
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
+        flat_payment_methods: false,
         elements_options: nil,
       )
     ensure
@@ -1047,6 +1055,7 @@ describe Checkout::StripePaymentPresenter do
         disable_wallets: true,
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
+        flat_payment_methods: false,
         elements_options: nil,
       )
     ensure
@@ -1174,6 +1183,9 @@ describe Checkout::StripePaymentPresenter do
       expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
       expect(props[:disable_wallets]).to be(true)
       expect(props[:payment_element_wallets]).to be(false)
+      # The flat list is decoupled from the wallet flag: this wallet-suppressed cart still
+      # renders the accordion payment-method list, just without wallet rows.
+      expect(props[:flat_payment_methods]).to be(true)
     ensure
       if seller
         Feature.deactivate_user(:buyer_local_currency, seller)

@@ -1018,6 +1018,7 @@ const CreditCardContent = ({
             mountCurrency={stripePaymentElementMountCurrency}
             elementsOptions={stripePaymentElementConfig}
             walletsEnabled={state.checkoutPayment.payment_element_wallets}
+            flatLayout={state.checkoutPayment.flat_payment_methods}
             applePayOption={memoizedPaymentElementApplePayOption}
             disabled={isProcessing(state)}
             defaultEmail={state.email}
@@ -1605,13 +1606,16 @@ const PaymentMethodsSection = ({
   const usesPaymentElement = canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state);
   const cardPayDisabled = usesPaymentElement && !paymentElementReady;
 
-  // Flat payment-methods list (payment_element_wallets): the element's accordion IS the
-  // payment-method selector — Card and the wallets render as its rows — so the outer "Card"
-  // radio row is dropped entirely and PayPal is appended as one more matching row below the
-  // element (see FlatPayPalRow). No nesting, no duplicate "Card". The element stays mounted
-  // while PayPal is selected (unmounting would wipe entered card details); interacting with it
-  // re-selects the card/wallet lane.
-  if (usesPaymentElement && state.checkoutPayment.payment_element_wallets) {
+  // Flat payment-methods list (flat_payment_methods, server-owned): the element's accordion IS
+  // the payment-method selector — Card (plus wallets and local methods where enabled) renders
+  // as its rows — so the outer "Card" radio row is dropped entirely and PayPal is appended as
+  // one more matching row below the element (see FlatPayPalRow). No nesting, no duplicate
+  // "Card". The element stays mounted while PayPal is selected (unmounting would wipe entered
+  // card details); interacting with it re-selects the card/wallet lane. Originally keyed on
+  // payment_element_wallets (antiwork/gumroad#5790) and since decoupled: wallet-suppressed
+  // carts (disable_wallets — e.g. buyer-currency presentment) get the same flat list without
+  // wallet rows.
+  if (usesPaymentElement && state.checkoutPayment.flat_payment_methods) {
     return (
       <>
         <CreditCardContent
