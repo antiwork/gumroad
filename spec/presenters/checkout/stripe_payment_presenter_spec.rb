@@ -1194,8 +1194,11 @@ describe Checkout::StripePaymentPresenter do
     end
 
     it "does not enable wallets when the seller is not flagged" do
+      # flat_payment_methods false is asserted explicitly: with the wallet flag off on a
+      # wallet-capable cart, the kill-switch invariant requires the legacy layout (where the
+      # Payment Request Button renders) to come back, not a flat list without wallets.
       expect(stripe_payment_props(add_products: [flagged_seller_product]))
-        .to eq(payment_element_props(payment_element_wallets: false))
+        .to eq(payment_element_props(payment_element_wallets: false, flat_payment_methods: false))
     end
 
     it "does not enable wallets when any seller in the cart is not flagged" do
@@ -1210,7 +1213,7 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, unflagged_seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(flagged), checkout_product_for(unflagged)]))
-        .to eq(payment_element_props(payment_element_wallets: false))
+        .to eq(payment_element_props(payment_element_wallets: false, flat_payment_methods: false))
     end
   end
 end

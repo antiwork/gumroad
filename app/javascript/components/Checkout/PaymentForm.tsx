@@ -629,7 +629,7 @@ const CreditCardContent = ({
   // Checkout reaches tokenization through async effects several ticks after the click, so the
   // click handler triggers the submit here and tokenization reuses the in-flight promise.
   walletClickSubmitRef?: React.MutableRefObject<(() => void) | null> | undefined;
-  // The payment_element_wallets flat layout (see PaymentMethodsSection): this component stays
+  // The flat payment-methods layout (flat_payment_methods — see PaymentMethodsSection): this component stays
   // mounted even while PayPal is checkout's selected payment method (the element's accordion IS
   // the payment-method list, and unmounting it would wipe entered card details). Interacting
   // with the element (focusing a field or picking one of its rows) re-selects the card/wallet
@@ -996,7 +996,7 @@ const CreditCardContent = ({
   }, [state.surcharges, state.status.type]);
 
   return (
-    // In the flat wallets layout a click anywhere in the card area (the saved-card box, the
+    // In the flat payment-methods layout a click anywhere in the card area (the saved-card box, the
     // element's surrounding padding) re-selects the card/wallet lane from PayPal. Focus/change
     // events inside the element's iframe are handled separately (see reclaimCardLane); the
     // PayPal row itself stops propagation so selecting it doesn't immediately bounce back.
@@ -1540,8 +1540,8 @@ const StripePaymentRequestPayButton = ({ canPay }: { canPay: boolean }) => {
   return <StripePaymentRequestContent />;
 };
 
-// PayPal rendered as one more row of the flat payment-methods list used when the Payment
-// Element shows wallets (payment_element_wallets — see PaymentMethodsSection). The element's
+// PayPal rendered as one more row of the flat payment-methods list (flat_payment_methods —
+// see PaymentMethodsSection; wallet rows appear only when payment_element_wallets is also on). The element's
 // accordion already lists Card / Apple Pay / Google Pay as bordered rounded rows (the
 // ".AccordionItem" appearance rule in PaymentElementInput.tsx), so this row copies that look —
 // same border, radius, and padding — and sits directly below the element, making the whole

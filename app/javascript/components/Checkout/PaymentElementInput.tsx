@@ -99,7 +99,7 @@ export const PaymentElementInput = ({
   invalid?: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
-  // Fires when the buyer focuses any field inside the element. Used by the flat wallets layout
+  // Fires when the buyer focuses any field inside the element. Used by the flat payment-methods layout
   // (see PaymentMethodsSection in PaymentForm.tsx) to re-select the card/wallet lane when the
   // buyer returns to the element after picking PayPal — clicks inside the element's iframe never
   // reach the surrounding DOM, so this Stripe event is the only reliable interaction signal.

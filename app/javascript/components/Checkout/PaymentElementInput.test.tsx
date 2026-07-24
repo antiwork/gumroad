@@ -232,7 +232,7 @@ describe("PaymentElementInput", () => {
   });
 
   it("forwards element focus to onFocus, alongside the Link-prefill touch tracking", () => {
-    // The flat payment-methods layout (payment_element_wallets) re-selects the card/wallet lane
+    // The flat payment-methods layout (flat_payment_methods) re-selects the card/wallet lane
     // from PayPal when the buyer interacts with the element. Clicks inside the element's iframe
     // never reach the surrounding DOM, so PaymentForm relies on this callback being wired
     // through to the underlying PaymentElement's focus event.
