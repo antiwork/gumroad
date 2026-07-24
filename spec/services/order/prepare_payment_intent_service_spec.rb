@@ -601,12 +601,13 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
-      # The safety net for resolver drift on the plain USD lane: the Element offered Klarna
-      # (the buyer selected it and minted a Klarna ConfirmationToken), but by the time prepare
-      # re-runs the resolver its inputs changed — here the launch flag flipped off
-      # mid-checkout. The buyer's selection must still ride the intent or Stripe rejects the
-      # payment_method_types-scoped token and the confirm fails with no recourse.
-      it "appends the buyer's previewed method to the USD intent even when the re-run resolver drops it" do
+      # The launch flag is the rollout gate, and the previewed-method append must not be a
+      # way around it: a klarna ConfirmationToken arriving while the seller's flag is off
+      # (rolled back mid-checkout, or crafted for a seller the rollout never reached) must
+      # NOT re-enter the intent's method list. The intent stays byte-for-byte the flag-off
+      # list and the stale token fails closed at confirm — the same fail-closed shape as a
+      # forced-currency token after its launch flag rolls back.
+      it "does not append a klarna token to the USD intent when the seller's launch flag is off" do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
 
@@ -621,11 +622,43 @@ describe Order::PreparePaymentIntentService, :vcr do
           charge_intent
         end
 
-        # The Klarna flag is OFF for this seller, so the resolver omits klarna — only the
-        # previewed-method append can keep the buyer's selection on the intent.
+        # The Klarna flag is OFF for this seller: the resolver omits klarna and the append
+        # must not put it back.
         described_class.new(order:, params:, confirmation_token: "ctoken_klarna_drift").perform
 
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      end
+
+      # With the flag ON, the append is the drift safety net it was built to be: a launched
+      # seller's klarna token stays on the intent even if the re-run resolver's OTHER inputs
+      # drift (here the merchant-account capability check answers differently at prepare than
+      # it did when the Element mounted).
+      it "appends a launched seller's klarna token to the USD intent when the re-run resolver drops it" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "klarna", klarna: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        # Simulate resolver-input drift: the resolver drops klarna at prepare even though the
+        # Element offered it (and the buyer confirmed with it) when it mounted.
+        allow_any_instance_of(Checkout::PaymentMethodResolver)
+          .to receive(:klarna_supported_merchant_account?).and_return(false)
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_klarna_drift_on").perform
+
         expect(create_args[:payment_method_types]).to eq(%w[card link cashapp klarna])
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
       end
 
       # Klarna is US-only in v1 but deliberately lives outside US_LOCKED_PAYMENT_METHOD_TYPES

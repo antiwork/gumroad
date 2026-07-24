@@ -497,8 +497,12 @@ class Order::PreparePaymentIntentService
       # appending it to a USD intent (e.g. its launch flag rolled back mid-checkout, so no
       # presentment was built) would make Stripe reject the intent CREATE itself; leaving
       # it off keeps the flag-off USD lane byte-for-byte and fails the stale token closed
-      # at confirm instead. (Klarna's US-only launch gate is separately enforced
-      # fail-closed, before this method runs, by
+      # at confirm instead. Klarna gets the equivalent launch-flag gate: it is only
+      # appended while checkout_local_method_klarna is active for this seller, so a stale
+      # or crafted klarna token cannot re-enable the method after a rollback (or before a
+      # rollout ever reached the seller) — it fails closed at confirm, exactly like a
+      # forced-currency token after its flag rolled back. (Klarna's US-only buyer lock is
+      # separately enforced fail-closed, before this method runs, by
       # block_region_locked_payment_method_country_mismatch.)
       method_types = (resolved_payment_method_types + [appendable_previewed_payment_method_type(presentment)]).compact.uniq
       # The US-locked methods (Cash App Pay, ACH) are also USD-only: Stripe rejects creating an
@@ -528,12 +532,19 @@ class Order::PreparePaymentIntentService
     end
 
     # The previewed method, or nil when it must not ride this intent: nil when no method
-    # preview was supplied (saved-card charges), and nil when the method forces a currency
-    # the intent is not being created in — that token can never confirm against this intent
-    # anyway, and listing the method would make Stripe reject the intent create outright.
+    # preview was supplied (saved-card charges), nil for a klarna token when the seller's
+    # launch flag is off (the append is a drift safety net for LAUNCHED methods, never a
+    # way for an unlaunched method's token to enable itself past the rollout gate), and
+    # nil when the method forces a currency the intent is not being created in — that
+    # token can never confirm against this intent anyway, and listing the method would
+    # make Stripe reject the intent create outright.
     def appendable_previewed_payment_method_type(presentment)
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
+
+      if method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE
+        return nil unless Feature.active?(Checkout::PaymentMethodResolver::KLARNA_LAUNCH_FEATURE, seller)
+      end
 
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
       return method_type if forced_currency.blank?
