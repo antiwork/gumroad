@@ -394,6 +394,7 @@ describe ProductPresenter do
                   "google_calendar" => false,
                 },
                 rich_content: [],
+                has_files: false,
                 sales_count_for_inventory: 0,
                 active_subscribers_count: 0,
               },
@@ -410,6 +411,7 @@ describe ProductPresenter do
                   "google_calendar" => false,
                 },
                 rich_content: [],
+                has_files: false,
                 sales_count_for_inventory: 0,
                 active_subscribers_count: 0,
               }
@@ -495,6 +497,40 @@ describe ProductPresenter do
           dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
       )
+    end
+
+    context "when the shared-content flag hides recoverable variant content" do
+      # The July 21, 2026 state (gumroad-private#1230): support restored the
+      # per-version pages while has_same_rich_content_for_all_variants stayed
+      # on and the product level held only a blank placeholder. A faithful
+      # rendering of the flag gave the editor EMPTY content — the state that
+      # produced the wipe. The presenter must instead expose the real
+      # per-version pages so the seller recovers by simply reloading.
+      let!(:version1_page) { create(:rich_content, entity: version1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Restored content" }] }]) }
+
+      before do
+        create(:product_rich_content, entity: product, description: [{ "type" => "paragraph" }])
+        product.update!(has_same_rich_content_for_all_variants: true)
+      end
+
+      it "serves the editor a per-version view with the hidden pages" do
+        product_data = presenter.edit_props[:product]
+        expect(product_data[:has_same_rich_content_for_all_variants]).to eq(false)
+        version1_data = product_data[:variants].find { _1[:id] == version1.external_id }
+        expect(version1_data[:rich_content].sole[:id]).to eq(version1_page.external_id)
+      end
+
+      it "keeps the flag's faithful value when the product level has real content too" do
+        # Both sides carry content — the editor cannot pick a winner, so it
+        # keeps showing the shared view; the save-time guard fails closed and
+        # asks for an explicit choice instead (Product::RichContentDeletionGuard).
+        product_page = create(:product_rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }])
+
+        product_data = presenter.edit_props[:product]
+        expect(product_data[:has_same_rich_content_for_all_variants]).to eq(true)
+        expect(product_data[:variants].map { _1[:rich_content] }).to all(eq([]))
+        expect(product_data[:rich_content].map { _1[:id] }).to include(product_page.external_id)
+      end
     end
 
     context "when the price_checker feature flag is enabled for the seller" do
@@ -672,6 +708,7 @@ describe ProductPresenter do
                   subscription_price_change_effective_date: tier.subscription_price_change_effective_date,
                   subscription_price_change_message: "Price change!",
                   rich_content: [],
+                  has_files: false,
                   sales_count_for_inventory: 1,
                   active_subscribers_count: 0,
                 },
@@ -791,6 +828,7 @@ describe ProductPresenter do
                 "google_calendar" => false,
               },
               rich_content: [],
+              has_files: false,
               sales_count_for_inventory: 0,
               active_subscribers_count: 0,
             },
@@ -808,6 +846,7 @@ describe ProductPresenter do
                 "google_calendar" => false,
               },
               rich_content: [],
+              has_files: false,
               sales_count_for_inventory: 0,
               active_subscribers_count: 0,
             },
