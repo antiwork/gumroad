@@ -176,7 +176,7 @@ describe Product::VariantCategoryUpdaterService do
               product: @product,
               category_params: { id: @variant.variant_category.external_id, title: "" },
               ).perform
-          end.to raise_error(Link::LinkInvalid, /updated in another tab/)
+          end.to raise_error(Link::LinkInvalid, /weren't explicitly removed in the editor/)
 
           expect(@variant.reload.deleted_at).to be_nil
         end

@@ -312,5 +312,12 @@ describe RichContent do
       rich_content = create(:rich_content, entity: product, description: [{ "type" => "orderedList", "content" => [{ "type" => "listItem", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Item" }] }] }] }])
       expect(rich_content.has_editor_content?).to be(true)
     end
+
+    it "returns true for a title-only page with an empty body" do
+      # A title renders in the buyer's page list, so a titled page is
+      # seller-authored work even when its body is only a blank placeholder.
+      rich_content = create(:rich_content, entity: product, title: "Bonus resources", description: [{ "type" => "paragraph" }])
+      expect(rich_content.has_editor_content?).to be(true)
+    end
   end
 end

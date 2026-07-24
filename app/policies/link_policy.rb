@@ -119,6 +119,11 @@ class LinkPolicy < ApplicationPolicy
       end,
       variants: [
         :id,
+        # The editor's own id for a variant created in the current session
+        # (submitted alongside id: null). The save response maps it to the
+        # canonical server id so the next save updates the created variant
+        # instead of re-creating it.
+        :client_id,
         :name,
         :description,
         :price_difference_cents,

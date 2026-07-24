@@ -217,7 +217,12 @@ class ProductPresenter
         collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
         rich_content: product.rich_content_json,
         files: files_data(product),
-        has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants?,
+        # Served as false in the recoverable hidden-content state (flag on,
+        # product level blank, variant pages real — the July 21, 2026 incident
+        # shape) so the editor loads the real per-version pages instead of the
+        # blank product level; the next save then persists the flag as off,
+        # resolving the inconsistency for good.
+        has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants? && !@product.recoverable_hidden_variant_rich_content?,
         is_multiseat_license:,
         call_limitation_info: product.native_type == Link::NATIVE_TYPE_CALL && product.call_limitation_info.present? ?
           {
@@ -334,7 +339,10 @@ class ProductPresenter
     end
 
     def refer_to_product_level_rich_content?(has_variants:)
-      product.is_physical? || !has_variants || product.has_same_rich_content_for_all_variants?
+      # The shared-content flag doesn't count when the product level is blank
+      # and the real pages live on the variants (the recoverable hidden-content
+      # state) — the variant pages are the ones worth showing.
+      product.is_physical? || !has_variants || (product.has_same_rich_content_for_all_variants? && !product.recoverable_hidden_variant_rich_content?)
     end
 
     def custom_domain_verification_status

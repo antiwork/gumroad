@@ -63,11 +63,15 @@ class RichContent < ApplicationRecord
 
   # True when the page carries anything a buyer could actually see. A page whose
   # description is only empty structural nodes (e.g. a single bare paragraph —
-  # the shape the editor creates as a blank placeholder) has no content. This
+  # the shape the editor creates as a blank placeholder) has no content, unless
+  # the seller gave the page a title: a titled page renders its title in the
+  # page list, so it is seller-authored work even with an empty body. This
   # matters for content resolution: an empty product-level placeholder page must
   # not make the product look like it has product-level content, which would
   # hide the real variant-level content from buyers.
   def has_editor_content?
+    return true if title.present?
+
     description.present? && description.any? { node_has_content?(_1) }
   end
 

@@ -1214,7 +1214,31 @@ class Link < ApplicationRecord
   end
 
   def has_product_level_rich_content?
-    is_physical? || has_same_rich_content_for_all_variants? || alive_variants.empty?
+    is_physical? || alive_variants.empty? || (has_same_rich_content_for_all_variants? && !recoverable_hidden_variant_rich_content?)
+  end
+
+  # Detects a stored state the editor cannot faithfully display: the product
+  # claims every version shares the product-level content
+  # (has_same_rich_content_for_all_variants is on), yet the product level has
+  # no visible content while version-level pages still do. This is the state
+  # that caused the July 21, 2026 content wipe: support restored a product's
+  # per-version pages without turning the flag off, so the editor (and buyers)
+  # resolved to the blank product level, the real content became unreachable,
+  # and the next ordinary save deleted it.
+  #
+  # When the hidden version content is unambiguously the only real content
+  # (the product level is blank), we treat the product as effectively using
+  # per-version content so the editor and buyers see the real pages again —
+  # the seller recovers just by reloading. When BOTH sides have visible
+  # content we cannot pick a winner automatically; saves that would delete the
+  # hidden pages fail closed instead and require an explicit choice (see
+  # Product::RichContentDeletionGuard).
+  def recoverable_hidden_variant_rich_content?
+    return false unless has_same_rich_content_for_all_variants?
+    return false if is_physical?
+    return false if alive_rich_contents.any?(&:has_editor_content?)
+
+    alive_variants.any? { |variant| variant.alive_rich_contents.any?(&:has_editor_content?) }
   end
 
   def has_embedded_license_key?

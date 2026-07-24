@@ -1020,7 +1020,9 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update allows a collaborator to access" do
-    assert_collaborator_can_access(:put, :update, product: @product, params: @params, status: 204)
+    # A successful save renders the id-mapping JSON (200), not an empty 204 —
+    # the editor needs the canonical ids of records the save created.
+    assert_collaborator_can_access(:put, :update, product: @product, params: @params, status: 200)
   end
 
   test "PUT update returns the existing validation error when suggested price is set but the default price record is missing" do
@@ -1081,12 +1083,18 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal false, @product.reload.is_licensed
   end
 
-  # --- content deletion guards (stale-payload wipe protection) ----------------
+  # --- content deletion guards (blind-payload wipe protection) ----------------
   # Ported from the PR-6178 additions to spec/controllers/links_controller_spec.rb
   # (that spec has since moved here — see #6145). Reproduces gumroad-private#1230:
-  # a stale editor session (or a race between two tabs) submits a save payload
-  # that doesn't know about the product's variants/pages, and without the guards
-  # the save silently soft-deletes the seller's entire version tree and content.
+  # one production product had its content wiped three times in nine days (July
+  # 13, 18 and 21, 2026) by save payloads that didn't know about its
+  # variants/pages; without the guards such a save silently soft-deletes the
+  # entire version tree and content. The July 21 payload was server-induced —
+  # support restored per-version pages while has_same_rich_content_for_all_variants
+  # stayed on, so a fresh editor load received empty variant content (see the
+  # dedicated "July 21" tests below). The July 13/18 client-side trigger was
+  # never identified, so these tests cover payload shapes, not one specific
+  # trigger.
 
   def guard_content_description
     [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Course content" }] }]
@@ -1101,7 +1109,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   test "PUT update blocks a save whose payload omits a content-bearing variant" do
     setup_guarded_version!
 
-    # The stale payload only knows about a different, new variant — the
+    # The blind payload only knows about a different, new variant — the
     # server would previously treat version1 as removed and wipe it.
     post :update, params: @params.merge(variants: [{ id: nil, name: "Brand new version" }]), format: :json
 
@@ -1187,11 +1195,11 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update allows replacing a page when its content is resubmitted under a new id" do
-    # Pages created in the current editor session keep their client-generated
-    # ids across saves (the editor never learns the server's ids), so the
-    # second save of such a page arrives under an unknown id and the server
-    # re-creates it. That's a rewrite, not a deletion — the guard must let it
-    # through even though the stored page's id is missing from the payload.
+    # Editor sessions predating the id reconciliation in the save response
+    # keep their client-generated page ids across saves, so the second save of
+    # such a page arrives under an unknown id and the server re-creates it.
+    # That's a rewrite, not a deletion — the guard must let it through even
+    # though the stored page's id is missing from the payload.
     setup_guarded_version!
 
     post :update, params: @params.merge(
@@ -1203,8 +1211,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal guard_content_description, @version1.alive_rich_contents.sole.description
   end
 
-  test "PUT update still blocks a stale payload that resubmits different content under a new id" do
-    # The rewrite allowance matches on CONTENT — a stale tab that submits its
+  test "PUT update still blocks an outdated payload that resubmits different content under a new id" do
+    # The rewrite allowance matches on CONTENT — an outdated payload that submits its
     # own (different) page under a fresh id must not unlock deleting the
     # stored content-bearing page.
     setup_guarded_version!
@@ -1217,9 +1225,9 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal false, @version1_page.reload.deleted?
   end
 
-  test "PUT update blocks a stale payload that omits one of two duplicate-content pages" do
+  test "PUT update blocks an outdated payload that omits one of two duplicate-content pages" do
     # Two stored pages can legitimately carry identical content (e.g. the
-    # seller duplicated a page). A stale payload that keeps one twin under its
+    # seller duplicated a page). An outdated payload that keeps one twin under its
     # known id but omits the other must not pass the rewrite allowance — the
     # kept page is an in-place update of itself, not a rewrite of the omitted
     # one.
@@ -1235,7 +1243,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal false, @version1_page.reload.deleted?
   end
 
-  test "PUT update blocks a stale payload where one unknown-id page matches two omitted duplicate-content pages" do
+  test "PUT update blocks an outdated payload where one unknown-id page matches two omitted duplicate-content pages" do
     # The rewrite allowance is count-aware: a single resubmitted unknown-id
     # page can account for at most one omitted stored page. When two stored
     # duplicate-content pages are both omitted, one unknown-id twin in the
@@ -1251,7 +1259,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal 2, @version1.reload.alive_rich_contents.count
   end
 
-  test "PUT update blocks a stale payload where one unknown-id page matches omitted duplicate-content pages across the product and a variant" do
+  test "PUT update blocks an outdated payload where one unknown-id page matches omitted duplicate-content pages across the product and a variant" do
     # The rewrite allowance is shared across the whole save request: the guard
     # runs once for the product-level pages and once per variant, and a single
     # resubmitted unknown-id page must not authorize one deletion in EACH of
@@ -1278,7 +1286,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     setup_guarded_version!
     # The editor initializes every new page with a single empty paragraph,
     # so a structurally-blank page must count as contentless — otherwise
-    # cleaning up never-used pages would trip the stale-save guard.
+    # cleaning up never-used pages would trip the deletion guard.
     placeholder_page = create_rich_content(entity: @version1, description: [{ "type" => "paragraph" }])
 
     post :update, params: @params.merge(
@@ -1317,7 +1325,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :success
   end
 
-  test "PUT update blocks deleting a product-level content page missing from a stale payload" do
+  test "PUT update blocks deleting a product-level content page missing from an outdated payload" do
     setup_guarded_version!
     product_page = create_product_rich_content(entity: @product, description: guard_content_description)
 
@@ -1339,6 +1347,215 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
     assert notified.any? { |message, context| message == "Blocked product save that would delete content-bearing variants without confirmation" && context[:product_id] == @product.id },
            "Expected ErrorNotifier to be notified about the blocked wipe (got: #{notified.inspect})"
+  end
+
+  test "PUT update includes non-PII diagnostics in the blocked-save notification" do
+    setup_guarded_version!
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    _message, context = notified.find { |message, _| message.include?("delete content pages") }
+    assert_not_nil context, "Expected a blocked-save notification (got: #{notified.inspect})"
+    assert_equal 1, context[:submitted_variant_count]
+    assert_equal 1, context[:alive_variant_count]
+    assert_equal 0, context[:submitted_page_count]
+    assert_equal 1, context[:alive_page_count]
+    assert_equal false, context[:persisted_has_same_rich_content_for_all_variants]
+    assert_nil context[:submitted_has_same_rich_content_for_all_variants]
+  end
+
+  test "PUT update blocks deleting a title-only page missing from the payload" do
+    # A page can carry nothing but a title (its body is an empty paragraph).
+    # That title is seller-authored work and renders in the buyer's page list,
+    # so such a page must NOT be treated as a freely deletable blank.
+    setup_guarded_version!
+    title_only_page = create_rich_content(entity: @version1, title: "Bonus resources", description: [{ "type" => "paragraph" }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page 1", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal false, title_only_page.reload.deleted?
+  end
+
+  # --- canonical id reconciliation (create → save → edit → save) --------------
+  # The editor creates pages/variants under client-generated ids. The save
+  # response must map those to the canonical server ids, otherwise the next
+  # save (without a reload) resubmits them under ids the server doesn't know —
+  # re-creating records and, once the content was edited in between, tripping
+  # the deletion guard with a 422.
+
+  test "PUT update returns canonical id mappings for pages created in the editor session, and the reconciled follow-up save edits the same page" do
+    post :update, params: @params.merge(
+      rich_content: [{ id: "client-page-guid", title: "New page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Draft" }] }] } }]
+    ), format: :json
+
+    assert_response :success
+    page = @product.reload.alive_rich_contents.sole
+    assert_equal page.external_id, response.parsed_body["rich_content_id_mappings"]["client-page-guid"]
+
+    # Second save without a reload: the editor swapped in the canonical id and
+    # the seller edited the page. Before the reconciliation this 422'd — the
+    # unknown-id resubmission no longer matched the rewrite allowance once the
+    # content changed.
+    post :update, params: @params.merge(
+      rich_content: [{ id: page.external_id, title: "New page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Draft, edited" }] }] } }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal 1, @product.reload.alive_rich_contents.count
+    assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Draft, edited" }] }], page.reload.description
+  end
+
+  test "PUT update returns canonical id mappings for variants created in the editor session, and repeated saves keep a single variant" do
+    post :update, params: @params.merge(
+      variants: [{ id: nil, client_id: "client-variant-guid", name: "Version 1", rich_content: [{ id: "client-page-guid", title: nil, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+    variant = @product.reload.alive_variants.sole
+    assert_equal variant.external_id, response.parsed_body["variant_id_mappings"]["client-variant-guid"]
+    page = variant.alive_rich_contents.sole
+    assert_equal page.external_id, response.parsed_body["rich_content_id_mappings"]["client-page-guid"]
+
+    # Second save without a reload, edited content, canonical ids swapped in —
+    # must update the same variant in place rather than re-creating it (or
+    # rejecting the save because the original would lose its content).
+    post :update, params: @params.merge(
+      variants: [{ id: variant.external_id, name: "Version 1 renamed", rich_content: [{ id: page.external_id, title: nil, description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Edited content" }] }] } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal [variant.id], @product.reload.alive_variants.ids
+    assert_equal "Version 1 renamed", variant.reload.name
+    assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edited content" }] }], page.reload.description
+  end
+
+  # --- the July 21, 2026 incident shape (gumroad-private#1230) -----------------
+  # Support restored a product's per-version pages while
+  # has_same_rich_content_for_all_variants stayed on and a blank product-level
+  # placeholder page existed. The editor resolves content through the flag, so
+  # a fresh load received EMPTY variant content — the stored state itself
+  # produced a blind payload. The seller then switched to per-version content
+  # (which moved the blank placeholder onto the first version) and saved,
+  # wiping every restored page. The exact request body was not retained, but
+  # the audited state transitions and the deployed code tightly constrain it
+  # to this shape.
+
+  def setup_july_21_incident_state!
+    @category = create_variant_category(link: @product, title: "Versions")
+    @version1 = create_variant(variant_category: @category, name: "Version 1")
+    @version2 = create_variant(variant_category: @category, name: "Version 2")
+    file = @product.product_files.alive.first
+    @restored_description1 = [
+      { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Restored Version 1 content" }] },
+      { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => "version1-file-uid" } },
+    ]
+    @restored_description2 = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Restored Version 2 content" }] }]
+    @restored_page1 = create_rich_content(entity: @version1, description: @restored_description1)
+    @restored_page2 = create_rich_content(entity: @version2, description: @restored_description2)
+    @version1.product_files = [file]
+    @placeholder_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph" }])
+    @product.update!(has_same_rich_content_for_all_variants: true)
+  end
+
+  test "PUT update blocks the July 21 blind-snapshot save and keeps every restored page and file intact" do
+    setup_july_21_incident_state!
+    file = @product.product_files.alive.first
+
+    # The blind editor session switches to per-version content: the blank
+    # product-level placeholder moves onto the first version (keeping its id —
+    # the cross-entity placeholder), the other version gets an empty page
+    # list, and none of the restored pages appear anywhere in the payload.
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: false,
+      rich_content: [],
+      variants: [
+        { id: @version1.external_id, name: "Version 1", rich_content: [{ id: @placeholder_page.external_id, title: nil, description: { type: "doc", content: [{ type: "paragraph" }] } }] },
+        { id: @version2.external_id, name: "Version 2", rich_content: [] },
+      ]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal Product::RichContentDeletionGuard::HIDDEN_CONTENT_RECOVERABLE_MESSAGE, response.parsed_body["error_message"]
+
+    # Every restored page — and the file the content embeds — survives untouched.
+    assert_equal false, @restored_page1.reload.deleted?
+    assert_equal false, @restored_page2.reload.deleted?
+    assert_equal @restored_description1, @restored_page1.description
+    assert_equal @restored_description2, @restored_page2.description
+    assert_equal [file.id], @version1.reload.product_files.alive.ids
+    assert_equal false, file.reload.deleted?
+  end
+
+  test "PUT update accepts the recovered per-version save a refreshed editor produces after the July 21 state" do
+    setup_july_21_incident_state!
+
+    # In this state the presenter now serves has_same_rich_content_for_all_variants
+    # as false with each version's real pages (see ProductPresenter), so a
+    # refreshed editor submits the restored content under its real ids. Saving
+    # persists the flag as off and resolves the inconsistency for good.
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: false,
+      rich_content: [{ id: @placeholder_page.external_id, title: nil, description: { type: "doc", content: [{ type: "paragraph" }] } }],
+      variants: [
+        { id: @version1.external_id, name: "Version 1", rich_content: [{ id: @restored_page1.external_id, title: nil, description: { type: "doc", content: @restored_description1 } }] },
+        { id: @version2.external_id, name: "Version 2", rich_content: [{ id: @restored_page2.external_id, title: nil, description: { type: "doc", content: @restored_description2 } }] },
+      ]
+    ), format: :json
+
+    assert_response :success
+    assert_equal false, @product.reload.has_same_rich_content_for_all_variants?
+    assert_equal false, @restored_page1.reload.deleted?
+    assert_equal false, @restored_page2.reload.deleted?
+    assert_equal @restored_description1, @restored_page1.description
+    assert_equal @restored_description2, @restored_page2.description
+  end
+
+  test "PUT update fails closed with an explicit-choice error when hidden version content conflicts with real product-level content" do
+    setup_guarded_version!
+    product_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }])
+    @product.update!(has_same_rich_content_for_all_variants: true)
+
+    # An ordinary save of the shared-content view: the product-level page is
+    # kept, and the (hidden) version page is absent from the payload. Neither
+    # side can be picked automatically — the save must fail closed and name
+    # the hidden pages so the editor can ask for an explicit choice.
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: true,
+      rich_content: [{ id: product_page.external_id, title: nil, description: { type: "doc", content: product_page.description } }],
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal Product::RichContentDeletionGuard::HIDDEN_CONTENT_CONFLICT_MESSAGE, response.parsed_body["error_message"]
+    assert_equal "hidden_variant_content_conflict", response.parsed_body["error_code"]
+    assert_equal [{ "id" => @version1_page.external_id, "title" => nil }], response.parsed_body["hidden_variant_pages"]
+    assert_equal false, @version1_page.reload.deleted?
+  end
+
+  test "PUT update deletes the hidden version content once the seller makes the explicit choice" do
+    setup_guarded_version!
+    product_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }])
+    @product.update!(has_same_rich_content_for_all_variants: true)
+
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: true,
+      rich_content: [{ id: product_page.external_id, title: nil, description: { type: "doc", content: product_page.description } }],
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }],
+      confirmed_removed_rich_content_ids: [@version1_page.external_id]
+    ), format: :json
+
+    assert_response :success
+    assert_equal true, @version1_page.reload.deleted?
+    assert_equal false, product_page.reload.deleted?
+    assert_equal true, @product.reload.has_same_rich_content_for_all_variants?
   end
 
   # --- coffee products --------------------------------------------------------
@@ -2692,6 +2909,9 @@ class LinksControllerUpdateTest < ActionController::TestCase
         { title: "Page 2", description: { type: "doc", content: new_rich_content_description } },
         { title: "Page 3", description: nil },
       ],
+      # The omitted "p3" page is titled, and a title counts as seller-authored
+      # content — dropping it from the payload needs explicit deletion intent.
+      confirmed_removed_rich_content_ids: [rich_content3.external_id],
     }, format: :json
 
     assert_equal false, rich_content1.reload.deleted?
@@ -2715,7 +2935,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :unprocessable_entity
 
     # Deletes all existing rich content pages when the seller confirmed
-    # removing them (empty pages need no confirmation).
+    # removing each of them.
     assert_difference -> { product.reload.alive_rich_contents.count }, -4 do
       assert_no_difference -> { product.rich_contents.count } do
         post :update, params: {
@@ -2771,7 +2991,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
           has_same_rich_content_for_all_variants: false,
           # The page moves from the product level to the variant, keeping its
           # id — mirroring what the editor sends when un-toggling "use the same
-          # content for all versions" (a stale payload without the id would be
+          # content for all versions" (an outdated payload without the id would be
           # blocked by the content deletion guard).
           variants: [{ name: "Version 1", rich_content: [{ id: @product.alive_rich_contents.find_by(position: 0).external_id, title: "Version 1 - Page 1", description: { type: "doc", content: description } }] }],
           files:,
@@ -2811,7 +3031,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
           has_same_rich_content_for_all_variants: true,
           # The page keeps its id as it moves from the variant to the product
           # level — mirroring what the editor sends when toggling "use the same
-          # content for all versions" (a stale payload without the id would be
+          # content for all versions" (an outdated payload without the id would be
           # blocked by the content deletion guard).
           rich_content: [{ id: version1.reload.alive_rich_contents.first.external_id, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content_description } }],
           files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],

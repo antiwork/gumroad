@@ -3039,6 +3039,47 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal false, not_shared.has_product_level_rich_content?
   end
 
+  # --- #recoverable_hidden_variant_rich_content? ------------------------------
+  # The July 21, 2026 incident state: shared-content flag on, blank (or no)
+  # product-level pages, real content stored on variant-level pages. See the
+  # method's comment in link.rb for the full story.
+
+  test "recoverable_hidden_variant_rich_content? detects the hidden-content state and makes it count as per-variant content" do
+    product = create_product(has_same_rich_content_for_all_variants: true)
+    variant = create_variant(variant_category: create_variant_category(link: product), name: "V1")
+    create_rich_content(entity: product, description: [{ "type" => "paragraph" }])
+    variant_page = create_rich_content(entity: variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Restored" }] }])
+
+    assert_equal true, product.recoverable_hidden_variant_rich_content?
+    # The flag is effectively off in this state: content resolution must look
+    # at the variants, where the real pages live.
+    assert_equal false, product.has_product_level_rich_content?
+    # And the variant serves its pages even though the flag is on.
+    assert_equal [variant_page.external_id], variant.rich_content_json.map { _1[:id] }
+  end
+
+  test "recoverable_hidden_variant_rich_content? is false when the product level has real content (the conflicting state) or the flag is off" do
+    conflicting = create_product(has_same_rich_content_for_all_variants: true)
+    conflicting_variant = create_variant(variant_category: create_variant_category(link: conflicting), name: "V1")
+    create_rich_content(entity: conflicting, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product content" }] }])
+    create_rich_content(entity: conflicting_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Variant content" }] }])
+
+    flag_off = create_product
+    flag_off_variant = create_variant(variant_category: create_variant_category(link: flag_off), name: "V1")
+    create_rich_content(entity: flag_off_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Variant content" }] }])
+
+    no_variant_content = create_product(has_same_rich_content_for_all_variants: true)
+    create_variant(variant_category: create_variant_category(link: no_variant_content), name: "V1")
+
+    assert_equal false, conflicting.recoverable_hidden_variant_rich_content?
+    # Fail-closed: both sides have content, so the flag keeps ruling and the
+    # save-time guard demands an explicit choice instead.
+    assert_equal true, conflicting.has_product_level_rich_content?
+    assert_equal [], conflicting_variant.rich_content_json
+    assert_equal false, flag_off.recoverable_hidden_variant_rich_content?
+    assert_equal false, no_variant_content.recoverable_hidden_variant_rich_content?
+  end
+
   # --- #percentage_revenue_cut_for_user --------------------------------------
 
   test "percentage_revenue_cut_for_user is 100 for the creator of a non-collab, 0 for others" do

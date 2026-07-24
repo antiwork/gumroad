@@ -393,6 +393,11 @@ class LinksController < ApplicationController
         return render json: { error_message: "Use the API to publish custom_html; the dashboard only supports removing it." }, status: :unprocessable_entity
       end
 
+      # Capture the deletion-guard diagnostics (alive counts, persisted
+      # shared-content flag) NOW, before assign_attributes and the save steps
+      # below mutate the product — they describe the pre-save state.
+      deletion_guard_diagnostics
+
       ActiveRecord::Base.transaction do
         @product.assign_attributes(product_permitted_params.except(
           :products,
@@ -469,6 +474,10 @@ class LinksController < ApplicationController
           product_rich_content[:description] = SaveContentUpsellsService.new(seller: @product.user, content: product_rich_content[:description], old_content: rich_content.description || []).from_rich_content
           rich_content.update!(title: product_rich_content[:title].presence, description: product_rich_content[:description].presence || [], position: index)
           rich_contents_to_keep << rich_content
+          # A page submitted under an id the server didn't know was just
+          # created with a canonical id — report the mapping so the editor's
+          # next save addresses this page instead of re-creating it.
+          save_id_mappings[:rich_content][product_rich_content[:id]] = rich_content.external_id if product_rich_content[:id].present? && product_rich_content[:id] != rich_content.external_id
         end
         product_rich_contents_to_delete = existing_rich_contents - rich_contents_to_keep
         Product::RichContentDeletionGuard.ensure_intent!(
@@ -476,7 +485,8 @@ class LinksController < ApplicationController
           rich_contents_to_delete: product_rich_contents_to_delete,
           payload_page_ids:,
           confirmed_removed_ids: confirmed_removed_rich_content_ids,
-          rewrite_budget: page_rewrite_budget
+          rewrite_budget: page_rewrite_budget,
+          diagnostics: deletion_guard_diagnostics
         )
         product_rich_contents_to_delete.each(&:mark_deleted!)
 
@@ -500,6 +510,17 @@ class LinksController < ApplicationController
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
         @product.generate_product_files_archives!
       end
+    rescue Product::RichContentDeletionGuard::HiddenVariantContentConflict => e
+      # The fail-closed inconsistent-content case: hidden version-level pages
+      # AND real product-level content both exist, so the save must not pick a
+      # winner. Return the hidden pages so the editor can present the seller
+      # an explicit choice (delete them and keep the product-level content, or
+      # cancel).
+      return render json: {
+        error_message: e.message,
+        error_code: "hidden_variant_content_conflict",
+        hidden_variant_pages: e.hidden_pages,
+      }, status: :unprocessable_entity
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       if @product.errors.details[:custom_fields].present?
         error_message = "You must add titles to all of your inputs"
@@ -529,11 +550,16 @@ class LinksController < ApplicationController
       end
 
       return render json: {
-        warning_message: "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
+        warning_message: "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout.",
+        **save_id_mappings_response
       }
     end
 
-    head :no_content
+    # The editor needs the canonical ids of records this save created (pages
+    # and variants submitted under client-generated ids) so its next save
+    # addresses them instead of re-creating them — without this, saving twice
+    # without a reload trips the content deletion guard.
+    render json: save_id_mappings_response
   end
 
   def unpublish
@@ -827,6 +853,8 @@ class LinksController < ApplicationController
           payload_page_ids:,
           confirmed_removed_rich_content_ids:,
           rewrite_budget: page_rewrite_budget,
+          deletion_guard_diagnostics:,
+          id_mappings: save_id_mappings,
         ).perform
       elsif variant_category.present?
         Product::VariantsUpdaterService.new(
@@ -841,14 +869,16 @@ class LinksController < ApplicationController
           payload_page_ids:,
           confirmed_removed_rich_content_ids:,
           rewrite_budget: page_rewrite_budget,
+          deletion_guard_diagnostics:,
+          id_mappings: save_id_mappings,
         ).perform
       end
     end
 
     # External ids of variants the seller explicitly removed in the editor (via
     # the "Remove version/tier/duration" confirmation modal). Used to distinguish
-    # an intentional deletion from a stale payload that simply doesn't know about
-    # a variant.
+    # an intentional deletion from an outdated or blind payload that simply
+    # doesn't know about a variant.
     def confirmed_removed_variant_ids
       Array.wrap(product_permitted_params[:confirmed_removed_variant_ids])
     end
@@ -877,13 +907,13 @@ class LinksController < ApplicationController
     end
 
     # Descriptions of payload pages the server does NOT already know about.
-    # Pages created in the current editor session keep their client-generated
-    # ids across saves (the editor never learns the server's ids), so a
-    # resubmitted new page arrives under an unknown id: matching on content
-    # identifies it as a rewrite rather than a deletion. Pages submitted under
-    # an id the server already has are in-place updates of that page — their
-    # content must NOT unlock deleting a different stored page that happens to
-    # have the same content (two duplicate-content pages, stale tab omits one).
+    # Editor sessions predating the id reconciliation in the save response keep
+    # their client-generated page ids across saves, so a resubmitted new page
+    # arrives under an unknown id: matching on content identifies it as a
+    # rewrite rather than a deletion. Pages submitted under an id the server
+    # already has are in-place updates of that page — their content must NOT
+    # unlock deleting a different stored page that happens to have the same
+    # content (two duplicate-content pages, an outdated payload omits one).
     # NOTE: reads the RAW params, not the permitted ones — by the time the
     # deletion guards run, the permitted variant params may have been
     # consumed/mutated by earlier steps.
@@ -909,6 +939,43 @@ class LinksController < ApplicationController
     # of one deletion total.
     def page_rewrite_budget
       @_page_rewrite_budget ||= Product::RichContentDeletionGuard.build_rewrite_budget(payload_page_descriptions)
+    end
+
+    # Non-PII diagnostics attached to every blocked-save notification so an
+    # incident like the July 21, 2026 wipe is diagnosable from the alert alone
+    # (the request body isn't retained). Must be built BEFORE the save mutates
+    # the product — the alive counts and the persisted shared-content flag
+    # describe the pre-save state; `update` calls this before
+    # assign_attributes and the value is memoized.
+    def deletion_guard_diagnostics
+      @_deletion_guard_diagnostics ||= {
+        submitted_variant_count: params[:variants].is_a?(Array) ? params[:variants].size : 0,
+        alive_variant_count: @product.alive_variants.count,
+        submitted_page_count: submitted_page_count,
+        alive_page_count: @product.alive_rich_contents.count + @product.current_base_variants.sum { |variant| variant.alive_rich_contents.count },
+        persisted_has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants?,
+        submitted_has_same_rich_content_for_all_variants: params.key?(:has_same_rich_content_for_all_variants) ? ActiveModel::Type::Boolean.new.cast(params[:has_same_rich_content_for_all_variants]) : nil,
+      }
+    end
+
+    def submitted_page_count
+      count = params[:rich_content].is_a?(Array) ? params[:rich_content].size : 0
+      count + (params[:variants].is_a?(Array) ? params[:variants].sum { |variant| variant[:rich_content].is_a?(Array) ? variant[:rich_content].size : 0 } : 0)
+    end
+
+    # Accumulates client id → canonical server id for records this save
+    # creates (pages and variants submitted under client-generated ids).
+    # Returned to the editor so its next save addresses the created records
+    # instead of re-creating them (which would trip the deletion guards).
+    def save_id_mappings
+      @_save_id_mappings ||= { variants: {}, rich_content: {} }
+    end
+
+    def save_id_mappings_response
+      {
+        variant_id_mappings: save_id_mappings[:variants],
+        rich_content_id_mappings: save_id_mappings[:rich_content],
+      }
     end
 
     def update_custom_domain

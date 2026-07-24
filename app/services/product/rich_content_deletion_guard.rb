@@ -3,33 +3,70 @@
 # Blocks a product-editor save from deleting content pages the seller didn't
 # explicitly delete. The editor always submits the FULL list of pages, so a page
 # that exists in the database but is missing from the payload normally means the
-# seller deleted it in the UI. However, a stale browser tab (or a race between
-# two editor sessions) can submit an outdated page list, in which case the save
-# silently soft-deletes every page the payload doesn't know about — wiping the
+# seller deleted it in the UI. But a payload built from outdated or incomplete
+# data silently soft-deletes every page it doesn't know about — wiping the
 # seller's product content in a single ordinary save.
+#
+# This guard exists because one production product had its content wiped three
+# times in nine days (July 13, 18 and 21, 2026). The July 21 wipe was
+# server-induced, not a stale browser tab: support had restored the product's
+# per-version pages while has_same_rich_content_for_all_variants stayed on, so
+# a fresh editor load received empty variant content — the stored state itself
+# produced a blind payload (see Link#recoverable_hidden_variant_rich_content?).
+# The July 13/18 client-side trigger was never identified (the request bodies
+# were not retained). The guard is therefore deliberately trigger-agnostic: ANY
+# save that would delete visible content without a matching intent signal is
+# blocked, whatever produced the payload.
 #
 # A page deletion is considered intentional when either:
 # - the page's id appears elsewhere in the same payload (the page moved between
 #   the product level and a variant, e.g. when toggling "use the same content
 #   for all versions"),
 # - the page's exact content appears in the payload under an id the server
-#   doesn't know. The editor keeps client-generated ids for pages created in
-#   the current session (it never learns the server's ids), so the second save
-#   of such a page arrives with an unknown id and the server re-creates it — a
-#   rewrite, not a deletion. A stale-tab wipe doesn't resubmit the content, so
-#   it stays blocked. Matching is count-aware: N identical unknown-id payload
-#   pages can only account for N deleted pages, so a duplicate-content page
-#   omitted by a stale payload can't hide behind its surviving twin. Or,
+#   doesn't know. Before the server started returning canonical ids to the
+#   editor after each save, pages created in an editor session kept their
+#   client-generated ids across saves, so the second save of such a page
+#   arrived with an unknown id and the server re-created it — a rewrite, not a
+#   deletion. A blind wipe doesn't resubmit the content, so it stays blocked.
+#   Matching is count-aware: N identical unknown-id payload pages can only
+#   account for N deleted pages, so a duplicate-content page omitted by an
+#   outdated payload can't hide behind its surviving twin. Or,
 # - the seller confirmed the deletion in the editor (delete-page modal, copy
 #   content from another version, discard other versions' content), which the
 #   client reports via confirmed_removed_rich_content_ids.
 #
-# Pages without visible editor content (a blank description, or only empty
-# structural nodes like the single bare paragraph the editor creates as a
-# placeholder) are deletable without confirmation — they carry nothing a buyer
-# could see, and the editor legitimately drops them in several flows.
+# Pages without visible editor content (no title, and a description that is
+# blank or only empty structural nodes like the single bare paragraph the
+# editor creates as a placeholder) are deletable without confirmation — they
+# carry nothing a buyer could see, and the editor legitimately drops them in
+# several flows.
 class Product::RichContentDeletionGuard
-  MESSAGE = "This save would remove content pages that weren't explicitly deleted. Your product may have been updated in another tab — please refresh the page and try again."
+  MESSAGE = "This save would remove content pages that weren't explicitly deleted. The content shown in the editor may be out of date — please refresh the page and try again."
+
+  # The July 21 incident shape, caught before any damage: the persisted
+  # shared-content flag hid real version-level pages from the editor session
+  # that produced this save, and the product level is blank. Refreshing
+  # genuinely recovers here — the editor now serves the hidden pages in this
+  # state (see Link#recoverable_hidden_variant_rich_content?).
+  HIDDEN_CONTENT_RECOVERABLE_MESSAGE = "This product's versions have content pages that weren't loaded into this editor session. Refresh the page to load them, review, and save again."
+
+  # Same hidden version-level pages, but the product level ALSO has visible
+  # content, so there's no safe side to pick automatically. The save fails
+  # closed; the editor offers the seller an explicit choice (keep the
+  # product-level content and delete the hidden pages, or cancel) via the
+  # structured payload on HiddenVariantContentConflict.
+  HIDDEN_CONTENT_CONFLICT_MESSAGE = "This product's versions still have their own content pages, which aren't shown because the product is set to use the same content for all versions. Saving would permanently delete them, so an explicit choice is required."
+
+  # Raised for the fail-closed conflict case. Carries the hidden pages so the
+  # controller can return them and the editor can present the explicit choice.
+  class HiddenVariantContentConflict < Link::LinkInvalid
+    attr_reader :hidden_pages
+
+    def initialize(message, hidden_pages:)
+      @hidden_pages = hidden_pages
+      super(message)
+    end
+  end
 
   # rewrite_budget: the shared allowance built by .build_rewrite_budget for the
   # whole save request. The guard runs several times per save (once for the
@@ -37,7 +74,13 @@ class Product::RichContentDeletionGuard
   # every call — building a fresh budget per call would let one resubmitted
   # page account for one omitted stored page in each scope instead of one
   # total. Entries are consumed (mutated) as they authorize rewrites.
-  def self.ensure_intent!(product:, rich_contents_to_delete:, payload_page_ids:, confirmed_removed_ids:, rewrite_budget: {})
+  #
+  # diagnostics: non-PII counts and flags captured by the controller BEFORE the
+  # save mutated anything (see LinksController#deletion_guard_diagnostics).
+  # Included in the blocked-save notification so an incident like July 21 is
+  # diagnosable from the alert alone, and used to classify hidden-content
+  # blocks via the persisted shared-content flag.
+  def self.ensure_intent!(product:, rich_contents_to_delete:, payload_page_ids:, confirmed_removed_ids:, rewrite_budget: {}, diagnostics: {})
     unconfirmed = rich_contents_to_delete.select do |rich_content|
       next false unless rich_content.has_editor_content?
       next false if payload_page_ids.include?(rich_content.external_id)
@@ -52,13 +95,33 @@ class Product::RichContentDeletionGuard
     end
     return if unconfirmed.empty?
 
-    ErrorNotifier.notify(
-      "Blocked product save that would delete content pages without confirmation",
-      product_id: product.id,
-      rich_content_ids: unconfirmed.map(&:id)
-    )
-    product.errors.add(:base, MESSAGE)
-    raise Link::LinkInvalid, MESSAGE
+    # Version-level pages being deleted while the PERSISTED shared-content
+    # flag is on were invisible to the editor session that produced this save
+    # — the exact July 21 mechanism — so they get a specific error instead of
+    # the generic "editor may be out of date" one.
+    hidden_variant_pages =
+      diagnostics[:persisted_has_same_rich_content_for_all_variants] ? unconfirmed.select { |rich_content| rich_content.entity.is_a?(BaseVariant) } : []
+
+    if hidden_variant_pages.any?
+      # The product-level pages of this save are already applied by the time
+      # the per-variant guards run, so the live rows tell us whether real
+      # product-level content exists alongside the hidden version pages.
+      product_side_has_content = product.alive_rich_contents.reset.any?(&:has_editor_content?)
+      if product_side_has_content
+        block_save!(product:, unconfirmed:, diagnostics:,
+                    error_name: "Blocked product save that would delete version content hidden by the shared-content flag (conflicting product-level content)",
+                    message: HIDDEN_CONTENT_CONFLICT_MESSAGE,
+                    exception: HiddenVariantContentConflict.new(HIDDEN_CONTENT_CONFLICT_MESSAGE, hidden_pages: hidden_variant_pages.map { { id: _1.external_id, title: _1.title } }))
+      else
+        block_save!(product:, unconfirmed:, diagnostics:,
+                    error_name: "Blocked product save that would delete version content hidden by the shared-content flag (recoverable)",
+                    message: HIDDEN_CONTENT_RECOVERABLE_MESSAGE)
+      end
+    end
+
+    block_save!(product:, unconfirmed:, diagnostics:,
+                error_name: "Blocked product save that would delete content pages without confirmation",
+                message: MESSAGE)
   end
 
   # Builds the request-wide rewrite allowance from the unknown-id payload page
@@ -83,4 +146,16 @@ class Product::RichContentDeletionGuard
     else description
     end
   end
+
+  def self.block_save!(product:, unconfirmed:, diagnostics:, error_name:, message:, exception: nil)
+    ErrorNotifier.notify(
+      error_name,
+      product_id: product.id,
+      rich_content_ids: unconfirmed.map(&:id),
+      **diagnostics
+    )
+    product.errors.add(:base, message)
+    raise exception || Link::LinkInvalid.new(message)
+  end
+  private_class_method :block_save!
 end
