@@ -49,6 +49,7 @@ import {
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
   getChargeTodayPrice,
+  getTotalPrice,
   hasShipping,
   isCardReadyToPay,
   isProcessing,
@@ -379,8 +380,9 @@ const SharedInputs = () => {
                 onBlur={checkForEmailTypos}
               />
             </PopoverAnchor>
-            {/* Open upward: the pay/download button sits right below the email field, and a
-                    downward popover covers it, blocking the purchase until the buyer answers. */}
+            {/* Open upward: on paid carts the payment methods (and on free carts the
+                    pay/download button) sit right below the email field, and a downward
+                    popover covers them, blocking the purchase until the buyer answers. */}
             <PopoverContent className="grid gap-2" matchTriggerWidth side="top">
               <div>Did you mean {state.emailTypoSuggestion}?</div>
               <div className="flex gap-2">
@@ -881,6 +883,7 @@ const CreditCardContent = ({
             heldWalletPaymentRef.current = {
               paymentMethod: clientConfirmPaymentMethod,
               approvedAmount: getStripePaymentElementAmount(state),
+              approvedTotal: getTotalPrice(state),
             };
             return;
           }
@@ -904,6 +907,7 @@ const CreditCardContent = ({
             heldWalletPaymentRef.current = {
               paymentMethod: clientConfirmPaymentMethod,
               approvedAmount: getStripePaymentElementAmount(state),
+              approvedTotal: getTotalPrice(state),
             };
             return;
           }
@@ -986,6 +990,7 @@ const CreditCardContent = ({
           heldWalletPaymentRef.current = {
             paymentMethod,
             approvedAmount: getStripePaymentElementAmount(state),
+            approvedTotal: getTotalPrice(state),
           };
           return;
         }
@@ -1018,6 +1023,7 @@ const CreditCardContent = ({
           heldWalletPaymentRef.current = {
             paymentMethod,
             approvedAmount: getStripePaymentElementAmount(state),
+            approvedTotal: getTotalPrice(state),
           };
           return;
         }
@@ -1090,8 +1096,11 @@ const CreditCardContent = ({
               // Mirror the selection into checkout state so the form can react to it — the
               // Full name and Country/ZIP fields hide while a selection has the element
               // collect the full billing details (UPI on digital carts, see SharedInputs).
-              if (state.paymentElementType !== evt.value.type)
-                dispatch({ type: "set-value", paymentElementType: evt.value.type });
+              // Dispatched unconditionally: guarding on the render-closure `state` could skip
+              // the second of two change events landing before a re-render flush, stranding
+              // state on the stale type. An identical value is a no-op assignment in the
+              // reducer, so redundant dispatches cost nothing.
+              dispatch({ type: "set-value", paymentElementType: evt.value.type });
               if (evt.complete) setCardError(false);
               // A change means the buyer is interacting with the element — reclaim the
               // card/wallet lane from PayPal. Ignore the empty card-form event a freshly

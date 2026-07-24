@@ -1180,6 +1180,53 @@ describe("reduceCheckoutState", () => {
       expect(next.status).toEqual({ type: "offering" });
     });
   });
+
+  // On the element-full mode (UPI on digital carts) the pane collects the postal code and
+  // checkout's own Full name field is the only name source Stripe's confirm can use — the two
+  // validation rules below keep the buyer from being blocked on a hidden ZIP field, and from
+  // reaching Stripe's confirm with a blank billing name (the parameter_missing failure shape
+  // of gumroad-private#933).
+  describe("element-full billing validation (UPI pane collects the address)", () => {
+    const elementFullState = (overrides: Partial<State> = {}) =>
+      state({
+        checkoutPayment: paymentElementClientConfirmConfig,
+        paymentElementType: "upi",
+        ...overrides,
+      });
+
+    it("requires a full name when the pane collects the billing details", () => {
+      const next = reduceCheckoutState(elementFullState({ fullName: "" }), { type: "offer" });
+      expect(next.status).toEqual({ type: "input", errors: new Set(["fullName"]) });
+    });
+
+    it("offers normally once the full name is present", () => {
+      const next = reduceCheckoutState(elementFullState({ fullName: "Priya Sharma", zipCode: "" }), {
+        type: "offer",
+      });
+      expect(next.status).toEqual({ type: "offering" });
+    });
+
+    it("waives the US ZIP requirement — the pane collects the postal code and checkout's field is hidden", () => {
+      const next = reduceCheckoutState(elementFullState({ zipCode: "" }), { type: "offer" });
+      expect(next.status).toEqual({ type: "offering" });
+    });
+
+    it("still requires the US ZIP when the element shows a card pane", () => {
+      const next = reduceCheckoutState(elementFullState({ paymentElementType: "card", zipCode: "" }), {
+        type: "offer",
+      });
+      expect(next.status).toEqual({ type: "input", errors: new Set(["zipCode"]) });
+    });
+
+    it("does not require the full name once the buyer switches to a method whose flow collects it", () => {
+      // With PayPal selected the element-full mode is off: the fullName gate releases, and the
+      // US ZIP requirement comes back (checkout's own field is visible again).
+      const next = reduceCheckoutState(elementFullState({ fullName: "", zipCode: "", paymentMethod: "paypal" }), {
+        type: "offer",
+      });
+      expect(next.status).toEqual({ type: "input", errors: new Set(["zipCode"]) });
+    });
+  });
 });
 
 const loadedSurcharges = (
