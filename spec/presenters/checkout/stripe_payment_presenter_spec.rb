@@ -652,13 +652,14 @@ describe Checkout::StripePaymentPresenter do
           .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
       end
 
-      it "keeps Klarna off recurring (membership) carts — excluded from v1" do
+      it "counts quantities toward the window — price is per-unit, so 100 × $50 is a $5,000 cart, not a $50 one" do
         stub_geoip_country("104.28.0.1", "United States")
-        item = klarna_flagged_seller_item(recurrence: "monthly")
+        item = klarna_flagged_seller_item
+        item[:price] = 50_00
+        item[:quantity] = 100
 
-        props = stripe_payment_props(add_products: [item], ip: "104.28.0.1")
-
-        expect(props[:integration]).not_to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
+        expect(stripe_payment_props(add_products: [item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
       end
     end
 

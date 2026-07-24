@@ -241,17 +241,25 @@ class Checkout::PaymentMethodResolver
     # forced-currency methods there is no blanket Stripe-test-mode bypass — the flag is the QA
     # switch too (activate it for a QA seller on preview/staging), because a test-mode bypass
     # would silently offer Klarna on every test-keyed checkout regardless of the ramp decision.
-    # On top of the flag, three Klarna-specific cart gates — all fail closed:
+    # On top of the flag, four Klarna-specific cart gates — all fail closed:
     #   - US buyers only in v1 (see KLARNA_SUPPORTED_BUYER_COUNTRY; unknown GeoIP fails safe),
     #   - the cart total must sit inside Stripe's Klarna USD transaction window (a cart outside
     #     it renders a method whose confirm Stripe rejects with no buyer recourse),
     #   - one-time carts only (recurring is already stripped from `eligible` by
-    #     RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES, which the intersection here inherits).
+    #     RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES, which the intersection here inherits),
+    #   - for direct-charge (connect) sellers, the connected account itself must be US-based:
+    #     Stripe's Klarna cross-border rule applies to the account the intent is created on, so
+    #     a non-US connected account with an active klarna_payments capability would still have
+    #     its USD/US-buyer intent create rejected — and an incompatible payment_method_types
+    #     entry fails the ENTIRE intent create, taking card down with it (the
+    #     gumroad-private#1026 failure mode). The capability snapshot check downstream
+    #     (account_supported_methods) can't catch this because the capability really is active.
     def klarna_methods(eligible)
       return [] unless sellers.one?
       return [] unless eligible.include?(KLARNA_PAYMENT_METHOD_TYPE)
       return [] unless buyer_country == KLARNA_SUPPORTED_BUYER_COUNTRY
       return [] unless klarna_amount_within_limits?
+      return [] unless klarna_supported_merchant_account?
       return [] unless Feature.active?(KLARNA_LAUNCH_FEATURE, sellers.first)
 
       [KLARNA_PAYMENT_METHOD_TYPE]
@@ -261,6 +269,15 @@ class Checkout::PaymentMethodResolver
       cart_total_usd_cents.present? &&
         cart_total_usd_cents >= KLARNA_MIN_USD_CHARGE_CENTS &&
         cart_total_usd_cents <= KLARNA_MAX_USD_CHARGE_CENTS
+    end
+
+    # Platform-account sellers always pass (the platform account is US-based). Direct-charge
+    # sellers pass only when their connected account's country is US — see klarna_methods'
+    # fourth gate. An unknown country fails closed.
+    def klarna_supported_merchant_account?
+      return true unless direct_charge_seller?
+
+      sellers.first.stripe_connect_account&.country == KLARNA_SUPPORTED_BUYER_COUNTRY
     end
 
     # The methods (from our policy-resolved set) that the account the PaymentIntent will be created

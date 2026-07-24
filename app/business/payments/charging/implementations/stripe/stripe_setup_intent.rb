@@ -37,9 +37,15 @@ class StripeSetupIntent < SetupIntent
       # (iDEAL, Klarna) are handled by Stripe.js in the buyer's browser, so retrieving an
       # intent that still carries one (e.g. the buyer came back to the checkout return page
       # without completing the flow) is expected, not an error. redirect_to_url only counts
-      # when the intent actually lists a client-redirect method — on a server-confirmed
-      # (e.g. card-only mandate setup) intent no browser owns the redirect, so it still alerts.
-      return if StripeIntentStatus.client_handled_next_action?(next_action_type, setup_intent.payment_method_types)
+      # when the method the buyer actually attempted is a client-redirect method (falling
+      # back to the offered menu when the attempted method isn't in the API response) — on a
+      # server-confirmed (e.g. card-only mandate setup) intent no browser owns the redirect,
+      # so it still alerts.
+      return if StripeIntentStatus.client_handled_next_action?(
+        next_action_type,
+        setup_intent.payment_method_types,
+        payment_method_type: StripeIntentStatus.attempted_payment_method_type(setup_intent)
+      )
 
       ErrorNotifier.notify "Stripe setup intent #{id} requires an unsupported action: #{next_action_type}"
     end

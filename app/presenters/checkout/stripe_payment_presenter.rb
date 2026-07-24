@@ -158,12 +158,15 @@ class Checkout::StripePaymentPresenter
         # carts pass nil — they always mount the canonical USD element, where forced-currency
         # methods must never appear.
         cart_product_currency: items.one? ? items.first[:product_currency] : nil,
-        # The Klarna amount-window gate's input (see the resolver). Pre-tax item total, the same
-        # basis the STRIPE_PAYMENT_ELEMENT_MINIMUM gate uses — prepare re-checks against the
-        # final charged total, so a total that drifts out of Klarna's window after tax/tip
+        # The Klarna amount-window gate's input (see the resolver). Pre-tax, pre-discount cart
+        # total including quantities — price_cents is the per-unit price and quantity is a
+        # separate field, so a 100 × $50 cart must read $5,000 here, not $50: undercounting
+        # would render Klarna on carts whose real total is outside Stripe's window, and the
+        # buyer's confirm would then fail with no recourse. Prepare re-checks against the final
+        # charged total, so a total that drifts out of Klarna's window after tax/tip/discounts
         # fails closed there instead of at Stripe. Only meaningful for USD-priced carts;
         # forced-currency carts never offer Klarna (see the resolver's launched_method_set).
-        cart_total_usd_cents: items.all? { _1[:product_currency] == Currency::USD } ? items.sum { _1[:price_cents].to_i } : nil,
+        cart_total_usd_cents: items.all? { _1[:product_currency] == Currency::USD } ? items.sum { _1[:price_cents].to_i * (_1[:quantity] || 1).to_i } : nil,
       )
     end
 
@@ -383,6 +386,7 @@ class Checkout::StripePaymentPresenter
         item(
           seller: product.user,
           price_cents: cart_product.price,
+          quantity: cart_product.quantity,
           recurrence: cart_product.recurrence,
           pay_in_installments: cart_product.pay_in_installments,
           offers_installment_plan: product.installment_plan.present?,
@@ -405,6 +409,7 @@ class Checkout::StripePaymentPresenter
         item(
           seller: sellers_by_external_id[product.dig(:creator, :id)],
           price_cents: checkout_product[:price],
+          quantity: checkout_product[:quantity],
           recurrence: checkout_product[:recurrence],
           pay_in_installments: checkout_product[:pay_in_installments],
           offers_installment_plan: product[:installment_plan].present?,
@@ -420,10 +425,13 @@ class Checkout::StripePaymentPresenter
       end
     end
 
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, product_currency: nil, ppp_discounted: false)
+    # quantity defaults to 1: price_cents is always the per-unit price, and the only current
+    # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false)
       {
         seller:,
         price_cents:,
+        quantity:,
         recurrence:,
         pay_in_installments:,
         offers_installment_plan:,

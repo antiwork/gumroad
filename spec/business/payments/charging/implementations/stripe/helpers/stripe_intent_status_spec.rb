@@ -1,0 +1,50 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe StripeIntentStatus do
+  describe ".client_handled_next_action?" do
+    it "accepts the method-specific browser-handled action types regardless of the method list" do
+      expect(described_class.client_handled_next_action?("cashapp_handle_redirect_or_display_qr_code", ["card"])).to eq(true)
+    end
+
+    it "rejects non-redirect action types even when a client-redirect method is offered" do
+      expect(described_class.client_handled_next_action?("boleto_display_details", %w[card klarna])).to eq(false)
+    end
+
+    context "for redirect_to_url" do
+      it "accepts when the attempted method is a client-redirect method" do
+        expect(described_class.client_handled_next_action?("redirect_to_url", %w[card klarna], payment_method_type: "klarna")).to eq(true)
+      end
+
+      it "rejects when the attempted method is card, even though the intent's menu offers a client-redirect method — a stray redirect on the card path must keep alerting" do
+        expect(described_class.client_handled_next_action?("redirect_to_url", %w[card klarna], payment_method_type: "card")).to eq(false)
+      end
+
+      it "falls back to the offered menu when the attempted method is unknown" do
+        expect(described_class.client_handled_next_action?("redirect_to_url", %w[card klarna])).to eq(true)
+        expect(described_class.client_handled_next_action?("redirect_to_url", %w[card link])).to eq(false)
+      end
+    end
+  end
+
+  describe ".attempted_payment_method_type" do
+    it "reads the type from an expanded payment_method object" do
+      intent = Stripe::StripeObject.construct_from(payment_method: { type: "klarna" })
+
+      expect(described_class.attempted_payment_method_type(intent)).to eq("klarna")
+    end
+
+    it "returns nil for an unexpanded payment_method (the ID string)" do
+      intent = Stripe::StripeObject.construct_from(payment_method: "pm_123")
+
+      expect(described_class.attempted_payment_method_type(intent)).to be_nil
+    end
+
+    it "returns nil when no payment method is attached" do
+      intent = Stripe::StripeObject.construct_from(payment_method: nil)
+
+      expect(described_class.attempted_payment_method_type(intent)).to be_nil
+    end
+  end
+end

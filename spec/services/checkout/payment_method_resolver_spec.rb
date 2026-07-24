@@ -166,6 +166,37 @@ describe Checkout::PaymentMethodResolver do
             expect(methods).not_to include("klarna")
           end
         end
+
+        context "for a direct-charge (connect) seller" do
+          let(:seller) { create(:user, check_merchant_account_is_linked: true) }
+          let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+          before do
+            connect_account.update!(stripe_capabilities_snapshot: {
+                                      "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active", "klarna_payments" => "active" },
+                                      "refreshed_at" => Time.current.iso8601,
+                                    })
+          end
+
+          it "offers Klarna when the connected account is US-based with an active klarna_payments capability" do
+            expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).payment_method_types).to include("klarna")
+          end
+
+          it "drops Klarna when the connected account is not US-based even with the capability active — Stripe's cross-border rule would fail the entire intent create (the gumroad-private#1026 failure mode)" do
+            connect_account.update!(country: "DE")
+
+            expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).payment_method_types).not_to include("klarna")
+          end
+
+          it "drops Klarna when the account's klarna_payments capability is not active" do
+            connect_account.update!(stripe_capabilities_snapshot: {
+                                      "capabilities" => { "link_payments" => "active", "cashapp_payments" => "active" },
+                                      "refreshed_at" => Time.current.iso8601,
+                                    })
+
+            expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).payment_method_types).not_to include("klarna")
+          end
+        end
       end
 
       it "keeps Klarna off without its launch flag even for an eligible US cart — the 0% default" do

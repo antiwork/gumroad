@@ -194,6 +194,9 @@ describe StripeChargeIntent, :vcr do
       before do
         allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
         allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna]
+        # The attempted method — not just the offered menu — is what keys the suppression:
+        # the buyer picked Klarna and Stripe.js owns the provider redirect.
+        allow(processor_payment_intent).to receive(:payment_method).and_return Stripe::StripeObject.construct_from(type: "klarna")
       end
 
       it "does not notify error tracker" do

@@ -471,12 +471,17 @@ class Order::PreparePaymentIntentService
         # the Element's list and the deferred intent's list must match or Stripe rejects
         # the ConfirmationToken.
         cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil,
-        # Klarna's amount-window input (see the resolver): the final charged USD total. The
-        # presenter gated the element on the pre-tax item total, so a cart whose total drifts
-        # across the Klarna window between mount and prepare resolves a different method set
-        # here — Stripe then rejects the (payment_method_types-scoped) ConfirmationToken and the
-        # purchase fails closed instead of reaching Klarna outside its limits.
-        cart_total_usd_cents: purchases_to_charge.sum(&:total_transaction_cents)
+        # Klarna's amount-window input (see the resolver), on the SAME basis the presenter used
+        # when mounting the Element — nil unless every product is USD-priced, and the pre-tax,
+        # pre-discount, quantity-inclusive item total when they are. Matching the basis matters
+        # because the Element's method list and the deferred intent's must match (Stripe rejects
+        # a payment_method_types-scoped ConfirmationToken against a mismatched intent): passing
+        # the tax-inclusive charged total, or a real USD total for a non-USD-priced cart the
+        # presenter nil'ed out, would make the two sides resolve different Klarna answers near
+        # the window edges and fail carts that never touched Klarna. Residual drift (a stale
+        # Element, flag flips mid-checkout) is covered by the previewed-method append below —
+        # the buyer's actual selection always rides the intent.
+        cart_total_usd_cents: purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == Currency::USD } ? purchases_to_charge.sum { _1.displayed_price_cents_before_offer_code } : nil
       ).resolve
     end
 
