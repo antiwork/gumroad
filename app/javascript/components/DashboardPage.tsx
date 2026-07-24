@@ -342,10 +342,15 @@ const EmailConfirmationBanner = ({
       });
       if (!response.ok) throw new Error();
       // The endpoint replies 200 with { success: false } when the resend was
-      // rejected (e.g. the email was confirmed in another tab while the banner
-      // was still up), so HTTP status alone isn't enough to claim success.
+      // rejected — the only rejection case is that there is nothing left to
+      // confirm (e.g. the email was confirmed in another tab while the banner
+      // was still up), so tell the seller that instead of a generic error.
       const responseData = typia.assert<{ success: boolean }>(await response.json());
-      if (!responseData.success) throw new Error();
+      if (!responseData.success) {
+        setResendState("initial");
+        showAlert("Your email address is already confirmed — refresh the page to update your dashboard.", "error");
+        return;
+      }
       setResendState("sent");
     } catch {
       setResendState("initial");
