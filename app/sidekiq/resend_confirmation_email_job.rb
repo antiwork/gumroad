@@ -34,7 +34,17 @@ class ResendConfirmationEmailJob
     # For an email change awaiting re-confirmation the link goes to the pending
     # address; otherwise it goes to the account's current email.
     address = user.unconfirmed_email.presence || user.email
-    EmailSuppressionManager.new(address).remove_from_lists(DELIVERABILITY_SUPPRESSION_LISTS)
+
+    # Best-effort: the send is the critical payload. If SendGrid's suppression API
+    # is down, raising here would burn the job's retries and the user would never
+    # get the email — the exact silent failure this job exists to prevent. An
+    # address that wasn't suppressed loses nothing; a suppressed one is no worse
+    # off than before and gets cleared by the nightly stale-suppression sweep.
+    begin
+      EmailSuppressionManager.new(address).remove_from_lists(DELIVERABILITY_SUPPRESSION_LISTS)
+    rescue => e
+      ErrorNotifier.notify(e, user_id: user.id)
+    end
 
     user.send_confirmation_instructions
   end

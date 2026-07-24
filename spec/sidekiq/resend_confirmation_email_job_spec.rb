@@ -31,6 +31,16 @@ describe ResendConfirmationEmailJob do
 
         described_class.new.perform(user.id)
       end
+
+      it "still sends the confirmation email when the suppression API fails" do
+        # The send is the critical payload — a SendGrid suppression outage must not
+        # burn the job's retries and silently strand the user unconfirmed.
+        allow(suppression_manager).to receive(:remove_from_lists).and_raise(SocketError, "sendgrid down")
+        expect(ErrorNotifier).to receive(:notify)
+        expect_any_instance_of(User).to receive(:send_confirmation_instructions)
+
+        described_class.new.perform(user.id)
+      end
     end
 
     context "when the user is confirming a changed email address" do

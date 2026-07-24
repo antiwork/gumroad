@@ -10,12 +10,28 @@ describe ConfirmationsController do
 
   describe "#create" do
     context "when the address still needs to be confirmed" do
+      before do
+        # Signup stamped confirmation_sent_at just now; move past the one-minute
+        # enqueue floor the way a real "I never got the email" resend would be.
+        @user.update_column(:confirmation_sent_at, 2.minutes.ago)
+      end
+
       it "enqueues a resend that clears stale suppressions first, rather than sending inline" do
         expect do
           post :create, params: { user: { email: @user.email } }
         end.to change { ResendConfirmationEmailJob.jobs.size }.by(1)
 
         expect(ResendConfirmationEmailJob).to have_enqueued_sidekiq_job(@user.id)
+      end
+    end
+
+    context "when a resend was already enqueued moments ago" do
+      it "does not enqueue another one (per-user enqueue floor)" do
+        @user.update_column(:confirmation_sent_at, 10.seconds.ago)
+
+        expect do
+          post :create, params: { user: { email: @user.email } }
+        end.not_to change { ResendConfirmationEmailJob.jobs.size }
       end
     end
 

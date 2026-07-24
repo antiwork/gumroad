@@ -166,6 +166,21 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
           get :index
         end
       end
+
+      context "when the page is refreshed while the queued resend hasn't run yet" do
+        before do
+          user.update_attribute(:confirmation_sent_at, nil)
+        end
+
+        it "enqueues exactly one resend, because confirmation_sent_at is stamped at enqueue time" do
+          allow(controller).to receive(:current_user).and_return(user)
+
+          expect do
+            get :index
+            get :index
+          end.to change { ResendConfirmationEmailJob.jobs.size }.by(1)
+        end
+      end
     end
 
     describe "suspended (tos) user" do

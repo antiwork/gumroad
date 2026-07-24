@@ -570,6 +570,9 @@ describe Settings::MainController, type: :controller, inertia: true do
       before do
         seller.confirm
         seller.update_attribute(:email, "some@gumroad.com")
+        # The email change just stamped confirmation_sent_at; a real resend click
+        # comes later ("I never got it"), past the one-minute enqueue floor.
+        seller.update_column(:confirmation_sent_at, 2.minutes.ago)
       end
 
       it_behaves_like "resends email confirmation"
