@@ -445,12 +445,14 @@ export default function SettingsPage() {
             <>
               <section className="p-4! md:p-8!">
                 <Alert role="status" variant="warning">
-                  Pages are a legacy way to lay out your profile and are being phased out. To customize your profile,
-                  edit your{" "}
+                  This sections editor is the old way to lay out your profile and is being phased out. It stays here
+                  while your profile still uses sections, and it's the last hand-editable profile layout. Customizing
+                  your profile beyond this needs an AI agent — that is how profile design works now, by design. Open
+                  your{" "}
                   <Link href={Routes.edit_page_path("profile")} className="underline">
                     Home page under Pages
                   </Link>{" "}
-                  — your agent designs and publishes it for you.
+                  to get the prompt for it.
                 </Alert>
               </section>
               <section aria-label="Profile section editor">
