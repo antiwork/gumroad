@@ -132,4 +132,58 @@ describe("inertia prefetch rejection", () => {
     await new Promise((resolve) => setTimeout(resolve, 250));
     expect(requests).not.toContain("visit /products");
   });
+
+  it("does not resurrect the abandoned page after a client-side push to another page", async () => {
+    const { router } = await import("@inertiajs/core");
+
+    window.history.replaceState({}, "", "/dashboard");
+    document.body.innerHTML = "<div id='app'></div>";
+
+    router.init({
+      initialPage: inertiaPage("/dashboard"),
+      resolveComponent: () => Promise.resolve({}),
+      swapComponent: () => Promise.resolve(),
+    });
+
+    router.prefetch("/products", { method: "get" }, { cacheFor: "1m" });
+    await vi.waitFor(() => expect(requests).toContain("prefetch /products"), WAIT);
+    router.visit("/products");
+
+    // router.push() moves to another page entirely without going through
+    // Router#visit, so it has to abandon the pending adoption as well.
+    router.push({ component: "Page", url: "/customers", props: {} });
+    await vi.waitFor(() => expect(window.location.pathname).toBe("/customers"), WAIT);
+
+    pendingPrefetchReject?.(new Error("prefetch failed"));
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(requests).not.toContain("visit /products");
+  });
+
+  it("still navigates when only the props change on the current page while a prefetch is adopted", async () => {
+    const { router } = await import("@inertiajs/core");
+
+    window.history.replaceState({}, "", "/dashboard");
+    document.body.innerHTML = "<div id='app'></div>";
+
+    router.init({
+      initialPage: inertiaPage("/dashboard"),
+      resolveComponent: () => Promise.resolve({}),
+      swapComponent: () => Promise.resolve(),
+    });
+
+    router.prefetch("/products", { method: "get" }, { cacheFor: "1m" });
+    await vi.waitFor(() => expect(requests).toContain("prefetch /products"), WAIT);
+    router.visit("/products");
+
+    // A prop update on the page the user is still looking at is not a
+    // navigation, so it must not cancel the click that is waiting on the
+    // prefetch -- otherwise the original silent-click bug comes back.
+    router.replaceProp("filter", "all");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    pendingPrefetchReject?.(new Error("prefetch failed"));
+
+    await vi.waitFor(() => expect(requests).toContain("visit /products"), WAIT);
+  });
 });
