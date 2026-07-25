@@ -60,7 +60,7 @@ class ReceiptPresenter::PaymentInfo
 
       amount_cents = chargeable.successful_purchases.sum do |purchase|
         next 0 if purchase.is_free_trial_purchase?
-        purchase.buyer_presentment_display? ? purchase.purchase_presentment.presentment_shipping_cents : purchase.shipping_cents
+        presentment_currency.present? ? purchase.purchase_presentment.presentment_shipping_cents : purchase.shipping_cents
       end
 
       {
@@ -77,7 +77,7 @@ class ReceiptPresenter::PaymentInfo
       next 0 if purchase.is_free_trial_purchase?
       # Net of refunds in both currencies: a standalone VAT refund (valid VAT ID supplied
       # at invoice time) must not leave the invoice claiming we still hold that tax.
-      purchase.buyer_presentment_display? ? purchase.buyer_presentment_non_refunded_tax_cents : purchase.non_refunded_tax_amount
+      presentment_currency.present? ? purchase.buyer_presentment_non_refunded_tax_cents : purchase.non_refunded_tax_amount
     end
     # Show zero for free trials, single-item purchases
     return if amount_cents.zero? && chargeable.multi_item_charge?
@@ -193,7 +193,7 @@ class ReceiptPresenter::PaymentInfo
 
       amount_cents = 0
       if !purchase.is_free_trial_purchase?
-        amount_cents = if purchase.buyer_presentment_display?
+        amount_cents = if presentment_currency.present?
           purchase.buyer_presentment_price_cents
         else
           get_usd_cents(
@@ -206,7 +206,7 @@ class ReceiptPresenter::PaymentInfo
 
       {
         label: price_attribute_label(purchase) + today_price_attribute_label_notes(purchase),
-        value: format_purchase_amount(purchase, amount_cents) + today_price_attribute_value_notes(purchase),
+        value: format_today_amount(amount_cents) + today_price_attribute_value_notes(purchase),
       }
     end
 
@@ -259,7 +259,7 @@ class ReceiptPresenter::PaymentInfo
 
       amount_cents = chargeable.successful_purchases.sum do |purchase|
         next 0 if purchase.is_free_trial_purchase?
-        purchase.buyer_presentment_display? ? purchase.buyer_presentment_total_cents : purchase.total_transaction_cents
+        presentment_currency.present? ? purchase.buyer_presentment_total_cents : purchase.total_transaction_cents
       end
       {
         label: "Amount paid",
@@ -374,13 +374,9 @@ class ReceiptPresenter::PaymentInfo
     end
 
     def presentment_currency
-      buyer_presentment_display_currency(chargeable.successful_purchases)
-    end
+      return @_presentment_currency if defined?(@_presentment_currency)
 
-    def format_purchase_amount(purchase, amount_cents)
-      return MoneyFormatter.format(amount_cents, purchase.buyer_presentment_currency.to_sym, no_cents_if_whole: true, symbol: true) if purchase.buyer_presentment_display?
-
-      formatted_dollar_amount(amount_cents)
+      @_presentment_currency = buyer_presentment_display_currency(chargeable.successful_purchases)
     end
 
     def format_today_amount(amount_cents)

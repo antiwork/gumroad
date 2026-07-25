@@ -721,6 +721,37 @@ describe ReceiptPresenter::PaymentInfo do
           )
         end
 
+        context "when only one purchase on the charge was charged in the buyer's currency" do
+          before do
+            charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 21_80)
+            create(:purchase_presentment,
+                   purchase: purchase_two,
+                   charge_presentment:,
+                   presentment_price_cents: 21_80,
+                   presentment_tip_cents: 0,
+                   presentment_seller_tax_cents: 0,
+                   presentment_gumroad_tax_cents: 0,
+                   presentment_shipping_cents: 0,
+                   presentment_total_cents: 21_80)
+          end
+
+          # One receipt must be readable as one currency. Adding buyer-currency cents from
+          # one purchase to USD cents from another would yield a total that is wrong in
+          # both currencies, so a charge that cannot be stated wholly in the buyer's
+          # currency is stated wholly in USD instead.
+          it "states the whole receipt in canonical USD rather than mixing currencies" do
+            expect(today_payment_attributes).to eq(
+              [
+                { label: "Digital product", value: "$14.99" },
+                { label: "Product Two", value: "$9.99" },
+                { label: "Product Three", value: "$4.99" },
+                { label: "Amount paid", value: "$29.97" },
+                { label: nil, value: link_to("Generate invoice", invoice_url) },
+              ]
+            )
+          end
+        end
+
         context "when purchases have shipping and tax" do
           before do
             purchase_two.update!(

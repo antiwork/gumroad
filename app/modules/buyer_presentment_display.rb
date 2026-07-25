@@ -9,6 +9,11 @@
 # currency that is; otherwise the document falls back to canonical USD throughout.
 module BuyerPresentmentDisplay
   private
+    # Returns the buyer's currency when the whole document can be stated in it, or nil
+    # when it has to fall back to canonical USD. Every amount on the document must be
+    # read from the same side of this decision — mixing buyer-currency cents from one
+    # purchase with USD cents from another produces a number that is wrong in both
+    # currencies.
     def buyer_presentment_display_currency(purchases)
       return nil unless purchases.any? && purchases.all?(&:buyer_presentment_display?)
 
