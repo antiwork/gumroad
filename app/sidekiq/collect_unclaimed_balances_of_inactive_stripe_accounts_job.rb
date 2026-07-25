@@ -8,6 +8,10 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
   # Ref: https://support.stripe.com/questions/unclaimed-balances-faqs-for-platforms
   STRIPE_ACCOUNT_INACTIVE_AFTER_DURATION = 3.years
 
+  # Written on every transfer this job makes, and used to recognise our own past transfers when
+  # recovering from a run that moved the money but did not finish updating our records.
+  TRANSFER_DESCRIPTION = "Collect unclaimed balance of inactive account"
+
   def perform
     MerchantAccount.stripe
                    .where(country: Compliance::Countries::USA.alpha2)
@@ -34,26 +38,37 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
       stripe_available_balance = stripe_balance["available"][0]["amount"]
       stripe_pending_balance = stripe_balance["pending"][0]["amount"]
       actual_stripe_account_balance = stripe_available_balance + stripe_pending_balance
-      next unless actual_stripe_account_balance > 0
-
-      # Transfer the money from Stripe connect account to Gumroad's platform Stripe account.
-      #
-      # The idempotency key guards against two runs overlapping. This job has no uniqueness
-      # lock, so a cron double-fire or a manual enqueue alongside the scheduled run can have
-      # two executions both read a positive balance before either transfers, and without a key
-      # that means two real transfers. Keying on the account and the amount makes the second
-      # one replay the first instead. (Ordinary Sidekiq retries are not the risk here: the
-      # balance is re-read live above, so once a transfer has succeeded a retry reads 0 and
-      # skips this account before reaching the transfer at all.)
-      transfer = Stripe::Transfer.create({
-                                           amount: actual_stripe_account_balance,
-                                           currency: Currency::USD,
-                                           description: "Collect unclaimed balance of inactive account",
-                                           destination: STRIPE_PLATFORM_ACCOUNT_ID,
-                                         }, {
-                                           stripe_account: stripe_account_id,
-                                           idempotency_key: "collect_unclaimed_balance_#{stripe_account_id}_#{actual_stripe_account_balance}",
-                                         })
+      transfer =
+        if actual_stripe_account_balance > 0
+          # Transfer the money from Stripe connect account to Gumroad's platform Stripe account.
+          #
+          # The idempotency key guards against two runs overlapping. This job has no uniqueness
+          # lock, so a cron double-fire or a manual enqueue alongside the scheduled run can have
+          # two executions both read a positive balance before either transfers, and without a key
+          # that means two real transfers. Keying on the account and the amount makes the second
+          # one replay the first instead. (Ordinary Sidekiq retries are not the risk here: the
+          # balance is re-read live above, so once a transfer has succeeded a retry reads 0 and
+          # skips this account before reaching the transfer at all.)
+          Stripe::Transfer.create({
+                                    amount: actual_stripe_account_balance,
+                                    currency: Currency::USD,
+                                    description: TRANSFER_DESCRIPTION,
+                                    destination: STRIPE_PLATFORM_ACCOUNT_ID,
+                                  }, {
+                                    stripe_account: stripe_account_id,
+                                    idempotency_key: "collect_unclaimed_balance_#{stripe_account_id}_#{actual_stripe_account_balance}",
+                                  })
+        else
+          # A zero balance usually just means there is nothing to collect. But it is also what an
+          # earlier run of this job leaves behind when it moved the money on Stripe's side and
+          # then died before recording it here (the local writes below are rolled back together,
+          # so the account is still unmarked). In that state the money is already on Gumroad's
+          # platform account while our Balance rows still point at the connected account, and
+          # nothing else would ever fix it — so look for a transfer this job made previously and,
+          # if there is one, finish the bookkeeping for it now instead of skipping the account.
+          previous_transfer_made_by_this_job(stripe_account_id)
+        end
+      next if transfer.nil?
 
       # Recording the transfer and moving our own records of the balance have to happen
       # together. The transfer id is what stops the query above from selecting this account
@@ -73,4 +88,16 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
       end
     end
   end
+
+  private
+    # Looks for a transfer this job already made out of the given connected account. Only our own
+    # transfers count, so we match on the description we write and on Gumroad's platform account as
+    # the destination; anything else on the account (a seller's own payout, say) is not ours to
+    # reconcile. We only need the recent ones because the account is skipped for good as soon as a
+    # transfer id is recorded, so at most one unrecorded transfer can exist.
+    def previous_transfer_made_by_this_job(stripe_account_id)
+      Stripe::Transfer.list({ limit: 10 }, { stripe_account: stripe_account_id })
+                      .data
+                      .find { |transfer| transfer.description == TRANSFER_DESCRIPTION && transfer.destination == STRIPE_PLATFORM_ACCOUNT_ID }
+    end
 end

@@ -267,5 +267,55 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to be_nil
       expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: us_stripe_account.id).sum(:holding_amount_cents)).to eq 100_00
     end
+
+    # Continues the example above. After the rollback the money has already left the connected
+    # account, so the next run sees a zero balance — it has to recognise the transfer it made last
+    # time and finish the bookkeeping, otherwise the balances are stranded for good.
+    it "finishes the bookkeeping on a later run when an earlier run transferred but did not record it" do
+      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+
+      allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Account).to receive(:retrieve).and_return(double(type: "custom", created: 5.years.ago.to_i))
+      # The earlier run already swept the account, so there is nothing left on Stripe's side.
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        { "available" => [{ "amount" => 0 }], "pending" => [{ "amount" => 0 }] }
+      )
+      allow(Stripe::Transfer).to receive(:list).and_return(
+        double(data: [double(id: "tr_from_earlier_run",
+                             description: described_class::TRANSFER_DESCRIPTION,
+                             destination: STRIPE_PLATFORM_ACCOUNT_ID)])
+      )
+      expect(Stripe::Transfer).not_to receive(:create)
+
+      described_class.new.perform
+
+      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to eq "tr_from_earlier_run"
+      expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: us_stripe_account.id).sum(:holding_amount_cents)).to eq 0
+      expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 100_00
+    end
+
+    it "leaves an empty account alone when the only transfers on it were not made by this job" do
+      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+
+      allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Account).to receive(:retrieve).and_return(double(type: "custom", created: 5.years.ago.to_i))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        { "available" => [{ "amount" => 0 }], "pending" => [{ "amount" => 0 }] }
+      )
+      # Someone else's transfer out of the same account: right shape, not ours to reconcile.
+      allow(Stripe::Transfer).to receive(:list).and_return(
+        double(data: [double(id: "tr_unrelated", description: "Something else", destination: "acct_other")])
+      )
+      expect(Stripe::Transfer).not_to receive(:create)
+
+      described_class.new.perform
+
+      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to be_nil
+      expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: us_stripe_account.id).sum(:holding_amount_cents)).to eq 100_00
+    end
   end
 end
