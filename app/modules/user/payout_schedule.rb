@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 module User::PayoutSchedule
-  PAYOUT_STARTING_DATE = Date.new(2012, 12, 21)
-  PAYOUT_RECURRENCE_DAYS = 7
   PAYOUT_DELAY_DAYS = 7
 
   WEEKLY = "weekly"
@@ -100,10 +98,23 @@ module User::PayoutSchedule
   end
 
   # Public: Returns the upcoming payout date, not taking a user into account.
+  #
+  # This is the platform's payout RUN date — the Friday the payout job fires — and it is
+  # deliberately seller-agnostic. An individual seller can be on a daily, weekly, monthly,
+  # or quarterly frequency, so anything a seller sees must come from the per-seller
+  # #next_payout_date above (which branches on payout_frequency), never from here. The
+  # weekly run only actually pays a seller whose own next payout date has come up; see the
+  # per-user check in Payouts.
+  #
+  # Scheduled payouts run every Friday, so this is simply the next Friday (today, if
+  # today is a Friday). It used to be computed by starting at a hardcoded 2012 date and
+  # stepping forward a week at a time until the result caught up to today, which meant
+  # every call looped ~700 times and grew by one iteration a week forever. The anchor
+  # date carried no meaning beyond "a Friday", so anchoring to the current week instead
+  # gives the same answer in constant time and can't drift.
   def self.next_scheduled_payout_date
-    scheduled_payout_date = PAYOUT_STARTING_DATE
-    scheduled_payout_date += PAYOUT_RECURRENCE_DAYS while scheduled_payout_date < Date.today
-    scheduled_payout_date
+    today = Date.today
+    today.friday? ? today : today.next_occurring(:friday)
   end
 
   # Public: Returns the upcoming payout's end date, not taking a user into account.

@@ -4344,6 +4344,25 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal 50, auto.resolved_percent
   end
 
+  test "#auto_renewal_offer_code counts a guest purchase under the subscriber's confirmed email toward the ownership tier" do
+    auto_renewal_context
+    # Detach the membership purchase from the account so the only thing linking
+    # the subscriber to the product is the checkout email, the way a guest
+    # checkout leaves it until the buyer claims the purchase.
+    @arc_subscription.original_purchase.update!(purchaser_id: nil, email: @arc_buyer.email)
+
+    auto = Subscription.find(@arc_subscription.id).auto_renewal_offer_code
+    assert_equal @arc_tiered_code, auto.offer_code
+    assert_equal 50, auto.resolved_percent
+  end
+
+  test "#auto_renewal_offer_code ignores a guest purchase under a different email" do
+    auto_renewal_context
+    @arc_subscription.original_purchase.update!(purchaser_id: nil, email: "not-the-subscriber@example.com")
+
+    assert_nil Subscription.find(@arc_subscription.id).auto_renewal_offer_code
+  end
+
   test "#auto_renewal_offer_code ignores universal renewal discounts that exclude the product" do
     auto_renewal_context
     @arc_tiered_code.mark_deleted!

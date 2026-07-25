@@ -219,8 +219,6 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     end
 
     context "passkey setup prompt" do
-      before { Feature.activate(:passkeys) }
-
       it "flags the prompt after completing two-factor authentication" do
         post :create, params: { token: @user.otp_code, user_id: @user.encrypted_external_id }
 

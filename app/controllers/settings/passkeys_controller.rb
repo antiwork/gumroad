@@ -7,7 +7,6 @@ class Settings::PasskeysController < Settings::BaseController
   REGISTRATION_ERROR_MESSAGE = "Could not add this passkey. Please try again."
 
   before_action :set_user
-  before_action :ensure_passkeys_feature_enabled
   before_action :authorize
   before_action :set_webauthn_credential, only: %i[update destroy]
 
@@ -89,10 +88,6 @@ class Settings::PasskeysController < Settings::BaseController
   private
     def set_user
       @user = current_seller
-    end
-
-    def ensure_passkeys_feature_enabled
-      e404 unless Feature.active?(:passkeys, @user)
     end
 
     def authorize

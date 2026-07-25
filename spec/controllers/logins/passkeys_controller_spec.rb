@@ -11,7 +11,6 @@ describe Logins::PasskeysController, type: :controller do
 
   before do
     request.env["devise.mapping"] = Devise.mappings[:user]
-    Feature.activate(:passkeys)
   end
 
   def fake_register
@@ -60,14 +59,6 @@ describe Logins::PasskeysController, type: :controller do
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to be true
       expect(response.parsed_body["options"]["challenge"]).to be_present
-    end
-
-    context "when the feature flag is inactive" do
-      before { Feature.deactivate(:passkeys) }
-
-      it "raises a not found error" do
-        expect { post :options, as: :json }.to raise_error(ActionController::RoutingError, "Not Found")
-      end
     end
   end
 
@@ -187,14 +178,6 @@ describe Logins::PasskeysController, type: :controller do
       expect(response).to be_successful
       expect(response.parsed_body).to include("success" => true)
       expect(controller.user_signed_in?).to be(true)
-    end
-
-    context "when the feature flag is inactive" do
-      before { Feature.deactivate(:passkeys) }
-
-      it "raises a not found error" do
-        expect { post :create, params: { credential: {} }, as: :json }.to raise_error(ActionController::RoutingError, "Not Found")
-      end
     end
   end
 end

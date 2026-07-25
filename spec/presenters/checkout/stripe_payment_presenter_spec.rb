@@ -628,6 +628,115 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link]))
     end
 
+    describe "Klarna launch flag (checkout_local_method_klarna)" do
+      def klarna_flagged_seller_item(**overrides)
+        item = confirm_flagged_seller_product(**overrides)
+        seller = User.find_by(external_id: item[:product][:creator][:id])
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        item
+      end
+
+      it "mounts the element with Klarna for a US buyer of a flagged seller when the cart is inside the USD window" do
+        stub_geoip_country("104.28.0.1", "United States")
+
+        expect(stripe_payment_props(add_products: [klarna_flagged_seller_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp klarna]))
+      end
+
+      it "keeps Klarna off for a non-US buyer even with the flag on" do
+        stub_geoip_country("2.2.2.2", "United Kingdom")
+
+        expect(stripe_payment_props(add_products: [klarna_flagged_seller_item], ip: "2.2.2.2"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link]))
+      end
+
+      it "keeps Klarna off a cart above Stripe's USD transaction ceiling — eligibility fails closed instead of erroring at confirm" do
+        stub_geoip_country("104.28.0.1", "United States")
+        item = klarna_flagged_seller_item
+        item[:price] = 5_000_00
+
+        expect(stripe_payment_props(add_products: [item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      it "counts quantities toward the window — price is per-unit, so 100 × $50 is a $5,000 cart, not a $50 one" do
+        stub_geoip_country("104.28.0.1", "United States")
+        item = klarna_flagged_seller_item
+        item[:price] = 50_00
+        item[:quantity] = 100
+
+        expect(stripe_payment_props(add_products: [item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      # The example above covers the buy-now/upsell path, which carries quantity in the
+      # add_products hash. The shopping-cart path reads it from the CartProduct row instead, so
+      # it needs its own pin: without it, dropping quantity from the cart branch would price a
+      # 100 × $50 cart as $50 and render Klarna on a $5,000 cart while every other spec passed.
+      it "counts CartProduct quantities toward the window on the shopping-cart path" do
+        stub_geoip_country("104.28.0.1", "United States")
+        seller = create(:user)
+        product = create(:product, user: seller, price_cents: 50_00)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        cart = create(:cart, :guest)
+        create(:cart_product, cart:, product:, price: 50_00, quantity: 100)
+
+        expect(stripe_payment_props(cart:, ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      # Multi-item single-seller carts are Klarna-eligible (the gate is sellers.one?, not
+      # items.one?) and the window input must be the SUM across items — these branches decide
+      # real eligibility, so pin them rather than leaving the derivation to the resolver
+      # spec's injected totals.
+      it "offers Klarna on a multi-item single-seller USD cart whose summed total is inside the window" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        second_product = create(:product, user: seller, price_cents: 20_00)
+        second_item = checkout_product_for(second_product)
+
+        expect(stripe_payment_props(add_products: [first_item, second_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp klarna]))
+      end
+
+      it "keeps Klarna off a multi-item single-seller cart whose SUMMED total crosses the ceiling, even though each item alone is inside the window" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        first_item[:price] = 3_000_00
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        second_product = create(:product, user: seller, price_cents: 3_000_00)
+        second_item = checkout_product_for(second_product)
+
+        expect(stripe_payment_props(add_products: [first_item, second_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      # A cart containing any non-USD-priced item nils the window input, which fails closed
+      # for Klarna — Stripe's Klarna window is defined on USD amounts, so a total we cannot
+      # express in USD must never render the method.
+      it "keeps Klarna off a cart with a non-USD-priced item — the window input is nil and fails closed" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: "eur")
+        eur_item = checkout_product_for(eur_product)
+
+        props = stripe_payment_props(add_products: [first_item, eur_item], ip: "104.28.0.1")
+
+        expect(props[:elements_options][:payment_method_types]).not_to include("klarna")
+      end
+    end
+
+    it "keeps Klarna off without its launch flag — the flag defaults to 0% everywhere" do
+      stub_geoip_country("104.28.0.1", "United States")
+
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+    end
+
     describe "PPP method matrix (U13)" do
       let(:ppp_details) { { country: "Brazil", factor: 0.5, minimum_price: 99 } }
 

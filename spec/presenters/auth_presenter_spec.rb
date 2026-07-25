@@ -19,7 +19,6 @@ describe AuthPresenter do
           {
             email: nil,
             application_name: nil,
-            show_passkey_login: false,
           }
         )
       end
@@ -33,17 +32,8 @@ describe AuthPresenter do
           {
             email: nil,
             application_name: "Test App",
-            show_passkey_login: false,
           }
         )
-      end
-    end
-
-    context "when the passkeys feature is active" do
-      before { Feature.activate(:passkeys) }
-
-      it "enables passkey login" do
-        expect(presenter.login_props[:show_passkey_login]).to be(true)
       end
     end
   end
@@ -66,7 +56,6 @@ describe AuthPresenter do
               total_made: 0,
             },
             recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
-            show_passkey_login: false,
           }
         )
       end
@@ -98,7 +87,6 @@ describe AuthPresenter do
               total_made: 923_456_789,
             },
             recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
-            show_passkey_login: false,
           }
         )
       end

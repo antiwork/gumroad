@@ -6,6 +6,7 @@ class StripeChargeIntent < ChargeIntent
 
   def initialize(payment_intent:, merchant_account: nil)
     self.payment_intent = payment_intent
+    @merchant_account = merchant_account
 
     load_charge(payment_intent, merchant_account) if succeeded?
     validate_next_action
@@ -47,10 +48,29 @@ class StripeChargeIntent < ChargeIntent
 
       next_action_type = payment_intent.next_action.type
       return if next_action_type == StripeIntentStatus::ACTION_TYPE_USE_SDK
-      # Actions like Cash App Pay's QR code are handled by Stripe.js in the buyer's browser,
-      # so retrieving an intent that still carries one (e.g. the buyer came back to the
-      # checkout return page without completing the QR flow) is expected, not an error.
-      return if next_action_type.in?(StripeIntentStatus::CLIENT_HANDLED_ACTION_TYPES)
+      # Actions like Cash App Pay's QR code or a client-redirect method's provider redirect
+      # (iDEAL, Klarna) are handled by Stripe.js in the buyer's browser, so retrieving an
+      # intent that still carries one (e.g. the buyer came back to the checkout return page
+      # without completing the flow) is expected, not an error. redirect_to_url only counts
+      # when the method the buyer actually attempted is a client-redirect method — resolved
+      # ONLY for redirect_to_url, because resolving it can cost a PaymentMethod retrieve on a
+      # plain (unexpanded) intent, and the other action types decide without it. Falls back
+      # to the offered menu only when NOTHING is attached; a failed lookup returns a sentinel
+      # that keeps the alert alive instead (see StripeIntentStatus). On a
+      # server-confirmed (e.g. card-only off-session) intent no browser owns the redirect,
+      # so it still alerts. The connected-account scope matters for direct-Connect
+      # merchants, whose payment methods aren't visible from the platform account.
+      attempted_type = if next_action_type == StripeIntentStatus::ACTION_TYPE_REDIRECT_TO_URL
+        StripeIntentStatus.attempted_payment_method_type(
+          payment_intent,
+          stripe_account: @merchant_account&.is_a_stripe_connect_account? ? @merchant_account.charge_processor_merchant_id : nil
+        )
+      end
+      return if StripeIntentStatus.client_handled_next_action?(
+        next_action_type,
+        payment_intent.payment_method_types,
+        payment_method_type: attempted_type
+      )
 
       ErrorNotifier.notify "Stripe charge intent #{id} requires an unsupported action: #{next_action_type}"
     end

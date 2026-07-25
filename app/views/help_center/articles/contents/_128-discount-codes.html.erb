@@ -71,6 +71,7 @@
   <h3 id="limit-to-existing-customers">Limit to existing customers</h3>
   <p>Restrict a discount code to buyers who already own one of your products. Open the discount, scroll to <b>Settings</b>, and turn on <b>Limit to existing customers</b>. Under <b>Must have purchased</b>, pick the product (or products) the buyer must already own for the code to apply.</p>
   <figure><%= image_tag "help_center/discount-existing-customers.png", alt: "Limit to existing customers toggle with the Must have purchased product picker" %></figure>
+  <p>Guest checkouts count too. If a buyer bought the required product without an account, the code still applies as long as they are signed in to a Gumroad account whose confirmed email matches the email they used at that checkout. If their account email is not confirmed yet, only purchases already attached to the account count, so ask them to confirm their email address.</p>
   <p>A few common setups:</p>
   <ul>
     <li><b>Reward repeat buyers.</b> Pick Product A under <b>Must have purchased</b>, then set the discount to apply to Product B. Buyers who already own A get the discount on B.</li>
@@ -91,6 +92,7 @@
     <li>Tier discounts require the <b>Percentage</b> discount type — fixed amounts aren't supported.</li>
     <li>Tiers replace <b>Discount duration for memberships</b>. When tiers are on, that option is hidden — the tiers control the schedule.</li>
     <li>Combine with <a href="#limit-to-existing-customers">Limit to existing customers</a> if you want to require the buyer to own a specific product before any tier applies.</li>
+    <li>Ownership is counted from the buyer's oldest qualifying purchase, and it is matched the same way as <a href="#limit-to-existing-customers">Limit to existing customers</a>, so a guest checkout under the buyer's confirmed account email counts toward their duration.</li>
   </ul>
   <h3 id="edit-discount-codes">Edit discount codes</h3>
   <p>Click any discount you want to edit, and a side panel will open. </p>

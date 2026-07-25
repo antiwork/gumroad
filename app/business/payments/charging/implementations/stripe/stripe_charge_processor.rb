@@ -204,7 +204,7 @@ class StripeChargeProcessor
         setup_intent = Stripe::SetupIntent.retrieve(setup_intent_id)
       end
 
-      StripeSetupIntent.new(setup_intent)
+      StripeSetupIntent.new(setup_intent, merchant_account:)
     end
   end
 
@@ -241,7 +241,7 @@ class StripeChargeProcessor
 
       setup_intent.confirm if setup_intent.status == StripeIntentStatus::REQUIRES_CONFIRMATION
 
-      StripeSetupIntent.new(setup_intent)
+      StripeSetupIntent.new(setup_intent, merchant_account:)
     end
   end
 
