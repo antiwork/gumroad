@@ -753,7 +753,7 @@ describe Exports::PurchaseExportService do
         expect(field_value(row, "Buyer Refunded Total")).to eq("0.0")
       end
 
-      it "sums only the refunds carrying a buyer-currency snapshot" do
+      it "sums the refunds carrying a buyer-currency snapshot" do
         create(:purchase_presentment, purchase: @purchase, charge_presentment: build_charge_presentment, presentment_currency: Currency::CAD)
         create(:refund, purchase: @purchase, amount_cents: 5_00).update!(
           json_data: { presentment_currency: Currency::CAD, presentment_amount_cents: 7_00 }
@@ -761,11 +761,22 @@ describe Exports::PurchaseExportService do
         create(:refund, purchase: @purchase, amount_cents: 3_00).update!(
           json_data: { presentment_currency: Currency::CAD, presentment_amount_cents: 4_25 }
         )
-        # A refund predating the presentment feature has no snapshot, so it contributes
-        # nothing to the buyer-currency total rather than being guessed at.
-        create(:refund, purchase: @purchase, amount_cents: 1_00)
 
         expect(field_value(last_data_row, "Buyer Refunded Total")).to eq("11.25")
+      end
+
+      it "leaves the buyer refunded total blank when a refund predates buyer-currency snapshots" do
+        create(:purchase_presentment, purchase: @purchase, charge_presentment: build_charge_presentment, presentment_currency: Currency::CAD)
+        create(:refund, purchase: @purchase, amount_cents: 5_00).update!(
+          json_data: { presentment_currency: Currency::CAD, presentment_amount_cents: 7_00 }
+        )
+        # No snapshot: this refund happened before the feature shipped, so its buyer-currency
+        # amount is genuinely unknown. Publishing "7.0" would understate what the buyer got
+        # back and a seller reconciling against their statement could not tell. An empty cell
+        # says "unknown" honestly.
+        create(:refund, purchase: @purchase, amount_cents: 1_00)
+
+        expect(field_value(last_data_row, "Buyer Refunded Total")).to be_nil
       end
 
       it "does not divide zero-decimal currencies by 100" do

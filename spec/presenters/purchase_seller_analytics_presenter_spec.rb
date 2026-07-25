@@ -47,6 +47,14 @@ describe PurchaseSellerAnalyticsPresenter do
     end
 
     describe "buyer-currency fields" do
+      before do
+        # Charging a card in the :purchase factory needs Gumroad's own managed merchant
+        # account to exist. Most specs inherit it from another example's setup; this group
+        # creates purchases directly, so it seeds it here (same pattern as the export spec).
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+      end
+
       let(:seller) { create(:user, google_analytics_id: "G-ABC123") }
       let(:product) { create(:product, user: seller) }
       let(:purchase) { create(:purchase, link: product, displayed_price_cents: 10_00) }

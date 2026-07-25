@@ -220,7 +220,10 @@ class Exports::PurchaseExportService
         # row (summing amounts across mixed buyer currencies is a meaningless number).
         "Buyer Currency" => purchase.buyer_presentment_currency&.upcase,
         "Buyer Total" => purchase.buyer_presentment_major_units(purchase.buyer_presentment_total_cents),
-        "Buyer Refunded Total" => purchase.buyer_presentment_major_units(purchase.buyer_presentment_refunded_cents)
+        # Left blank when any effective refund predates buyer-currency snapshots: the
+        # derived sum would silently omit it, and an honest empty cell beats a
+        # plausible-but-low number a seller might reconcile against their statement.
+        "Buyer Refunded Total" => (purchase.buyer_presentment_major_units(purchase.buyer_presentment_refunded_cents) unless purchase.buyer_presentment_refunded_cents_incomplete?)
       }
 
       raise "This data is not JSON safe: #{data.inspect}" if !Rails.env.production? && !data.eql?(JSON.load(JSON.dump(data)))

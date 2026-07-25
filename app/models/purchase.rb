@@ -1369,7 +1369,13 @@ class Purchase < ApplicationRecord
       json[:has_sales_tax_or_shipping_to_show] = (purchase.was_purchase_taxable && purchase.price_cents > 0) || purchase.shipping_cents > 0
       json[:total_price_including_tax_and_shipping] = purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_total : purchase.formatted_total_transaction_amount
       if purchase.buyer_presentment?
-        json[:buyer_presentment_currency] = purchase.buyer_presentment_currency
+        # Upcased deliberately. presentment_currency is stored lowercase ("cad"), but the
+        # analytics event this feeds is also produced by PurchaseSellerAnalyticsPresenter,
+        # which upcases — and Google Analytics event parameters are case-sensitive strings.
+        # Emitting "cad" here and "CAD" there would split one dimension into two values
+        # depending on which page the buyer landed on, and GA data can't be repaired after
+        # collection. The adjacent canonical `currency` param is upcased on every path too.
+        json[:buyer_presentment_currency] = purchase.buyer_presentment_currency.to_s.upcase
         json[:buyer_presentment_total_cents] = purchase.buyer_presentment_total_cents
         # Major-unit form of the charged total, for the analytics `purchased` event. Done
         # server-side because zero-decimal handling depends on Gumroad's currency specs,
@@ -1608,6 +1614,20 @@ class Purchase < ApplicationRecord
   def buyer_presentment_refunded_cents
     effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
     effective_refunds.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
+  end
+
+  # True when this purchase has an effective refund that carries NO buyer-currency
+  # snapshot, which makes buyer_presentment_refunded_cents an incomplete total.
+  #
+  # Refunds issued before #6167 shipped have no presentment snapshot, so they contribute
+  # zero to the sum above. That is the right behaviour for the Sales API (it reports only
+  # what it can attest to), but a seller reading a CSV cannot tell an incomplete total from
+  # a real one — a plausible-looking low number next to a populated USD refund column is
+  # worse than an empty cell. Callers rendering the total for a human use this to blank the
+  # cell instead of publishing a number they'd have to caveat.
+  def buyer_presentment_refunded_cents_incomplete?
+    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
+    effective_refunds.any? { |refund| !refund.presentment_snapshot? }
   end
 
   # Buyer-currency minor units expressed as a plain major-unit number (12.34, not "$12.34"),
