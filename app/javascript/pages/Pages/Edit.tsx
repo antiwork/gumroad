@@ -9,6 +9,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -186,6 +187,7 @@ export default function PagesEdit() {
       <p className="text-sm text-muted">
         Or use the CLI: <code>gumroad pages list / create / push / preview</code>.
       </p>
+      <AgentSupportFallbackNote subject={is_profile ? "Help with my profile page" : "Help with one of my pages"} />
     </div>
   );
 

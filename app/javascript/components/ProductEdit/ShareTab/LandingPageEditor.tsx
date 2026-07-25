@@ -8,6 +8,7 @@ import { Modal } from "$app/components/Modal";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
+import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 
@@ -125,6 +126,7 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
         <DetailsToggle>Show prompt</DetailsToggle>
         <pre className="rounded border border-border bg-background p-4 text-sm whitespace-pre-wrap">{agentPrompt}</pre>
       </Details>
+      <AgentSupportFallbackNote subject="Help with my product landing page" />
       {isRemoveOpen ? (
         <Modal
           open
