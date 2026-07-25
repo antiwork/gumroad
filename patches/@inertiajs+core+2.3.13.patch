@@ -1,0 +1,160 @@
+diff --git a/node_modules/@inertiajs/core/dist/index.esm.js b/node_modules/@inertiajs/core/dist/index.esm.js
+index 5371b7d..7c482e1 100644
+--- a/node_modules/@inertiajs/core/dist/index.esm.js
++++ b/node_modules/@inertiajs/core/dist/index.esm.js
+@@ -484,6 +484,24 @@ var PrefetchedRequests = class {
+       } });
+       this.removeSingleUseItems(params);
+       return response.handle();
++    }, (error) => {
++      // The prefetch this navigation adopted failed (network error, or it was
++      // cancelled while still in flight). Without this handler the rejection is
++      // unobserved, response.handle() never runs, and the click silently does
++      // nothing at all -- the user sees the page simply not navigate.
++      //
++      // Only recover when this is still the navigation the user is waiting on:
++      // if a newer click has since called use(), currentUseId has moved on and
++      // resolving quietly is correct, because reviving this one would navigate
++      // somewhere the user already left.
++      if (this.currentUseId !== id) {
++        return;
++      }
++      // Drop the dead entry so the retry (and any later hover) cannot adopt the
++      // same rejected promise a second time, then re-throw so the caller in
++      // Router#visit can reissue the visit as a normal, non-prefetched request.
++      this.remove(params);
++      throw error;
+     });
+   }
+   removeSingleUseItems(params) {
+@@ -2293,9 +2311,16 @@ var RequestStream = class {
+   }
+   send(request) {
+     this.requests.push(request);
+-    request.send().then(() => {
++    // A failed request must still leave the stream, otherwise it occupies a
++    // concurrency slot forever and later requests queue behind a corpse. The
++    // second callback also observes the rejection, which Request#send re-throws
++    // for prefetches, so a failed hover no longer shows up as an unhandled
++    // promise rejection. Anyone who needs to react to the failure has already
++    // registered their own handler on the same promise.
++    const forget = () => {
+       this.requests = this.requests.filter((r) => r !== request);
+-    });
++    };
++    request.send().then(forget, forget);
+   }
+   interruptInFlight() {
+     this.cancel({ interrupted: true }, false);
+@@ -2448,7 +2473,14 @@ var Router = class {
+     const prefetched = prefetchedRequests.get(requestParams);
+     if (prefetched) {
+       progress.reveal(prefetched.inFlight);
+-      prefetchedRequests.use(prefetched, requestParams);
++      prefetchedRequests.use(prefetched, requestParams).catch(() => {
++        // The adopted prefetch failed and this is still the navigation the user
++        // is waiting on (use() only rejects in that case). Fall back to exactly
++        // what we would have done had there been no prefetch to adopt, so the
++        // click still navigates instead of being silently swallowed.
++        const requestStream2 = visit.async ? this.asyncRequestStream : this.syncRequestStream;
++        requestStream2.send(Request.create(requestParams, page.get()));
++      });
+     } else {
+       progress.reveal(true);
+       const requestStream = visit.async ? this.asyncRequestStream : this.syncRequestStream;
+@@ -2520,7 +2552,14 @@ var Router = class {
+           cacheTags: [],
+           ...prefetchOptions
+         }
+-      );
++      ).catch(() => {
++        // A speculative prefetch failing is not an application error: the user
++        // only hovered a link. Observe the rejection here so it does not surface
++        // as an unhandled promise rejection in the console and in error
++        // reporting. Attaching this handler does not stop prefetchedRequests.use
++        // from seeing the same rejection if a click has adopted this request --
++        // it registered its own handler on the same promise.
++      });
+     });
+   }
+   clearHistory() {
+diff --git a/node_modules/@inertiajs/core/dist/index.js b/node_modules/@inertiajs/core/dist/index.js
+index 12b452d..e9cc5a8 100644
+--- a/node_modules/@inertiajs/core/dist/index.js
++++ b/node_modules/@inertiajs/core/dist/index.js
+@@ -542,6 +542,24 @@ var PrefetchedRequests = class {
+       } });
+       this.removeSingleUseItems(params);
+       return response.handle();
++    }, (error) => {
++      // The prefetch this navigation adopted failed (network error, or it was
++      // cancelled while still in flight). Without this handler the rejection is
++      // unobserved, response.handle() never runs, and the click silently does
++      // nothing at all -- the user sees the page simply not navigate.
++      //
++      // Only recover when this is still the navigation the user is waiting on:
++      // if a newer click has since called use(), currentUseId has moved on and
++      // resolving quietly is correct, because reviving this one would navigate
++      // somewhere the user already left.
++      if (this.currentUseId !== id) {
++        return;
++      }
++      // Drop the dead entry so the retry (and any later hover) cannot adopt the
++      // same rejected promise a second time, then re-throw so the caller in
++      // Router#visit can reissue the visit as a normal, non-prefetched request.
++      this.remove(params);
++      throw error;
+     });
+   }
+   removeSingleUseItems(params) {
+@@ -2351,9 +2369,16 @@ var RequestStream = class {
+   }
+   send(request) {
+     this.requests.push(request);
+-    request.send().then(() => {
++    // A failed request must still leave the stream, otherwise it occupies a
++    // concurrency slot forever and later requests queue behind a corpse. The
++    // second callback also observes the rejection, which Request#send re-throws
++    // for prefetches, so a failed hover no longer shows up as an unhandled
++    // promise rejection. Anyone who needs to react to the failure has already
++    // registered their own handler on the same promise.
++    const forget = () => {
+       this.requests = this.requests.filter((r) => r !== request);
+-    });
++    };
++    request.send().then(forget, forget);
+   }
+   interruptInFlight() {
+     this.cancel({ interrupted: true }, false);
+@@ -2506,7 +2531,14 @@ var Router = class {
+     const prefetched = prefetchedRequests.get(requestParams);
+     if (prefetched) {
+       progress.reveal(prefetched.inFlight);
+-      prefetchedRequests.use(prefetched, requestParams);
++      prefetchedRequests.use(prefetched, requestParams).catch(() => {
++        // The adopted prefetch failed and this is still the navigation the user
++        // is waiting on (use() only rejects in that case). Fall back to exactly
++        // what we would have done had there been no prefetch to adopt, so the
++        // click still navigates instead of being silently swallowed.
++        const requestStream2 = visit.async ? this.asyncRequestStream : this.syncRequestStream;
++        requestStream2.send(Request.create(requestParams, page.get()));
++      });
+     } else {
+       progress.reveal(true);
+       const requestStream = visit.async ? this.asyncRequestStream : this.syncRequestStream;
+@@ -2578,7 +2610,14 @@ var Router = class {
+           cacheTags: [],
+           ...prefetchOptions
+         }
+-      );
++      ).catch(() => {
++        // A speculative prefetch failing is not an application error: the user
++        // only hovered a link. Observe the rejection here so it does not surface
++        // as an unhandled promise rejection in the console and in error
++        // reporting. Attaching this handler does not stop prefetchedRequests.use
++        // from seeing the same rejection if a click has adopted this request --
++        // it registered its own handler on the same promise.
++      });
+     });
+   }
+   clearHistory() {
