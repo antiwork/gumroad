@@ -1719,6 +1719,46 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :success
   end
 
+  test "PUT update rejects a stale tier save that would re-enable a recurrence another session turned off" do
+    # Both tiers carry the same set of recurrences — the editor enforces that,
+    # and a payload with mismatched sets is rejected before the guard runs.
+    product = create_membership_product_with_preset_tiered_pricing(
+      user: @seller,
+      recurrence_price_values: [
+        { monthly: { enabled: true, price_cents: 300 }, yearly: { enabled: true, price_cents: 3000 } },
+        { monthly: { enabled: true, price_cents: 500 }, yearly: { enabled: true, price_cents: 5000 } },
+      ]
+    )
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+    second_snapshot = Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json
+
+    # Session B drops the yearly option from both tiers. That SOFT-DELETES the
+    # yearly price rows rather than writing live ones, and the monthly prices it
+    # resubmits are unchanged so those rows aren't touched either — a snapshot
+    # built only from ALIVE price rows therefore doesn't move. Session A's stale
+    # payload would bring the deleted yearly prices straight back.
+    travel 1.minute
+    first_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 300 })
+    second_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 500 })
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 }, yearly: { enabled: true, price_cents: 3000 } } },
+        { id: second_tier.external_id, name: second_tier.name, updated_at: second_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 }, yearly: { enabled: true, price_cents: 5000 } } },
+      ]
+    }, format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_nil first_tier.reload.alive_prices.is_buy.find_by(recurrence: BasePrice::Recurrence::YEARLY)
+  end
+
   test "PUT update fails open for payloads that do not echo snapshot timestamps (sessions predating the guard)" do
     setup_guarded_version!
     newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }]

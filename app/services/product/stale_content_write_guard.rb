@@ -99,8 +99,14 @@ class Product::StaleContentWriteGuard
   # tier's prices are rows in a separate table (VariantPrice), and saving them
   # does NOT bump the tier row's own updated_at — so the tier row's timestamp
   # alone would let a stale save revert a price another session had just
-  # changed. Take the newest of the variant row and its alive price rows so a
+  # changed. Take the newest of the variant row and its price rows so a
   # price-only change is visible to the freshness check.
+  #
+  # ALL price rows count, not just the alive ones. Turning a recurrence off
+  # soft-deletes its price row rather than writing a live one, so an alive-only
+  # maximum wouldn't move at all — and a stale payload resubmitting that
+  # recurrence would bring the deleted price straight back, which is exactly the
+  # revert this guard exists to stop.
   #
   # This is also the value served to the editor as the variant's snapshot
   # timestamp (ProductPresenter) and refreshed after every save
@@ -110,8 +116,8 @@ class Product::StaleContentWriteGuard
   # last touched after the tier row itself would be told their own price edit
   # conflicts.
   def self.snapshot_at(variant)
-    price_timestamps = variant.respond_to?(:alive_prices) ? variant.alive_prices.map(&:updated_at) : []
-    [variant.updated_at, *price_timestamps].compact.max
+    price_timestamp = variant.respond_to?(:prices) ? variant.prices.maximum(:updated_at) : nil
+    [variant.updated_at, price_timestamp].compact.max
   end
 
   # Variant attributes the editor lets a seller change that live on the variant
