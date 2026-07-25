@@ -509,8 +509,12 @@ class Installment < ApplicationRecord
   # already honor. A post that is scoped to one product should behave the same way, so replies
   # land in the inbox the seller picked for that product. Posts that go to the whole audience
   # are not tied to a product, so they fall back to the account-level support address.
+  #
+  # This reads the product's own column rather than Link#support_email_or_default because that
+  # method falls back to the product owner's address, which is not necessarily this post's
+  # seller; the fallback here always stays with the seller who is sending the post.
   def reply_to_email
-    link&.support_email_or_default.presence || seller.support_or_form_email
+    link&.support_email.presence || seller.support_or_form_email
   end
 
   def post_views_count
