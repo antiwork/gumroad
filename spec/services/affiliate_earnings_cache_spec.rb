@@ -56,9 +56,9 @@ describe AffiliateEarningsCache do
       it "returns nil rather than a wrong number and schedules a background refresh" do
         expect do
           expect(described_class.fetch(affiliate)).to be_nil
-        end.to change { RefreshAffiliateEarningsWorker.jobs.size }.by(1)
+        end.to change { RefreshAffiliateEarningsJob.jobs.size }.by(1)
 
-        expect(RefreshAffiliateEarningsWorker.jobs.last["args"]).to eq [affiliate.id]
+        expect(RefreshAffiliateEarningsJob.jobs.last["args"]).to eq [affiliate.id]
       end
 
       it "does not poison the cache, so a later successful computation is stored" do
@@ -80,7 +80,7 @@ describe AffiliateEarningsCache do
 
       expect do
         expect(described_class.fetch(affiliate)).to be_nil
-      end.to change { RefreshAffiliateEarningsWorker.jobs.size }.by(1)
+      end.to change { RefreshAffiliateEarningsJob.jobs.size }.by(1)
     end
 
     it "serves a stale value immediately and refreshes it in the background" do
@@ -94,7 +94,7 @@ describe AffiliateEarningsCache do
 
       expect do
         expect(described_class.fetch(affiliate)).to eq 500
-      end.to change { RefreshAffiliateEarningsWorker.jobs.size }.by(1)
+      end.to change { RefreshAffiliateEarningsJob.jobs.size }.by(1)
     end
 
     it "does not schedule a refresh for a fresh value" do
@@ -102,7 +102,7 @@ describe AffiliateEarningsCache do
 
       expect do
         described_class.fetch(affiliate)
-      end.not_to change { RefreshAffiliateEarningsWorker.jobs.size }
+      end.not_to change { RefreshAffiliateEarningsJob.jobs.size }
     end
 
     context "when another request is already computing the same affiliate's sum" do
@@ -115,7 +115,7 @@ describe AffiliateEarningsCache do
 
         expect do
           expect(described_class.fetch(affiliate)).to be_nil
-        end.to change { RefreshAffiliateEarningsWorker.jobs.size }.by(1)
+        end.to change { RefreshAffiliateEarningsJob.jobs.size }.by(1)
       end
     end
 

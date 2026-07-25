@@ -7,7 +7,7 @@
 # `lock: :until_executed` keeps an affiliate who reloads the page repeatedly
 # (which is what people do when a page is slow) from queueing the same expensive
 # sum many times over.
-class RefreshAffiliateEarningsWorker
+class RefreshAffiliateEarningsJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :low, lock: :until_executed
 

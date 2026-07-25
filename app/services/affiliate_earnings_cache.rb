@@ -22,8 +22,12 @@
 #  2. The background job computes the sum with no time limit and writes it to
 #     the cache, so the affiliate's next page load is served from cache. A value
 #     older than STALE_AFTER is still served immediately while a refresh job
-#     recomputes it in the background, so a warm affiliate never falls back into
-#     the slow path.
+#     recomputes it in the background, so an active affiliate stays off the slow
+#     path between deploys. Production namespaces the cache by deploy revision
+#     (see config/environments/production.rb), so a deploy effectively empties
+#     it: the first visit after one costs a heavy affiliate one bounded attempt
+#     and, if that times out, a single "calculating" page. That is the intended
+#     worst case, not an unbounded one.
 class AffiliateEarningsCache
   # How long a computed value stays usable. Deliberately much longer than the
   # refresh interval: the value existing at all is what keeps a heavy affiliate
@@ -155,7 +159,7 @@ class AffiliateEarningsCache
       end
 
       def refresh_later(affiliate)
-        RefreshAffiliateEarningsWorker.perform_async(affiliate.id)
+        RefreshAffiliateEarningsJob.perform_async(affiliate.id)
       end
   end
 end

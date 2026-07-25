@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe RefreshAffiliateEarningsWorker do
+describe RefreshAffiliateEarningsJob do
   it "recomputes and caches the affiliate's lifetime earnings" do
     affiliate = create(:direct_affiliate, affiliate_basis_points: 1000)
     # Set the commission directly rather than routing a purchase through the

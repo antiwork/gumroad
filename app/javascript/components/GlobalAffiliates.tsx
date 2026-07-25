@@ -59,9 +59,11 @@ const DiscoverLinkSection = ({
         <FieldsetDescription>
           {/* A null total means the lifetime earnings figure is still being calculated in the
               background (it is an expensive sum for affiliates with a long history). Showing a
-              placeholder is better than showing $0, which would read as "you have earned nothing". */}
+              placeholder is better than showing $0, which would read as "you have earned nothing".
+              The recompute runs on a low-priority queue with no latency guarantee, so the copy
+              deliberately avoids promising a specific wait. */}
           {totalSales === null ? (
-            <>Calculating how much you have made from Gumroad referrals. Check back in a few moments.</>
+            <>Calculating how much you have made from Gumroad referrals. Reload to check again.</>
           ) : (
             <>
               To date, you have made <strong>{totalSales}</strong> from Gumroad referrals.

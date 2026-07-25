@@ -670,7 +670,7 @@ describe AffiliatedProductsPresenter do
       props = nil
       expect do
         props = described_class.new(user).affiliated_products_page_props
-      end.to change { RefreshAffiliateEarningsWorker.jobs.size }.by(1)
+      end.to change { RefreshAffiliateEarningsJob.jobs.size }.by(1)
 
       expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
     end
