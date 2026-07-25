@@ -5085,6 +5085,20 @@ module RealElasticsearchBridge
   # the models isolated index names so runs on the shared cluster don't collide.
   # No client objects are swapped, so elasticsearch-model's per-class client
   # memoization is a non-issue and nothing leaks between test classes.
+  #
+  # Two limits worth knowing before extending this:
+  #
+  # 1. Only the models passed in get namespaced index names. While the thread-local is
+  #    set, an incidental ES write from ANY other model — say an indexing callback firing
+  #    inside a Sidekiq::Testing.inline! block — goes to the real cluster under that
+  #    model's DEFAULT index name, and nothing cleans it up. Locally ELASTICSEARCH_HOST
+  #    is the same localhost:9200 as .env.development, so that would quietly write test
+  #    documents into your dev indices. Pass every model whose index the test can touch.
+  # 2. The namespace assumes one process. It keeps concurrent local runs apart because
+  #    each has its own TEST_DATABASE_NAME, but if Rails `parallelize` is ever turned on
+  #    for this suite, in-job workers would share one namespace and each test's
+  #    create_index!(force: true) would wipe indices out from under its siblings.
+  #    Revisit the naming before enabling parallelize.
   def install_real_elasticsearch!(models)
     @es_models = models
     @prev_index_names = models.index_with { |model| model.index_name }
@@ -5518,8 +5532,13 @@ class LinksControllerSearchTest < ActionController::TestCase
     create_seller_profile_products_section(seller: user)
     create_product(name: "sample 2", user:)
     product_with_review = create_product(name: "sample 1", user:, taxonomy: Taxonomy.find_or_create_by(slug: "films"))
+    # ONE review, deliberately. The rspec original gave this product a single review (via
+    # the :recommendable trait), and that was the point: one review is enough to clear the
+    # discover filter. A second review would still pass today but would stop this test from
+    # failing if the threshold ever regressed from one review to two.
+    # rating: 5 is explicit because create_product_review defaults to 1 here, where the
+    # rspec factory defaulted higher.
     create_product_review(purchase: create_purchase(link: product_with_review, created_at: 1.week.ago), rating: 5)
-    create_product_review(purchase: create_purchase(link: product_with_review))
     Link.import(force: true, refresh: true)
     Link.__elasticsearch__.refresh_index!
 

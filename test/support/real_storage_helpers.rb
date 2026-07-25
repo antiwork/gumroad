@@ -9,6 +9,10 @@
 # to the S3 service configured in config/storage.yml (`:test`, pointing at the
 # MinIO container — see AWS_S3_ENDPOINT in .env.test / the CI `minio` service) for
 # the duration of the block and restores the Disk service afterward.
+#
+# Blobs must not outlive the block. A blob created inside it records
+# `service_name: "test"`, which resolves back to the Disk service once the block exits, so
+# reading that blob afterward 404s. Purge or finish with such blobs before yielding back.
 module RealStorageHelpers
   def with_real_s3
     previous_services = ActiveStorage::Blob.services

@@ -381,10 +381,19 @@ jobs:
             minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --console-address ":9001"
           for i in $(seq 1 30); do curl -fsS http://localhost:9000/minio/health/ready >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://localhost:9000/minio/health/ready || { echo "MinIO did not become ready"; exit 1; }
-          # Create the buckets the app's :test storage service expects (see config/storage.yml).
-          docker run --rm --network host --entrypoint /bin/sh minio/mc:latest -c "
+          # Provision the buckets the app's :test storage service expects (see
+          # config/storage.yml). This mirrors the `createbuckets` service in
+          # docker/docker-compose-test-and-ci.yml so the two CI lanes behave the same:
+          # the mc release is pinned to the same version (an unpinned :latest can change
+          # CLI behavior and break this job with no code change), and both buckets get the
+          # public read policy and versioning the compose stack sets. The :test service is
+          # declared `public: true`, so without `anonymous set public` any future test that
+          # fetches blob.url over plain HTTP would 403 here while passing locally.
+          docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
             mc alias set local http://localhost:9000 minioadmin minioadmin &&
-            mc mb --ignore-existing local/gumroad-specs local/gumroad-invoices"
+            mc mb --ignore-existing local/gumroad-specs local/gumroad-invoices &&
+            mc anonymous set public local/gumroad-specs local/gumroad-invoices &&
+            mc version enable local/gumroad-specs local/gumroad-invoices"
 
       - name: Wait for Elasticsearch
         run: |
