@@ -1570,6 +1570,42 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :success
   end
 
+  # The freshness check has to run while this request holds the product row
+  # lock, otherwise two saves that each echo the same (at-request-time fresh)
+  # timestamps both pass the check and the last writer silently overwrites the
+  # other — the exact overwrite the guard exists to stop. This test drives that
+  # ordering: the concurrent save is committed at the moment the request
+  # acquires the lock (`SELECT ... FOR UPDATE` on the product row), which is
+  # where a real second request would have been unblocked. The check must
+  # therefore read the post-lock state and reject, even though the echoed
+  # timestamps were current when the request started.
+  test "PUT update checks freshness while holding the product row lock, so a save committed just before the lock is honored" do
+    setup_guarded_version!
+    snapshot_current_at_request_time = @version1_page.updated_at.as_json
+    concurrent_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Committed by the concurrent save" }] }]
+
+    locked_product_row = false
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+      next if locked_product_row
+      next unless payload[:sql].to_s.include?("FOR UPDATE") && payload[:sql].to_s.include?("`links`")
+      locked_product_row = true
+      travel 1.minute
+      @version1_page.update!(description: concurrent_content)
+    end
+
+    begin
+      post :update, params: @params.merge(
+        variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: snapshot_current_at_request_time, description: { type: "doc", content: guard_content_description } }] }]
+      ), format: :json
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+
+    assert locked_product_row, "Expected the save to lock the product row (SELECT ... FOR UPDATE) before checking freshness"
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+  end
+
   test "PUT update fails open for payloads that do not echo snapshot timestamps (sessions predating the guard)" do
     setup_guarded_version!
     newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }]

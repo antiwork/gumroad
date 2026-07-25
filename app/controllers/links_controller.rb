@@ -393,24 +393,38 @@ class LinksController < ApplicationController
         return render json: { error_message: "Use the API to publish custom_html; the dashboard only supports removing it." }, status: :unprocessable_entity
       end
 
-      # Capture the deletion-guard diagnostics (alive counts, persisted
-      # shared-content flag) NOW, before assign_attributes and the save steps
-      # below mutate the product — they describe the pre-save state.
-      deletion_guard_diagnostics
-
-      # Reject a save built from a stale snapshot BEFORE any mutation: a
-      # payload that echoes page/variant snapshot timestamps older than the
-      # stored rows would silently overwrite content another session saved in
-      # between (gumroad-private#1295). The deletion guards below can't catch
-      # this — an in-place update under an existing id deletes nothing.
-      Product::StaleContentWriteGuard.ensure_fresh!(
-        product: @product,
-        pages_params: snapshot_pages_params,
-        variants_params: snapshot_variants_params,
-        diagnostics: deletion_guard_diagnostics
-      )
-
       ActiveRecord::Base.transaction do
+        # Serialize concurrent saves of the same product. `lock!` takes a
+        # SELECT ... FOR UPDATE on the product row and reloads it (dropping
+        # stale association caches), so the freshness check below reads the
+        # committed state and no second save can slip between the check and
+        # the writes: a concurrent save blocks here until this transaction
+        # commits, then re-reads the rows this save just wrote and sees its own
+        # snapshot as stale. Without the lock, two saves echoing the same
+        # (fresh) timestamps could both pass the check and the last writer
+        # would silently win — the exact overwrite this guard exists to stop.
+        @product.lock!
+
+        # Capture the deletion-guard diagnostics (alive counts, persisted
+        # shared-content flag) NOW, after the lock/reload but before
+        # assign_attributes and the save steps below mutate the product — they
+        # describe the committed pre-save state.
+        deletion_guard_diagnostics
+
+        # Reject a save built from a stale snapshot BEFORE any mutation: a
+        # payload that echoes page/variant snapshot timestamps older than the
+        # stored rows would silently overwrite content another session saved in
+        # between (gumroad-private#1295). The deletion guards below can't catch
+        # this — an in-place update under an existing id deletes nothing.
+        # Raising here rolls the transaction back (nothing has been written
+        # yet) and releases the lock; the rescue below renders the 409.
+        Product::StaleContentWriteGuard.ensure_fresh!(
+          product: @product,
+          pages_params: snapshot_pages_params,
+          variants_params: snapshot_variants_params,
+          diagnostics: deletion_guard_diagnostics
+        )
+
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
