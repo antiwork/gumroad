@@ -5,6 +5,7 @@
 # CreateUsStateMonthlySalesReportsJob.perform_async("WA", 8, 2022)
 class CreateUsStateMonthlySalesReportsJob
   include Sidekiq::Job
+  include LongRunningJobTracking
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
 
   attr_reader :taxjar_api
