@@ -21,35 +21,70 @@ module User::PayoutSchedule
     bank_account = active_bank_account
     return PayoutRailSchedule.weekday_for_bank_account_type(bank_account.type) if bank_account.present?
 
-    return PayoutRailSchedule.paypal_weekday if current_payout_processor == PayoutProcessorType::PAYPAL
+    # Without a bank account the seller is paid either through PayPal or through their own
+    # connected Stripe account. Both of those runs are scheduled on the same weekday, so
+    # normally we can answer without working out which of the two applies — and that matters,
+    # because deciding is expensive: current_payout_processor reads paypal_payout_email, which
+    # calls PayPal's API for a seller who connected a PayPal account instead of giving us an
+    # email address. next_payout_date is called for every seller the weekly payout batch
+    # considers, so an API call per seller there is not affordable.
+    paypal_weekday = PayoutRailSchedule.paypal_weekday
+    stripe_connect_weekday = PayoutRailSchedule.stripe_connect_weekday
+    return paypal_weekday if paypal_weekday == stripe_connect_weekday
 
-    # A Stripe payout with no bank account goes out through the seller's own connected Stripe
-    # account, which is paid by its own run.
-    PayoutRailSchedule.stripe_connect_weekday
+    current_payout_processor == PayoutProcessorType::PAYPAL ? paypal_weekday : stripe_connect_weekday
   end
 
-  def next_payout_date
+  # The payout CYCLE the seller's next payout belongs to: the Friday of the platform's payout
+  # week that decides which balances the payout covers. This is the seller's payout schedule
+  # as it has always been computed, and anything comparing a payout BATCH to a seller must use
+  # it rather than #next_payout_date. The batch is scheduled by the cycle, while the seller's
+  # own payout day sits earlier in the same week (see #payout_weekday) — comparing against
+  # that day would make a batch running later in the week, such as a retried dead job, look
+  # like it belonged to the following week and skip every seller in it.
+  #
+  # For a seller on daily payouts the value is tomorrow rather than a Friday: their payout is
+  # not part of the weekly cycle at all.
+  def next_payout_cycle_date
     return nil if unpaid_balance_cents < minimum_payout_amount_cents
 
-    return Date.current + 1 if payout_frequency == DAILY && Payouts.is_user_payable(self, Date.current, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+    return Date.current + 1 if instant_daily_payout?
 
-    # The payout CYCLE is still anchored on the platform's Friday-to-Friday week (that is
-    # what decides which balances are included), but the day the seller is actually paid is
-    # their rail's weekday inside that cycle — so the cycle math below stays on Fridays and
-    # only the date we hand back is converted.
     payout_cycle_date = get_initial_payout_date(Date.today)
 
-    until payout_date_for_cycle(payout_cycle_date) >= Date.today
-      payout_cycle_date = advance_payout_date(payout_cycle_date)
-    end
+    payout_cycle_date = advance_payout_date(payout_cycle_date) until payout_cycle_date >= Date.today
 
     if payout_amount_for_cycle(payout_cycle_date) < minimum_payout_amount_cents
       payout_cycle_date = advance_payout_date(payout_cycle_date)
     end
 
+    # Already paid within this cycle today: the cycle is spent, so the seller's next payout
+    # belongs to the following one. Without this the payout batch would consider them again
+    # on the same day.
+    if payout_cycle_date == Date.today && payments.where("date(created_at) = ?", Date.today).first.present?
+      payout_cycle_date = advance_payout_date(payout_cycle_date)
+    end
+
+    payout_cycle_date
+  end
+
+  def next_payout_date
+    payout_cycle_date = next_payout_cycle_date
+    return nil if payout_cycle_date.nil?
+
+    # A daily seller's date is already the date they are paid, not a cycle to convert.
+    return payout_cycle_date if instant_daily_payout?
+
+    # The cycle stays anchored on the platform's Friday-to-Friday week (that is what decides
+    # which balances are included); the day the seller is actually paid is their rail's weekday
+    # inside that cycle.
     upcoming_payout_date = payout_date_for_cycle(payout_cycle_date)
 
-    if upcoming_payout_date == Date.today && payments.where("date(created_at) = ?", Date.today).first.present?
+    # Their rail may already have run earlier this week — the cycle is still this week's, but
+    # the day they would have been paid on has passed, so the next one they can be paid on is
+    # in the following cycle. Same when they have already been paid today.
+    already_paid_today = upcoming_payout_date == Date.today && payments.where("date(created_at) = ?", Date.today).first.present?
+    if upcoming_payout_date < Date.today || already_paid_today
       upcoming_payout_date = payout_date_for_cycle(advance_payout_date(payout_cycle_date))
     end
 
@@ -70,9 +105,13 @@ module User::PayoutSchedule
 
     # Track the Friday cycle alongside the seller-facing date: the cycle is what advances a week
     # (or a month, or a quarter) at a time, and the seller's date is that cycle converted to their
-    # rail's weekday. Deriving the next cycle back out of the seller's date instead would be wrong
-    # for a daily seller, whose first projected date is tomorrow rather than a cycle date at all.
-    payout_cycle_date = payout_cycle_for_payout_date(upcoming_payout_date)
+    # rail's weekday. A daily seller's first date is tomorrow rather than a cycle date at all, so
+    # for them start from the cycle their fallback weekly payout would use.
+    payout_cycle_date = if instant_daily_payout?
+      get_initial_payout_date(upcoming_payout_date)
+    else
+      payout_cycle_for_payout_date(upcoming_payout_date)
+    end
     upcoming_payouts = []
 
     while upcoming_payout_date
@@ -168,6 +207,21 @@ module User::PayoutSchedule
   end
 
   private
+    # Whether the seller's next payout is a daily instant payout, which sits outside the
+    # weekly cycle entirely (it pays yesterday's instantly-payable balance, tomorrow).
+    # Answering it runs the full eligibility check, so the answer is remembered per day —
+    # #next_payout_date and #next_payout_cycle_date both ask, and the batch gate asks for
+    # every seller it considers.
+    def instant_daily_payout?
+      return false unless payout_frequency == DAILY
+
+      today = Date.current
+      return @instant_daily_payout unless @instant_daily_payout_on == today
+
+      @instant_daily_payout_on = today
+      @instant_daily_payout = Payouts.is_user_payable(self, today, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+    end
+
     # The seller-facing payout date for a payout cycle. Cycle dates are always Fridays (the
     # platform's payout week), and each rail's job fires earlier in that same week — Tuesday
     # for cross-border banks, Wednesday for other non-US banks, Thursday for US banks — so
@@ -186,10 +240,17 @@ module User::PayoutSchedule
     # How many days before the cycle's Friday the seller's rail runs. Every payout run fires
     # between Sunday and Friday of the payout week, so this is the plain distance back from
     # Friday; a rail with no weekday of its own falls back to Friday itself (zero days).
+    #
+    # Memoized for the life of the object: the conversion happens inside loops (the cycle
+    # search in #next_payout_date, the projection in #upcoming_payouts) and resolving the rail
+    # reads the seller's bank account, so recomputing it per iteration means a query per
+    # iteration for no benefit — a seller's rail cannot change mid-request.
     def days_before_cycle_date
+      return @days_before_cycle_date if defined?(@days_before_cycle_date)
+
       friday_index = PayoutRailSchedule::WEEKDAYS.index(:friday)
       rail_index = PayoutRailSchedule::WEEKDAYS.index(payout_weekday) || friday_index
-      (friday_index - rail_index) % PayoutRailSchedule::WEEKDAYS.size
+      @days_before_cycle_date = (friday_index - rail_index) % PayoutRailSchedule::WEEKDAYS.size
     end
 
     def payout_amount_for_cycle(cycle_date)

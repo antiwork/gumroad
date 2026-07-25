@@ -217,6 +217,18 @@ describe User::PayoutSchedule do
       expect(us_seller.payout_weekday).to eq :thursday
       expect(paypal_seller.payout_weekday).to eq :friday
     end
+
+    it "does not look up which processor pays a seller who has no bank account" do
+      # The PayPal and Stripe Connect runs share a weekday, so the answer is the same either
+      # way — and finding out which of the two applies is expensive, because it reads
+      # paypal_payout_email, which calls PayPal's API for a seller who connected a PayPal
+      # account rather than giving us an email address. next_payout_date runs for every seller
+      # the weekly payout batch considers, so that call must not happen here.
+      seller = create(:user)
+
+      expect(seller).not_to receive(:current_payout_processor)
+      expect(seller.payout_weekday).to eq :friday
+    end
   end
 
   describe "#next_payout_date on a non-Friday payout rail" do

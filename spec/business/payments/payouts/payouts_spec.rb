@@ -686,6 +686,30 @@ describe Payouts do
           end.to change { Payment.count }.by(1)
         end
       end
+
+      it "still pays a seller when the batch is run after their rail's weekday has passed" do
+        # A payout batch is scheduled by the cycle, but it can run later in the same week — a
+        # slice job that died on Tuesday is retried on Wednesday, for instance. The batch's
+        # payout period is fixed when it is enqueued, so the seller must still be paid; a gate
+        # comparing that period against the seller's own Tuesday would read the retry as
+        # belonging to next week and quietly pay nobody.
+        creator = create(:user_with_compliance_info)
+        create(:merchant_account, user: creator, charge_processor_merchant_id: "acct_railretrytest")
+        create(:philippines_bank_account, user: creator, stripe_bank_account_id: "ba_bankaccountid")
+        create(:balance, user: creator, amount_cents: 100_001, date: Date.new(2026, 7, 8))
+
+        payout_period_end_date = travel_to(Time.local(2026, 7, 28, 12)) do # Tuesday, the run's day
+          User::PayoutSchedule.next_scheduled_payout_end_date
+        end
+
+        travel_to(Time.local(2026, 7, 29, 12)) do # Wednesday, the day after
+          expect do
+            described_class.create_payments_for_balances_up_to_date_for_users(
+              payout_period_end_date, PayoutProcessorType::STRIPE, [creator]
+            )
+          end.to change { Payment.count }.by(1)
+        end
+      end
     end
 
     context "when payouts are paused for the seller" do

@@ -45,7 +45,9 @@ describe PayoutRailSchedule do
   it "reads the weekday from the schedule rather than a hardcoded list" do
     # Proves the mapping cannot drift from the cron file: point the loader at a schedule that
     # moves a rail to a different weekday and the answer moves with it.
-    allow(YAML).to receive(:load_file).and_return(
+    schedule_path = Rails.root.join("config", "sidekiq_schedule.yml")
+    allow(YAML).to receive(:load_file).and_call_original
+    allow(YAML).to receive(:load_file).with(schedule_path).and_return(
       "payouts_made_up_rail" => {
         "cron" => "0 10 * * 1 # UTC 10:00 MON",
         "class" => described_class::PAYOUT_WORKER_CLASS,

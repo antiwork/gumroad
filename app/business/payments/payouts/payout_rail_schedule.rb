@@ -78,15 +78,16 @@ class PayoutRailSchedule
         result
       end
 
-      # The schedule's cron expressions are in UTC and may carry a trailing comment, e.g.
-      # `0 10 * * 2 # UTC 10:00 TUE`. A payout job runs on exactly one weekday; if a cron
-      # ever names several, take the earliest so we never promise a seller a date that is
-      # later than a run they are actually included in.
+      # A payout job runs on exactly one weekday. The schedule's cron expressions are in UTC
+      # and may carry a trailing comment, e.g. `0 10 * * 2 # UTC 10:00 TUE`. Fugit reports
+      # weekdays as [wday, nth] pairs, so take each pair's weekday; if a cron ever names
+      # several, use the earliest so we never promise a seller a date later than a run they
+      # are actually included in.
       def weekday_from_cron(cron)
         return nil if cron.blank?
 
         parsed = Fugit::Cron.parse("#{cron.sub(/#.*/, '').strip} UTC")
-        weekday_numbers = parsed&.weekdays&.flatten&.compact
+        weekday_numbers = parsed&.weekdays&.map(&:first)&.compact
         return nil if weekday_numbers.blank?
 
         WEEKDAYS[weekday_numbers.min % WEEKDAYS.size]

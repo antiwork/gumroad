@@ -234,6 +234,24 @@ describe PayoutsHelper do
     end
   end
 
+  describe "current_payout_end_date" do
+    it "covers the payout cycle's period rather than a week before the seller's own payout day" do
+      # A US bank account is paid on the Thursday of the payout week, one day before the
+      # cycle's Friday, but the payout still covers everything up to the cycle's period end.
+      # Subtracting a fixed week from the seller's Thursday instead would cut a day off the
+      # period and leave that day's balance out of the amount shown.
+      travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do # Sunday
+        user = create(:user)
+        create(:ach_account, user:)
+        create(:balance, user:, amount_cents: 100_00, date: Date.new(2015, 3, 6))
+
+        expect(user.next_payout_date).to eq Date.new(2015, 3, 12) # Thursday
+        expect(self.current_payout_end_date(user)).to eq Date.new(2015, 3, 6)
+        expect(self.payout_period_data(user)[:payout_cents]).to eq(10_000)
+      end
+    end
+  end
+
   describe "payout period data" do
     it "shows minimum payout volume for user without enough balance" do
       user = create(:user)
