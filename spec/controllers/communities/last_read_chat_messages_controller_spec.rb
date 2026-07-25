@@ -12,9 +12,6 @@ describe Communities::LastReadChatMessagesController do
 
   include_context "with user signed in as admin for seller"
 
-  before do
-    Feature.activate_user(:communities, seller)
-  end
 
   describe "POST create" do
     it_behaves_like "authorize called for action", :post, :create do
@@ -29,8 +26,6 @@ describe Communities::LastReadChatMessagesController do
       end
 
       it "returns unauthorized response if the :communities feature flag is disabled" do
-        Feature.deactivate_user(:communities, seller)
-
         post :create, params: { community_id: community.external_id, message_id: "message123" }
 
         expect(response).to redirect_to dashboard_path

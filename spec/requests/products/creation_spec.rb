@@ -365,7 +365,6 @@ describe "Product creation", type: :system, js: true do
   end
 
   it "does not automatically enable the community chat on creating a product" do
-    Feature.activate_user(:communities, seller)
     visit new_product_path
     choose "Digital product"
     fill_in "Name", with: "My product"

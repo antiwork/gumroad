@@ -1170,7 +1170,7 @@ class User < ApplicationRecord
     ).to_a
 
     (seller_communities + buyer_communities).map do
-      _1.resource.alive? && Feature.active?(:communities, _1.seller) && _1.resource.community_chat_enabled? ? _1.id : nil
+      _1.resource.alive? && _1.resource.community_chat_enabled? ? _1.id : nil
     end.compact.uniq
   end
 

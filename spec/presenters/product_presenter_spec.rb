@@ -1033,7 +1033,6 @@ describe ProductPresenter do
 
     context "with community chat enabled" do
       before do
-        Feature.activate_user(:communities, product.user)
         create(:community, seller: product.user, resource: product)
         product.update!(community_chat_enabled: true)
       end

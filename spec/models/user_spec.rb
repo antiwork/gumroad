@@ -3839,26 +3839,17 @@ describe User, :vcr do
       let!(:community) { create(:community, seller: user, resource: product) }
 
       it "includes communities owned by the seller" do
-        Feature.activate_user(:communities, user)
         product.update!(community_chat_enabled: true)
         expect(user.accessible_communities_ids).to eq([community.id])
       end
 
       it "excludes communities where the resource is deleted" do
-        Feature.activate_user(:communities, user)
         product.update!(community_chat_enabled: true)
         product.mark_deleted!
         expect(user.accessible_communities_ids).to eq([])
       end
 
-      it "excludes communities when feature flag is disabled" do
-        Feature.deactivate_user(:communities, user)
-        product.update!(community_chat_enabled: true)
-        expect(user.accessible_communities_ids).to eq([])
-      end
-
       it "excludes communities when community chat is disabled" do
-        Feature.activate_user(:communities, user)
         product.update!(community_chat_enabled: false)
         expect(user.accessible_communities_ids).to eq([])
       end
@@ -3869,26 +3860,17 @@ describe User, :vcr do
       let!(:purchase) { create(:purchase, purchaser: user, link: other_product) }
 
       it "includes communities of purchased products" do
-        Feature.activate_user(:communities, other_product.user)
         other_product.update!(community_chat_enabled: true)
         expect(user.accessible_communities_ids).to eq([other_community.id])
       end
 
       it "excludes communities where the resource is deleted" do
-        Feature.activate_user(:communities, other_product.user)
         other_product.update!(community_chat_enabled: true)
         other_product.mark_deleted!
         expect(user.accessible_communities_ids).to eq([])
       end
 
-      it "excludes communities when feature flag is disabled" do
-        Feature.deactivate_user(:communities, other_product.user)
-        other_product.update!(community_chat_enabled: true)
-        expect(user.accessible_communities_ids).to eq([])
-      end
-
       it "excludes communities when community chat is disabled" do
-        Feature.activate_user(:communities, other_product.user)
         other_product.update!(community_chat_enabled: false)
         expect(user.accessible_communities_ids).to eq([])
       end
@@ -3897,7 +3879,6 @@ describe User, :vcr do
         let!(:purchase) { create(:purchase, purchaser: nil, email: user.email, link: other_product) }
 
         it "includes communities of purchased products" do
-          Feature.activate_user(:communities, other_product.user)
           other_product.update!(community_chat_enabled: true)
           expect(user.accessible_communities_ids).to eq([other_community.id])
         end
@@ -3910,24 +3891,12 @@ describe User, :vcr do
       let!(:purchase) { create(:purchase, purchaser: user, link: other_product) }
 
       it "includes both seller and buyer communities" do
-        Feature.activate_user(:communities, user)
-        Feature.activate_user(:communities, other_product.user)
         product.update!(community_chat_enabled: true)
         other_product.update!(community_chat_enabled: true)
         expect(user.accessible_communities_ids.uniq).to match_array([community.id, other_community.id])
       end
 
-      it "excludes communities where feature flag is disabled" do
-        Feature.deactivate_user(:communities, user)
-        Feature.deactivate_user(:communities, other_product.user)
-        product.update!(community_chat_enabled: true)
-        other_product.update!(community_chat_enabled: true)
-        expect(user.accessible_communities_ids).to eq([])
-      end
-
       it "excludes communities where community chat is disabled" do
-        Feature.activate_user(:communities, user)
-        Feature.activate_user(:communities, other_product.user)
         product.update!(community_chat_enabled: false)
         other_product.update!(community_chat_enabled: false)
         expect(user.accessible_communities_ids).to eq([])

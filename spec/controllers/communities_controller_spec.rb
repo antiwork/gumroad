@@ -15,9 +15,6 @@ describe CommunitiesController, inertia: true do
 
   include_context "with user signed in as admin for seller"
 
-  before do
-    Feature.activate_user(:communities, seller)
-  end
 
   describe "GET index" do
     it_behaves_like "authorize called for action", :get, :index do
@@ -49,8 +46,6 @@ describe CommunitiesController, inertia: true do
       end
 
       it "returns unauthorized response if the :communities feature flag is disabled" do
-        Feature.deactivate_user(:communities, seller)
-
         get :index
 
         expect(response).to redirect_to dashboard_path
@@ -149,8 +144,6 @@ describe CommunitiesController, inertia: true do
       end
 
       it "returns unauthorized response if the :communities feature flag is disabled" do
-        Feature.deactivate_user(:communities, seller)
-
         get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
 
         expect(response).to redirect_to dashboard_path
@@ -163,7 +156,6 @@ describe CommunitiesController, inertia: true do
       let!(:purchase) { create(:purchase, seller:, purchaser: buyer, link: product) }
 
       before do
-        Feature.activate_user(:communities, buyer)
         sign_in buyer
       end
 
@@ -177,7 +169,6 @@ describe CommunitiesController, inertia: true do
 
       it "returns unauthorized response for communities they don't have access to" do
         other_seller = create(:user)
-        Feature.activate_user(:communities, other_seller)
         other_product = create(:product, user: other_seller, community_chat_enabled: true)
         other_community = create(:community, seller: other_seller, resource: other_product)
 
