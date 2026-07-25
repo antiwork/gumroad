@@ -95,12 +95,18 @@ describe HoldsDeployWhileRunning do
 
   it "is included in the jobs whose interruption the overnight deploy block used to prevent" do
     # These are the long-running scheduled jobs a deploy must not recycle mid-run. If a new
-    # one is added, include the concern in it and list it here.
+    # one is added, include the concern in it and list it here. This list is exhaustive on
+    # purpose: everything including FinanceReportFailureAlert gets the wrapper through it, so
+    # the report jobs below are listed individually rather than left implicit.
     [
+      # Payout jobs — money movement.
       PerformPayoutsUpToDelayDaysAgoWorker,
       PerformPayoutsForUserSliceWorker,
       PerformDailyInstantPayoutsWorker,
+      ExecuteScheduledPayoutsJob,
+      # Tax upload.
       UploadUsStatesSalesTaxToTaxjarJob,
+      # Report generators, via FinanceReportFailureAlert.
       GenerateCanadaSalesReportJob,
       GenerateFinancialReportsForPreviousMonthJob,
       GenerateFinancialReportsForPreviousQuarterJob,
@@ -108,6 +114,13 @@ describe HoldsDeployWhileRunning do
       CreateVatReportJob,
       GenerateSalesReportJob,
       SendFinancesReportWorker,
+      CreateCanadaMonthlySalesReportJob,
+      EmailOutstandingBalancesCsvWorker,
+      GenerateFeesByCreatorLocationReportJob,
+      SendDailyFinanceLedgerReportJob,
+      SendDeferredRefundsReportWorker,
+      SendStripeBalanceSummariesReportJob,
+      SendStripeCurrencyBalancesReportJob,
     ].each do |job_class|
       expect(job_class.ancestors).to include(described_class), "#{job_class} is missing HoldsDeployWhileRunning"
     end

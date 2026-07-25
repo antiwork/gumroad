@@ -12,7 +12,7 @@
 # midnight and 6am ET because that is when most of these jobs are scheduled. A clock is a
 # poor proxy: it blocked six hours of deploys a day even when nothing was running, and it
 # protected nothing when a job ran late, was re-run by hand, or was rescheduled out of the
-# window. Jobs announcing themselves holds deploys exactly as long as the work actually
+# window. A job that announces itself holds deploys for exactly as long as the work actually
 # takes.
 #
 # Every participating job registers its OWN unique token in a Redis sorted set scored by
@@ -39,6 +39,13 @@ module HoldsDeployWhileRunning
   # counting after this long, so a dead job can never freeze deploys forever. Three hours
   # covers the longest of these jobs (the payout query budget, the ~1-2h Canada sales
   # report) with headroom. The healthcheck only counts entries younger than this.
+  #
+  # It is a ceiling, not just a backstop: a job that legitimately runs longer than this stops
+  # holding deploys while it is still working. That matters for the report jobs whose query
+  # budget is Redis-tunable at runtime —
+  # RedisKey.generate_canada_sales_report_job_max_execution_time_seconds, default 1 hour. If
+  # that knob is ever raised past this TTL, raise this TTL with it, or the healthcheck will
+  # prune a still-running job's entry and let a deploy kill it.
   IN_FLIGHT_ENTRY_TTL = 3.hours
 
   # ZADD and EXPIRE run as one atomic Lua script so a transient error between them can't

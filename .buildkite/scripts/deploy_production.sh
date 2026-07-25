@@ -28,8 +28,12 @@ logger() {
 # healthcheck as broken, and fall through to the clock, losing the live check exactly once.
 # Fallback: if NEITHER name answers 200 or 503, the healthcheck is genuinely unreachable —
 # fall back to the clock: skip the deploy during the payout batch window (Tue-Fri UTC
-# 10:00-10:59) and during the overnight cron window (UTC 04:00-09:59, i.e. midnight-6am ET,
-# when the report jobs run) — so a broken healthcheck can never let a deploy land mid-run.
+# 10:00-10:59) and during the scheduled-job window (UTC 03:00-10:59), so a broken healthcheck
+# can never let a deploy land mid-run. The window is expressed in UTC, not ET, because the
+# crons themselves are UTC-pinned: it starts at 03:00 for the TaxJar upload and runs through
+# 10:59 to cover the 09:00 scheduled payouts and the money-moving monthly jobs that fire at
+# 10:00 on any day of the week. It is deliberately wider than the ET window it replaces —
+# this branch only runs when the live check is broken, so erring toward waiting is cheap.
 deploy_safe_healthcheck_url="https://gumroad.com/healthcheck/deploy_safe"
 legacy_healthcheck_url="https://gumroad.com/healthcheck/payouts"
 probe_deploy_safe() {
@@ -49,20 +53,15 @@ for attempt in $(seq 1 15); do
     sleep 180
   else
     current_utc_hour=$(date -u +%H)
-    current_utc_dow=$(date -u +%u) # 1=Mon .. 7=Sun
-    if [ "$current_utc_dow" -ge 2 ] && [ "$current_utc_dow" -le 5 ] && [ "$current_utc_hour" -eq 10 ]; then
-      logger "Deploy-safety healthcheck unreachable (neither path answered; last HTTP $hc_status) during the payout batch window (Tue-Fri UTC 10:00-11:00) — skipping deployment"
-      exit 0
-    fi
-    if [ "$current_utc_hour" -ge 4 ] && [ "$current_utc_hour" -lt 10 ]; then
-      logger "Deploy-safety healthcheck unreachable (neither path answered; last HTTP $hc_status) during the overnight cron window (UTC 04:00-10:00 / midnight-6am ET) — skipping deployment"
+    if [ "$current_utc_hour" -ge 3 ] && [ "$current_utc_hour" -lt 11 ]; then
+      logger "Deploy-safety healthcheck unreachable (neither path answered; last HTTP $hc_status) during the scheduled-job window (UTC 03:00-11:00, which includes the Tue-Fri payout batch at 10:00) — skipping deployment"
       exit 0
     fi
     logger "Deploy-safety healthcheck unreachable (neither path answered; last HTTP $hc_status) outside the fallback windows — proceeding"
     break
   fi
   if [ "$attempt" = "15" ]; then
-    logger "WARNING: a long-running job is still in flight after 45 minutes — proceeding with deploy anyway (these jobs retry after a worker recycle; this warning means the run is unusually slow and worth a look)"
+    logger "WARNING: a long-running job is still in flight after 45 minutes — proceeding with deploy anyway. Most of these jobs are re-run by Sidekiq after a worker recycle, but PerformDailyInstantPayoutsWorker runs with retry: 0, so recycling it drops that day's instant payouts (the balances are picked up by the next day's run). Either way this warning means the run is unusually slow and worth a look."
   fi
 done
 
