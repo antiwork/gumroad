@@ -1294,6 +1294,28 @@ describe Order::PreparePaymentIntentService, :vcr do
           [create_args, responses]
         end
 
+        it "keeps the USD intent when a free differently priced line makes the cart non-uniform" do
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          free_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+              { uid: "unique-id-2", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_mixed_free_currency")
+
+          # The Element also sees the free USD line, so it mounts in canonical USD instead of
+          # offering EUR-only methods. Prepare must preserve that same method/currency set.
+          expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+          expect(create_args[:payment_method_types]).to eq(%w[card link])
+          expect(responses.values).to all(include(success: true))
+          expect(order.charges.last.charge_presentment).to be_nil
+        end
+
         it "prepares an EUR intent with presentment rows when the buyer pays by card on the forced-currency element" do
           expect(StripeFxQuote).not_to receive(:create)
 

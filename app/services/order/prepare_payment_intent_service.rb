@@ -80,6 +80,14 @@ class Order::PreparePaymentIntentService
       end
     end
 
+    # The client-confirmed charge includes this seller's free/test purchases for receipts even
+    # though they do not contribute to its amount. Keep them in the currency/method-set basis too:
+    # the Payment Element saw every cart item, so omitting a free item here could create an intent
+    # in a different currency from the Element that minted the ConfirmationToken.
+    def charge_purchases
+      @charge_purchases ||= purchases_to_charge + free_or_test_purchases.select { _1.seller_id == seller.id }
+    end
+
     # One ConfirmationToken funds one PaymentIntent, so re-check the single-seller constraint
     # server-side before charging a crafted cart.
     def block_multiple_sellers
@@ -318,7 +326,6 @@ class Order::PreparePaymentIntentService
       # finalize's send_charge_receipts covers them (Order::ChargeService assigns every purchase in
       # a seller group to its charge). Scoped to this charge's seller so a free item from another
       # seller in a mixed cart isn't misattributed. The charge amount stays paid-only.
-      charge_purchases = purchases_to_charge + free_or_test_purchases.select { _1.seller_id == seller.id }
       charge_purchases.each do |purchase|
         purchase.charge = charge
         purchase.save!
@@ -675,7 +682,7 @@ class Order::PreparePaymentIntentService
     def uniform_method_forced_purchase_currency
       return nil if purchases_to_charge.empty?
 
-      currencies = purchases_to_charge.map { _1.link.price_currency_type.to_s.downcase }.uniq
+      currencies = charge_purchases.map { _1.link.price_currency_type.to_s.downcase }.uniq
       return nil unless currencies.one?
 
       currency = currencies.first
