@@ -56,10 +56,7 @@ class License < ApplicationRecord
 
   def increment!(attribute, by = 1, touch: nil)
     super.tap do
-      if attribute.to_s == "uses"
-        enqueue_purchase_search_index_update(["license_uses"])
-        update_purchase_audience_member_details
-      end
+      enqueue_purchase_search_index_update(["license_uses"]) if attribute.to_s == "uses"
     end
   end
 
@@ -69,7 +66,6 @@ class License < ApplicationRecord
       fields << "license_serial" if previous_changes.key?("serial")
       fields << "license_uses" if previous_changes.key?("uses")
       enqueue_purchase_search_index_update(fields)
-      update_purchase_audience_member_details if previous_changes.key?("uses")
     end
 
     def enqueue_purchase_search_index_update(fields)
@@ -82,7 +78,4 @@ class License < ApplicationRecord
                                             })
     end
 
-    def update_purchase_audience_member_details
-      purchase&.add_to_audience_member_details
-    end
 end
