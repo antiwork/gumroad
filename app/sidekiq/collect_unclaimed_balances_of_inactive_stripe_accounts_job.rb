@@ -37,12 +37,23 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
       next unless actual_stripe_account_balance > 0
 
       # Transfer the money from Stripe connect account to Gumroad's platform Stripe account.
+      # The transfer id is recorded on the merchant account in the NEXT statement, and that
+      # record is the only thing stopping the query above from selecting this account again.
+      # So an interruption between the two — a deploy recycling the worker, an OOM kill, a
+      # pod eviction — leaves the money moved but unrecorded, and the retry moves it again.
+      # The idempotency key closes that window: Stripe replays the original transfer for 24
+      # hours instead of creating a second one, and the retry gets the same id to record.
+      # It is scoped to the account and the amount, so a legitimate later collection (a new
+      # balance three years from now) is a different key and not suppressed.
       transfer = Stripe::Transfer.create({
                                            amount: actual_stripe_account_balance,
                                            currency: Currency::USD,
                                            description: "Collect unclaimed balance of inactive account",
                                            destination: STRIPE_PLATFORM_ACCOUNT_ID,
-                                         }, { stripe_account: stripe_account_id })
+                                         }, {
+                                           stripe_account: stripe_account_id,
+                                           idempotency_key: "collect_unclaimed_balance_#{stripe_account_id}_#{actual_stripe_account_balance}",
+                                         })
       merchant_account.update!(unclaimed_balance_collection_transfer_id: transfer.id)
 
       # Move the unpaid balances in our records to be against Gumroad's platform Stripe account,
