@@ -26,6 +26,13 @@ module RendersCustomHtmlPages
   # shim — see tailwind_v3_gradient_compat_head.
   TAILWIND_V3_CDN_HOST = "cdn.tailwindcss.com"
 
+  # Hostnames are case-insensitive, and the sanitizer compares them after
+  # downcasing (Ai::PageSanitizer.https_host_in?), so a page written as
+  # "https://CDN.Tailwindcss.com" passes sanitization and really does load
+  # Tailwind v3. The shim trigger below has to match on the same terms or
+  # those pages would keep rendering transparent gradients.
+  TAILWIND_V3_CDN_HOST_PATTERN = /#{Regexp.escape(TAILWIND_V3_CDN_HOST)}/i
+
   # Re-registers Tailwind's gradient custom properties with the universal
   # syntax so a Tailwind v3 page can coexist with our injected v4 build.
   # See tailwind_v3_gradient_compat_head for why this is needed and why the
@@ -309,7 +316,7 @@ module RendersCustomHtmlPages
     # Only emitted for pages that actually load the v3 CDN, so pages using our
     # v4 build alone keep v4's exact registrations and are untouched.
     def tailwind_v3_gradient_compat_head(custom_html)
-      return "" unless custom_html.to_s.include?(TAILWIND_V3_CDN_HOST)
+      return "" unless custom_html.to_s.match?(TAILWIND_V3_CDN_HOST_PATTERN)
 
       TAILWIND_V3_GRADIENT_COMPAT_STYLE
     end

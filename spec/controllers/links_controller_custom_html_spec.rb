@@ -415,6 +415,14 @@ describe LinksController, :vcr, type: :controller do
       expect(html).not_to include(%(syntax:"<color>"))
     end
 
+    it "emits the shim when the CDN host is written in a different case" do
+      # Hostnames are case-insensitive and the sanitizer downcases before
+      # comparing, so this page really does load Tailwind v3 and needs the shim.
+      expect(described_class.tailwind_v3_gradient_compat_head(
+               %(<script src="https://CDN.Tailwindcss.com"></script><div class="bg-gradient-to-br from-red-500 to-blue-500"></div>)
+             )).to include(%(@property --tw-gradient-from{syntax:"*"))
+    end
+
     it "emits nothing for a page that does not load the v3 CDN" do
       expect(described_class.tailwind_v3_gradient_compat_head(
                %(<div class="bg-linear-to-br from-red-500 to-blue-500">no v3 here</div>)
