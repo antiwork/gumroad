@@ -241,13 +241,10 @@ export const EditProfile = ({ controls = true, selectedTabIndex, onChange, ...pr
           ) : null}
           <div className="mx-auto grid w-full max-w-6xl gap-4">
             {props.bio ? (
-              <div className="grid gap-2">
-                {/* Mirrors the public profile: name is the h1 headline, bio is small body prose. */}
-                <h1>{props.creator_profile.name}</h1>
-                <p className="text-sm whitespace-pre-line">
-                  <AutoLink text={props.bio} />
-                </p>
-              </div>
+              /* Mirrors the public profile: the bio is a paragraph at normal body size, not a headline. */
+              <p className="whitespace-pre-line">
+                <AutoLink text={props.bio} />
+              </p>
             ) : null}
             {controls || tabs.length > 1 ? (
               <Tabs aria-label="Profile Tabs">
