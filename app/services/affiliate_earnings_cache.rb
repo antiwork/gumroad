@@ -124,62 +124,84 @@ class AffiliateEarningsCache
       cents
     end
 
-    # What the background job calls. Recomputing is pointless if a fresh value
-    # has landed since the job was enqueued — the job's uniqueness lock only
-    # collapses jobs that are still waiting in the queue, so a run that is
-    # already in flight does not stop another enqueue for the same affiliate.
-    # Checking the cache first keeps that from becoming a second long-running
-    # scan.
+    # What the background job calls. The job's uniqueness lock only collapses
+    # jobs that are still waiting in the queue, so once a run is in flight
+    # another enqueue for the same affiliate is allowed — and would otherwise
+    # start a second copy of the same multi-minute scan. Two things prevent that:
+    # a fresh cached value short-circuits the work entirely, and beyond that only
+    # one worker at a time can hold this affiliate's background run lock.
     #
-    # This is the background job's entry point, and running it means this process
-    # is the owner of the computation, so it takes the claim for the length of its
-    # own run. To warm a value from a console without claiming anything, call
-    # `refresh!` instead.
+    # Running it means this process is the owner of the computation, so it also
+    # takes the request-facing claim for the length of its own run. To warm a
+    # value from a console without claiming or locking anything, call `refresh!`
+    # instead.
     def refresh_unless_fresh!(affiliate)
       cached = read(affiliate)
+      return cached[:cents] if cached && !stale?(cached)
 
-      cents = if cached && !stale?(cached)
-        cached[:cents]
-      else
-        # Take the claim for this run, whether or not one survived to here.
-        #
-        # A claim written when the request handed the work over has been burning
-        # down for however long this job then sat in the queue, and on a busy
-        # low-priority queue it can lapse before the job is even picked up. Only
-        # extending a claim that still existed would leave exactly that case —
-        # the slowest affiliates, waiting behind the longest queues — running a
-        # multi-minute aggregate with nothing holding requests back, so a cold
-        # request could take a fresh claim and start a second scan of the same
-        # purchase history alongside it.
-        #
-        # Writing the claim unconditionally is safe because it says no more than
-        # what is true: this run is computing the value right now. The claim only
-        # produces the calculating state when no value is cached at all, which is
-        # precisely when a request should wait for this run rather than start its
-        # own; and it is released the moment a value lands (below), when Sidekiq
-        # gives up retrying (the job's retries-exhausted hook), or by its own
-        # expiry if the process dies without doing either.
-        claim_for_background_run(affiliate)
-        refresh!(affiliate)
+      # Only one background worker at a time may run the aggregate for a given
+      # affiliate. This has to be its own atomic acquisition rather than a check
+      # of the request-facing claim below, because that claim is written
+      # unconditionally and so cannot say whether anybody else already owns the
+      # work. The case that needs it: a page whose cached value has gone stale
+      # is served immediately and enqueues a refresh, and `lock: :until_executed`
+      # only collapses jobs still sitting in the queue — once one starts running,
+      # the next reload can enqueue and start another. Without an exclusive
+      # acquisition here, both would read the same stale value and both would
+      # scan the whole purchase history.
+      unless claim_background_run(affiliate)
+        # Somebody else is computing it right now, and their claim — not ours —
+        # governs what requests see. Hand back whatever is cached (a stale
+        # number, or nothing at all if the value has never been computed) and
+        # leave the claim alone: releasing it here would let a request start its
+        # own scan next to the run that is already in flight.
+        return cached&.fetch(:cents, nil)
       end
 
-      # A value is cached now (this run wrote one, or found one already there),
-      # so release the claim a timed-out request may have handed over. Waiting
-      # for it to expire would keep requests on the calculating state for long
-      # after the number was ready.
-      release_computation(affiliate)
-      cents
-    rescue StandardError
-      # The recomputation failed and nothing was cached, but Sidekiq will retry
-      # this job, so the background is still the owner of this computation.
-      # Releasing the claim here would let the next request take a fresh one and
-      # start its own bounded scan alongside the pending retry — the duplicated
-      # work the claim exists to prevent. Instead re-arm the claim's window so it
-      # survives the retry's backoff, and leave the release to the job's
-      # retries-exhausted hook, which is the only point at which nobody is going
-      # to compute this value anymore.
-      claim_for_background_run(affiliate)
-      raise
+      begin
+        # Tell requests the value is being computed, whether or not the claim a
+        # timed-out request handed over survived to here.
+        #
+        # That claim has been burning down for however long this job then sat in
+        # the queue, and on a busy low-priority queue it can lapse before the job
+        # is even picked up. Only extending a claim that still existed would
+        # leave exactly that case — the slowest affiliates, waiting behind the
+        # longest queues — running a multi-minute aggregate with nothing holding
+        # requests back.
+        #
+        # Writing it unconditionally is safe because it says no more than what is
+        # true: this run is computing the value right now. It only produces the
+        # calculating state when no value is cached at all, which is precisely
+        # when a request should wait for this run rather than start its own; and
+        # it is released the moment a value lands (below), when Sidekiq gives up
+        # retrying (the job's retries-exhausted hook), or by its own expiry if
+        # the process dies without doing either.
+        claim_for_background_run(affiliate)
+
+        cents = refresh!(affiliate)
+
+        # A value is cached now, so release the claim a timed-out request may
+        # have handed over. Waiting for it to expire would keep requests on the
+        # calculating state for long after the number was ready.
+        release_computation(affiliate)
+        cents
+      rescue StandardError
+        # The recomputation failed and nothing was cached, but Sidekiq will retry
+        # this job, so the background is still the owner of this computation.
+        # Releasing the request-facing claim here would let the next request take
+        # a fresh one and start its own bounded scan alongside the pending retry
+        # — the duplicated work the claim exists to prevent. Instead re-arm its
+        # window so it survives the retry's backoff, and leave the release to the
+        # job's retries-exhausted hook, which is the only point at which nobody
+        # is going to compute this value anymore.
+        claim_for_background_run(affiliate)
+        raise
+      ensure
+        # The exclusive lock covers only this attempt. A retry has to be able to
+        # take it, so it is released even on the failure path — unlike the
+        # request-facing claim, which deliberately outlives a failed run.
+        release_background_run(affiliate)
+      end
     end
 
     # Hands the computation back to the request path. Called by the background
@@ -197,6 +219,14 @@ class AffiliateEarningsCache
     # Exposed for specs and for clearing a stuck claim from a console.
     def compute_lock_key(affiliate)
       "affiliate/#{affiliate.id}/total_cents_earned/computing"
+    end
+
+    # The background workers' mutual exclusion, separate from the claim above
+    # because the two answer different questions: this one is "is another worker
+    # running the aggregate right now", the other is "should a request show the
+    # calculating state". Exposed for the same reasons as compute_lock_key.
+    def background_run_lock_key(affiliate)
+      "affiliate/#{affiliate.id}/total_cents_earned/refreshing"
     end
 
     private
@@ -267,6 +297,25 @@ class AffiliateEarningsCache
           true,
           expires_in: BACKGROUND_HANDOFF_LOCK_TTL
         )
+      end
+
+      # Returns true for exactly one background worker at a time. Like
+      # claim_computation this relies on `unless_exist` mapping to memcached's
+      # atomic `add`, so two workers picking up refresh jobs for the same
+      # affiliate at the same moment cannot both win. The window has to outlast a
+      # full run, hence the same sizing as the handoff claim; if a worker dies
+      # mid-run the lock expires and a later job can retry.
+      def claim_background_run(affiliate)
+        Rails.cache.write(
+          background_run_lock_key(affiliate),
+          true,
+          expires_in: BACKGROUND_HANDOFF_LOCK_TTL,
+          unless_exist: true
+        )
+      end
+
+      def release_background_run(affiliate)
+        Rails.cache.delete(background_run_lock_key(affiliate))
       end
 
       def read(affiliate)

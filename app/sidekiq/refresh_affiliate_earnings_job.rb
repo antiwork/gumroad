@@ -10,10 +10,11 @@
 # `lock: :until_executed` keeps an affiliate who reloads the page repeatedly
 # (which is what people do when a page is slow) from queueing the same expensive
 # sum many times over. That lock only collapses jobs that are still queued
-# though, so the job also re-checks the cache before recomputing: if another run
-# has already produced a fresh value there is nothing left to do, and skipping
-# is what stops two long-running scans of the same purchase history from running
-# at once.
+# though, so it cannot stop a second job from starting while one is already
+# running. AffiliateEarningsCache handles that case: a run skips the work if a
+# fresh value has landed since the job was enqueued, and otherwise has to win an
+# exclusive per-affiliate lock before it may scan, so two long-running scans of
+# the same purchase history never overlap.
 class RefreshAffiliateEarningsJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :low, lock: :until_executed

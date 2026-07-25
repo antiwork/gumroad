@@ -289,5 +289,65 @@ describe AffiliateEarningsCache do
 
       expect(described_class.refresh_unless_fresh!(affiliate)).to eq 21
     end
+
+    it "does not scan while another worker is already running the aggregate" do
+      # Two stale-page reloads can produce two refresh jobs, and the job's
+      # queue-level uniqueness lock does not stop the second from starting once
+      # the first is in flight. Only one of them may scan the purchase history.
+      Rails.cache.write(
+        described_class.cache_key(affiliate),
+        { cents: 500, computed_at: (described_class::STALE_AFTER + 1.minute).ago },
+        expires_in: described_class::CACHE_TTL
+      )
+      Rails.cache.write(described_class.background_run_lock_key(affiliate), true, expires_in: 1.minute)
+
+      expect(affiliate).not_to receive(:total_cents_earned)
+      # The stale number is still the best answer available, so the losing run
+      # hands that back rather than nil.
+      expect(described_class.refresh_unless_fresh!(affiliate)).to eq 500
+    end
+
+    it "returns nothing rather than a wrong number when it loses the lock with no value cached" do
+      Rails.cache.write(described_class.background_run_lock_key(affiliate), true, expires_in: 1.minute)
+
+      expect(affiliate).not_to receive(:total_cents_earned)
+      expect(described_class.refresh_unless_fresh!(affiliate)).to be_nil
+    end
+
+    it "leaves the request-facing claim alone when it loses the lock" do
+      # The worker that holds the lock is computing right now, so requests should
+      # keep waiting for it. Releasing the claim here would let one start its own
+      # bounded scan next to that run.
+      Rails.cache.write(described_class.background_run_lock_key(affiliate), true, expires_in: 1.minute)
+      Rails.cache.write(described_class.compute_lock_key(affiliate), true, expires_in: described_class::BACKGROUND_HANDOFF_LOCK_TTL)
+
+      described_class.refresh_unless_fresh!(affiliate)
+
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_present
+    end
+
+    it "holds the run lock while scanning and releases it afterwards" do
+      lock_held_during_run = nil
+      allow(affiliate).to receive(:total_cents_earned) do
+        lock_held_during_run = Rails.cache.read(described_class.background_run_lock_key(affiliate)).present?
+        7
+      end
+
+      expect(described_class.refresh_unless_fresh!(affiliate)).to eq 7
+
+      expect(lock_held_during_run).to be true
+      expect(Rails.cache.read(described_class.background_run_lock_key(affiliate))).to be_nil
+    end
+
+    it "releases the run lock when the aggregate fails, so the retry can take it" do
+      # Unlike the request-facing claim, which deliberately survives a failed run
+      # so the pending retry stays the owner, this lock guards a single attempt.
+      # Holding it past the failure would make the retry a no-op until it expired.
+      allow(affiliate).to receive(:total_cents_earned).and_raise(ActiveRecord::StatementTimeout)
+
+      expect { described_class.refresh_unless_fresh!(affiliate) }.to raise_error(ActiveRecord::StatementTimeout)
+
+      expect(Rails.cache.read(described_class.background_run_lock_key(affiliate))).to be_nil
+    end
   end
 end
