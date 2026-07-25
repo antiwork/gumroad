@@ -113,9 +113,15 @@ const PublicProfile = (props: Props) => {
         <header className="border-b border-border">
           <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4 px-4 py-8 lg:px-0">
             {props.bio ? (
-              <h1 className="whitespace-pre-line">
+              /*
+                The bio is regular prose, so it renders as a paragraph at normal body size. It used
+                to be the page's h1, which meant a normal multi-sentence bio was displayed at
+                headline size with no way for the creator to make it smaller. The creator's name is
+                already shown in the navigation header above, so it is not repeated here.
+              */
+              <p className="whitespace-pre-line">
                 <AutoLink text={props.bio} />
-              </h1>
+              </p>
             ) : null}
             {props.tabs.length > 1 ? (
               <UITabs aria-label="Profile Tabs">
