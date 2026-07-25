@@ -51,11 +51,21 @@ class RichContent < ApplicationRecord
     }
   }
 
+  # Link and button hrefs may use any URL scheme — custom app schemes like `myapp://activate` are
+  # supported on purpose so sellers can deep-link buyers into their own app — except the ones below,
+  # which either execute script or read local resources in the buyer's browser. Content pages render
+  # on Gumroad-owned domains, so a seller must never be able to store one of these. The editor blocks
+  # them client-side too (validateUrl in app/javascript/components/RichTextEditor.tsx); this is the
+  # backstop for anything writing rich content through the API.
+  BLOCKED_HREF_SCHEMES = %w[javascript data vbscript file blob].freeze
+  LINK_NODE_TYPES = ["link", "tiptap-link", "button"].freeze
+
   belongs_to :entity, polymorphic: true, optional: true
 
   validates :entity, presence: true
   validates :description, json: { schema: DESCRIPTION_JSON_SCHEMA, message: :invalid }
   validate :embedded_files_belong_to_product, if: :will_save_change_to_description?
+  validate :link_hrefs_use_permitted_schemes, if: :will_save_change_to_description?
 
   def embedded_product_file_ids_in_order
     description.flat_map { select_file_embed_ids(_1) }.compact.uniq
@@ -129,6 +139,37 @@ class RichContent < ApplicationRecord
   end
 
   private
+    def link_hrefs_use_permitted_schemes
+      return unless description.is_a?(Array)
+
+      offending = collect_blocked_hrefs(description)
+      return if offending.empty?
+
+      errors.add(:base, "Links cannot use these URL schemes: #{offending.uniq.join(', ')}")
+    end
+
+    # Walks the whole document (any nesting) collecting hrefs whose scheme is blocked. Both link
+    # marks (`marks: [{type: "link", attrs: {href:}}]`) and link/button nodes carry an href.
+    def collect_blocked_hrefs(nodes)
+      Array(nodes).flat_map do |node|
+        next [] unless node.is_a?(Hash)
+
+        hrefs = []
+        hrefs << node.dig("attrs", "href") if node["type"].in?(LINK_NODE_TYPES)
+        Array(node["marks"]).each do |mark|
+          next unless mark.is_a?(Hash) && mark["type"].in?(LINK_NODE_TYPES)
+          hrefs << mark.dig("attrs", "href")
+        end
+
+        blocked = hrefs.compact.filter_map do |href|
+          scheme = href.to_s.strip[/\A([a-zA-Z][a-zA-Z0-9+.-]*):/, 1]&.downcase
+          scheme if scheme.in?(BLOCKED_HREF_SCHEMES)
+        end
+
+        blocked + collect_blocked_hrefs(node["content"])
+      end
+    end
+
     def embedded_files_belong_to_product
       return unless description.is_a?(Array)
 

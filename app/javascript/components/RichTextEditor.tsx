@@ -167,6 +167,17 @@ declare module "@tiptap/core" {
   /* eslint-enable */
 }
 
+// Schemes we refuse to store in a link or button href. These can execute script or reach local
+// resources in the visitor's browser, and content pages are rendered on Gumroad-owned domains, so
+// a seller must never be able to emit them. Every other scheme is allowed, which is what makes
+// custom app schemes (`goodsnooze://activate?key=...`) usable for deep-linking into a native app.
+const BLOCKED_URL_SCHEMES = ["javascript", "data", "vbscript", "file", "blob"];
+
+// Matches a scheme only when it is followed by `//`, e.g. `goodsnooze://`. Requiring the slashes
+// matters: without them, a bare host with a port (`example.com:8080/x`) looks like the scheme
+// `example.com` and would no longer get the `https://` prefix it needs.
+const SCHEME_WITH_AUTHORITY_REGEX = /^([a-z][a-z0-9+.-]*):\/\//iu;
+
 export const validateUrl = (url?: string) => {
   if (!url) return false;
 
@@ -175,8 +186,14 @@ export const validateUrl = (url?: string) => {
   // Fix the URL if it starts with an invalid protocol string that is accidentally mistyped as `http:/example.com`, `https//example.com`, etc.
   if (/^https?:?[/]{0,2}.*/iu.test(url)) url = url.replace(/^https?:?[/]{0,2}/iu, "https://");
 
-  // Add a protocol to the URL if it doesn't have one.
-  if (!/^https?:\/\//iu.test(url)) url = `https://${url}`;
+  const schemeMatch = SCHEME_WITH_AUTHORITY_REGEX.exec(url);
+
+  if (schemeMatch) {
+    if (BLOCKED_URL_SCHEMES.includes((schemeMatch[1] ?? "").toLowerCase())) return false;
+  } else {
+    // Add a protocol to the URL if it doesn't have one.
+    url = `https://${url}`;
+  }
 
   try {
     return new URL(url).toString();

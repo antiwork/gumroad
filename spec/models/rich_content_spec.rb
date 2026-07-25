@@ -162,6 +162,48 @@ describe RichContent do
     end
   end
 
+  describe "link href scheme validation" do
+    let(:product) { create(:product) }
+
+    def build_content(href, node_type: "button")
+      build(:rich_content, entity: product, description: [{ "type" => node_type, "attrs" => { "href" => href }, "content" => [{ "type" => "text", "text" => "Go" }] }])
+    end
+
+    it "allows https links" do
+      expect(build_content("https://example.com/activate?key=__license_key__")).to be_valid
+    end
+
+    it "allows custom app schemes so sellers can deep-link into their own app" do
+      expect(build_content("goodsnooze://activate?key=__license_key__")).to be_valid
+      expect(build_content("my-app.desktop://open", node_type: "tiptap-link")).to be_valid
+    end
+
+    it "rejects schemes that can execute script or read local files" do
+      %w[javascript:alert(1) data:text/html,<script>alert(1)</script> vbscript:msgbox(1) file:///etc/passwd blob:https://example.com/x].each do |href|
+        content = build_content(href)
+        expect(content).not_to be_valid, "expected #{href} to be rejected"
+        expect(content.errors.full_messages.join).to include("URL schemes")
+      end
+    end
+
+    it "rejects a blocked scheme in a link mark nested inside a list" do
+      content = build(:rich_content, entity: product, description: [
+                        { "type" => "bulletList", "content" => [
+                          { "type" => "listItem", "content" => [
+                            { "type" => "paragraph", "content" => [
+                              { "type" => "text", "text" => "Click", "marks" => [{ "type" => "link", "attrs" => { "href" => "javascript:alert(1)" } }] }
+                            ] }
+                          ] }
+                        ] }
+                      ])
+      expect(content).not_to be_valid
+    end
+
+    it "is case-insensitive about the blocked scheme" do
+      expect(build_content("JavaScript:alert(1)")).not_to be_valid
+    end
+  end
+
   describe "#has_posts?" do
     let(:product) { create(:product) }
 
