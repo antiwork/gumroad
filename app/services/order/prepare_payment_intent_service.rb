@@ -154,8 +154,9 @@ class Order::PreparePaymentIntentService
     # Stripe-owned funding-source countries, safe to trust for PPP verification. US-locked methods
     # (Cash App Pay, ACH) expose no country in their preview blocks, but Stripe only lets a US Cash
     # App account or US bank account fund them — the region lock IS the funding country, so verify
-    # them as US (U13's region-locked bucket). UPI has the same property for India. We deliberately
-    # do NOT fall back to buyer-supplied billing_details: that is checkout-form input, so trusting it
+    # them as US (U13's region-locked bucket). UPI has the same property for India, and Pix for
+    # Brazil (both settle over domestic rails the buyer can only reach from a local bank account).
+    # We deliberately do NOT fall back to buyer-supplied billing_details: that is checkout-form input, so trusting it
     # would let a buyer spoof the discounted country. When Stripe exposes no funding country and the
     # method has no region lock, the value stays nil and a PPP-discounted purchase fails closed. Uses
     # [] access because a Stripe::StripeObject raises on a missing attribute reader but returns nil
@@ -204,6 +205,7 @@ class Order::PreparePaymentIntentService
     def region_locked_country(method_type)
       return Checkout::PaymentMethodResolver::US_ALPHA2 if Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
       return Checkout::PaymentMethodResolver::IN_ALPHA2 if Checkout::PaymentMethodResolver::IN_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
+      return Checkout::PaymentMethodResolver::BR_ALPHA2 if Checkout::PaymentMethodResolver::BR_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
 
       nil
     end

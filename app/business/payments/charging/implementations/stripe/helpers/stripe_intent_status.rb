@@ -13,7 +13,11 @@ class StripeIntentStatus
   # shows the QR code / performs the redirect itself). Seeing one of these on a retrieved
   # intent is expected — for example, a buyer who returns to the checkout return page
   # without finishing the Cash App QR flow — so it is not an error worth alerting on.
-  CLIENT_HANDLED_ACTION_TYPES = ["cashapp_handle_redirect_or_display_qr_code"].freeze
+  # Pix behaves the same way: Stripe.js renders the Pix QR code and copy-paste key, the
+  # buyer pays in their own banking app, and the intent sits in requires_action until they
+  # do (or until the key expires), so a buyer who reopens the return page mid-flow is a
+  # normal state rather than a misconfiguration.
+  CLIENT_HANDLED_ACTION_TYPES = ["cashapp_handle_redirect_or_display_qr_code", "pix_display_qr_code"].freeze
   # The generic browser-redirect action. Unlike the Cash App action type above it is not
   # method-specific: many payment methods can surface it, including ones a server-confirmed
   # (off-session) intent might carry by misconfiguration, where no Stripe.js client exists to

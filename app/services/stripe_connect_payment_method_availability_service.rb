@@ -33,6 +33,7 @@ class StripeConnectPaymentMethodAvailabilityService
     "ideal" => "ideal_payments",
     "bancontact" => "bancontact_payments",
     "upi" => "upi_payments",
+    "pix" => "pix_payments",
     "sepa_debit" => "sepa_debit_payments",
   }.freeze
 
