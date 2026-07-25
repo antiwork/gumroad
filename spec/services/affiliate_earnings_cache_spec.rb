@@ -175,6 +175,15 @@ describe AffiliateEarningsCache do
       expect(described_class.refresh!(affiliate)).to eq 139
       expect(Rails.cache.read(described_class.cache_key(affiliate))[:cents]).to eq 139
     end
+
+    it "claims nothing, so warming a value from a console cannot park the page on the calculating state" do
+      # `refresh!` is the plain recomputation, with no ownership attached. Only
+      # the background job's entry point takes the claim, because only it has a
+      # retry behind it to finish the work.
+      described_class.refresh!(affiliate)
+
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
+    end
   end
 
   describe ".refresh_unless_fresh!" do
@@ -212,15 +221,30 @@ describe AffiliateEarningsCache do
       expect(claim_held_during_run).to be true
     end
 
-    it "does not create a claim when the run was not covering one" do
-      # A console-invoked refresh has no claim behind it, and inventing one would
-      # park the page on the calculating state for work no request is waiting on.
+    it "claims the computation even when the handoff claim already expired in the queue" do
+      # The worst case for this endpoint is the affiliate whose sum is slowest,
+      # and that job also waits behind the longest low-priority queue — long
+      # enough that the claim the request handed over can lapse before the job is
+      # picked up. The run still has to hold requests back while it scans, so it
+      # takes the claim itself rather than leaving the window uncovered.
+      claim_held_during_run = nil
       allow(affiliate).to receive(:total_cents_earned) do
-        expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
+        claim_held_during_run = Rails.cache.read(described_class.compute_lock_key(affiliate)).present?
         7
       end
 
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
       expect(described_class.refresh_unless_fresh!(affiliate)).to eq 7
+      expect(claim_held_during_run).to be true
+    end
+
+    it "does not leave a claim behind once it has cached a value" do
+      # The claim exists to stop a second scan while this one runs, so having
+      # written the number it must go — otherwise the page would keep showing the
+      # calculating state for a value that is ready.
+      expect(described_class.refresh_unless_fresh!(affiliate)).to eq 0
+
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
     end
 
     it "releases the claim a timed-out request handed over, so requests stop showing the calculating state" do
@@ -243,14 +267,16 @@ describe AffiliateEarningsCache do
       expect(Rails.cache.read(described_class.cache_key(affiliate))).to be_nil
     end
 
-    it "does not create a claim when a failing refresh was not covering one" do
+    it "keeps a claim for the pending retry even when the handoff claim expired in the queue" do
       allow(affiliate).to receive(:total_cents_earned).and_raise(ActiveRecord::StatementTimeout)
 
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
       expect { described_class.refresh_unless_fresh!(affiliate) }.to raise_error(ActiveRecord::StatementTimeout)
 
-      # A console-invoked refresh has no claim behind it, and inventing one would
-      # park the page on the calculating state for work nobody will retry.
-      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
+      # The retry is the only thing that is going to compute this sum, so it stays
+      # the owner. The job's retries-exhausted hook is what finally hands the
+      # computation back to the request path.
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_present
     end
 
     it "recomputes when the cached value is stale" do

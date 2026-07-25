@@ -109,7 +109,7 @@ class AffiliateEarningsCache
         # sized for a three-second in-request attempt, so it would otherwise
         # lapse while the job was still queued or running and let the next
         # request start a competing scan.
-        hold_claim_for_background_job(affiliate)
+        claim_for_background_run(affiliate)
         refresh_later(affiliate)
       end
       nil
@@ -130,21 +130,36 @@ class AffiliateEarningsCache
     # already in flight does not stop another enqueue for the same affiliate.
     # Checking the cache first keeps that from becoming a second long-running
     # scan.
+    #
+    # This is the background job's entry point, and running it means this process
+    # is the owner of the computation, so it takes the claim for the length of its
+    # own run. To warm a value from a console without claiming anything, call
+    # `refresh!` instead.
     def refresh_unless_fresh!(affiliate)
       cached = read(affiliate)
 
       cents = if cached && !stale?(cached)
         cached[:cents]
       else
-        # The claim was written when the request handed the work over, so its
-        # window has been burning down for however long this job then sat in the
-        # queue — on a busy low-priority queue that can be most of it. Re-arm it
-        # now that the aggregate is actually starting, so the window covers this
-        # run rather than the wait that preceded it. Without this a long queue
-        # wait plus a long run outlives the claim, and a cold request part way
-        # through the run takes a fresh claim and starts a second scan of the
-        # same purchase history.
-        extend_claim_if_held(affiliate)
+        # Take the claim for this run, whether or not one survived to here.
+        #
+        # A claim written when the request handed the work over has been burning
+        # down for however long this job then sat in the queue, and on a busy
+        # low-priority queue it can lapse before the job is even picked up. Only
+        # extending a claim that still existed would leave exactly that case —
+        # the slowest affiliates, waiting behind the longest queues — running a
+        # multi-minute aggregate with nothing holding requests back, so a cold
+        # request could take a fresh claim and start a second scan of the same
+        # purchase history alongside it.
+        #
+        # Writing the claim unconditionally is safe because it says no more than
+        # what is true: this run is computing the value right now. The claim only
+        # produces the calculating state when no value is cached at all, which is
+        # precisely when a request should wait for this run rather than start its
+        # own; and it is released the moment a value lands (below), when Sidekiq
+        # gives up retrying (the job's retries-exhausted hook), or by its own
+        # expiry if the process dies without doing either.
+        claim_for_background_run(affiliate)
         refresh!(affiliate)
       end
 
@@ -163,7 +178,7 @@ class AffiliateEarningsCache
       # survives the retry's backoff, and leave the release to the job's
       # retries-exhausted hook, which is the only point at which nobody is going
       # to compute this value anymore.
-      extend_claim_if_held(affiliate)
+      claim_for_background_run(affiliate)
       raise
     end
 
@@ -241,26 +256,17 @@ class AffiliateEarningsCache
         Rails.cache.delete(compute_lock_key(affiliate))
       end
 
-      # Rewrites the claim — unconditionally, since we already hold it — with the
-      # longer background window, so it cannot lapse while the job it is covering
-      # is still queued or running.
-      def hold_claim_for_background_job(affiliate)
+      # Writes the claim with the long background window — unconditionally, since
+      # every caller either already holds it or is itself the process about to do
+      # the work. It cannot lapse while the job it covers is queued or running,
+      # and it is re-armed at each point the background becomes the owner again,
+      # so a queue wait never eats into the window meant for the run.
+      def claim_for_background_run(affiliate)
         Rails.cache.write(
           compute_lock_key(affiliate),
           true,
           expires_in: BACKGROUND_HANDOFF_LOCK_TTL
         )
-      end
-
-      # Re-arms an existing claim with a fresh background window. Only an
-      # existing claim is extended, never created: these paths also run for a
-      # refresh invoked from a console with no claim in play, and inventing one
-      # there would park the page on the calculating state for a computation
-      # nobody is going to finish.
-      def extend_claim_if_held(affiliate)
-        return unless Rails.cache.exist?(compute_lock_key(affiliate))
-
-        hold_claim_for_background_job(affiliate)
       end
 
       def read(affiliate)
