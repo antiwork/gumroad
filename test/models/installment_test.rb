@@ -597,8 +597,13 @@ const b = 2;</code></pre>
 
   test "publish! publishes the installment" do
     assert_nil @installment.published_at
-    @installment.publish!
-    assert_in_delta Time.current.to_f, @installment.published_at.to_f, 1.0
+    # Frozen so the assertion compares against the same instant publish! stamped. Comparing a
+    # timestamp taken on entry to publish! against Time.current after it returns makes the
+    # tolerance absorb the method's own runtime, which is why this flaked on slow runners.
+    freeze_time do
+      @installment.publish!
+      assert_equal Time.current, @installment.published_at
+    end
   end
 
   test "publish! sets published_at to the provided argument" do
@@ -632,19 +637,25 @@ const b = 2;</code></pre>
   end
 
   test "publish! skips the content moderation check for VIP creators" do
-    @installment.user.stub(:vip_creator?, true) do
-      ContentModeration::ModerateRecordService.stub(:check, ->(*) { flunk "moderation check should be skipped for VIP creators" }) do
-        @installment.publish!
+    freeze_time do
+      @installment.user.stub(:vip_creator?, true) do
+        ContentModeration::ModerateRecordService.stub(:check, ->(*) { flunk "moderation check should be skipped for VIP creators" }) do
+          @installment.publish!
+        end
       end
+      # to_i because published_at has no sub-second precision in the schema, so the reloaded
+      # value is truncated to the whole second.
+      assert_equal Time.current.to_i, @installment.reload.published_at.to_i
     end
-    assert_in_delta Time.current.to_f, @installment.reload.published_at.to_f, 2.0
   end
 
   test "publish! succeeds when the content moderation check passes" do
-    ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: true)) do
-      @installment.publish!
+    freeze_time do
+      ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: true)) do
+        @installment.publish!
+      end
+      assert_equal Time.current.to_i, @installment.reload.published_at.to_i
     end
-    assert_in_delta Time.current.to_f, @installment.reload.published_at.to_f, 2.0
   end
 
   test "publish! clears the publishing flag after it completes" do
