@@ -62,12 +62,19 @@ steps:
     # second starts, finds the lock, and dies ~30 seconds in. Failed deploys are not
     # retried, so main silently stops shipping until someone notices and pushes again.
     #
-    # On 2026-07-25 that was 9 of 11 deploy failures in 30 builds — a 37% failure rate,
-    # every one a lost race rather than a real problem with the commit.
+    # On 2026-07-25, 11 of 30 main deploy jobs failed — a 37% failure rate — and 9 of the
+    # 11 were provably lost races (each started inside a concurrently-successful deploy's
+    # hold window and died in 25-32s). The other two failed for unrelated reasons.
     #
     # concurrency_group makes Buildkite queue these steps instead: the second deploy
     # waits for the first to finish and then runs, which is what the Consul lock was
     # trying to express but could only enforce by failing.
+    #
+    # Scope: this serializes deploys started from THIS step only. A lock held by anything
+    # else — a manual nomad/production/lock_deployment.sh run, or one leaked by a deploy
+    # that died mid-flight — still fails a queued deploy exactly as it does today. That
+    # residual case is what antiwork/gumroad-deployment#43 addresses, by recording who
+    # holds the lock and why, and auto-releasing it when a deploy dies.
     concurrency_group: "gumroad/production-deploy"
     concurrency: 1
     # Left on the default concurrency_method ("ordered"): queued deploys run in the order
