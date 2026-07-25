@@ -98,6 +98,15 @@ class Checkout::PresentmentRounding
   # fees, taxes we remit) — a floor is what this needs to be, not an accurate total.
   # Returns 0 when the seller pays no percentage fee, which keeps rounding down off for
   # those sales rather than funding it out of the seller's money.
+  #
+  # Tips belong in the base because Gumroad's percentage fee is charged on them: a tip
+  # makes a product's price "customizable" rather than adding a line beside it, so the
+  # buyer submits one tip-inclusive price, that becomes Purchase#price_cents, and
+  # Purchase#calculate_fees takes its percentage from that whole amount. A tip-heavy cart
+  # therefore has a proportionally larger Gumroad share, not a smaller one. The
+  # presentment_rounding spec asserts this cap against the real fee calculation, so if the
+  # tip ever stops being part of the fee base a test fails rather than a round-down
+  # silently reaching into the seller's money.
   def self.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents:)
     fee_per_thousand = (seller.custom_fee_per_thousand.presence || Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND).to_i
     return 0 unless fee_per_thousand.positive?
