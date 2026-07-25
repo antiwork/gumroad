@@ -403,7 +403,7 @@ RSpec.describe AudienceMember, :freeze_time do
     email = generate(:email)
     purchases = specs.map do |spec|
       product = create(:product, user: seller, is_licensed: true)
-      purchase = create(:purchase, link: product, seller:, email:, purchase_state: "successful")
+      purchase = create(:purchase, :from_seller, link: product, seller:, email:)
       create(:license, purchase:, link: product, uses: spec[:uses]) unless spec[:uses].nil?
       purchase
     end
