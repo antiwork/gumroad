@@ -63,16 +63,24 @@ class AffiliateEarningsCache
   # rather than a wrong number.
   BACKGROUND_TIMEOUT_MS = 15.minutes.in_milliseconds
 
-  # How long the claim is held once the work has been handed to the background
-  # job. It has to outlast a queue wait plus a full background recomputation, so
-  # it is derived from BACKGROUND_TIMEOUT_MS rather than picked independently: if
+  # How long the claim is held while the background job owns the computation.
+  # It is derived from BACKGROUND_TIMEOUT_MS rather than picked independently: if
   # the job is ever allowed longer, this follows. Without it the claim would keep
   # its three-second window, lapse while the job was still running, and let the
   # next request take a fresh claim and start a competing scan — the duplicated
-  # work the handoff was meant to move off the request path. The job clears the
-  # claim as soon as it caches a value, so the calculating state never outstays
-  # the unknown number; this expiry is only the recovery path for a job that dies
-  # without writing one.
+  # work the handoff was meant to move off the request path.
+  #
+  # The margin on top of the aggregate's own limit is intentionally small,
+  # because this window is re-armed at each point the background becomes the
+  # owner again — when the work is handed over, when a run actually starts, and
+  # when a failed run leaves a retry pending — rather than being expected to
+  # cover a queue wait *and* a full run from a single write. A busy low-priority
+  # queue can hold a job for longer than any fixed window we would be willing to
+  # leave a stale claim behind for, so we re-arm instead of over-sizing.
+  #
+  # The job clears the claim as soon as it caches a value, so the calculating
+  # state never outstays the unknown number; this expiry is only the recovery
+  # path for a job that dies without writing one.
   BACKGROUND_HANDOFF_LOCK_TTL = (BACKGROUND_TIMEOUT_MS / 1_000).seconds + 5.minutes
 
   class << self
@@ -128,6 +136,15 @@ class AffiliateEarningsCache
       cents = if cached && !stale?(cached)
         cached[:cents]
       else
+        # The claim was written when the request handed the work over, so its
+        # window has been burning down for however long this job then sat in the
+        # queue — on a busy low-priority queue that can be most of it. Re-arm it
+        # now that the aggregate is actually starting, so the window covers this
+        # run rather than the wait that preceded it. Without this a long queue
+        # wait plus a long run outlives the claim, and a cold request part way
+        # through the run takes a fresh claim and starts a second scan of the
+        # same purchase history.
+        extend_claim_if_held(affiliate)
         refresh!(affiliate)
       end
 
@@ -146,7 +163,7 @@ class AffiliateEarningsCache
       # survives the retry's backoff, and leave the release to the job's
       # retries-exhausted hook, which is the only point at which nobody is going
       # to compute this value anymore.
-      extend_claim_for_retry(affiliate)
+      extend_claim_if_held(affiliate)
       raise
     end
 
@@ -235,13 +252,12 @@ class AffiliateEarningsCache
         )
       end
 
-      # Re-arms an existing claim after a failed background run, so it covers the
-      # retry that Sidekiq has already scheduled instead of lapsing in between.
-      # Only an existing claim is extended: this method also runs when the
-      # refresh was invoked from a console with no claim in play, and creating
-      # one there would put the page on the calculating state for a computation
-      # nobody is going to retry.
-      def extend_claim_for_retry(affiliate)
+      # Re-arms an existing claim with a fresh background window. Only an
+      # existing claim is extended, never created: these paths also run for a
+      # refresh invoked from a console with no claim in play, and inventing one
+      # there would park the page on the calculating state for a computation
+      # nobody is going to finish.
+      def extend_claim_if_held(affiliate)
         return unless Rails.cache.exist?(compute_lock_key(affiliate))
 
         hold_claim_for_background_job(affiliate)

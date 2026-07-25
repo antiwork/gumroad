@@ -192,6 +192,37 @@ describe AffiliateEarningsCache do
       expect(Rails.cache.read(described_class.cache_key(affiliate))[:cents]).to eq 21
     end
 
+    it "re-arms the claim when the aggregate starts, so a long queue wait cannot let it lapse mid-run" do
+      # Stands in for a claim that was written when the request handed the work
+      # over and has since spent most of its window waiting in the queue.
+      Rails.cache.write(described_class.compute_lock_key(affiliate), true, expires_in: 30.seconds)
+
+      claim_held_during_run = nil
+      allow(affiliate).to receive(:total_cents_earned) do
+        # A heavy sum can run for many minutes. If the claim still carried the
+        # window it was written with before the queue wait, it would lapse right
+        # here and let a cold request start a competing scan.
+        travel_to(2.minutes.from_now) do
+          claim_held_during_run = Rails.cache.read(described_class.compute_lock_key(affiliate)).present?
+        end
+        7
+      end
+
+      expect(described_class.refresh_unless_fresh!(affiliate)).to eq 7
+      expect(claim_held_during_run).to be true
+    end
+
+    it "does not create a claim when the run was not covering one" do
+      # A console-invoked refresh has no claim behind it, and inventing one would
+      # park the page on the calculating state for work no request is waiting on.
+      allow(affiliate).to receive(:total_cents_earned) do
+        expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
+        7
+      end
+
+      expect(described_class.refresh_unless_fresh!(affiliate)).to eq 7
+    end
+
     it "releases the claim a timed-out request handed over, so requests stop showing the calculating state" do
       Rails.cache.write(described_class.compute_lock_key(affiliate), true, expires_in: described_class::BACKGROUND_HANDOFF_LOCK_TTL)
 
