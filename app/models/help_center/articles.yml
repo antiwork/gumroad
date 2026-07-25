@@ -467,7 +467,7 @@
 - id: 281
   slug: "281-payout-delays"
   title: "Payout delays"
-  description: "Creators are typically paid every Friday for all sales not made through PayPal (here's how payouts work). However, payouts can sometimes be delayed—see reasons below. If yours is delayed by more than one Friday, please email us."
+  description: "Creators are typically paid once a week, on the weekday that matches how they get paid (here's how to find your payout day, and here's how payouts work). However, payouts can sometimes be delayed—see reasons below. If yours is delayed by more than one week, please email us."
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 282
   slug: "282-how-do-purchases-work-for-my-customers"
