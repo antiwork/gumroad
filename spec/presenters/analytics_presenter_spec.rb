@@ -8,7 +8,10 @@ describe AnalyticsPresenter do
   let!(:deleted_with_sales) { create(:product, user: seller, deleted_at: Time.current) }
   let!(:deleted_without_sales) { create(:product, user: seller, deleted_at: Time.current) }
 
-  before { create(:purchase, link: deleted_with_sales) }
+  # The purchase only needs to exist so deleted_with_sales counts as "has sales" —
+  # save without validations so the spec doesn't require Stripe (the purchase factory's
+  # financial_transaction_validation otherwise needs a real/stubbed charge).
+  before { build(:purchase, link: deleted_with_sales).save!(validate: false) }
 
   describe "#page_props" do
     it "returns the correct props" do
@@ -36,6 +39,14 @@ describe AnalyticsPresenter do
       expect(presenter.page_props[:state_names].first).to eq("Alabama")
       expect(presenter.page_props[:state_names].last).to eq("Other")
       expect(presenter.page_props[:seller_time_zone]).to eq("America/Los_Angeles")
+      # No sales history → no stable hourly curve; the frontend falls back to the
+      # uniform run-rate projection.
+      expect(presenter.page_props[:expected_sales_fraction_of_day]).to be_nil
+    end
+
+    it "includes the seller's expected sales fraction when history is deep enough" do
+      allow_any_instance_of(CreatorAnalytics::HourlySalesCurve).to receive(:expected_fraction_of_day).and_return(0.42)
+      expect(presenter.page_props[:expected_sales_fraction_of_day]).to eq(0.42)
     end
 
     it "returns the seller's own time zone as an IANA identifier" do

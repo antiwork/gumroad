@@ -94,6 +94,10 @@ describe Product::VariantsUpdaterService do
             options: {
               "0" => {
                 name: "First Tier",
+                # Update the auto-created default tier in place — it carries a
+                # recurring price, so blindly omitting its id would now trip
+                # the deletion-intent guard.
+                id: product.default_tier.external_id,
                 settings: {
                   apply_price_changes_to_existing_memberships: {
                     enabled: "1",

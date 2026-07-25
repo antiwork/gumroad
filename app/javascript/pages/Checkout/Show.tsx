@@ -52,7 +52,6 @@ import {
 import { Receipt } from "$app/components/Checkout/Receipt";
 import { TemporaryLibrary } from "$app/components/Checkout/TemporaryLibrary";
 import { type OfferedUpsell, UpsellModal } from "$app/components/Checkout/UpsellModal";
-import { useFeatureFlags } from "$app/components/FeatureFlags";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { computeOptionPrice } from "$app/components/Product/ConfigurationSelector";
@@ -169,7 +168,6 @@ const CheckoutIndexPage = () => {
     for (const seller of initialCheckout.sellersToTrack) startTrackingForSeller(seller.id, seller.analytics);
     for (const event of initialCheckout.beginCheckoutEvents) trackProductEvent(event.seller_id, event);
   });
-  const { require_email_typo_acknowledgment } = useFeatureFlags();
   const reducer = createReducer({
     country,
     email,
@@ -187,7 +185,9 @@ const CheckoutIndexPage = () => {
     recaptchaScoreBased: recaptcha_score_based,
     paypalClientId: paypal_client_id,
     gift,
-    requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,
+    // Always on since the require_email_typo_acknowledgment rollout flag was removed
+    // (100% enabled in production since 2025-08; see gumroad-private#1208).
+    requireEmailTypoAcknowledgment: true,
     checkoutPayment: checkout_payment,
   });
   const [state, dispatch] = reducer;
@@ -658,11 +658,21 @@ const CheckoutIndexPage = () => {
       );
       const originalCartItem = originalCartItems[0];
       if (originalCartItem) {
+        // When a replace-type cross-sell offers a bundle, also drop any cart items for products
+        // that are already inside that bundle (e.g. products added by earlier accepted add-on
+        // cross-sells). Those items aren't tagged with this offer's id (their cross_sells were
+        // stripped when they were injected mid-checkout), so the originalCartItems filter alone
+        // would leave the buyer purchasing the bundle plus its own contents.
+        const offeredBundleProductIds = new Set(
+          currentOffer.offered_product.product.bundle_products.map(({ product_id }) => product_id),
+        );
+        const replacedItems = (item: CartItem) =>
+          originalCartItems.includes(item) || offeredBundleProductIds.has(item.product.id);
         return {
           ...cartForm.data.cart,
           items: [
             ...(currentOffer.replace_selected_products
-              ? cartForm.data.cart.items.filter((item) => !originalCartItems.includes(item))
+              ? cartForm.data.cart.items.filter((item) => !replacedItems(item))
               : cartForm.data.cart.items),
             {
               ...currentOffer.offered_product,

@@ -7,11 +7,6 @@ describe AuthPresenter do
   let(:application) { nil }
   let(:presenter) { described_class.new(params:, application:) }
 
-  before do
-    allow(GlobalConfig).to receive(:get).with("RECAPTCHA_LOGIN_SITE_KEY").and_return("recaptcha_login_site_key")
-    allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SIGNUP_SITE_KEY").and_return("recaptcha_signup_site_key")
-  end
-
   describe "#login_props" do
     context "with no params" do
       it "returns correct props" do
@@ -19,7 +14,6 @@ describe AuthPresenter do
           {
             email: nil,
             application_name: nil,
-            show_passkey_login: false,
           }
         )
       end
@@ -33,17 +27,8 @@ describe AuthPresenter do
           {
             email: nil,
             application_name: "Test App",
-            show_passkey_login: false,
           }
         )
-      end
-    end
-
-    context "when the passkeys feature is active" do
-      before { Feature.activate(:passkeys) }
-
-      it "enables passkey login" do
-        expect(presenter.login_props[:show_passkey_login]).to be(true)
       end
     end
   end
@@ -65,23 +50,8 @@ describe AuthPresenter do
               number_of_creators: 0,
               total_made: 0,
             },
-            recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
-            show_passkey_login: false,
           }
         )
-      end
-    end
-
-    context "when disable_signup_recaptcha feature flag is active" do
-      before do
-        allow(Feature).to receive(:active?).with(:disable_signup_recaptcha).and_return(true)
-        allow(Feature).to receive(:active?).with(:passkeys).and_return(false)
-        $redis.del(RedisKey.total_made)
-        $redis.del(RedisKey.number_of_creators)
-      end
-
-      it "returns nil for the reCAPTCHA site key" do
-        expect(presenter.signup_props[:recaptcha_site_key]).to be_nil
       end
     end
 
@@ -110,8 +80,6 @@ describe AuthPresenter do
               number_of_creators: 56_789,
               total_made: 923_456_789,
             },
-            recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
-            show_passkey_login: false,
           }
         )
       end

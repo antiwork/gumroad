@@ -234,6 +234,24 @@ describe PayoutsHelper do
     end
   end
 
+  describe "current_payout_end_date" do
+    it "covers the payout cycle's period rather than a week before the seller's own payout day" do
+      # A US bank account is paid on the Thursday of the payout week, one day before the
+      # cycle's Friday, but the payout still covers everything up to the cycle's period end.
+      # Subtracting a fixed week from the seller's Thursday instead would cut a day off the
+      # period and leave that day's balance out of the amount shown.
+      travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do # Sunday
+        user = create(:user)
+        create(:ach_account, user:)
+        create(:balance, user:, amount_cents: 100_00, date: Date.new(2015, 3, 6))
+
+        expect(user.next_payout_date).to eq Date.new(2015, 3, 12) # Thursday
+        expect(self.current_payout_end_date(user)).to eq Date.new(2015, 3, 6)
+        expect(self.payout_period_data(user)[:payout_cents]).to eq(10_000)
+      end
+    end
+  end
+
   describe "payout period data" do
     it "shows minimum payout volume for user without enough balance" do
       user = create(:user)
@@ -297,7 +315,9 @@ describe PayoutsHelper do
         create(:bank, routing_number: "110000000", name: "Bank of America")
         expect(self.payout_period_data(user)[:is_user_payable]).to eq(true)
         expect(self.payout_period_data(user)[:displayable_payout_period_range]).to eq("Activity up to now")
-        expect(self.payout_period_data(user)[:payout_date_formatted]).to eq("March 13th, 2015")
+        # A US bank account is paid by the Thursday payout run, so the seller's date is the
+        # Thursday of the payout week rather than its Friday.
+        expect(self.payout_period_data(user)[:payout_date_formatted]).to eq("March 12th, 2015")
         expect(self.payout_period_data(user)[:payout_cents]).to eq(10000)
         expect(self.payout_period_data(user)[:bank_number]).to eq("110000000")
         expect(self.payout_period_data(user)[:account_number]).to eq("******1234")
@@ -364,7 +384,9 @@ describe PayoutsHelper do
         create(:bank, routing_number: "110000000", name: "Bank of America")
         expect(self.payout_period_data(user)[:is_user_payable]).to eq(true)
         expect(self.payout_period_data(user)[:displayable_payout_period_range]).to eq("Activity since March 1st, 2015")
-        expect(self.payout_period_data(user)[:payout_date_formatted]).to eq("March 13th, 2015")
+        # A US bank account is paid by the Thursday payout run, so the seller's date is the
+        # Thursday of the payout week rather than its Friday.
+        expect(self.payout_period_data(user)[:payout_date_formatted]).to eq("March 12th, 2015")
         expect(self.payout_period_data(user)[:payout_cents]).to eq(10000)
         expect(self.payout_period_data(user)[:bank_number]).to eq("110000000")
         expect(self.payout_period_data(user)[:account_number]).to eq("******1234")

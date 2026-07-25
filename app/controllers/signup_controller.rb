@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 class SignupController < Devise::RegistrationsController
-  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering, SilentAlreadySignedInRedirect
+  include OauthApplicationConfig, InertiaRendering, SilentAlreadySignedInRedirect
 
   include PageMeta::Base
 
-  before_action :verify_captcha_and_handle_existing_users, only: :create
+  before_action :handle_existing_users, only: :create
   before_action :set_noindex_header, only: :new, if: -> { params[:next]&.start_with?("/oauth/authorize") }
 
   before_action :set_default_page_title
@@ -119,24 +119,13 @@ class SignupController < Devise::RegistrationsController
       )
     end
 
-    def verify_captcha_and_handle_existing_users
+    def handle_existing_users
       if params[:user].present? && !params[:user].is_a?(ActionController::Parameters)
         respond_to do |format|
           format.html { redirect_with_signup_error("Please provide a valid email address.") }
           format.json { render json: { success: false, error_message: "Please provide a valid email address." } }
         end
         return
-      end
-
-      if params[:user] && params[:user][:buyer_signup].blank? && Feature.inactive?(:disable_signup_recaptcha)
-        site_key = GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY")
-        if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key, surface: :signup)
-          respond_to do |format|
-            format.html { redirect_with_signup_error(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE) }
-            format.json { render json: { success: false, error_message: ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE } }
-          end
-          return
-        end
       end
 
       return unless params[:user] && params[:user][:password].present? && params[:user][:email].present?

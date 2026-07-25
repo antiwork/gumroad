@@ -111,8 +111,21 @@ describe RichContents do
             variant_category.link.update!(has_same_rich_content_for_all_variants: true)
           end
 
-          it "returns empty array" do
-            expect(variant.rich_content_json).to eq([])
+          context "when the product has its own rich content" do
+            let!(:product_rich_content) { create(:rich_content, entity: variant_category.link, description:, title: "Product page", position: 0) }
+
+            it "returns empty array because the shared product-level pages are the content" do
+              expect(variant.rich_content_json).to eq([])
+            end
+          end
+
+          context "when the product has no rich content of its own (recoverable hidden variant content)" do
+            it "returns the variant-level pages so the otherwise-hidden content stays reachable" do
+              expect(variant.rich_content_json).to eq([
+                                                        { id: rich_content3.external_id, page_id: rich_content3.external_id, variant_id: variant.external_id, title: "Page 3", description: { type: "doc", content: rich_content3.description }, updated_at: rich_content3.updated_at },
+                                                        { id: rich_content1.external_id, page_id: rich_content1.external_id, variant_id: variant.external_id, title: "Page 1", description: { type: "doc", content: rich_content1.description }, updated_at: rich_content1.updated_at }
+                                                      ])
+            end
           end
         end
       end

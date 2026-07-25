@@ -32,10 +32,6 @@ class PurchaseTest < ActiveSupport::TestCase
   end
 
   teardown do
-    # Flipper state is process-global and not rolled back with the test transaction, so a
-    # feature turned on by the attach_credit_card "enabled" cases would leak into the "not
-    # called" cases. Reset it to match RSpec's per-example Flipper state.
-    Feature.deactivate(:attach_credit_card_to_purchaser)
     # "new flat fee / on Gumroad day" writes RedisKey.gumroad_day_date; Redis isn't rolled
     # back between tests. Clear it so a leaked Gumroad-day date doesn't waive the fee later.
     $redis.del(RedisKey.gumroad_day_date)
@@ -535,7 +531,11 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out doesn't allow purchase once sold out" do
     link = create_product(max_purchase_count: 1)
     create_purchase(link:, seller: link.user)
-    p2 = create_purchase(link:, purchase_state: "in_progress")
+    # The inventory counter cache is synced in the database via update_all
+    # (see Purchase#sync_inventory_counter_caches_on_create), so the in-memory
+    # `link` still holds the pre-purchase column value. Reload to read the
+    # synced count (inventory_counter_cache flag removal, gp#1208).
+    p2 = create_purchase(link: link.reload, purchase_state: "in_progress")
     assert p2.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, p2.error_code
   end
@@ -543,9 +543,10 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out doesn't count failed purchases towards the sold-out count" do
     link = create_product(max_purchase_count: 1)
     create_purchase(link:, purchase_state: "failed")
-    p2 = create_purchase(link:)
+    p2 = create_purchase(link: link.reload)
     assert p2.valid?
-    p3 = create_purchase(link:, purchase_state: "in_progress")
+    # Reload again: p2's counter-cache bump happened via update_all in the DB.
+    p3 = create_purchase(link: link.reload, purchase_state: "in_progress")
     assert p3.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, p3.error_code
   end
@@ -560,9 +561,9 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out doesn't count additional contributions toward max_purchase_count" do
     link = create_product(max_purchase_count: 1)
     create_purchase(link:, seller: link.user)
-    p2 = create_purchase(link:, is_additional_contribution: true)
+    p2 = create_purchase(link: link.reload, is_additional_contribution: true)
     assert p2.valid?
-    p3 = create_purchase(link:)
+    p3 = create_purchase(link: link.reload)
     assert p3.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, p3.error_code
   end
@@ -570,7 +571,8 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out doesn't allow purchase once sold out (product variant naming)" do
     product = create_product(max_purchase_count: 1)
     create_purchase(link: product)
-    purchase_2 = create_purchase(link: product, purchase_state: "in_progress")
+    # Reload: the counter cache was bumped in the DB via update_all.
+    purchase_2 = create_purchase(link: product.reload, purchase_state: "in_progress")
     assert purchase_2.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, purchase_2.error_code
   end
@@ -594,7 +596,8 @@ class PurchaseTest < ActiveSupport::TestCase
   test "sold_out subscriptions does count original_subscription_purchase towards max_purchase_count" do
     product = create_membership_product(subscription_duration: :monthly, max_purchase_count: 1)
     create_purchase(link: product, subscription: create_subscription(link: product), is_original_subscription_purchase: true)
-    purchase = create_purchase(link: product, subscription: create_subscription, is_original_subscription_purchase: true)
+    # Reload: the counter cache was bumped in the DB via update_all.
+    purchase = create_purchase(link: product.reload, subscription: create_subscription, is_original_subscription_purchase: true)
     assert purchase.errors[:base].present?
     assert_equal PurchaseErrorCode::PRODUCT_SOLD_OUT, purchase.error_code
   end
@@ -635,7 +638,9 @@ class PurchaseTest < ActiveSupport::TestCase
     variant1 = create_variant(variant_category:, max_purchase_count: 2)
     variant2 = create_variant(variant_category:)
     create_purchase(link: product, variant_attributes: [variant1], quantity: 2)
-    purchase = create_purchase(link: product, variant_attributes: [variant1, variant2])
+    # Reload the sold-out variant: its counter cache was bumped in the DB via
+    # update_all, so the in-memory instance is stale (gp#1208).
+    purchase = create_purchase(link: product, variant_attributes: [variant1.reload, variant2])
     assert_includes purchase.errors.full_messages, "Sold out, please go back and pick another option."
   end
 
@@ -661,7 +666,9 @@ class PurchaseTest < ActiveSupport::TestCase
     variant3 = create_variant(variant_category:, max_purchase_count: 1)
     create_purchase(link: product, variant_attributes: [variant3])
 
-    purchase = build_purchase(link: product, variant_attributes: [variant1, variant2, variant3])
+    # Reload the sold-out variant: its counter cache was bumped in the DB via
+    # update_all, so the in-memory instance is stale (gp#1208).
+    purchase = build_purchase(link: product, variant_attributes: [variant1, variant2, variant3.reload])
     purchase.original_variant_attributes = [variant1, variant2]
     purchase.save
     assert_includes purchase.errors.full_messages, "Sold out, please go back and pick another option."
@@ -4398,107 +4405,6 @@ class PurchaseTest < ActiveSupport::TestCase
     create_purchase(link: product_2, email: buyer_email, seller:)
 
     assert AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).where(email: buyer_email).present?
-  end
-
-  # ---- #attach_credit_card_to_purchaser ----
-
-  test "#attach_credit_card_to_purchaser the method is not called when the purchaser_id is not updated" do
-    user = create_user
-    subscription = create_subscription(user:)
-    purchase = create_purchase(purchaser: user, subscription:, is_original_subscription_purchase: true)
-
-    purchase.expects(:attach_credit_card_to_purchaser).never
-
-    purchase.email = "buyer-#{unique_suffix}@example.com"
-    purchase.save!
-  end
-
-  test "#attach_credit_card_to_purchaser the method is not called when the purchaser_id is set to nil" do
-    user = create_user
-    subscription = create_subscription(user:)
-    purchase = create_purchase(purchaser: user, subscription:, is_original_subscription_purchase: true)
-
-    purchase.expects(:attach_credit_card_to_purchaser).never
-
-    purchase.purchaser_id = nil
-    purchase.save!
-  end
-
-  test "#attach_credit_card_to_purchaser the method is not called for non-subscription purchases" do
-    purchase = create_purchase(purchaser: create_user)
-
-    purchase.expects(:attach_credit_card_to_purchaser).never
-
-    purchase.purchaser_id = create_user.id
-    purchase.save!
-  end
-
-  test "#attach_credit_card_to_purchaser when changing the purchaser id when feature is disabled does not call the method" do
-    user = create_user
-    subscription = create_subscription(user:)
-    purchase = create_purchase(purchaser: user, subscription:, is_original_subscription_purchase: true)
-
-    purchase.expects(:attach_credit_card_to_purchaser).never
-
-    purchase.purchaser_id = create_user.id
-    purchase.save!
-  end
-
-  test "#attach_credit_card_to_purchaser when changing the purchaser id when feature is enabled calls the method" do
-    Feature.activate(:attach_credit_card_to_purchaser)
-    user = create_user
-    subscription = create_subscription(user:)
-    purchase = create_purchase(purchaser: user, subscription:, is_original_subscription_purchase: true)
-
-    assert_receives_and_calls_original(purchase, :attach_credit_card_to_purchaser) do
-      purchase.purchaser_id = create_user.id
-      purchase.save!
-    end
-  end
-
-  test "#attach_credit_card_to_purchaser when changing the purchaser id when feature is enabled attaches the credit card of the latest successful purchase to the purchaser" do
-    VCR.use_cassette("Purchase/_attach_credit_card_to_purchaser/when_changing_the_purchaser_id/when_attach_credit_card_to_purchaser_feature_is_enabled/attaches_the_credit_card_of_the_latest_successful_purchase_to_the_purchaser") do
-      Feature.activate(:attach_credit_card_to_purchaser)
-      user = create_user
-      subscription = create_subscription(user:)
-
-      latest_eligible_cc = create_credit_card
-
-      purchase = create_purchase(subscription:, credit_card: create_credit_card,
-                                 is_original_subscription_purchase: true, created_at: 30.minutes.ago)
-      create_purchase(purchaser: user, credit_card: create_credit_card, created_at: 25.minutes.ago)
-      create_purchase(purchaser: user, credit_card: latest_eligible_cc, created_at: 20.minutes.ago)
-      create_purchase(purchaser: user, created_at: 15.minutes.ago)
-      create_purchase(purchaser: user, purchase_state: "failed", credit_card: create_credit_card, created_at: 10.minutes.ago)
-      create_purchase(credit_card: create_credit_card, created_at: 5.minutes.ago)
-
-      assert_nil user.reload.credit_card
-
-      assert_receives_and_calls_original(purchase, :attach_credit_card_to_purchaser) do
-        purchase.purchaser = user
-        purchase.save!
-      end
-
-      assert_equal latest_eligible_cc, user.reload.credit_card
-    end
-  end
-
-  test "#attach_credit_card_to_purchaser when changing the purchaser id when feature is enabled does not attempt to attach a credit card to the purchaser if one already exists" do
-    VCR.use_cassette("Purchase/_attach_credit_card_to_purchaser/when_changing_the_purchaser_id/when_attach_credit_card_to_purchaser_feature_is_enabled/does_not_attempt_to_attach_a_credit_card_to_the_purchaser_if_one_already_exists") do
-      Feature.activate(:attach_credit_card_to_purchaser)
-      subscription = create_subscription(user: create_user)
-
-      user = create_user(credit_card: create_credit_card)
-      purchase = create_purchase(subscription:, credit_card: create_credit_card,
-                                 is_original_subscription_purchase: true)
-
-      before_cc = user.reload.credit_card
-      assert_receives_and_calls_original(purchase, :attach_credit_card_to_purchaser) do
-        purchase.purchaser = user
-        purchase.save!
-      end
-      assert_equal before_cc, user.reload.credit_card
-    end
   end
 
   # ---- #update_rental_expired ----

@@ -27,10 +27,14 @@ module SslCertificates
       attr_reader :domain_verification_service
 
       def order_certificates
-        domains_pointed_to_gumroad = domain_verification_service.domains_pointed_to_gumroad
+        # Only order for names whose DNS actually resolves to Gumroad. A name
+        # that merely carries a stale CNAME record but resolves elsewhere would
+        # fail ACME validation every time, and repeated failures get Let's
+        # Encrypt to pause the whole account (issue #6184).
+        resolving_domains = domain_verification_service.domains_resolving_to_gumroad
 
         all_certificates_generated = true
-        domains_pointed_to_gumroad.each do |domain|
+        resolving_domains.each do |domain|
           # `&=` will set all_certificates_generated to false if generate_certificate()
           # returns false for any of the domains.
           all_certificates_generated &= generate_certificate(domain)
@@ -38,7 +42,7 @@ module SslCertificates
 
         if all_certificates_generated
           custom_domain.set_ssl_certificate_issued_at!
-          domains_pointed_to_gumroad.each { |domain| log_message(domain, "Issued SSL certificate.") }
+          resolving_domains.each { |domain| log_message(domain, "Issued SSL certificate.") }
         else
           # Reset ssl_certificate_issued_at
           custom_domain.reset_ssl_certificate_issued_at!
@@ -70,10 +74,10 @@ module SslCertificates
         return false, "Invalid domain" unless custom_domain.valid?
 
         Rails.cache.fetch(domain_check_cache_key, expires_in: invalid_domain_cache_expires_in) do
-          if domain_verification_service.points_to_gumroad?
+          if domain_verification_service.domains_resolving_to_gumroad.any?
             return true
           else
-            return false, "No domains pointed to Gumroad"
+            return false, "No domains resolve to Gumroad"
           end
         end
       end

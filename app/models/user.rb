@@ -175,7 +175,6 @@ class User < ApplicationRecord
 
   attr_json_data_accessor :background_opacity_percent, default: 100
   attr_json_data_accessor :payout_date_of_last_payment_failure_email
-  attr_json_data_accessor :last_ping_failure_notification_at
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
@@ -346,7 +345,6 @@ class User < ApplicationRecord
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :remove_follows_for_suspended_account!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
-    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :send_suspension_email
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation],
                      :do => :add_to_gmail_abuse_filter
 
@@ -1172,7 +1170,7 @@ class User < ApplicationRecord
     ).to_a
 
     (seller_communities + buyer_communities).map do
-      _1.resource.alive? && Feature.active?(:communities, _1.seller) && _1.resource.community_chat_enabled? ? _1.id : nil
+      _1.resource.alive? && _1.resource.community_chat_enabled? ? _1.id : nil
     end.compact.uniq
   end
 
@@ -1199,6 +1197,37 @@ class User < ApplicationRecord
     return false if sales_cents_total < MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION
 
     has_completed_payouts?
+  end
+
+  # Devise routes every confirmation *resend* through this method — the public
+  # "resend confirmation" form, the Settings resend button, and the library
+  # gate all land here. A prior transient delivery failure may have left the
+  # target address on SendGrid's bounce/block suppression list, which silently
+  # drops every later send including this one, so we clear those suppressions
+  # before re-sending (see ResendConfirmationEmailJob for the full rationale).
+  #
+  # Initial-signup sends go through send_confirmation_instructions instead, so
+  # this override adds no suppression lookups to the signup path. We keep
+  # Devise's pending_any_confirmation guard so an already-confirmed address
+  # still gets the usual "already confirmed" error rather than a pointless send.
+  #
+  # We stamp confirmation_sent_at here, at enqueue time, because the callers that
+  # throttle resends (e.g. the library gate) read it synchronously — if it only
+  # updated when the low-priority job actually sends, every request in between
+  # would see a stale timestamp and enqueue another duplicate resend.
+  #
+  # The one-minute floor bounds double-clicks and the public "resend confirmation"
+  # form (which has no rack_attack throttle): each enqueue costs SendGrid
+  # suppression-API calls in the job, so an unbounded per-user enqueue rate would
+  # hand an attacker who knows an unconfirmed address a free API-hammering lever.
+  RESEND_CONFIRMATION_ENQUEUE_FLOOR = 1.minute
+
+  def resend_confirmation_instructions
+    pending_any_confirmation do
+      return if confirmation_sent_at.present? && confirmation_sent_at > RESEND_CONFIRMATION_ENQUEUE_FLOOR.ago
+      update_column(:confirmation_sent_at, Time.current)
+      ResendConfirmationEmailJob.perform_async(id)
+    end
   end
 
   protected

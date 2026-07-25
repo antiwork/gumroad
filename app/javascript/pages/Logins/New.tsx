@@ -29,7 +29,6 @@ type PageProps = {
   email: string | null;
   application_name: string | null;
   authenticity_token: string;
-  show_passkey_login: boolean;
   passkey_login_options: PasskeyAuthenticationOptions | null;
   is_gumroad_mobile_app: boolean;
 };
@@ -48,7 +47,6 @@ function LoginPage() {
     email: initialEmail,
     application_name,
     authenticity_token,
-    show_passkey_login,
     passkey_login_options,
     is_gumroad_mobile_app,
   } = usePage<PageProps>().props;
@@ -61,7 +59,7 @@ function LoginPage() {
   const [passkeyError, setPasskeyError] = React.useState<string | null>(null);
   const [passkeySupported, setPasskeySupported] = React.useState(false);
   React.useEffect(() => setPasskeySupported(isPasskeySupported()), []);
-  const passkeyLoginEnabled = show_passkey_login && !is_gumroad_mobile_app && passkeySupported;
+  const passkeyLoginEnabled = !is_gumroad_mobile_app && passkeySupported;
   const conditionalRequest = React.useRef<AbortController | null>(null);
 
   const form = useForm<FormData>({

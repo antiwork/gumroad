@@ -1124,6 +1124,84 @@ describe PaypalChargeProcessor, :vcr do
                           purchase:)
         end
 
+        context "when the order lists the same sku twice with a zero-value line (free sibling purchase of the same product)" do
+          let(:duplicate_sku_order) do
+            OpenStruct.new(
+              purchase_units: [OpenStruct.new(
+                items: [
+                  OpenStruct.new(unit_amount: OpenStruct.new(value: "0.00", currency_code: "GBP"), quantity: 1, sku: "zmuYY"),
+                  OpenStruct.new(unit_amount: OpenStruct.new(value: "10.00", currency_code: "GBP"), quantity: 1, sku: "zmuYY"),
+                ],
+                amount: OpenStruct.new(currency_code: "GBP", value: "10.00", breakdown: nil),
+                payments: OpenStruct.new(
+                  captures: [OpenStruct.new(id: capture_id, amount: OpenStruct.new(value: "10.00", currency_code: "GBP"))],
+                  refunds: []
+                )
+              )]
+            )
+          end
+
+          before do
+            allow_any_instance_of(PaypalRestApi).to receive(:fetch_order)
+              .with(order_id: paypal_order_id)
+              .and_return(OpenStruct.new(result: duplicate_sku_order))
+          end
+
+          it "ignores the zero-value line and refunds the paid item's amount" do
+            expect_any_instance_of(PaypalRestApi).to receive(:refund)
+              .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.00)
+              .and_return(OpenStruct.new(status_code: 201,
+                                         result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+            expect do
+              subject.refund!(capture_id,
+                              amount_cents: 1427,
+                              merchant_account: gbp_merchant_account,
+                              paypal_order_purchase_unit_refund: true,
+                              purchase:)
+            end.not_to raise_error
+          end
+
+          it "falls back to format_money_floored when the sku matches multiple paid lines" do
+            duplicate_sku_order.purchase_units.first.items[0] =
+              OpenStruct.new(unit_amount: OpenStruct.new(value: "5.00", currency_code: "GBP"), quantity: 1, sku: "zmuYY")
+            allow(PaypalChargeProcessor).to receive(:get_rate).with("gbp").and_return("0.7426")
+
+            expect_any_instance_of(PaypalRestApi).to receive(:refund)
+              .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.59)
+              .and_return(OpenStruct.new(status_code: 201,
+                                         result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+            subject.refund!(capture_id,
+                            amount_cents: 1427,
+                            merchant_account: gbp_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase:)
+          end
+        end
+
+        it "does not count FAILED or CANCELLED refunds against the capture's remaining balance" do
+          fake_order.purchase_units.first.payments.refunds.clear
+          # 30.00 is large enough that counting it would shrink the remaining balance below
+          # the item's 10.60 value and change the refund amount — proving it was excluded.
+          fake_order.purchase_units.first.payments.refunds <<
+            OpenStruct.new(id: "FAILED_REFUND", status: "FAILED", amount: OpenStruct.new(value: "30.00", currency_code: "GBP")) <<
+            OpenStruct.new(id: "CANCELLED_REFUND", status: "CANCELLED", amount: OpenStruct.new(value: "4.23", currency_code: "GBP"))
+
+          expect_any_instance_of(PaypalRestApi).to receive(:refund)
+            .with(capture_id:, merchant_account: gbp_merchant_account, amount: 10.60)
+            .and_return(OpenStruct.new(status_code: 201,
+                                       result: OpenStruct.new(id: "REFUND_ID", status: "COMPLETED")))
+
+          expect do
+            subject.refund!(capture_id,
+                            amount_cents: 1427,
+                            merchant_account: gbp_merchant_account,
+                            paypal_order_purchase_unit_refund: true,
+                            purchase:)
+          end.not_to raise_error
+        end
+
         it "falls back to format_money_floored when fetch_order returns no result (HTTP error)" do
           allow_any_instance_of(PaypalRestApi).to receive(:fetch_order)
             .with(order_id: paypal_order_id)

@@ -7,7 +7,6 @@ describe("Passkey Login Scenario", type: :system, js: true) do
 
   before do
     use_webauthn_driver
-    Feature.activate(:passkeys)
   end
 
   it "registers a passkey, then signs in with it and bypasses the 2FA challenge" do

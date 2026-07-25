@@ -36,6 +36,7 @@ class RedisKey
     def blast_recipients_slice_size = "blast:recipients_slice_size"
     def blast_sent_emails(blast_id) = "blast:#{blast_id}:sent_emails"
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
+    def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
     def audience_member_load_max_execution_time_seconds = "audience_member_load:max_execution_time_seconds"
     def impersonated_user(admin_user_id) = "impersonated_user_by_admin_#{admin_user_id}"
     def gumroad_day_date = "gumroad_day_date"
@@ -63,6 +64,10 @@ class RedisKey
     # deploy pipeline can ask "is a payout batch in flight right now?" instead
     # of freezing deploys on a fixed clock window. See HealthcheckController#payouts.
     def payout_batch_in_flight = "payouts:batch_in_flight"
+    # Same idea for the non-payout jobs a deploy must not interrupt (long report
+    # builds and the like, which restart from zero when their worker is recycled).
+    # See LongRunningJobTracking and HealthcheckController#long_running_jobs.
+    def long_running_jobs_in_flight = "deploy:long_running_jobs_in_flight"
     def stripe_balance_topup_needed = "stripe:balance_topup_needed"
     def min_successful_purchases_in_last_10_minutes = "healthcheck:min_successful_purchases_in_last_10_minutes"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"

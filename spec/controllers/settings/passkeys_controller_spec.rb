@@ -14,7 +14,6 @@ describe Settings::PasskeysController, type: :controller do
 
   before do
     sign_in user
-    Feature.activate_user(:passkeys, user)
   end
 
   it_behaves_like "authorize called for controller", Settings::Passkeys::UserPolicy do
@@ -65,14 +64,6 @@ describe Settings::PasskeysController, type: :controller do
         "success" => false,
         "error_message" => WebauthnCredential::MAX_PER_USER_ERROR_MESSAGE
       )
-    end
-
-    context "when the feature flag is inactive" do
-      before { Feature.deactivate_user(:passkeys, user) }
-
-      it "raises a not found error" do
-        expect { post :registration_options, as: :json }.to raise_error(ActionController::RoutingError, "Not Found")
-      end
     end
 
     context "when signed in as an admin for the seller" do

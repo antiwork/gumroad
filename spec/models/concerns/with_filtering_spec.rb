@@ -541,19 +541,29 @@ describe WithFiltering do
       end
 
       describe "bought variants only" do
+        # The stored bought_variants must be real variant external ids: saving an
+        # installment validates the seller's sending limit with an Elasticsearch
+        # audience count (unconditional since the audience_count_from_elasticsearch
+        # flag removal, gp#1208 / #6232), and made-up ids decrypt to nil, which
+        # produces an invalid ES terms query. The external ids passed to
+        # seller_post_passes_filters are only string-matched in memory, so
+        # arbitrary values are still fine there.
+        let(:variant_a) { create(:variant, variant_category: create(:variant_category, link: create(:product, user: @creator))) }
+        let(:variant_b) { create(:variant, variant_category: create(:variant_category, link: create(:product, user: @creator))) }
+
         it "returns false when passed filters are missing" do
-          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: ["a"] })
+          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: [variant_a.external_id] })
           expect(post.seller_post_passes_filters).to eq(false)
         end
 
-        it "returns false when product permalinks don't match the bought_products filter" do
-          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: %w[a b] })
+        it "returns false when variant external ids don't match the bought_variants filter" do
+          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: [variant_a.external_id, variant_b.external_id] })
           expect(post.seller_post_passes_filters(variant_external_ids: %w[c d e])).to eq(false)
         end
 
-        it "returns true when one product permalink matches the bought_products filter" do
-          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: %w[a b] })
-          expect(post.seller_post_passes_filters(variant_external_ids: %w[b c d])).to eq(true)
+        it "returns true when one variant external id matches the bought_variants filter" do
+          post = create(:seller_installment, seller: @creator, json_data: { bought_variants: [variant_a.external_id, variant_b.external_id] })
+          expect(post.seller_post_passes_filters(variant_external_ids: [variant_b.external_id, "c", "d"])).to eq(true)
         end
       end
     end
@@ -632,6 +642,66 @@ describe WithFiltering do
           seller_sales: other_seller.sales,
           seller_post_filter_cache: shared_cache
         )).to eq(true)
+      end
+    end
+
+    describe "with a seller post probe batch" do
+      before do
+        @product = create(:product, user: @creator)
+        @purchase = create(:free_purchase, link: @product, seller: @creator)
+      end
+
+      it "answers the probe from the batch without issuing the per-seller SQL probe" do
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        batch = Purchase::SellerPostProbeBatch.new([@purchase])
+        expect(batch).to receive(:matched?).with(hash_including(seller_id: @creator.id, email: @purchase.email)).and_call_original
+
+        result = nil
+        queries = []
+        callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          result = post.seller_post_passes_filters(
+            email: @purchase.email,
+            permalink_to_link_id: { @product.unique_permalink => @product.id },
+            seller_post_probe_batch: batch
+          )
+        end
+
+        expect(result).to eq(false)
+        # The batch prefetch queries purchases via `email IN (...)`; the
+        # per-seller probe it replaces is an existence check with `LIMIT 1`
+        # and a `seller_id` equality — none of those should run.
+        expect(queries.grep(/SELECT\s+1.*purchases.*LIMIT 1/m)).to be_empty
+      end
+
+      it "falls back to the SQL probe when the batch does not cover the probe email" do
+        other_buyer = create(:free_purchase, link: @product, seller: @creator)
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        batch = Purchase::SellerPostProbeBatch.new([@purchase])
+
+        expect(post.seller_post_passes_filters(
+          email: other_buyer.email,
+          permalink_to_link_id: { @product.unique_permalink => @product.id },
+          seller_post_probe_batch: batch
+        )).to eq(false)
+      end
+
+      it "falls back to the SQL probe when the batch covers the email but not the post's seller" do
+        # The batch was built from another seller's purchases, so it never
+        # prefetched @creator's rows. Answering from the (incomplete) batch
+        # would wrongly report "hasn't bought" and show the post; the SQL
+        # probe must run instead and hide it.
+        other_seller = create(:user)
+        other_purchase = create(:free_purchase, link: create(:product, user: other_seller), seller: other_seller, email: @purchase.email)
+        post = create(:seller_installment, seller: @creator, json_data: { not_bought_products: [@product.unique_permalink] })
+        batch = Purchase::SellerPostProbeBatch.new([other_purchase])
+        expect(batch).not_to receive(:matched?)
+
+        expect(post.seller_post_passes_filters(
+          email: @purchase.email,
+          permalink_to_link_id: { @product.unique_permalink => @product.id },
+          seller_post_probe_batch: batch
+        )).to eq(false)
       end
     end
   end

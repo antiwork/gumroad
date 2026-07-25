@@ -24,7 +24,12 @@ module RichContents
 
   def rich_content_json
     if is_a?(BaseVariant)
-      return [] if link.has_same_rich_content_for_all_variants?
+      # Variant pages are normally hidden while the product shares one set of
+      # pages across all versions — except in the recoverable inconsistent
+      # state where those hidden pages are the product's only real content
+      # (see Link#recoverable_hidden_variant_rich_content?). Serving them is
+      # what lets the seller (and buyers) reach the content again.
+      return [] if link.has_same_rich_content_for_all_variants? && !link.recoverable_hidden_variant_rich_content?
       variant_id = self.external_id
     end
 

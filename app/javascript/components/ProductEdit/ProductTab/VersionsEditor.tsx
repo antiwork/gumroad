@@ -27,12 +27,23 @@ export const VersionsEditor = ({
   versions: Version[];
   onChange: (versions: Version[]) => void;
 }) => {
+  const { updateProduct } = useProductEditContext();
   const updateVersion = (id: string, update: Partial<Version>) => {
     onChange(versions.map((version) => (version.id === id ? { ...version, ...update } : version)));
   };
 
   const [deletionModalVersionId, setDeletionModalVersionId] = React.useState<string | null>(null);
   const deletionModalVersion = versions.find(({ id }) => id === deletionModalVersionId);
+
+  // Records that the seller explicitly confirmed removing this version, so the
+  // server-side wipe guard allows deleting it even if it still has content.
+  const confirmRemoval = (version: Version) => {
+    if (!version.newlyAdded)
+      updateProduct((product) => {
+        product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), version.id];
+      });
+    onChange(versions.filter(({ id }) => id !== version.id));
+  };
 
   const addButton = (
     <Button
@@ -78,10 +89,7 @@ export const VersionsEditor = ({
           footer={
             <>
               <Button onClick={() => setDeletionModalVersionId(null)}>No, cancel</Button>
-              <Button
-                color="accent"
-                onClick={() => onChange(versions.filter(({ id }) => id !== deletionModalVersion.id))}
-              >
+              <Button color="accent" onClick={() => confirmRemoval(deletionModalVersion)}>
                 Yes, remove
               </Button>
             </>

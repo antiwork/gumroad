@@ -112,6 +112,63 @@ describe Tag do
     end.to change { Tag.count }.by(4)
   end
 
+  describe "taggings_count counter cache" do
+    it "increments and decrements as products are tagged and untagged" do
+      @product.tag!("Capybara")
+      tag = Tag.find_by(name: "capybara")
+      expect(tag.taggings_count).to eq(1)
+
+      second_product = create(:product)
+      second_product.tag!("Capybara")
+      expect(tag.reload.taggings_count).to eq(2)
+
+      second_product.untag!("Capybara")
+      expect(tag.reload.taggings_count).to eq(1)
+    end
+
+    # NOTE: there is deliberately no hard-`destroy!` counterpart to the soft-delete
+    # spec below. Hard-destroying a tagged product already raises RecordNotFound from
+    # ProductTagging's `after_commit :update_product_search_index!` (the callback
+    # reloads the now-deleted Link) — a pre-existing condition on main, unrelated to
+    # this counter cache. Products are soft-deleted in production, so that path is not
+    # exercised; the tagging destroy callbacks that keep the counter honest are
+    # covered by the untag! spec above.
+    it "leaves the counter alone when a product is only soft-deleted" do
+      second_product = create(:product)
+      @product.tag!("Capybara")
+      second_product.tag!("Capybara")
+      tag = Tag.find_by(name: "capybara")
+
+      # This is the property that keeps the counter equivalent to the query it
+      # replaced: the old LEFT JOIN + COUNT never filtered on links.deleted_at, so
+      # taggings belonging to soft-deleted products counted towards a tag's
+      # popularity. Soft delete leaves product_taggings rows in place, so the counter
+      # agrees. Anything that later "fixes" soft delete to purge taggings would
+      # change autocomplete ranking.
+      expect { second_product.mark_deleted! }.not_to change { tag.reload.taggings_count }
+      expect(tag.taggings_count).to eq(2)
+    end
+  end
+
+  describe ".by_text" do
+    it "ranks prefix matches by usage without joining product_taggings" do
+      3.times { create(:product).tag!("Lemur") }
+      create(:product).tag!("Leopard")
+      create(:tag, name: "lemming")
+      create(:tag, name: "walrus")
+
+      results = Tag.by_text(text: "le")
+      expect(results.map(&:name)).to eq(%w[lemur leopard lemming])
+      expect(results.map { |tag| tag["uses"] }).to eq([3, 1, 0])
+      expect(Tag.by_text(text: "le").to_sql).not_to include("product_taggings")
+    end
+
+    it "respects the limit" do
+      %w[quail quokka quoll].each { |name| create(:tag, name:) }
+      expect(Tag.by_text(text: "q", limit: 2).length).to eq(2)
+    end
+  end
+
   it "Flags" do
     tag = create(:tag)
     expect { tag.flag! }.to change { tag.flagged? }.from(false).to(true)

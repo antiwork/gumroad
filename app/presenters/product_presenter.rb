@@ -162,6 +162,11 @@ class ProductPresenter
             max_purchase_count: variant.max_purchase_count,
             integrations: Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? },
             rich_content: variant.rich_content_json,
+            # Whether the variant has files attached directly (legacy products
+            # predating embedded rich-content files). The editor's save-time
+            # deletion summary uses this to treat file-only variants as
+            # content-bearing, matching the server-side deletion guard.
+            has_files: variant.has_files?,
             sales_count_for_inventory: variant.max_purchase_count? ? variant.sales_count_for_inventory : 0,
             active_subscribers_count: variant.active_subscribers_count,
           }
@@ -212,7 +217,12 @@ class ProductPresenter
         collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
         rich_content: product.rich_content_json,
         files: files_data(product),
-        has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants?,
+        # Served as false in the recoverable hidden-content state (flag on,
+        # product level blank, variant pages real — the July 21, 2026 incident
+        # shape) so the editor loads the real per-version pages instead of the
+        # blank product level; the next save then persists the flag as off,
+        # resolving the inconsistency for good.
+        has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants? && !@product.recoverable_hidden_variant_rich_content?,
         is_multiseat_license:,
         call_limitation_info: product.native_type == Link::NATIVE_TYPE_CALL && product.call_limitation_info.present? ?
           {
@@ -235,7 +245,7 @@ class ProductPresenter
           discount: default_offer_code.configured_discount_for_display,
         } : nil,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
-        community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
+        community_chat_enabled: product.community_chat_enabled?,
       },
       id: product.external_id,
       unique_permalink: product.unique_permalink,
@@ -329,7 +339,10 @@ class ProductPresenter
     end
 
     def refer_to_product_level_rich_content?(has_variants:)
-      product.is_physical? || !has_variants || product.has_same_rich_content_for_all_variants?
+      # The shared-content flag doesn't count when the product level is blank
+      # and the real pages live on the variants (the recoverable hidden-content
+      # state) — the variant pages are the ones worth showing.
+      product.is_physical? || !has_variants || (product.has_same_rich_content_for_all_variants? && !product.recoverable_hidden_variant_rich_content?)
     end
 
     def custom_domain_verification_status

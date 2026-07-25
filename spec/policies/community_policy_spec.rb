@@ -26,11 +26,6 @@ describe CommunityPolicy do
 
   permissions :index? do
     context "when user has accessible communities" do
-      before do
-        Feature.activate_user(:communities, seller)
-        Feature.activate_user(:communities, other_product.user)
-      end
-
       it "grants access to owner" do
         seller_context = SellerContext.new(user: seller, seller:)
         expect(subject).to permit(seller_context, Community)
@@ -64,7 +59,6 @@ describe CommunityPolicy do
       it "denies access to seller who has at least one product but no active communities" do
         another_seller = create(:user)
         create(:product, user: another_seller)
-        Feature.activate_user(:communities, another_seller)
         seller_context = SellerContext.new(user: another_seller, seller:)
 
         expect(subject).not_to permit(seller_context, Community)
@@ -73,8 +67,8 @@ describe CommunityPolicy do
 
     context "when user has no accessible communities" do
       before do
-        Feature.deactivate_user(:communities, seller)
-        Feature.deactivate_user(:communities, other_product.user)
+        product.update!(community_chat_enabled: false)
+        other_product.update!(community_chat_enabled: false)
       end
 
       it "denies access to owner" do
@@ -112,11 +106,6 @@ describe CommunityPolicy do
 
   permissions :show? do
     context "when user has access to the community" do
-      before do
-        Feature.activate_user(:communities, seller)
-        Feature.activate_user(:communities, other_product.user)
-      end
-
       context "when user is a seller" do
         it "grants access to own community" do
           seller_context = SellerContext.new(user: seller, seller:)
@@ -157,8 +146,8 @@ describe CommunityPolicy do
 
     context "when user has no access to the community" do
       before do
-        Feature.deactivate_user(:communities, seller)
-        Feature.deactivate_user(:communities, other_product.user)
+        product.update!(community_chat_enabled: false)
+        other_product.update!(community_chat_enabled: false)
       end
 
       it "denies access to owner" do
@@ -180,7 +169,6 @@ describe CommunityPolicy do
 
     context "when community's resource is deleted" do
       before do
-        Feature.activate_user(:communities, seller)
         product.mark_deleted!
       end
 
@@ -197,7 +185,6 @@ describe CommunityPolicy do
 
     context "when community chat is disabled" do
       before do
-        Feature.activate_user(:communities, seller)
         product.update!(community_chat_enabled: false)
       end
 

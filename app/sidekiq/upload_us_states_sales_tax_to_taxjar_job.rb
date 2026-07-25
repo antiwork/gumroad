@@ -26,6 +26,7 @@
 class UploadUsStatesSalesTaxToTaxjarJob
   include Sidekiq::Job
   include FinanceReportCompletionTracking
+  include LongRunningJobTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
   # Resolved default for a no-arg scheduled run (mirrors #perform's default). Used to key

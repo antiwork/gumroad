@@ -391,13 +391,6 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your account has been suspended for being high risk"
   end
 
-  def account_suspended(user_id)
-    @seller = User.find(user_id)
-    @subject = "Your Gumroad account has been suspended"
-    @scheduled_payout = @seller.scheduled_payouts.pending.last
-    @payout_amount = formatted_dollar_amount(@scheduled_payout.payout_amount_cents) if @scheduled_payout
-  end
-
   def user_sales_data(user_id, sales_csv_tempfile)
     @seller = User.find(user_id)
     @subject = "Here's your customer data!"
@@ -573,13 +566,6 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Important: Update Your Payout Method on Gumroad"
   end
 
-  def ping_endpoint_failure(user_id, ping_url, response_code)
-    @seller = User.find(user_id)
-    @ping_url = redact_ping_url(ping_url)
-    @response_code = response_code
-    @subject = "Webhook ping endpoint delivery failed"
-  end
-
   private
     def do_not_send
       @do_not_send = true
@@ -632,37 +618,5 @@ class ContactingCreatorMailer < ApplicationMailer
       if Feature.active?(:send_sales_notifications_to_consumer_app)
         PushNotificationWorker.perform_async(@seller.id, Device::APP_TYPES[:consumer], @subject, nil, {}, Device::NOTIFICATION_SOUNDS[:sale])
       end
-    end
-
-    def redact_ping_url(url)
-      uri = URI.parse(url)
-
-      # --- build the host portion (scheme + host + optional port) ----------
-      host_part  = "#{uri.scheme}://#{uri.host}"
-      host_part += ":#{uri.port}" if uri.port && uri.port != uri.default_port
-
-      # --- collect the part we want to redact ------------------------------
-      path = uri.path.to_s           # always starts with "/" (may be "")
-      query_frag = +""  # Use unary plus to create unfrozen string
-      query_frag << "?#{uri.query}"   if uri.query
-      query_frag << "##{uri.fragment}" if uri.fragment
-
-      body = path.delete_prefix("/") + query_frag  # strip leading "/" before counting
-      return host_part + "/" if body.empty?     # nothing to redact
-
-      n = body.length
-
-      redacted =
-        if n <= 4                            # 1-4 → replace completely with stars
-          "*" * n
-        elsif n <= 8                         # 5-8 → exactly 4 stars + tail (n-4)
-          "****" + body[-(n - 4)..]
-        else                                 # ≥9 → (n-4) stars + last 4 chars
-          "*" * (n - 4) + body[-4..]
-        end
-
-      "#{host_part}/#{redacted}"
-    rescue URI::InvalidURIError
-      url
     end
 end

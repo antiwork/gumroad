@@ -53,7 +53,13 @@ export type PublishedInstallment = SavedInstallment & {
   open_rate: number | null;
   view_count: number | null;
   published_at: string;
-  non_opener_resends: { requested_at: string; delivery_count: number; completed: boolean }[];
+  non_opener_resends: {
+    requested_at: string;
+    delivery_count: number;
+    completed: boolean;
+    open_count: number | null;
+    open_rate: number | null;
+  }[];
 };
 
 export type ScheduledInstallment = SavedInstallment & {
@@ -152,7 +158,9 @@ export async function getNonOpenerCount(externalId: string) {
   });
 
   if (!response.ok) throw new ResponseError();
-  return typia.assert<{ count: number; recently_resent: boolean; audience_filtered_out: boolean }>(
+  // `count` is null when the audience is too large to count within the request; the
+  // resend itself still works (recipients are resolved in a background job).
+  return typia.assert<{ count: number | null; recently_resent: boolean; audience_filtered_out: boolean }>(
     await response.json(),
   );
 }
@@ -166,7 +174,7 @@ export async function resendToNonOpeners(externalId: string) {
 
   const json: unknown = await response.json();
   if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
-  return typia.assert<{ count: number }>(json);
+  return typia.assert<{ success: boolean }>(json);
 }
 
 export async function previewInstallment(externalId: string) {

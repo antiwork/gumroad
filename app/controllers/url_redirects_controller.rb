@@ -10,7 +10,6 @@ class UrlRedirectsController < ApplicationController
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file subtitle_file_vtt read download_archive download_product_files
   ]
-  before_action :redirect_to_custom_domain_if_needed, only: :download_page
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
@@ -312,12 +311,25 @@ class UrlRedirectsController < ApplicationController
     return render json: { success: false, error: "File not found" }, status: :not_found if @product_file.nil?
     return render json: { success: false, error: "This file cannot be sent to Kindle" }, status: :unprocessable_entity if !@product_file.can_send_to_kindle?
 
+    # Stamp-enabled PDFs must be sent as the buyer-specific stamped copy, not
+    # the original upload (mirrors the Download button behavior). If the
+    # stamped copy hasn't been generated yet, kick off stamping and ask the
+    # buyer to retry instead of leaking the un-watermarked original.
+    if @product_file.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(@product_file)
+      # Do not enqueue the job more than once in 2 hours
+      Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(@url_redirect.purchase_id), expires_in: 4.hours) do
+        StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
+      end
+
+      return render json: { success: false, error: "We are preparing the file. Please try again in a few minutes." }, status: :unprocessable_entity
+    end
+
     if logged_in_user.present?
       logged_in_user.kindle_email = params[:email]
       return render json: { success: false, error: logged_in_user.errors.full_messages.to_sentence } unless logged_in_user.save
     end
 
-    @product_file.send_to_kindle(params[:email])
+    @product_file.send_to_kindle(params[:email], url_redirect: @url_redirect)
     create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ)
     render json: { success: true }
   rescue ArgumentError => e
@@ -359,28 +371,14 @@ class UrlRedirectsController < ApplicationController
       @url_redirect.enqueue_job_to_regenerate_deleted_transcoded_videos
     end
 
-    def redirect_to_custom_domain_if_needed
-      return if Feature.inactive?(:custom_domain_download)
-
-      creator_subdomain_with_protocol = @url_redirect.seller.subdomain_with_protocol
-      target_host = !@is_user_custom_domain && creator_subdomain_with_protocol.present? ? creator_subdomain_with_protocol : request.host
-      return if target_host == request.host
-
-      redirect_to(
-        custom_domain_download_page_url(@url_redirect.token, host: target_host, receipt: params[:receipt]),
-        status: :moved_permanently,
-        allow_other_host: true
-      )
-    end
-
     def redirect_bundle_purchase_to_library_if_needed
       return unless @url_redirect.purchase&.is_bundle_purchase?
 
-      # Build the library URL on the main app domain explicitly. This redirect can run after
-      # redirect_to_custom_domain_if_needed has already moved the request onto the seller's
-      # subdomain (or custom domain), and /library requires authentication. A signed-out buyer
-      # would get bounced to /login on the seller's host, which isn't routed there and 404s.
-      # Pinning the host to the app domain keeps the login redirect on a host that routes it.
+      # Build the library URL on the main app domain explicitly. This request can arrive on
+      # the seller's subdomain (or custom domain), and /library requires authentication. A
+      # signed-out buyer would get bounced to /login on the seller's host, which isn't routed
+      # there and 404s. Pinning the host to the app domain keeps the login redirect on a host
+      # that routes it.
       redirect_to library_url(
         bundles: @url_redirect.purchase.link.external_id,
         purchase_id: params[:receipt] && @url_redirect.purchase.external_id,

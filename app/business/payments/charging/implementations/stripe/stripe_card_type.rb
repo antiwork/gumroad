@@ -19,7 +19,17 @@ class StripeCardType
     "jcb" => CardType::JCB,
     "diners" => CardType::DINERS_CLUB,
     "unionpay" => CardType::UNION_PAY,
-    "link" => CardType::LINK
+    "link" => CardType::LINK,
+    # Local bank-transfer methods (Stripe reports them in payment_method_details.type,
+    # never as a card brand). Mapping them here means a UPI or iDEAL charge records its
+    # real method instead of falling through to "generic_card".
+    "upi" => CardType::UPI,
+    "ideal" => CardType::IDEAL,
+    # Klarna reports itself the same way (payment_method_details.type == "klarna"). Every
+    # non-card method launched through the Payment Element needs an entry here, otherwise
+    # its charges record "generic_card" and the receipt claims a credit card statement
+    # line that will never appear.
+    "klarna" => CardType::KLARNA
   }.freeze
 
   def self.to_card_type(stripe_card_type)

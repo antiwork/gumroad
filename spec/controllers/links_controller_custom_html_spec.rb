@@ -118,6 +118,81 @@ describe LinksController, :vcr, type: :controller do
       end
     end
 
+    describe "search engine visibility (crawlable wrapper)" do
+      it "includes a meta description derived from the product description" do
+        product.update!(description: "<p>A hands-on guide to <strong>etching</strong> sliders.</p>")
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta name="description" content="A hands-on guide to etching sliders.">))
+        expect(response.body).to include(%(<meta property="og:description" content="A hands-on guide to etching sliders.">))
+      end
+
+      it "falls back to the standard page's default description when the product has none" do
+        product.update!(description: nil)
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta name="description" content="Available on Gumroad">))
+      end
+
+      it "falls back to the default description when the description is markup with no text" do
+        product.update!(description: "<p><br></p>")
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta name="description" content="Available on Gumroad">))
+      end
+
+      it "escapes HTML-special characters in the meta description" do
+        product.update!(description: %(Quotes " and <tags> & ampersands))
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<meta name="description" content="Quotes &quot; and &amp; ampersands">))
+      end
+
+      it "renders the same Product JSON-LD as the standard product page" do
+        allow_any_instance_of(Link).to receive(:structured_data).and_return(
+          { "@context" => "https://schema.org", "@type" => "Product", "name" => product.name }
+        )
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<script type="application/ld+json">))
+        expect(response.body).to include(%("@type":"Product"))
+      end
+
+      it "omits the JSON-LD script when the product has no structured data" do
+        allow_any_instance_of(Link).to receive(:structured_data).and_return({})
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).not_to include("application/ld+json")
+      end
+
+      it "escapes closing script tags inside the JSON-LD payload" do
+        allow_any_instance_of(Link).to receive(:structured_data).and_return(
+          { "@type" => "Product", "description" => %(bad</script><script>alert(1)</script>) }
+        )
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).not_to include(%(bad</script><script>alert(1)</script>))
+        expect(response.body).to include("bad\\u003c/script\\u003e")
+      end
+
+      it "includes a visually-hidden crawlable summary with the product name and description" do
+        product.update!(description: "<p>Crawlable summary text.</p>")
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include(%(<div class="seo-summary">))
+        expect(response.body).to include("<h1>#{ERB::Util.h(product.name)}</h1>")
+        expect(response.body).to include("<p>Crawlable summary text.</p>")
+      end
+    end
+
     it "escapes the checkout URL for JavaScript string context" do
       allow(product).to receive(:unique_permalink).and_return(%(abc</script><script>alert(1)</script>))
 

@@ -16,6 +16,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
   payment_element_wallets: true,
+  flat_payment_methods: true,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
@@ -31,6 +32,7 @@ const clientConfirmConfig: CheckoutPaymentConfig = {
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
   payment_element_wallets: true,
+  flat_payment_methods: true,
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",

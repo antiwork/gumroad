@@ -542,15 +542,7 @@ describe UrlRedirectPresenter do
         expect(presenter.download_page_with_content_props[:content][:community_chat_url]).to be_nil
       end
 
-      it "returns nil when communities feature is not active for seller" do
-        expect(presenter.download_page_with_content_props[:content][:community_chat_url]).to be_nil
-      end
-
-      context "when communities feature is active for seller" do
-        before do
-          Feature.activate_user(:communities, product.user)
-        end
-
+      context "when community chat is available" do
         it "returns nil when community chat is not enabled for product" do
           expect(presenter.download_page_with_content_props[:content][:community_chat_url]).to be_nil
         end

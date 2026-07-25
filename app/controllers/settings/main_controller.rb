@@ -41,10 +41,22 @@ class Settings::MainController < Settings::BaseController
 
   def resend_confirmation_email
     if current_seller.unconfirmed_email.present? || !current_seller.confirmed?
-      current_seller.send_confirmation_instructions
-      return redirect_to settings_main_path, status: :see_other, notice: "Confirmation email resent!"
+      # resend_confirmation_instructions (not send_) clears any stale SendGrid
+      # suppression on the address first, so a resend can't be silently dropped.
+      current_seller.resend_confirmation_instructions
+      respond_to do |format|
+        # The dashboard's confirm-your-email banner triggers the resend in place —
+        # a redirect to the Settings page would yank the seller away from wherever
+        # they were, so it gets a JSON acknowledgment instead.
+        format.json { render json: { success: true } }
+        format.html { redirect_to settings_main_path, status: :see_other, notice: "Confirmation email resent!" }
+      end
+      return
     end
-    redirect_to settings_main_path, alert: "Sorry, something went wrong. Please try again."
+    respond_to do |format|
+      format.json { render json: { success: false } }
+      format.html { redirect_to settings_main_path, alert: "Sorry, something went wrong. Please try again." }
+    end
   end
 
   private

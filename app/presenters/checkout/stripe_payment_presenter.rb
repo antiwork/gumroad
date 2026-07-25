@@ -97,6 +97,9 @@ class Checkout::StripePaymentPresenter
         # CardElement carts never mount a Payment Element, so there is no element wallet surface
         # to enable — they keep the Payment Request Button regardless of the rollout flag.
         payment_element_wallets: false,
+        # And with no Payment Element there is no accordion to act as the payment-method
+        # selector, so the CardElement lane always renders the legacy nested radio-row list.
+        flat_payment_methods: false,
         elements_options: nil,
       }
     end
@@ -112,6 +115,7 @@ class Checkout::StripePaymentPresenter
         # presentment lane above), the element wallet surface stays off regardless of the
         # rollout flag, so the client never has to reconcile the two fields.
         payment_element_wallets: payment_element_wallets? && !disable_wallets,
+        flat_payment_methods: flat_payment_methods?(disable_wallets),
         elements_options: {
           stripe_elements_mode:,
           currency: "usd",
@@ -158,6 +162,15 @@ class Checkout::StripePaymentPresenter
         # carts pass nil — they always mount the canonical USD element, where forced-currency
         # methods must never appear.
         cart_product_currency: items.one? ? items.first[:product_currency] : nil,
+        # The Klarna amount-window gate's input (see the resolver). Pre-tax, pre-discount cart
+        # total including quantities — price_cents is the per-unit price and quantity is a
+        # separate field, so a 100 × $50 cart must read $5,000 here, not $50: undercounting
+        # would render Klarna on carts whose real total is outside Stripe's window, and the
+        # buyer's confirm would then fail with no recourse. Prepare re-checks against the final
+        # charged total, so a total that drifts out of Klarna's window after tax/tip/discounts
+        # fails closed there instead of at Stripe. Only meaningful for USD-priced carts;
+        # forced-currency carts never offer Klarna (see the resolver's launched_method_set).
+        cart_total_usd_cents: items.all? { _1[:product_currency] == Currency::USD } ? items.sum { _1[:price_cents].to_i * (_1[:quantity] || 1).to_i } : nil,
       )
     end
 
@@ -173,6 +186,25 @@ class Checkout::StripePaymentPresenter
     # enabling wallets-in-the-element for one seller must never change another seller's checkout.
     def payment_element_wallets?
       sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
+    end
+
+    # Whether the checkout renders the flat payment-methods list (the Payment Element's
+    # accordion IS the payment-method selector — no outer "Card" radio row — with PayPal
+    # appended as one more matching row). Introduced with the element-wallets rollout
+    # (antiwork/gumroad#5768) and now decoupled from it so every Payment Element cart gets one
+    # layout: carts whose wallets are suppressed (the buyer-currency presentment lane,
+    # disable_wallets) render the same flat list with the wallet rows simply absent, instead of
+    # falling back to the legacy nested layout.
+    #
+    # The one deliberate exception: a cart that COULD take wallet payments while the
+    # payment_element_wallets flag is off (an emergency ramp-down of that flag) keeps the
+    # legacy layout, because that layout is where the deprecated Payment Request Button
+    # renders — ramping the flag to 0 must restore the previous wallet surface, not remove
+    # Apple Pay/Google Pay from checkout entirely. At the flag's steady state (100% since
+    # July 2026) this method is true for every Payment Element cart. Server-owned so the
+    # client never composes flags itself.
+    def flat_payment_methods?(disable_wallets)
+      payment_element_wallets? || disable_wallets
     end
 
     # U13 PPP method matrix input. True when any item offers a PPP discount for this buyer's GeoIP
@@ -235,6 +267,7 @@ class Checkout::StripePaymentPresenter
         # payment (the buyer-currency presentment case above), the element wallet surface stays
         # off no matter what the rollout flag says — the client never has to reconcile the two.
         payment_element_wallets: payment_element_wallets? && !disable_wallets,
+        flat_payment_methods: flat_payment_methods?(disable_wallets),
         elements_options: {
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: method_forced ? method_forced_element_currency : CLIENT_CONFIRM_CURRENCY,
@@ -377,6 +410,7 @@ class Checkout::StripePaymentPresenter
         item(
           seller: product.user,
           price_cents: cart_product.price,
+          quantity: cart_product.quantity,
           recurrence: cart_product.recurrence,
           pay_in_installments: cart_product.pay_in_installments,
           offers_installment_plan: product.installment_plan.present?,
@@ -399,6 +433,7 @@ class Checkout::StripePaymentPresenter
         item(
           seller: sellers_by_external_id[product.dig(:creator, :id)],
           price_cents: checkout_product[:price],
+          quantity: checkout_product[:quantity],
           recurrence: checkout_product[:recurrence],
           pay_in_installments: checkout_product[:pay_in_installments],
           offers_installment_plan: product[:installment_plan].present?,
@@ -414,10 +449,13 @@ class Checkout::StripePaymentPresenter
       end
     end
 
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, product_currency: nil, ppp_discounted: false)
+    # quantity defaults to 1: price_cents is always the per-unit price, and the only current
+    # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false)
       {
         seller:,
         price_cents:,
+        quantity:,
         recurrence:,
         pay_in_installments:,
         offers_installment_plan:,

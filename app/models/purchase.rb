@@ -362,11 +362,6 @@ class Purchase < ApplicationRecord
   before_save :assign_default_rental_expired
   before_save :truncate_referrer
 
-  after_commit :attach_credit_card_to_purchaser,
-               on: :update,
-               if: -> (purchase) { Feature.active?(:attach_credit_card_to_purchaser) && purchase.previous_changes[:purchaser_id].present? && purchase.purchaser &&
-                                   purchase.subscription }
-
   after_commit :enqueue_update_sales_related_products_infos_job, if: -> (purchase) {
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
@@ -2801,10 +2796,18 @@ class Purchase < ApplicationRecord
     # sellers in the same batch can't collide.
     seller_post_filter_cache = {}
 
+    # A buyer whose library spans many sellers still pays one probe per
+    # distinct seller even with the cache above (the cache key includes the
+    # seller id, so it can't dedupe across sellers — antiwork/gumroad#6185:
+    # 24 sellers x ~115ms of probes in one mobile library search request).
+    # The batch prefetches the buyer's purchase rows across ALL of the
+    # batch's sellers in two queries and answers each probe in Ruby.
+    seller_post_probe_batch = Purchase::SellerPostProbeBatch.new(purchases)
+
     check_filters = lambda do |posts|
       posts.select do |post|
         purchases.reduce(false) do |select_post, purchase|
-          select_post || post.purchase_passes_filters(purchase, seller_post_filter_cache:)
+          select_post || post.purchase_passes_filters(purchase, seller_post_filter_cache:, seller_post_probe_batch:)
         end
       end
     end
@@ -2815,7 +2818,7 @@ class Purchase < ApplicationRecord
           next true if select_post
 
           next false unless purchase.link.should_show_all_posts?
-          next false unless post.purchase_passes_filters(purchase, seller_post_filter_cache:)
+          next false unless post.purchase_passes_filters(purchase, seller_post_filter_cache:, seller_post_probe_batch:)
           # A seller-wide post (no product/variant targeting) is not "targeted at
           # the purchased item", but a should_show_all_posts buyer (e.g. a member)
           # is entitled to the full post history regardless of individual email
@@ -3283,6 +3286,8 @@ class Purchase < ApplicationRecord
     self.was_zipcode_check_performed = !processor_charge.zip_check_result.nil?
     save!
 
+    record_stripe_payment_method_type(processor_charge)
+
     check_indian_card_mandate_was_registered(processor_charge)
 
     charge.update_charge_details_from_processor!(processor_charge) if charge.present?
@@ -3290,6 +3295,25 @@ class Purchase < ApplicationRecord
 
     load_flow_of_funds(processor_charge)
     true
+  end
+
+  # The purchase_payment_flows row is written at checkout time with a "card" placeholder,
+  # before the charge exists — at that point the server only knows the buyer paid through
+  # the Payment Element, not with which method. Once the processor tells us the real
+  # method family ("upi", "ideal", ...), correct the row so payment-method rollout
+  # metrics don't count every local method as a card. Observability only: never let a
+  # metrics correction break charge processing.
+  def record_stripe_payment_method_type(processor_charge)
+    return unless stripe_charge_processor?
+
+    method_type = processor_charge.payment_method_type
+    return if method_type.blank?
+    return if purchase_payment_flow.nil?
+    return if purchase_payment_flow.stripe_payment_method_type == method_type
+
+    purchase_payment_flow.update!(stripe_payment_method_type: method_type)
+  rescue => e
+    ErrorNotifier.notify(e, purchase: external_id)
   end
 
   # A charge that rebills a card the buyer saved earlier: subscription renewals and
@@ -4923,18 +4947,6 @@ class Purchase < ApplicationRecord
 
     def subscription_duration
       price_for_recurrence&.recurrence
-    end
-
-    def attach_credit_card_to_purchaser
-      return if purchaser.credit_card
-
-      latest_successful_purchase =
-        purchaser.purchases.successful.with_credit_card_id.order(created_at: :desc).first
-
-      return unless latest_successful_purchase
-
-      purchaser.credit_card_id = latest_successful_purchase.credit_card_id
-      purchaser.save!
     end
 
     def assign_default_rental_expired

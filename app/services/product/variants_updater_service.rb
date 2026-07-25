@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -9,10 +9,39 @@ class Product::VariantsUpdaterService
            :variant_categories_alive,
            :skus, to: :product
 
-  def initialize(product:, variants_params:, skus_params: {})
+  # confirmed_removed_variant_ids: external ids of variants the seller explicitly
+  # deleted in the editor (via the "Remove version" confirmation). Deleting a
+  # variant that still has content (rich content pages or files) is only allowed
+  # when its id is in this list — this protects sellers from a save payload
+  # built from outdated or incomplete data silently wiping their whole version
+  # tree. One production product was wiped three times in nine days (July
+  # 13/18/21, 2026); July 21 was a server-induced blind editor state, and the
+  # July 13/18 client trigger is unknown — see Product::RichContentDeletionGuard
+  # for the full history.
+  # payload_page_ids / confirmed_removed_rich_content_ids feed the analogous
+  # guard for page deletions (Product::RichContentDeletionGuard).
+  # preserved_rich_content_ids: version-level pages the seller chose to KEEP in
+  # the hidden-content conflict dialog — absent from the payload (the
+  # shared-content flag hides them from the editor) but never to be deleted.
+  # rewrite_budget: the SHARED request-wide rewrite allowance built once by
+  # Product::RichContentDeletionGuard.build_rewrite_budget — pass the same hash
+  # to every service in the save so a resubmitted page can only authorize one
+  # deletion across all scopes, not one per scope.
+  # deletion_guard_diagnostics: non-PII counts/flags captured before the save
+  # mutated anything, attached to every blocked-save notification.
+  # id_mappings: per-request accumulator of client id → canonical server id for
+  # newly created variants and pages, returned to the editor after the save.
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil)
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
+    @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
+    @payload_page_ids = Array.wrap(payload_page_ids)
+    @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
+    @preserved_rich_content_ids = Array.wrap(preserved_rich_content_ids)
+    @rewrite_budget = rewrite_budget
+    @deletion_guard_diagnostics = deletion_guard_diagnostics
+    @id_mappings = id_mappings || { variants: {}, rich_content: {} }
   end
 
   def perform
@@ -24,7 +53,14 @@ class Product::VariantsUpdaterService
     variants_params.each do |category|
       variant_category_updater = Product::VariantCategoryUpdaterService.new(
         product:,
-        category_params: category
+        category_params: category,
+        confirmed_removed_variant_ids:,
+        payload_page_ids:,
+        confirmed_removed_rich_content_ids:,
+        preserved_rich_content_ids:,
+        rewrite_budget:,
+        deletion_guard_diagnostics:,
+        id_mappings:
       )
       variant_category = variant_category_updater.perform
       keep_categories << variant_category if category[:id].present?
@@ -32,7 +68,15 @@ class Product::VariantsUpdaterService
 
     categories_to_delete = existing_categories - keep_categories
     categories_to_delete.each do |variant_category|
-      variant_category.mark_deleted! unless variant_category.has_alive_grouping_variants_with_purchases?
+      next if variant_category.has_alive_grouping_variants_with_purchases?
+
+      Product::VariantCategoryUpdaterService.ensure_deletion_intent!(
+        product:,
+        variants: variant_category.alive_variants.to_a,
+        confirmed_removed_variant_ids:,
+        diagnostics: deletion_guard_diagnostics
+      )
+      variant_category.mark_deleted!
     end
 
     begin
@@ -55,7 +99,7 @@ class Product::VariantsUpdaterService
           title: variant[:name],
           id: variant[:id],
           options: options&.map do |option|
-            new_option = option.slice(:id, :temp_id, :name, :description, :url, :customizable_price, :recurrence_price_values, :max_purchase_count, :integrations, :rich_content, :apply_price_changes_to_existing_memberships, :subscription_price_change_effective_date, :subscription_price_change_message, :duration_in_minutes)
+            new_option = option.slice(:id, :temp_id, :client_id, :name, :description, :url, :customizable_price, :recurrence_price_values, :max_purchase_count, :integrations, :rich_content, :apply_price_changes_to_existing_memberships, :subscription_price_change_effective_date, :subscription_price_change_message, :duration_in_minutes)
 
             # TODO: :product_edit_react cleanup
             if option[:price_difference_cents].present?

@@ -400,6 +400,15 @@ describe Exports::PurchaseExportService do
       @purchase.update!(card_type: "mastercard")
       expect(field_value(last_data_row, "Payment Type")).to eq("Card")
 
+      @purchase.update!(card_type: "upi")
+      expect(field_value(last_data_row, "Payment Type")).to eq("UPI")
+
+      @purchase.update!(card_type: "ideal")
+      expect(field_value(last_data_row, "Payment Type")).to eq("iDEAL")
+
+      @purchase.update!(card_type: "klarna")
+      expect(field_value(last_data_row, "Payment Type")).to eq("Klarna")
+
       @purchase.update!(card_type: nil)
       expect(field_value(last_data_row, "Payment Type")).to eq(nil)
     end

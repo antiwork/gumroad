@@ -36,6 +36,12 @@ describe Api::Internal::Installments::AudienceCountsController do
     end
 
     it "returns audience count" do
+      # Counts are served from Elasticsearch, but the fixtures' indexing jobs only sit
+      # in the fake Sidekiq queue — run them synchronously so the index has the members.
+      recreate_model_index(AudienceMember)
+      AudienceMember.find_each { ElasticsearchIndexerWorker.new.perform("index", { "record_id" => _1.id, "class_name" => "AudienceMember" }) }
+      AudienceMember.__elasticsearch__.refresh_index!
+
       get :show, params: { id: create(:audience_post, seller:).external_id }
       expect(response).to be_successful
       expect(response.parsed_body).to eq({ "count" => 6 })

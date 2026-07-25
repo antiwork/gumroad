@@ -350,6 +350,28 @@ describe("Product Edit Scenario", type: :system, js: true) do
     )
   end
 
+  it "saves edits to a content page created in the same session without a reload" do
+    product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
+
+    visit edit_link_path(product.unique_permalink)
+    select_tab "Content"
+
+    set_rich_text_editor_input(find("[aria-label='Content editor']"), to_text: "First draft")
+    save_change
+
+    # Regression: the second save used to fail with a "refresh the page" error
+    # — the editor kept resubmitting the page under its client-generated id
+    # (the canonical server id was never returned to it), and once the content
+    # was edited in between, the server's deletion guard read the save as an
+    # unintended deletion of the stored page.
+    set_rich_text_editor_input(find("[aria-label='Content editor']"), to_text: "Second draft")
+    save_change
+
+    expect(product.reload.alive_rich_contents.sole.description).to eq(
+      [{ "type" => "paragraph", "content" => [{ "text" => "Second draft", "type" => "text" }] }]
+    )
+  end
+
   it "displays video transcoding notice" do
     product = create(:product_with_video_file, user: seller)
     video_file = product.product_files.first
@@ -1185,8 +1207,6 @@ describe("Product Edit Scenario", type: :system, js: true) do
   end
 
   it "allows toggling the community chat integration on and off" do
-    Feature.activate_user(:communities, seller)
-
     visit edit_link_path(product.unique_permalink)
 
     check "Invite your customers to your Gumroad community chat", unchecked: true, allow_label_click: true
