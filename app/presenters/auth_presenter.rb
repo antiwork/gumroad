@@ -12,7 +12,6 @@ class AuthPresenter
     {
       email: params[:email] || retrieve_team_invitation_email(params[:next]),
       application_name: application&.name,
-      show_passkey_login: Feature.active?(:passkeys),
     }
   end
 

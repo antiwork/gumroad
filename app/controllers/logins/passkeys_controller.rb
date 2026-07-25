@@ -7,7 +7,6 @@ class Logins::PasskeysController < ApplicationController
 
   skip_before_action :check_suspended
   skip_before_action :invalidate_session_if_necessary
-  before_action :ensure_passkeys_feature_enabled
 
   def options
     render json: { success: true, options: build_webauthn_authentication_options }
@@ -41,10 +40,6 @@ class Logins::PasskeysController < ApplicationController
   end
 
   private
-    def ensure_passkeys_feature_enabled
-      e404 unless Feature.active?(:passkeys)
-    end
-
     def verified_credential(challenge)
       map_webauthn_verification_errors do
         webauthn_credential = WebAuthn::Credential.from_get(assertion_params)

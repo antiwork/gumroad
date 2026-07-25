@@ -25,7 +25,6 @@ type PasswordPageProps = {
   settings_pages: SettingPage[];
   require_old_password: boolean;
   authenticator_app_enabled: boolean;
-  show_passkeys_settings: boolean;
   passkeys: Passkey[];
 };
 
@@ -195,11 +194,9 @@ export default function PasswordPage() {
           <RecoveryCodes codes={regeneratedCodes} onDone={() => setRegeneratedCodes(null)} />
         ) : null}
       </FormSection>
-      {props.show_passkeys_settings ? (
-        <FormSection header={<h2>Passkeys</h2>}>
-          <PasskeysSection passkeys={props.passkeys} />
-        </FormSection>
-      ) : null}
+      <FormSection header={<h2>Passkeys</h2>}>
+        <PasskeysSection passkeys={props.passkeys} />
+      </FormSection>
     </SettingsLayout>
   );
 }

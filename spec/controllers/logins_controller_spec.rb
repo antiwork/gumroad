@@ -23,29 +23,13 @@ describe LoginsController, type: :controller, inertia: true do
       expect(inertia.props[:application_name]).to be_nil
     end
 
-    context "when the passkeys feature is active" do
-      before { Feature.activate(:passkeys) }
-      after { Feature.deactivate(:passkeys) }
+    it "embeds passkey login options and stores the challenge in the session" do
+      get :new
 
-      it "embeds passkey login options and stores the challenge in the session" do
-        get :new
-
-        expect(inertia.props[:show_passkey_login]).to be(true)
-        options = inertia.props[:passkey_login_options].with_indifferent_access
-        expect(options[:challenge]).to be_present
-        expect(options[:rpId]).to eq(WebAuthn.configuration.rp_id)
-        expect(session[:webauthn_authentication_challenge]).to eq(options[:challenge])
-      end
-    end
-
-    context "when the passkeys feature is inactive" do
-      it "does not embed passkey login options or store a challenge" do
-        get :new
-
-        expect(inertia.props[:show_passkey_login]).to be(false)
-        expect(inertia.props[:passkey_login_options]).to be_nil
-        expect(session[:webauthn_authentication_challenge]).to be_nil
-      end
+      options = inertia.props[:passkey_login_options].with_indifferent_access
+      expect(options[:challenge]).to be_present
+      expect(options[:rpId]).to eq(WebAuthn.configuration.rp_id)
+      expect(session[:webauthn_authentication_challenge]).to eq(options[:challenge])
     end
 
     context "with an email in the query parameters" do
@@ -124,8 +108,6 @@ describe LoginsController, type: :controller, inertia: true do
     end
 
     describe "passkey setup prompt" do
-      before { Feature.activate(:passkeys) }
-
       it "flags the prompt after an eligible login" do
         post "create", params: { user: { login_identifier: @user.email, password: "password" } }
 
@@ -157,14 +139,6 @@ describe LoginsController, type: :controller, inertia: true do
         expect(session[:prompt_passkey_setup]).to be_nil
       end
 
-      it "does not flag the prompt when the passkeys feature is inactive" do
-        Feature.deactivate(:passkeys)
-
-        post "create", params: { user: { login_identifier: @user.email, password: "password" } }
-
-        expect(session[:prompt_passkey_setup]).to be_nil
-      end
-
       it "does not flag the prompt inside the mobile app webview" do
         cookies[:is_gumroad_mobile_app] = "true"
 
@@ -175,9 +149,6 @@ describe LoginsController, type: :controller, inertia: true do
     end
 
     describe "passkey password fallback" do
-      before { Feature.activate(:passkeys) }
-      after { Feature.deactivate(:passkeys) }
-
       it "logs the password-fallback analytics event when a passkey user signs in with a password" do
         create(:webauthn_credential, user: @user)
         allow(Rails.logger).to receive(:info)
