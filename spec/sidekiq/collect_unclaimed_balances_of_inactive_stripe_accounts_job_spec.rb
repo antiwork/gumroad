@@ -211,19 +211,19 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
     end
 
-    # The transfer id is what stops the account from being selected again, and it is recorded
-    # in a separate statement AFTER the money has moved. Anything that kills the worker in
-    # between (a deploy recycling the pod, an OOM, an eviction) leaves the transfer unrecorded,
-    # so Sidekiq's retry re-selects the account. Without a stable idempotency key that retry
-    # is a second real transfer.
-    it "reuses the same Stripe idempotency key on a retry, so an interruption before the transfer id is recorded can't move the money twice" do
+    # Two executions can overlap: the job has no uniqueness lock, so a cron double-fire or a
+    # manual enqueue alongside the scheduled run can both read a positive balance before either
+    # of them transfers. Stripe collapses the second transfer into the first only if both carry
+    # the same idempotency key.
+    it "sends an idempotency key derived from the account and amount, so two overlapping runs can't both transfer" do
       us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
       create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
 
+      # Stubbed rather than replayed from a cassette: this example is about the request the job
+      # sends, and it needs a positive balance on BOTH runs to represent two executions racing
+      # each other — which is exactly the state a cassette of a real sequence wouldn't have.
       allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
       allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
-      # Stubbed rather than replayed from a cassette: this example is about what the job sends
-      # to Stripe on a retry, and it needs a non-zero balance for the transfer to happen at all.
       allow(Stripe::Account).to receive(:retrieve).and_return(double(type: "custom", created: 5.years.ago.to_i))
       allow(Stripe::Balance).to receive(:retrieve).and_return(
         { "available" => [{ "amount" => 100_00 }], "pending" => [{ "amount" => 0 }] }
@@ -232,22 +232,40 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       idempotency_keys = []
       allow(Stripe::Transfer).to receive(:create) do |_params, opts|
         idempotency_keys << opts[:idempotency_key]
-        double(id: "tr_replayed")
+        double(id: "tr_collected")
       end
 
-      # First run: the money moves, then the worker dies before the id is recorded.
-      allow_any_instance_of(MerchantAccount).to receive(:update!).and_raise(Sidekiq::Shutdown)
-      expect { described_class.new.perform }.to raise_error(Sidekiq::Shutdown)
-      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to be_nil
-
-      # Sidekiq retries. The account is still unstamped, so it is selected again.
-      allow_any_instance_of(MerchantAccount).to receive(:update!).and_call_original
       described_class.new.perform
 
-      expect(idempotency_keys.size).to eq(2)
-      expect(idempotency_keys.uniq.size).to eq(1), "the retry sent a different idempotency key, so Stripe would create a second transfer"
-      expect(idempotency_keys.first).to include("acct_1SO1bwI533JwXS4r")
-      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to eq("tr_replayed")
+      # Asserted as the exact string: a nil key would satisfy a "both runs agree" check.
+      expect(idempotency_keys).to eq(["collect_unclaimed_balance_acct_1SO1bwI533JwXS4r_10000"])
+      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to eq("tr_collected")
+    end
+
+    # The transfer id is what stops the account from being selected again, so saving it while
+    # leaving the Balance rows behind would strand them on the dead merchant account forever —
+    # no later run would ever look at the account again.
+    it "does not record the transfer id if moving the balances fails" do
+      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+
+      allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Account).to receive(:retrieve).and_return(double(type: "custom", created: 5.years.ago.to_i))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        { "available" => [{ "amount" => 100_00 }], "pending" => [{ "amount" => 0 }] }
+      )
+      allow(Stripe::Transfer).to receive(:create).and_return(double(id: "tr_collected"))
+
+      # The worker dies part-way through reassigning the balances.
+      allow_any_instance_of(Balance).to receive(:update!).and_raise(Sidekiq::Shutdown)
+
+      expect { described_class.new.perform }.to raise_error(Sidekiq::Shutdown)
+
+      # Rolled back together: the account stays selectable so the next run can finish the job,
+      # rather than being marked done with its balances stranded.
+      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to be_nil
+      expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: us_stripe_account.id).sum(:holding_amount_cents)).to eq 100_00
     end
   end
 end

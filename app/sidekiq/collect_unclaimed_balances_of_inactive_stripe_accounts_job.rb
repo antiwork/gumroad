@@ -37,14 +37,14 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
       next unless actual_stripe_account_balance > 0
 
       # Transfer the money from Stripe connect account to Gumroad's platform Stripe account.
-      # The transfer id is recorded on the merchant account in the NEXT statement, and that
-      # record is the only thing stopping the query above from selecting this account again.
-      # So an interruption between the two — a deploy recycling the worker, an OOM kill, a
-      # pod eviction — leaves the money moved but unrecorded, and the retry moves it again.
-      # The idempotency key closes that window: Stripe replays the original transfer for 24
-      # hours instead of creating a second one, and the retry gets the same id to record.
-      # It is scoped to the account and the amount, so a legitimate later collection (a new
-      # balance three years from now) is a different key and not suppressed.
+      #
+      # The idempotency key guards against two runs overlapping. This job has no uniqueness
+      # lock, so a cron double-fire or a manual enqueue alongside the scheduled run can have
+      # two executions both read a positive balance before either transfers, and without a key
+      # that means two real transfers. Keying on the account and the amount makes the second
+      # one replay the first instead. (Ordinary Sidekiq retries are not the risk here: the
+      # balance is re-read live above, so once a transfer has succeeded a retry reads 0 and
+      # skips this account before reaching the transfer at all.)
       transfer = Stripe::Transfer.create({
                                            amount: actual_stripe_account_balance,
                                            currency: Currency::USD,
@@ -54,13 +54,22 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
                                            stripe_account: stripe_account_id,
                                            idempotency_key: "collect_unclaimed_balance_#{stripe_account_id}_#{actual_stripe_account_balance}",
                                          })
-      merchant_account.update!(unclaimed_balance_collection_transfer_id: transfer.id)
 
-      # Move the unpaid balances in our records to be against Gumroad's platform Stripe account,
-      # as the money has been moved to Gumroad's platform Stripe account with the above transfer.
-      # Since this balance is at least 3 years old, no refunds or disputes are possible on it now.
-      merchant_account.user.unpaid_balances.where(merchant_account_id: merchant_account.id).where(holding_currency: Currency::USD).each do |balance|
-        balance.update!(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id)
+      # Recording the transfer and moving our own records of the balance have to happen
+      # together. The transfer id is what stops the query above from selecting this account
+      # again, so if the id were saved and the balances then left behind — a worker killed
+      # part-way through the loop, a failing update — the account would never be looked at
+      # again and those Balance rows would stay pointing at the dead merchant account forever.
+      # Both statements are local database writes, so wrapping them costs nothing.
+      ApplicationRecord.transaction do
+        merchant_account.update!(unclaimed_balance_collection_transfer_id: transfer.id)
+
+        # Move the unpaid balances in our records to be against Gumroad's platform Stripe account,
+        # as the money has been moved to Gumroad's platform Stripe account with the above transfer.
+        # Since this balance is at least 3 years old, no refunds or disputes are possible on it now.
+        merchant_account.user.unpaid_balances.where(merchant_account_id: merchant_account.id).where(holding_currency: Currency::USD).each do |balance|
+          balance.update!(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id)
+        end
       end
     end
   end
