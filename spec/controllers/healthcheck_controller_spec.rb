@@ -262,12 +262,27 @@ describe HealthcheckController do
   describe "GET 'purchases'" do
     let(:redis_key) { RedisKey.min_successful_purchases_in_last_10_minutes }
 
+    # The action counts EVERY successful purchase in the last 10 minutes, so it also sees rows this
+    # spec did not create. Two sources of those:
+    #
+    # 1. Rows another example leaked into the shared test database. Most specs roll back in a
+    #    transaction, but any that commit (or that ran before transactional fixtures covered them)
+    #    leave a permanent row behind, and it counts here for the 10 minutes after it was written.
+    # 2. Rows created by a parallel spec process on the same database.
+    #
+    # Counting the ambient rows first and expressing each threshold relative to that baseline makes
+    # the expectations hold regardless. Writing absolute thresholds is what made this group fail
+    # intermittently: `create(:purchase)` defaults to `created_at: Time.current`, so a single leaked
+    # successful purchase pushed the live count over a hard-coded threshold and flipped the result.
+    let(:ambient_recent_successful_count) { Purchase.successful.where(created_at: 10.minutes.ago..Time.current).count }
+
     after { $redis.del(redis_key) }
 
     context "when the successful purchases count meets the threshold" do
       before do
-        $redis.set(redis_key, 2)
         create_list(:purchase, 2, purchase_state: "successful", created_at: 5.minutes.ago)
+        # Exactly the 2 rows above are needed, so ambient rows can only help, never hurt.
+        $redis.set(redis_key, 2)
       end
 
       it "returns HTTP success" do
@@ -280,8 +295,9 @@ describe HealthcheckController do
 
     context "when the successful purchases count is below the threshold" do
       before do
-        $redis.set(redis_key, 5)
         create_list(:purchase, 2, purchase_state: "successful", created_at: 5.minutes.ago)
+        # One more than everything in the window, so the count is always short by exactly 1.
+        $redis.set(redis_key, ambient_recent_successful_count + 3)
       end
 
       it "returns HTTP service_unavailable" do
@@ -294,8 +310,10 @@ describe HealthcheckController do
 
     context "when successful purchases are older than 10 minutes" do
       before do
-        $redis.set(redis_key, 1)
         create(:purchase, purchase_state: "successful", created_at: 15.minutes.ago)
+        # The 15-minutes-ago purchase must not count. Requiring one more than the ambient rows means
+        # the request can only succeed if that out-of-window purchase is wrongly included.
+        $redis.set(redis_key, ambient_recent_successful_count + 1)
       end
 
       it "ignores them and returns HTTP service_unavailable" do
