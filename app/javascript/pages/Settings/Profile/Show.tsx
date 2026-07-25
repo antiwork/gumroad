@@ -444,7 +444,7 @@ export default function SettingsPage() {
             </section>
           ) : tab === "pages" && showPagesTab ? (
             <>
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 p-4! md:p-8!">
                 <Alert role="status" variant="warning">
                   Pages are a legacy way to lay out your profile and are being phased out. To customize your profile,
                   edit your{" "}
