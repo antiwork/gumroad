@@ -516,6 +516,36 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.del(snapshot_key)
     end
 
+    it "revalidates the snapshot in slices small enough to stay on the primary key" do
+      post = basic_post_with_audience
+      create(:active_follower, user: @seller)
+      create(:active_follower, user: @seller)
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      snapshotted_ids = AudienceMember.where(seller_id: post.seller_id).pluck(:id)
+      expect(snapshotted_ids.size).to be >= 3
+      $redis.rpush(snapshot_key, snapshotted_ids)
+
+      # A big `IN (...)` list makes MySQL abandon the primary key and scan the whole
+      # table, so the revalidation must never hand the filter more ids than the slice
+      # size — regardless of how large the audience is.
+      stub_const("#{described_class}::REVALIDATION_SLICE_SIZE", 2)
+      slice_sizes = []
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        slice_sizes << kwargs[:ids].size
+        original.call(**kwargs)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect(slice_sizes.size).to eq((snapshotted_ids.size / 2.0).ceil)
+      expect(slice_sizes).to all(be <= 2)
+      expect(slice_sizes.sum).to eq(snapshotted_ids.size)
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(snapshot_key)
+    end
+
     it "drops snapshotted members who have since left the audience" do
       post = basic_post_with_audience
       blast = create(:blast, :just_requested, post:)

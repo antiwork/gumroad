@@ -59,6 +59,19 @@ class SendPostBlastEmailsJob
     # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
     AUDIENCE_SNAPSHOT_TTL = 3.days
 
+    # How many snapshotted member ids to revalidate per statement. Small on purpose:
+    # MySQL's range optimizer has a memory budget for representing an `IN (...)` list as
+    # primary-key ranges, and once the list is big enough to blow that budget it silently
+    # abandons the primary key and scans an index over the whole table instead. Measured
+    # on production, the audience filter flips from a 1,000-row primary-key range to a
+    # 145-million-row index scan somewhere between 6,000 and 7,000 ids — with no error to
+    # tell you it happened. 1,000 keeps every slice on the primary key with plenty of
+    # headroom, and measures ~90 ms per slice against the real 350k-member audience.
+    REVALIDATION_SLICE_SIZE = 1_000
+
+    # Redis list/set writes only — no SQL — so this can stay large.
+    REDIS_WRITE_SLICE_SIZE = 10_000
+
     # Loads the recipient list for the blast. For sellers with very large audiences
     # (hundreds of thousands of members) the filter query is the slowest, most fragile
     # part of the job: it can exceed the database's default 5-minute statement cap, and a
@@ -118,7 +131,7 @@ class SendPostBlastEmailsJob
       # path above is protected. Run the revalidation under the same raised,
       # Redis-tunable cap the fresh load uses.
       members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
-        snapshotted_ids.each_slice(10_000).flat_map do |ids_slice|
+        snapshotted_ids.each_slice(REVALIDATION_SLICE_SIZE).flat_map do |ids_slice|
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
             .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end
@@ -140,7 +153,7 @@ class SendPostBlastEmailsJob
 
       tmp_key = "#{snapshot_key}:tmp"
       $redis.del(tmp_key)
-      members.each_slice(10_000) do |slice|
+      members.each_slice(REDIS_WRITE_SLICE_SIZE) do |slice|
         $redis.rpush(tmp_key, slice.map(&:id))
       end
       $redis.expire(tmp_key, AUDIENCE_SNAPSHOT_TTL.to_i)
@@ -191,7 +204,7 @@ class SendPostBlastEmailsJob
 
       tmp_key = "#{checkpoint_key}:tmp"
       $redis.del(tmp_key)
-      emails.each_slice(10_000) do |slice|
+      emails.each_slice(REDIS_WRITE_SLICE_SIZE) do |slice|
         $redis.sadd(tmp_key, slice)
       end
       $redis.expire(tmp_key, AUDIENCE_SNAPSHOT_TTL.to_i)
