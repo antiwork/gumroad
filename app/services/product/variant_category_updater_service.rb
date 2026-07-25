@@ -177,9 +177,25 @@ class Product::VariantCategoryUpdaterService
       variant_ids = variants.respond_to?(:pluck) ? variants.pluck(:id) : variants.map(&:id)
       return if variant_ids.empty?
 
+      # Only stamp rows that are still alive. `variants` is derived from
+      # `existing_variants - keep_variants`, which can include variants that were
+      # already soft-deleted by an earlier save; an unscoped write would move
+      # their `deleted_at` forward every time an unrelated save happened to
+      # include them, making the timestamp describe the most recent save rather
+      # than the deletion. Support relies on that timestamp to scope restores to
+      # the window of the save that actually caused a wipe (see the restores in
+      # gumroad-private#1230), and moving it drags unrelated rows into that
+      # window. The deletion-intent guard just above is already scoped this way
+      # -- it passes `variants_to_delete.select(&:alive?)` -- so this makes the
+      # write agree with the guard that authorised it.
       now = Time.current
-      BaseVariant.where(id: variant_ids).update_all(deleted_at: now, updated_at: now)
+      already_deleted_ids = BaseVariant.where(id: variant_ids).where.not(deleted_at: nil).pluck(:id)
+      variant_ids_to_delete = variant_ids - already_deleted_ids
+      BaseVariant.where(id: variant_ids_to_delete).update_all(deleted_at: now, updated_at: now) if variant_ids_to_delete.any?
 
+      # Cleanup still runs for every id in the batch: an earlier soft-delete may
+      # have stamped the variant without its rich content or file archives being
+      # cleaned up, and both workers are idempotent.
       variant_ids.each do |variant_id|
         DeleteProductRichContentWorker.perform_async(product.id, variant_id)
         DeleteProductFilesArchivesWorker.perform_async(product.id, variant_id)
