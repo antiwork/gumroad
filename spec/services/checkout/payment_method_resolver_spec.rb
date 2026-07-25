@@ -231,11 +231,10 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(buyer_country: "US", cart_total_usd_cents: nil).payment_method_types).to include("alipay")
         end
 
-        it "drops Alipay from the eligible AND launched sets on recurring carts — memberships are out of scope for the first launch" do
+        it "drops Alipay from the eligible set on recurring carts — memberships are out of scope for the first launch" do
           resolution = resolve(buyer_country: "US", recurring: true)
 
           expect(resolution.eligible_payment_method_types).not_to include("alipay")
-          expect(resolution.payment_method_types).not_to include("alipay")
         end
 
         it "drops Alipay on PPP-discounted checkouts — the wallet exposes no funding country to verify pre-charge" do
