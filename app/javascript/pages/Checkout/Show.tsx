@@ -558,6 +558,12 @@ const CheckoutIndexPage = () => {
             ...(item.product.buyer_currency_display
               ? { buyer_currency_display: item.product.buyer_currency_display }
               : {}),
+            ...(result.buyer_presentment_currency
+              ? {
+                  buyer_presentment_currency: result.buyer_presentment_currency,
+                  buyer_presentment_value: result.buyer_presentment_value,
+                }
+              : {}),
           });
         }
         if (result.has_third_party_analytics && !redirectTo)

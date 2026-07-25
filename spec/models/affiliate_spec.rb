@@ -155,6 +155,40 @@ describe Affiliate do
 
       expect(affiliate.total_cents_earned).to eq 0
     end
+
+    context "with a statement timeout" do
+      it "returns the same sum as the untimed query" do
+        create(:purchase, affiliate:, purchase_state: "successful", price_cents: 100)
+        create(:purchase, affiliate:, purchase_state: "failed", price_cents: 150)
+        create(:purchase, affiliate:, purchase_state: "successful", price_cents: 1399)
+
+        expect(affiliate.total_cents_earned(timeout_ms: 5_000)).to eq 113
+      end
+
+      it "returns zero rather than nil when there is nothing to sum" do
+        expect(affiliate.total_cents_earned(timeout_ms: 5_000)).to eq 0
+      end
+
+      it "asks the database to abort the query after the given time" do
+        # MySQL only honours an optimizer hint in the position immediately after
+        # the first SELECT keyword — anywhere else it is silently ignored and the
+        # whole protection becomes a no-op. So capture the SQL the method really
+        # sends and assert on its shape, rather than building a string here and
+        # checking that string (which would prove nothing about production).
+        sql = nil
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_, _, _, _, payload|
+          sql = payload[:sql] if payload[:sql]&.include?("MAX_EXECUTION_TIME")
+        end
+
+        begin
+          expect(affiliate.total_cents_earned(timeout_ms: 1_234)).to eq 0
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        expect(sql).to start_with "SELECT /*+ MAX_EXECUTION_TIME(1234) */"
+      end
+    end
   end
 
   describe "#total_cents_earned_formatted" do

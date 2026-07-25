@@ -32,6 +32,11 @@ type PurchasedEvent = {
   quantity: number;
   tax: string;
   buyer_currency_display?: BuyerCurrencyDisplay;
+  // What the buyer's card was actually charged, when the sale was charged in the buyer's
+  // own currency. Additive: `currency` and `value` above stay canonical. Absent for
+  // canonical-USD sales.
+  buyer_presentment_currency?: string;
+  buyer_presentment_value?: number | null;
 };
 
 export type BeginCheckoutEvent = {
@@ -109,6 +114,8 @@ export type SellerPurchaseEvent = {
   quantity: number;
   tax: string;
   buyer_currency_display?: BuyerCurrencyDisplay;
+  buyer_presentment_currency?: string;
+  buyer_presentment_value?: number | null;
 };
 
 export type SellerAnalyticsProps = {
@@ -131,6 +138,12 @@ export function trackSellerPurchaseEvent({ seller_id, analytics, purchase_event 
     quantity: purchase_event.quantity,
     tax: purchase_event.tax,
     ...(purchase_event.buyer_currency_display ? { buyer_currency_display: purchase_event.buyer_currency_display } : {}),
+    ...(purchase_event.buyer_presentment_currency
+      ? {
+          buyer_presentment_currency: purchase_event.buyer_presentment_currency,
+          buyer_presentment_value: purchase_event.buyer_presentment_value,
+        }
+      : {}),
   });
 }
 
