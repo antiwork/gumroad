@@ -1266,6 +1266,49 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(order.purchases.map { _1.reload.purchase_presentment.presentment_total_cents }).to contain_exactly(15_00, 7_00)
         end
 
+        # The Payment Element mounts at the quantity-inclusive cart subtotal (the presenter
+        # multiplies per-unit price by quantity), so prepare must create the intent for the same
+        # number. If prepare summed per-unit prices instead, a quantity-2 cart would confirm an
+        # EUR 15.00 intent against an Element that showed EUR 30.00 and Stripe would reject it.
+        it "prepares the forced-currency intent for the quantity-inclusive amount" do
+          expect(StripeFxQuote).not_to receive(:create)
+
+          order, params = build_order(line_item_overrides: { quantity: 2, perceived_price_cents: 30_00 })
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_quantity_two")
+
+          expect(order.purchases.first.reload.displayed_price_cents).to eq(30_00)
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(30_00)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment.presentment_total_cents).to eq(30_00)
+        end
+
+        # Gumroad's cut is stored twice: once on the charge-level presentment row and once per
+        # purchase. Payouts and refunds read the per-purchase rows, so if the allocator ever
+        # dropped or double-counted a cent the seller's proceeds would silently disagree with what
+        # was charged. Pin the invariant that the per-purchase shares sum to the charge-level share.
+        it "splits Gumroad's presentment fee share across purchases so it sums to the charge-level share" do
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          _create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_fee_split")
+          expect(responses.values).to all(include(success: true))
+
+          charge_presentment = order.charges.last.charge_presentment
+          purchase_shares = order.purchases.map { _1.reload.purchase_presentment.presentment_gumroad_amount_cents }
+
+          expect(purchase_shares.size).to eq(2)
+          expect(purchase_shares).to all(be >= 0)
+          expect(purchase_shares.sum).to eq(charge_presentment.presentment_gumroad_amount_cents)
+          expect(charge_presentment.presentment_gumroad_amount_cents).to be <= charge_presentment.presentment_total_cents
+        end
+
         it "keys the intent on the charge external id and currency (no quote), scoped to the confirmation token" do
           order, params = build_order
           create_args, = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_direct")

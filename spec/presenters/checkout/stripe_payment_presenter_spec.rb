@@ -1122,6 +1122,45 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
+    # Companion to Order::PreparePaymentIntentService's "free differently priced line" example.
+    # A free USD line still renders in the Element's cart, so the Element cannot mount in EUR —
+    # and prepare derives its currency basis from the same full item list. If the presenter
+    # ignored free lines the browser would mint an EUR token for a USD intent (or vice versa),
+    # which Stripe rejects, so presenter and prepare must agree on this cart shape.
+    it "keeps the canonical USD element when a free USD line makes an otherwise-EUR cart non-uniform" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      free_product = create(:product, user: seller, price_currency_type: "usd", price_cents: 0)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+
+      props = stripe_payment_props(
+        add_products: [checkout_product_for(product), checkout_product_for(free_product, price: 0)]
+      )
+
+      expect(props[:elements_options][:currency]).to eq("usd")
+      expect(props[:elements_options][:presentment_amount_cents]).to be_nil
+      expect(props[:elements_options][:payment_method_types]).to eq(%w[card link])
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps the canonical USD element for a mixed EUR/USD paid cart" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      usd_product = create(:product, user: seller, price_currency_type: "usd", price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+
+      props = stripe_payment_props(
+        add_products: [checkout_product_for(product), checkout_product_for(usd_product)]
+      )
+
+      expect(props[:elements_options][:currency]).to eq("usd")
+      expect(props[:elements_options][:presentment_amount_cents]).to be_nil
+      expect(props[:elements_options][:payment_method_types]).to eq(%w[card link])
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
     # price_cents is the per-unit listed price, while the charge side derives the intent's amount
     # from displayed_price_cents (already quantity-inclusive). Without the multiplication a cart
     # of two EUR 15 copies would mount the Element with 1500 and confirm against a 3000 intent,
