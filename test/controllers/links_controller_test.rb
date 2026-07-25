@@ -770,21 +770,8 @@ class LinksControllerSellerAreaTest < ActionController::TestCase
     assert_response :forbidden
   end
 
-  test "POST create does not enable community chat by default when communities feature is enabled" do
+  test "POST create does not enable community chat by default" do
     Rails.cache.clear
-    Feature.activate_user(:communities, @seller)
-
-    post :create, params: { link: { price_cents: 100, name: "test link" } }
-
-    assert_redirected_to edit_link_path(Link.last)
-    product = @seller.links.last
-    assert_equal false, product.community_chat_enabled?
-    assert_nil product.active_community
-  end
-
-  test "POST create does not enable community chat when communities feature is disabled" do
-    Rails.cache.clear
-    Feature.deactivate_user(:communities, @seller)
 
     post :create, params: { link: { price_cents: 100, name: "test link" } }
 
@@ -3816,9 +3803,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
   # --- community chat ---------------------------------------------------------
 
-  test "PUT update enables community chat when requested and communities feature is enabled" do
-    Feature.activate_user(:communities, @seller)
-
+  test "PUT update enables community chat when requested" do
     post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }, as: :json
 
     assert_response :success
@@ -3826,8 +3811,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert @product.reload.active_community.present?
   end
 
-  test "PUT update disables community chat when requested and communities feature is enabled" do
-    Feature.activate_user(:communities, @seller)
+  test "PUT update disables community chat when requested" do
     @product.update!(community_chat_enabled: true)
 
     post :update, params: { id: @product.unique_permalink, community_chat_enabled: false }, as: :json
@@ -3838,7 +3822,6 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update does not enable community chat for coffee products" do
-    Feature.activate_user(:communities, @seller)
     @seller.update!(created_at: (User::MIN_AGE_FOR_SERVICE_PRODUCTS + 1.day).ago)
     product = create_product(user: @seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 1000)
 
@@ -3850,7 +3833,6 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update does not enable community chat for bundle products" do
-    Feature.activate_user(:communities, @seller)
     @product.update!(native_type: Link::NATIVE_TYPE_BUNDLE)
 
     post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }, as: :json
@@ -3860,7 +3842,6 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update reactivates existing community when enabling chat" do
-    Feature.activate_user(:communities, @seller)
     community = create_community(resource: @product, seller: @seller)
     community.mark_deleted!
     @product.update!(community_chat_enabled: false)
@@ -3870,16 +3851,6 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :success
     assert_equal true, @product.reload.community_chat_enabled?
     assert community.reload.alive?
-  end
-
-  test "PUT update does not enable community chat when communities feature is disabled" do
-    Feature.deactivate_user(:communities, @seller)
-
-    post :update, params: { id: @product.unique_permalink, community_chat_enabled: true }, as: :json
-
-    assert_response :success
-    assert_equal false, @product.reload.community_chat_enabled?
-    assert_nil @product.reload.active_community
   end
 end
 
