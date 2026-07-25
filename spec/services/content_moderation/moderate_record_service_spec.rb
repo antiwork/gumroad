@@ -365,6 +365,49 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(community_product.reload, :product).passed).to eq(true)
       end
 
+      # A spammer can produce any of these states for free, so they don't count
+      # as a deliverable for the purpose of letting a spam flag through — even
+      # though the off-platform-fulfillment preset treats them as "not empty".
+      it "still blocks when the only content page has a title and an empty body" do
+        create(:rich_content, entity: product, title: "Chapter one", description: [{ "type" => "paragraph" }])
+
+        result = described_class.check(product.reload, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
+      end
+
+      it "still blocks a bundle with no products in it" do
+        bundle = create(:product, user: seller, is_bundle: true, name: "Bundle", description: "Everything you need")
+
+        expect(described_class.check(bundle.reload, :product).passed).to eq(false)
+      end
+
+      it "publishes a bundle that actually contains products" do
+        bundle = create(:product, user: seller, is_bundle: true, name: "Bundle", description: "Everything you need")
+        create(:bundle_product, bundle:, product: create(:product, user: seller))
+
+        expect(described_class.check(bundle.reload, :product).passed).to eq(true)
+      end
+
+      it "still blocks a coffee listing, which has no deliverable by design" do
+        coffee = create(:coffee_product, name: "Buy me a coffee", description: "Support my work")
+
+        expect(described_class.check(coffee.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only integration is scheduling plumbing rather than the deliverable" do
+        scheduled = create(:product, user: seller, name: "Session", description: "Book a session", active_integrations: [create(:zoom_integration)])
+
+        expect(described_class.check(scheduled.reload, :product).passed).to eq(false)
+      end
+
+      it "publishes a commission, where the deliverable is work the seller performs" do
+        commission = create(:commission_product, name: "Custom art", description: "I will draw you")
+
+        expect(described_class.check(commission.reload, :product).passed).to eq(true)
+      end
+
       it "still blocks an empty listing, where a spam flag has no real product behind it" do
         result = described_class.check(product, :product)
 

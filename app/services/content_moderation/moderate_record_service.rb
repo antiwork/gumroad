@@ -180,7 +180,59 @@ class ContentModeration::ModerateRecordService
     # Posts are unaffected: they have no deliverable of their own, so a spam
     # flag on a post keeps blocking as before.
     def spam_flag_should_not_block?
-      entity_type == :product && product_has_deliverable?
+      entity_type == :product && product_has_substantive_deliverable?
+    end
+
+    # The stricter half of "does this listing deliver anything", used only to
+    # decide whether a corroborated spam flag stops being a block.
+    #
+    # `product_has_deliverable?` is deliberately generous because it gates a
+    # QUESTION we ask a model (see `check_off_platform_fulfillment?`): being
+    # generous there only means we don't ask, and the other presets still run.
+    # Here the same generosity would let a listing publish, so states a spammer
+    # can produce for free are not enough:
+    #
+    #   - a page with a title and nothing in it (the title renders in the
+    #     buyer's page list, but there is nothing to read),
+    #   - a bundle with no component products in it,
+    #   - a "coffee"/tip listing, which has no deliverable by design,
+    #   - an integration Gumroad does not fulfil on purchase (only a Circle or
+    #     Discord invite is itself the thing the buyer receives; a Zoom or
+    #     Google Calendar connection is scheduling plumbing attached to a call).
+    #
+    # Everything that does establish a real deliverable still downgrades the
+    # flag: uploaded files at the product or variant level, a content page with
+    # an actual body, a physical product (it ships), a bundle that contains
+    # products, a call or commission (work the seller performs), or a
+    # Gumroad-provisioned community invite.
+    def product_has_substantive_deliverable?
+      return true if record.is_physical?
+      return true if record.is_bundle? && record.bundle_products.alive.any?
+      return true if record.native_type.in?([Link::NATIVE_TYPE_CALL, Link::NATIVE_TYPE_COMMISSION])
+      return true if gumroad_fulfilled_community_integration?
+
+      record.alive_product_files.any? ||
+        record.alive_variants.any? { |variant| variant.alive_product_files.any? } ||
+        has_readable_body_content?(record)
+    end
+
+    # Rich content with something in the body, ignoring pages that only have a
+    # title. See `product_has_substantive_deliverable?` for why the title alone
+    # doesn't count here even though it counts for the off-platform preset.
+    def has_readable_body_content?(product)
+      product.alive_rich_contents.any?(&:has_body_content?) ||
+        product.alive_variants.any? { |variant| variant.alive_rich_contents.any?(&:has_body_content?) }
+    end
+
+    # An integration whose invite IS what the buyer receives, and which Gumroad
+    # itself provisions and records on purchase.
+    def gumroad_fulfilled_community_integration?
+      names = [Integration::CIRCLE, Integration::DISCORD]
+
+      record.active_integrations.where(type: names.map { Integration.type_for(_1) }).exists? ||
+        record.alive_variants.any? do |variant|
+          variant.active_integrations.where(type: names.map { Integration.type_for(_1) }).exists?
+        end
     end
 
     # Whether the buyer receives something for their money. This is the
