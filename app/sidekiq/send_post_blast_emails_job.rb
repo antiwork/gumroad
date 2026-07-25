@@ -62,11 +62,17 @@ class SendPostBlastEmailsJob
     # How many snapshotted member ids to revalidate per statement. Small on purpose:
     # MySQL's range optimizer has a memory budget for representing an `IN (...)` list as
     # primary-key ranges, and once the list is big enough to blow that budget it silently
-    # abandons the primary key and scans an index over the whole table instead. Measured
-    # on production, the audience filter flips from a 1,000-row primary-key range to a
-    # 145-million-row index scan somewhere between 6,000 and 7,000 ids — with no error to
-    # tell you it happened. 1,000 keeps every slice on the primary key with plenty of
-    # headroom, and measures ~90 ms per slice against the real 350k-member audience.
+    # abandons the primary key and looks the rows up through the (seller_id, email) index
+    # instead — which for a seller with a six-figure audience means searching that
+    # seller's whole membership per statement rather than the ids the slice asked for.
+    # Measured on production against the real 350k-member audience: the plan holds
+    # `range`/`PRIMARY` up to 6,000 ids and has flipped to `ref`/seller_id_and_email by
+    # 6,500, with no error to tell you it happened. The cost shows up as tail latency —
+    # ~57 ms per statement at 1,000 ids versus ~600-1,200 ms at 10,000 — so a slow
+    # replica or a busy window is far likelier to push a 10,000-id statement into the
+    # execution cap. Total revalidation wall time is roughly the same either way (the
+    # work is proportional to the audience, not the slice count), so 1,000 buys tail
+    # safety at no throughput cost. It leaves ~6x headroom under the measured flip.
     REVALIDATION_SLICE_SIZE = 1_000
 
     # Redis list/set writes only — no SQL — so this can stay large.
