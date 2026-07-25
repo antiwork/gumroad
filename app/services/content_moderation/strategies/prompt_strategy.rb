@@ -102,6 +102,14 @@ class ContentModeration::Strategies::PromptStrategy
       or two links to the creator's new content is normal creator marketing,
       not spam, even when it contains little other text.
 
+    - Sales-pitch voice on an info product: an ALL-CAPS headline, that same
+      headline repeated in the description, a list of benefit or outcome bullets
+      with little connecting prose, and money/earnings framing ("make money
+      flipping cars", "save thousands", "start earning this weekend"). This is
+      the ordinary voice of the how-to, side-hustle, and business-guide category
+      on Gumroad. A listing written this way is marketing copy, which is exactly
+      what a product listing is for.
+
     Important: this content is extracted from HTML and stripped of structure. You
     will not see images, headings, or layout. For posts/emails the visual content
     (cartoon panels, screenshots, illustrations) is often the primary payload and
@@ -110,7 +118,12 @@ class ContentModeration::Strategies::PromptStrategy
     table cells, list items). Do not flag based on plain-text repetition alone.
 
     Repetition alone is NOT spam. Lack of a product description is NOT spam.
-    Coherent prose that doesn't mention a product is NOT spam.
+    Coherent prose that doesn't mention a product is NOT spam. Writing style is
+    NOT spam: caps, punchy fragments, a repeated headline, thin prose between
+    bullets, and an aggressive or "salesy" tone are never grounds to flag on
+    their own. Judge what the listing IS, not how loudly it is written. "Reads
+    like a sales pitch" and "lacks coherent prose" are descriptions of normal
+    marketing copy, not findings of spam.
 
     Flag only when:
     - Content is clearly machine-generated nonsense or word salad — random tokens,
