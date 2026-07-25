@@ -25,6 +25,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { postToMobileApp } from "$app/components/Settings/Layout";
 import { ShareButtons } from "$app/components/ShareButtons";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
+import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -452,6 +453,7 @@ export default function SettingsPage() {
                   </Link>{" "}
                   — your agent designs and publishes it for you.
                 </Alert>
+                <AgentSupportFallbackNote subject="Help with my profile page" />
               </section>
               <section aria-label="Profile section editor">
                 <ProfileSectionsForm
