@@ -1605,15 +1605,11 @@ class Purchase < ApplicationRecord
   # Sum of the buyer-currency amounts actually returned to the buyer across this
   # purchase's effective refunds, in buyer-currency minor units.
   #
-  # Presentment refund amounts intentionally live as snapshots in refunds.json_data
-  # rather than a database column (see gumroad#5419: aggregate refunded-presentment
-  # reporting has to be derived deliberately, never SUM()ed in SQL), so this walks the
-  # refunds association in memory. Uses the same effective?/loaded? pattern as
-  # amount_refunded_cents so callers that preload :refunds — the Sales API and the CSV
-  # export both do — issue no extra queries per purchase.
+  # Only refunds carrying a buyer-currency snapshot contribute; see
+  # refunds_that_moved_money for why the amounts are walked in Ruby rather than SUM()ed,
+  # and buyer_presentment_refunded_cents_incomplete? for what a missing snapshot means.
   def buyer_presentment_refunded_cents
-    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
-    effective_refunds.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
+    refunds_that_moved_money.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
   end
 
   # True when this purchase has an effective refund that carries NO buyer-currency
@@ -1626,8 +1622,7 @@ class Purchase < ApplicationRecord
   # worse than an empty cell. Callers rendering the total for a human use this to blank the
   # cell instead of publishing a number they'd have to caveat.
   def buyer_presentment_refunded_cents_incomplete?
-    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
-    effective_refunds.any? { |refund| !refund.presentment_snapshot? }
+    refunds_that_moved_money.any? { |refund| !refund.presentment_snapshot? }
   end
 
   # Buyer-currency minor units expressed as a plain major-unit number (12.34, not "$12.34"),
@@ -1651,15 +1646,14 @@ class Purchase < ApplicationRecord
   # Every refund that actually moved money reduces what the buyer paid. Refunds on
   # buyer-currency purchases normally carry a buyer-currency snapshot (see
   # Purchase::PresentmentRefund), but a refund created without one consumed canonical
-  # USD cents while recording zero buyer-currency cents. Any "remaining" buyer-currency
+  # USD cents while recording zero buyer-currency cents — which is exactly what
+  # buyer_presentment_refunded_cents_incomplete? reports. Any "remaining" buyer-currency
   # figure derived from that state would overstate what the buyer is still out of pocket.
   # An invoice is the document a tax authority reads, so in that case receipts and
   # invoices fall back to canonical USD amounts for every line rather than print a
   # confident buyer-currency number that is wrong.
   def buyer_presentment_display?
-    return false unless buyer_presentment?
-
-    refunds.effective.all?(&:presentment_snapshot?)
+    buyer_presentment? && !buyer_presentment_refunded_cents_incomplete?
   end
 
   # Buyer-currency tax still retained after refunds. A tax amount printed in the buyer's
@@ -1672,7 +1666,7 @@ class Purchase < ApplicationRecord
   def buyer_presentment_non_refunded_tax_cents
     return unless buyer_presentment?
 
-    refunded_tax_cents = refunds.effective.sum do |refund|
+    refunded_tax_cents = refunds_that_moved_money.sum do |refund|
       refund.presentment_seller_tax_cents.to_i + refund.presentment_gumroad_tax_cents.to_i
     end
     [buyer_presentment_tax_cents - refunded_tax_cents, 0].max
@@ -1684,8 +1678,7 @@ class Purchase < ApplicationRecord
   def buyer_presentment_non_refunded_total_cents
     return unless buyer_presentment?
 
-    refunded_cents = refunds.effective.sum { _1.presentment_amount_cents.to_i }
-    [buyer_presentment_total_cents - refunded_cents, 0].max
+    [buyer_presentment_total_cents - buyer_presentment_refunded_cents, 0].max
   end
 
   def formatted_buyer_presentment_price
@@ -3722,6 +3715,18 @@ class Purchase < ApplicationRecord
       return if purchase_presentment.blank?
 
       FlowOfFunds::Amount.new(currency: Currency::USD, cents: total_transaction_cents)
+    end
+
+    # This purchase's refunds that actually moved money, as an in-memory array.
+    #
+    # Presentment refund amounts live as snapshots in refunds.json_data rather than
+    # database columns (see gumroad#5419: aggregate refunded-presentment reporting has to
+    # be derived deliberately, never SUM()ed in SQL), so every buyer-currency refund
+    # figure has to walk the refunds in Ruby. Uses the same effective?/loaded? pattern as
+    # amount_refunded_cents, so callers that preload :refunds — the Sales API, the CSV
+    # export, and the receipt and invoice presenters — issue no extra query per purchase.
+    def refunds_that_moved_money
+      association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
     end
 
     # Refund counterpart of presentment_canonical_issued_amount: the processor refund is
