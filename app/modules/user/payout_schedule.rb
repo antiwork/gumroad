@@ -216,7 +216,7 @@ module User::PayoutSchedule
       return false unless payout_frequency == DAILY
 
       today = Date.current
-      return @instant_daily_payout unless @instant_daily_payout_on == today
+      return @instant_daily_payout if @instant_daily_payout_on == today
 
       @instant_daily_payout_on = today
       @instant_daily_payout = Payouts.is_user_payable(self, today, payout_type: Payouts::PAYOUT_TYPE_INSTANT)

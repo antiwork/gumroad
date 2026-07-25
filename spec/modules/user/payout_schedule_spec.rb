@@ -78,6 +78,38 @@ describe User::PayoutSchedule do
         end
       end
     end
+
+    context "when payout frequency is daily" do
+      before { user.update!(payout_frequency: User::PayoutSchedule::DAILY) }
+
+      it "returns tomorrow when the seller is eligible for an instant payout" do
+        travel_to(Date.new(2025, 9, 22)) do
+          create(:balance, user:, amount_cents: 10_000, date: Date.new(2025, 9, 18))
+          allow(Payouts).to receive(:is_user_payable).and_call_original
+          allow(Payouts).to receive(:is_user_payable)
+            .with(user, Date.current, payout_type: Payouts::PAYOUT_TYPE_INSTANT).and_return(true)
+
+          expect(user.next_payout_date).to eq Date.new(2025, 9, 23)
+          # Asking twice must give the same answer: the eligibility check is remembered for the
+          # day, and a memo that never returns its remembered value would fall back to the
+          # weekly cycle instead.
+          expect(user.next_payout_date).to eq Date.new(2025, 9, 23)
+          expect(Payouts).to have_received(:is_user_payable)
+            .with(user, Date.current, payout_type: Payouts::PAYOUT_TYPE_INSTANT).once
+        end
+      end
+
+      it "falls back to the weekly cycle when the seller is not eligible for an instant payout" do
+        travel_to(Date.new(2025, 9, 22)) do
+          create(:balance, user:, amount_cents: 10_000, date: Date.new(2025, 9, 18))
+          allow(Payouts).to receive(:is_user_payable).and_call_original
+          allow(Payouts).to receive(:is_user_payable)
+            .with(user, anything, payout_type: Payouts::PAYOUT_TYPE_INSTANT).and_return(false)
+
+          expect(user.next_payout_date).to eq Date.new(2025, 9, 26)
+        end
+      end
+    end
   end
 
   describe "#upcoming_payouts" do
