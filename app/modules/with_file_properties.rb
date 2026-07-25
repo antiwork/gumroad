@@ -204,11 +204,14 @@ module WithFileProperties
       TranscodeVideoForStreamingWorker.perform_in(10.seconds, streamable.id, streamable.class.name)
     end
 
-    # A video we could not read metadata from. Leaves analyze_completed unset so
-    # a later re-analyze can still succeed if the source is replaced, and tells
-    # the seller their file is unusable rather than failing silently.
+    # A video we could not read metadata from. Clears analyze_completed so a
+    # later re-analyze can still succeed if the source is replaced (a file that
+    # analyzed fine before and is re-analyzed after its source was replaced by a
+    # corrupt one must not keep the flag), and tells the seller their file is
+    # unusable rather than failing silently.
     def video_analysis_failed(reason)
       logger.info("Could not analyze movie #{self.class.name} #{id}: #{reason}")
+      self.analyze_completed = false if respond_to?(:analyze_completed=)
       save! if changed?
       transcoding_failed if respond_to?(:transcoding_failed)
       nil

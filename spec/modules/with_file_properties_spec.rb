@@ -193,6 +193,14 @@ describe WithFileProperties do
 
         corrupt_file.assign_video_attributes(corrupt_path)
       end
+
+      it "clears a previously-set analyze_completed flag when the source is replaced with a corrupt file" do
+        corrupt_file.update!(width: 1920, height: 1080, analyze_completed: true)
+
+        expect do
+          corrupt_file.assign_video_attributes(corrupt_path)
+        end.to change { corrupt_file.reload.analyze_completed? }.from(true).to(false)
+      end
     end
   end
 
