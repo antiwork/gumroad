@@ -105,13 +105,22 @@ class Product::StaleContentWriteGuard
     stale_records = stale_pages(product, pages_params) + stale_variants(product, variants_params)
     return if stale_records.empty?
 
-    blocking = Feature.active?(BLOCK_FEATURE_NAME, product.user)
+    blocking = enforcement_enabled?(product)
 
     # The notification accompanies the rejection so incidents are visible and
     # diagnosable from the alert alone — it never replaces the rejection. With
     # enforcement gated off we still send it (under OBSERVED_MESSAGE) so the
     # payload-contract follow-up keeps the same diagnostics without any
     # seller-visible effect.
+    #
+    # NOTE on volume: while enforcement is off, a session that never adopts its
+    # refreshed timestamps succeeds and keeps its stale snapshot, so it can
+    # notify once per save rather than once per seller-visible block. That is
+    # accepted deliberately for now — the observe-only signal is the input to
+    # the payload-contract work (gumroad-private#1360 / #1361) and under-reporting
+    # it would hide the bug we are trying to characterise. If the volume becomes
+    # a problem the lever is a Sentry-side sample rate on OBSERVED_MESSAGE, not
+    # dropping events here. Tracked on gumroad-private#1295.
     ErrorNotifier.notify(
       blocking ? BLOCKED_MESSAGE : OBSERVED_MESSAGE,
       product_id: product.id,
@@ -127,6 +136,30 @@ class Product::StaleContentWriteGuard
     product.errors.add(:base, MESSAGE)
     raise StaleContentConflict.new(MESSAGE, stale_records:)
   end
+
+  # Whether the seller-visible rejection is switched on for this product's
+  # owner.
+  #
+  # Reading a Flipper flag is a Redis round trip, and this runs inside the
+  # save's transaction while it holds the `SELECT ... FOR UPDATE` lock on the
+  # product row. So a feature-store outage must not turn a save this guard was
+  # about to ALLOW into a 500 — that would recreate, for a different reason, the
+  # exact failure this gate exists to stop. A failed lookup therefore reads as
+  # "not enforcing": the same fail-open direction as a missing or unparseable
+  # timestamp, and the only direction consistent with why the flag exists.
+  #
+  # The actor is the product's OWNER rather than whoever is doing the editing,
+  # so a canary cohort is a stable set of sellers and a collaborator editing
+  # someone else's product gets the same behaviour that seller does.
+  def self.enforcement_enabled?(product)
+    Feature.active?(BLOCK_FEATURE_NAME, product.user)
+  rescue StandardError => e
+    # Deliberately swallowed: the alternative is failing a seller's save because
+    # a feature-flag lookup blipped.
+    Rails.logger.warn("StaleContentWriteGuard: #{BLOCK_FEATURE_NAME} lookup failed (#{e.class}: #{e.message}); not enforcing")
+    false
+  end
+  private_class_method :enforcement_enabled?
 
   def self.stale_pages(product, pages_params)
     stored_pages_by_external_id = (product.alive_rich_contents.to_a +

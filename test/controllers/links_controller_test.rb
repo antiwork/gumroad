@@ -1958,6 +1958,40 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert @version1_page.reload.alive?
   end
 
+  # The kill switch reads a Flipper flag, which is a Redis round trip, and it
+  # runs inside the save's transaction while that transaction holds the product
+  # row lock. If the feature store is unreachable the save must still go
+  # through: a 500 here would recreate the failure this gate exists to remove.
+  test "PUT update still saves when the enforcement flag lookup itself fails" do
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    seller_edit = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Saved despite a flag-store outage" }] }]
+    # Simulate the feature store failing for THIS flag only, without mocha:
+    # a `.with` matcher turns every OTHER flag lookup in the request into an
+    # unexpected invocation (custom_html_pages, cancellation_discounts), so
+    # override the singleton and restore it in an ensure block.
+    original = Feature.method(:active?)
+    Feature.define_singleton_method(:active?) do |name, actor = nil|
+      raise Redis::CannotConnectError, "Error connecting to Redis" if name == Product::StaleContentWriteGuard::BLOCK_FEATURE_NAME
+
+      original.call(name, actor)
+    end
+
+    begin
+      travel 1.minute
+      @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+      post :update, params: @params.merge(
+        variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: seller_edit } }] }]
+      ), format: :json
+    ensure
+      Feature.define_singleton_method(:active?, original)
+    end
+
+    assert_response :success
+    assert_equal seller_edit, @version1_page.reload.description
+  end
+
   # --- the July 21, 2026 incident shape (gumroad-private#1230) -----------------
   # Support restored a product's per-version pages while
   # has_same_rich_content_for_all_variants stayed on and a blank product-level
