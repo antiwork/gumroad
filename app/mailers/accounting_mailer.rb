@@ -191,6 +191,24 @@ class AccountingMailer < ApplicationMailer
          to: PAYMENTS_NOTIFICATION_EMAIL
   end
 
+  # One slice of a weekly payout batch gave up after its retries. This is deliberately
+  # separate from payout_batch_failed: a failed slice means a bounded group of sellers is
+  # unpaid and the fix is to retry that one job from the Sidekiq dead set, whereas a failed
+  # batch means the whole processor bucket is unpaid and needs a full re-run. Sending the
+  # batch email for a slice failure would overstate the blast radius and prescribe a
+  # cohort-wide re-run that duplicates payout notes for every ineligible seller.
+  def payout_batch_slice_failed(payout_processor_type, bank_account_type, seller_count, error_class, error_message)
+    @payout_processor_type = payout_processor_type
+    @bank_account_type = bank_account_type.presence
+    @seller_count = seller_count
+    @error_class = error_class
+    @error_message = error_message
+
+    bucket = @bank_account_type.presence || payout_processor_type
+    mail subject: "#{SUBJECT_PREFIX}Weekly payout batch slice failed - #{bucket}",
+         to: PAYMENTS_NOTIFICATION_EMAIL
+  end
+
   def global_sales_tax_summary_report(month, year, s3_read_url)
     @subject_and_title = "Global Sales Tax Summary Report for #{month}/#{year}"
     @s3_url = s3_read_url

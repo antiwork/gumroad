@@ -316,51 +316,96 @@ describe Payouts do
     let(:payout_date) { Date.yesterday }
     let(:payout_processor_type) { PayoutProcessorType::PAYPAL }
 
-    it "calls on create_payments_for_balances_up_to_date_for_users with all users holding balance" do
+    it "hands every holding-balance seller to a slice job" do
       create(:user, unpaid_balance_cents: 0)
       u2 = create(:user, unpaid_balance_cents: 1)
       u3 = create(:user, unpaid_balance_cents: 10)
       u4 = create(:user, unpaid_balance_cents: 1000)
-      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, payout_processor_type, [u2, u3, u4], perform_async: true)
+
+      expect(PerformPayoutsForUserSliceWorker).to receive(:perform_in)
+        .with(0, payout_processor_type, payout_date.to_s, [u2.id, u3.id, u4.id], nil)
+
       described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
     end
 
-    it "walks the cohort in bounded slices so each slice's payments are enqueued before the next slice is evaluated" do
-      # Regression test for gumroad-private#1021: the whole-cohort single pass ran
-      # ~110 minutes before enqueueing anything, so a worker restart mid-pass lost
-      # all progress and the Friday batch produced zero payments. Slicing must
-      # produce one enqueue call per slice, covering every holding-balance user.
+    it "fans the cohort out to one job per bounded slice, staggered, instead of walking it inline" do
+      # Regression test for gumroad-private#1021 and #1284: checking eligibility for the
+      # whole ~195k-seller cohort inside one job took about two hours, which is longer than
+      # a worker lives, so the job was recycled and restarted from the beginning until it
+      # was buried in the dead set with the cohort unpaid. Each slice must therefore get its
+      # own job, so a recycle costs one slice instead of the whole run.
       stub_const("Payouts::USER_LOOKUP_BATCH_SIZE", 2)
       users = create_list(:user, 5, unpaid_balance_cents: 100)
 
-      enqueued = []
-      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).exactly(3).times do |_date, _processor, slice_users, **kwargs|
-        # Each slice must be enqueued asynchronously; a synchronous call would
-        # reintroduce the long single pass this test exists to prevent.
-        expect(kwargs[:perform_async]).to eq(true)
-        enqueued.concat(slice_users.to_a)
+      enqueued_ids = []
+      delays = []
+      expect(PerformPayoutsForUserSliceWorker).to receive(:perform_in).exactly(3).times do |delay, processor, date_string, user_ids, bank_account_type|
+        expect(processor).to eq(payout_processor_type)
+        expect(date_string).to eq(payout_date.to_s)
+        expect(bank_account_type).to be_nil
+        delays << delay
+        enqueued_ids.concat(user_ids)
       end
 
       described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
 
-      expect(enqueued).to match_array(users)
+      expect(enqueued_ids).to match_array(users.map(&:id))
+      # Staggered so the whole cohort's payout jobs don't hit the processors at once.
+      expect(delays).to eq([0, Payouts::SLICE_ENQUEUE_STAGGER, 2 * Payouts::SLICE_ENQUEUE_STAGGER])
     end
 
-    it "calls create_payments_for_balances_up_to_date_for_users with all users holding balance who have an active Stripe Connect account" do
-      u1 = create(:user, unpaid_balance_cents: 0) # Has an active Stripe Connect account but no balance
-      u2 = create(:user, unpaid_balance_cents: 200) # Has balance and a Stripe account but no Stripe Connect account
-      u3 = create(:user, unpaid_balance_cents: 100) # Has balance and an active Stripe Connect account
-      u4 = create(:user, unpaid_balance_cents: 1000) # Has balance and an inactive Stripe Connect account
-      create(:user, unpaid_balance_cents: 1000) # Has balance but no Stripe or Stripe Connect account
+    it "does not evaluate eligibility itself, so the orchestrator stays short-lived" do
+      create(:user, unpaid_balance_cents: 100)
+      allow(PerformPayoutsForUserSliceWorker).to receive(:perform_in)
 
-      create(:merchant_account_stripe_connect, charge_processor_merchant_id: "stripe_connect_u1", user: u1)
-      create(:merchant_account, charge_processor_merchant_id: "stripe_u2", user: u2)
-      create(:merchant_account_stripe_connect, charge_processor_merchant_id: "stripe_connect_u3", user: u3)
-      create(:merchant_account_stripe_connect, charge_processor_merchant_id: "stripe_connect_u4", user: u4, deleted_at: Time.current)
+      expect(described_class).not_to receive(:create_payments_for_balances_up_to_date_for_users)
 
-      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, PayoutProcessorType::STRIPE, [u3], perform_async: true)
+      described_class.create_payments_for_balances_up_to_date(payout_date, payout_processor_type)
+    end
+  end
 
-      described_class.create_payments_for_balances_up_to_date(payout_date, PayoutProcessorType::STRIPE)
+  describe "create_payments_for_balances_up_to_date_for_user_ids" do
+    let(:payout_date) { Date.yesterday }
+
+    it "evaluates the given sellers and enqueues their payouts asynchronously" do
+      users = create_list(:user, 2, unpaid_balance_cents: 100)
+
+      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |date, processor, relation, **kwargs|
+        expect(date).to eq(payout_date)
+        expect(processor).to eq(PayoutProcessorType::PAYPAL)
+        expect(relation).to match_array(users)
+        expect(kwargs[:perform_async]).to eq(true)
+        expect(kwargs[:bank_account_type]).to be_nil
+      end
+
+      described_class.create_payments_for_balances_up_to_date_for_user_ids(payout_date, PayoutProcessorType::PAYPAL, users.map(&:id))
+    end
+
+    it "limits the Friday Stripe run to sellers with an active Stripe Connect account" do
+      u1 = create(:user, unpaid_balance_cents: 200) # Has balance and a Stripe account but no Stripe Connect account
+      u2 = create(:user, unpaid_balance_cents: 100) # Has balance and an active Stripe Connect account
+      u3 = create(:user, unpaid_balance_cents: 1000) # Has balance and an inactive Stripe Connect account
+      u4 = create(:user, unpaid_balance_cents: 1000) # Has balance but no Stripe or Stripe Connect account
+
+      create(:merchant_account, charge_processor_merchant_id: "stripe_u1", user: u1)
+      create(:merchant_account_stripe_connect, charge_processor_merchant_id: "stripe_connect_u2", user: u2)
+      create(:merchant_account_stripe_connect, charge_processor_merchant_id: "stripe_connect_u3", user: u3, deleted_at: Time.current)
+
+      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor, relation, **_kwargs|
+        expect(relation.to_a).to eq([u2])
+      end
+
+      described_class.create_payments_for_balances_up_to_date_for_user_ids(payout_date, PayoutProcessorType::STRIPE, [u1, u2, u3, u4].map(&:id))
+    end
+
+    it "does not apply the Stripe Connect filter to a bank-account-type run" do
+      # Bank-account-type runs pay Gumroad-managed Stripe accounts, which have no Stripe
+      # Connect merchant account — filtering on one would pay nobody.
+      user = create(:user, unpaid_balance_cents: 100)
+
+      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, PayoutProcessorType::STRIPE, [user], perform_async: true, bank_account_type: "AchAccount")
+
+      described_class.create_payments_for_balances_up_to_date_for_user_ids(payout_date, PayoutProcessorType::STRIPE, [user.id], bank_account_type: "AchAccount")
     end
   end
 
@@ -514,19 +559,27 @@ describe Payouts do
     end
     before { u3_0 }
 
-    it "calls create_payments_for_balances_up_to_date_for_users for users holding balance once for every bank account type" do
-      allow(Payouts).to receive(:is_user_payable).exactly(3).times.and_return(true)
-      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, payout_processor_type, [u1_2, u2_2], perform_async: true, bank_account_type: "AustralianBankAccount").and_call_original
-      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, payout_processor_type, [u3_0], perform_async: true, bank_account_type: "CanadianBankAccount").and_call_original
+    it "enqueues a slice job for the users holding balance once for every bank account type" do
+      slices = []
+      allow(PerformPayoutsForUserSliceWorker).to receive(:perform_in) do |_delay, processor, date_string, user_ids, bank_account_type|
+        expect(processor).to eq(payout_processor_type)
+        expect(date_string).to eq(payout_date.to_s)
+        slices << [bank_account_type, user_ids]
+      end
 
       described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name, CanadianBankAccount.name])
+
+      expect(slices).to match_array([
+                                      ["AustralianBankAccount", [u1_2.id, u2_2.id]],
+                                      ["CanadianBankAccount", [u3_0.id]],
+                                    ])
     end
 
     it "looks up bank accounts in chunks of holding-balance user ids" do
       stub_const("Payouts::BANK_ACCOUNT_LOOKUP_BATCH_SIZE", 1)
 
-      allow(Payouts).to receive(:is_user_payable).and_return(true)
-      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, payout_processor_type, [u1_2, u2_2], perform_async: true, bank_account_type: "AustralianBankAccount").and_call_original
+      expect(PerformPayoutsForUserSliceWorker).to receive(:perform_in)
+        .with(0, payout_processor_type, payout_date.to_s, [u1_2.id, u2_2.id], "AustralianBankAccount")
 
       expect(BankAccount).to receive(:alive).at_least(:twice).and_call_original
 
@@ -536,28 +589,27 @@ describe Payouts do
     it "selects the same users when the holding-balance ids are materialized in multiple batches" do
       stub_const("Payouts::HOLDING_BALANCE_ID_BATCH_SIZE", 1)
 
-      allow(Payouts).to receive(:is_user_payable).and_return(true)
-      expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, payout_processor_type, [u1_2, u2_2], perform_async: true, bank_account_type: "AustralianBankAccount").and_call_original
+      expect(PerformPayoutsForUserSliceWorker).to receive(:perform_in)
+        .with(0, payout_processor_type, payout_date.to_s, [u1_2.id, u2_2.id], "AustralianBankAccount")
 
       described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
     end
 
-    it "loads the matched users in id-bounded batches so a large cohort cannot force a full-table scan" do
+    it "hands the matched users to slice jobs in id-bounded batches so a large cohort cannot force a full-table scan" do
       stub_const("Payouts::USER_LOOKUP_BATCH_SIZE", 1)
-      allow(Payouts).to receive(:is_user_payable).and_return(true)
 
-      loaded_batches = []
-      allow(described_class).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor, users, **_options|
-        loaded_batches << users.to_a
+      enqueued_slices = []
+      allow(PerformPayoutsForUserSliceWorker).to receive(:perform_in) do |_delay, _processor, _date_string, user_ids, _bank_account_type|
+        enqueued_slices << user_ids
       end
 
       described_class.create_payments_for_balances_up_to_date_for_bank_account_types(payout_date, payout_processor_type, [AustralianBankAccount.name])
 
-      # One batch per user at a batch size of 1: no single lookup ever exceeds the cap,
-      # and the union across batches is still the full Australian cohort.
-      expect(loaded_batches.size).to eq(2)
-      expect(loaded_batches.map(&:size)).to all(be <= 1)
-      expect(loaded_batches.flatten).to match_array([u1_2, u2_2])
+      # One slice per user at a batch size of 1: no single lookup ever exceeds the cap,
+      # and the union across slices is still the full Australian cohort.
+      expect(enqueued_slices.size).to eq(2)
+      expect(enqueued_slices.map(&:size)).to all(be <= 1)
+      expect(enqueued_slices.flatten).to match_array([u1_2.id, u2_2.id])
     end
   end
 
