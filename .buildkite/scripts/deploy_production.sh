@@ -12,20 +12,42 @@ logger() {
 # Redis while they run (see DeployBlockingJobTracking) and the matching healthcheck answers
 # 503 for as long as any of them is registered.
 #
-# wait_for_healthcheck <label> <url> <max attempts> <on-timeout: proceed|skip> <fail-safe window test>
+# wait_for_healthcheck <label> <url> <max attempts> <on-timeout: proceed|skip> <fail-safe window test> [pre-rollout window test]
 #
 # Polls every 3 minutes. Meanings of the answers:
 #   200 -> nothing in flight, deploy now.
 #   503 -> something is in flight, keep waiting.
+#   404 -> the app currently in production does not serve this endpoint at all, i.e. it
+#     predates the deploy that adds it. See the pre-rollout note below.
 #   anything else (unreachable, 5xx from the LB, ...) -> we cannot tell, so fall back to the
 #     conservative clock window this check replaced: skip the deploy if we are inside it,
 #     proceed if we are not. A broken healthcheck can then never be worse than the old
 #     time-based behaviour.
 #
-# The fail-safe window test is a shell snippet evaluated with `eval`; it should succeed when
-# the current time is inside the window.
+# Why 404 is handled separately from "we cannot tell":
+#
+# The deploy script runs BEFORE the app it is deploying is live, so on the single deploy that
+# first ships a new healthcheck endpoint, the still-running old app answers 404. That is not an
+# ambiguous failure — it is the old app telling us definitively that none of the new tracking
+# code is live yet, so nothing can be registered and this check has nothing to report on. If we
+# treated it as "cannot tell" and applied the wide fail-safe window, that window would skip the
+# very deploy that installs the endpoint, and keep skipping it for as long as the window lasts.
+# The endpoint can only start answering by being deployed, so the check would be blocking its
+# own bootstrap.
+#
+# Instead, a 404 falls back to the narrower clock window that was actually protecting these jobs
+# BEFORE this mechanism existed (the pre-rollout window). That is the honest answer: on an app
+# without the tracking code, the old clock guard is the only protection there ever was, so
+# reproducing it exactly is neither weaker nor stronger than the behaviour we are replacing.
+# Once the endpoint is live it answers 200/503 on the healthy paths; the windows stay in place
+# for the abnormal ones (a 5xx or an unreachable host still falls back to the fail-safe window).
+#
+# The window tests are shell snippets evaluated with `eval`; each should succeed when the
+# current time is inside its window. The pre-rollout test defaults to the fail-safe test when
+# not supplied, which is the right behaviour for a check whose endpoint is already deployed.
 wait_for_healthcheck() {
   local label="$1" url="$2" max_attempts="$3" on_timeout="$4" failsafe_window_test="$5"
+  local prerollout_window_test="${6:-$5}"
   local attempt hc_status
 
   for attempt in $(seq 1 "$max_attempts"); do
@@ -38,6 +60,13 @@ wait_for_healthcheck() {
     elif [ "$hc_status" = "503" ]; then
       logger "$label in flight (healthcheck 503) — waiting 3 minutes (attempt $attempt/$max_attempts)"
       sleep 180
+    elif [ "$hc_status" = "404" ]; then
+      if eval "$prerollout_window_test"; then
+        logger "$label healthcheck absent (HTTP 404) and we are inside the pre-rollout window — skipping deployment"
+        exit 0
+      fi
+      logger "$label healthcheck absent (HTTP 404) and we are outside the pre-rollout window — proceeding so the endpoint can ship"
+      return 0
     else
       if eval "$failsafe_window_test"; then
         logger "$label healthcheck unreachable (HTTP $hc_status) inside the fail-safe window — skipping deployment"
@@ -90,8 +119,28 @@ wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15
 #   UTC 11:00 finances / deferred refunds / Stripe balance summaries reports
 # => hours 00-05 and 08-13. Outside those we proceed, because nothing that registers here
 # is scheduled to be running.
+#
+# The last argument is the PRE-ROLLOUT window, used only while production still 404s this
+# endpoint (see wait_for_healthcheck). It reproduces the guard this check replaced — the
+# midnight-6am ET block that used to live in .github/workflows/tests.yml — and it is written in
+# ET, exactly as that block was (TZ=America/New_York, hours 0-5). Note this one is deliberately
+# NOT in UTC even though the fail-safe window above is: the fail-safe window is read off the
+# UTC cron schedule, which does not move with daylight saving, whereas this window reproduces a
+# human "midnight to 6am local" rule, so hardcoding a UTC offset would silently be wrong for the
+# ~4.5 months of EST (during EST, ET 05:00 is UTC 10:00 — the busiest scheduled hour, when the
+# quarterly financial reports run).
+#
+# It is also deliberately NARROWER than the fail-safe window: on an app that has none of the
+# tracking code, the old block is exactly the protection that existed, and widening it here
+# would only delay this endpoint's own rollout.
+#
+# REMOVE THIS LAST ARGUMENT once the endpoint is confirmed live in production. It exists only to
+# let the endpoint bootstrap itself. Left in place it would apply this narrow window to every
+# FUTURE 404 as well — a removed route, a web-only rollback, an edge 404 — and those are cases
+# where the tracking code IS live, so the wide fail-safe window is the right answer for them.
 wait_for_healthcheck "Long-running job" "https://gumroad.com/healthcheck/long_running_jobs" 40 skip \
-  '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
+  '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }' \
+  '[ "$(TZ=America/New_York date +%-H)" -le 5 ]'
 
 ECR_REGISTRY=${ECR_REGISTRY}
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
