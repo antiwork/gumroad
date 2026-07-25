@@ -45,5 +45,58 @@ describe PurchaseSellerAnalyticsPresenter do
       expect(props[:analytics][:google_analytics_id]).to eq("G-ABC123")
       expect(props[:analytics][:facebook_pixel_id]).to be_nil
     end
+
+    describe "buyer-currency fields" do
+      let(:seller) { create(:user, google_analytics_id: "G-ABC123") }
+      let(:product) { create(:product, user: seller) }
+      let(:purchase) { create(:purchase, link: product, displayed_price_cents: 10_00) }
+      # The charge factory's default merchant account collides with the shared Gumroad
+      # managed-account uniqueness validation, so give the presentment's charge its own.
+      let(:charge_presentment) do
+        create(:charge_presentment, charge: create(:charge, merchant_account: create(:merchant_account, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")))
+      end
+
+      it "omits them for a canonical USD sale" do
+        event = described_class.new(purchase).props[:purchase_event]
+
+        expect(event).not_to have_key(:buyer_presentment_currency)
+        expect(event).not_to have_key(:buyer_presentment_value)
+      end
+
+      it "includes the buyer currency and charged total for a presentment sale" do
+        create(:purchase_presentment, purchase:, charge_presentment:,
+                                      presentment_currency: Currency::CAD,
+                                      presentment_price_cents: 12_00,
+                                      presentment_tip_cents: 0,
+                                      presentment_seller_tax_cents: 0,
+                                      presentment_gumroad_tax_cents: 1_50,
+                                      presentment_shipping_cents: 0,
+                                      presentment_total_cents: 13_50)
+
+        event = described_class.new(purchase.reload).props[:purchase_event]
+
+        expect(event[:buyer_presentment_currency]).to eq("CAD")
+        expect(event[:buyer_presentment_value]).to eq(13.5)
+        # Canonical fields keep their existing meaning so current reports are unaffected.
+        expect(event[:currency]).to eq(purchase.displayed_price_currency_type.to_s)
+        expect(event[:value]).to eq(10_00)
+      end
+
+      it "does not divide zero-decimal currencies by 100" do
+        create(:purchase_presentment, purchase:, charge_presentment:,
+                                      presentment_currency: Currency::JPY,
+                                      presentment_price_cents: 1_500,
+                                      presentment_tip_cents: 0,
+                                      presentment_seller_tax_cents: 0,
+                                      presentment_gumroad_tax_cents: 0,
+                                      presentment_shipping_cents: 0,
+                                      presentment_total_cents: 1_500)
+
+        event = described_class.new(purchase.reload).props[:purchase_event]
+
+        expect(event[:buyer_presentment_currency]).to eq("JPY")
+        expect(event[:buyer_presentment_value]).to eq(1_500)
+      end
+    end
   end
 end
