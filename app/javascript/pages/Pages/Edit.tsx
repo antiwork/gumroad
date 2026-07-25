@@ -158,7 +158,7 @@ export default function PagesEdit() {
   // replaces the default template.
   const agentPanelHeading = !is_profile && page.custom_html ? "Update with your agent" : "Build with your agent";
   const agentPanelIntro = is_profile
-    ? "Your profile page is designed by an AI agent — use your own agent with the prompt below, or Gumroad's built-in Agent tab. Either way, the agent replaces the default template with full HTML: custom layout, animations, anything."
+    ? "Your profile page is built to be updated by an AI agent — use your own agent with the prompt below, or Gumroad's built-in Agent tab. Either way, the agent replaces the default template with full HTML: custom layout, animations, anything."
     : page.custom_html
       ? "This page is custom HTML built by your agent, so it can't be edited here — hand your agent this prompt to change it."
       : "Want more than rich text? Your agent can redesign this page as full HTML and publish it for you.";

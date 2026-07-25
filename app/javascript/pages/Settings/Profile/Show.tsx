@@ -447,8 +447,8 @@ export default function SettingsPage() {
               <section className="grid gap-8 p-4! md:p-8!">
                 <Alert role="status" variant="warning">
                   This sections editor is the old way to lay out your profile and is being phased out. It stays here
-                  while your profile still uses sections. To customize your profile beyond it, an AI agent designs the
-                  page for you — use your own agent, or Gumroad's built-in Agent tab. Open your{" "}
+                  while your profile still uses sections. Beyond it, your profile page is built to be updated by an AI
+                  agent — use your own agent, or Gumroad's built-in Agent tab. Open your{" "}
                   <Link href={Routes.edit_page_path("profile")} className="underline">
                     Home page under Pages
                   </Link>{" "}
