@@ -32,4 +32,22 @@ describe RefreshAffiliateEarningsJob do
   it "does nothing when the affiliate no longer exists" do
     expect { described_class.new.perform(0) }.not_to raise_error
   end
+
+  describe "when Sidekiq gives up retrying" do
+    it "hands the computation claim back so requests can attempt the sum again" do
+      affiliate = create(:direct_affiliate, affiliate_basis_points: 1000)
+      Rails.cache.clear
+      Rails.cache.write(AffiliateEarningsCache.compute_lock_key(affiliate), true, expires_in: 1.hour)
+
+      described_class.sidekiq_retries_exhausted_block.call({ "args" => [affiliate.id] }, StandardError.new)
+
+      expect(Rails.cache.read(AffiliateEarningsCache.compute_lock_key(affiliate))).to be_nil
+    end
+
+    it "does not blow up when the affiliate is gone" do
+      expect do
+        described_class.sidekiq_retries_exhausted_block.call({ "args" => [0] }, StandardError.new)
+      end.not_to raise_error
+    end
+  end
 end

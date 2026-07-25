@@ -18,6 +18,17 @@ class RefreshAffiliateEarningsJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :low, lock: :until_executed
 
+  # A request that timed out handed its computation claim to this job, and a
+  # failed run keeps that claim so the pending retry stays the only thing
+  # computing the sum. Once Sidekiq stops retrying, nobody is going to compute
+  # it, so the claim has to go back: otherwise the affiliate would sit on the
+  # calculating state until it expired on its own, even though a fresh request
+  # is now free to attempt the aggregate again.
+  sidekiq_retries_exhausted do |msg, _exception|
+    affiliate = Affiliate.find_by(id: msg["args"].first)
+    AffiliateEarningsCache.release_computation!(affiliate) if affiliate
+  end
+
   def perform(affiliate_id)
     affiliate = Affiliate.find_by(id: affiliate_id)
     return if affiliate.nil?

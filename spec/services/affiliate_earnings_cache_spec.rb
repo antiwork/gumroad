@@ -200,6 +200,28 @@ describe AffiliateEarningsCache do
       expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
     end
 
+    it "keeps the claim when the recomputation fails, so a retry is the only thing computing the sum" do
+      Rails.cache.write(described_class.compute_lock_key(affiliate), true, expires_in: described_class::BACKGROUND_HANDOFF_LOCK_TTL)
+      allow(affiliate).to receive(:total_cents_earned).and_raise(ActiveRecord::StatementTimeout)
+
+      expect { described_class.refresh_unless_fresh!(affiliate) }.to raise_error(ActiveRecord::StatementTimeout)
+
+      # Sidekiq still has retries left for this job, so releasing here would let
+      # the next request start its own scan alongside the pending retry.
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_present
+      expect(Rails.cache.read(described_class.cache_key(affiliate))).to be_nil
+    end
+
+    it "does not create a claim when a failing refresh was not covering one" do
+      allow(affiliate).to receive(:total_cents_earned).and_raise(ActiveRecord::StatementTimeout)
+
+      expect { described_class.refresh_unless_fresh!(affiliate) }.to raise_error(ActiveRecord::StatementTimeout)
+
+      # A console-invoked refresh has no claim behind it, and inventing one would
+      # park the page on the calculating state for work nobody will retry.
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
+    end
+
     it "recomputes when the cached value is stale" do
       create_purchase_earning(21)
       Rails.cache.write(

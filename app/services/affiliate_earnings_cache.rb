@@ -124,14 +124,37 @@ class AffiliateEarningsCache
     # scan.
     def refresh_unless_fresh!(affiliate)
       cached = read(affiliate)
-      return cached[:cents] if cached && !stale?(cached)
 
-      refresh!(affiliate)
-    ensure
+      cents = if cached && !stale?(cached)
+        cached[:cents]
+      else
+        refresh!(affiliate)
+      end
+
       # A value is cached now (this run wrote one, or found one already there),
       # so release the claim a timed-out request may have handed over. Waiting
-      # for it to expire would keep requests on the calculating state for up to
-      # two minutes after the number was ready.
+      # for it to expire would keep requests on the calculating state for long
+      # after the number was ready.
+      release_computation(affiliate)
+      cents
+    rescue StandardError
+      # The recomputation failed and nothing was cached, but Sidekiq will retry
+      # this job, so the background is still the owner of this computation.
+      # Releasing the claim here would let the next request take a fresh one and
+      # start its own bounded scan alongside the pending retry — the duplicated
+      # work the claim exists to prevent. Instead re-arm the claim's window so it
+      # survives the retry's backoff, and leave the release to the job's
+      # retries-exhausted hook, which is the only point at which nobody is going
+      # to compute this value anymore.
+      extend_claim_for_retry(affiliate)
+      raise
+    end
+
+    # Hands the computation back to the request path. Called by the background
+    # job once Sidekiq has given up retrying: with no pending retry there is no
+    # owner, so the next request should be allowed to attempt the aggregate
+    # again rather than watch the calculating state until the claim expires.
+    def release_computation!(affiliate)
       release_computation(affiliate)
     end
 
@@ -210,6 +233,18 @@ class AffiliateEarningsCache
           true,
           expires_in: BACKGROUND_HANDOFF_LOCK_TTL
         )
+      end
+
+      # Re-arms an existing claim after a failed background run, so it covers the
+      # retry that Sidekiq has already scheduled instead of lapsing in between.
+      # Only an existing claim is extended: this method also runs when the
+      # refresh was invoked from a console with no claim in play, and creating
+      # one there would put the page on the calculating state for a computation
+      # nobody is going to retry.
+      def extend_claim_for_retry(affiliate)
+        return unless Rails.cache.exist?(compute_lock_key(affiliate))
+
+        hold_claim_for_background_job(affiliate)
       end
 
       def read(affiliate)
