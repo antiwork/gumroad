@@ -107,7 +107,16 @@ class Checkout::PresentmentRounding
   # presentment_rounding spec asserts this cap against the real fee calculation, so if the
   # tip ever stops being part of the fee base a test fails rather than a round-down
   # silently reaching into the seller's money.
-  def self.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents:)
+  #
+  # Brazilian Stripe Connect sellers are the exception the fee percentages cannot see:
+  # Purchase#calculate_fees zeroes fee_cents outright for those accounts, so Gumroad takes
+  # nothing from the charge and there is no share for a round-down to come out of. They are
+  # otherwise buyer-currency eligible, so without this the cap would claim absorption
+  # capacity that does not exist and the reduction would land on the seller's proceeds.
+  # Those sales quote the exact converted amount instead.
+  def self.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents:, merchant_account: nil)
+    return 0 if merchant_account&.is_a_brazilian_stripe_connect_account?
+
     fee_per_thousand = (seller.custom_fee_per_thousand.presence || Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND).to_i
     return 0 unless fee_per_thousand.positive?
 

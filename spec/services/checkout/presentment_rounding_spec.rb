@@ -155,6 +155,33 @@ describe Checkout::PresentmentRounding do
 
       expect(cap).to be <= purchase.fee_cents
     end
+
+    # Brazilian Stripe Connect accounts pass every buyer-currency eligibility check, so
+    # they reach this cap, but Purchase#calculate_fees returns a fee of zero for them.
+    # The percentage arithmetic alone would therefore authorise a round-down against a
+    # Gumroad share that does not exist, and the orchestrator's clamp would push the
+    # difference onto the seller.
+    it "is zero for a Brazilian Stripe Connect seller, whom Gumroad charges no fee" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller, country: "BR")
+      product = create(:product, user: seller, price_cents: 10_00)
+      purchase = build(:purchase, link: product, seller:, price_cents: 10_00, merchant_account:)
+      purchase.send(:calculate_fees)
+
+      expect(purchase.fee_cents).to eq(0)
+      expect(
+        described_class.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents: 10_00, merchant_account:)
+      ).to eq(0)
+    end
+
+    it "still counts the fee for a Stripe Connect seller outside Brazil" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller, country: "GB")
+
+      expect(
+        described_class.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents: 10_00, merchant_account:)
+      ).to eq(1_00)
+    end
   end
 
   describe ".enabled_for?" do

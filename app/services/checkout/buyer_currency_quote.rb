@@ -195,7 +195,8 @@ class Checkout::BuyerCurrencyQuote
         max_downward_cents: presentment_cents_for(
           Checkout::PresentmentRounding.absorbable_gumroad_cents(
             seller:,
-            canonical_price_and_tip_cents: line_items.sum { _1.price_cents + _1.tip_cents }
+            canonical_price_and_tip_cents: line_items.sum { _1.price_cents + _1.tip_cents },
+            merchant_account:
           ),
           quote.fx_rate,
           buyer_currency
