@@ -7,14 +7,23 @@ class ReceiptPresenter::ItemInfo
   include PreorderHelper
   include ProductsHelper
   include BasePrice::Recurrence
+  include BuyerPresentmentDisplay
 
   attr_reader :product, :purchase
 
-  def initialize(purchase)
+  # document_purchases is every purchase rendered on the same receipt. A receipt's
+  # currency is decided once for the whole document (see BuyerPresentmentDisplay), so an
+  # item line cannot make that call on its own: a charge where only some purchases can
+  # be stated in the buyer's currency prints entirely in canonical USD, and an item line
+  # that independently chose the buyer's currency would sit under a USD total. Defaults
+  # to this purchase alone for the mails that render a single item section without a full
+  # receipt (the upcoming-call reminder).
+  def initialize(purchase, document_purchases: nil)
     @product = purchase.link
     @purchase = purchase
     @seller = purchase.link.user
     @subscription = purchase.subscription
+    @document_purchases = document_purchases || [purchase]
   end
 
   def props
@@ -31,7 +40,19 @@ class ReceiptPresenter::ItemInfo
   end
 
   private
-    attr_reader :seller, :subscription
+    attr_reader :seller, :subscription, :document_purchases
+
+    # True when this line should be stated in the buyer's currency: the document as a
+    # whole settled on one buyer currency, AND this particular purchase has the
+    # buyer-currency amounts to print. The second condition matters for bundles — an item
+    # line can be a bundle product purchase, which has no presentment row of its own even
+    # though the bundle purchase the buyer was actually charged for does.
+    def show_buyer_presentment_amounts?
+      return @_show_buyer_presentment_amounts if defined?(@_show_buyer_presentment_amounts)
+
+      @_show_buyer_presentment_amounts =
+        buyer_presentment_display_currency(document_purchases).present? && purchase.buyer_presentment?
+    end
 
     def product_props
       @_product_props ||= ProductPresenter.card_for_email(product:)
@@ -160,7 +181,7 @@ class ReceiptPresenter::ItemInfo
 
       {
         label: purchase.link.native_type === Link::NATIVE_TYPE_COFFEE ? "Donation" : "Product price",
-        value: purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_price_per_unit : purchase.formatted_total_display_price_per_unit
+        value: show_buyer_presentment_amounts? ? purchase.formatted_buyer_presentment_price_per_unit : purchase.formatted_total_display_price_per_unit
       }
     end
 
@@ -169,7 +190,7 @@ class ReceiptPresenter::ItemInfo
 
       {
         label: "Tip",
-        value: purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_tip : format_just_price_in_cents(purchase.tip.value_cents, purchase.displayed_price_currency_type),
+        value: show_buyer_presentment_amounts? ? purchase.formatted_buyer_presentment_tip : format_just_price_in_cents(purchase.tip.value_cents, purchase.displayed_price_currency_type),
       }
     end
 

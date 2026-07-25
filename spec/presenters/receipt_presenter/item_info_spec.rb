@@ -287,6 +287,23 @@ describe ReceiptPresenter::ItemInfo do
                 )
               end
             end
+
+            # A receipt is stated in one currency for the whole document. When a sibling
+            # purchase on the same charge cannot be stated in the buyer's currency, the
+            # receipt falls back to canonical USD everywhere — including this item line,
+            # which would otherwise print CAD under a USD total.
+            context "when a sibling purchase on the same receipt has no buyer-presentment amounts" do
+              let(:usd_only_purchase) { create(:purchase, link: product, seller:, merchant_account:, price_cents: 999) }
+              let(:item_info) { described_class.new(purchase, document_purchases: [purchase, usd_only_purchase]) }
+
+              it "states the item line in canonical USD" do
+                expect(props[:general_attributes]).to eq(
+                  [
+                    { label: "Product price", value: "$14.99" },
+                  ]
+                )
+              end
+            end
           end
         end
 

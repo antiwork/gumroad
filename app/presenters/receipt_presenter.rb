@@ -26,8 +26,12 @@ class ReceiptPresenter
   end
 
   def items_infos
+    # Every item line has to be stated in the currency the receipt as a whole chose, so
+    # each ItemInfo is handed the same set of purchases that decision is made over (the
+    # set PaymentInfo and ChargeInfo use) rather than deciding line by line.
+    document_purchases = chargeable.successful_purchases
     chargeable.unbundled_purchases.map do |purchase_item|
-      ReceiptPresenter::ItemInfo.new(purchase_item)
+      ReceiptPresenter::ItemInfo.new(purchase_item, document_purchases:)
     end
   end
 

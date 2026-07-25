@@ -76,7 +76,7 @@ describe ReceiptPresenter do
 
     describe "#items_infos" do
       it "returns an array" do
-        expect(ReceiptPresenter::ItemInfo).to receive(:new).with(chargeable).and_call_original
+        expect(ReceiptPresenter::ItemInfo).to receive(:new).with(chargeable, document_purchases: anything).and_call_original
         purchases = presenter.items_infos
         expect(purchases.size).to eq(1)
         expect(purchases.first).to be_a(ReceiptPresenter::ItemInfo)
@@ -172,7 +172,7 @@ describe ReceiptPresenter do
 
     describe "#items_infos" do
       it "returns an array" do
-        expect(ReceiptPresenter::ItemInfo).to receive(:new).with(purchase).and_call_original
+        expect(ReceiptPresenter::ItemInfo).to receive(:new).with(purchase, document_purchases: anything).and_call_original
         purchases = presenter.items_infos
         expect(purchases.size).to eq(1)
         expect(purchases.first).to be_a(ReceiptPresenter::ItemInfo)
