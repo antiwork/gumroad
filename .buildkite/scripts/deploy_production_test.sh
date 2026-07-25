@@ -5,8 +5,8 @@
 # only test the deploy gate has. It drives the SHIPPED function, extracted from the real file
 # with awk rather than retyped, so the test cannot drift from the code that deploys.
 #
-# The `date` stub resolves real timezones from a fixed epoch via python zoneinfo, so the
-# EST/EDT cases below exercise genuine daylight-saving behaviour rather than a hardcoded offset.
+# The `date` stub resolves real timezones from a fixed epoch via python zoneinfo, so a case can
+# pin behaviour at any wall-clock hour without waiting for it.
 #
 # Usage: ./deploy_production_test.sh            run the cases
 #        ./deploy_production_test.sh --mutate   also prove each case FAILS against broken
@@ -76,7 +76,9 @@ run_case() {
     source '$STUB_DIR/fn.sh'
     $call
     echo REACHED_DEPLOY_BODY
-  " 2>/dev/null | grep -q REACHED_DEPLOY_BODY && echo DEPLOY || echo SKIP
+  " > "$STUB_DIR/out" 2>/dev/null
+  # the log lines stay in $STUB_DIR/out so check_log can assert on them afterwards
+  grep -q REACHED_DEPLOY_BODY "$STUB_DIR/out" && echo DEPLOY || echo SKIP
 }
 
 PASS=0; FAIL=0
@@ -87,33 +89,43 @@ check() { # <desc> <expected> <statuses> <day> <hour> <call>
   else FAIL=$((FAIL+1)); echo "FAIL: $desc -> got $got, expected $exp"; fi
 }
 
+# Same as check(), but asserts on what the run LOGGED rather than on deploy/skip. Some branches
+# exist only for the diagnostic value of their log line, and a case on the outcome alone cannot
+# tell whether the branch is still there.
+check_log() { # <desc> <expected-substring> <statuses> <day> <hour> <call>
+  local desc="$1" pat="$2"; shift 2
+  run_case "$@" >/dev/null
+  if grep -qF -- "$pat" "$STUB_DIR/out"; then PASS=$((PASS+1)); [ -n "${QUIET:-}" ] || echo "PASS: $desc"
+  else FAIL=$((FAIL+1)); echo "FAIL: $desc -> log did not contain: $pat"; fi
+}
+
 cases() {
-  EDT=2026-07-15; EST=2026-01-15
+  D=2026-07-15
   # --- steady state: endpoint deployed and answering ---
-  check "200 nothing in flight deploys"                    DEPLOY "200" $EDT 2  long
-  check "200 deploys even inside every window"             DEPLOY "200" $EDT 5  long
-  # --- 503 in-flight loop then clear (the sleep path, previously untested) ---
-  check "503 then 200 waits then deploys"                  DEPLOY "503 503 200" $EDT 2 long
-  # --- the bootstrap case this PR fixes ---
-  check "404 at 02 UTC (outside old ET block) SHIPS"       DEPLOY "404" $EDT 2  long
-  # --- narrow-window-DISTINCT hours: inside ET block but OUTSIDE the wide window.
-  #     These are what make the 404 branch non-vacuous; deleting it flips them. ---
-  check "404 at 06 UTC = 02:00 EDT waits (narrow-only)"    SKIP   "404" $EDT 6  long
-  check "404 at 07 UTC = 03:00 EDT waits (narrow-only)"    SKIP   "404" $EDT 7  long
-  # --- DST correctness: UTC 10 is ET 06:00 in EDT (deploy) but ET 05:00 in EST (skip).
-  #     A hardcoded UTC window cannot satisfy both rows. UTC 04 is the mirror case. ---
-  check "404 at 10 UTC in EDT = 06:00 ET SHIPS"            DEPLOY "404" $EDT 10 long
-  check "404 at 10 UTC in EST = 05:00 ET waits"            SKIP   "404" $EST 10 long
-  check "404 at 04 UTC in EST = 23:00 ET SHIPS"            DEPLOY "404" $EST 4  long
-  check "404 at 04 UTC in EDT = 00:00 ET waits"            SKIP   "404" $EDT 4  long
-  # --- genuinely broken endpoint still uses the WIDE fail-safe window ---
-  check "500 at 02 UTC skips (conservative)"               SKIP   "500" $EDT 2  long
-  check "500 at 12 UTC skips (report window)"              SKIP   "500" $EDT 12 long
-  check "000 unreachable at 20 UTC proceeds"               DEPLOY "000" $EDT 20 long
-  check "500 at 20 UTC outside all windows proceeds"       DEPLOY "500" $EDT 20 long
-  # --- the 5-arg payouts call: guards the ${6:-$5} default. Tue UTC 10 is its window. ---
-  check "payouts 404 inside its window skips (5-arg)"      SKIP   "404" 2026-07-14 10 payouts
-  check "payouts 404 outside its window proceeds (5-arg)"  DEPLOY "404" $EDT 20 payouts
+  check "200 nothing in flight deploys"                    DEPLOY "200" $D 2  long
+  check "200 deploys even inside every window"             DEPLOY "200" $D 5  long
+  # --- 503 in-flight loop then clear (the sleep path) ---
+  check "503 then 200 waits then deploys"                  DEPLOY "503 503 200" $D 2 long
+  # --- 404: no interpretable answer, so the WIDE fail-safe window decides, same as a 5xx.
+  #     The long-running-job window is UTC 00-05 and 08-13. ---
+  check "404 at 02 UTC inside fail-safe window skips"      SKIP   "404" $D 2  long
+  check "404 at 12 UTC inside report hours skips"          SKIP   "404" $D 12 long
+  check "404 at 06 UTC outside the window proceeds"        DEPLOY "404" $D 6  long
+  check "404 at 20 UTC outside the window proceeds"        DEPLOY "404" $D 20 long
+  # --- the 404 branch exists for its distinct log line: a live endpoint that starts 404ing
+  #     means a renamed/removed route, a web-only rollback, or an edge 404, and the deploy log
+  #     should say so rather than call it unreachable. Assert the wording, both directions. ---
+  check_log "404 skip logs it as absent, not unreachable"  "absent (HTTP 404) inside the fail-safe window" "404" $D 2  long
+  check_log "404 proceed logs it as absent too"            "absent (HTTP 404) outside the fail-safe window" "404" $D 20 long
+  check_log "5xx still logs as unreachable"                "unreachable (HTTP 500)" "500" $D 2 long
+  # --- genuinely broken endpoint uses the same window ---
+  check "500 at 02 UTC skips (conservative)"               SKIP   "500" $D 2  long
+  check "500 at 12 UTC skips (report window)"              SKIP   "500" $D 12 long
+  check "000 unreachable at 20 UTC proceeds"               DEPLOY "000" $D 20 long
+  check "500 at 20 UTC outside all windows proceeds"       DEPLOY "500" $D 20 long
+  # --- the payouts call has its own, much narrower window: Tue-Fri UTC 10. ---
+  check "payouts 404 inside its window skips"              SKIP   "404" 2026-07-14 10 payouts
+  check "payouts 404 outside its window proceeds"          DEPLOY "404" $D 20 payouts
   check "payouts 500 inside its window skips"              SKIP   "500" 2026-07-14 10 payouts
 }
 
@@ -150,16 +162,16 @@ if [ "${1:-}" = "--mutate" ]; then
     PAYOUT_ARGS=$(awk '/^wait_for_healthcheck "Payout batch"/,/^$/' "$SCRIPT" | tr -d '\\\n')
   }
   ESCAPES=0
-  mutate "delete the whole 404 branch (falls through to wide fail-safe)" \
+  mutate "delete the whole 404 branch (loses its diagnostic log line)" \
     's/    elif \[ "\$hc_status" = "404" \]; then.*?      return 0\n(    else)/$1/s'
-  mutate "pre-rollout window hardcoded to UTC 04-09 (the DST bug this review found)" \
-    "s/'\\[ \"\\\$\\(TZ=America\\/New_York date \\+%-H\\)\" -le 5 \\]'/'[ \"\\\$(date -u +%-H)\" -ge 4 ] \\&\\& [ \"\\\$(date -u +%-H)\" -le 9 ]'/"
-  mutate "drop the \${6:-\$5} default (payouts 404 evals an empty test)" \
-    's/\$\{6:-\$5\}/$6/'
-  mutate "off-by-one: -le 5 becomes -le 6 in the pre-rollout window" \
-    "s/(TZ=America\\/New_York date \\+%-H\\)\" -le )5/\${1}6/"
+  mutate "404 branch ignores the window and always skips" \
+    's/(= "404" \]; then\n      )if eval "\$failsafe_window_test"; then/${1}if true; then/'
   mutate "404 skip uses return instead of exit (deploy proceeds anyway)" \
-    's/(inside the pre-rollout window — skipping deployment"\n        )exit 0/${1}return 0/'
+    's/(absent \(HTTP 404\) inside the fail-safe window — skipping deployment"\n        )exit 0/${1}return 0/'
+  mutate "off-by-one: fail-safe window overnight leg becomes -le 6" \
+    "s/(date -u \\+%-H\\)\" -le )5/\${1}6/"
+  mutate "fail-safe window loses its report-hours leg (08-13 becomes 18-13)" \
+    's/-ge 8 \]/-ge 18 ]/'
   echo
   echo "MUTANTS_ESCAPED=$ESCAPES"
   [ "$ESCAPES" -eq 0 ] && [ "$BASE_FAIL" -eq 0 ] && echo "ALL GREEN: cases pass, every mutant caught"
