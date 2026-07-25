@@ -32,9 +32,11 @@ class Checkout::PaymentMethodResolver
   # claim a recurring-incapable method.) Klarna is here as a v1 launch decision, not a Stripe
   # limitation: Stripe supports Klarna on recurring payments, but memberships/preorders are
   # excluded from Klarna's first launch (gumroad-private#933) so the policy set must not claim it.
-  # Alipay is here for the same reason as Klarna: Stripe does support recurring Alipay
-  # payments, but memberships/preorders are out of scope for its first launch
-  # (gumroad-private#1339), so the policy set must not claim it on a recurring cart.
+  # Alipay is here for a stronger reason than Klarna's: Stripe gates recurring Alipay behind
+  # its own approval and does not support Alipay in Checkout's subscription mode at all
+  # (docs.stripe.com/payments/alipay), and memberships/preorders are out of scope for its
+  # first launch anyway (gumroad-private#1339), so the policy set must not claim it on a
+  # recurring cart.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna alipay].freeze
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
