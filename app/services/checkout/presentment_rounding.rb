@@ -1,7 +1,15 @@
 # frozen_string_literal: true
 
-# Rounds a buyer-currency total to a price ending a human would plausibly have chosen
-# (€8,49 instead of €8,53), at the moment the quote is minted.
+# Rounds a buyer-currency total so it keeps the price ending the seller chose in USD:
+# a $9.99 cart quotes €8,99 rather than €8,53, and a $10 cart quotes €9 rather than €8,53.
+# This happens at the moment the quote is minted.
+#
+# Mirroring the seller's own ending, rather than picking from a menu of "good" endings, is
+# the rule Gumroad wants: the seller decided what their price should look like, and a buyer
+# paying in euros should see the same decision expressed in euros. It also means we never
+# have to defend a chosen set of endings — the ending is whatever the seller already picked.
+# The ending mirrored is the one on the USD total being converted, so a cart with tax keeps
+# the total's ending (the .49 of an $11.49 total), not the bare product price's.
 #
 # Why quote-mint time and not charge time: the buyer decides against the amount the
 # checkout shows them. Rounding after that decision — on the way to the processor —
@@ -17,13 +25,13 @@
 # as charge_presentments.rounding_delta_cents so it can be monitored alongside
 # foreign-exchange drift.
 #
-# Direction is NEAREST target only, never ceiling. Measured against 2,159 real
-# charge_presentments amounts (July 2026): a nearest rule moves the buyer's total by
-# 0.90% on average in absolute terms and is very slightly in the buyer's favour on
-# balance (signed mean -0.13%, 1,170 down vs 953 up), whereas a ceiling rule on the same
-# grids and the same amounts is a +2.06% average price increase (p50 +1.27%, p90 +5.20%).
-# A ceiling rule is therefore a price rise on international buyers wearing a rounding
-# algorithm's clothes; if we ever want that spread we should take it explicitly as a
+# Direction is NEAREST occurrence of that ending, never ceiling. Measured against 2,159
+# real charge_presentments amounts (July 2026, on an earlier version of this rule that
+# aimed at a fixed menu of endings): a nearest rule was very slightly in the buyer's
+# favour on balance (signed mean -0.13%), whereas always rounding up to the next
+# occurrence was a +2.06% average price increase. The grids have changed since, but the
+# asymmetry has not: always-up is a price rise on international buyers wearing a rounding
+# algorithm's clothes. If we ever want that spread we should take it explicitly as a
 # pricing decision, not as a side effect of making prices look nicer.
 class Checkout::PresentmentRounding
   include CurrencyHelper
@@ -34,34 +42,24 @@ class Checkout::PresentmentRounding
     end
   end
 
-  # Target price endings, by how large the amount is. Each band is a repeating grid:
-  # `endings_minor` are the offsets inside each `step_minor`-wide slot that count as a
-  # good-looking price. So the $5-$25 band targets every whole unit minus one and minus
-  # fifty-one cents (7.49, 7.99, 8.49 …), and the $100+ band targets every five units
-  # minus a cent (104.99, 109.99 …), where a coarser grid is still a small move.
-  #
-  # The grids are deliberately finer than the price-ending research alone would suggest,
-  # because the grid — not the percentage cap — is what bounds how far any single amount
-  # can move. With only .99 to aim at below $5, a €1,22 conversion has nowhere good to go
-  # (€0,99 is −19%, €1,49 is +20%), and a rounding rule that can move a small price by a
-  # fifth is not one we should ship. Each band's worst case (half its widest gap) is at
-  # most a few percent of the smallest amount in that band.
-  #
-  # `max_percent` is how far the rounded amount may sit from the true converted amount.
-  # When no target inside the cap fits, we do not round at all — the buyer sees and pays
-  # the exact converted amount, which is what happens today.
-  BANDS = [
-    { below_minor: 5_00, step_minor: 100, endings_minor: [29, 49, 79, 99], max_percent: 8 },
-    { below_minor: 25_00, step_minor: 100, endings_minor: [49, 99], max_percent: 6 },
-    { below_minor: 100_00, step_minor: 100, endings_minor: [99], max_percent: 3 },
-    { below_minor: nil, step_minor: 500, endings_minor: [499], max_percent: 3 },
+  # How far the quoted amount may sit from the true converted amount, by how large it is.
+  # Mirroring the ending can ask for a move of up to half a major unit (49 cents), which is
+  # a rounding error on a €40 cart and a fifth of the price on a €2,20 one. When the move
+  # the seller's ending would need is outside this cap we do not round at all: the buyer
+  # sees and pays the exact converted amount, which is today's behaviour.
+  PERCENT_CAPS = [
+    { below_minor: 5_00, max_percent: 10 },
+    { below_minor: 25_00, max_percent: 6 },
+    { below_minor: nil, max_percent: 3 },
   ].freeze
 
-  # Zero-decimal currencies (¥, ₩ …) have no cents to make charming, so the good-looking
-  # amount is a round one: ¥1,500 rather than ¥1,483. We pick the coarsest of these grids
-  # whose worst case still fits the percentage cap, so small yen amounts round to tens and
-  # large ones to thousands.
-  ZERO_DECIMAL_STEPS = [10, 50, 100, 500, 1_000, 5_000].freeze
+  # Zero-decimal currencies (¥, ₩ …) have no cents, so a USD ending cannot be copied into
+  # them literally — there is no ¥8,99. The ending is mirrored one place up instead: it is
+  # read as a position inside a hundred units, so a $9.99 price quotes ¥1,499 (one below a
+  # round hundred, the same shape as one below a round unit) and a $10 price quotes a round
+  # ¥1,500. Below the cap this leaves the amount alone, which is why small yen carts quote
+  # the exact converted amount.
+  ZERO_DECIMAL_STEP = 100
   ZERO_DECIMAL_MAX_PERCENT = 3
 
   # Rounding rides along with the seller's buyer-local-currency setup and is on by
@@ -83,6 +81,10 @@ class Checkout::PresentmentRounding
   # exact converted amount" — every path that cannot round safely returns that rather
   # than raising, because a checkout must never fail over a cosmetic price ending.
   #
+  # canonical_total_cents is the USD total being converted, and it is what supplies the
+  # ending to mirror: its cents (99 for a $9.99 cart, 0 for a $10 one) are the ending the
+  # quoted amount is pulled onto.
+  #
   # max_downward_cents is how much of the charge Gumroad is known to be able to give up:
   # rounding DOWN is absorbed out of Gumroad's share of the charge, and the seller's
   # proceeds must come out identical either way, so the amount can never fall further
@@ -93,8 +95,8 @@ class Checkout::PresentmentRounding
   # the charge, leaving no Gumroad share behind the round-down this sized. That is why
   # Charge::PresentmentOrchestrator re-checks the reduction against the fee actually
   # computed on the purchases and refuses the charge if the fee no longer covers it.
-  def self.round(presentment_total_cents:, currency:, max_downward_cents:)
-    new(presentment_total_cents:, currency:, max_downward_cents:).round
+  def self.round(presentment_total_cents:, canonical_total_cents:, currency:, max_downward_cents:)
+    new(presentment_total_cents:, canonical_total_cents:, currency:, max_downward_cents:).round
   end
 
   # The part of the charge Gumroad is guaranteed to be holding, and so the most a
@@ -128,10 +130,11 @@ class Checkout::PresentmentRounding
     canonical_price_and_tip_cents.to_i * fee_per_thousand / 1000
   end
 
-  attr_reader :presentment_total_cents, :currency, :max_downward_cents
+  attr_reader :presentment_total_cents, :canonical_total_cents, :currency, :max_downward_cents
 
-  def initialize(presentment_total_cents:, currency:, max_downward_cents:)
+  def initialize(presentment_total_cents:, canonical_total_cents:, currency:, max_downward_cents:)
     @presentment_total_cents = presentment_total_cents.to_i
+    @canonical_total_cents = canonical_total_cents.to_i
     @currency = currency.to_s.downcase
     @max_downward_cents = [max_downward_cents.to_i, 0].max
   end
@@ -139,13 +142,12 @@ class Checkout::PresentmentRounding
   def round
     unrounded = Result.new(presentment_total_cents:, delta_cents: 0)
     return unrounded unless presentment_total_cents.positive?
-    # Below one major unit there is no ending worth aiming at, and rounding down could
+    return unrounded unless canonical_total_cents.positive?
+    # Below one major unit there is no ending worth mirroring, and rounding down could
     # take the charge under a processor minimum.
     return unrounded if presentment_total_cents < subunit_to_unit(currency)
 
-    # Already a good-looking price: leave it exactly where it is. Without this an amount
-    # sitting on a target would be pulled to a neighbouring one, since the target it is
-    # already on is a zero-distance move and therefore not a move at all.
+    # Already carries the seller's ending: leave it exactly where it is.
     return unrounded if candidates.include?(presentment_total_cents)
 
     target = nearest_allowed_target
@@ -155,7 +157,7 @@ class Checkout::PresentmentRounding
   rescue StandardError => e
     # A cosmetic price ending must never be able to break a checkout: fall back to the
     # exact converted amount, which is the behaviour every charge had before this existed.
-    ErrorNotifier.notify(e, context: { presentment_total_cents:, currency: })
+    ErrorNotifier.notify(e, context: { presentment_total_cents:, canonical_total_cents:, currency: })
     Result.new(presentment_total_cents:, delta_cents: 0)
   end
 
@@ -164,40 +166,39 @@ class Checkout::PresentmentRounding
       subunit_to_unit(currency) == 1
     end
 
-    # Ties (an amount exactly between two targets) go to the lower one: given no reason
-    # to prefer either, charge the buyer less. When the nearest target is out of bounds
-    # (usually because Gumroad cannot absorb that much of a round-down) the next-nearest
-    # allowed one is used rather than giving up on rounding altogether.
+    # Ties (an amount exactly between the occurrence below and the one above) go to the
+    # lower one: given no reason to prefer either, charge the buyer less. When the nearer
+    # occurrence is out of bounds (usually because Gumroad cannot absorb that much of a
+    # round-down) the other one is used rather than giving up on rounding altogether.
     def nearest_allowed_target
       candidates
         .select { |candidate| candidate.positive? && allowed?(candidate - presentment_total_cents) }
         .min_by { |candidate| [(candidate - presentment_total_cents).abs, candidate] }
     end
 
+    # The amounts in the buyer's currency that carry the seller's ending: the occurrence
+    # inside the amount's own slot plus the ones either side, so the nearest is found even
+    # when the amount sits just above or just below a slot boundary.
     def candidates
-      zero_decimal? ? zero_decimal_candidates : banded_candidates
+      slot = presentment_total_cents / target_step
+
+      ((slot - 1)..(slot + 1)).map { |index| index * target_step + target_ending }
     end
 
-    # Walks the slots either side of the amount so the nearest target is found even when
-    # the amount sits just above or just below a slot boundary.
-    def banded_candidates
-      step = band.fetch(:step_minor)
-      slot = presentment_total_cents / step
-
-      ((slot - 1)..(slot + 1)).flat_map do |index|
-        band.fetch(:endings_minor).map { |ending| index * step + ending }
-      end
+    # How wide the repeating window the ending sits inside is. For an ordinary two-decimal
+    # currency that is one major unit, so the ending recurs every €1. For a zero-decimal
+    # currency it is a hundred units, because the ending is mirrored one place up (see
+    # ZERO_DECIMAL_STEP).
+    def target_step
+      zero_decimal? ? ZERO_DECIMAL_STEP : subunit_to_unit(currency)
     end
 
-    # Picks the coarsest round-number grid whose worst case still fits the percentage
-    # cap, then offers the multiples either side of the amount. A step is only usable if
-    # half of it (the furthest the amount can be from a multiple) is inside the cap.
-    def zero_decimal_candidates
-      allowance = presentment_total_cents * ZERO_DECIMAL_MAX_PERCENT / 100.0
-      step = ZERO_DECIMAL_STEPS.select { |candidate| candidate / 2.0 <= allowance }.max
-      return [] if step.nil?
-
-      [presentment_total_cents / step, presentment_total_cents / step + 1].map { _1 * step }
+    # The seller's own ending, expressed in the buyer currency's units. The cents of the
+    # USD total are a position inside a hundred, rescaled to a position inside the window
+    # above — 99 cents becomes 99 yen out of every hundred, or 99 euro cents out of every
+    # euro.
+    def target_ending
+      canonical_total_cents % subunit_to_unit(Currency::USD) * target_step / subunit_to_unit(Currency::USD)
     end
 
     def allowed?(delta_cents)
@@ -205,11 +206,12 @@ class Checkout::PresentmentRounding
       # Rounding down beyond what Gumroad can absorb would come out of the seller's money.
       return false if delta_cents.negative? && delta_cents.abs > max_downward_cents
 
-      max_percent = zero_decimal? ? ZERO_DECIMAL_MAX_PERCENT : band.fetch(:max_percent)
       delta_cents.abs * 100 <= presentment_total_cents * max_percent
     end
 
-    def band
-      @band ||= BANDS.find { |candidate| candidate[:below_minor].nil? || presentment_total_cents < candidate[:below_minor] }
+    def max_percent
+      return ZERO_DECIMAL_MAX_PERCENT if zero_decimal?
+
+      PERCENT_CAPS.find { |cap| cap[:below_minor].nil? || presentment_total_cents < cap[:below_minor] }.fetch(:max_percent)
     end
 end

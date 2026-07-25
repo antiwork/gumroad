@@ -1,105 +1,100 @@
 # frozen_string_literal: true
 
 describe Checkout::PresentmentRounding do
-  # Generous by default so the Gumroad-absorption cap isn't the binding constraint except
-  # in the cases that test it on purpose.
-  def round(cents, currency: Currency::EUR, max_downward_cents: 10_000)
-    described_class.round(presentment_total_cents: cents, currency:, max_downward_cents:)
+  # Generous absorption by default so the Gumroad-absorption cap isn't the binding
+  # constraint except in the cases that test it on purpose.
+  def round(cents, canonical:, currency: Currency::EUR, max_downward_cents: 10_000)
+    described_class.round(presentment_total_cents: cents, canonical_total_cents: canonical, currency:, max_downward_cents:)
   end
 
   describe ".round" do
-    it "rounds a mid-priced amount to the nearest good-looking ending" do
-      result = round(8_53)
+    it "gives the buyer the seller's .99 ending" do
+      # $9.99 converts to €8,53; the seller's ending is 99, so the nearest euro amount
+      # ending in 99 is €8,99.
+      result = round(8_53, canonical: 9_99)
 
-      expect(result.presentment_total_cents).to eq(8_49)
-      expect(result.delta_cents).to eq(-4)
+      expect(result.presentment_total_cents).to eq(8_99)
+      expect(result.delta_cents).to eq(46)
       expect(result).to be_rounded
     end
 
-    it "rounds up when the nearer target is above the amount" do
-      # €8,80 sits 19 cents under €8,99 and 31 cents over €8,49, so the move is upward.
-      result = round(8_80)
+    it "gives the buyer a whole-unit price when the seller priced in whole dollars" do
+      # $10 converts to €8,53; the seller's ending is nothing, so the buyer sees €9.
+      result = round(8_53, canonical: 10_00)
+
+      expect(result.presentment_total_cents).to eq(9_00)
+      expect(result.delta_cents).to eq(47)
+    end
+
+    it "mirrors an unusual ending just as literally as a .99 one" do
+      # $12.34 → the ending to hit is 34, not a prettier number of our choosing.
+      expect(round(10_50, canonical: 12_34).presentment_total_cents).to eq(10_34)
+    end
+
+    it "rounds down when the nearer occurrence of the ending is below the amount" do
+      result = round(9_10, canonical: 9_99)
 
       expect(result.presentment_total_cents).to eq(8_99)
-      expect(result.delta_cents).to eq(19)
+      expect(result.delta_cents).to eq(-11)
     end
 
-    it "leaves an amount that already lands on a target exactly where it is" do
-      result = round(8_99)
-
-      expect(result.presentment_total_cents).to eq(8_99)
-      expect(result.delta_cents).to eq(0)
-      expect(result).not_to be_rounded
+    it "leaves an amount that already carries the seller's ending exactly where it is" do
+      expect(round(8_99, canonical: 9_99).delta_cents).to eq(0)
+      expect(round(9_00, canonical: 10_00).delta_cents).to eq(0)
     end
 
-    it "uses the finer small-amount targets instead of moving a small price by a fifth" do
-      # With only .49/.99 to aim at, this would have gone to €0,99 (−19%) or €1,49 (+20%).
-      result = round(1_22)
-
-      expect(result.presentment_total_cents).to eq(1_29)
-      expect(result.delta_cents).to eq(7)
+    it "breaks a tie toward the buyer" do
+      # €9,00 sits exactly 50 cents from €8,50 and €9,50; charge the lower one.
+      expect(round(9_00, canonical: 9_50).presentment_total_cents).to eq(8_50)
     end
 
-    it "targets x.99 in the $25-$100 band" do
-      expect(round(31_40).presentment_total_cents).to eq(30_99)
-      expect(round(33_10).presentment_total_cents).to eq(32_99)
-    end
+    it "quotes the exact converted amount when the ending is too far to reach" do
+      # Mirroring 99 onto €1,22 would mean €0,99 (−19%) or €1,99 (+63%). Both are outside
+      # the cap for an amount this small, so the buyer sees and pays the exact conversion.
+      result = round(1_22, canonical: 9_99)
 
-    it "targets a coarser x4.99 / x9.99 grid above $100" do
-      expect(round(142_30).presentment_total_cents).to eq(139_99)
-      expect(round(147_80).presentment_total_cents).to eq(149_99)
-    end
-
-    it "refuses to round when no target sits inside the band's percentage cap" do
-      # 8% of 1.14 is 9 cents; the nearest targets (0.99 and 1.29) are both 15 away.
-      result = round(1_14)
-
-      expect(result.presentment_total_cents).to eq(1_14)
+      expect(result.presentment_total_cents).to eq(1_22)
       expect(result.delta_cents).to eq(0)
     end
 
-    it "rounds zero-decimal currencies to a round number rather than a .99 ending" do
-      result = round(1_483, currency: Currency::JPY)
-
-      expect(result.presentment_total_cents).to eq(1_500)
-      expect(result.delta_cents).to eq(17)
+    it "mirrors the ending in zero-decimal currencies one place up" do
+      # ¥ has no cents, so a .99 ending becomes "one below a round hundred": ¥1,499.
+      expect(round(1_483, canonical: 9_99, currency: Currency::JPY).presentment_total_cents).to eq(1_499)
+      # And a whole-dollar price becomes a round hundred.
+      expect(round(1_483, canonical: 10_00, currency: Currency::JPY).presentment_total_cents).to eq(1_500)
     end
 
-    it "picks a coarser grid for larger zero-decimal amounts and a finer one for smaller" do
-      expect(round(14_233, currency: Currency::JPY).presentment_total_cents).to eq(14_000)
-      expect(round(283, currency: Currency::JPY).presentment_total_cents).to eq(280)
-    end
-
-    it "leaves a zero-decimal amount too small for even the finest grid alone" do
-      expect(round(9, currency: Currency::JPY).delta_cents).to eq(0)
+    it "leaves a zero-decimal amount alone when a hundred-unit move is too large for it" do
+      expect(round(283, canonical: 9_99, currency: Currency::JPY).delta_cents).to eq(0)
     end
 
     it "leaves amounts below one major unit alone" do
-      expect(round(80).delta_cents).to eq(0)
+      expect(round(80, canonical: 9_99).delta_cents).to eq(0)
     end
 
     it "leaves non-positive amounts alone" do
-      expect(round(0).presentment_total_cents).to eq(0)
-      expect(round(-100).presentment_total_cents).to eq(-100)
+      expect(round(0, canonical: 9_99).presentment_total_cents).to eq(0)
+      expect(round(-100, canonical: 9_99).presentment_total_cents).to eq(-100)
+      expect(round(8_53, canonical: 0).presentment_total_cents).to eq(8_53)
     end
 
     it "never rounds down further than the caller says Gumroad can absorb" do
-      expect(round(9_12, max_downward_cents: 13).presentment_total_cents).to eq(8_99)
-      # One cent less of headroom and the round-down is refused; the next allowed target
-      # is above the amount, so the buyer's total goes up instead of down — never into
-      # the seller's money.
-      expect(round(9_12, max_downward_cents: 12).presentment_total_cents).to eq(9_49)
+      expect(round(9_10, canonical: 9_99, max_downward_cents: 11).presentment_total_cents).to eq(8_99)
+      # One cent less of headroom and the round-down is refused. The occurrence above is
+      # 89 cents away, outside the cap, so the buyer pays the exact converted amount —
+      # the shortfall is never taken out of the seller's money.
+      expect(round(9_10, canonical: 9_99, max_downward_cents: 10).delta_cents).to eq(0)
     end
 
     it "still rounds up when Gumroad has nothing to absorb a round-down with" do
-      expect(round(8_53, max_downward_cents: 0).presentment_total_cents).to eq(8_99)
+      expect(round(8_53, canonical: 9_99, max_downward_cents: 0).presentment_total_cents).to eq(8_99)
     end
 
     it "charges the exact converted amount and reports it if the rounding itself fails" do
       allow_any_instance_of(described_class).to receive(:candidates).and_raise(StandardError, "boom")
       expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError), hash_including(:context))
 
-      result = round(8_53)
+      result = round(8_53, canonical: 9_99)
 
       expect(result.presentment_total_cents).to eq(8_53)
       expect(result.delta_cents).to eq(0)
@@ -107,12 +102,14 @@ describe Checkout::PresentmentRounding do
 
     it "can never move an amount by more than Gumroad's flat fee across the whole price range" do
       # The real guarantee this feature rests on: the difference is absorbed out of
-      # Gumroad's share, so no rounding may exceed the fee Gumroad actually collects.
+      # Gumroad's share, so no move may exceed the fee Gumroad actually collects.
       flat_fee_percent = Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND / 10.0
 
-      (1_00..500_00).step(7).each do |cents|
-        delta = round(cents).delta_cents
-        expect(delta.abs * 100).to be <= cents * flat_fee_percent
+      [9_99, 10_00, 12_34, 4_50].each do |canonical|
+        (1_00..500_00).step(7).each do |cents|
+          delta = round(cents, canonical:).delta_cents
+          expect(delta.abs * 100).to be <= cents * flat_fee_percent
+        end
       end
     end
   end
@@ -201,7 +198,7 @@ describe Checkout::PresentmentRounding do
       expect(described_class.enabled_for?(seller)).to eq(true)
     end
 
-    it "is off when the seller opted out of rounding" do
+    it "is off when the seller opted out" do
       seller.update!(disable_buyer_currency_rounding: true)
 
       expect(described_class.enabled_for?(seller)).to eq(false)

@@ -104,7 +104,7 @@ class Checkout::BuyerCurrencyQuote
       currency: payload.fetch("currency"),
       canonical_total_cents: payload.fetch("canonical_total_cents"),
       presentment_total_cents: payload.fetch("presentment_total_cents"),
-      # Older tokens (minted before smart rounding shipped) have no delta key, and a
+      # Older tokens (minted before price-ending mirroring shipped) have no delta key, and a
       # token in flight across the deploy must still verify: no key means no rounding.
       rounding_delta_cents: payload["rounding_delta_cents"].to_i,
       fx_rate: BigDecimal(payload.fetch("fx_rate")),
@@ -183,12 +183,14 @@ class Checkout::BuyerCurrencyQuote
       stripe_account_id: merchant_account.charge_processor_merchant_id
     )
     converted_total_cents = presentment_cents_for(canonical_total_cents, quote.fx_rate, buyer_currency)
-    # Round to a sensible price ending HERE, before the token is signed, so the rounded
-    # amount is the one the checkout displays, the buyer confirms, and the charge uses.
-    # Rounding any later would charge an amount the buyer never saw.
+    # Give the converted total the same price ending the seller chose in USD ($9.99 →
+    # €8,99, $10 → €9), HERE, before the token is signed, so the rounded amount is the one
+    # the checkout displays, the buyer confirms, and the charge uses. Rounding any later
+    # would charge an amount the buyer never saw.
     rounding = if Checkout::PresentmentRounding.enabled_for?(seller)
       Checkout::PresentmentRounding.round(
         presentment_total_cents: converted_total_cents,
+        canonical_total_cents:,
         currency: buyer_currency,
         # A round-down comes out of Gumroad's share of the charge, never the seller's, so
         # cap it at the presentment value of the fee we know Gumroad collects on this cart.
