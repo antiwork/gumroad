@@ -7,11 +7,6 @@ describe AuthPresenter do
   let(:application) { nil }
   let(:presenter) { described_class.new(params:, application:) }
 
-  before do
-    allow(GlobalConfig).to receive(:get).with("RECAPTCHA_LOGIN_SITE_KEY").and_return("recaptcha_login_site_key")
-    allow(GlobalConfig).to receive(:get).with("RECAPTCHA_SIGNUP_SITE_KEY").and_return("recaptcha_signup_site_key")
-  end
-
   describe "#login_props" do
     context "with no params" do
       it "returns correct props" do
@@ -55,7 +50,6 @@ describe AuthPresenter do
               number_of_creators: 0,
               total_made: 0,
             },
-            recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
           }
         )
       end
@@ -86,7 +80,6 @@ describe AuthPresenter do
               number_of_creators: 56_789,
               total_made: 923_456_789,
             },
-            recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
           }
         )
       end

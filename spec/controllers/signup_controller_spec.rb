@@ -25,7 +25,6 @@ describe SignupController, type: :controller, inertia: true do
         expect(inertia.component).to eq("Signup/New")
         expect(inertia.props[:email]).to be_nil
         expect(inertia.props[:application_name]).to eq(@oauth_application.name)
-        expect(inertia.props[:recaptcha_site_key]).to eq(GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"))
         expect(response.headers["X-Robots-Tag"]).to eq "noindex"
       end
 
@@ -33,7 +32,6 @@ describe SignupController, type: :controller, inertia: true do
         referrer = User.find_by_username(params[:referrer]) if params[:referrer].present?
         number_of_creators, total_made = $redis.mget(RedisKey.number_of_creators, RedisKey.total_made)
         login_props.merge(
-          recaptcha_site_key: GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
           referrer: referrer ? {
             id: referrer.external_id,
             name: referrer.name_or_username,

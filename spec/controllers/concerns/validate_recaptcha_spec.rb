@@ -14,10 +14,6 @@ describe ValidateRecaptcha, type: :controller do
       render_recaptcha_result(valid_recaptcha_response?(site_key: "test_site_key", surface: :login))
     end
 
-    def signup_action
-      render_recaptcha_result(valid_recaptcha_response?(site_key: "test_site_key", surface: :signup))
-    end
-
     def checkout_action
       render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_site_key"))
     end
@@ -44,7 +40,6 @@ describe ValidateRecaptcha, type: :controller do
     routes.draw do
       post :action, to: "anonymous#action"
       post :login_action, to: "anonymous#login_action"
-      post :signup_action, to: "anonymous#signup_action"
       post :checkout_action, to: "anonymous#checkout_action"
       post :checkout_score_action, to: "anonymous#checkout_score_action"
       post :checkout_score_trusted_action, to: "anonymous#checkout_score_trusted_action"
@@ -234,17 +229,6 @@ describe ValidateRecaptcha, type: :controller do
       expect(Rails.logger).to receive(:info).with(/\[recaptcha_score\].*surface=login.*decision=infra_error_fail_closed/)
 
       post :login_action, params: { "g-recaptcha-response" => "test_token" }
-
-      expect(response).to have_http_status(:unprocessable_entity)
-      expect(parsed_body["error"]).to eq("captcha_failed")
-    end
-
-    it "fails signup when the reCAPTCHA API times out because signup fails closed by default" do
-      allow(HTTParty).to receive(:post).and_raise(Net::OpenTimeout.new("execution expired"))
-
-      expect(Rails.logger).to receive(:info).with(/\[recaptcha_score\].*surface=signup.*decision=infra_error_fail_closed/)
-
-      post :signup_action, params: { "g-recaptcha-response" => "test_token" }
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(parsed_body["error"]).to eq("captcha_failed")
