@@ -135,6 +135,26 @@ describe Checkout::PresentmentRounding do
 
       expect(described_class.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents: 10_00)).to eq(0)
     end
+
+    # The cap has to be a floor under what Gumroad actually collects, and the only thing
+    # that makes including tips in its base correct is that Purchase#price_cents is itself
+    # tip-inclusive (a tip makes the price "customizable" rather than adding a line beside
+    # it), so Purchase's own percentage fee is charged on price + tip too. If that ever
+    # changes, a tip-heavy cart could authorise a round-down bigger than Gumroad's share
+    # and the difference would come out of the seller's money — so assert the cap against
+    # the real fee calculation rather than trusting the comment.
+    it "stays within the percentage fee Purchase actually charges on a tip-heavy cart" do
+      seller = create(:user, tipping_enabled: true)
+      product = create(:product, user: seller, price_cents: 2_00)
+      # What the buyer submits for a $2 product with an $8 tip: one tip-inclusive price.
+      purchase = build(:purchase, link: product, seller:, price_cents: 10_00)
+      purchase.build_tip(value_cents: 8_00, value_usd_cents: 8_00)
+      purchase.send(:calculate_fees)
+
+      cap = described_class.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents: 2_00 + 8_00)
+
+      expect(cap).to be <= purchase.fee_cents
+    end
   end
 
   describe ".enabled_for?" do
