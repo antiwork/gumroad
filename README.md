@@ -20,8 +20,17 @@
   </a>
 </p>
 
+## Contributing
+
+**We don't accept pull requests on this repository.** A PR opened here will be closed without review.
+
+If you want to contribute a change: **fork the repo, open the pull request on your own fork, then email [support@gumroad.com](mailto:support@gumroad.com) with a link to it.** We'll review it and merge it on our side if we want it.
+
+Your PR still has to meet the same bar as our own work — visual evidence for anything user-facing, QA steps, test results, and an AI disclosure naming the model. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines; they apply to fork PRs exactly as written.
+
 ## Table of Contents
 
+- [Contributing](#contributing)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
