@@ -2,28 +2,34 @@
 
 class ContentModeration::Strategies::PromptStrategy
   # `reasoning` holds reasons that should block the publish. `audit_reasoning`
-  # holds spam flags that did NOT reproduce on resampling (see
-  # SPAM_CORROBORATION_RESAMPLES below) — the caller records them for review
+  # holds judgment-preset flags that did NOT reproduce on resampling (see
+  # CORROBORATION_RESAMPLES below) — the caller records them for review
   # instead of blocking, because a one-off flag from a language model is too
   # noisy to act on by itself.
   Result = Struct.new(:status, :reasoning, :audit_reasoning, keyword_init: true)
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
 
   # A single language-model evaluation is nondeterministic: the same content
-  # can flag as spam on one attempt and pass on the next, so one flag is too
-  # noisy a basis for blocking a publish. When the spam preset flags, we ask
-  # the model the same question this many more times, and only block when
-  # every resample flags too. Real spam (gibberish, keyword stuffing, identical
-  # repeated CTAs) reproduces reliably; a noisy one-off flag does not, and is
-  # downgraded to an audit record instead of blocking the seller.
-  # Adult-content flags are not resampled — this gate is spam-only.
+  # can flag on one attempt and pass on the next, so one flag is too noisy a
+  # basis for blocking a publish. When a judgment preset flags, we ask the
+  # model the same question this many more times, and only block when every
+  # resample flags too. Content that really violates the policy (gibberish,
+  # keyword stuffing, an explicit "pay me here, DM me for the goods" pitch)
+  # reproduces reliably; a noisy one-off flag does not, and is downgraded to
+  # an audit record instead of blocking the seller.
   #
-  # Corroboration is opt-in (`corroborate_spam_flags: true`) so that only
+  # Corroboration is opt-in (`corroborate_judgment_flags: true`) so that only
   # callers designed for the downgrade path get it. ModerateRecordService
   # opts in and records downgraded flags as non-blocking admin notes; other
   # callers (e.g. CreatePublicMediaService screening uploads) keep the
   # original single-sample blocking behavior and its latency profile.
-  SPAM_CORROBORATION_RESAMPLES = 2
+  CORROBORATION_RESAMPLES = 2
+
+  # Which presets are judgment calls that need corroboration before they may
+  # block a publish. Adult-content flags are NOT resampled: they key off
+  # concrete depicted content rather than an inference about the seller's
+  # intent, so a single sample is reliable enough to act on.
+  CORROBORATED_PRESETS = %w[spam off_platform_fulfillment].freeze
 
   ADULT_CONTENT_RULES = <<~RULES
     You are a content moderator. Evaluate the following content for adult/sexual content policy violations.
@@ -124,14 +130,70 @@ class ContentModeration::Strategies::PromptStrategy
     reference to a product — it is not spam.
   RULES
 
+  # Gumroad is a platform for selling digital products, and the buyer is
+  # supposed to receive what they paid for ON Gumroad — files, streamed
+  # content, license keys, a call booking, or written content in the product's
+  # own content area. A listing whose entire delivery mechanism is "pay here,
+  # then message me somewhere else to get the thing" gives the buyer no
+  # deliverable, no delivery record, and no way for support to verify a
+  # non-delivery complaint. When the off-platform handle then goes dead or
+  # ignores the buyer, Gumroad is left holding a paid order with nothing
+  # behind it — the failure mode this preset exists to catch at publish time
+  # instead of weeks later via support tickets and chargebacks.
+  #
+  # This is deliberately narrow. It is NOT about mentioning other platforms:
+  # creators legitimately link their Discord, Telegram, YouTube, and socials
+  # as a bonus, a community, or a support channel alongside a real product.
+  # It fires only when the off-platform contact IS the product.
+  OFF_PLATFORM_FULFILLMENT_RULES = <<~RULES
+    You are a content moderator for Gumroad, a marketplace where creators sell digital
+    products. Buyers pay on Gumroad and are supposed to receive what they bought through
+    Gumroad — downloadable files, streaming video or audio, license keys, a scheduled
+    call, or written/embedded content inside the product itself.
+
+    Your only job here is to decide whether this listing's ONLY way of delivering what
+    the buyer paid for is to contact the seller on another platform (Telegram, WhatsApp,
+    Discord, X/Twitter, Instagram, Signal, email, SMS, etc.).
+
+    Default: do not flag. Only flag when the listing itself makes clear there is nothing
+    to receive on Gumroad and the buyer must go message the seller to get anything at all.
+    When in doubt, treat the content as compliant.
+
+    ALLOW (these are normal Gumroad listings, never flag them):
+    - Any listing that describes actual content the buyer receives: files, PDFs, videos,
+      audio, courses, templates, code, ebooks, presets, written content, license keys.
+    - A Discord/Telegram/Slack community offered ALONGSIDE product content, as a bonus,
+      as a perk of a membership, or as where the community discussion happens.
+    - Links to the creator's own social accounts, newsletter, portfolio, or YouTube for
+      marketing, credibility, updates, or follow-up.
+    - A support, questions, or customer-service contact ("email me if you have trouble",
+      "DM me if a link breaks", "reach out for help with setup").
+    - Coaching, consulting, commissions, calls, or custom work where the listing describes
+      the actual service being performed and scheduling or intake happens over a channel.
+      The seller doing real work for the buyer is a legitimate deliverable.
+    - Physical goods that ship, or anything else with an obvious real deliverable.
+    - Listings that are simply short or vague about their content. Sparse copy is not
+      grounds to flag; there must be an affirmative "message me elsewhere to get it".
+
+    FLAG only when the listing communicates all of this:
+    - There is no described deliverable on Gumroad at all, AND
+    - The buyer is instructed to go to another platform to receive the thing they paid
+      for ("after paying, DM me on Telegram for the content", "the exclusive content is
+      on TG, so DM me on X for access", "subscribe here then message me for the link").
+
+    In other words: flag "pay here, get it somewhere else", not "pay here, and there is
+    also a community/support channel over there".
+  RULES
+
   MODEL = "gpt-4o-mini"
   JUDGE_MODEL = "gpt-4o-mini"
   SUPPORTED_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg .gif .webp].freeze
 
-  def initialize(text:, image_urls: [], corroborate_spam_flags: false)
+  def initialize(text:, image_urls: [], corroborate_judgment_flags: false, check_off_platform_fulfillment: false)
     @text = text
     @image_urls = image_urls
-    @corroborate_spam_flags = corroborate_spam_flags
+    @corroborate_judgment_flags = corroborate_judgment_flags
+    @check_off_platform_fulfillment = check_off_platform_fulfillment
   end
 
   def perform
@@ -145,23 +207,20 @@ class ContentModeration::Strategies::PromptStrategy
     all_reasoning = []
     audit_reasoning = []
 
-    [
-      { name: "adult_content", rules: ADULT_CONTENT_RULES, skip_images: false },
-      { name: "spam", rules: SPAM_RULES, skip_images: true },
-    ].each do |preset|
+    presets.each do |preset|
       result = evaluate_preset(preset)
       next if result[:status] == "compliant"
       next unless passes_uncertainty_check?(result[:reasoning])
 
-      if preset[:name] == "spam" && @corroborate_spam_flags
-        flagged_resamples, resamples_run = run_spam_resamples(preset)
-        corroborated = flagged_resamples == SPAM_CORROBORATION_RESAMPLES
+      if CORROBORATED_PRESETS.include?(preset[:name]) && @corroborate_judgment_flags
+        flagged_resamples, resamples_run = run_resamples(preset)
+        corroborated = flagged_resamples == CORROBORATION_RESAMPLES
         Rails.logger.info(
-          "ContentModeration::PromptStrategy spam corroboration: #{flagged_resamples}/#{resamples_run} resamples flagged; " \
+          "ContentModeration::PromptStrategy #{preset[:name]} corroboration: #{flagged_resamples}/#{resamples_run} resamples flagged; " \
           "#{corroborated ? "blocking" : "downgrading to audit-only"}"
         )
         unless corroborated
-          audit_reasoning << "spam (uncorroborated, #{flagged_resamples + 1}/#{resamples_run + 1} samples flagged): #{result[:reasoning]}"
+          audit_reasoning << "#{preset[:name]} (uncorroborated, #{flagged_resamples + 1}/#{resamples_run + 1} samples flagged): #{result[:reasoning]}"
           next
         end
       end
@@ -183,7 +242,24 @@ class ContentModeration::Strategies::PromptStrategy
   end
 
   private
-    # Re-runs the spam preset to see whether the initial flag reproduces, and
+    # The adult-content and spam presets run on every moderated record. The
+    # off-platform-fulfillment preset is opt-in per record because it only
+    # makes sense for a listing that has no deliverable of its own — the
+    # caller decides that (see ModerateRecordService), and skipping the preset
+    # otherwise keeps both the false-positive surface and the number of model
+    # calls down.
+    def presets
+      list = [
+        { name: "adult_content", rules: ADULT_CONTENT_RULES, skip_images: false },
+        { name: "spam", rules: SPAM_RULES, skip_images: true },
+      ]
+      if @check_off_platform_fulfillment
+        list << { name: "off_platform_fulfillment", rules: OFF_PLATFORM_FULFILLMENT_RULES, skip_images: true }
+      end
+      list
+    end
+
+    # Re-runs a preset to see whether the initial flag reproduces, and
     # returns [how many resamples flagged, how many were run]. Blocking needs
     # every resample to flag, so the first clean one decides the outcome and
     # we stop there rather than spend another model call on the seller's
@@ -193,10 +269,10 @@ class ContentModeration::Strategies::PromptStrategy
     # not flagging (evaluate_preset already maps those to compliant), so
     # transient API trouble fails open — toward publishing — like the rest of
     # this class.
-    def run_spam_resamples(preset)
+    def run_resamples(preset)
       flagged = 0
       run = 0
-      SPAM_CORROBORATION_RESAMPLES.times do
+      CORROBORATION_RESAMPLES.times do
         run += 1
         break unless evaluate_preset(preset)[:status] == "flagged"
         flagged += 1

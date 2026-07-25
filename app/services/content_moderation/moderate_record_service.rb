@@ -28,7 +28,17 @@ class ContentModeration::ModerateRecordService
   PROMPT_PRESET_LABELS = {
     "spam" => "content that reads as promotional spam",
     "adult_content" => "adult content",
+    "off_platform_fulfillment" => "off-platform fulfillment",
   }.freeze
+
+  # `humanize_reasons` phrases most violations as something the content
+  # "contains". Off-platform fulfillment is the opposite shape — the problem is
+  # what the listing is MISSING — so it gets its own sentence instead of being
+  # forced into that template.
+  OFF_PLATFORM_FULFILLMENT_MESSAGE =
+    "Buyers need to receive what they paid for on Gumroad. This %<noun>s has no content attached and " \
+    "directs buyers to message you on another platform to get it, which we don't allow. Add the files, " \
+    "videos, or written content buyers should get when they buy, then publish again."
 
   # Turn raw moderation reasons (e.g. "OpenAI moderation flagged: violence
   # (score: 0.86, threshold: 0.9)" or "spam: repeated unrelated slogans") into
@@ -53,6 +63,8 @@ class ContentModeration::ModerateRecordService
     transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
+    elsif rs.any? { |r| r.to_s.start_with?("off_platform_fulfillment:") }
+      format(OFF_PLATFORM_FULFILLMENT_MESSAGE, noun: noun)
     else
       subject = title.present? ? "The #{noun} \"#{title}\"" : "This #{noun}"
       "#{subject} can’t be saved because it looks like it contains #{humanize_reasons(reasons)}. Please update the content to follow our content guidelines."
@@ -130,10 +142,16 @@ class ContentModeration::ModerateRecordService
     def run_ai_strategies(content)
       strategies = [
         ContentModeration::Strategies::ClassifierStrategy.new(text: content.text, image_urls: content.image_urls),
-        # `corroborate_spam_flags` makes a spam flag block only when it
-        # reproduces on resampling; a lone flag is returned as audit_reasoning
-        # and recorded as a non-blocking note instead (see `check` above).
-        ContentModeration::Strategies::PromptStrategy.new(text: content.text, image_urls: content.image_urls, corroborate_spam_flags: true),
+        # `corroborate_judgment_flags` makes a spam or off-platform-fulfillment
+        # flag block only when it reproduces on resampling; a lone flag is
+        # returned as audit_reasoning and recorded as a non-blocking note
+        # instead (see `check` above).
+        ContentModeration::Strategies::PromptStrategy.new(
+          text: content.text,
+          image_urls: content.image_urls,
+          corroborate_judgment_flags: true,
+          check_off_platform_fulfillment: check_off_platform_fulfillment?,
+        ),
       ]
 
       threads = strategies.map do |strategy|
@@ -145,6 +163,27 @@ class ContentModeration::ModerateRecordService
       end
 
       threads.map(&:value)
+    end
+
+    # Only ask about off-platform fulfillment when the product genuinely has
+    # nothing for the buyer to receive on Gumroad: no uploaded files (at the
+    # product level or on any of its variants/tiers), no written or embedded
+    # content, and not a type whose deliverable is inherently something other
+    # than content (a call is a scheduled meeting, a commission is work the
+    # seller performs, a coffee/tip has no deliverable by design, a physical
+    # product ships, a bundle delivers its component products). Checking this
+    # first means a listing with real content can never be blocked by this
+    # preset no matter how the description mentions Telegram or Discord — the
+    # preset is about empty listings that route buyers off-platform, and the
+    # emptiness half of that is decided here in code rather than by a model.
+    def check_off_platform_fulfillment?
+      return false unless entity_type == :product
+      return false if record.is_physical? || record.is_bundle?
+      return false if Link::SERVICE_TYPES.include?(record.native_type)
+
+      record.alive_product_files.empty? &&
+        record.alive_variants.none? { |variant| variant.alive_product_files.any? } &&
+        !record.has_content?
     end
 
     # `blocked: false` records a flag that did not stop the publish (e.g. a

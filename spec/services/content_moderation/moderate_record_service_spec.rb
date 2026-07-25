@@ -144,7 +144,97 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       described_class.check(product, :product)
 
       expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
-        .with(hash_including(corroborate_spam_flags: true))
+        .with(hash_including(corroborate_judgment_flags: true))
+    end
+
+    # The off-platform-fulfillment preset only makes sense for a listing with
+    # nothing attached for the buyer, so the emptiness half of that judgment is
+    # decided here in code and only then handed to the model.
+    describe "off-platform fulfillment opt-in" do
+      it "asks about off-platform fulfillment for a product with no files and no content" do
+        described_class.check(product, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: true))
+      end
+
+      it "does not ask when the product has files buyers can download" do
+        product.product_files << create(:product_file)
+        product.save!
+
+        described_class.check(product.reload, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
+      it "does not ask when the product has rich content buyers can read" do
+        create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Lesson one" }] }])
+
+        described_class.check(product.reload, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
+      it "does not ask when only a variant carries the files" do
+        membership = create(:membership_product, user: seller)
+        tier = membership.tiers.first
+        tier.product_files << create(:product_file, link: membership)
+        tier.save!
+
+        described_class.check(membership.reload, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
+      it "asks for a membership whose tier has neither files nor content" do
+        membership = create(:membership_product, user: seller)
+
+        described_class.check(membership.reload, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: true))
+      end
+
+      it "does not ask for service products, whose deliverable is the seller's own work" do
+        # Service products require an account at least 30 days old.
+        seller.update!(created_at: 2.months.ago)
+        call_product = create(:call_product, user: seller)
+
+        described_class.check(call_product, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
+      it "does not ask for physical products, which ship instead of delivering content" do
+        physical = create(:physical_product, user: seller)
+
+        described_class.check(physical, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
+      it "does not ask for bundles, which deliver their component products" do
+        bundle = create(:product, :bundle, user: seller)
+
+        described_class.check(bundle, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
+      it "does not ask for posts, which have no attachable deliverable of their own" do
+        post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
+
+        described_class.check(post, :post)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
     end
 
     context "when the prompt strategy downgrades an uncorroborated spam flag" do
@@ -255,6 +345,16 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       message = described_class.seller_message(["OpenAI moderation flagged: violence"], "product")
 
       expect(message).to start_with("This product can’t be saved")
+    end
+
+    it "explains what is missing for an off-platform fulfillment flag" do
+      message = described_class.seller_message(["off_platform_fulfillment: buyer must DM on Telegram"], "product")
+
+      expect(message).to eq(
+        "Buyers need to receive what they paid for on Gumroad. This product has no content attached and " \
+        "directs buyers to message you on another platform to get it, which we don't allow. Add the files, " \
+        "videos, or written content buyers should get when they buy, then publish again."
+      )
     end
   end
 end
