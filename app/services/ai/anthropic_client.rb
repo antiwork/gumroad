@@ -230,8 +230,13 @@ class Ai::AnthropicClient
       result = begin
         response = http.post(api_url, json: body)
         raise_for_status!(response, kind: "request")
+        # JSON::ParserError is caught alongside our own errors because the failure being recovered
+        # from here is a gateway that truncates bodies: the same gateway can just as easily hand
+        # back a cut-off 200 body, and `parse` raises on that. Letting it through would replace the
+        # clear "unreadable tool call" message with a raw parser error, which reads like a bug in
+        # our code rather than the upstream problem it is.
         parse_message(response.parse)
-      rescue Error, HTTP::Error
+      rescue Error, HTTP::Error, JSON::ParserError
         raise original_error
       end
 

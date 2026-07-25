@@ -548,6 +548,31 @@ describe Ai::AnthropicClient do
       expect(buffered).to have_been_requested.once
     end
 
+    it "surfaces the original unreadable-tool-call error when the fallback's own response body is cut off" do
+      # The gateway failure this fallback recovers from is truncation, so the buffered replay can
+      # come back as a 200 with a half-written body. Parsing that raises a JSON error, which would
+      # otherwise reach the seller as a raw parser message that reads like a bug in our code — the
+      # clear upstream-flavored error has to win instead.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{still not json" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      streamed = stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered = stub_request(:post, url)
+        .with(body: hash_including("stream" => false))
+        .to_return(status: 200, body: '{"content":[{"type":"tool_use","id":"toolu_y","name":"api_wr',
+                   headers: { "Content-Type" => "application/json" })
+
+      expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::Error, /unreadable tool call/i)
+      expect(streamed).to have_been_requested.times(3)
+      expect(buffered).to have_been_requested.once
+    end
+
     it "does not retry a corrupted tool call once text has already streamed to the caller" do
       # Tool-use turns often stream preamble text before the tool_use block. Once any delta has
       # reached the caller, retrying — streamed OR via the non-streamed fallback — would replay the
