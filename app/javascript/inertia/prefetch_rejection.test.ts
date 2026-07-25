@@ -186,4 +186,61 @@ describe("inertia prefetch rejection", () => {
 
     await vi.waitFor(() => expect(requests).toContain("visit /products"), WAIT);
   });
+
+  it("does not resurrect the abandoned page after a client-side replace to another page", async () => {
+    const { router } = await import("@inertiajs/core");
+
+    window.history.replaceState({}, "", "/dashboard");
+    document.body.innerHTML = "<div id='app'></div>";
+
+    router.init({
+      initialPage: inertiaPage("/dashboard"),
+      resolveComponent: () => Promise.resolve({}),
+      swapComponent: () => Promise.resolve(),
+    });
+
+    router.prefetch("/products", { method: "get" }, { cacheFor: "1m" });
+    await vi.waitFor(() => expect(requests).toContain("prefetch /products"), WAIT);
+    router.visit("/products");
+
+    // router.replace() bypasses Router#visit just like router.push() does, and
+    // replacing the history entry still leaves the user on a different page.
+    router.replace({ component: "Page", url: "/customers", props: {} });
+    await vi.waitFor(() => expect(window.location.pathname).toBe("/customers"), WAIT);
+
+    pendingPrefetchReject?.(new Error("prefetch failed"));
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(requests).not.toContain("visit /products");
+    expect(window.location.pathname).toBe("/customers");
+  });
+
+  it("still navigates when a same-page URL sync happens while a prefetch is adopted", async () => {
+    const { router } = await import("@inertiajs/core");
+
+    window.history.replaceState({}, "", "/dashboard");
+    document.body.innerHTML = "<div id='app'></div>";
+
+    router.init({
+      initialPage: inertiaPage("/dashboard"),
+      resolveComponent: () => Promise.resolve({}),
+      swapComponent: () => Promise.resolve(),
+    });
+
+    router.prefetch("/products", { method: "get" }, { cacheFor: "1m" });
+    await vi.waitFor(() => expect(requests).toContain("prefetch /products"), WAIT);
+    router.visit("/products");
+
+    // This is what the library's own infinite scroll does as the user scrolls:
+    // router.replace() with the same path and a new ?page=. The URL changes but
+    // the user has not gone anywhere, so their pending click must survive it.
+    // Comparing whole URLs instead of pathnames would treat this as leaving the
+    // page and swallow the click, which is the bug this whole file is about.
+    router.replace({ url: "/dashboard?page=2", preserveScroll: true, preserveState: true });
+    await vi.waitFor(() => expect(window.location.search).toBe("?page=2"), WAIT);
+
+    pendingPrefetchReject?.(new Error("prefetch failed"));
+
+    await vi.waitFor(() => expect(requests).toContain("visit /products"), WAIT);
+  });
 });

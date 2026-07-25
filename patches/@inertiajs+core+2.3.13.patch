@@ -1,5 +1,5 @@
 diff --git a/node_modules/@inertiajs/core/dist/index.esm.js b/node_modules/@inertiajs/core/dist/index.esm.js
-index 5371b7d..389eacf 100644
+index 5371b7d..3bec9e1 100644
 --- a/node_modules/@inertiajs/core/dist/index.esm.js
 +++ b/node_modules/@inertiajs/core/dist/index.esm.js
 @@ -473,6 +473,13 @@ var PrefetchedRequests = class {
@@ -102,25 +102,29 @@ index 5371b7d..389eacf 100644
      });
    }
    clearHistory() {
-@@ -2611,6 +2666,16 @@ var Router = class {
+@@ -2611,6 +2666,20 @@ var Router = class {
      };
      const preserveScroll = RequestParams.resolvePreserveOption(params.preserveScroll ?? false, page2);
      const preserveState = RequestParams.resolvePreserveOption(params.preserveState ?? false, page2);
-+    if (page2.url !== current.url) {
++    if (hrefToUrl(page2.url).pathname !== hrefToUrl(current.url).pathname) {
 +      // router.push()/router.replace() can move the user to a different page
 +      // entirely without going through Router#visit, so they too abandon any
 +      // earlier click still waiting on a prefetch: recovering that prefetch
-+      // later would overwrite this newer page. Only a real change of URL counts
-+      // -- the same APIs are also used to update props or flash messages on the
-+      // page the user is already looking at (see replaceProp/appendToProp and
-+      // flash below), and those must not cancel a navigation in progress.
++      // later would overwrite this newer page.
++      //
++      // Only a change of pathname counts as going somewhere else. These same
++      // APIs are also used for updates that stay on the current page -- the
++      // built-in infinite scroll syncing ?page= into the URL, replaceProp() and
++      // flash() rewriting props -- and treating those as a navigation would
++      // bring back the original bug, where the click that adopted a failing
++      // prefetch did nothing at all.
 +      prefetchedRequests.abandonCurrentUse();
 +    }
      return page.set(page2, {
        replace,
        preserveScroll,
 diff --git a/node_modules/@inertiajs/core/dist/index.js b/node_modules/@inertiajs/core/dist/index.js
-index 12b452d..8baebea 100644
+index 12b452d..043cc0e 100644
 --- a/node_modules/@inertiajs/core/dist/index.js
 +++ b/node_modules/@inertiajs/core/dist/index.js
 @@ -531,6 +531,13 @@ var PrefetchedRequests = class {
@@ -223,18 +227,22 @@ index 12b452d..8baebea 100644
      });
    }
    clearHistory() {
-@@ -2669,6 +2724,16 @@ var Router = class {
+@@ -2669,6 +2724,20 @@ var Router = class {
      };
      const preserveScroll = RequestParams.resolvePreserveOption(params.preserveScroll ?? false, page2);
      const preserveState = RequestParams.resolvePreserveOption(params.preserveState ?? false, page2);
-+    if (page2.url !== current.url) {
++    if (hrefToUrl(page2.url).pathname !== hrefToUrl(current.url).pathname) {
 +      // router.push()/router.replace() can move the user to a different page
 +      // entirely without going through Router#visit, so they too abandon any
 +      // earlier click still waiting on a prefetch: recovering that prefetch
-+      // later would overwrite this newer page. Only a real change of URL counts
-+      // -- the same APIs are also used to update props or flash messages on the
-+      // page the user is already looking at (see replaceProp/appendToProp and
-+      // flash below), and those must not cancel a navigation in progress.
++      // later would overwrite this newer page.
++      //
++      // Only a change of pathname counts as going somewhere else. These same
++      // APIs are also used for updates that stay on the current page -- the
++      // built-in infinite scroll syncing ?page= into the URL, replaceProp() and
++      // flash() rewriting props -- and treating those as a navigation would
++      // bring back the original bug, where the click that adopted a failing
++      // prefetch did nothing at all.
 +      prefetchedRequests.abandonCurrentUse();
 +    }
      return page.set(page2, {
