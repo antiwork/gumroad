@@ -552,7 +552,7 @@ class Order::PreparePaymentIntentService
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
 
-      # The allowlist mirrors the resolver's five sources of offerable methods: always-on
+      # The allowlist mirrors the resolver's sources of offerable methods: always-on
       # launched methods, the seller's ACH opt-in, Klarna's launch flag + account gate,
       # Alipay's launch flag + account gate, and the forced-currency local methods (their
       # currency gate is below). Anything else —
@@ -581,7 +581,7 @@ class Order::PreparePaymentIntentService
           Checkout::PaymentMethodResolver.alipay_supported_merchant_account?(seller)) ||
         Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).present?
 
-      # The policy allowlist above is not enough on its own: it mirrors the resolver's four
+      # The policy allowlist above is not enough on its own: it mirrors the resolver's
       # POLICY sources but the resolver's final step is an intersection with what the charged
       # ACCOUNT can accept (launched & account_supported_methods). For a direct-charge seller
       # whose capability snapshot dropped a method (link/cashapp/us_bank_account deactivated
