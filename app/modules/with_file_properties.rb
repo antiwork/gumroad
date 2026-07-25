@@ -85,23 +85,32 @@ module WithFileProperties
   end
 
   def assign_video_attributes(path)
-    if filetype == "mov"
-      probe = Ffprobe.new(path).parse
-      self.framerate = probe.framerate
-      self.duration = probe.duration.to_i
-      self.width = probe.width
-      self.height = probe.height
-      self.bitrate = probe.bit_rate.to_i
-    else
-      movie = FFMPEG::Movie.new(path)
-      self.framerate = movie.frame_rate
-      self.duration  = movie.duration
-      self.width = movie.width
-      self.height = movie.height
-      self.bitrate = movie.bitrate if movie.bitrate.present?
+    # Only the probing itself is guarded. A NoMethodError raised later — e.g. by
+    # a nil association while queueing the transcode — must not be reported to
+    # the seller as a broken video, because by then the file has analyzed fine.
+    begin
+      if filetype == "mov"
+        probe = Ffprobe.new(path).parse
+        self.framerate = probe.framerate
+        self.duration = probe.duration.to_i
+        self.width = probe.width
+        self.height = probe.height
+        self.bitrate = probe.bit_rate.to_i
+      else
+        movie = FFMPEG::Movie.new(path)
+        self.framerate = movie.frame_rate
+        self.duration  = movie.duration
+        self.width = movie.width
+        self.height = movie.height
+        self.bitrate = movie.bitrate if movie.bitrate.present?
+      end
+    rescue NoMethodError
+      # The .mov path reads the first video stream unguarded, so a file with no
+      # video stream raises here instead of returning nils.
+      return video_analysis_failed("probe output was missing expected fields")
     end
 
-    # ffprobe can "succeed" without finding a video stream — a truncated or
+    # ffprobe can also "succeed" without finding a video stream — a truncated or
     # corrupt upload yields nil width/height (and duration 0) instead of an
     # exception. Treat that as a failed analysis: streaming needs the height to
     # pick an HLS preset, so a file without dimensions can never be transcoded
@@ -114,8 +123,6 @@ module WithFileProperties
     save!
 
     video_file_analysis_completed
-  rescue NoMethodError
-    video_analysis_failed("probe output was missing expected fields")
   end
 
   def assign_audio_attributes(path)

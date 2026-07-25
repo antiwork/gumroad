@@ -154,7 +154,8 @@ describe WithFileProperties do
       # transcoded, so it must not be recorded as successfully analyzed
       # (gumroad-private#1332).
       let(:corrupt_file) { create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/corrupt.mp4") }
-      let(:corrupt_path) { file_fixture("sample.mov").to_s.sub(".mov", ".mp4") }
+      # The FFMPEG::Movie stub below ignores the path, so this file is never opened.
+      let(:corrupt_path) { "/tmp/corrupt.mp4" }
 
       before do
         allow(FFMPEG::Movie).to receive(:new).and_return(
@@ -200,6 +201,38 @@ describe WithFileProperties do
         expect do
           corrupt_file.assign_video_attributes(corrupt_path)
         end.to change { corrupt_file.reload.analyze_completed? }.from(true).to(false)
+      end
+    end
+
+    context "when probing a .mov raises because it has no video stream" do
+      # Ffprobe#first_stream reads the first video stream unguarded, so a .mov
+      # with no video stream raises NoMethodError rather than returning nils.
+      let(:mov_file) { create(:streamable_video) }
+
+      before do
+        allow_any_instance_of(Ffprobe).to receive(:parse).and_raise(NoMethodError)
+      end
+
+      it "treats it as a failed analysis and notifies the seller" do
+        mail = double("mail")
+        expect(mail).to receive(:deliver_later)
+        expect(ContactingCreatorMailer).to receive(:video_transcode_failed).with(mov_file.id).and_return(mail)
+
+        expect do
+          mov_file.assign_video_attributes("/tmp/corrupt.mov")
+        end.not_to change { mov_file.reload.analyze_completed? }.from(false)
+      end
+    end
+
+    context "when a NoMethodError is raised after the video analyzed successfully" do
+      # The rescue must not cover post-analysis work: the file is fine by then,
+      # so telling the seller it failed to transcode would be a false alarm.
+      it "does not notify the seller and keeps the analyze_completed flag" do
+        allow(@video_file).to receive(:video_file_analysis_completed).and_raise(NoMethodError)
+        expect(ContactingCreatorMailer).not_to receive(:video_transcode_failed)
+
+        expect { @video_file.assign_video_attributes(@file_path) }.to raise_error(NoMethodError)
+        expect(@video_file.reload.analyze_completed?).to eq true
       end
     end
   end
