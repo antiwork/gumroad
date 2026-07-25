@@ -474,6 +474,59 @@ describe ReceiptPresenter::PaymentInfo do
                   ]
                 )
               end
+
+              context "when the tax was refunded on its own" do
+                before do
+                  create(:refund,
+                         purchase:,
+                         amount_cents: 0,
+                         gumroad_tax_cents: 254,
+                         total_transaction_cents: 254,
+                         presentment_currency: Currency::CAD,
+                         presentment_amount_cents: 3_18,
+                         presentment_gumroad_tax_cents: 3_18)
+                  purchase.reload
+                end
+
+                # The tax line is what a tax authority reads, so it has to be net of tax we
+                # returned. "Amount paid" stays at the amount charged today, exactly as the
+                # canonical USD receipt does (it nets tax but not the total).
+                it "nets the refunded tax out of the buyer-presentment tax line" do
+                  expect(today_payment_attributes).to eq(
+                    [
+                      { label: "Digital product", value: "CAD$21.80" },
+                      { label: "Sales tax (included)", value: "CAD$0" },
+                      { label: "Amount paid", value: "CAD$24.98" },
+                      { label: nil, value: link_to("Generate invoice", invoice_url) },
+                    ]
+                  )
+                end
+              end
+
+              context "when a refund carries no buyer-currency snapshot" do
+                before do
+                  create(:refund,
+                         purchase:,
+                         amount_cents: 0,
+                         gumroad_tax_cents: 254,
+                         total_transaction_cents: 254)
+                  purchase.reload
+                end
+
+                # Such a refund consumed canonical cents while recording zero buyer-currency
+                # cents, so no honest buyer-currency figure can be derived — fall back to the
+                # canonical USD amounts rather than overstate what the buyer is still out.
+                it "falls back to canonical USD amounts" do
+                  expect(today_payment_attributes).to eq(
+                    [
+                      { label: "Digital product", value: "$17.44" },
+                      { label: "Sales tax (included)", value: "$2.54" },
+                      { label: "Amount paid", value: "$19.98" },
+                      { label: nil, value: link_to("Generate invoice", invoice_url) },
+                    ]
+                  )
+                end
+              end
             end
           end
 

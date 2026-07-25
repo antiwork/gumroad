@@ -3,6 +3,7 @@
 class InvoicePresenter::OrderInfo
   include ActionView::Helpers::TextHelper
   include CurrencyHelper
+  include BuyerPresentmentDisplay
 
   attr_reader :charge_info
 
@@ -228,14 +229,31 @@ class InvoicePresenter::OrderInfo
     end
 
     def non_refunded_total_payment_attribute
-      amount_cents = chargeable.successful_purchases.sum do |purchase|
-        purchase.is_free_trial_purchase? ? 0 : purchase.non_refunded_total_transaction_amount
-      end
-
       {
         label: "Payment Total",
-        value: formatted_dollar_amount(amount_cents),
+        value: non_refunded_total_payment_value,
       }
+    end
+
+    # An invoice's payment total has to be denominated in the same currency as the line
+    # items above it, and for a buyer-currency purchase those lines are in the buyer's
+    # currency. Printing a USD total under EUR lines misstates the amount a tax
+    # authority reads off the document.
+    def non_refunded_total_payment_value
+      purchases = chargeable.successful_purchases
+      currency = buyer_presentment_display_currency(purchases)
+
+      if currency.present?
+        amount_cents = purchases.sum do |purchase|
+          purchase.is_free_trial_purchase? ? 0 : purchase.buyer_presentment_non_refunded_total_cents
+        end
+        MoneyFormatter.format(amount_cents, currency.to_sym, no_cents_if_whole: true, symbol: true)
+      else
+        amount_cents = purchases.sum do |purchase|
+          purchase.is_free_trial_purchase? ? 0 : purchase.non_refunded_total_transaction_amount
+        end
+        formatted_dollar_amount(amount_cents)
+      end
     end
 
     # Marks the invoice when money has been returned, so a buyer's books

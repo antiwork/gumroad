@@ -5,6 +5,7 @@ class ReceiptPresenter::ChargeInfo
   include CurrencyHelper
   include MailerHelper
   include ERB::Util
+  include BuyerPresentmentDisplay
 
   def initialize(chargeable, for_email:, order_items_count:)
     @for_email = for_email
@@ -49,11 +50,10 @@ class ReceiptPresenter::ChargeInfo
     attr_reader :for_email, :order_items_count, :chargeable, :seller
 
     def presentment_currency
-      currencies = chargeable.successful_purchases.filter_map(&:buyer_presentment_currency).uniq
-      currencies.one? ? currencies.first : nil
+      buyer_presentment_display_currency(chargeable.successful_purchases)
     end
 
     def presentment_total_cents
-      chargeable.successful_purchases.sum { _1.buyer_presentment_total_cents || _1.total_transaction_cents }
+      chargeable.successful_purchases.sum { _1.buyer_presentment_total_cents.to_i }
     end
 end

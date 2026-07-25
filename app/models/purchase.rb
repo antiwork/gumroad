@@ -1646,6 +1646,48 @@ class Purchase < ApplicationRecord
     (amount_cents.to_f / scaling_factor).round(2)
   end
 
+  # Whether buyer-currency amounts are safe to print on a receipt or invoice.
+  #
+  # Every refund that actually moved money reduces what the buyer paid. Refunds on
+  # buyer-currency purchases normally carry a buyer-currency snapshot (see
+  # Purchase::PresentmentRefund), but a refund created without one consumed canonical
+  # USD cents while recording zero buyer-currency cents. Any "remaining" buyer-currency
+  # figure derived from that state would overstate what the buyer is still out of pocket.
+  # An invoice is the document a tax authority reads, so in that case receipts and
+  # invoices fall back to canonical USD amounts for every line rather than print a
+  # confident buyer-currency number that is wrong.
+  def buyer_presentment_display?
+    return false unless buyer_presentment?
+
+    refunds.effective.all?(&:presentment_snapshot?)
+  end
+
+  # Buyer-currency tax still retained after refunds. A tax amount printed in the buyer's
+  # currency is the figure a tax authority reads off the invoice, so it has to be net of
+  # anything already returned: Gumroad-remitted tax (VAT/GST) can be refunded on its own
+  # — for example when a buyer supplies a valid VAT ID while generating an invoice — and
+  # a full or partial refund of the purchase returns a share of both tax components.
+  # (Canonical non_refunded_tax_amount nets only the Gumroad-remitted side; here both
+  # sides are netted because both are printed as one buyer-currency tax line.)
+  def buyer_presentment_non_refunded_tax_cents
+    return unless buyer_presentment?
+
+    refunded_tax_cents = refunds.effective.sum do |refund|
+      refund.presentment_seller_tax_cents.to_i + refund.presentment_gumroad_tax_cents.to_i
+    end
+    [buyer_presentment_tax_cents - refunded_tax_cents, 0].max
+  end
+
+  # Buyer-currency amount the buyer has actually paid after refunds — the buyer-currency
+  # counterpart of non_refunded_total_transaction_amount, used for an invoice's payment
+  # total so it is denominated in the same currency as the line items above it.
+  def buyer_presentment_non_refunded_total_cents
+    return unless buyer_presentment?
+
+    refunded_cents = refunds.effective.sum { _1.presentment_amount_cents.to_i }
+    [buyer_presentment_total_cents - refunded_cents, 0].max
+  end
+
   def formatted_buyer_presentment_price
     format_buyer_presentment_amount(buyer_presentment_price_cents)
   end
