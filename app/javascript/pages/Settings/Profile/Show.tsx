@@ -447,8 +447,8 @@ export default function SettingsPage() {
                 <Alert role="status" variant="warning">
                   This sections editor is the old way to lay out your profile and is being phased out. It stays here
                   while your profile still uses sections, and it's the last hand-editable profile layout. Customizing
-                  your profile beyond this needs an AI agent — that is how profile design works now, by design. Open
-                  your{" "}
+                  your profile beyond this needs an AI agent — that is how profile design works now, by design. We
+                  recommend using your own agent, and Gumroad's built-in Agent tab works too. Open your{" "}
                   <Link href={Routes.edit_page_path("profile")} className="underline">
                     Home page under Pages
                   </Link>{" "}
