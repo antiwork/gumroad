@@ -56,6 +56,24 @@ steps:
     branches: "main"
     command: ".buildkite/scripts/deploy_production.sh"
     timeout_in_minutes: 120
+    # Serialize production deploys. A deploy holds a Consul lock for its whole run
+    # (median 23 minutes), and deploy_production.sh exits 1 immediately if the lock is
+    # already held. Without this, two commits merged inside one deploy window race: the
+    # second starts, finds the lock, and dies ~30 seconds in. Failed deploys are not
+    # retried, so main silently stops shipping until someone notices and pushes again.
+    #
+    # On 2026-07-25 that was 9 of 11 deploy failures in 30 builds — a 37% failure rate,
+    # every one a lost race rather than a real problem with the commit.
+    #
+    # concurrency_group makes Buildkite queue these steps instead: the second deploy
+    # waits for the first to finish and then runs, which is what the Consul lock was
+    # trying to express but could only enforce by failing.
+    concurrency_group: "gumroad/production-deploy"
+    concurrency: 1
+    # Left on the default concurrency_method ("ordered"): queued deploys run in the order
+    # they were queued. That matters here — deploys ship a specific revision, so running
+    # them out of order could put an older revision live after a newer one. "eager" only
+    # removes the ordering guarantee; it does not mean newest-first.
     plugins:
       - docker-login#v3.0.0:
           username: "gumroadteam"
