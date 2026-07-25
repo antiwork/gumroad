@@ -6,13 +6,13 @@
 
 Contribute like this instead:
 
-1. **Fork the repo** and open the pull request on *your own* fork.
+1. **Fork the repo** and open the pull request on _your own_ fork.
 2. **Email [support@gumroad.com](mailto:support@gumroad.com)** with a link to it.
 3. We review it ourselves, and if we want it, **we merge it on our side.**
 
 Your PR on your fork is held to the same bar as anything we write. Concretely, at minimum:
 
-- **Visual evidence** for anything a user can see, before/after, desktop + mobile, light + dark. Video preferred. This is the #1 rule below and it is not waived for forks.
+- **Visual evidence** for anything a user can see, before/after, desktop + mobile, light + dark. Video preferred. This is the #1 rule below and it is not waived for forks. The one exception is the same one we give ourselves: a PR that only touches documentation or agent skill files needs no video, because the diff is the reviewable artifact.
 - **QA steps** someone else can actually follow to verify the change.
 - **Test results** — updated tests, and a screenshot of them passing.
 - **An AI disclosure** naming the specific model, after a `---` separator.
