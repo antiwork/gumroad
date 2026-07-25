@@ -1465,6 +1465,356 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edited content" }] }], page.reload.description
   end
 
+  # --- stale-snapshot overwrite guard (gumroad-private#1295) -------------------
+  # The editor submits the full product on every save, so a session working
+  # from an outdated snapshot resubmits existing page/variant ids carrying old
+  # data. Those are plain in-place updates — the deletion guards above never
+  # fire — and they silently revert whatever a newer session saved. The editor
+  # echoes each page's/variant's served updated_at; the server rejects the
+  # save with a structured conflict when a stored row changed after the
+  # snapshot, before anything is mutated. Each "two-session" test simulates
+  # session A loading (capturing snapshot timestamps), session B saving
+  # (bumping the rows), then session A saving from its stale snapshot.
+
+  test "PUT update rejects a two-session page overwrite: a save echoing a stale page snapshot cannot replace content saved in between" do
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Session B's newer content" }] }]
+
+    # Session B saves newer content after session A loaded.
+    travel 1.minute
+    @version1_page.update!(description: newer_content)
+
+    # Session A saves old content under the same page id, echoing its stale
+    # snapshot timestamp.
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_includes response.parsed_body["error_message"], "reload the page"
+    assert_equal [{ "type" => "page", "id" => @version1_page.external_id, "name" => nil }],
+                 response.parsed_body["stale_records"].map { _1.slice("type", "id", "name") }
+    assert_equal newer_content, @version1_page.reload.description
+  end
+
+  test "PUT update rejects a two-session product-level page overwrite" do
+    product_page = create_rich_content(entity: @product, description: guard_content_description, title: "Shared page")
+    stale_snapshot = product_page.updated_at.as_json
+    newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Session B's newer content" }] }]
+
+    travel 1.minute
+    product_page.update!(description: newer_content)
+
+    post :update, params: @params.merge(
+      rich_content: [{ id: product_page.external_id, title: "Shared page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }]
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_equal newer_content, product_page.reload.description
+  end
+
+  test "PUT update rejects a two-session variant overwrite: a save echoing a stale variant snapshot cannot revert attributes saved in between" do
+    setup_guarded_version!
+    stale_snapshot = @version1.updated_at.as_json
+
+    # Session B renames the variant after session A loaded.
+    travel 1.minute
+    @version1.update!(name: "Session B's newer name")
+
+    # Session A submits the old name, echoing its stale variant snapshot.
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: "Summer Sale", updated_at: stale_snapshot, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_equal [{ "type" => "variant", "id" => @version1.external_id, "name" => "Session B's newer name" }],
+                 response.parsed_body["stale_records"].map { _1.slice("type", "id", "name") }
+    assert_equal "Session B's newer name", @version1.reload.name
+  end
+
+  test "PUT update rejects a stale save before mutating ANY part of the payload" do
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    original_name = @product.name
+
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+    post :update, params: @params.merge(
+      name: "Renamed by the stale session",
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal original_name, @product.reload.name
+  end
+
+  test "PUT update sends a Sentry notification alongside the stale-save rejection" do
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :conflict
+    message, context = notified.find { |m, _| m.include?("stale snapshot") }
+    assert_not_nil message, "Expected a stale-save notification (got: #{notified.inspect})"
+    assert_equal @product.id, context[:product_id]
+    assert_equal [@version1_page.external_id], context[:stale_page_external_ids]
+  end
+
+  test "PUT update allows a save echoing the CURRENT snapshot timestamps and refreshes them in the response" do
+    setup_guarded_version!
+    updated_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edited by this session" }] }]
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: @version1.updated_at.as_json, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: @version1_page.updated_at.as_json, description: { type: "doc", content: updated_content } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal updated_content, @version1_page.reload.description
+    # The response reports the fresh post-save timestamps so the session's
+    # NEXT save echoes them instead of the pre-save ones (which would now
+    # reject the session's own follow-up save as stale).
+    fresh_timestamp = response.parsed_body["rich_content_updated_at"][@version1_page.external_id]
+    assert_equal @version1_page.updated_at.to_i, Time.zone.parse(fresh_timestamp).to_i
+    assert response.parsed_body["variant_updated_at"].key?(@version1.external_id)
+
+    # Echoing the refreshed timestamps, the follow-up save succeeds.
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: response.parsed_body["variant_updated_at"][@version1.external_id], rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: fresh_timestamp, description: { type: "doc", content: updated_content } }] }]
+    ), format: :json
+
+    assert_response :success
+  end
+
+  # The freshness check has to run while this request holds the product row
+  # lock, otherwise two saves that each echo the same (at-request-time fresh)
+  # timestamps both pass the check and the last writer silently overwrites the
+  # other — the exact overwrite the guard exists to stop. This test drives that
+  # ordering: the concurrent save is committed at the moment the request
+  # acquires the lock (`SELECT ... FOR UPDATE` on the product row), which is
+  # where a real second request would have been unblocked. The check must
+  # therefore read the post-lock state and reject, even though the echoed
+  # timestamps were current when the request started.
+  test "PUT update checks freshness while holding the product row lock, so a save committed just before the lock is honored" do
+    setup_guarded_version!
+    snapshot_current_at_request_time = @version1_page.updated_at.as_json
+    concurrent_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Committed by the concurrent save" }] }]
+
+    locked_product_row = false
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+      next if locked_product_row
+      next unless payload[:sql].to_s.include?("FOR UPDATE") && payload[:sql].to_s.include?("`links`")
+      locked_product_row = true
+      travel 1.minute
+      @version1_page.update!(description: concurrent_content)
+    end
+
+    begin
+      post :update, params: @params.merge(
+        variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: snapshot_current_at_request_time, description: { type: "doc", content: guard_content_description } }] }]
+      ), format: :json
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+
+    assert locked_product_row, "Expected the save to lock the product row (SELECT ... FOR UPDATE) before checking freshness"
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+  end
+
+  test "PUT update does NOT reject a save whose variant row was only touched by a buyer's purchase" do
+    setup_guarded_version!
+    @version1.update!(max_purchase_count: 100)
+    stale_variant_snapshot = @version1.reload.updated_at.as_json
+    page_snapshot = @version1_page.updated_at.as_json
+
+    # Every sale of a limited-quantity variant touches the variant row to bust
+    # the product cache (Purchase#touch_variants_if_limited_quantity). That
+    # bumps updated_at without changing anything the seller edits, so a save
+    # from a session that loaded before the sale has no newer seller content to
+    # overwrite and must still go through.
+    travel 1.minute
+    @version1.touch
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: stale_variant_snapshot, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: page_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+  end
+
+  # Membership tier prices are rows in a separate table (VariantPrice) and
+  # saving them does not bump the tier row's own updated_at, so the tier row's
+  # timestamp alone would let a stale full save silently revert a price another
+  # session had just changed.
+  test "PUT update rejects a two-session membership tier price overwrite: a stale save cannot revert a tier price saved in between" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+
+    # Session B raises the tier's monthly price after session A loaded. Only
+    # the price row changes — the tier row itself is untouched.
+    travel 1.minute
+    first_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 2500 })
+
+    # Session A resubmits the price it was served, echoing its stale snapshot.
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_equal [{ "type" => "variant", "id" => first_tier.external_id, "name" => "First Tier" }],
+                 response.parsed_body["stale_records"].map { _1.slice("type", "id", "name") }
+    assert_equal 2500, first_tier.reload.alive_prices.is_buy.find_by!(recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+  end
+
+  test "PUT update lets a session change a membership tier price and save again, because the response refreshes the tier's price-aware snapshot" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    tier_params = ->(snapshots) do
+      [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: snapshots[first_tier.external_id],
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 900 } } },
+        { id: second_tier.external_id, name: second_tier.name, updated_at: snapshots[second_tier.external_id],
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    end
+    served_snapshots = product.tiers.to_h { [_1.external_id, Product::StaleContentWriteGuard.snapshot_at(_1).as_json] }
+
+    post :update, params: { id: product.unique_permalink, name: product.name, variants: tier_params.call(served_snapshots) }, format: :json
+
+    assert_response :success
+    assert_equal 900, first_tier.reload.alive_prices.is_buy.find_by!(recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+    # The refreshed snapshot has to account for the price row this save wrote,
+    # otherwise the session's next save echoes a timestamp older than the price
+    # and rejects itself.
+    refreshed = response.parsed_body["variant_updated_at"]
+    assert_equal Product::StaleContentWriteGuard.snapshot_at(first_tier).to_i, Time.zone.parse(refreshed[first_tier.external_id]).to_i
+
+    travel 1.second
+    post :update, params: { id: product.unique_permalink, name: product.name, variants: tier_params.call(refreshed) }, format: :json
+
+    assert_response :success
+  end
+
+  test "PUT update does NOT reject a save that resubmits a membership tier's stored prices unchanged" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+
+    # The tier row moves without any seller-editable value changing — the same
+    # bare touch a sale of a limited-quantity tier performs. Resubmitting the
+    # stored prices would overwrite nothing, so the save must go through.
+    travel 1.minute
+    first_tier.touch
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :success
+  end
+
+  test "PUT update rejects a stale tier save that would re-enable a recurrence another session turned off" do
+    # Both tiers carry the same set of recurrences — the editor enforces that,
+    # and a payload with mismatched sets is rejected before the guard runs.
+    product = create_membership_product_with_preset_tiered_pricing(
+      user: @seller,
+      recurrence_price_values: [
+        { monthly: { enabled: true, price_cents: 300 }, yearly: { enabled: true, price_cents: 3000 } },
+        { monthly: { enabled: true, price_cents: 500 }, yearly: { enabled: true, price_cents: 5000 } },
+      ]
+    )
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+    second_snapshot = Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json
+
+    # Session B drops the yearly option from both tiers. That SOFT-DELETES the
+    # yearly price rows rather than writing live ones, and the monthly prices it
+    # resubmits are unchanged so those rows aren't touched either — a snapshot
+    # built only from ALIVE price rows therefore doesn't move. Session A's stale
+    # payload would bring the deleted yearly prices straight back.
+    travel 1.minute
+    first_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 300 })
+    second_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 500 })
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 }, yearly: { enabled: true, price_cents: 3000 } } },
+        { id: second_tier.external_id, name: second_tier.name, updated_at: second_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 }, yearly: { enabled: true, price_cents: 5000 } } },
+      ]
+    }, format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_nil first_tier.reload.alive_prices.is_buy.find_by(recurrence: BasePrice::Recurrence::YEARLY)
+  end
+
+  test "PUT update fails open for payloads that do not echo snapshot timestamps (sessions predating the guard)" do
+    setup_guarded_version!
+    newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }]
+
+    travel 1.minute
+    @version1_page.update!(description: newer_content)
+
+    # No updated_at anywhere in the payload — a legacy session. The save goes
+    # through the way it always did (this is the pre-guard behavior, kept so a
+    # deploy doesn't break every open editor tab).
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal guard_content_description, @version1_page.reload.description
+  end
+
+  test "PUT update ignores unparseable echoed timestamps instead of failing the save" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: "not-a-timestamp", rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: "also-not-a-timestamp", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+  end
+
   # --- the July 21, 2026 incident shape (gumroad-private#1230) -----------------
   # Support restored a product's per-version pages while
   # has_same_rich_content_for_all_variants stayed on and a blank product-level
