@@ -129,4 +129,71 @@ describe Charge::PresentmentOrchestrator do
     expect(purchase.reload.purchase_presentment).to be_nil
     expect(ErrorNotifier).to have_received(:notify).with(instance_of(RuntimeError), context: hash_including(charge_id: charge.id))
   end
+
+  describe "a locked quote that was rounded down" do
+    # The quote sized this round-down against the fee it expected Gumroad to collect. By
+    # the time the charge runs, that fee is a fact on the purchase rather than a
+    # prediction, so the orchestrator re-checks it.
+    before do
+      locked_quote.presentment_total_cents = 12_49
+      locked_quote.rounding_delta_cents = -1
+    end
+
+    it "takes the reduction out of Gumroad's share when the fee still covers it" do
+      expect(purchase.fee_cents).to be > 0
+
+      expect(result).to have_attributes(processor_amount_cents: 12_49,
+                                        processor_gumroad_amount_cents: 3_74)
+      expect(charge.reload.charge_presentment).to have_attributes(presentment_total_cents: 12_49,
+                                                                  presentment_gumroad_amount_cents: 3_74,
+                                                                  rounding_delta_cents: -1)
+      expect(purchase.reload.purchase_presentment).to have_attributes(presentment_total_cents: 12_49,
+                                                                      presentment_gumroad_amount_cents: 3_74)
+    end
+
+    # The waiver (Gumroad Day or the per-seller flag) can begin after the quote was minted,
+    # and then there is no percentage fee left to absorb the reduction. Charging anyway
+    # would quietly pay the difference out of the seller's proceeds.
+    it "refuses the charge, rather than charging the seller, when the fee was waived after the quote was minted" do
+      purchase.update!(fee_cents: 0)
+
+      expect(result).to be_nil
+      expect(charge.reload.charge_presentment).to be_nil
+      expect(purchase.reload.purchase_presentment).to be_nil
+    end
+
+    it "reports why it refused so the charge can fail closed with a real reason" do
+      purchase.update!(fee_cents: 0)
+      orchestrator = described_class.new(charge:,
+                                         merchant_account:,
+                                         purchases: [purchase],
+                                         amount_cents: 10_00,
+                                         gumroad_amount_cents: 3_00,
+                                         eligibility_decision:,
+                                         locked_quote:)
+
+      expect(orchestrator.perform).to be_nil
+      expect(orchestrator.fallback_reason).to eq("rounding_delta_exceeds_gumroad_fee")
+    end
+
+    it "refuses when the round-down is larger than the fee even though other Gumroad-held money would cover it" do
+      # gumroad_amount_cents (3.00 USD → 3.75 CAD) also carries affiliate credit and
+      # Gumroad-collected tax, which are owed elsewhere; only the fee can absorb a
+      # round-down. A 1.00 CAD reduction clears the former and not the latter.
+      purchase.update!(fee_cents: 50)
+      locked_quote.presentment_total_cents = 11_50
+      locked_quote.rounding_delta_cents = -1_00
+
+      expect(result).to be_nil
+    end
+
+    it "still rounds up without consulting the fee at all" do
+      purchase.update!(fee_cents: 0)
+      locked_quote.presentment_total_cents = 12_99
+      locked_quote.rounding_delta_cents = 49
+
+      expect(result).to have_attributes(processor_amount_cents: 12_99,
+                                        processor_gumroad_amount_cents: 4_24)
+    end
+  end
 end

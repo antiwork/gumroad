@@ -248,7 +248,7 @@ class Charge::CreateService
 
     locked_quote = locked_buyer_currency_quote!(quote_token, eligibility_decision)
 
-    presentment_result = Charge::PresentmentOrchestrator.new(
+    orchestrator = Charge::PresentmentOrchestrator.new(
       charge:,
       merchant_account:,
       purchases:,
@@ -256,11 +256,15 @@ class Charge::CreateService
       gumroad_amount_cents:,
       eligibility_decision:,
       locked_quote:
-    ).perform
-    # The orchestrator returns nil only on unexpected snapshot/allocation failures (it
-    # notifies and logs internally). The buyer confirmed the locked local-currency total,
-    # so this must also fail closed rather than silently charge canonical USD.
-    raise BuyerCurrencyQuoteInvalid, "presentment orchestration failed" if presentment_result.blank?
+    )
+    presentment_result = orchestrator.perform
+    # The orchestrator returns nil on unexpected snapshot/allocation failures (it notifies
+    # and logs internally), and on the one expected refusal it reports through
+    # #fallback_reason: a round-down the fee computed at charge time can no longer absorb.
+    # Either way the buyer confirmed the locked local-currency total, so this must fail
+    # closed rather than silently charge canonical USD or shift the reduction onto the
+    # seller's proceeds.
+    raise BuyerCurrencyQuoteInvalid, orchestrator.fallback_reason || "presentment orchestration failed" if presentment_result.blank?
 
     # Remembered for the error handler: when Stripe rejects the intent create with a
     # settlement-currency mismatch, the marker must be recorded for the currency this

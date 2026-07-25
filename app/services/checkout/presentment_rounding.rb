@@ -88,6 +88,11 @@ class Checkout::PresentmentRounding
   # proceeds must come out identical either way, so the amount can never fall further
   # than that. Callers pass the presentment-currency value of the share they can prove
   # exists at quote time (see Checkout::BuyerCurrencyQuote).
+  #
+  # This cap is a prediction, not a guarantee: a fee waiver can begin between the quote and
+  # the charge, leaving no Gumroad share behind the round-down this sized. That is why
+  # Charge::PresentmentOrchestrator re-checks the reduction against the fee actually
+  # computed on the purchases and refuses the charge if the fee no longer covers it.
   def self.round(presentment_total_cents:, currency:, max_downward_cents:)
     new(presentment_total_cents:, currency:, max_downward_cents:).round
   end

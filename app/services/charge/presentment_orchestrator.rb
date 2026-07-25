@@ -20,6 +20,11 @@ class Charge::PresentmentOrchestrator
 
   attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :eligibility_decision, :locked_quote
 
+  # Set when the orchestrator declines to charge for a reason that is expected rather than
+  # a defect (see #rounding_absorbable?), so Charge::CreateService can say why it failed
+  # closed instead of reporting a generic orchestration failure.
+  attr_reader :fallback_reason
+
   def initialize(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, eligibility_decision:, locked_quote:)
     @charge = charge
     @merchant_account = merchant_account
@@ -80,14 +85,21 @@ class Charge::PresentmentOrchestrator
     # The buyer must be charged exactly the verified locked total they last saw; this
     # orchestrator never mints a fresh quote of its own.
     presentment_total_cents = locked_quote.presentment_total_cents
+    rounding_delta_cents = locked_quote.rounding_delta_cents.to_i
+    # A round-down was capped at quote time against the fee Gumroad expected to collect,
+    # but that expectation can go stale between the quote and the charge (see
+    # #rounding_absorbable?). Re-check it here, where the fee is already computed, and
+    # refuse the charge rather than fund the reduction out of the seller's proceeds.
+    return unless rounding_absorbable?(rounding_delta_cents)
+
     # Gumroad absorbs the whole rounding difference: the seller's proceeds are the
     # converted canonical amount either way, so a total rounded UP adds to Gumroad's
-    # share and a total rounded DOWN comes out of it. The quote already refused any
-    # round-down larger than the fee Gumroad collects, so this stays non-negative; clamp
+    # share and a total rounded DOWN comes out of it. The check above establishes that
+    # Gumroad's converted share covers a round-down, so this stays non-negative; clamp
     # to the total as well so a pathological cart can never ask Stripe for a fee above
     # the payment (which Stripe rejects, and which would degrade the charge to USD).
     presentment_gumroad_amount_cents = (
-      presentment_cents_for(gumroad_amount_cents, locked_quote.fx_rate) + locked_quote.rounding_delta_cents.to_i
+      presentment_cents_for(gumroad_amount_cents, locked_quote.fx_rate) + rounding_delta_cents
     ).clamp(0, presentment_total_cents)
 
     allocations = Charge::PresentmentAllocator.new(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:).allocations
@@ -100,7 +112,7 @@ class Charge::PresentmentOrchestrator
       stripe_fx_quote_id: locked_quote.id,
       stripe_fx_quote_expires_at: locked_quote.expires_at,
       fx_rate: locked_quote.fx_rate,
-      rounding_delta_cents: locked_quote.rounding_delta_cents.to_i
+      rounding_delta_cents: rounding_delta_cents
     )
 
     Result.new(
@@ -121,6 +133,44 @@ class Charge::PresentmentOrchestrator
   end
 
   private
+    # Whether Gumroad's share of THIS charge really covers a round-down, checked against
+    # the fee that was actually computed on the purchases rather than the fee the quote
+    # predicted.
+    #
+    # Why the quote-time cap is not enough: the quote is minted while the buyer is still
+    # on the checkout page, and Checkout::PresentmentRounding sizes the round-down against
+    # the percentage fee it expects Gumroad to collect. Between then and the charge, that
+    # fee can legitimately drop to zero — Gumroad Day starts (which is decided from the
+    # current date in the seller's timezone, so it can flip mid-checkout) or someone turns
+    # on the seller's fee-waiver flag. Purchase#calculate_fees then charges no percentage
+    # fee, so there is no Gumroad share for the reduction to come out of and the seller
+    # would silently receive less than their canonical proceeds.
+    #
+    # Charging the buyer the un-rounded amount is not an option: they confirmed the rounded
+    # total, and charging anything else breaks the invariant this whole feature rests on.
+    # So the charge fails closed instead — the buyer is asked to review the updated total,
+    # and the reloaded checkout mints a fresh quote that will not round down (a waived
+    # seller is excluded from rounding at quote time). This is rare by construction: it
+    # needs a waiver to begin during one checkout session.
+    def rounding_absorbable?(rounding_delta_cents)
+      return true unless rounding_delta_cents.negative?
+
+      # Only the Gumroad fee counts. gumroad_amount_cents also carries affiliate credit and
+      # Gumroad-collected tax, and neither is Gumroad's to give up — the affiliate is owed
+      # their cut and the tax gets remitted — so a floor built from the fee alone is the
+      # honest measure of what a round-down can come out of. Converted to presentment cents
+      # because the delta is a presentment-currency amount.
+      absorbable_presentment_cents = presentment_cents_for(purchases.sum { _1.fee_cents.to_i }, locked_quote.fx_rate)
+      return true if rounding_delta_cents.abs <= absorbable_presentment_cents
+
+      @fallback_reason = "rounding_delta_exceeds_gumroad_fee"
+      Rails.logger.info(
+        "Buyer currency presentment fallback for charge #{charge.external_id}: " \
+        "round-down of #{rounding_delta_cents.abs} exceeds Gumroad's fee of #{absorbable_presentment_cents}"
+      )
+      false
+    end
+
     def presentment_cents_for(canonical_usd_cents, fx_rate)
       raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
 
