@@ -1,8 +1,22 @@
 diff --git a/node_modules/@inertiajs/core/dist/index.esm.js b/node_modules/@inertiajs/core/dist/index.esm.js
-index 5371b7d..7c482e1 100644
+index 5371b7d..9d8054e 100644
 --- a/node_modules/@inertiajs/core/dist/index.esm.js
 +++ b/node_modules/@inertiajs/core/dist/index.esm.js
-@@ -484,6 +484,24 @@ var PrefetchedRequests = class {
+@@ -473,6 +473,13 @@ var PrefetchedRequests = class {
+   get(params) {
+     return this.findCached(params) || this.findInFlight(params);
+   }
++  // A navigation that adopted an in-flight prefetch is only worth recovering
++  // while the user is still waiting for it. Any later ordinary navigation calls
++  // this, so if the adopted prefetch fails afterwards its failure is dropped
++  // instead of dragging the user back to the page they already left.
++  abandonCurrentUse() {
++    this.currentUseId = null;
++  }
+   use(prefetched, params) {
+     const id = `${params.url.pathname}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+     this.currentUseId = id;
+@@ -484,6 +491,24 @@ var PrefetchedRequests = class {
        } });
        this.removeSingleUseItems(params);
        return response.handle();
@@ -27,7 +41,7 @@ index 5371b7d..7c482e1 100644
      });
    }
    removeSingleUseItems(params) {
-@@ -2293,9 +2311,16 @@ var RequestStream = class {
+@@ -2293,9 +2318,16 @@ var RequestStream = class {
    }
    send(request) {
      this.requests.push(request);
@@ -46,7 +60,7 @@ index 5371b7d..7c482e1 100644
    }
    interruptInFlight() {
      this.cancel({ interrupted: true }, false);
-@@ -2448,7 +2473,14 @@ var Router = class {
+@@ -2448,8 +2480,24 @@ var Router = class {
      const prefetched = prefetchedRequests.get(requestParams);
      if (prefetched) {
        progress.reveal(prefetched.inFlight);
@@ -60,9 +74,19 @@ index 5371b7d..7c482e1 100644
 +        requestStream2.send(Request.create(requestParams, page.get()));
 +      });
      } else {
++      if (!visit.async) {
++        // A real navigation starting here abandons any earlier click that is
++        // still waiting on a prefetch, so that prefetch failing later cannot
++        // pull the user back to the page they have already navigated away from.
++        // Async visits (deferred props, polling, partial reloads) are background
++        // work rather than the user going somewhere, so they leave the pending
++        // navigation alone.
++        prefetchedRequests.abandonCurrentUse();
++      }
        progress.reveal(true);
        const requestStream = visit.async ? this.asyncRequestStream : this.syncRequestStream;
-@@ -2520,7 +2552,14 @@ var Router = class {
+       requestStream.send(Request.create(requestParams, page.get()));
+@@ -2520,7 +2568,14 @@ var Router = class {
            cacheTags: [],
            ...prefetchOptions
          }
@@ -79,10 +103,24 @@ index 5371b7d..7c482e1 100644
    }
    clearHistory() {
 diff --git a/node_modules/@inertiajs/core/dist/index.js b/node_modules/@inertiajs/core/dist/index.js
-index 12b452d..e9cc5a8 100644
+index 12b452d..0a98851 100644
 --- a/node_modules/@inertiajs/core/dist/index.js
 +++ b/node_modules/@inertiajs/core/dist/index.js
-@@ -542,6 +542,24 @@ var PrefetchedRequests = class {
+@@ -531,6 +531,13 @@ var PrefetchedRequests = class {
+   get(params) {
+     return this.findCached(params) || this.findInFlight(params);
+   }
++  // A navigation that adopted an in-flight prefetch is only worth recovering
++  // while the user is still waiting for it. Any later ordinary navigation calls
++  // this, so if the adopted prefetch fails afterwards its failure is dropped
++  // instead of dragging the user back to the page they already left.
++  abandonCurrentUse() {
++    this.currentUseId = null;
++  }
+   use(prefetched, params) {
+     const id = `${params.url.pathname}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+     this.currentUseId = id;
+@@ -542,6 +549,24 @@ var PrefetchedRequests = class {
        } });
        this.removeSingleUseItems(params);
        return response.handle();
@@ -107,7 +145,7 @@ index 12b452d..e9cc5a8 100644
      });
    }
    removeSingleUseItems(params) {
-@@ -2351,9 +2369,16 @@ var RequestStream = class {
+@@ -2351,9 +2376,16 @@ var RequestStream = class {
    }
    send(request) {
      this.requests.push(request);
@@ -126,7 +164,7 @@ index 12b452d..e9cc5a8 100644
    }
    interruptInFlight() {
      this.cancel({ interrupted: true }, false);
-@@ -2506,7 +2531,14 @@ var Router = class {
+@@ -2506,8 +2538,24 @@ var Router = class {
      const prefetched = prefetchedRequests.get(requestParams);
      if (prefetched) {
        progress.reveal(prefetched.inFlight);
@@ -140,9 +178,19 @@ index 12b452d..e9cc5a8 100644
 +        requestStream2.send(Request.create(requestParams, page.get()));
 +      });
      } else {
++      if (!visit.async) {
++        // A real navigation starting here abandons any earlier click that is
++        // still waiting on a prefetch, so that prefetch failing later cannot
++        // pull the user back to the page they have already navigated away from.
++        // Async visits (deferred props, polling, partial reloads) are background
++        // work rather than the user going somewhere, so they leave the pending
++        // navigation alone.
++        prefetchedRequests.abandonCurrentUse();
++      }
        progress.reveal(true);
        const requestStream = visit.async ? this.asyncRequestStream : this.syncRequestStream;
-@@ -2578,7 +2610,14 @@ var Router = class {
+       requestStream.send(Request.create(requestParams, page.get()));
+@@ -2578,7 +2626,14 @@ var Router = class {
            cacheTags: [],
            ...prefetchOptions
          }

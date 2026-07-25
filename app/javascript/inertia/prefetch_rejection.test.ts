@@ -16,6 +16,12 @@
 import axios, { type AxiosAdapter } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Loading and initialising the real router costs seconds on a cold Vitest
+// environment, so the default one-second waitFor budget is not enough to be
+// reliable in CI. Every wait here is for something that happens in a
+// microtask once the router is up, so a generous ceiling costs nothing.
+const WAIT = { timeout: 5000 } as const;
+
 const requests: string[] = [];
 let pendingPrefetchReject: ((reason: Error) => void) | null = null;
 
@@ -32,7 +38,7 @@ const inertiaPage = (url: string) => ({
 // how we tell the hover-triggered request apart from the click-triggered one.
 // Axios normalises header casing inconsistently across versions, so check both.
 const isPrefetch = (headers: Record<string, unknown> | undefined) =>
-  headers?.["Purpose"] === "prefetch" || headers?.["purpose"] === "prefetch";
+  headers?.Purpose === "prefetch" || headers?.purpose === "prefetch";
 
 const adapter: AxiosAdapter = (config) => {
   const url = String(config.url);
@@ -78,7 +84,7 @@ describe("inertia prefetch rejection", () => {
 
     // 1. Hover the sidebar link: a prefetch starts and stays in flight.
     router.prefetch("/products", { method: "get" }, { cacheFor: "1m" });
-    await vi.waitFor(() => expect(requests).toContain("prefetch /products"));
+    await vi.waitFor(() => expect(requests).toContain("prefetch /products"), WAIT);
 
     // 2. Click that same link while the prefetch is still in flight, so the
     //    router adopts the prefetch instead of issuing its own request.
@@ -89,6 +95,41 @@ describe("inertia prefetch rejection", () => {
     pendingPrefetchReject?.(new Error("prefetch failed"));
 
     // 4. The click must still produce a real navigation request.
-    await vi.waitFor(() => expect(requests).toContain("visit /products"), { timeout: 4000 });
+    await vi.waitFor(() => expect(requests).toContain("visit /products"), WAIT);
+  });
+
+  it("does not resurrect the abandoned page when the user navigates elsewhere first", async () => {
+    const { router } = await import("@inertiajs/core");
+
+    window.history.replaceState({}, "", "/dashboard");
+    document.body.innerHTML = "<div id='app'></div>";
+
+    router.init({
+      initialPage: inertiaPage("/dashboard"),
+      resolveComponent: () => Promise.resolve({}),
+      swapComponent: () => Promise.resolve(),
+    });
+
+    // 1. Hover /products, then click it while its prefetch is still in flight,
+    //    so this navigation adopts the prefetch.
+    router.prefetch("/products", { method: "get" }, { cacheFor: "1m" });
+    await vi.waitFor(() => expect(requests).toContain("prefetch /products"), WAIT);
+    router.visit("/products");
+
+    // 2. Nothing has rendered yet, so the user gives up and clicks a different
+    //    link. This is an ordinary navigation with no prefetch to adopt.
+    router.visit("/customers");
+    await vi.waitFor(() => expect(requests).toContain("visit /customers"), WAIT);
+
+    // 3. Only now does the abandoned prefetch fail. Recovering it here would
+    //    send the user to a page they already left, so the failure must be
+    //    dropped: no /products request may follow.
+    pendingPrefetchReject?.(new Error("prefetch failed"));
+
+    // The recovery path this guards against is synchronous once the rejection is
+    // delivered, so a short settle is enough to prove it did not happen. Before
+    // the fix the /products request appeared here within a single tick.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(requests).not.toContain("visit /products");
   });
 });
