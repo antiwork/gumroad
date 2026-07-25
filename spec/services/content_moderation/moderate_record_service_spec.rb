@@ -320,6 +320,79 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       end
     end
 
+    # A corroborated spam flag is still a judgment call about the seller's
+    # intent, and it fires on the writing style of the info-product genre. On a
+    # listing that actually delivers something we keep it as a reviewable note
+    # rather than blocking the publish.
+    context "when the spam preset flags a product that has a deliverable" do
+      before do
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: ContentModeration::Strategies::PromptStrategy::Result.new(
+                            status: "flagged",
+                            reasoning: ["spam: reads like a sales pitch and lacks coherent prose"],
+                            audit_reasoning: []
+                          ))
+        )
+      end
+
+      it "publishes and records the flag as a non-blocking note when files are attached" do
+        ContentModerationAdminCommentJob.clear
+        product.product_files << create(:product_file)
+        product.save!
+
+        result = described_class.check(product.reload, :product)
+
+        expect(result.passed).to eq(true)
+        expect(result.reasons).to eq([])
+        contents = ContentModerationAdminCommentJob.jobs.map { |j| j["args"].second }
+        expect(contents).to contain_exactly(
+          a_string_including("flagged but did not block").and(
+            a_string_including("not blocked: listing has content attached")
+          )
+        )
+      end
+
+      it "publishes when the deliverable is readable content instead of files" do
+        create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Lesson one" }] }])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      it "publishes when the deliverable is a Gumroad-managed community invite" do
+        community_product = create(:product, user: seller, active_integrations: [create(:discord_integration)])
+
+        expect(described_class.check(community_product.reload, :product).passed).to eq(true)
+      end
+
+      it "still blocks an empty listing, where a spam flag has no real product behind it" do
+        result = described_class.check(product, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
+      end
+
+      it "still blocks a post, which has no deliverable of its own" do
+        post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
+
+        expect(described_class.check(post, :post).passed).to eq(false)
+      end
+
+      it "still blocks on a non-spam reason flagged alongside the spam one" do
+        product.product_files << create(:product_file)
+        product.save!
+        allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["OpenAI moderation flagged: sexual"]))
+        )
+
+        result = described_class.check(product.reload, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["OpenAI moderation flagged: sexual"])
+      end
+    end
+
     context "when all strategies return compliant" do
       it "returns passed: true without enqueuing a comment" do
         ContentModerationAdminCommentJob.clear
