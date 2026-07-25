@@ -614,13 +614,20 @@ class Purchase < ApplicationRecord
   scope :successful, -> { where(purchase_state: "successful") }
   scope :test_successful, -> { where(purchase_state: "test_successful") }
   scope :in_progress, -> { where(purchase_state: "in_progress") }
-  # A payment the processor has confirmed but that hasn't settled yet — e.g. an ACH bank
-  # debit that takes several business days to clear. Both conditions matter: `stripe_status`
-  # is only ever written once Stripe acknowledges a real payment (the checkout return page
-  # sets it to "processing", and every subsequent Stripe webhook updates it), so an attempt
-  # the buyer abandoned before confirming payment keeps it nil and is NOT settling. And a
-  # purchase must still be in_progress — once it reaches a terminal state (failed,
-  # successful), stripe_status remains set but the payment is no longer in flight.
+  # A payment that can still complete without the buyer returning to checkout, but hasn't
+  # settled yet. Two shapes reach this state: a payment the processor already confirmed and
+  # is clearing (e.g. an ACH bank debit, several business days), and a Pix payment where
+  # Stripe issued a QR code / copy-paste key the buyer can pay from their banking app for up
+  # to half an hour (Purchase::FinalizeConfirmedChargeService writes "requires_action" for
+  # that case). Both conditions matter: `stripe_status` is only ever written once Stripe has
+  # a live payment to report on, so an attempt the buyer dropped before reaching a payment
+  # method keeps it nil and is NOT settling. And a purchase must still be in_progress — once
+  # it reaches a terminal state (failed, successful), stripe_status remains set but the
+  # payment is no longer in flight.
+  #
+  # The Pix case is deliberately included: an outstanding QR key is exactly the window where
+  # a buyer could pay again by another method and end up paying twice, which is what the
+  # double-charge guards built on this scope exist to prevent.
   scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
   scope :in_progress_or_successful_including_test, -> { where(purchase_state: %w(in_progress successful test_successful)) }
   scope :not_in_progress, -> { where.not(purchase_state: "in_progress") }
