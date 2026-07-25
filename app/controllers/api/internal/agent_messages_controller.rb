@@ -105,9 +105,9 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
       # permission denials, unknown-key rejections, and API validation failures all land here.
       # Stash the executor's reason and the endpoint being written so append_info_to_payload can
       # attach them to this request's log line, making the 422s separable in Elasticsearch. The
-      # reason is the executor's own message and the endpoint is a catalog id — no request bodies
-      # or seller data.
-      @agent_action_failure_reason = result[:message]
+      # endpoint is a catalog id, and the reason is bounded before logging — see
+      # #log_safe_failure_reason.
+      @agent_action_failure_reason = log_safe_failure_reason(result[:message])
       @agent_action_endpoint = action_params["endpoint"].presence
     end
 
@@ -144,6 +144,24 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
       super
       payload[:agent_action_failure_reason] = @agent_action_failure_reason if @agent_action_failure_reason
       payload[:agent_action_endpoint] = @agent_action_endpoint if @agent_action_endpoint
+    end
+
+    # Permission denials come from our own code, but validation failures are reflected from the v2
+    # API, which echoes seller-supplied values back in its messages (a rejected product name, a bad
+    # discount code). Those land in structured logs, which are searchable by anyone with log access
+    # and retained far longer than a request, so bound what gets written:
+    #   - collapse newlines, so one failure can't fake extra log lines or break the JSON payload
+    #   - cap the length, so a long echoed value can't bloat every 422's log entry
+    # The point of logging the reason is to tell the buckets of 422 apart (denied vs unknown key vs
+    # validation), and the leading words carry that; the exact rejected value does not.
+    FAILURE_REASON_LOG_LIMIT = 200
+    private_constant :FAILURE_REASON_LOG_LIMIT
+
+    def log_safe_failure_reason(message)
+      normalized = message.to_s.gsub(/\s+/, " ").strip
+      return if normalized.blank?
+
+      normalized.truncate(FAILURE_REASON_LOG_LIMIT)
     end
 
     # Runs before throttling so a team member denied the Agent tab can't burn the seller-scoped

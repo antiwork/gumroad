@@ -495,6 +495,36 @@ describe Ai::AnthropicClient do
       expect(result.text).to eq("Updating that now.")
     end
 
+    it "withholds the fallback's text from the caller's block when the buffered replay is itself truncated" do
+      # A "max_tokens" turn is unusable, and the caller (StoreAgentService) handles that by telling
+      # the UI to discard what it showed and streaming an honest truncation notice instead. Yielding
+      # the incomplete text here would put a partial answer on the seller's screen for a moment
+      # before the caller throws it away, so the text is returned but not streamed.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{broken" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered_body = {
+        "content" => [{ "type" => "text", "text" => "Here is the first half of a long answer that got cut" }],
+        "stop_reason" => "max_tokens",
+      }
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => false))
+        .to_return(status: 200, body: buffered_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      chunks = []
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text }
+
+      expect(chunks).to be_empty
+      expect(result.stop_reason).to eq("max_tokens")
+      expect(result.text).to eq("Here is the first half of a long answer that got cut")
+    end
+
     it "surfaces the original unreadable-tool-call error when the non-streamed fallback also fails" do
       # The fallback must not make the failure murkier: if the buffered replay errors too, the
       # seller-facing error is the same clear "unreadable tool call" message as before the fallback

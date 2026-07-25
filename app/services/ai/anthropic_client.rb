@@ -235,7 +235,12 @@ class Ai::AnthropicClient
         raise original_error
       end
 
-      on_text&.call(result.text) if result.text.present?
+      # A buffered replay can hit the token cap itself. The caller treats a "max_tokens" turn as
+      # unusable — it tells the UI to discard whatever was shown and streams its own truncation
+      # notice instead — so yielding the incomplete text here would only flash a partial answer on
+      # the seller's screen a moment before it gets thrown away. Hand back the result and let the
+      # caller decide what to show.
+      on_text&.call(result.text) if result.text.present? && result.stop_reason != "max_tokens"
       result
     end
 

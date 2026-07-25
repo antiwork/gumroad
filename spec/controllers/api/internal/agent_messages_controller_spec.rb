@@ -390,6 +390,29 @@ describe Api::Internal::AgentMessagesController do
         expect(payload[:agent_action_endpoint]).to eq("create_discount")
       end
 
+      it "bounds the logged failure reason so a reflected seller value can't bloat or split the log line" do
+        # Validation failures are reflected from the v2 API, which echoes seller-supplied values back
+        # in its messages. Structured logs are long-lived and searchable, so the reason is collapsed
+        # to one line and capped — enough to tell the 422 buckets apart without carrying an arbitrary
+        # amount of seller text into the log.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        reflected = "Name is invalid:\n#{"A" * 500}"
+        allow(executor_double).to receive(:execute).and_return(success: false, message: reflected)
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        logged = payload[:agent_action_failure_reason]
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(logged.length).to be <= 200
+        expect(logged).not_to include("\n")
+        expect(logged).to start_with("Name is invalid: AAA")
+        # The seller still gets the API's full message; only the log copy is bounded.
+        expect(response.parsed_body["message"]).to eq(reflected)
+      end
+
       it "does not add failure fields to the log payload when the confirmed action succeeds" do
         executor_double = instance_double(Ai::StoreAgentActionExecutor)
         allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
