@@ -32,7 +32,12 @@ class Checkout::PaymentMethodResolver
   # claim a recurring-incapable method.) Klarna is here as a v1 launch decision, not a Stripe
   # limitation: Stripe supports Klarna on recurring payments, but memberships/preorders are
   # excluded from Klarna's first launch (gumroad-private#933) so the policy set must not claim it.
-  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna].freeze
+  # iDEAL and Bancontact are one-shot bank approvals: the buyer authorises a single payment in
+  # their banking app, and charging them again later requires separately collecting a SEPA Direct
+  # Debit mandate, which Gumroad's checkout does not do. So a membership or preorder priced in
+  # euros must never claim them either — the buyer would authorise the first charge and every
+  # renewal after it would have nothing to charge against.
+  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna ideal bancontact].freeze
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
   # element flags themselves since Stripe's dashboard payment-method settings are the emergency
