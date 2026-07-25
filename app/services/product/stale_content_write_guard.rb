@@ -30,8 +30,57 @@
 # unparseable: payloads from editor sessions predating this feature (open tabs
 # at deploy time) and any client that doesn't echo timestamps keep saving the
 # way they always did. Only a client that claims a snapshot time is held to it.
+#
+# ⚠️ THE SELLER-BLOCKING REJECTION IS CURRENTLY OFF (gumroad-private#1295).
+#
+# When this shipped, blocking was on for everyone, and production showed the
+# check is not yet safe to enforce: in its first ~12 hours it blocked 363 real
+# saves for 61 sellers, and every sampled block was a false positive — the
+# payload submitted exactly as many pages and variants as the product had, so
+# nothing was being overwritten at all. The reason is that the timestamp the
+# editor echoes is not a reliable description of what the session has seen:
+#
+#   * Page timestamps were already part of the editor's payload BEFORE this
+#     guard existed (RichContents#rich_content_json has served `updated_at`
+#     for a long time), so the "fail open for tabs open at deploy time"
+#     allowance above never actually applied to pages. A tab from before the
+#     deploy carries a real page id and a page timestamp it has no way to
+#     refresh, and gets blocked.
+#   * Any editor path that re-renders without adopting the timestamp handed
+#     back by the previous save leaves the session holding an older value
+#     than the row, which then reads as a conflict on the very next save.
+#
+# So the seller-visible 409 is gated behind the `product_editor_stale_content_block`
+# Flipper flag, which is OFF by default. Everything else is unchanged: the
+# staleness detection still runs, and it still reports to Sentry (under a
+# distinct observe-only message) so the follow-up work on the payload contract
+# keeps its diagnostics. Re-enabling is a flag flip once the editor reliably
+# reports a snapshot the server can trust — but the intended replacement is a
+# server-issued whole-editor revision token rather than these per-row
+# timestamps (see gumroad-private#1329).
+#
+# The deletion guards from #6178/#6244 (Product::RichContentDeletionGuard,
+# Product::VariantCategoryUpdaterService.ensure_deletion_intent!) are NOT
+# affected by this flag and stay fully active — they are the protection that
+# actually stopped the July 13/18/21 content wipes.
 class Product::StaleContentWriteGuard
   MESSAGE = "This product was updated after this page was loaded, so saving now would overwrite those newer changes. Please reload the page to get the latest content, then make your edits again."
+
+  # Kill switch for the seller-visible rejection. OFF (no Flipper gates) means
+  # detect-and-report only: a stale payload is allowed through exactly as it was
+  # before this guard shipped. Flip on per-seller
+  # (`Feature.activate_user(:product_editor_stale_content_block, user)`) or by
+  # percentage of actors to canary the enforcement once the payload contract is
+  # trustworthy; `Feature.deactivate(:product_editor_stale_content_block)`
+  # turns it back off without a deploy.
+  BLOCK_FEATURE_NAME = :product_editor_stale_content_block
+
+  # Sent when staleness is detected but NOT enforced. Deliberately a different
+  # message from the blocking one so the two are separate Sentry issues: the
+  # blocking issue must stay at zero events while the flag is off, and this one
+  # carries the observe-only signal for the payload-contract work.
+  OBSERVED_MESSAGE = "Observed stale product-editor save snapshot (not blocked; enforcement gated)"
+  BLOCKED_MESSAGE = "Blocked product save built from a stale snapshot (would overwrite newer content)"
 
   # Raised before any mutation when the payload echoes snapshot timestamps
   # older than the stored rows. Carries the conflicting records so the
@@ -56,15 +105,25 @@ class Product::StaleContentWriteGuard
     stale_records = stale_pages(product, pages_params) + stale_variants(product, variants_params)
     return if stale_records.empty?
 
+    blocking = Feature.active?(BLOCK_FEATURE_NAME, product.user)
+
     # The notification accompanies the rejection so incidents are visible and
-    # diagnosable from the alert alone — it never replaces the rejection.
+    # diagnosable from the alert alone — it never replaces the rejection. With
+    # enforcement gated off we still send it (under OBSERVED_MESSAGE) so the
+    # payload-contract follow-up keeps the same diagnostics without any
+    # seller-visible effect.
     ErrorNotifier.notify(
-      "Blocked product save built from a stale snapshot (would overwrite newer content)",
+      blocking ? BLOCKED_MESSAGE : OBSERVED_MESSAGE,
       product_id: product.id,
       stale_page_external_ids: stale_records.select { _1[:type] == "page" }.map { _1[:id] },
       stale_variant_external_ids: stale_records.select { _1[:type] == "variant" }.map { _1[:id] },
       **diagnostics
     )
+    # Enforcement off: the save proceeds exactly as it did before this guard
+    # shipped. The deletion guards later in the save are untouched and still
+    # block payloads that would remove content.
+    return unless blocking
+
     product.errors.add(:base, MESSAGE)
     raise StaleContentConflict.new(MESSAGE, stale_records:)
   end
