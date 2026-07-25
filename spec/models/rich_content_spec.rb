@@ -199,6 +199,16 @@ describe RichContent do
       expect(content).not_to be_valid
     end
 
+    it "rejects a blocked scheme on an image's click-through link" do
+      content = build(:rich_content, entity: product, description: [{ "type" => "image", "attrs" => { "src" => "https://example.com/a.png", "link" => "javascript:alert(1)" } }])
+      expect(content).not_to be_valid
+    end
+
+    it "allows a custom scheme on an image's click-through link" do
+      content = build(:rich_content, entity: product, description: [{ "type" => "image", "attrs" => { "src" => "https://example.com/a.png", "link" => "goodsnooze://activate?key=__license_key__" } }])
+      expect(content).to be_valid
+    end
+
     it "is case-insensitive about the blocked scheme" do
       expect(build_content("JavaScript:alert(1)")).not_to be_valid
     end

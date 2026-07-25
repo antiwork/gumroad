@@ -59,6 +59,9 @@ class RichContent < ApplicationRecord
   # backstop for anything writing rich content through the API.
   BLOCKED_HREF_SCHEMES = %w[javascript data vbscript file blob].freeze
   LINK_NODE_TYPES = ["link", "tiptap-link", "button"].freeze
+  # An image node can carry a click-through URL in `attrs.link` (not `attrs.href`), which the image
+  # renderer wraps the img in as an anchor. It needs the same scheme check as a real link.
+  IMAGE_NODE_TYPE = "image"
 
   belongs_to :entity, polymorphic: true, optional: true
 
@@ -156,6 +159,7 @@ class RichContent < ApplicationRecord
 
         hrefs = []
         hrefs << node.dig("attrs", "href") if node["type"].in?(LINK_NODE_TYPES)
+        hrefs << node.dig("attrs", "link") if node["type"] == IMAGE_NODE_TYPE
         Array(node["marks"]).each do |mark|
           next unless mark.is_a?(Hash) && mark["type"].in?(LINK_NODE_TYPES)
           hrefs << mark.dig("attrs", "href")
