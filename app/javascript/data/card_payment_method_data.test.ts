@@ -6,6 +6,7 @@ import {
   createPaymentElementConfirmationToken,
   paymentElementBillingDetails,
   paymentElementBillingDetailsCollection,
+  paymentElementRequiresFullName,
   preparePaymentElementPaymentMethodData,
 } from "$app/data/card_payment_method_data";
 
@@ -175,6 +176,33 @@ describe("paymentElementBillingDetailsCollection", () => {
     expect(paymentElementBillingDetailsCollection("card", false)).toBe("form");
     expect(paymentElementBillingDetailsCollection("link", false)).toBe("form");
     expect(paymentElementBillingDetailsCollection("ideal", false)).toBe("form");
+  });
+});
+
+describe("paymentElementRequiresFullName", () => {
+  // Checkout only asks for the buyer's full name when it needs it, so digital carts leave it
+  // empty. Stripe refuses to confirm UPI and Pix without billing_details.name, and dropping
+  // either from this list brings back the failure mode from the July 2026 UPI ramp-down: the
+  // confirm fails server-side with parameter_missing and the buyer sees a generic error they
+  // cannot act on. Everything else must stay out, or checkout would demand a name it does not
+  // need.
+  it("requires a full name for UPI and Pix, and for nothing else", () => {
+    expect(paymentElementRequiresFullName("upi")).toBe(true);
+    expect(paymentElementRequiresFullName("pix")).toBe(true);
+    expect(paymentElementRequiresFullName("card")).toBe(false);
+    expect(paymentElementRequiresFullName("link")).toBe(false);
+    expect(paymentElementRequiresFullName("ideal")).toBe(false);
+    expect(paymentElementRequiresFullName("apple_pay")).toBe(false);
+    expect(paymentElementRequiresFullName("google_pay")).toBe(false);
+  });
+
+  // UPI on a shippable cart is the case the old guard missed: it read the billing-details
+  // collection mode, which is "form" there rather than "element-address", so the name check
+  // never ran. Checkout's shipping form already requires a full name, so nothing changes for
+  // the buyer — but the requirement is a property of the payment method, not of the cart.
+  it("does not depend on whether the cart needs shipping", () => {
+    expect(paymentElementBillingDetailsCollection("upi", true)).toBe("form");
+    expect(paymentElementRequiresFullName("upi")).toBe(true);
   });
 });
 
