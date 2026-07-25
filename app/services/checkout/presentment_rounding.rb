@@ -17,10 +17,14 @@
 # as charge_presentments.rounding_delta_cents so it can be monitored alongside
 # foreign-exchange drift.
 #
-# Direction is NEAREST target only, never ceiling. A ceiling rule measured against real
-# presentments is a ~1.4% price increase on international buyers (p90 ~11%) wearing a
-# rounding algorithm's clothes; if we ever want that spread we should take it explicitly
-# as a pricing decision, not as a side effect of making prices look nicer.
+# Direction is NEAREST target only, never ceiling. Measured against 2,159 real
+# charge_presentments amounts (July 2026): a nearest rule moves the buyer's total by
+# 0.90% on average in absolute terms and is very slightly in the buyer's favour on
+# balance (signed mean -0.13%, 1,170 down vs 953 up), whereas a ceiling rule on the same
+# grids and the same amounts is a +2.06% average price increase (p50 +1.27%, p90 +5.20%).
+# A ceiling rule is therefore a price rise on international buyers wearing a rounding
+# algorithm's clothes; if we ever want that spread we should take it explicitly as a
+# pricing decision, not as a side effect of making prices look nicer.
 class Checkout::PresentmentRounding
   include CurrencyHelper
 
