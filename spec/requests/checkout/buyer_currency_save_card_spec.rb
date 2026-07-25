@@ -24,6 +24,12 @@ describe "Buyer-currency checkout save-card fallback (#5419)", type: :system, js
     @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false)
     Feature.activate_user(:buyer_local_currency, @seller)
     Feature.activate_user(:buyer_currency_charging, @seller)
+    # Price-ending rounding is off so the expected totals below stay the exact converted
+    # amount (€8.00). This spec is about which currency the checkout displays and charges
+    # when the buyer saves their card, not about how the amount is rounded; with rounding
+    # on, €8.00 becomes €7.99 and the assertions would be tracking the rounding rule
+    # rather than the currency fallback. Checkout::PresentmentRounding has its own spec.
+    @seller.update!(disable_buyer_currency_rounding: true)
     @product = create(:product, user: @seller, price_cents: 10_00)
   end
 

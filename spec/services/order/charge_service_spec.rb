@@ -25,6 +25,22 @@ describe Order::ChargeService, :vcr do
       )
     end
 
+    # Puts seller_1 into the state the buyer-presentment charge path needs.
+    #
+    # Rounding is switched off deliberately. The examples that call this cover the
+    # presentment charge plumbing — the idempotency key, Gumroad's share of the charge,
+    # which purchases get a presentment row — not price endings. Buyer-currency price
+    # rounding (Checkout::PresentmentRounding) nudges every converted total by a cent or
+    # two, so leaving it on would make these examples assert the rounding rule's output
+    # instead of the behaviour they are named for. The rounding rule has its own spec.
+    def configure_seller_1_for_presentment_charges
+      seller_1.update!(
+        check_merchant_account_is_linked: true,
+        disable_buyer_local_currency: false,
+        disable_buyer_currency_rounding: true
+      )
+    end
+
     let(:seller_1) { create(:user) }
     let(:seller_2) { create(:user) }
     let(:seller_3) { create(:user) }
@@ -215,7 +231,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "creates a buyer-presentment charge through the order path when the internal flag is enabled in test mode" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       merchant_account = create(:merchant_account_stripe_connect,
                                 user: seller_1,
                                 charge_processor_merchant_id: "acct_presentment",
@@ -315,7 +331,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "creates a buyer-presentment charge for a paid item alongside a free item" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       create(:merchant_account_stripe_connect,
              user: seller_1,
              charge_processor_merchant_id: "acct_presentment",
@@ -376,7 +392,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "creates the presentment for the gifter purchase only on gift checkouts" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       create(:merchant_account_stripe_connect,
              user: seller_1,
              charge_processor_merchant_id: "acct_presentment",
@@ -437,7 +453,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "creates the presentment only on the bundle parent purchase" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       bundle = create(:product, :bundle, user: seller_1, price_cents: 10_00)
       create(:merchant_account_stripe_connect,
              user: seller_1,
@@ -576,7 +592,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "keeps buyer-presentment purchases in progress when Stripe settlement data is not available yet" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       create(:merchant_account_stripe_connect,
              user: seller_1,
              charge_processor_merchant_id: "acct_presentment",
