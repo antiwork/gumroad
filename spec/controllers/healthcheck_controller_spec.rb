@@ -124,6 +124,59 @@ describe HealthcheckController do
     end
   end
 
+  describe "GET 'long_running_jobs'" do
+    let(:key) { RedisKey.long_running_jobs_in_flight }
+
+    before { $redis.del(key) }
+    after  { $redis.del(key) }
+
+    context "when no long-running job is in flight (Redis key absent)" do
+      it "returns 200" do
+        get :long_running_jobs
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("Long running jobs: no job in flight")
+      end
+    end
+
+    context "when a long-running job is in flight (a fresh job entry exists)" do
+      it "returns 503" do
+        $redis.zadd(key, Time.current.to_i, "job-token")
+
+        get :long_running_jobs
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Long running jobs: job in flight")
+      end
+    end
+
+    context "when the only entries are older than the per-entry TTL (job died mid-run)" do
+      it "returns 200 and prunes the stale entry" do
+        stale_score = (LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(key, stale_score, "dead-job-token")
+
+        get :long_running_jobs
+
+        expect(response.status).to eq(200)
+        expect($redis.zcard(key)).to eq(0)
+      end
+    end
+
+    context "when a stale entry sits alongside a fresh one" do
+      it "returns 503 and prunes only the stale entry" do
+        stale_score = (LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(key, stale_score, "dead-job-token")
+        $redis.zadd(key, Time.current.to_i, "live-job-token")
+
+        get :long_running_jobs
+
+        expect(response.status).to eq(503)
+        expect($redis.zscore(key, "dead-job-token")).to be_nil
+        expect($redis.zscore(key, "live-job-token")).to be_present
+      end
+    end
+  end
+
   describe "GET 'paypal_balance'" do
     context "when PayPal topup is not needed (Redis key is false)" do
       before do

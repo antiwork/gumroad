@@ -3,6 +3,7 @@
 class EmailOutstandingBalancesCsvWorker
   include Sidekiq::Job
   include FinanceReportFailureAlert
+  include LongRunningJobTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :raise
 
   # The balances are read live (point-in-time, no reporting-period args), so a re-run is
