@@ -481,6 +481,11 @@ class ContactingCreatorMailer < ApplicationMailer
   # NotifySellersOfUnplayableVideoFilesJob for what makes a file unplayable.
   def unplayable_video_files(product_id, product_file_ids)
     @product = Link.find(product_id)
+    # The sweep skips deleted products, but delivery happens later: if the seller
+    # deleted the product in between there is nothing for them to re-upload to,
+    # and the email would link into a deleted editor.
+    return do_not_send if @product.deleted?
+
     @seller = @product.user
     @product_files = @product.product_files.alive.where(id: product_file_ids).in_order
     return do_not_send if @product_files.empty?

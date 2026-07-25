@@ -1744,6 +1744,14 @@ describe ContactingCreatorMailer do
 
       expect(mail.message).to be_a(ActionMailer::Base::NullMail)
     end
+
+    it "does not send when the product has since been deleted" do
+      @product.update!(deleted_at: Time.current)
+
+      mail = ContactingCreatorMailer.unplayable_video_files(@product.id, [@product_file.id])
+
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
   end
 
   describe "tax_form_1099k" do

@@ -28,19 +28,39 @@ class NotifySellersOfUnplayableVideoFilesJob
 
   def perform
     emails_sent = 0
+    last_link_id = 0
 
-    ProductFile.unplayable_video
-      .joins(:link)
-      .where(links: { deleted_at: nil })
-      .find_in_batches(batch_size: BATCH_SIZE) do |batch|
+    # Walk the affected products, not the affected files: a product with more
+    # unplayable files than one batch holds must still get a single email listing
+    # all of them, so the batching has to happen a product at a time.
+    loop do
       ReplicaLagWatcher.watch
 
-      not_yet_notified = batch.reject { |product_file| product_file.unplayable_video_notified_at.present? }
-      not_yet_notified.group_by(&:link_id).each do |link_id, product_files|
-        return if emails_sent >= MAX_EMAILS_PER_RUN
+      link_ids = ProductFile.unplayable_video
+        .joins(:link)
+        .where(links: { deleted_at: nil })
+        .where("product_files.link_id > ?", last_link_id)
+        .distinct
+        .order(:link_id)
+        .limit(BATCH_SIZE)
+        .pluck(:link_id)
+      break if link_ids.empty?
+
+      link_ids.each do |link_id|
+        # unplayable_video_notified_at lives in the JSON data column, so it cannot
+        # be filtered in SQL — the already-notified files are dropped here.
+        product_files = ProductFile.unplayable_video
+          .where(link_id:)
+          .order(:id)
+          .to_a
+          .reject { |product_file| product_file.unplayable_video_notified_at.present? }
+        next if product_files.empty?
 
         emails_sent += 1 if notify(link_id, product_files)
+        return if emails_sent >= MAX_EMAILS_PER_RUN
       end
+
+      last_link_id = link_ids.last
     end
   end
 

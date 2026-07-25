@@ -118,6 +118,31 @@ describe NotifySellersOfUnplayableVideoFilesJob do
     expect(product_file.reload.unplayable_video_notified_at).to be_nil
   end
 
+  it "sends one email for a product whose files span more than one batch" do
+    stub_const("#{described_class}::BATCH_SIZE", 1)
+    first_file = create_unplayable_video
+    second_file = create_unplayable_video
+
+    expect do
+      described_class.new.perform
+    end.to have_enqueued_mail(ContactingCreatorMailer, :unplayable_video_files)
+      .with(product.id, [first_file.id, second_file.id]).once
+  end
+
+  it "walks past the batch size to reach products beyond the first batch" do
+    stub_const("#{described_class}::BATCH_SIZE", 1)
+    first_file = create_unplayable_video
+    other_product = create(:product, user: seller)
+    other_product_file = create_unplayable_video(link: other_product)
+
+    expect do
+      described_class.new.perform
+    end.to have_enqueued_mail(ContactingCreatorMailer, :unplayable_video_files)
+      .with(product.id, [first_file.id])
+      .and have_enqueued_mail(ContactingCreatorMailer, :unplayable_video_files)
+      .with(other_product.id, [other_product_file.id])
+  end
+
   it "stops once it hits the per-run email cap and picks the rest up on the next run" do
     stub_const("#{described_class}::MAX_EMAILS_PER_RUN", 1)
     create_unplayable_video
