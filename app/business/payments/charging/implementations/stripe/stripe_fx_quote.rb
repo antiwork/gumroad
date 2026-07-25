@@ -17,6 +17,16 @@ class StripeFxQuote
   #   The FX Quote's to_currency: "usd" must match the payment intent's settlement currency: "cad".
   SETTLEMENT_MISMATCH_MESSAGE = /must match the payment intent's settlement currency/i
 
+  # FX Quotes is still a Stripe *preview* API — offered as is, no warranty, no committed
+  # deprecation window, access gated per account. We run live buyer-currency charges on it
+  # anyway; docs/stripe_fx_quotes_preview_api.md records that accepted risk and its owner.
+  #
+  # This version is deliberately applied per request, never globally: the app-wide
+  # Stripe.api_version (config/initializers/003_stripe.rb) stays on a stable version, and only
+  # this call plus the two PaymentIntent paths that attach an fx_quote id opt in. Changing this
+  # constant is a reviewed payments change in its own PR, not a routine bump — see
+  # spec/business/payments/charging/implementations/stripe/fx_quote_preview_pin_spec.rb, which
+  # fails if the scoping erodes.
   API_VERSION = "2025-07-30.preview"
   LOCK_DURATION = "hour"
   OPEN_TIMEOUT_SECONDS = 2
