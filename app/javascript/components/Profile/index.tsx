@@ -113,9 +113,18 @@ const PublicProfile = (props: Props) => {
         <header className="border-b border-border">
           <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4 px-4 py-8 lg:px-0">
             {props.bio ? (
-              <h1 className="whitespace-pre-line">
-                <AutoLink text={props.bio} />
-              </h1>
+              <div className="grid gap-2">
+                {/*
+                  The creator's name is the headline of the profile, so it is the h1, and the bio
+                  reads as prose underneath it at small body size. Previously the bio itself was the
+                  h1, so a normal multi-sentence bio was displayed at headline size with no way for
+                  the creator to make it smaller.
+                */}
+                <h1>{props.creator_profile.name}</h1>
+                <p className="text-sm whitespace-pre-line">
+                  <AutoLink text={props.bio} />
+                </p>
+              </div>
             ) : null}
             {props.tabs.length > 1 ? (
               <UITabs aria-label="Profile Tabs">

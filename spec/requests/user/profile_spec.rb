@@ -19,6 +19,16 @@ describe "User profile page", type: :system, js: true do
       end
     end
 
+    it "renders the creator name as the headline and the bio as smaller body text" do
+      creator.update!(bio: "I write about growing a one-person business.\n\nNew essays every other week.")
+      visit creator.subdomain_with_protocol
+      within "main > header" do
+        expect(page).to have_selector "h1", text: creator.name
+        expect(page).to have_selector "p", text: "I write about growing a one-person business."
+        expect(page).to_not have_selector "h1", text: "I write about growing a one-person business."
+      end
+    end
+
     it "allows impersonating from the profile page when logged in as Gumroad admin" do
       admin = create(:user, is_team_member: true)
       sign_in admin
