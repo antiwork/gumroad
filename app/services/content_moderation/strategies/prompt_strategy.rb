@@ -172,6 +172,10 @@ class ContentModeration::Strategies::PromptStrategy
       the actual service being performed and scheduling or intake happens over a channel.
       The seller doing real work for the buyer is a legitimate deliverable.
     - Physical goods that ship, or anything else with an obvious real deliverable.
+    - Subscriptions whose deliverable arrives over time on Gumroad: a newsletter, a
+      membership, or serialized content where buyers receive posts and emails after
+      subscribing. Having nothing attached yet is normal for these, because the content
+      is published later — that alone is never grounds to flag.
     - Listings that are simply short or vague about their content. Sparse copy is not
       grounds to flag; there must be an affirmative "message me elsewhere to get it".
 
