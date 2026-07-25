@@ -19,6 +19,32 @@ module RendersCustomHtmlPages
   # stylesheet <link> would be blocked.
   PAGES_TAILWIND_ASSET_HOST = "#{PROTOCOL}://#{ASSET_DOMAIN}"
 
+  # Tailwind v3's CDN build. Seller pages (especially agent-generated ones) load
+  # it for its runtime `tailwind.config` support, which our v4 build has no
+  # equivalent for, so it's allowed by both the sanitizer and the CSP below.
+  # Its presence in a page's HTML is what triggers the gradient compatibility
+  # shim — see tailwind_v3_gradient_compat_head.
+  TAILWIND_V3_CDN_HOST = "cdn.tailwindcss.com"
+
+  # Re-registers Tailwind's gradient custom properties with the universal
+  # syntax so a Tailwind v3 page can coexist with our injected v4 build.
+  # See tailwind_v3_gradient_compat_head for why this is needed and why the
+  # position in <head> matters.
+  #
+  # The `-position` variables are included because v3 also writes an *empty*
+  # value into them (`--tw-gradient-from-position: ;` for an unpositioned stop),
+  # which fails v4's <length-percentage> registration the same way.
+  TAILWIND_V3_GRADIENT_COMPAT_STYLE = <<~HTML
+    <style>
+      @property --tw-gradient-from{syntax:"*";inherits:false;initial-value:#0000}
+      @property --tw-gradient-via{syntax:"*";inherits:false;initial-value:#0000}
+      @property --tw-gradient-to{syntax:"*";inherits:false;initial-value:#0000}
+      @property --tw-gradient-from-position{syntax:"*";inherits:false;initial-value:0%}
+      @property --tw-gradient-via-position{syntax:"*";inherits:false;initial-value:50%}
+      @property --tw-gradient-to-position{syntax:"*";inherits:false;initial-value:100%}
+    </style>
+  HTML
+
   CUSTOM_HTML_CSP = [
     # Sandbox the response itself, not just the wrapper's iframe attribute.
     # A visitor can navigate straight to the /landing/embed endpoint (top-level,
@@ -250,6 +276,44 @@ module RendersCustomHtmlPages
       end
     end
 
+    # Extra <head> CSS that lets a seller page load Tailwind v3 from the CDN
+    # without its gradients silently rendering as fully transparent.
+    #
+    # The problem: we inject our own Tailwind *v4* build into every custom page
+    # (see pages_tailwind_head), and the sanitizer + CSP also allow
+    # cdn.tailwindcss.com, which serves Tailwind *v3*. Agent-generated pages use
+    # the v3 CDN routinely, so two Tailwind majors end up on one document, and
+    # they disagree about what a gradient variable holds:
+    #
+    #   v4 registers it as strictly a color, and CSS @property registration is
+    #   document-global, so it applies to the whole page:
+    #     @property --tw-gradient-from{syntax:"<color>";inherits:false;initial-value:#0000}
+    #
+    #   v3 writes a color AND a position into that same variable:
+    #     .from-navy-700{--tw-gradient-from:#173a70 var(--tw-gradient-from-position)}
+    #
+    # "#173a70 0%" is not a <color>, so the browser rejects the declaration and
+    # substitutes the registered initial-value, #0000 — transparent. Every v3
+    # gradient on the page quietly becomes transparent-to-transparent. Nothing
+    # errors and no warning appears; the utilities just stop working, which is
+    # why sellers cannot diagnose it (they report their *text* as invisible,
+    # because light text designed to sit on the missing panel now sits on the
+    # white page background instead).
+    #
+    # The fix is to re-register those variables with the universal syntax "*",
+    # which accepts any token sequence, so v3's "color position" value survives.
+    # This must come AFTER our v4 stylesheet: for duplicate @property rules the
+    # last registration wins, so emitting it earlier has no effect at all
+    # (verified in a browser — see the PR for the before/after computed values).
+    #
+    # Only emitted for pages that actually load the v3 CDN, so pages using our
+    # v4 build alone keep v4's exact registrations and are untouched.
+    def tailwind_v3_gradient_compat_head(custom_html)
+      return "" unless custom_html.to_s.include?(TAILWIND_V3_CDN_HOST)
+
+      TAILWIND_V3_GRADIENT_COMPAT_STYLE
+    end
+
     private
       # The manifest maps the logical stylesheet name to its current
       # fingerprinted path (e.g. "assets/pages/pages-tailwind-<sha>.css").
@@ -416,6 +480,7 @@ module RendersCustomHtmlPages
             <meta name="viewport" content="width=device-width, initial-scale=1">
             #{SANDBOX_COMPAT_SCRIPT}
             #{self.class.pages_tailwind_head}
+            #{self.class.tailwind_v3_gradient_compat_head(custom_html)}
           </head>
           <body>
             <script id="gumroad-data" type="application/json">#{data_json}</script>

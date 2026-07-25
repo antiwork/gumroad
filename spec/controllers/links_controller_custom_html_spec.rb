@@ -387,6 +387,75 @@ describe LinksController, :vcr, type: :controller do
     end
   end
 
+  describe ".tailwind_v3_gradient_compat_head" do
+    # Regression coverage for gumroad-private#1357: our injected Tailwind v4
+    # build registers the gradient custom properties as strictly <color> via
+    # @property, which is document-global. Tailwind v3 (loaded from the CDN by
+    # seller/agent pages) writes "<color> <position>" into those same
+    # properties, so the browser rejects the declaration and substitutes the
+    # registered initial-value #0000 — every v3 gradient silently renders
+    # transparent. Re-registering with syntax:"*" accepts v3's value shape.
+    it "emits the universal-syntax re-registration for a page that loads the v3 CDN" do
+      html = described_class.tailwind_v3_gradient_compat_head(
+        %(<script src="https://cdn.tailwindcss.com"></script><div class="bg-gradient-to-br from-red-500 to-blue-500"></div>)
+      )
+
+      expect(html).to include("@property --tw-gradient-from")
+      expect(html).to include(%(syntax:"*"))
+      # All six variables v3 writes into must be re-registered: the three color
+      # stops and the three positions (v3 writes an empty value into the
+      # position variables, which fails v4's <length-percentage> registration
+      # the same way a "color position" pair fails its <color> registration).
+      %w[
+        --tw-gradient-from --tw-gradient-via --tw-gradient-to
+        --tw-gradient-from-position --tw-gradient-via-position --tw-gradient-to-position
+      ].each do |property|
+        expect(html).to include("@property #{property}{")
+      end
+      expect(html).not_to include(%(syntax:"<color>"))
+    end
+
+    it "emits nothing for a page that does not load the v3 CDN" do
+      expect(described_class.tailwind_v3_gradient_compat_head(
+               %(<div class="bg-linear-to-br from-red-500 to-blue-500">no v3 here</div>)
+             )).to eq("")
+    end
+
+    it "emits nothing for blank or nil page HTML" do
+      expect(described_class.tailwind_v3_gradient_compat_head(nil)).to eq("")
+      expect(described_class.tailwind_v3_gradient_compat_head("")).to eq("")
+    end
+  end
+
+  describe "GET landing_iframe_content Tailwind v3 gradient compatibility" do
+    it "injects the compatibility shim AFTER the platform stylesheet when the page loads the v3 CDN" do
+      # The test environment has no built Tailwind artifact, so pages_tailwind_head
+      # returns "" here and the real <link> never appears. Stub it, because the
+      # ORDER of the two is the whole point of this test: for duplicate @property
+      # rules the LAST registration wins, so a shim emitted before our v4
+      # stylesheet would be overwritten by it and fix nothing.
+      allow(described_class).to receive(:pages_tailwind_head)
+        .and_return(%(<link rel="stylesheet" href="https://assets.example.com/pages-tailwind-abc.css">))
+      product.update!(custom_html: %(<script src="https://cdn.tailwindcss.com"></script><div class="bg-gradient-to-br from-red-500 to-blue-500">panel</div>))
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      shim_position = response.body.index("@property --tw-gradient-from")
+      tailwind_position = response.body.index("pages-tailwind-abc.css")
+      expect(shim_position).to be_present
+      expect(tailwind_position).to be_present
+      expect(shim_position).to be > tailwind_position
+    end
+
+    it "does not inject the shim for a page with no v3 CDN script" do
+      product.update!(custom_html: %(<div class="bg-linear-to-br from-red-500 to-blue-500">panel</div>))
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response.body).not_to include("@property --tw-gradient-from")
+    end
+  end
+
   describe "POST update (internal dashboard, session-authed Reset flow)" do
     before { sign_in seller }
 
