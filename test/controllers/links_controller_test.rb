@@ -1606,6 +1606,27 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal "stale_content_conflict", response.parsed_body["error_code"]
   end
 
+  test "PUT update does NOT reject a save whose variant row was only touched by a buyer's purchase" do
+    setup_guarded_version!
+    @version1.update!(max_purchase_count: 100)
+    stale_variant_snapshot = @version1.reload.updated_at.as_json
+    page_snapshot = @version1_page.updated_at.as_json
+
+    # Every sale of a limited-quantity variant touches the variant row to bust
+    # the product cache (Purchase#touch_variants_if_limited_quantity). That
+    # bumps updated_at without changing anything the seller edits, so a save
+    # from a session that loaded before the sale has no newer seller content to
+    # overwrite and must still go through.
+    travel 1.minute
+    @version1.touch
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: stale_variant_snapshot, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: page_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+  end
+
   test "PUT update fails open for payloads that do not echo snapshot timestamps (sessions predating the guard)" do
     setup_guarded_version!
     newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }]

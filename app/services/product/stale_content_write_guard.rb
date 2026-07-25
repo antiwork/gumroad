@@ -81,11 +81,43 @@ class Product::StaleContentWriteGuard
     Array.wrap(variants_params).filter_map do |variant|
       stored = variant[:id].present? ? stored_variants_by_external_id[variant[:id]] : nil
       next unless stale?(stored, variant[:updated_at])
+      next unless overwrites_variant_attributes?(stored, variant)
 
       { type: "variant", id: stored.external_id, name: stored.name }
     end
   end
   private_class_method :stale_variants
+
+  # Variant attributes the editor lets a seller change that live on the variant
+  # row itself, so a stale save would revert them. Membership prices live in a
+  # separate table and don't bump the variant's own updated_at, so they're not
+  # part of this comparison.
+  COMPARED_VARIANT_ATTRIBUTES = %i[name description price_difference_cents max_purchase_count duration_in_minutes].freeze
+
+  # Whether a stale variant snapshot would actually change anything the seller
+  # edits. A newer updated_at on a variant row does NOT by itself mean another
+  # editor session saved: every sale of a limited-quantity variant touches the
+  # row to bust the product cache (Purchase#touch_variants_if_limited_quantity,
+  # via the after_transition on successful purchases). Rejecting on the
+  # timestamp alone would block a seller from saving simply because their
+  # product sold after they opened the editor — the exact opposite of the
+  # protection this guard exists to give them.
+  #
+  # So a variant only counts as a conflict when the payload's values differ
+  # from what's stored: that's when writing them would revert someone else's
+  # change. When they're identical the write is a no-op for this variant and
+  # there is nothing to protect. Attributes the payload doesn't mention are
+  # skipped (the save won't touch them). Compared as strings because the
+  # payload arrives as JSON/form values while the stored values are typed.
+  def self.overwrites_variant_attributes?(stored, submitted)
+    COMPARED_VARIANT_ATTRIBUTES.any? do |attribute|
+      next false unless submitted.key?(attribute) || submitted.key?(attribute.to_s)
+
+      submitted_value = submitted[attribute].nil? ? submitted[attribute.to_s] : submitted[attribute]
+      submitted_value.to_s != stored.public_send(attribute).to_s
+    end
+  end
+  private_class_method :overwrites_variant_attributes?
 
   # Stale = the stored row changed after the snapshot the client echoed.
   # Compared at whole-second precision because that's what the row's JSON

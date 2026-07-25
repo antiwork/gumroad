@@ -1006,10 +1006,14 @@ class LinksController < ApplicationController
     end
 
     # Every variant in the save payload with the snapshot timestamp the editor
-    # echoed for it, for the stale-write guard.
+    # echoed for it, for the stale-write guard. The whole variant hash is
+    # passed through (not just id/updated_at) because the guard compares the
+    # submitted attributes against the stored row: a variant row's updated_at
+    # is also bumped by ordinary sales, so a newer timestamp alone doesn't mean
+    # another editor session saved.
     def snapshot_variants_params
       variants = params[:variants].is_a?(Array) ? params[:variants] : []
-      variants.filter_map { |variant| { id: variant[:id], updated_at: variant[:updated_at] } if variant.is_a?(ActionController::Parameters) || variant.is_a?(Hash) }
+      variants.select { |variant| variant.is_a?(ActionController::Parameters) || variant.is_a?(Hash) }
     end
 
     # Non-PII diagnostics attached to every blocked-save notification so an
