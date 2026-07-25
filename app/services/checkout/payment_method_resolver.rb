@@ -119,12 +119,13 @@ class Checkout::PaymentMethodResolver
   # a BRL cart has no USD item total for the resolver to read (the presenter only passes one for
   # USD-priced carts), and Stripe validates the intent's final amount anyway. See
   # Order::PreparePaymentIntentService#block_pix_amount_outside_window.
-  PIX_MIN_BRL_CHARGE_CENTS = 50
-  PIX_MAX_USD_CHARGE_CENTS = 3_000_00
   # Stripe also caps a single buyer at 10,000 USD of Pix payments per month with one business.
   # That is a property of the buyer's history, not of this cart, so no cart-shaped gate can see
   # it: such a payment fails at confirm and surfaces through the payment_intent.payment_failed
   # webhook like any other decline.
+  PIX_MIN_BRL_CHARGE_CENTS = 50
+  PIX_MAX_USD_CHARGE_CENTS = 3_000_00
+
   # Never gated by the per-account capability check on direct-charge sellers. Card processing is
   # the baseline capability of any chargeable Stripe account — an account that truly can't take
   # cards is unusable no matter what we render, and an empty method list would just break the
