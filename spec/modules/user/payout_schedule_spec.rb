@@ -78,6 +78,38 @@ describe User::PayoutSchedule do
         end
       end
     end
+
+    context "when payout frequency is daily" do
+      before { user.update!(payout_frequency: User::PayoutSchedule::DAILY) }
+
+      it "returns tomorrow when the seller is eligible for an instant payout" do
+        travel_to(Date.new(2025, 9, 22)) do
+          create(:balance, user:, amount_cents: 10_000, date: Date.new(2025, 9, 18))
+          allow(Payouts).to receive(:is_user_payable).and_call_original
+          allow(Payouts).to receive(:is_user_payable)
+            .with(user, Date.current, payout_type: Payouts::PAYOUT_TYPE_INSTANT).and_return(true)
+
+          expect(user.next_payout_date).to eq Date.new(2025, 9, 23)
+          # Asking twice must give the same answer: the eligibility check is remembered for the
+          # day, and a memo that never returns its remembered value would fall back to the
+          # weekly cycle instead.
+          expect(user.next_payout_date).to eq Date.new(2025, 9, 23)
+          expect(Payouts).to have_received(:is_user_payable)
+            .with(user, Date.current, payout_type: Payouts::PAYOUT_TYPE_INSTANT).once
+        end
+      end
+
+      it "falls back to the weekly cycle when the seller is not eligible for an instant payout" do
+        travel_to(Date.new(2025, 9, 22)) do
+          create(:balance, user:, amount_cents: 10_000, date: Date.new(2025, 9, 18))
+          allow(Payouts).to receive(:is_user_payable).and_call_original
+          allow(Payouts).to receive(:is_user_payable)
+            .with(user, anything, payout_type: Payouts::PAYOUT_TYPE_INSTANT).and_return(false)
+
+          expect(user.next_payout_date).to eq Date.new(2025, 9, 26)
+        end
+      end
+    end
   end
 
   describe "#upcoming_payouts" do
@@ -201,6 +233,137 @@ describe User::PayoutSchedule do
         expect(weekly_seller.next_payout_date).to eq Date.new(2026, 7, 24)
         expect(monthly_seller.next_payout_date).to eq Date.new(2026, 7, 31)
         expect(quarterly_seller.next_payout_date).to eq Date.new(2026, 9, 25)
+      end
+    end
+  end
+
+  describe "#payout_weekday" do
+    it "is the weekday of the run that pays the seller's bank account type" do
+      cross_border_seller = create(:philippines_bank_account).user
+      non_us_seller = create(:uk_bank_account).user
+      us_seller = create(:ach_account).user
+      paypal_seller = create(:user, payment_address: "paypal@example.com")
+
+      expect(cross_border_seller.payout_weekday).to eq :tuesday
+      expect(non_us_seller.payout_weekday).to eq :wednesday
+      expect(us_seller.payout_weekday).to eq :thursday
+      expect(paypal_seller.payout_weekday).to eq :friday
+    end
+
+    it "does not look up which processor pays a seller who has no bank account" do
+      # The PayPal and Stripe Connect runs share a weekday, so the answer is the same either
+      # way — and finding out which of the two applies is expensive, because it reads
+      # paypal_payout_email, which calls PayPal's API for a seller who connected a PayPal
+      # account rather than giving us an email address. next_payout_date runs for every seller
+      # the weekly payout batch considers, so that call must not happen here.
+      seller = create(:user)
+
+      expect(seller).not_to receive(:current_payout_processor)
+      expect(seller.payout_weekday).to eq :friday
+    end
+  end
+
+  describe "#next_payout_date on a non-Friday payout rail" do
+    # The bug this covers: the projected date was always the platform's Friday cycle date, so a
+    # seller whose rail runs on Tuesday was told a day they could never be paid on, wrote in on
+    # that day asking where the money was, and support repeated the wrong date back to them.
+    it "lands on the seller's own rail weekday, not the platform Friday" do
+      travel_to(Time.local(2026, 7, 22, 12)) do # Wednesday
+        seller_for = lambda do |factory|
+          create(factory).user.tap do |seller|
+            create(:balance, user: seller, amount_cents: 10_000, date: Date.new(2026, 7, 10))
+          end
+        end
+
+        cross_border_seller = seller_for.call(:philippines_bank_account)
+        non_us_seller = seller_for.call(:uk_bank_account)
+        us_seller = seller_for.call(:ach_account)
+        paypal_seller = create(:user, payment_address: "paypal@example.com")
+        create(:balance, user: paypal_seller, amount_cents: 10_000, date: Date.new(2026, 7, 10))
+
+        expect(cross_border_seller.next_payout_date).to eq Date.new(2026, 7, 28) # next Tuesday
+        expect(non_us_seller.next_payout_date).to eq Date.new(2026, 7, 22)       # today, a Wednesday
+        expect(us_seller.next_payout_date).to eq Date.new(2026, 7, 23)           # Thursday
+        expect(paypal_seller.next_payout_date).to eq Date.new(2026, 7, 24)       # Friday
+      end
+    end
+
+    it "does not project a date that has already passed this week" do
+      # Wednesday: the Tuesday run for this cycle has already fired, so the seller's next date
+      # is next week's Tuesday rather than yesterday.
+      travel_to(Time.local(2026, 7, 22, 12)) do # Wednesday
+        seller = create(:philippines_bank_account).user
+        create(:balance, user: seller, amount_cents: 10_000, date: Date.new(2026, 7, 10))
+
+        expect(seller.next_payout_date).to eq Date.new(2026, 7, 28)
+      end
+    end
+
+    it "returns today when today is the seller's payout day" do
+      travel_to(Time.local(2026, 7, 28, 12)) do # Tuesday
+        seller = create(:philippines_bank_account).user
+        create(:balance, user: seller, amount_cents: 10_000, date: Date.new(2026, 7, 10))
+
+        expect(seller.next_payout_date).to eq Date.new(2026, 7, 28)
+      end
+    end
+
+    it "covers the same balance period the payout job will actually pay on that day" do
+      # The payout jobs all pay balances up to User::PayoutSchedule.next_scheduled_payout_end_date,
+      # whichever weekday they fire on, so the period a seller's projected payout covers must
+      # match what the job computes on the seller's own payout day. Getting this wrong would show
+      # the seller the right day with the wrong amount.
+      {
+        philippines_bank_account: Date.new(2026, 7, 28), # Tuesday run
+        uk_bank_account: Date.new(2026, 7, 29),          # Wednesday run
+        ach_account: Date.new(2026, 7, 30),              # Thursday run
+      }.each do |bank_account_factory, payout_day|
+        seller = create(bank_account_factory).user
+        create(:balance, user: seller, amount_cents: 10_000, date: Date.new(2026, 7, 10))
+
+        travel_to(payout_day.in_time_zone.change(hour: 12)) do
+          expect(seller.next_payout_date).to eq payout_day
+          expect(seller.payout_period_end_date_for_payout_date(payout_day))
+            .to eq User::PayoutSchedule.next_scheduled_payout_end_date
+        end
+      end
+    end
+
+    it "advances to the next cycle when the seller was already paid today" do
+      travel_to(Time.local(2026, 7, 28, 12)) do # Tuesday
+        seller = create(:philippines_bank_account).user
+        create(:balance, user: seller, amount_cents: 10_000, date: Date.new(2026, 7, 10))
+        create(:payment, user: seller)
+
+        expect(seller.next_payout_date).to eq Date.new(2026, 8, 4) # the following Tuesday
+      end
+    end
+
+    it "keeps monthly and quarterly frequencies on their own cycle while moving the weekday" do
+      travel_to(Time.local(2026, 7, 22, 12)) do # Wednesday
+        monthly_seller = create(:philippines_bank_account).user
+        monthly_seller.update!(payout_frequency: User::PayoutSchedule::MONTHLY)
+        create(:balance, user: monthly_seller, amount_cents: 10_000, date: Date.new(2026, 7, 1))
+
+        # Last Friday of July is the 31st, so the Tuesday of that payout week is the 28th.
+        expect(monthly_seller.next_payout_date).to eq Date.new(2026, 7, 28)
+      end
+    end
+  end
+
+  describe "#upcoming_payouts on a non-Friday payout rail" do
+    it "spaces the projected payouts a week apart on the seller's weekday" do
+      travel_to(Time.local(2025, 9, 22, 12)) do # Monday
+        seller = create(:philippines_bank_account).user
+        create(:balance, user: seller, amount_cents: 11_000, date: Date.new(2025, 9, 18))
+        create(:balance, user: seller, amount_cents: 10_000, date: Date.new(2025, 9, 22))
+
+        upcoming = seller.upcoming_payouts
+        expect(upcoming.size).to eq 2
+        expect(upcoming[0].created_at).to eq Date.new(2025, 9, 23) # Tuesday
+        expect(upcoming[0].amount_cents).to eq 11_000
+        expect(upcoming[1].created_at).to eq Date.new(2025, 9, 30) # the next Tuesday
+        expect(upcoming[1].amount_cents).to eq 10_000
       end
     end
   end

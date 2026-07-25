@@ -39,7 +39,10 @@ module PayoutsHelper
     if user.payout_frequency == User::DAILY
       next_payout_date - 1
     else
-      next_payout_date - User::PayoutSchedule::PAYOUT_DELAY_DAYS
+      # The period a payout covers comes from the payout cycle rather than a fixed number of
+      # days before the payout date: the seller's payout date sits on their own rail's
+      # weekday, which can be up to three days before the cycle's Friday.
+      user.payout_period_end_date_for_payout_date(next_payout_date)
     end
   end
 

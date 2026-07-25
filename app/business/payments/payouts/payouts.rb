@@ -225,8 +225,14 @@ class Payouts
       (
         from_admin ||
         (
-          user.next_payout_date.present? &&
-          date + User::PayoutSchedule::PAYOUT_DELAY_DAYS >= user.next_payout_date
+          # Compare the batch against the seller's payout CYCLE, not the day their own rail
+          # runs on. The cycle is what schedules this batch, while the seller's payout day
+          # sits earlier in the same week (see User::PayoutSchedule#payout_weekday) — so
+          # comparing against that day would make a batch running any later in the week,
+          # such as a retried dead job, look like it belonged to the following week and
+          # skip every seller in it.
+          user.next_payout_cycle_date.present? &&
+          date + User::PayoutSchedule::PAYOUT_DELAY_DAYS >= user.next_payout_cycle_date
         )
       )
         user_ids_to_pay << user.id

@@ -193,7 +193,10 @@ describe Api::V2::PayoutsController do
           expect(upcoming_payout["amount"]).to eq("150.00")
           expect(upcoming_payout["currency"]).to eq(Currency::USD)
           expect(upcoming_payout["status"]).to eq(@seller.payouts_status)
-          expect(upcoming_payout["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
+          # A US bank account is paid by the Thursday payout run, so the seller's date is the
+          # Thursday of the payout week rather than its Friday. The amount is unchanged: the
+          # balance period still comes from the payout cycle.
+          expect(upcoming_payout["created_at"]).to eq(Time.zone.parse("2025-09-18").iso8601)
           expect(upcoming_payout["processed_at"]).to be_nil
         end
 
@@ -377,9 +380,10 @@ describe Api::V2::PayoutsController do
           expect(upcoming_payouts.length).to eq(2)
 
           expect(upcoming_payouts.first["amount"]).to eq("200.00")
-          expect(upcoming_payouts.first["created_at"]).to eq(Time.zone.parse("2025-09-26").iso8601)
+          # US bank account: the Thursday of each payout week, not its Friday.
+          expect(upcoming_payouts.first["created_at"]).to eq(Time.zone.parse("2025-09-25").iso8601)
           expect(upcoming_payouts.second["amount"]).to eq("150.00")
-          expect(upcoming_payouts.second["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
+          expect(upcoming_payouts.second["created_at"]).to eq(Time.zone.parse("2025-09-18").iso8601)
         end
       end
     end
@@ -698,7 +702,9 @@ describe Api::V2::PayoutsController do
       expect(upcoming_payout["amount"]).to eq("150.00")
       expect(upcoming_payout["currency"]).to eq(Currency::USD)
       expect(upcoming_payout["status"]).to eq(@seller.payouts_status)
-      expect(upcoming_payout["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
+      # A US bank account is paid by the Thursday payout run, so the seller's date is the
+      # Thursday of the payout week rather than its Friday.
+      expect(upcoming_payout["created_at"]).to eq(Time.zone.parse("2025-09-18").iso8601)
       expect(upcoming_payout["processed_at"]).to be_nil
     end
 
@@ -789,9 +795,10 @@ describe Api::V2::PayoutsController do
       expect(upcoming_payouts.length).to eq(2)
 
       expect(upcoming_payouts.first["amount"]).to eq("150.00")
-      expect(upcoming_payouts.first["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
+      # US bank account: the Thursday of each payout week, not its Friday.
+      expect(upcoming_payouts.first["created_at"]).to eq(Time.zone.parse("2025-09-18").iso8601)
       expect(upcoming_payouts.second["amount"]).to eq("200.00")
-      expect(upcoming_payouts.second["created_at"]).to eq(Time.zone.parse("2025-09-26").iso8601)
+      expect(upcoming_payouts.second["created_at"]).to eq(Time.zone.parse("2025-09-25").iso8601)
     end
   end
 end
