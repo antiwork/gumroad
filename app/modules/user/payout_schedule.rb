@@ -66,6 +66,13 @@ module User::PayoutSchedule
 
   def upcoming_payouts
     upcoming_payout_date = next_payout_date
+    return [] if upcoming_payout_date.nil?
+
+    # Track the Friday cycle alongside the seller-facing date: the cycle is what advances a week
+    # (or a month, or a quarter) at a time, and the seller's date is that cycle converted to their
+    # rail's weekday. Deriving the next cycle back out of the seller's date instead would be wrong
+    # for a daily seller, whose first projected date is tomorrow rather than a cycle date at all.
+    payout_cycle_date = payout_cycle_for_payout_date(upcoming_payout_date)
     upcoming_payouts = []
 
     while upcoming_payout_date
@@ -91,7 +98,8 @@ module User::PayoutSchedule
 
       upcoming_payouts << upcoming_payout
 
-      upcoming_payout_date = payout_date_for_cycle(advance_payout_date(payout_cycle_for_payout_date(upcoming_payout_date)))
+      payout_cycle_date = advance_payout_date(payout_cycle_date)
+      upcoming_payout_date = payout_date_for_cycle(payout_cycle_date)
     end
 
     upcoming_payouts
