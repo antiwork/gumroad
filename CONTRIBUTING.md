@@ -59,7 +59,7 @@ Non-trivial PRs should follow this structure:
 - **Before/After** — Video is required for all PRs, except PRs that only touch documentation or agent skill files, where the diff itself is the reviewable artifact. For user-facing changes, show before/after with desktop and mobile, light and dark mode. For non-user-facing changes, include a short video walking through the relevant existing functionality.
 - **Test Results** — Screenshot of tests passing locally.
 
-Store screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. Reference them in PR descriptions with raw GitHub URLs:
+Store screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. From a fork, use your own fork's PR number — it won't match any number here, and that's fine. Reference them in PR descriptions with raw GitHub URLs:
 
 ```markdown
 ![description](https://raw.githubusercontent.com/antiwork/gumroad/<branch>/qa-media/pr-5160-pagination-page1.png)
@@ -99,6 +99,8 @@ git rebase origin/main
 ```
 
 Resolve conflicts locally before pushing. PRs with stale branches will not be merged.
+
+Working from a fork, `origin` is your fork — and your fork's `main` goes stale the moment this repo moves. Add this repo as `upstream` once (`git remote add upstream https://github.com/antiwork/gumroad.git`) and rebase onto `upstream/main` instead.
 
 ### Code review
 
