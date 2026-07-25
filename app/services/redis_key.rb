@@ -65,6 +65,12 @@ class RedisKey
     # HoldsDeployWhileRunning, read by HealthcheckController#deploy_safe, which the
     # production deploy script polls instead of freezing deploys on a clock window.
     def jobs_holding_deploys = "deploy:jobs_in_flight"
+    # The key the payout batch jobs used before the above replaced it. Nothing writes it any
+    # more, but a payout batch that started on the previous release is still running the old
+    # code and registered itself here, so HealthcheckController#deploy_safe keeps counting it
+    # for the length of this change's rollout. Once no payout batch predating this release can
+    # still be running (one weekly batch cycle), this and its use in the healthcheck can go.
+    def legacy_payout_batch_in_flight = "payouts:batch_in_flight"
     def stripe_balance_topup_needed = "stripe:balance_topup_needed"
     def min_successful_purchases_in_last_10_minutes = "healthcheck:min_successful_purchases_in_last_10_minutes"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"

@@ -69,6 +69,8 @@ describe HealthcheckController do
   end
 
   describe "GET 'deploy_safe'" do
+    after { $redis.del(RedisKey.jobs_holding_deploys, RedisKey.legacy_payout_batch_in_flight) }
+
     context "when nothing is in flight (Redis key absent)" do
       it "returns 200" do
         $redis.del(RedisKey.jobs_holding_deploys)
@@ -120,6 +122,42 @@ describe HealthcheckController do
         expect($redis.zscore(RedisKey.jobs_holding_deploys, "live-job-token")).to be_present
       ensure
         $redis.del(RedisKey.jobs_holding_deploys)
+      end
+    end
+
+    context "when the in-flight job predates this change and only wrote the legacy key" do
+      it "returns 503, so a payout batch started on the previous release still holds deploys" do
+        $redis.zadd(RedisKey.legacy_payout_batch_in_flight, Time.current.to_i, "old-code-payout-token")
+
+        get :deploy_safe
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Deploy safety: job in flight")
+      end
+    end
+
+    context "when the legacy key holds only an entry older than the per-entry TTL" do
+      it "returns 200 and prunes it, so a dead old-code job cannot freeze deploys" do
+        stale_score = (HoldsDeployWhileRunning::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(RedisKey.legacy_payout_batch_in_flight, stale_score, "dead-old-code-token")
+
+        get :deploy_safe
+
+        expect(response.status).to eq(200)
+        expect($redis.zcard(RedisKey.legacy_payout_batch_in_flight)).to eq(0)
+      end
+    end
+
+    context "when a live entry in one key sits alongside a stale entry in the other" do
+      it "prunes both keys rather than stopping at the first live one" do
+        stale_score = (HoldsDeployWhileRunning::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(RedisKey.jobs_holding_deploys, Time.current.to_i, "live-job-token")
+        $redis.zadd(RedisKey.legacy_payout_batch_in_flight, stale_score, "dead-old-code-token")
+
+        get :deploy_safe
+
+        expect(response.status).to eq(503)
+        expect($redis.zscore(RedisKey.legacy_payout_batch_in_flight, "dead-old-code-token")).to be_nil
       end
     end
 

@@ -27,13 +27,27 @@ class HealthcheckController < ApplicationController
   # Only entries younger than the per-entry TTL count: the key-level EXPIRE is refreshed
   # whenever any job registers, so score-based filtering here is what actually ages out
   # an entry left behind by a job that died mid-batch.
+  #
+  # Two keys are checked, not one. Jobs running the current code register in
+  # RedisKey.jobs_holding_deploys, but a payout batch that started on the PREVIOUS release is
+  # still running the old code, which registers in RedisKey.legacy_payout_batch_in_flight.
+  # That old worker survives the deploy that ships this change, so for the length of this
+  # rollout its hold is only visible in the legacy key — ignoring it would let the next deploy
+  # recycle Sidekiq in the middle of a payout batch. Both keys hold the same shape (a sorted
+  # set of per-job tokens scored by start time) and the same entry TTL, so they are pruned and
+  # counted identically. The legacy key can be dropped from this check once no payout batch
+  # predating this release can still be running.
   def deploy_safe
-    key = RedisKey.jobs_holding_deploys
+    keys = [RedisKey.jobs_holding_deploys, RedisKey.legacy_payout_batch_in_flight]
     oldest_valid_score = HoldsDeployWhileRunning::IN_FLIGHT_ENTRY_TTL.ago.to_i
-    # Prune expired entries first so a dead job's leftover token gets removed rather
-    # than lingering until the whole key expires.
-    $redis.zremrangebyscore(key, "-inf", "(#{oldest_valid_score}")
-    in_flight = $redis.zcard(key) > 0
+    # `map` rather than `any?` so both keys are always pruned: `any?` would stop at the first
+    # key with a live entry and leave a dead job's leftover token in the other one.
+    in_flight = keys.map do |key|
+      # Prune expired entries first so a dead job's leftover token gets removed rather
+      # than lingering until the whole key expires.
+      $redis.zremrangebyscore(key, "-inf", "(#{oldest_valid_score}")
+      $redis.zcard(key) > 0
+    end.any?
     status = in_flight ? :service_unavailable : :ok
     message = in_flight ? "job in flight" : "no job in flight"
 
