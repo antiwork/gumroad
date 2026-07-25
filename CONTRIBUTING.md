@@ -10,7 +10,7 @@ Contribute like this instead:
 2. **Email [support@gumroad.com](mailto:support@gumroad.com)** with a link to it.
 3. We review it ourselves, and if we want it, **we merge it on our side.**
 
-Your PR on your fork has to meet the exact same bar as anything we write, because it gets held to the same guidelines — everything below in this document applies. Concretely, that means at minimum:
+Your PR on your fork is held to the same bar as anything we write. Concretely, at minimum:
 
 - **Visual evidence** for anything a user can see, before/after, desktop + mobile, light + dark. Video preferred. This is the #1 rule below and it is not waived for forks.
 - **QA steps** someone else can actually follow to verify the change.
@@ -18,7 +18,15 @@ Your PR on your fork has to meet the exact same bar as anything we write, becaus
 - **An AI disclosure** naming the specific model, after a `---` separator.
 - **A self-review** comment on your own diff, and a **What / Why / Before-After / Test Results** description.
 
-A fork PR that skips these gets the same answer as one of ours that skips them: it isn't ready. If your change is good and documented well, the fork is not a barrier — it's just where the work lives until we pull it in.
+The rest of the guidelines below apply too, with the obvious substitutions for working outside this repo: reference `qa-media/` files by your own fork's raw URL (`raw.githubusercontent.com/<your-username>/gumroad/<branch>/...`, not `antiwork/gumroad`), name them `pr-<your-fork-pr-number>-<description>`, and skip the steps that depend on this repo's own infrastructure — preview-app deploys and `@claude review once` both need org credentials you won't have, so we run those ourselves once we pull the change in. Substituting for those is expected; skipping the evidence itself is not.
+
+A fork PR that skips the evidence gets the same answer as one of ours that skips it: it isn't ready. If your change is good and documented well, the fork is not a barrier — it's just where the work lives until we pull it in.
+
+**Issues and bug reports are still welcome here.** This policy is about pull requests only — [file issues](https://github.com/antiwork/gumroad/issues) and bug reports on this repo as normal.
+
+Merged fork commits keep your authorship, so contributions show up under your name in the history. Emailing us a link to your fork PR counts as contributing under the [license terms](#license) at the bottom of this guide.
+
+We read every submission, but we can't promise a reply to each one or a timeline for review.
 
 ## Overall
 

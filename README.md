@@ -24,9 +24,11 @@
 
 **We don't accept pull requests on this repository.** A PR opened here will be closed without review.
 
-If you want to contribute a change: **fork the repo, open the pull request on your own fork, then email [support@gumroad.com](mailto:support@gumroad.com) with a link to it.** We'll review it and merge it on our side if we want it.
+If you want to contribute a change: **fork the repo, open the pull request on your own fork, then email [support@gumroad.com](mailto:support@gumroad.com) with a link to it.** We read every submission and merge the ones we want on our side, keeping your authorship — though we can't promise a reply to each one or a timeline.
 
-Your PR still has to meet the same bar as our own work — visual evidence for anything user-facing, QA steps, test results, and an AI disclosure naming the model. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines; they apply to fork PRs exactly as written.
+Your PR still has to meet the same bar as our own work — visual evidence for anything user-facing, QA steps, test results, and an AI disclosure naming the model. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines and the substitutions that apply when working from a fork.
+
+**Issues and bug reports are still welcome here** — this policy is about pull requests only.
 
 ## Table of Contents
 
