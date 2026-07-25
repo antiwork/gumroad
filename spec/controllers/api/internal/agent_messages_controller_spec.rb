@@ -203,7 +203,7 @@ describe Api::Internal::AgentMessagesController do
   end
 
   describe "POST execute" do
-    let(:valid_params) { { type: "api_write", params: { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 } } }
+    let(:valid_params) { { type: "api_write", params: { endpoint: "create_offer_code", code: "LAUNCH", percent_off: 20 } } }
 
     it_behaves_like "authentication required for action", :post, :execute do
       let(:request_params) { valid_params }
@@ -240,7 +240,7 @@ describe Api::Internal::AgentMessagesController do
             "proposed_action" => {
               "type" => "api_write",
               "summary" => "Create discount LAUNCH",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -286,7 +286,7 @@ describe Api::Internal::AgentMessagesController do
           metadata: {
             "proposed_action" => {
               "type" => "api_write",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -312,7 +312,7 @@ describe Api::Internal::AgentMessagesController do
           metadata: {
             "proposed_action" => {
               "type" => "api_write",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -371,6 +371,77 @@ describe Api::Internal::AgentMessagesController do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body["success"]).to be(false)
+      end
+
+      it "puts the failure reason and endpoint id in the request's log payload when a confirmed action fails" do
+        # The 422s from this endpoint are a bucket (permission denials, unknown-key rejections, API
+        # validation failures all land here); the reason and endpoint on the lograge payload are
+        # what make them separable by cause in Elasticsearch.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: false, message: "You don't have permission to do that.")
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(payload[:agent_action_failure_reason]).to eq("You don't have permission to do that.")
+        expect(payload[:agent_action_endpoint]).to eq("create_offer_code")
+      end
+
+      it "bounds the logged failure reason so a reflected seller value can't bloat or split the log line" do
+        # Validation failures are reflected from the v2 API, which echoes seller-supplied values back
+        # in its messages. Structured logs are long-lived and searchable, so the reason is collapsed
+        # to one line and capped — enough to tell the 422 buckets apart without carrying an arbitrary
+        # amount of seller text into the log.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        reflected = "Name is invalid:\n#{"A" * 500}"
+        allow(executor_double).to receive(:execute).and_return(success: false, message: reflected)
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        logged = payload[:agent_action_failure_reason]
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(logged.length).to be <= 200
+        expect(logged).not_to include("\n")
+        expect(logged).to start_with("Name is invalid: AAA")
+        # The seller still gets the API's full message; only the log copy is bounded.
+        expect(response.parsed_body["message"]).to eq(reflected)
+      end
+
+      it "omits the endpoint from the log payload when the confirmed action names one the catalog doesn't have" do
+        # The endpoint is what these 422s get grouped by, so it is resolved through the catalog
+        # rather than copied from the request — a tampered or stale proposal naming something the
+        # catalog doesn't have contributes no value of its own choosing to the metric.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: false, message: "That action isn't supported.")
+
+        payload = {}
+        post :execute, params: { type: "api_write", params: { endpoint: "not_a_real_endpoint" } }, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(payload[:agent_action_failure_reason]).to eq("That action isn't supported.")
+        expect(payload).not_to have_key(:agent_action_endpoint)
+      end
+
+      it "does not add failure fields to the log payload when the confirmed action succeeds" do
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: true, message: "Created discount code LAUNCH.")
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to be_successful
+        expect(payload).not_to have_key(:agent_action_failure_reason)
+        expect(payload).not_to have_key(:agent_action_endpoint)
       end
 
       it "halts on throttle without invoking the action executor" do
