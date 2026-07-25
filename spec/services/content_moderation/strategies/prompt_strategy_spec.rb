@@ -54,7 +54,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
   # A single language-model sample is nondeterministic, so a lone spam flag
   # must not block a publish. These specs pin the corroboration gate: the flag
   # only blocks when every resample reproduces it.
-  describe "spam corroboration resampling (corroborate_spam_flags: true)" do
+  describe "spam corroboration resampling (corroborate_judgment_flags: true)" do
     it "downgrades a spam flag to audit-only when a resample comes back clean" do
       allow(client).to receive(:chat).and_return(
         json_chat_response(flagged: false, reasoning: ""),           # adult_content preset
@@ -64,7 +64,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
         json_chat_response(flagged: false, reasoning: "")            # resample 2 disagrees
       )
 
-      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true).perform
 
       expect(result.status).to eq("compliant")
       expect(result.reasoning).to eq([])
@@ -80,7 +80,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
         json_chat_response(flagged: true, reasoning: "clear spam")
       )
 
-      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true).perform
 
       expect(result.status).to eq("flagged")
       expect(result.reasoning).to eq(["spam: clear spam"])
@@ -95,7 +95,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
         json_chat_response(flagged: false, reasoning: "")  # first resample decides
       )
 
-      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true).perform
 
       expect(result.status).to eq("compliant")
       expect(result.audit_reasoning).to eq(["spam (uncorroborated, 1/2 samples flagged): clear spam"])
@@ -115,7 +115,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
         end
       end
 
-      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true).perform
 
       expect(result.status).to eq("compliant")
       expect(result.audit_reasoning).to eq(["spam (uncorroborated, 1/2 samples flagged): clear spam"])
@@ -128,7 +128,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
         json_chat_response(flagged: false, reasoning: "")                     # spam preset
       )
 
-      result = described_class.new(text: "moderate me", corroborate_spam_flags: true).perform
+      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true).perform
 
       expect(result.status).to eq("flagged")
       expect(result.reasoning).to eq(["adult_content: clear adult content"])
@@ -147,6 +147,67 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
       expect(result.status).to eq("flagged")
       expect(result.reasoning).to eq(["spam: clear spam"])
       expect(client).to have_received(:chat).exactly(3).times
+    end
+
+    it "corroborates off-platform fulfillment flags too" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),                            # adult_content
+        json_chat_response(flagged: false, reasoning: ""),                            # spam
+        json_chat_response(flagged: true, reasoning: "DM me on TG for the content"),  # off_platform_fulfillment
+        json_chat_response(uncertain: false),                                         # uncertainty check
+        json_chat_response(flagged: false, reasoning: "")                             # resample disagrees
+      )
+
+      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true, check_off_platform_fulfillment: true).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.reasoning).to eq([])
+      expect(result.audit_reasoning).to eq(["off_platform_fulfillment (uncorroborated, 1/2 samples flagged): DM me on TG for the content"])
+    end
+  end
+
+  # The preset that catches listings whose only delivery mechanism is "pay
+  # here, then message me on Telegram/X to get it": the buyer receives nothing
+  # on Gumroad, so a non-delivery complaint can't be verified or fixed.
+  describe "off-platform fulfillment preset (check_off_platform_fulfillment: true)" do
+    it "is not evaluated unless the caller opts in" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),
+        json_chat_response(flagged: false, reasoning: "")
+      )
+
+      described_class.new(text: "DM me on Telegram for the content").perform
+
+      expect(client).to have_received(:chat).exactly(2).times
+    end
+
+    it "blocks when the flag reproduces on every resample" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),                                   # adult_content
+        json_chat_response(flagged: false, reasoning: ""),                                   # spam
+        json_chat_response(flagged: true, reasoning: "buyer must DM on X for access"),       # off_platform_fulfillment
+        json_chat_response(uncertain: false),                                                # uncertainty check
+        json_chat_response(flagged: true, reasoning: "buyer must DM on X for access"),       # resample 1
+        json_chat_response(flagged: true, reasoning: "buyer must DM on X for access")        # resample 2
+      )
+
+      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true, check_off_platform_fulfillment: true).perform
+
+      expect(result.status).to eq("flagged")
+      expect(result.reasoning).to eq(["off_platform_fulfillment: buyer must DM on X for access"])
+    end
+
+    it "skips images for the preset, as the listing text is what routes buyers off-platform" do
+      image_counts_per_call = []
+      allow(client).to receive(:chat) do |parameters:|
+        image_counts_per_call << parameters[:messages].last[:content].count { |part| part[:type] == "image_url" }
+        json_chat_response(flagged: false, reasoning: "")
+      end
+
+      described_class.new(text: "moderate me", image_urls: ["https://cdn.example.com/1.png"], check_off_platform_fulfillment: true).perform
+
+      # adult_content sees the image; spam and off_platform_fulfillment are text-only.
+      expect(image_counts_per_call).to eq([1, 0, 0])
     end
   end
 
