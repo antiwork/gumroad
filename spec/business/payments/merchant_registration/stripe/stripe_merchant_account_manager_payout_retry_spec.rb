@@ -216,6 +216,62 @@ describe StripeMerchantAccountManager do
       end
     end
 
+    context "when Stripe rejects the bank as unsupported (no code or param on the error)" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "Stripe is unable to support this bank at this time.", nil
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry (expected seller-input error) and re-raises" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "records a bank sync failure note" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+      end
+    end
+
+    context "when Stripe rejects the postal code" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "Invalid NL postal code", "individual[address][postal_code]", code: "postal_code_invalid"
+          )
+        )
+      end
+
+      it "does not report the rejection to Sentry (expected seller-input error, auto-retried weekly) and re-raises" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "records a postal code failure note" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(payout_notes(StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX).count).to eq(1)
+      end
+    end
+
     context "when Stripe rejects the external account with a card error" do
       before do
         allow(Stripe::Account).to receive(:create).and_raise(

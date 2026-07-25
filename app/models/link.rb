@@ -711,8 +711,19 @@ class Link < ApplicationRecord
   end
 
   def sales_count_for_inventory
-    return sales_count_for_inventory_cache if Feature.active?(:inventory_counter_cache)
-    sales.counts_towards_inventory.sum(:quantity)
+    # The counter-cache column is kept in sync by Purchase/Subscription callbacks and has been
+    # the production source since 2026-04 (the inventory_counter_cache flag was 100% on; removed
+    # via gp#1208). The live SUM fallback is gone with the flag.
+    #
+    # Read the column fresh from the database rather than trusting this instance's loaded
+    # attribute: the callbacks bump the counter with `update_all` (no in-memory sync), so a
+    # Link object loaded before a concurrent purchase would otherwise report a stale count.
+    # Inventory protection (Purchase#sold_out under the per-product semaphore) depends on
+    # seeing the committed value. This is a primary-key point read — still far cheaper than
+    # the SUM over purchases it replaced.
+    return sales_count_for_inventory_cache unless persisted?
+
+    self.class.where(id: id).pick(:sales_count_for_inventory_cache)
   end
 
   def variants_available?
@@ -1214,7 +1225,31 @@ class Link < ApplicationRecord
   end
 
   def has_product_level_rich_content?
-    is_physical? || has_same_rich_content_for_all_variants? || alive_variants.empty?
+    is_physical? || alive_variants.empty? || (has_same_rich_content_for_all_variants? && !recoverable_hidden_variant_rich_content?)
+  end
+
+  # Detects a stored state the editor cannot faithfully display: the product
+  # claims every version shares the product-level content
+  # (has_same_rich_content_for_all_variants is on), yet the product level has
+  # no visible content while version-level pages still do. This is the state
+  # that caused the July 21, 2026 content wipe: support restored a product's
+  # per-version pages without turning the flag off, so the editor (and buyers)
+  # resolved to the blank product level, the real content became unreachable,
+  # and the next ordinary save deleted it.
+  #
+  # When the hidden version content is unambiguously the only real content
+  # (the product level is blank), we treat the product as effectively using
+  # per-version content so the editor and buyers see the real pages again —
+  # the seller recovers just by reloading. When BOTH sides have visible
+  # content we cannot pick a winner automatically; saves that would delete the
+  # hidden pages fail closed instead and require an explicit choice (see
+  # Product::RichContentDeletionGuard).
+  def recoverable_hidden_variant_rich_content?
+    return false unless has_same_rich_content_for_all_variants?
+    return false if is_physical?
+    return false if alive_rich_contents.any?(&:has_editor_content?)
+
+    alive_variants.any? { |variant| variant.alive_rich_contents.any?(&:has_editor_content?) }
   end
 
   def has_embedded_license_key?

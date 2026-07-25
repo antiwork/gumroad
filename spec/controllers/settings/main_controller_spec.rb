@@ -535,9 +535,12 @@ describe Settings::MainController, type: :controller, inertia: true do
   describe "POST resend_confirmation_email" do
     shared_examples_for "resends email confirmation" do
       it "resends email confirmation" do
+        # The resend clears any stale SendGrid suppression first, so it runs in
+        # the background via ResendConfirmationEmailJob rather than sending inline.
         expect { post :resend_confirmation_email }
-          .to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+          .to change { ResendConfirmationEmailJob.jobs.size }.by(1)
 
+        expect(ResendConfirmationEmailJob).to have_enqueued_sidekiq_job(seller.id)
         expect(response).to redirect_to(settings_main_path)
         expect(response).to have_http_status :see_other
         expect(flash[:notice]).to eq("Confirmation email resent!")
@@ -547,7 +550,7 @@ describe Settings::MainController, type: :controller, inertia: true do
     shared_examples_for "doesn't resend email confirmation" do
       it "doesn't resend email confirmation" do
         expect { post :resend_confirmation_email }
-          .not_to have_enqueued_mail(UserSignupMailer)
+          .not_to change { ResendConfirmationEmailJob.jobs.size }
 
         expect(response).to redirect_to(settings_main_path)
         expect(response).to have_http_status :found
@@ -567,6 +570,9 @@ describe Settings::MainController, type: :controller, inertia: true do
       before do
         seller.confirm
         seller.update_attribute(:email, "some@gumroad.com")
+        # The email change just stamped confirmation_sent_at; a real resend click
+        # comes later ("I never got it"), past the one-minute enqueue floor.
+        seller.update_column(:confirmation_sent_at, 2.minutes.ago)
       end
 
       it_behaves_like "resends email confirmation"
@@ -586,6 +592,39 @@ describe Settings::MainController, type: :controller, inertia: true do
       end
 
       it_behaves_like "doesn't resend email confirmation"
+    end
+
+    # The dashboard's confirm-your-email banner posts as JSON so the seller isn't
+    # redirected to the Settings page mid-flow.
+    context "when requesting JSON" do
+      context "when the user is unconfirmed" do
+        before do
+          seller.update_columns(confirmed_at: nil)
+        end
+
+        it "resends email confirmation and renders success" do
+          expect { post :resend_confirmation_email, format: :json }
+            .to change { ResendConfirmationEmailJob.jobs.size }.by(1)
+
+          expect(ResendConfirmationEmailJob).to have_enqueued_sidekiq_job(seller.id)
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to eq("success" => true)
+        end
+      end
+
+      context "when the user is confirmed" do
+        before do
+          seller.confirm
+        end
+
+        it "doesn't resend email confirmation and renders failure" do
+          expect { post :resend_confirmation_email, format: :json }
+            .not_to change { ResendConfirmationEmailJob.jobs.size }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to eq("success" => false)
+        end
+      end
     end
   end
 end

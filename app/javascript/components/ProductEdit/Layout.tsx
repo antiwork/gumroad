@@ -2,7 +2,6 @@ import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
 
-import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
 import { getContrastColor, hexToRgb } from "$app/utils/color";
@@ -140,8 +139,7 @@ export const Layout = ({
   // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
   receiptSubject?: string | null;
 }) => {
-  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType, receiptEmailFrom } =
-    useProductEditContext();
+  const { product, updateProduct, uniquePermalink, saving, save, receiptEmailFrom } = useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
@@ -171,7 +169,16 @@ export const Layout = ({
   const setPublished = async (published: boolean) => {
     try {
       setIsPublishing(true);
-      await saveProduct(uniquePermalink, id, product, currencyType);
+      // Publishing (and unpublishing) saves first, and must do so through the
+      // shared save() so the save-time deletion summary appears here too — a
+      // publish must not be a side door around the final "this will delete
+      // content" confirmation. save() surfaces its own error alerts and
+      // resolves false when it failed or the seller cancelled; stay put then.
+      const saved = await save();
+      if (!saved) {
+        setIsPublishing(false);
+        return;
+      }
       await setProductPublished(uniquePermalink, published);
       updateProduct({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
@@ -263,7 +270,11 @@ export const Layout = ({
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void save().then(() => navigate.current(`${rootPath}/content`))}
+              onClick={() =>
+                void save().then((saved) => {
+                  if (saved) navigate.current(`${rootPath}/content`);
+                })
+              }
             >
               {saving ? "Saving changes..." : "Save and continue"}
             </Button>
@@ -360,7 +371,15 @@ export const Layout = ({
                               // consumes the transient activation), which matters because the mobile
                               // preview pane is this button's main audience.
                               const previewWindow = window.open("about:blank", "_blank");
-                              void save().then(() => {
+                              void save().then((saved) => {
+                                // A false result means the seller cancelled the deletion
+                                // confirmation or the save request failed — opening the preview
+                                // then would show stale saved content that doesn't match what's
+                                // on screen. Close the placeholder tab and stay in the editor.
+                                if (!saved) {
+                                  previewWindow?.close();
+                                  return;
+                                }
                                 if (previewWindow) previewWindow.location.href = url;
                                 else window.open(url, "_blank");
                               });

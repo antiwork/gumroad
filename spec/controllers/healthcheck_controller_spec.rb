@@ -95,7 +95,7 @@ describe HealthcheckController do
 
     context "when the only entries are older than the per-entry TTL (job died mid-batch)" do
       it "returns 200 and prunes the stale entry" do
-        stale_score = (PerformPayoutsUpToDelayDaysAgoWorker::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        stale_score = (PayoutBatchInFlightTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
         $redis.zadd(RedisKey.payout_batch_in_flight, stale_score, "dead-job-token")
 
         get :payouts
@@ -109,7 +109,7 @@ describe HealthcheckController do
 
     context "when a stale entry sits alongside a fresh one" do
       it "returns 503 and prunes only the stale entry" do
-        stale_score = (PerformPayoutsUpToDelayDaysAgoWorker::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        stale_score = (PayoutBatchInFlightTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
         $redis.zadd(RedisKey.payout_batch_in_flight, stale_score, "dead-job-token")
         $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "live-job-token")
 
@@ -120,6 +120,59 @@ describe HealthcheckController do
         expect($redis.zscore(RedisKey.payout_batch_in_flight, "live-job-token")).to be_present
       ensure
         $redis.del(RedisKey.payout_batch_in_flight)
+      end
+    end
+  end
+
+  describe "GET 'long_running_jobs'" do
+    let(:key) { RedisKey.long_running_jobs_in_flight }
+
+    before { $redis.del(key) }
+    after  { $redis.del(key) }
+
+    context "when no long-running job is in flight (Redis key absent)" do
+      it "returns 200" do
+        get :long_running_jobs
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("Long running jobs: no job in flight")
+      end
+    end
+
+    context "when a long-running job is in flight (a fresh job entry exists)" do
+      it "returns 503" do
+        $redis.zadd(key, Time.current.to_i, "job-token")
+
+        get :long_running_jobs
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Long running jobs: job in flight")
+      end
+    end
+
+    context "when the only entries are older than the per-entry TTL (job died mid-run)" do
+      it "returns 200 and prunes the stale entry" do
+        stale_score = (LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(key, stale_score, "dead-job-token")
+
+        get :long_running_jobs
+
+        expect(response.status).to eq(200)
+        expect($redis.zcard(key)).to eq(0)
+      end
+    end
+
+    context "when a stale entry sits alongside a fresh one" do
+      it "returns 503 and prunes only the stale entry" do
+        stale_score = (LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(key, stale_score, "dead-job-token")
+        $redis.zadd(key, Time.current.to_i, "live-job-token")
+
+        get :long_running_jobs
+
+        expect(response.status).to eq(503)
+        expect($redis.zscore(key, "dead-job-token")).to be_nil
+        expect($redis.zscore(key, "live-job-token")).to be_present
       end
     end
   end
@@ -209,12 +262,27 @@ describe HealthcheckController do
   describe "GET 'purchases'" do
     let(:redis_key) { RedisKey.min_successful_purchases_in_last_10_minutes }
 
+    # The action counts EVERY successful purchase in the last 10 minutes, so it also sees rows this
+    # spec did not create. Two sources of those:
+    #
+    # 1. Rows another example leaked into the shared test database. Most specs roll back in a
+    #    transaction, but any that commit (or that ran before transactional fixtures covered them)
+    #    leave a permanent row behind, and it counts here for the 10 minutes after it was written.
+    # 2. Rows created by a parallel spec process on the same database.
+    #
+    # Counting the ambient rows first and expressing each threshold relative to that baseline makes
+    # the expectations hold regardless. Writing absolute thresholds is what made this group fail
+    # intermittently: `create(:purchase)` defaults to `created_at: Time.current`, so a single leaked
+    # successful purchase pushed the live count over a hard-coded threshold and flipped the result.
+    let(:ambient_recent_successful_count) { Purchase.successful.where(created_at: 10.minutes.ago..Time.current).count }
+
     after { $redis.del(redis_key) }
 
     context "when the successful purchases count meets the threshold" do
       before do
-        $redis.set(redis_key, 2)
         create_list(:purchase, 2, purchase_state: "successful", created_at: 5.minutes.ago)
+        # Exactly the 2 rows above are needed, so ambient rows can only help, never hurt.
+        $redis.set(redis_key, 2)
       end
 
       it "returns HTTP success" do
@@ -227,8 +295,9 @@ describe HealthcheckController do
 
     context "when the successful purchases count is below the threshold" do
       before do
-        $redis.set(redis_key, 5)
         create_list(:purchase, 2, purchase_state: "successful", created_at: 5.minutes.ago)
+        # One more than everything in the window, so the count is always short by exactly 1.
+        $redis.set(redis_key, ambient_recent_successful_count + 3)
       end
 
       it "returns HTTP service_unavailable" do
@@ -241,8 +310,10 @@ describe HealthcheckController do
 
     context "when successful purchases are older than 10 minutes" do
       before do
-        $redis.set(redis_key, 1)
         create(:purchase, purchase_state: "successful", created_at: 15.minutes.ago)
+        # The 15-minutes-ago purchase must not count. Requiring one more than the ambient rows means
+        # the request can only succeed if that out-of-window purchase is wrongly included.
+        $redis.set(redis_key, ambient_recent_successful_count + 1)
       end
 
       it "ignores them and returns HTTP service_unavailable" do

@@ -95,4 +95,26 @@ describe("Resend to non-openers flow", :js, type: :system) do
     expect(page).to have_text("Resends to non-openers")
     expect(page).to have_text("2 emailed")
   end
+
+  it "shows each completed resend as its own row in the published list with sent count and open rate" do
+    # The original open must predate the resend so it isn't attributed to the resend's window.
+    CreatorContactingCustomersEmailInfo.where(purchase_id: opened_purchase.id).update_all(opened_at: 3.hours.ago)
+    # Resend delivered 2 emails; one recipient opened after the resend -> 50% open rate.
+    create(:post_email_blast, post: installment, recipient_filter: "unopened", requested_at: 2.hours.ago, started_at: 2.hours.ago, completed_at: 1.hour.ago, delivery_count: 2)
+    CreatorContactingCustomersEmailInfo.where(purchase_id: unopened_purchase_1.id).update_all(state: "opened", opened_at: 30.minutes.ago)
+    # An in-progress resend must not get its own row yet.
+    create(:post_email_blast, :just_requested, post: installment, recipient_filter: "unopened")
+
+    visit emails_path
+
+    resend_row = find(:table_row, { "Subject" => "↳ Resend to non-openers" })
+    expect(resend_row).to have_text("2")
+    expect(resend_row).to have_text("50%")
+    expect(page).to have_selector(:table_row, { "Subject" => "↳ Resend to non-openers" }, count: 1)
+
+    # Clicking the resend row opens the original email's sheet.
+    resend_row.click
+    expect(page).to have_text("Resends to non-openers")
+    expect(page).to have_text("2 emailed, 50% opened")
+  end
 end

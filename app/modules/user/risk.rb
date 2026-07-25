@@ -91,7 +91,7 @@ module User::Risk
   def suspend_due_to_stripe_risk(disabled_reason: nil)
     transaction do
       update!(tos_violation_reason: "Stripe reported high risk")
-      suspend_for_tos_violation!(author_name: "stripe_risk", bulk: true, skip_generic_suspension_email: true) unless suspended?
+      suspend_for_tos_violation!(author_name: "stripe_risk", bulk: true) unless suspended?
       links.alive.find_each do |product|
         product.unpublish!(is_unpublished_by_admin: true)
       end
@@ -108,13 +108,6 @@ module User::Risk
 
   def not_verified?
     !verified
-  end
-
-  def send_suspension_email(transition)
-    return if transition.args.first&.dig(:skip_generic_suspension_email)
-    return unless Feature.active?(:account_suspended_email)
-
-    ContactingCreatorMailer.account_suspended(id).deliver_later
   end
 
   def disable_links_and_tell_chat

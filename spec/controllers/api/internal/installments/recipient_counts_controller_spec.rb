@@ -21,6 +21,18 @@ describe Api::Internal::Installments::RecipientCountsController do
     let!(:active_follower1) { create(:active_follower, user: seller, created_at: Time.current) }
     let!(:active_follower2) { create(:active_follower, user: seller, created_at: 1.week.ago, confirmed_at: 1.week.ago) }
 
+    # Both counts are served from Elasticsearch, and indexing jobs stay enqueued in
+    # the fake Sidekiq queue, so index the members synchronously before each example.
+    before do
+      recreate_model_index(AudienceMember)
+      sync_elasticsearch_audience_index
+    end
+
+    def sync_elasticsearch_audience_index
+      AudienceMember.find_each { ElasticsearchIndexerWorker.new.perform("index", { "record_id" => _1.id, "class_name" => "AudienceMember" }) }
+      AudienceMember.__elasticsearch__.refresh_index!
+    end
+
     it_behaves_like "authentication required for action", :get, :show do
       let(:request_params) { { installment_type: "audience" } }
     end
@@ -37,25 +49,6 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
     end
 
-    context "when the seller's audience_count_from_elasticsearch flag is on" do
-      before do
-        recreate_model_index(AudienceMember)
-        Feature.activate_user(:audience_count_from_elasticsearch, seller)
-        AudienceMember.find_each { ElasticsearchIndexerWorker.new.perform("index", { "record_id" => _1.id, "class_name" => "AudienceMember" }) }
-        AudienceMember.__elasticsearch__.refresh_index!
-      end
-
-      it "serves both counts from Elasticsearch" do
-        expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
-        expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id, params: hash_including(type: "follower"), limit: nil).and_call_original
-
-        get :show, params: { installment_type: "follower" }
-
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
-      end
-    end
-
     it "returns counts for seller installment type" do
       get :show, params: { installment_type: "seller" }
       expect(response).to be_successful
@@ -68,8 +61,12 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
     end
 
-    it "returns counts for follower installment type" do
+    it "serves both counts from Elasticsearch for follower installment type" do
+      expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
+      expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id, params: hash_including(type: "follower"), limit: nil).and_call_original
+
       get :show, params: { installment_type: "follower" }
+
       expect(response).to be_successful
       expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
     end
@@ -109,6 +106,7 @@ describe Api::Internal::Installments::RecipientCountsController do
       product1_purchase3.update!(price_cents: 500)
       product2_purchas1.update!(price_cents: 999)
       AudienceMember.refresh_all!(seller:)
+      sync_elasticsearch_audience_index
       get :show, params: { installment_type: "seller", paid_more_than_cents: 100 }
       expect(response).to be_successful
       expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
@@ -119,6 +117,7 @@ describe Api::Internal::Installments::RecipientCountsController do
       product1_purchase3.update!(price_cents: 1500)
       product2_purchas1.update!(price_cents: 2000)
       AudienceMember.refresh_all!(seller:)
+      sync_elasticsearch_audience_index
       get :show, params: { installment_type: "seller", paid_less_than_cents: 1000 }
       expect(response).to be_successful
       expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)

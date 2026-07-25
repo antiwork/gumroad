@@ -512,13 +512,38 @@ class UrlRedirect < ApplicationRecord
     def should_refer_to_product_level_rich_content_of_purchased_variant?(entity)
       return false unless entity.is_a?(BaseVariant)
 
-      entity.link&.has_same_rich_content_for_all_variants? || false
+      product = entity.link
+      return false if product.nil?
+
+      # When the shared-content flag is on but the product level is blank while
+      # this variant still has real pages (the state the July 21, 2026 restore
+      # left behind), the product level would show the buyer nothing — serve
+      # the variant's own content instead.
+      product.has_same_rich_content_for_all_variants? && !product.recoverable_hidden_variant_rich_content?
     end
 
     def product_or_cheapest_variant_as_rich_content_provider(entity)
       product = entity.is_a?(BaseVariant) ? entity.link : entity
-      return product if product.is_physical? || product.has_same_rich_content_for_all_variants? || product.rich_content_json.present? || product.alive_variants.none?
+      # A product-level page that is just an empty placeholder (a blank paragraph
+      # the editor can leave behind) must not count as "the product has its own
+      # content" — that would show buyers a single blank page instead of falling
+      # through to the content-bearing variant.
+      has_product_level_content = product.alive_rich_contents.any?(&:has_editor_content?)
+      # The shared-content flag only makes the product the provider when the
+      # product level actually holds the shared content. In the recoverable
+      # hidden-content state (flag on, product level blank, variant pages
+      # real) the flag is a lie and buyers must fall through to the variants.
+      effectively_shared = product.has_same_rich_content_for_all_variants? && !product.recoverable_hidden_variant_rich_content?
+      return product if product.is_physical? || effectively_shared || has_product_level_content || product.alive_variants.none?
 
-      product.alive_variants.order(price_difference_cents: :asc).first
+      cheapest_first = product.alive_variants.order(price_difference_cents: :asc)
+      # In the hidden-content state the cheapest variant may not be the one
+      # holding the restored pages — prefer the cheapest variant that actually
+      # has content so buyers aren't handed a blank sibling.
+      if product.recoverable_hidden_variant_rich_content?
+        cheapest_first.detect { |variant| variant.alive_rich_contents.any?(&:has_editor_content?) } || cheapest_first.first
+      else
+        cheapest_first.first
+      end
     end
 end

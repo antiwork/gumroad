@@ -23,7 +23,23 @@ describe Api::Internal::Installments::NonOpenerResendsController do
     create(:creator_contacting_customers_email_info_sent, installment: installment, purchase: unopened_sale)
   end
 
+  describe "preview budget" do
+    it "is 300ms so the count (or the 'too large to count' state) renders almost immediately" do
+      # Product requirement: the seller should either see the count or the
+      # "audience too large to calculate" alert within ~300ms, not after many seconds.
+      expect(described_class::COUNT_PREVIEW_TOTAL_BUDGET_SECONDS).to eq(0.3)
+    end
+  end
+
   describe "GET show" do
+    before do
+      # The production budget is intentionally very small (the preview must feel
+      # instant), which makes real-query specs sensitive to CI machine speed. These
+      # specs verify the budget-sharing MECHANICS, so give them a roomy budget; the
+      # actual production value is pinned by the "preview budget" spec above.
+      stub_const("#{described_class}::COUNT_PREVIEW_TOTAL_BUDGET_SECONDS", 10)
+    end
+
     it_behaves_like "authentication required for action", :get, :show do
       let(:request_params) { { id: installment.external_id } }
     end

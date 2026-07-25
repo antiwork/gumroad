@@ -28,7 +28,17 @@ class ContentModeration::ModerateRecordService
   PROMPT_PRESET_LABELS = {
     "spam" => "content that reads as promotional spam",
     "adult_content" => "adult content",
+    "off_platform_fulfillment" => "off-platform fulfillment",
   }.freeze
+
+  # `humanize_reasons` phrases most violations as something the content
+  # "contains". Off-platform fulfillment is the opposite shape — the problem is
+  # what the listing is MISSING — so it gets its own sentence instead of being
+  # forced into that template.
+  OFF_PLATFORM_FULFILLMENT_MESSAGE =
+    "Buyers need to receive what they paid for on Gumroad. This %<noun>s has no content attached and " \
+    "directs buyers to message you on another platform to get it, which we don’t allow. Add the files, " \
+    "videos, or written content buyers should get when they buy, then publish again."
 
   # Turn raw moderation reasons (e.g. "OpenAI moderation flagged: violence
   # (score: 0.86, threshold: 0.9)" or "spam: repeated unrelated slogans") into
@@ -53,6 +63,14 @@ class ContentModeration::ModerateRecordService
     transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
+    elsif rs.any? { |r| off_platform_fulfillment_reason?(r) }
+      message = format(OFF_PLATFORM_FULFILLMENT_MESSAGE, noun: noun)
+      # A run can flag off-platform fulfillment alongside another violation
+      # (e.g. adult content). Naming only the missing-content problem would
+      # send the seller back to add files and then block them again for the
+      # reason we withheld, so both are reported at once.
+      others = rs.reject { |r| off_platform_fulfillment_reason?(r) }
+      others.any? ? "#{message} It also looks like this #{noun} contains #{humanize_reasons(others)}." : message
     else
       subject = title.present? ? "The #{noun} \"#{title}\"" : "This #{noun}"
       "#{subject} can’t be saved because it looks like it contains #{humanize_reasons(reasons)}. Please update the content to follow our content guidelines."
@@ -62,6 +80,11 @@ class ContentModeration::ModerateRecordService
   def self.check(record, entity_type)
     new(record, entity_type).check
   end
+
+  def self.off_platform_fulfillment_reason?(reason)
+    reason.to_s.start_with?("off_platform_fulfillment:")
+  end
+  private_class_method :off_platform_fulfillment_reason?
 
   def initialize(record, entity_type)
     @record = record
@@ -88,9 +111,10 @@ class ContentModeration::ModerateRecordService
     ai_results = run_ai_strategies(content)
     flagged = ai_results.select { |r| r.status == "flagged" }
 
-    # Spam flags that didn't reproduce when PromptStrategy resampled them.
-    # They don't block the publish, but we still leave a note so the flag
-    # rate and false-positive rate can be measured against blocked publishes.
+    # Judgment-preset flags (spam, off-platform fulfillment) that didn't
+    # reproduce when PromptStrategy resampled them. They don't block the
+    # publish, but we still leave a note so the flag rate and false-positive
+    # rate can be measured against blocked publishes.
     audit_reasons = ai_results.flat_map { |r| r.respond_to?(:audit_reasoning) ? Array(r.audit_reasoning) : [] }
     leave_admin_comment(audit_reasons, blocked: false) if audit_reasons.any?
 
@@ -130,10 +154,16 @@ class ContentModeration::ModerateRecordService
     def run_ai_strategies(content)
       strategies = [
         ContentModeration::Strategies::ClassifierStrategy.new(text: content.text, image_urls: content.image_urls),
-        # `corroborate_spam_flags` makes a spam flag block only when it
-        # reproduces on resampling; a lone flag is returned as audit_reasoning
-        # and recorded as a non-blocking note instead (see `check` above).
-        ContentModeration::Strategies::PromptStrategy.new(text: content.text, image_urls: content.image_urls, corroborate_spam_flags: true),
+        # `corroborate_judgment_flags` makes a spam or off-platform-fulfillment
+        # flag block only when it reproduces on resampling; a lone flag is
+        # returned as audit_reasoning and recorded as a non-blocking note
+        # instead (see `check` above).
+        ContentModeration::Strategies::PromptStrategy.new(
+          text: content.text,
+          image_urls: content.image_urls,
+          corroborate_judgment_flags: true,
+          check_off_platform_fulfillment: check_off_platform_fulfillment?,
+        ),
       ]
 
       threads = strategies.map do |strategy|
@@ -145,6 +175,61 @@ class ContentModeration::ModerateRecordService
       end
 
       threads.map(&:value)
+    end
+
+    # Only ask about off-platform fulfillment when the product genuinely has
+    # nothing for the buyer to receive on Gumroad: no uploaded files (at the
+    # product level or on any of its variants/tiers), no written or embedded
+    # content, no Gumroad-managed integration (a Discord or Circle invite IS
+    # the deliverable, and Gumroad itself provisions it on purchase), and not a
+    # type whose deliverable is inherently something other than content (a call
+    # is a scheduled meeting, a commission is work the seller performs, a
+    # coffee/tip has no deliverable by design, a physical product ships, a
+    # bundle delivers its component products). Checking this first means a
+    # listing with real content can never be blocked by this preset no matter
+    # how the description mentions Telegram or Discord — the preset is about
+    # empty listings that route buyers off-platform, and the emptiness half of
+    # that is decided here in code rather than by a model.
+    def check_off_platform_fulfillment?
+      return false unless entity_type == :product
+      return false if record.is_physical? || record.is_bundle?
+      return false if Link::SERVICE_TYPES.include?(record.native_type)
+      return false if gumroad_managed_integration?
+
+      record.alive_product_files.empty? &&
+        record.alive_variants.none? { |variant| variant.alive_product_files.any? } &&
+        !has_reader_visible_content?(record)
+    end
+
+    # Whether the product holds rich content a buyer could actually read.
+    #
+    # Deliberately NOT `Link#has_content?`: that helper counts a rich content
+    # record as content whenever its description array is non-empty, and the
+    # product editor persists a blank placeholder paragraph for a content page
+    # the seller never typed into. Under `has_content?` a completely empty
+    # listing therefore looks like it has content and would skip this preset
+    # entirely — which is one of the exact shapes the preset exists to catch.
+    # `RichContent#has_editor_content?` is the predicate that knows a bare
+    # paragraph is not readable content, while treating a page the seller gave a
+    # title as real work (the title renders in the buyer's page list).
+    #
+    # Both levels are checked regardless of which one currently owns the
+    # content, so a listing whose real pages live on a variant/tier keeps the
+    # preset off just as a product-level page does.
+    def has_reader_visible_content?(product)
+      product.alive_rich_contents.any?(&:has_editor_content?) ||
+        product.alive_variants.any? { |variant| variant.alive_rich_contents.any?(&:has_editor_content?) }
+    end
+
+    # A product that sells access to a Discord server or Circle community has
+    # no files and no rich content by design: the buyer receives an invite that
+    # Gumroad sends and records (PurchaseIntegration) on purchase. That's a
+    # deliverable on Gumroad, so such a listing must never be handed to the
+    # preset — its description legitimately reads like "buy this to join my
+    # Discord".
+    def gumroad_managed_integration?
+      record.active_integrations.exists? ||
+        record.alive_variants.any? { |variant| variant.active_integrations.exists? }
     end
 
     # `blocked: false` records a flag that did not stop the publish (e.g. a

@@ -33,7 +33,6 @@ describe Settings::PasswordController, :vcr, type: :controller, inertia: true do
     end
 
     it "exposes the passkey setup prompt flag and keeps it set until the user acts" do
-      Feature.activate(:passkeys)
       session[:prompt_passkey_setup] = user.id
 
       get :show
@@ -49,7 +48,6 @@ describe Settings::PasswordController, :vcr, type: :controller, inertia: true do
     end
 
     it "does not show the prompt when the flagged user already has a passkey" do
-      Feature.activate(:passkeys)
       create(:webauthn_credential, user:)
       session[:prompt_passkey_setup] = user.id
 
@@ -59,7 +57,6 @@ describe Settings::PasswordController, :vcr, type: :controller, inertia: true do
     end
 
     it "does not show the prompt inside the mobile app webview" do
-      Feature.activate(:passkeys)
       session[:prompt_passkey_setup] = user.id
       cookies[:is_gumroad_mobile_app] = "true"
 

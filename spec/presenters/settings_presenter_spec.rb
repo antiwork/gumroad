@@ -372,23 +372,17 @@ describe SettingsPresenter do
       end
 
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:, authenticator_app_enabled: false, show_passkeys_settings: false, passkeys: [])
+        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:, authenticator_app_enabled: false, passkeys: [])
       end
     end
 
     context "when seller is registered using email" do
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:, authenticator_app_enabled: false, show_passkeys_settings: false, passkeys: [])
+        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:, authenticator_app_enabled: false, passkeys: [])
       end
     end
 
-    context "when the passkeys feature is active" do
-      before { Feature.activate_user(:passkeys, seller) }
-
-      it "enables the passkeys settings" do
-        expect(presenter.password_props).to include(show_passkeys_settings: true, passkeys: [])
-      end
-
+    context "with passkeys" do
       it "returns the seller's passkeys ordered by creation date" do
         older = create(:webauthn_credential, user: seller, nickname: "Laptop", created_at: 2.days.ago, last_used_at: 1.hour.ago)
         newer = create(:webauthn_credential, user: seller, nickname: "Phone", created_at: 1.day.ago, last_used_at: nil)

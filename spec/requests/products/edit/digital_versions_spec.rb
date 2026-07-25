@@ -91,6 +91,121 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
       expect(product.variant_categories.first.variants.reload.alive.in_order.pluck(:name)).to eq ["Basic Bundle", "First Product Files Grouping", "Second version"]
     end
 
+    it "recovers per-version content hidden by the shared-content flag and persists the recovery on save" do
+      # The July 21, 2026 incident state (gumroad-private#1230): support
+      # restored per-version pages while has_same_rich_content_for_all_variants
+      # stayed on, and the product level held only a blank placeholder — a
+      # fresh editor load used to show NO content and its next save wiped the
+      # restored pages. The editor must now load the real per-version pages
+      # and an ordinary save must keep them, turning the flag off for good.
+      restored_page = create(:rich_content, entity: @variant_option, title: "Restored guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Restored version content" }] }])
+      create(:product_rich_content, entity: product, description: [{ "type" => "paragraph" }])
+      product.update!(has_same_rich_content_for_all_variants: true)
+
+      visit "#{edit_link_path(product.unique_permalink)}/content"
+      expect(page).to have_text("Restored version content")
+
+      save_change
+
+      expect(product.reload.has_same_rich_content_for_all_variants?).to be(false)
+      expect(restored_page.reload).not_to be_deleted
+      expect(restored_page.description.to_s).to include("Restored version content")
+    end
+
+    it "asks for an explicit choice before deleting version content hidden behind real product-level content, and keeps the shared content when chosen" do
+      # Fail-closed counterpart of the recovery above: when the product level
+      # ALSO has visible content, the editor keeps the shared view and an
+      # ordinary save must not silently pick a winner — the seller decides.
+      hidden_page = create(:rich_content, entity: @variant_option, title: "Hidden guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hidden version content" }] }])
+      shared_page = create(:product_rich_content, entity: product, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level shared content" }] }])
+      product.update!(has_same_rich_content_for_all_variants: true)
+
+      visit "#{edit_link_path(product.unique_permalink)}/content"
+      expect(page).to have_text("Product-level shared content")
+
+      # Cancel keeps everything.
+      click_on "Save changes"
+      within_modal "Choose which content to keep" do
+        expect(page).to have_text("Hidden guide")
+        click_on "Cancel"
+      end
+      expect(hidden_page.reload).not_to be_deleted
+      expect(shared_page.reload).not_to be_deleted
+
+      # "Keep shared content" deletes the listed version pages, keeps the
+      # product-level pages, and leaves the shared-content flag on.
+      click_on "Save changes"
+      within_modal "Choose which content to keep" do
+        click_on "Keep shared content"
+      end
+      wait_for_ajax
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(hidden_page.reload).to be_deleted
+      expect(shared_page.reload).not_to be_deleted
+      expect(product.reload.has_same_rich_content_for_all_variants?).to be(true)
+    end
+
+    it "keeps the version content and its embedded files when the seller chooses to keep version content" do
+      hidden_file = @variant_option.product_files.alive.first
+      hidden_description = [
+        { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hidden version content" }] },
+        { "type" => "fileEmbed", "attrs" => { "id" => hidden_file.external_id, "uid" => "hidden-version-file" } },
+      ]
+      hidden_page = create(:rich_content, entity: @variant_option, title: "Hidden guide", description: hidden_description)
+      shared_page = create(:product_rich_content, entity: product, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level shared content" }] }])
+      product.update!(has_same_rich_content_for_all_variants: true)
+
+      visit "#{edit_link_path(product.unique_permalink)}/content"
+      expect(page).to have_text("Product-level shared content")
+
+      # "Keep version content" deletes the product-level pages, turns off
+      # "Use the same content for all versions", and preserves the hidden
+      # version pages. The editor reloads to show the kept content.
+      click_on "Save changes"
+      within_modal "Choose which content to keep" do
+        expect(page).to have_text("Hidden guide")
+        click_on "Keep version content"
+      end
+      expect(page).to have_text("Hidden version content")
+
+      expect(hidden_page.reload).not_to be_deleted
+      expect(hidden_page.description).to eq(hidden_description)
+      expect(hidden_file.reload).not_to be_deleted
+      expect(@variant_option.reload.product_files.alive).to contain_exactly(hidden_file)
+      expect(shared_page.reload).to be_deleted
+      expect(product.reload.has_same_rich_content_for_all_variants?).to be(false)
+    end
+
+    it "keeps addressing the same version across repeated saves after adding one, without a reload" do
+      visit edit_link_path(product.unique_permalink)
+      page.scroll_to version_rows[0], align: :center
+
+      click_on "Add version"
+      within version_rows[0] do
+        within version_option_rows[2] do
+          fill_in "Name", with: "Third version"
+        end
+      end
+      save_change
+
+      third_version = product.variant_categories.first.variants.reload.alive.find_by!(name: "Third version")
+
+      # Regression: before the save response returned canonical ids, the
+      # editor resubmitted the new version with id: null on every save, so a
+      # second save re-created it (a different record each time) instead of
+      # updating it — and 422'd outright once the version carried content.
+      within version_rows[0] do
+        within version_option_rows[2] do
+          fill_in "Name", with: "Third version renamed"
+        end
+      end
+      save_change
+
+      expect(third_version.reload.deleted_at).to be_nil
+      expect(third_version.name).to eq("Third version renamed")
+      expect(product.variant_categories.first.variants.reload.alive.count).to eq(3)
+    end
+
     it "has a valid share URL" do
       visit edit_link_path(product.unique_permalink)
 
@@ -145,6 +260,87 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
         save_change
 
         expect(@variant_option.reload).to be_deleted
+      end
+
+      it "shows a save-time summary confirmation and keeps the version when cancelled" do
+        visit edit_link_path(product.unique_permalink)
+
+        within version_rows[0] do
+          within version_option_rows[0] do
+            click_on "Remove version"
+          end
+        end
+
+        within_modal "Remove First Product Files Grouping?" do
+          click_on "Yes, remove"
+        end
+
+        # The save itself re-confirms the accumulated deletions in one summary
+        # modal. Cancelling aborts the save entirely — nothing is deleted.
+        click_on "Save changes"
+        within_modal "Save and delete content?" do
+          expect(page).to have_text("Saving now will permanently delete the following from this product:")
+          expect(page).to have_text("1 version")
+          expect(page).to have_text("First Product Files Grouping")
+          click_on "No, cancel"
+        end
+
+        refresh
+        expect(@variant_option.reload).to be_present
+
+        within version_rows[0] do
+          within version_option_rows[0] do
+            click_on "Remove version"
+          end
+        end
+
+        within_modal "Remove First Product Files Grouping?" do
+          click_on "Yes, remove"
+        end
+
+        click_on "Save changes"
+        within_modal "Save and delete content?" do
+          click_on "Yes, save and delete"
+        end
+        wait_for_ajax
+        expect(page).to have_alert(text: "Changes saved!")
+
+        expect(@variant_option.reload).to be_deleted
+      end
+
+      it "shows the save-time deletion summary when unpublishing and aborts the unpublish on cancel" do
+        visit edit_link_path(product.unique_permalink)
+
+        within version_rows[0] do
+          within version_option_rows[0] do
+            click_on "Remove version"
+          end
+        end
+        within_modal "Remove First Product Files Grouping?" do
+          click_on "Yes, remove"
+        end
+
+        # Unpublishing saves first, so it must pass through the same summary
+        # confirmation — publish/unpublish used to skip it entirely.
+        click_on "Unpublish"
+        within_modal "Save and delete content?" do
+          expect(page).to have_text("First Product Files Grouping")
+          click_on "No, cancel"
+        end
+
+        # Cancelling aborted the whole action: nothing was deleted and the
+        # product is still published.
+        expect(page).to have_button("Unpublish")
+        expect(@variant_option.reload).not_to be_deleted
+
+        click_on "Unpublish"
+        within_modal "Save and delete content?" do
+          click_on "Yes, save and delete"
+        end
+        expect(page).to have_alert(text: "Unpublished!")
+
+        expect(@variant_option.reload).to be_deleted
+        expect(product.reload.purchase_disabled_at).not_to be_nil
       end
 
       it "deletes a variant option with only test purchases" do

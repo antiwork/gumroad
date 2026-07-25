@@ -83,7 +83,7 @@ describe StripeSetupIntent, :vcr do
 
     context "when next action type is unsupported" do
       before do
-        allow(processor_setup_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_setup_intent.next_action).to receive(:type).and_return "boleto_display_details"
       end
 
       it "notifies error tracker" do
@@ -100,6 +100,76 @@ describe StripeSetupIntent, :vcr do
       it "does not notify error tracker" do
         expect(ErrorNotifier).not_to receive(:notify)
         described_class.new(processor_setup_intent)
+      end
+    end
+
+    context "when next action type is a browser-handled redirect" do
+      before do
+        # Force the requires_action + redirect_to_url shape directly: a bare SetupIntent.create
+        # (no confirm) sits in requires_confirmation, so the validation under test would
+        # otherwise never run (the check would pass vacuously). payment_method is the EXPANDED
+        # object shape a fresh confirm response carries (the buyer attempted Klarna), so the
+        # attempted-method resolution reads it inline — no PaymentMethod retrieve happens.
+        allow(processor_setup_intent).to receive_messages(
+          status: StripeIntentStatus::REQUIRES_ACTION,
+          next_action: double(type: "redirect_to_url"),
+          payment_method: Stripe::StripeObject.construct_from(id: "pm_klarna", type: "klarna"),
+          payment_method_types: %w[card klarna]
+        )
+      end
+
+      it "does not notify error tracker" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        described_class.new(processor_setup_intent)
+      end
+    end
+
+    context "when next action type is redirect_to_url on an intent without a client-redirect method (no browser owns the redirect)" do
+      before do
+        # Force the requires_action + redirect_to_url shape directly: a bare SetupIntent.create
+        # (no confirm) sits in requires_confirmation, so the validation under test would
+        # otherwise never run. payment_method_types stays the helper's card-only default, and
+        # payment_method is the expanded attached card, read inline without a retrieve.
+        allow(processor_setup_intent).to receive_messages(
+          status: StripeIntentStatus::REQUIRES_ACTION,
+          next_action: double(type: "redirect_to_url"),
+          payment_method: Stripe::StripeObject.construct_from(id: "pm_card", type: "card")
+        )
+      end
+
+      it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
+        described_class.new(processor_setup_intent)
+      end
+    end
+
+    context "when next action type is redirect_to_url on a direct-Connect merchant's setup intent" do
+      let(:connect_merchant_account) do
+        create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_connect_klarna")
+      end
+
+      before do
+        # payment_method is the unexpanded ID string a plain retrieve returns (rather than the
+        # expanded object a fresh confirm carries), so resolving the attempted method has to make
+        # a real PaymentMethod lookup — the only shape where the connected-account scope matters.
+        allow(processor_setup_intent).to receive_messages(
+          status: StripeIntentStatus::REQUIRES_ACTION,
+          next_action: double(type: "redirect_to_url"),
+          payment_method: "pm_klarna",
+          payment_method_types: %w[card klarna]
+        )
+      end
+
+      it "scopes the attempted-method retrieve to the connected account — payment methods created there are invisible from the platform" do
+        # Pin the derivation itself, mirroring the StripeChargeIntent example: without the
+        # connected account's ID the lookup fails, degrades to the lookup-failed sentinel, and
+        # turns an ordinary abandoned redirect into a false "unsupported action" page.
+        expect(Stripe::PaymentMethod).to receive(:retrieve)
+          .with("pm_klarna", { stripe_account: "acct_connect_klarna" })
+          .and_return(Stripe::StripeObject.construct_from(id: "pm_klarna", type: "klarna"))
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        described_class.new(processor_setup_intent, merchant_account: connect_merchant_account)
       end
     end
   end

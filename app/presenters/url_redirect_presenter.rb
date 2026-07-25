@@ -309,7 +309,7 @@ class UrlRedirectPresenter
     end
 
     def community_chat_url
-      return unless purchase.present? && Feature.active?(:communities, purchase.seller) && product.community_chat_enabled? && product.active_community.present?
+      return unless purchase.present? && product.community_chat_enabled? && product.active_community.present?
 
       path = community_path(purchase.seller.external_id, product.active_community.external_id)
 

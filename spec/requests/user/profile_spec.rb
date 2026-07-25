@@ -19,6 +19,15 @@ describe "User profile page", type: :system, js: true do
       end
     end
 
+    it "renders the bio as body text rather than a headline" do
+      creator.update!(bio: "I write about growing a one-person business.\n\nNew essays every other week.")
+      visit creator.subdomain_with_protocol
+      within "main > header" do
+        expect(page).to have_selector "p", text: "I write about growing a one-person business."
+        expect(page).to_not have_selector "h1"
+      end
+    end
+
     it "allows impersonating from the profile page when logged in as Gumroad admin" do
       admin = create(:user, is_team_member: true)
       sign_in admin
@@ -210,7 +219,16 @@ describe "User profile page", type: :system, js: true do
 
       def save_changes
         click_on "Update profile"
-        expect(page).to have_alert(text: "Changes saved!")
+        # Saving is two sequential round-trips: the settings POST, then an Inertia reload of the
+        # page props. The "Changes saved!" toast only appears once both have finished. The Inertia
+        # reload goes through axios rather than our own request helper, so `wait_for_ajax` can't
+        # see it and there is nothing else to synchronise on. On a loaded CI machine the pair can
+        # take longer than Capybara's default 10s wait, which made this spec flaky. Two changes:
+        # give the toast a wait sized for both hops, and scope the assertion to the toast element
+        # so it can't latch onto the always-mounted, momentarily-empty toast container and report
+        # a confusing 'found "" which matched the selector but not all filters'.
+        toast = find("[data-testid='toast-alert']", wait: 30)
+        within(toast) { expect(page).to have_text("Changes saved!", wait: 30) }
         wait_for_ajax
       end
 

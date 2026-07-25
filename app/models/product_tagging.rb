@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 class ProductTagging < ApplicationRecord
-  belongs_to :tag, optional: true
+  # counter_cache keeps tags.taggings_count in sync so tag autocomplete can
+  # rank tags by popularity without joining and counting product_taggings on
+  # every keystroke (see Tag.by_text).
+  belongs_to :tag, optional: true, counter_cache: :taggings_count
   belongs_to :product, class_name: "Link", optional: true
 
   validates_uniqueness_of :product_id, scope: :tag_id

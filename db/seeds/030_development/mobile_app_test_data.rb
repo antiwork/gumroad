@@ -4,7 +4,11 @@
 
 def create_mobile_user(email:, name:, username:)
   user = User.find_by(email:)
-  return user if user.present?
+  if user.present?
+    user.password = "password"
+    user.save!(validate: false)
+    return user
+  end
 
   user = User.create!(
     email:,
@@ -40,7 +44,12 @@ end
 
 def create_mobile_purchase(seller:, buyer:, product:)
   existing = Purchase.find_by(link_id: product.id, purchaser_id: buyer.id, purchase_state: "successful")
-  return existing if existing.present?
+  if existing.present?
+    # Databases seeded before url redirects were added here need the redirect backfilled,
+    # otherwise the mobile purchase page has no content to render.
+    existing.create_url_redirect! if existing.url_redirect.blank?
+    return existing
+  end
 
   purchase = Purchase.new(
     link_id: product.id,
@@ -58,7 +67,23 @@ def create_mobile_purchase(seller:, buyer:, product:)
   purchase.send(:calculate_fees)
   purchase.save!
   purchase.update_columns(purchase_state: "successful", succeeded_at: Time.current)
+  purchase.create_url_redirect!
   purchase
+end
+
+def create_mobile_product_file(product:, fixture_name:, file_name:)
+  s3_key = "attachments/mobile_e2e/#{file_name}"
+  url = "#{S3_BASE_URL}#{s3_key}"
+  existing = product.product_files.alive.find_by(url:)
+  return existing if existing.present?
+
+  s3_object = Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key)
+  fixture = Rails.root.join("spec", "support", "fixtures", fixture_name)
+  s3_object.upload_file(fixture.to_s) unless s3_object.exists?
+
+  product_file = product.product_files.create!(url:)
+  product_file.analyze
+  product_file
 end
 
 seller1 = create_mobile_user(
@@ -91,6 +116,22 @@ product2 = create_mobile_product(
   name: "Mobile Test Product 2",
   price_cents: 1000,
   permalink: "secondmobileproduct"
+)
+
+create_mobile_product_file(
+  product: product1,
+  fixture_name: "magic.mp3",
+  file_name: "Mobile Test Audio.mp3"
+)
+create_mobile_product_file(
+  product: product1,
+  fixture_name: "Big Buck Bunny - Trailer.mp4",
+  file_name: "Mobile Test Video.mp4"
+)
+create_mobile_product_file(
+  product: product1,
+  fixture_name: "Alice's Adventures in Wonderland.pdf",
+  file_name: "Mobile Test PDF.pdf"
 )
 
 create_mobile_purchase(seller: seller2, buyer: seller1, product: product2)

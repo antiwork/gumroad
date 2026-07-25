@@ -336,6 +336,52 @@ describe("Product checkout with upsells", type: :system, js: true) do
       end
     end
 
+    context "when the replacement cross-sell offers a bundle and an earlier add-on cross-sell added one of the bundle's products" do
+      let(:bundle) { create(:product, user: seller, name: "Complete bundle", is_bundle: true, price_cents: 500) }
+      let!(:bundle_product1) { create(:bundle_product, bundle:, product: selected_product1) }
+      let!(:bundle_product2) { create(:bundle_product, bundle:, product: addon_product) }
+      let(:addon_product) { create(:product, user: seller, name: "Add-on product", price_cents: 100) }
+      let!(:addon_cross_sell) { create(:upsell, text: "Add-on cross-sell", seller:, product: addon_product, selected_products: [selected_product1], cross_sell: true, replace_selected_products: false) }
+      let!(:bundle_cross_sell) { create(:upsell, text: "Bundle cross-sell", seller:, product: bundle, selected_products: [selected_product1], cross_sell: true, replace_selected_products: true) }
+      let!(:replacement_cross_sell) { nil } # Override so only this context's cross-sells fire
+
+      it "removes the add-on product from the cart along with the selected products" do
+        visit selected_product1.long_url
+        add_to_cart(selected_product1)
+
+        fill_checkout_form(selected_product1)
+        click_on "Pay"
+
+        within_modal "Add-on cross-sell" do
+          expect(page).to have_section("Add-on product")
+          click_on "Add to cart"
+        end
+
+        within_modal "Bundle cross-sell" do
+          expect(page).to have_section("Complete bundle")
+          # The cart still holds the selected product and the add-on at this point;
+          # accepting the replace-type offer is what must drop both.
+          click_on "Upgrade"
+        end
+
+        expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+        # What the buyer was actually charged for is the invariant that matters: one bundle,
+        # and no standalone purchase of anything the bundle already contains. (The success
+        # page legitimately lists "Selected product 1" and "Add-on product" as the bundle's
+        # contents, so asserting their ABSENCE on screen would contradict correct behavior.)
+        expect(bundle.sales.count).to eq(1)
+        bundle_purchase = bundle.sales.last
+        expect(bundle_purchase.upsell_purchase.upsell).to eq(bundle_cross_sell)
+        expect(bundle_purchase.upsell_purchase.selected_product).to eq(selected_product1)
+        expect(addon_product.sales.not_is_bundle_product_purchase).to be_empty
+        expect(selected_product1.sales.not_is_bundle_product_purchase).to be_empty
+        # The contained products are still delivered — as bundle-content purchases, not sales.
+        expect(addon_product.sales.is_bundle_product_purchase.count).to eq(1)
+        expect(selected_product1.sales.is_bundle_product_purchase.count).to eq(1)
+      end
+    end
+
     context "selected product is free and offered product is paid" do
       before do
         selected_product1.update!(price_cents: 0)

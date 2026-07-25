@@ -167,8 +167,17 @@ const FileUploadMenu = ({
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
-  const { id, product, updateProduct, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
-    useProductEditContext();
+  const {
+    id,
+    product,
+    updateProduct,
+    save,
+    existingFiles,
+    setExistingFiles,
+    uniquePermalink,
+    filesById,
+    serverIdMappings,
+  } = useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -187,6 +196,17 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         product.rich_content = pages;
       }
     });
+  // Records that the seller explicitly deleted these pages, so the server-side
+  // wipe guard allows removing them even though they may still have content.
+  const confirmPageRemovals = (removedPages: Page[]) => {
+    if (removedPages.length === 0) return;
+    updateProduct((product) => {
+      product.confirmed_removed_rich_content_ids = [
+        ...(product.confirmed_removed_rich_content_ids ?? []),
+        ...removedPages.map(({ id }) => id),
+      ];
+    });
+  };
   const addPage = (description?: object) => {
     const page = {
       id: GuidGenerator.generate(),
@@ -198,7 +218,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     setSelectedPageId(page.id);
     return page;
   };
-  const [selectedPageId, setSelectedPageId] = React.useState(pages[0]?.id);
+  const [rawSelectedPageId, setSelectedPageId] = React.useState(pages[0]?.id);
+  // A successful save swaps the client-generated ids of pages created this
+  // session for their canonical server ids — follow the mapping so the
+  // selection keeps pointing at the same page instead of falling back to the
+  // first one.
+  const selectedPageId =
+    rawSelectedPageId == null ? rawSelectedPageId : (serverIdMappings[rawSelectedPageId] ?? rawSelectedPageId);
   const selectedPage = pages.find((page) => page.id === selectedPageId);
   if ((selectedPageId || pages.length) && !selectedPage) setSelectedPageId(pages[0]?.id);
   const [renamingPageId, setRenamingPageId] = React.useState<string | null>(null);
@@ -523,6 +549,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         updated_at: new Date().toISOString(),
       };
     });
+    // Replacing this variant's pages deletes the current ones — record that the
+    // seller confirmed it (the copy-from-version dialog) for the server-side guard.
+    confirmPageRemovals(pages);
     updatePages(cloned);
     if (cloned[0]) setSelectedPageId(cloned[0].id);
     setCopyFromOpen(false);
@@ -1034,6 +1063,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 color="danger"
                 onClick={() => {
                   if (!editor) return;
+                  confirmPageRemovals([confirmingDeletePage]);
                   updatePages(pages.filter((page) => page !== confirmingDeletePage));
                   setConfirmingDeletePage(null);
                 }}
@@ -1134,8 +1164,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
 //TODO inline this once all the crazy providers are gone
 export const ContentTab = () => {
-  const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink } = useProductEditContext();
-  const [selectedVariantId, setSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
+  const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink, serverIdMappings } =
+    useProductEditContext();
+  const [rawSelectedVariantId, setSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
+  // A successful save swaps the client-generated ids of variants created this
+  // session for their canonical server ids — follow the mapping so the
+  // selection keeps pointing at the same variant instead of silently falling
+  // back to the product-level pages.
+  const selectedVariantId =
+    rawSelectedVariantId == null ? null : (serverIdMappings[rawSelectedVariantId] ?? rawSelectedVariantId);
   const [confirmingDiscardVariantContent, setConfirmingDiscardVariantContent] = React.useState(false);
   const selectedVariant = product.variants.find((variant) => variant.id === selectedVariantId);
 
@@ -1144,6 +1181,20 @@ export const ContentTab = () => {
       updateProduct((product) => {
         product.has_same_rich_content_for_all_variants = true;
         if (!product.rich_content.length) product.rich_content = selectedVariant?.rich_content ?? [];
+        // Emptying the variants' page lists deletes any page that didn't move to
+        // the product level. The seller confirmed this (the "Discard content from
+        // other versions?" dialog) — record the removals so the server-side wipe
+        // guard allows the save.
+        const keptPageIds = new Set(product.rich_content.map(({ id }) => id));
+        const removedPageIds = product.variants
+          .flatMap((variant) => variant.rich_content)
+          .filter(({ id }) => !keptPageIds.has(id))
+          .map(({ id }) => id);
+        if (removedPageIds.length > 0)
+          product.confirmed_removed_rich_content_ids = [
+            ...(product.confirmed_removed_rich_content_ids ?? []),
+            ...removedPageIds,
+          ];
         for (const variant of product.variants) variant.rich_content = [];
       });
     } else {

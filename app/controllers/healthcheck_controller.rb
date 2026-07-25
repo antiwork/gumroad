@@ -17,25 +17,30 @@ class HealthcheckController < ApplicationController
     render plain: "Sidekiq: #{status}", status:
   end
 
-  # Reports whether a weekly payout batch is currently running (see
-  # PerformPayoutsUpToDelayDaysAgoWorker, which registers a token per running job).
-  # The deploy pipeline polls this before deploying to production so deploys are held
-  # only while payouts are actually in flight, not on a fixed clock window.
-  #
-  # Only entries younger than the worker's per-entry TTL count: the key-level EXPIRE
-  # is refreshed whenever any job registers, so score-based filtering here is what
-  # actually ages out an entry left behind by a job that died mid-batch.
+  # Reports whether a payout batch is currently running (see PayoutBatchInFlightTracking,
+  # which every payout job uses to register a token while it runs). The deploy pipeline
+  # polls this before deploying to production so deploys are held only while payouts are
+  # actually in flight, not on a fixed clock window.
   def payouts
-    key = RedisKey.payout_batch_in_flight
-    oldest_valid_score = PerformPayoutsUpToDelayDaysAgoWorker::IN_FLIGHT_ENTRY_TTL.ago.to_i
-    # Prune expired entries first so a dead job's leftover token gets removed rather
-    # than lingering until the whole key expires.
-    $redis.zremrangebyscore(key, "-inf", "(#{oldest_valid_score}")
-    in_flight = $redis.zcard(key) > 0
-    status = in_flight ? :service_unavailable : :ok
+    in_flight = DeployBlockingJobTracking.any_in_flight?(
+      RedisKey.payout_batch_in_flight, PayoutBatchInFlightTracking::IN_FLIGHT_ENTRY_TTL
+    )
     message = in_flight ? "batch in flight" : "no batch in flight"
 
-    render plain: "Payouts: #{message}", status:
+    render plain: "Payouts: #{message}", status: in_flight ? :service_unavailable : :ok
+  end
+
+  # The same question for the non-payout jobs a deploy must not interrupt — long report
+  # builds that restart from zero when their worker pod is recycled (see
+  # LongRunningJobTracking). The deploy pipeline waits on this instead of refusing to
+  # deploy at all during the hours those jobs are scheduled for.
+  def long_running_jobs
+    in_flight = DeployBlockingJobTracking.any_in_flight?(
+      RedisKey.long_running_jobs_in_flight, LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL
+    )
+    message = in_flight ? "job in flight" : "no job in flight"
+
+    render plain: "Long running jobs: #{message}", status: in_flight ? :service_unavailable : :ok
   end
 
   def paypal_balance

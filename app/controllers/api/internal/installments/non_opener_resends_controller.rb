@@ -9,10 +9,17 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
   # of recipients) that cannot finish inside a web request, so the whole preview shares
   # one total time budget and the endpoint degrades to "count unavailable" instead of
   # erroring the whole page. The budget is enforced as a shrinking per-statement cap:
-  # each query runs under whatever is LEFT of the budget (not a fresh 10 seconds), so
+  # each query runs under whatever is LEFT of the budget (not a fresh allotment), so
   # several individually-fast statements can't add up past the budget and hit the HTTP
   # request deadline instead.
-  COUNT_PREVIEW_TOTAL_BUDGET_SECONDS = 10
+  #
+  # The budget is deliberately tight: the preview should feel instant. Either the count
+  # renders within ~300ms, or the UI immediately shows the "audience too large to
+  # calculate" state and lets the seller proceed — waiting many seconds just to learn
+  # the count is unavailable is worse than not having the count at all. Audiences too
+  # large to count within this budget can still be resent; the actual send resolves
+  # recipients in a background job.
+  COUNT_PREVIEW_TOTAL_BUDGET_SECONDS = 0.3
 
   before_action :authenticate_user!
   before_action :set_installment

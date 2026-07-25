@@ -14,7 +14,11 @@ class Payouts
   BANK_ACCOUNT_LOOKUP_BATCH_SIZE = 10_000
   HOLDING_BALANCE_ID_BATCH_SIZE = 25_000
   # Max ids per `User.where(id: ...)` lookup, so the IN() list stays on MySQL's PK range plan.
+  # Also the number of sellers handed to one PerformPayoutsForUserSliceWorker job.
   USER_LOOKUP_BATCH_SIZE = 1_000
+  # Delay added per slice when fanning slices out to their own jobs, so the whole cohort's
+  # payout jobs don't hit the payout processors at once. See .enqueue_user_slices.
+  SLICE_ENQUEUE_STAGGER = 10.seconds
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -81,33 +85,72 @@ class Payouts
   private_class_method :add_below_minimum_payout_note
 
   def self.create_payments_for_balances_up_to_date(date, processor_type)
-    # Walk the holding-balance cohort in bounded id slices, enqueueing each slice's
-    # payments as we go — the same shape as the bank-account-type path below. The old
-    # `User.holding_balance` relation evaluated the whole ~200k-user cohort in one
-    # `users × balances` GROUP BY and then iterated every user before enqueueing a
-    # single payment. On Fridays (PayPal + Stripe Connect, no bank-account-type
-    # filter) that single pass ran for ~110 minutes; any worker restart mid-pass
-    # (deploys, instance recycling) threw ALL progress away, and sidekiq-pro's
-    # orphan recovery restarted it from the top until the job was buried in the
-    # dead set with the whole cohort unpaid (gumroad-private#1021, 2026-07-10).
-    # Slicing makes progress durable: payments for completed slices are already
-    # enqueued, so a killed pass only re-walks users whose payments were not yet
-    # created — and Payouts.create_payment no-ops once a user's balances leave
-    # `unpaid`, so overlap is safe.
-    holding_balance_user_ids = self.holding_balance_user_ids
+    # Read the ids of every seller holding a balance, then hand each bounded slice of
+    # them to its own job (PerformPayoutsForUserSliceWorker) instead of checking
+    # eligibility for all of them here.
+    #
+    # This orchestrator used to do the per-seller work itself. Checking eligibility runs
+    # several queries per seller, so on Fridays (PayPal and Stripe Connect, no
+    # bank-account-type filter) walking the ~195k-seller cohort took about two hours —
+    # longer than a Sidekiq worker lives in production. The job was killed partway,
+    # sidekiq-pro's orphan recovery restarted it from the first seller, and after enough
+    # restarts it was buried in the dead set with most of the cohort unpaid
+    # (gumroad-private#1021 on 2026-07-10, and again #1284 on 2026-07-24 — slicing the
+    # work but keeping it inside one job was not enough, because the single job still had
+    # to outlive the whole walk).
+    #
+    # Fanning the slices out to separate jobs makes progress durable: this job only reads
+    # ids, each slice succeeds or retries on its own, and a worker recycle costs one slice
+    # instead of the entire run. Re-running a slice is safe because Payouts.create_payment
+    # no-ops once a seller's balances have left the `unpaid` state.
+    self.enqueue_user_slices(date, processor_type, self.holding_balance_user_ids)
+  end
 
-    holding_balance_user_ids.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
-      users = User.where(id: user_ids_batch)
+  # Hand slices of seller ids to PerformPayoutsForUserSliceWorker, spaced slightly apart.
+  #
+  # The spacing is a throttle, not rate parity. When slices ran one after another inside a
+  # single job, one 1,000-seller slice completed roughly every 38 seconds (measured at about
+  # 1,570 sellers a minute), so payout jobs reached the processors at that pace. Releasing a
+  # slice every 10 seconds is deliberately faster — the whole point is that sellers get paid
+  # early in the run rather than after a two-hour walk — which means a handful of slices are
+  # in flight at a time instead of one. That is a bounded, intentional increase: the slice
+  # jobs run on the :default queue so they cannot crowd out buyer-facing work, and PayPal
+  # calls are still spaced inside each slice by PaypalPayoutProcessor.enqueue_payments.
+  #
+  # Without any spacing, all ~195 Friday slices would be pushed at once, and PayPal — which
+  # takes up to PaypalPayoutProcessor::PAYOUT_RECIPIENTS_PER_JOB recipients per API call —
+  # would see a burst many times its usual call rate.
+  def self.enqueue_user_slices(date, processor_type, user_ids, bank_account_type: nil)
+    date_string = date.to_s
 
-      if processor_type == PayoutProcessorType::STRIPE
-        users = users.joins(:merchant_accounts)
-                     .where("merchant_accounts.deleted_at IS NULL")
-                     .where("merchant_accounts.charge_processor_id = ?", StripeChargeProcessor.charge_processor_id)
-                     .where("merchant_accounts.json_data->'$.meta.stripe_connect' = 'true'")
-      end
-
-      self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true)
+    user_ids.each_slice(USER_LOOKUP_BATCH_SIZE).with_index do |user_ids_batch, index|
+      PerformPayoutsForUserSliceWorker.perform_in(
+        index * SLICE_ENQUEUE_STAGGER,
+        processor_type,
+        date_string,
+        user_ids_batch,
+        bank_account_type
+      )
     end
+  end
+
+  # Evaluate one slice of sellers and enqueue their payouts. Called by
+  # PerformPayoutsForUserSliceWorker; kept here so all the payout-eligibility logic
+  # (including the Stripe Connect filter) stays in one place.
+  def self.create_payments_for_balances_up_to_date_for_user_ids(date, processor_type, user_ids, bank_account_type: nil)
+    users = User.where(id: user_ids)
+
+    # The Friday Stripe run pays sellers who connected their own Stripe account, so it is
+    # restricted to those. The bank-account-type runs pay Gumroad-managed accounts and must
+    # not apply this filter, which is why it is keyed off the absence of a bank account type.
+    if processor_type == PayoutProcessorType::STRIPE && bank_account_type.nil?
+      users = users.joins(:merchant_accounts)
+                   .where("merchant_accounts.deleted_at IS NULL")
+                   .where("merchant_accounts.charge_processor_id = ?", StripeChargeProcessor.charge_processor_id)
+                   .where("merchant_accounts.json_data->'$.meta.stripe_connect' = 'true'")
+    end
+
+    self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
   end
 
   def self.create_payments_for_balances_up_to_date_for_bank_account_types(date, processor_type, bank_account_types)
@@ -121,14 +164,12 @@ class Payouts
         BankAccount.alive.where(user_id: user_ids_batch, type: bank_account_type).distinct.pluck(:user_id)
       end
 
-      # Load users in id-bounded slices. One `User.where(id: user_ids)` over a large
+      # Hand the sellers to per-slice jobs. One `User.where(id: user_ids)` over a large
       # cohort exceeds MySQL's range_optimizer_max_mem_size and full-scans the users
       # table, blowing the statement timeout (gumroad-private#955); slicing keeps each
-      # lookup on the PK range plan. Enqueue is per-user, so slicing changes nothing.
-      user_ids.each_slice(USER_LOOKUP_BATCH_SIZE) do |user_ids_batch|
-        users = User.where(id: user_ids_batch)
-        self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
-      end
+      # lookup on the PK range plan, and a job per slice keeps progress durable across
+      # worker restarts (gumroad-private#1284).
+      self.enqueue_user_slices(date, processor_type, user_ids, bank_account_type:)
     end
   end
 
@@ -184,8 +225,14 @@ class Payouts
       (
         from_admin ||
         (
-          user.next_payout_date.present? &&
-          date + User::PayoutSchedule::PAYOUT_DELAY_DAYS >= user.next_payout_date
+          # Compare the batch against the seller's payout CYCLE, not the day their own rail
+          # runs on. The cycle is what schedules this batch, while the seller's payout day
+          # sits earlier in the same week (see User::PayoutSchedule#payout_weekday) — so
+          # comparing against that day would make a batch running any later in the week,
+          # such as a retried dead job, look like it belonged to the following week and
+          # skip every seller in it.
+          user.next_payout_cycle_date.present? &&
+          date + User::PayoutSchedule::PAYOUT_DELAY_DAYS >= user.next_payout_cycle_date
         )
       )
         user_ids_to_pay << user.id

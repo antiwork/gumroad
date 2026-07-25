@@ -567,6 +567,16 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
         before :each do
           @original_purchase.variant_attributes = []
           @original_purchase.save!
+          # Detaching the tier through a direct HABTM assignment (above) deletes the
+          # join row without running the inventory counter-cache callbacks, so the
+          # tier's cached sold count still includes this purchase. Production code
+          # detaches variants through services that adjust the cache themselves
+          # (e.g. Purchase::VariantUpdaterService), so bring the cache back in line
+          # with the purchase no longer counting toward the tier (gp#1208).
+          if @original_purchase.counts_towards_inventory? && @original_purchase.quantity.to_i > 0
+            BaseVariant.where(id: @original_tier.id)
+              .update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache - #{@original_purchase.quantity.to_i}")
+          end
         end
 
         it "does not treat it as a plan change if the default tier and original recurrence are selected" do

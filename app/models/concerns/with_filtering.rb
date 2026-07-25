@@ -119,7 +119,7 @@ module WithFiltering
     true
   end
 
-  def purchase_passes_filters(purchase, permalink_to_link_id: nil, seller_sales: nil, seller_post_filter_cache: nil)
+  def purchase_passes_filters(purchase, permalink_to_link_id: nil, seller_sales: nil, seller_post_filter_cache: nil, seller_post_probe_batch: nil)
     params = purchase.slice(:email, :country, :ip_country)
     params[:min_created_at] = purchase.created_at
     params[:max_created_at] = purchase.created_at
@@ -130,10 +130,10 @@ module WithFiltering
     params[:subscription_cancelled] = purchase.subscription&.cancelled_at.present?
     params[:license_uses] = purchase.license&.uses
 
-    seller_post_passes_filters(**params.symbolize_keys, permalink_to_link_id:, seller_sales:, seller_post_filter_cache:)
+    seller_post_passes_filters(**params.symbolize_keys, permalink_to_link_id:, seller_sales:, seller_post_filter_cache:, seller_post_probe_batch:)
   end
 
-  def seller_post_passes_filters(email: nil, min_created_at: nil, max_created_at: nil, min_price_cents: nil, max_price_cents: nil, country: nil, ip_country: nil, product_permalinks: [], variant_external_ids: [], subscription_cancelled: nil, license_uses: nil, permalink_to_link_id: nil, seller_sales: nil, seller_post_filter_cache: nil)
+  def seller_post_passes_filters(email: nil, min_created_at: nil, max_created_at: nil, min_price_cents: nil, max_price_cents: nil, country: nil, ip_country: nil, product_permalinks: [], variant_external_ids: [], subscription_cancelled: nil, license_uses: nil, permalink_to_link_id: nil, seller_sales: nil, seller_post_filter_cache: nil, seller_post_probe_batch: nil)
     return false if created_after.present? && (min_created_at.nil? || (min_created_at.present? && min_created_at < created_after))
     return false if created_before.present? && (max_created_at.nil? || (max_created_at.present? && max_created_at > created_before))
     excludes_product = bought_products.present? && (product_permalinks.empty? || (bought_products & product_permalinks).empty?)
@@ -180,11 +180,27 @@ module WithFiltering
       if cache && cache.key?(cache_key)
         return false if cache[cache_key]
       else
-        matched = (seller_sales || seller.sales)
-                    .not_is_archived_original_subscription_purchase
-                    .not_subscription_or_original_purchase
-                    .by_external_variant_ids_or_products(not_bought_variants, exclude_product_ids)
-                    .exists?(email:)
+        matched = if seller_post_probe_batch&.covers?(email:, seller_id:)
+          # A batch prefetched this buyer's purchase rows for this seller (and
+          # the rest of the batch's sellers) up front, so the existence check
+          # runs in Ruby against those rows instead of issuing per-seller SQL
+          # (see Purchase::SellerPostProbeBatch for why). `covers?` requires
+          # BOTH the email and this post's seller to be in the batch — an
+          # uncovered seller means the prefetch never loaded that seller's
+          # rows, so it must use the SQL probe below instead.
+          seller_post_probe_batch.matched?(
+            seller_id:,
+            email:,
+            not_bought_variant_external_ids: Array(not_bought_variants),
+            exclude_product_ids:
+          )
+        else
+          (seller_sales || seller.sales)
+            .not_is_archived_original_subscription_purchase
+            .not_subscription_or_original_purchase
+            .by_external_variant_ids_or_products(not_bought_variants, exclude_product_ids)
+            .exists?(email:)
+        end
         cache[cache_key] = matched if cache
         return false if matched
       end

@@ -1,5 +1,31 @@
 # Contributing to Gumroad
 
+## Contributing from a fork
+
+We don't run an inbound review queue on this repo, so external changes come to us a different way:
+
+1. **Fork the repo** and open the pull request on _your own_ fork.
+2. **Email [support@gumroad.com](mailto:support@gumroad.com)** with a link to it.
+3. We review it ourselves, and if we want it, **we merge it on our side.**
+
+Your PR on your fork is held to the same bar as anything we write. Concretely, at minimum:
+
+- **Visual evidence** for anything a user can see, before/after, desktop + mobile, light + dark. Video preferred. This is the #1 rule below and it is not waived for forks. The one exception is the same one we give ourselves: a PR that only touches documentation or agent skill files needs no video, because the diff is the reviewable artifact.
+- **QA steps** someone else can actually follow to verify the change.
+- **Test results** — updated tests, and a screenshot of them passing.
+- **An AI disclosure** naming the specific model, after a `---` separator.
+- **A self-review** comment on your own diff, and a **What / Why / Before-After / Test Results** description.
+
+The rest of the guidelines below apply too, with the obvious substitutions for working outside this repo: reference `qa-media/` files by your own fork's raw URL (`raw.githubusercontent.com/<your-username>/gumroad/<branch>/...`, not `antiwork/gumroad`), name them `pr-<your-fork-pr-number>-<description>`, and skip the steps that depend on this repo's own infrastructure — preview-app deploys and `@claude review once` both need org credentials you won't have, so we run those ourselves once we pull the change in. Substituting for those is expected; skipping the evidence itself is not.
+
+A fork PR that skips the evidence gets the same answer as one of ours that skips it: it isn't ready. If your change is good and documented well, the fork is not a barrier — it's just where the work lives until we pull it in.
+
+**Issues and bug reports are still welcome here.** This is about pull requests only — [file issues](https://github.com/antiwork/gumroad/issues) and bug reports on this repo as normal.
+
+Merged fork commits keep your authorship, so contributions show up under your name in the history. Emailing us a link to your fork PR counts as contributing under the [license terms](#license) at the bottom of this guide.
+
+We read every submission, but we can't promise a reply to each one or a timeline for review.
+
 ## Overall
 
 Use native-sounding English in all communication with no excessive capitalization (e.g HOW IS THIS GOING), multiple question marks (how's this going???), grammatical errors (how's dis going), or typos (thnx fr update).
@@ -31,7 +57,7 @@ Non-trivial PRs should follow this structure:
 - **Before/After** — Video is required for all PRs, except PRs that only touch documentation or agent skill files, where the diff itself is the reviewable artifact. For user-facing changes, show before/after with desktop and mobile, light and dark mode. For non-user-facing changes, include a short video walking through the relevant existing functionality.
 - **Test Results** — Screenshot of tests passing locally.
 
-Store screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. Reference them in PR descriptions with raw GitHub URLs:
+Store screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. From a fork, use your own fork's PR number — it won't match any number here, and that's fine. Reference them in PR descriptions with raw GitHub URLs:
 
 ```markdown
 ![description](https://raw.githubusercontent.com/antiwork/gumroad/<branch>/qa-media/pr-5160-pagination-page1.png)
@@ -71,6 +97,8 @@ git rebase origin/main
 ```
 
 Resolve conflicts locally before pushing. PRs with stale branches will not be merged.
+
+Working from a fork, `origin` is your fork — and your fork's `main` goes stale the moment this repo moves. Add this repo as `upstream` once (`git remote add upstream https://github.com/antiwork/gumroad.git`) and rebase onto `upstream/main` instead.
 
 ### Code review
 
@@ -190,7 +218,7 @@ A great bug report includes:
 
 ## Help
 
-- Any issue with label `help wanted` is open for contributions - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22)
+- Any issue with label `help wanted` is one we'd welcome a fix for - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22). Work it on your fork and email [support@gumroad.com](mailto:support@gumroad.com) with the link, per [the route at the top of this guide](#contributing-from-a-fork).
 
 ## When you're corrected, fix the docs
 

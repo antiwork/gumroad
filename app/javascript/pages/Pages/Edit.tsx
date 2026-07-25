@@ -9,6 +9,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -157,7 +158,7 @@ export default function PagesEdit() {
   // replaces the default template.
   const agentPanelHeading = !is_profile && page.custom_html ? "Update with your agent" : "Build with your agent";
   const agentPanelIntro = is_profile
-    ? "Replace the default template with a page your agent designs as full HTML — custom layout, animations, anything."
+    ? "Your profile page is built to be updated by an AI agent — use your own agent with the prompt below, or Gumroad's built-in Agent tab. Either way, the agent replaces the default template with full HTML: custom layout, animations, anything."
     : page.custom_html
       ? "This page is custom HTML built by your agent, so it can't be edited here — hand your agent this prompt to change it."
       : "Want more than rich text? Your agent can redesign this page as full HTML and publish it for you.";
@@ -186,6 +187,7 @@ export default function PagesEdit() {
       <p className="text-sm text-muted">
         Or use the CLI: <code>gumroad pages list / create / push / preview</code>.
       </p>
+      <AgentSupportFallbackNote subject={is_profile ? "Help with my profile page" : "Help with one of my pages"} />
     </div>
   );
 
