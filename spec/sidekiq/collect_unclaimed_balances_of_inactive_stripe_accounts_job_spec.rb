@@ -294,7 +294,8 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       allow(Stripe::Transfer).to receive(:list).and_return(
         double(data: [double(id: "tr_from_earlier_run",
                              description: described_class::TRANSFER_DESCRIPTION,
-                             destination: STRIPE_PLATFORM_ACCOUNT_ID)])
+                             destination: STRIPE_PLATFORM_ACCOUNT_ID,
+                             amount_reversed: 0)])
       )
       expect(Stripe::Transfer).not_to receive(:create)
 
@@ -317,9 +318,79 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       )
       # Someone else's transfer out of the same account: right shape, not ours to reconcile.
       allow(Stripe::Transfer).to receive(:list).and_return(
-        double(data: [double(id: "tr_unrelated", description: "Something else", destination: "acct_other")])
+        double(data: [double(id: "tr_unrelated", description: "Something else", destination: "acct_other", amount_reversed: 0)])
       )
       expect(Stripe::Transfer).not_to receive(:create)
+
+      described_class.new.perform
+
+      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to be_nil
+      expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: us_stripe_account.id).sum(:holding_amount_cents)).to eq 100_00
+    end
+
+    # Gumroad makes other connected-account-to-platform transfers that this job did not make —
+    # backtax collection and fee-retention debits both land on the platform account and send no
+    # description. Recovering one of those would record a collection that never happened and move
+    # the seller's balances for money this job never swept, so the description is what tells them
+    # apart. Pinned here because dropping either half of the match would otherwise pass the suite.
+    it "leaves an empty account alone when a transfer to the platform account was not made by this job" do
+      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+
+      allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Account).to receive(:retrieve).and_return(double(type: "custom", created: 5.years.ago.to_i))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        { "available" => [{ "amount" => 0 }], "pending" => [{ "amount" => 0 }] }
+      )
+      # The backtax/fee-retention shape: destination matches, no description.
+      allow(Stripe::Transfer).to receive(:list).and_return(
+        double(data: [double(id: "tr_backtax", description: nil, destination: STRIPE_PLATFORM_ACCOUNT_ID, amount_reversed: 0)])
+      )
+
+      described_class.new.perform
+
+      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to be_nil
+      expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: us_stripe_account.id).sum(:holding_amount_cents)).to eq 100_00
+    end
+
+    # The mirror of the above: our description, but the money went somewhere other than Gumroad's
+    # platform account, so it isn't a collection either.
+    it "leaves an empty account alone when a transfer with this job's description went elsewhere" do
+      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+
+      allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Account).to receive(:retrieve).and_return(double(type: "custom", created: 5.years.ago.to_i))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        { "available" => [{ "amount" => 0 }], "pending" => [{ "amount" => 0 }] }
+      )
+      allow(Stripe::Transfer).to receive(:list).and_return(
+        double(data: [double(id: "tr_elsewhere", description: described_class::TRANSFER_DESCRIPTION, destination: "acct_somewhere_else", amount_reversed: 0)])
+      )
+
+      described_class.new.perform
+
+      expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to be_nil
+      expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: us_stripe_account.id).sum(:holding_amount_cents)).to eq 100_00
+    end
+
+    # If ops already reversed the orphaned transfer by hand — a plausible cleanup for exactly this
+    # situation — the money went back to the seller, so there is no collection to record.
+    it "leaves an empty account alone when the transfer this job made was reversed" do
+      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+
+      allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
+      allow(Stripe::Account).to receive(:retrieve).and_return(double(type: "custom", created: 5.years.ago.to_i))
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        { "available" => [{ "amount" => 0 }], "pending" => [{ "amount" => 0 }] }
+      )
+      allow(Stripe::Transfer).to receive(:list).and_return(
+        double(data: [double(id: "tr_reversed", description: described_class::TRANSFER_DESCRIPTION, destination: STRIPE_PLATFORM_ACCOUNT_ID, amount_reversed: 100_00)])
+      )
 
       described_class.new.perform
 
