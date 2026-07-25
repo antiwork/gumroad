@@ -72,6 +72,14 @@ class RichContent < ApplicationRecord
   def has_editor_content?
     return true if title.present?
 
+    has_body_content?
+  end
+
+  # Whether the page body itself renders something for the buyer. Unlike
+  # `has_editor_content?` this ignores the page title: a titled but otherwise
+  # empty page shows up in the buyer's page list, which is enough to say the
+  # seller did some work, but it is not something the buyer can read.
+  def has_body_content?
     description.present? && description.any? { node_has_content?(_1) }
   end
 
