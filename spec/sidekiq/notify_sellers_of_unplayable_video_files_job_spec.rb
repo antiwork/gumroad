@@ -108,6 +108,16 @@ describe NotifySellersOfUnplayableVideoFilesJob do
       .with(product.id, [product_file.id])
   end
 
+  it "does not email a suspended seller, and leaves their files unstamped for later" do
+    product_file = create_unplayable_video
+    seller.update!(user_risk_state: "suspended_for_fraud")
+
+    expect do
+      described_class.new.perform
+    end.not_to have_enqueued_mail(ContactingCreatorMailer, :unplayable_video_files)
+    expect(product_file.reload.unplayable_video_notified_at).to be_nil
+  end
+
   it "stops once it hits the per-run email cap and picks the rest up on the next run" do
     stub_const("#{described_class}::MAX_EMAILS_PER_RUN", 1)
     create_unplayable_video

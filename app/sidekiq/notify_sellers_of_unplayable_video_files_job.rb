@@ -39,14 +39,18 @@ class NotifySellersOfUnplayableVideoFilesJob
       not_yet_notified.group_by(&:link_id).each do |link_id, product_files|
         return if emails_sent >= MAX_EMAILS_PER_RUN
 
-        notify(link_id, product_files)
-        emails_sent += 1
+        emails_sent += 1 if notify(link_id, product_files)
       end
     end
   end
 
   private
+    # Returns whether the seller was emailed.
     def notify(link_id, product_files)
+      # A suspended or deleted seller cannot act on this, and we deliberately do
+      # not stamp their files: if the account comes back, the next run tells them.
+      return false unless product_files.first.user&.account_active?
+
       # Stamping before the email is deliberate: a duplicate stamp costs the
       # seller nothing, whereas stamping afterwards risks emailing the same
       # files again if the job dies between the two steps.
@@ -56,5 +60,6 @@ class NotifySellersOfUnplayableVideoFilesJob
       end
 
       ContactingCreatorMailer.unplayable_video_files(link_id, product_files.map(&:id)).deliver_later(queue: "low")
+      true
     end
 end
