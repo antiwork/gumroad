@@ -630,3 +630,8 @@
   title: "Offering bank account payments (ACH Direct Debit)"
   description: "ACH Direct Debit lets customers in the United States pay for your products directly from their bank account instead of using a card. It is turned off by default; you can offer it by opting in from your checkout settings."
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 352
+  slug: "352-supporting-your-customers"
+  title: "Supporting your customers"
+  description: "You answer questions about your own products. This covers your support email, product-specific support emails, resending emails and receipts, refunds, reviews, blocking difficult customers, and when to send someone to Gumroad support instead."
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
