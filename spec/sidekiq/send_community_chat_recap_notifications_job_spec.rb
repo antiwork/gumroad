@@ -14,9 +14,6 @@ RSpec.describe SendCommunityChatRecapNotificationsJob do
     let!(:recap) { create(:community_chat_recap, community:, community_chat_recap_run: recap_run) }
     let!(:notification_setting) { create(:community_notification_setting, user:, seller:) }
 
-    before do
-      Feature.activate_user(:communities, seller)
-    end
 
     context "when recap run is not finished" do
       it "does not send any notifications" do

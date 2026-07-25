@@ -1207,8 +1207,6 @@ describe("Product Edit Scenario", type: :system, js: true) do
   end
 
   it "allows toggling the community chat integration on and off" do
-    Feature.activate_user(:communities, seller)
-
     visit edit_link_path(product.unique_permalink)
 
     check "Invite your customers to your Gumroad community chat", unchecked: true, allow_label_click: true

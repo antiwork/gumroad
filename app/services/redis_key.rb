@@ -64,6 +64,10 @@ class RedisKey
     # deploy pipeline can ask "is a payout batch in flight right now?" instead
     # of freezing deploys on a fixed clock window. See HealthcheckController#payouts.
     def payout_batch_in_flight = "payouts:batch_in_flight"
+    # Same idea for the non-payout jobs a deploy must not interrupt (long report
+    # builds and the like, which restart from zero when their worker is recycled).
+    # See LongRunningJobTracking and HealthcheckController#long_running_jobs.
+    def long_running_jobs_in_flight = "deploy:long_running_jobs_in_flight"
     def stripe_balance_topup_needed = "stripe:balance_topup_needed"
     def min_successful_purchases_in_last_10_minutes = "healthcheck:min_successful_purchases_in_last_10_minutes"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"

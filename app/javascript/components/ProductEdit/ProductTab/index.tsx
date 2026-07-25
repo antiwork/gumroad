@@ -210,17 +210,15 @@ export const ProductTab = () => {
               <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Integrations</h2>
                 <Fieldset>
-                  {product.community_chat_enabled === null ? null : (
-                    <ToggleSettingRow
-                      label="Invite your customers to your Gumroad community chat"
-                      value={product.community_chat_enabled}
-                      onChange={(newValue) => updateProduct({ community_chat_enabled: newValue })}
-                      help={{
-                        label: "Learn more",
-                        url: "/help/article/347-gumroad-community",
-                      }}
-                    />
-                  )}
+                  <ToggleSettingRow
+                    label="Invite your customers to your Gumroad community chat"
+                    value={product.community_chat_enabled}
+                    onChange={(newValue) => updateProduct({ community_chat_enabled: newValue })}
+                    help={{
+                      label: "Learn more",
+                      url: "/help/article/347-gumroad-community",
+                    }}
+                  />
                   <CircleIntegrationEditor
                     integration={product.integrations.circle}
                     onChange={(newIntegration) =>
