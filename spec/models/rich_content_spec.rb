@@ -209,6 +209,11 @@ describe RichContent do
       expect(content).to be_valid
     end
 
+    it "rejects a blocked scheme on a media embed's source URL" do
+      content = build(:rich_content, entity: product, description: [{ "type" => "mediaEmbed", "attrs" => { "html" => "<iframe></iframe>", "title" => "Demo", "url" => "javascript:alert(1)" } }])
+      expect(content).not_to be_valid
+    end
+
     it "is case-insensitive about the blocked scheme" do
       expect(build_content("JavaScript:alert(1)")).not_to be_valid
     end

@@ -59,9 +59,17 @@ class RichContent < ApplicationRecord
   # backstop for anything writing rich content through the API.
   BLOCKED_HREF_SCHEMES = %w[javascript data vbscript file blob].freeze
   LINK_NODE_TYPES = ["link", "tiptap-link", "button"].freeze
-  # An image node can carry a click-through URL in `attrs.link` (not `attrs.href`), which the image
-  # renderer wraps the img in as an anchor. It needs the same scheme check as a real link.
-  IMAGE_NODE_TYPE = "image"
+  # Not every node keeps its click-through URL under `attrs.href`. An image stores it in
+  # `attrs.link` and a media embed in `attrs.url`, and both renderers turn that value straight into
+  # an anchor's `href` on the content page, so all of them need the same scheme check. Keep this map
+  # in sync whenever a node type starts rendering a seller-supplied URL as a link.
+  URL_ATTRS_BY_NODE_TYPE = {
+    "link" => "href",
+    "tiptap-link" => "href",
+    "button" => "href",
+    "image" => "link",
+    "mediaEmbed" => "url",
+  }.freeze
 
   belongs_to :entity, polymorphic: true, optional: true
 
@@ -151,15 +159,17 @@ class RichContent < ApplicationRecord
       errors.add(:base, "Links cannot use these URL schemes: #{offending.uniq.join(', ')}")
     end
 
-    # Walks the whole document (any nesting) collecting hrefs whose scheme is blocked. Both link
-    # marks (`marks: [{type: "link", attrs: {href:}}]`) and link/button nodes carry an href.
+    # Walks the whole document (any nesting) collecting URLs whose scheme is blocked. A URL can
+    # arrive two ways: as a link mark on some text (`marks: [{type: "link", attrs: {href:}}]`), or
+    # as an attribute on a node that renders an anchor (see URL_ATTRS_BY_NODE_TYPE — the attribute
+    # name differs per node type).
     def collect_blocked_hrefs(nodes)
       Array(nodes).flat_map do |node|
         next [] unless node.is_a?(Hash)
 
         hrefs = []
-        hrefs << node.dig("attrs", "href") if node["type"].in?(LINK_NODE_TYPES)
-        hrefs << node.dig("attrs", "link") if node["type"] == IMAGE_NODE_TYPE
+        url_attr = URL_ATTRS_BY_NODE_TYPE[node["type"]]
+        hrefs << node.dig("attrs", url_attr) if url_attr
         Array(node["marks"]).each do |mark|
           next unless mark.is_a?(Hash) && mark["type"].in?(LINK_NODE_TYPES)
           hrefs << mark.dig("attrs", "href")
