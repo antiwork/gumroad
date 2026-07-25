@@ -1262,6 +1262,7 @@ class LinksController < ApplicationController
             <meta name="viewport" content="width=device-width, initial-scale=1">
             #{SANDBOX_COMPAT_SCRIPT}
             #{self.class.pages_tailwind_head}
+            #{self.class.tailwind_v3_gradient_compat_head(custom_html)}
           </head>
           <body>
             #{custom_html}
