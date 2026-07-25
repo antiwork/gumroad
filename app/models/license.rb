@@ -86,12 +86,11 @@ class License < ApplicationRecord
     # JSON column holding all of that buyer's purchases, which locks the row; doing it inline
     # made concurrent license verifications for the same buyer queue up on that lock and time
     # out with a 500. The audience data is only read later by email-audience filters, so a
-    # couple of seconds of delay is fine and the small delay also lets a burst of
-    # verifications collapse into fewer writes (same reasoning as the search-index update
-    # above).
+    # couple of seconds of delay is fine, and the job deduplicates per purchase while queued
+    # so a burst of verifications results in one rewrite rather than one per call.
     def update_purchase_audience_member_details
       return if purchase_id.blank?
 
-      UpdatePurchaseAudienceMemberDetailsWorker.perform_in(2.seconds, purchase_id)
+      UpdatePurchaseAudienceMemberDetailsJob.perform_in(2.seconds, purchase_id)
     end
 end

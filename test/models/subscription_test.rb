@@ -4060,20 +4060,20 @@ class SubscriptionTest < ActiveSupport::TestCase
 
   test "#resubscribe! enqueues the audience member update instead of writing it in-request" do
     @subscription.cancel_effective_immediately!
-    UpdatePurchaseAudienceMemberDetailsWorker.jobs.clear
+    UpdatePurchaseAudienceMemberDetailsJob.jobs.clear
 
     Purchase.any_instance.expects(:add_to_audience_member_details).never
     @subscription.resubscribe!
 
-    assert_sidekiq_enqueued(UpdatePurchaseAudienceMemberDetailsWorker, args: [@subscription.original_purchase.id])
+    assert_sidekiq_enqueued(UpdatePurchaseAudienceMemberDetailsJob, args: [@subscription.original_purchase.id])
   end
 
   test "#cancel! enqueues the audience member update for the original purchase" do
-    UpdatePurchaseAudienceMemberDetailsWorker.jobs.clear
+    UpdatePurchaseAudienceMemberDetailsJob.jobs.clear
 
     @subscription.cancel!
 
-    assert_sidekiq_enqueued(UpdatePurchaseAudienceMemberDetailsWorker, args: [@subscription.original_purchase.id])
+    assert_sidekiq_enqueued(UpdatePurchaseAudienceMemberDetailsJob, args: [@subscription.original_purchase.id])
   end
 
   # Deferring the audience-member write means an enqueued update can now run AFTER the
@@ -4085,7 +4085,7 @@ class SubscriptionTest < ActiveSupport::TestCase
     original_purchase = @subscription.original_purchase
     assert_nil AudienceMember.find_by(email: original_purchase.email, seller: original_purchase.seller)
 
-    UpdatePurchaseAudienceMemberDetailsWorker.new.perform(original_purchase.id)
+    UpdatePurchaseAudienceMemberDetailsJob.new.perform(original_purchase.id)
 
     assert_nil AudienceMember.find_by(email: original_purchase.email, seller: original_purchase.seller)
   end

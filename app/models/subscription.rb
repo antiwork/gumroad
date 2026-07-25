@@ -1270,7 +1270,7 @@ class Subscription < ApplicationRecord
       purchase_id = original_purchase&.id
       return if purchase_id.nil?
 
-      UpdatePurchaseAudienceMemberDetailsWorker.perform_in(2.seconds, purchase_id)
+      UpdatePurchaseAudienceMemberDetailsJob.perform_in(2.seconds, purchase_id)
     end
 
     def update_original_purchase_audience_member_details
