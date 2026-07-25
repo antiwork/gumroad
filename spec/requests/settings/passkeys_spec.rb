@@ -6,7 +6,6 @@ describe("Passkeys Settings Scenario", type: :system, js: true) do
   let(:seller) { create(:user) }
 
   before do
-    Feature.activate_user(:passkeys, seller)
     login_as seller
   end
 
@@ -93,16 +92,5 @@ describe("Passkeys Settings Scenario", type: :system, js: true) do
 
     expect(page).to have_alert(text: "Passkey removed.")
     expect(seller.webauthn_credentials).to be_empty
-  end
-
-  context "when the passkeys feature is disabled" do
-    before { Feature.deactivate_user(:passkeys, seller) }
-
-    it "does not show the passkeys section" do
-      visit settings_password_path
-
-      expect(page).to have_text("Change password")
-      expect(page).to_not have_text("Passkeys are an easier, more secure alternative to passwords")
-    end
   end
 end
