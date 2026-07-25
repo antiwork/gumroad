@@ -203,7 +203,7 @@ describe Api::Internal::AgentMessagesController do
   end
 
   describe "POST execute" do
-    let(:valid_params) { { type: "api_write", params: { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 } } }
+    let(:valid_params) { { type: "api_write", params: { endpoint: "create_offer_code", code: "LAUNCH", percent_off: 20 } } }
 
     it_behaves_like "authentication required for action", :post, :execute do
       let(:request_params) { valid_params }
@@ -240,7 +240,7 @@ describe Api::Internal::AgentMessagesController do
             "proposed_action" => {
               "type" => "api_write",
               "summary" => "Create discount LAUNCH",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -286,7 +286,7 @@ describe Api::Internal::AgentMessagesController do
           metadata: {
             "proposed_action" => {
               "type" => "api_write",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -312,7 +312,7 @@ describe Api::Internal::AgentMessagesController do
           metadata: {
             "proposed_action" => {
               "type" => "api_write",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -387,7 +387,7 @@ describe Api::Internal::AgentMessagesController do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(payload[:agent_action_failure_reason]).to eq("You don't have permission to do that.")
-        expect(payload[:agent_action_endpoint]).to eq("create_discount")
+        expect(payload[:agent_action_endpoint]).to eq("create_offer_code")
       end
 
       it "bounds the logged failure reason so a reflected seller value can't bloat or split the log line" do
@@ -411,6 +411,23 @@ describe Api::Internal::AgentMessagesController do
         expect(logged).to start_with("Name is invalid: AAA")
         # The seller still gets the API's full message; only the log copy is bounded.
         expect(response.parsed_body["message"]).to eq(reflected)
+      end
+
+      it "omits the endpoint from the log payload when the confirmed action names one the catalog doesn't have" do
+        # The endpoint is what these 422s get grouped by, so it is resolved through the catalog
+        # rather than copied from the request — a tampered or stale proposal naming something the
+        # catalog doesn't have contributes no value of its own choosing to the metric.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: false, message: "That action isn't supported.")
+
+        payload = {}
+        post :execute, params: { type: "api_write", params: { endpoint: "not_a_real_endpoint" } }, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(payload[:agent_action_failure_reason]).to eq("That action isn't supported.")
+        expect(payload).not_to have_key(:agent_action_endpoint)
       end
 
       it "does not add failure fields to the log payload when the confirmed action succeeds" do

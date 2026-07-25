@@ -105,10 +105,11 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
       # permission denials, unknown-key rejections, and API validation failures all land here.
       # Stash the executor's reason and the endpoint being written so append_info_to_payload can
       # attach them to this request's log line, making the 422s separable in Elasticsearch. The
-      # endpoint is a catalog id, and the reason is bounded before logging — see
-      # #log_safe_failure_reason.
+      # reason is bounded before logging (see #log_safe_failure_reason), and the endpoint is
+      # resolved through the catalog so only a known id — never a string chosen by the request —
+      # reaches the field this metric groups by.
       @agent_action_failure_reason = log_safe_failure_reason(result[:message])
-      @agent_action_endpoint = action_params["endpoint"].presence
+      @agent_action_endpoint = ::Ai::StoreAgentApiCatalog.find(action_params["endpoint"])&.id
     end
 
     # Recording the applied status must not mask a store change that already committed: if the
