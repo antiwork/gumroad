@@ -268,9 +268,16 @@ describe PostResendApi, :freeze_time do
     end
 
     it "falls back to the account address when the product has no support email of its own" do
-      # update_column skips validation on purpose: the column rejects blanks today, but older
-      # rows can still hold an empty string, and those must fall back rather than send an
-      # empty Reply-To.
+      @post.link.update!(support_email: nil)
+      send_default_email
+
+      expect(sent_email[:reply_to]).to include("account@example.com")
+    end
+
+    it "falls back to the account address when the product's support email is blank" do
+      # A blank support email is rejected by the model validation, so update_column is the only
+      # way to reproduce a row saved before that validation existed. Those rows have to fall
+      # back rather than send an empty Reply-To.
       @post.link.update_column(:support_email, "")
       send_default_email
 
