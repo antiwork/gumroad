@@ -38,8 +38,13 @@ describe LongRunningJobTracking do
   end
 
   it "passes the job's arguments and return value through untouched" do
+    # The wrapper must be in the chain for this to mean anything — otherwise the stand-in's
+    # own perform would satisfy the assertions with the feature reverted.
+    expect(job_class.ancestors).to include(LongRunningJobTracking::PerformWrapper)
+
     expect(job_class.new.perform(4, 2026)).to eq("return value")
     expect(job_class.received_args).to eq([4, 2026])
+    expect(job_class.entries_while_running.size).to eq(1)
   end
 
   it "removes its entry when the job raises, so a failure can't freeze deploys" do
@@ -58,11 +63,32 @@ describe LongRunningJobTracking do
     expect($redis.zscore(key, "sibling-job-token")).to be_present
   end
 
-  it "sets an expiry on the key so a crashed job can only hold deploys for the TTL" do
+  it "scores its entry with the start time and expires the key, so a crashed job can only hold deploys for the TTL" do
+    allow($redis).to receive(:zrem) # simulate a job that dies before cleaning up
+
+    started_at = Time.current.to_i
+    job_class.new.perform
+
+    # The score is the crash-safety mechanism the healthcheck relies on: readers prune by
+    # score (zremrangebyscore), and the key-level expiry is only a backstop, since any later
+    # registration refreshes it.
+    token = $redis.zrange(key, 0, -1).first
+    expect($redis.zscore(key, token)).to be_between(started_at, Time.current.to_i)
+    expect($redis.ttl(key)).to be_between(1, LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL.to_i)
+  end
+
+  it "stops blocking deploys once its entry is older than the TTL" do
     allow($redis).to receive(:zrem) # simulate a job that dies before cleaning up
 
     job_class.new.perform
+    expect(
+      DeployBlockingJobTracking.any_in_flight?(key, LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL)
+    ).to be(true)
 
-    expect($redis.ttl(key)).to be_between(1, LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL.to_i)
+    travel_to (LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).from_now do
+      expect(
+        DeployBlockingJobTracking.any_in_flight?(key, LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL)
+      ).to be(false)
+    end
   end
 end

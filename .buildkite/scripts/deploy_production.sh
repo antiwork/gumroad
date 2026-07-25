@@ -29,7 +29,10 @@ wait_for_healthcheck() {
   local attempt hc_status
 
   for attempt in $(seq 1 "$max_attempts"); do
-    hc_status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || echo "000")
+    # On a connection failure curl already writes "000" to stdout, so the `|| echo` fallback
+    # is only for the case where curl writes nothing at all. Either way the value is not
+    # 200/503 and falls through to the unreachable branch below.
+    hc_status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url") || hc_status="000"
     if [ "$hc_status" = "200" ]; then
       return 0
     elif [ "$hc_status" = "503" ]; then
@@ -63,15 +66,32 @@ wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15
   '[ "$(date -u +%u)" -ge 2 ] && [ "$(date -u +%u)" -le 5 ] && [ "$(date -u +%H)" -eq 10 ]'
 
 # Long-running non-payout jobs — the monthly/quarterly finance and tax reports, sitemap
-# rebuilds (see LongRunningJobTracking). These are NOT safe to interrupt: they hold no
-# checkpoint, so a recycled worker means the run starts over, and killed runs of these are
-# how finance reports have silently gone missing. So we wait longer (up to 2 hours, the
-# slowest of them is the Canada sales report at well over an hour) and, if one is still
-# running at the end of that, skip this deploy rather than kill the report.
-# Fail-safe window: midnight-6am ET, when these jobs are scheduled. This check is what
-# replaced blocking every deploy in that window outright.
+# rebuilds, the daily instant payouts (see LongRunningJobTracking). These are NOT safe to
+# interrupt: they hold no checkpoint, so a recycled worker means the run starts over, and
+# killed runs of these are how finance reports have silently gone missing. So we wait longer
+# (up to 2 hours, the slowest of them is the Canada sales report at well over an hour) and,
+# if one is still running at the end of that, skip this deploy rather than kill the report.
+#
+# Note this check runs on EVERY deploy, not only overnight ones, and it skips rather than
+# proceeds — so a manual mid-day re-run of one of these reports will make that deploy wait
+# and then drop. That is the intended trade (never kill a report), and the skipped change
+# ships with the next push or via require-approval; the bound on how long a hung job can keep
+# skipping deploys is LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL.
+#
+# Fail-safe window (used ONLY when the healthcheck cannot be reached): the UTC hours these
+# jobs are actually SCHEDULED for, plus ~2h of runtime headroom. Read straight off
+# config/sidekiq_schedule.yml, which is written in UTC — the schedule is not an ET
+# midnight-6am block, so testing ET hours here would leave most of it uncovered:
+#   UTC 00:00 sitemap refresh, outstanding balances CSV
+#   UTC 01:00 monthly financial reports (fans out the Canada sales report, 1-2h)
+#   UTC 02:00 YTD sales report   UTC 03:00 TaxJar upload, India sales report
+#   UTC 08:00 daily instant payouts
+#   UTC 10:00 quarterly financial reports (VAT + per-country sales reports)
+#   UTC 11:00 finances / deferred refunds / Stripe balance summaries reports
+# => hours 00-05 and 08-13. Outside those we proceed, because nothing that registers here
+# is scheduled to be running.
 wait_for_healthcheck "Long-running job" "https://gumroad.com/healthcheck/long_running_jobs" 40 skip \
-  '[ "$(TZ=America/New_York date +%-H)" -lt 6 ]'
+  '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
 
 ECR_REGISTRY=${ECR_REGISTRY}
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
