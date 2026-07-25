@@ -169,7 +169,7 @@ class Checkout::PaymentMethodResolver
   def self.us_based_merchant_account?(seller)
     return true unless seller&.has_stripe_account_connected?
 
-    seller.stripe_connect_account&.country == KLARNA_SUPPORTED_BUYER_COUNTRY
+    seller.stripe_connect_account&.country == US_ALPHA2
   end
 
   # cart_product_currency: the ISO code (lowercase, e.g. "eur") the cart's single item is priced
