@@ -90,14 +90,24 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
   end
 
   private
-    # Looks for a transfer this job already made out of the given connected account. Only our own
-    # transfers count, so we match on the description we write and on Gumroad's platform account as
-    # the destination; anything else on the account (a seller's own payout, say) is not ours to
-    # reconcile. We only need the recent ones because the account is skipped for good as soon as a
-    # transfer id is recorded, so at most one unrecorded transfer can exist.
+    # Looks for a transfer this job already made out of the given connected account, so a run that
+    # moved the money but died before recording it can be finished later.
+    #
+    # Only our own transfers count. Gumroad makes other connected-account-to-platform transfers —
+    # backtax collection and fee-retention debits — and those send no description, so the
+    # description we write is what distinguishes ours; recovering one of theirs would record a
+    # collection that never happened. The destination filter is applied by Stripe rather than by us
+    # so that unrelated transfers can't crowd ours out of the page we ask for. A transfer that has
+    # been reversed doesn't count either: the money went back to the seller, so there is nothing to
+    # record. We only need the recent ones, because the account is skipped for good as soon as a
+    # transfer id is recorded and so at most one unrecorded transfer can exist.
     def previous_transfer_made_by_this_job(stripe_account_id)
-      Stripe::Transfer.list({ limit: 10 }, { stripe_account: stripe_account_id })
+      Stripe::Transfer.list({ limit: 10, destination: STRIPE_PLATFORM_ACCOUNT_ID }, { stripe_account: stripe_account_id })
                       .data
-                      .find { |transfer| transfer.description == TRANSFER_DESCRIPTION && transfer.destination == STRIPE_PLATFORM_ACCOUNT_ID }
+                      .find do |transfer|
+        transfer.description == TRANSFER_DESCRIPTION &&
+          transfer.destination == STRIPE_PLATFORM_ACCOUNT_ID &&
+          transfer.amount_reversed.to_i.zero?
+      end
     end
 end
