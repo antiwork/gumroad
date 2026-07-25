@@ -7,39 +7,47 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") deploy_production.sh: $1${NC}"
 }
 
-# Hold deploys only while a payout batch is ACTUALLY running, by asking the app
-# (every payout batch job registers a Redis token while it runs — see
-# PayoutBatchInFlightTracking; /healthcheck/payouts returns 503 while any of them is in
-# flight). Note this tracks jobs that are RUNNING, not slices still scheduled to start, so
-# a deploy can land in a gap between slices. That is safe: scheduled slices survive in
-# Redis, and a recycled running slice is re-run by Sidekiq (re-running is idempotent —
-# sellers whose payouts were already created are skipped).
+# Hold deploys only while a job that must not be interrupted is ACTUALLY running, by asking
+# the app: payout batch jobs and the finance/tax report generators each register a Redis
+# token while they run (see HoldsDeployWhileRunning), and /healthcheck/deploy_safe returns
+# 503 while any of them is in flight. This is what replaced the blanket midnight-6am ET
+# block in .github/workflows/tests.yml, which refused to auto-unblock deploys for six hours
+# a night on the assumption that those jobs were running.
+# Note this tracks jobs that are RUNNING, not work still scheduled to start, so a deploy can
+# land in a gap between payout slices. That is safe: scheduled slices survive in Redis, and a
+# recycled running slice is re-run by Sidekiq (re-running is idempotent — sellers whose
+# payouts were already created are skipped).
 # Poll for up to 45 minutes, then proceed with a warning rather than dropping the deploy
 # silently. The Friday batch dispatches its slices over roughly the first half hour and the
 # slices drain after that, so a 503 can persist for a while on Fridays.
-# Fallback: if the healthcheck is unreachable (non-200/503 answer), fall back to the
-# static window (Tue-Fri UTC 10:00-10:59, when weekly batches are enqueued) so a
-# broken healthcheck can never let a deploy land mid-batch.
-payouts_healthcheck_url="https://gumroad.com/healthcheck/payouts"
+# Fallback: if the healthcheck is unreachable (non-200/503 answer), fall back to the clock —
+# skip the deploy during the payout batch window (Tue-Fri UTC 10:00-10:59) and during the
+# overnight cron window (UTC 04:00-09:59, i.e. midnight-6am ET, when the report jobs run) —
+# so a broken healthcheck can never let a deploy land mid-run.
+deploy_safe_healthcheck_url="https://gumroad.com/healthcheck/deploy_safe"
 for attempt in $(seq 1 15); do
-  hc_status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$payouts_healthcheck_url" || echo "000")
+  hc_status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$deploy_safe_healthcheck_url" || echo "000")
   if [ "$hc_status" = "200" ]; then
     break
   elif [ "$hc_status" = "503" ]; then
-    logger "Payout batch in flight (healthcheck 503) — waiting 3 minutes (attempt $attempt/15)"
+    logger "Long-running job in flight (healthcheck 503) — waiting 3 minutes (attempt $attempt/15)"
     sleep 180
   else
     current_utc_hour=$(date -u +%H)
     current_utc_dow=$(date -u +%u) # 1=Mon .. 7=Sun
     if [ "$current_utc_dow" -ge 2 ] && [ "$current_utc_dow" -le 5 ] && [ "$current_utc_hour" -eq 10 ]; then
-      logger "Payouts healthcheck unreachable (HTTP $hc_status) during the static batch window (Tue-Fri UTC 10:00-11:00) — skipping deployment"
+      logger "Deploy-safety healthcheck unreachable (HTTP $hc_status) during the payout batch window (Tue-Fri UTC 10:00-11:00) — skipping deployment"
       exit 0
     fi
-    logger "Payouts healthcheck unreachable (HTTP $hc_status) outside the static batch window — proceeding"
+    if [ "$current_utc_hour" -ge 4 ] && [ "$current_utc_hour" -lt 10 ]; then
+      logger "Deploy-safety healthcheck unreachable (HTTP $hc_status) during the overnight cron window (UTC 04:00-10:00 / midnight-6am ET) — skipping deployment"
+      exit 0
+    fi
+    logger "Deploy-safety healthcheck unreachable (HTTP $hc_status) outside the fallback windows — proceeding"
     break
   fi
   if [ "$attempt" = "15" ]; then
-    logger "WARNING: payout batch still in flight after 45 minutes — proceeding with deploy anyway (batch jobs are deploy-safe Sidekiq jobs with retries; this warning means the batch is unusually slow and worth a look)"
+    logger "WARNING: a long-running job is still in flight after 45 minutes — proceeding with deploy anyway (these jobs retry after a worker recycle; this warning means the run is unusually slow and worth a look)"
   fi
 done
 

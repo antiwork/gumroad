@@ -2,7 +2,7 @@
 
 class PerformPayoutsUpToDelayDaysAgoWorker
   include Sidekiq::Job
-  include PayoutBatchInFlightTracking
+  include HoldsDeployWhileRunning
 
   # retry: 3 (was 0): with no retries, a single transient
   # ActiveRecord::StatementTimeout on the `holding_balance` query sends the whole weekly
@@ -46,7 +46,7 @@ class PerformPayoutsUpToDelayDaysAgoWorker
     # .buildkite/scripts/deploy_production.sh). Each slice job registers its own entry too,
     # so the flag stays up until the last slice finishes rather than dropping when this job
     # returns.
-    with_payout_batch_in_flight do
+    while_holding_deploys do
       # The database connection defaults to a 5-minute statement cap (config/database.yml).
       # The seller-id reads for a large cohort regularly exceed that cap during the 10:00 UTC
       # batch window, and because all Sidekiq retries land in the same contention window,

@@ -2,6 +2,9 @@
 
 class PerformDailyInstantPayoutsWorker
   include Sidekiq::Job
+  # Runs at 08:00 UTC (4am ET) and can take a while on the balances scan; a deploy that
+  # recycles Sidekiq mid-run drops the day's instant payouts. See HoldsDeployWhileRunning.
+  include HoldsDeployWhileRunning::ForWholePerform
   sidekiq_options retry: 0, queue: :critical, lock: :until_executed
 
   def perform

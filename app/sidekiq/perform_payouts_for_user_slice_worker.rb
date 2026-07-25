@@ -17,7 +17,7 @@
 # because Payouts.create_payment no-ops once a seller's balances have left the `unpaid` state.
 class PerformPayoutsForUserSliceWorker
   include Sidekiq::Job
-  include PayoutBatchInFlightTracking
+  include HoldsDeployWhileRunning
 
   # Slices are independent, so a transient failure (statement timeout, PayPal blip) should
   # retry this slice rather than leaving its sellers unpaid for the week.
@@ -47,7 +47,7 @@ class PerformPayoutsForUserSliceWorker
 
     payout_period_end_date = Date.parse(date_string)
 
-    with_payout_batch_in_flight do
+    while_holding_deploys do
       WithMaxExecutionTime.timeout_queries(seconds: QUERY_TIME_BUDGET) do
         Payouts.create_payments_for_balances_up_to_date_for_user_ids(
           payout_period_end_date,

@@ -68,58 +68,72 @@ describe HealthcheckController do
     end
   end
 
-  describe "GET 'payouts'" do
-    context "when no payout batch is in flight (Redis key absent)" do
+  describe "GET 'deploy_safe'" do
+    context "when nothing is in flight (Redis key absent)" do
       it "returns 200" do
-        $redis.del(RedisKey.payout_batch_in_flight)
+        $redis.del(RedisKey.jobs_holding_deploys)
 
-        get :payouts
+        get :deploy_safe
 
         expect(response.status).to eq(200)
-        expect(response.body).to eq("Payouts: no batch in flight")
+        expect(response.body).to eq("Deploy safety: no job in flight")
       end
     end
 
-    context "when a payout batch is in flight (a fresh job entry exists)" do
+    context "when a job is in flight (a fresh entry exists)" do
       it "returns 503" do
-        $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "job-token")
+        $redis.zadd(RedisKey.jobs_holding_deploys, Time.current.to_i, "job-token")
 
-        get :payouts
+        get :deploy_safe
 
         expect(response.status).to eq(503)
-        expect(response.body).to eq("Payouts: batch in flight")
+        expect(response.body).to eq("Deploy safety: job in flight")
       ensure
-        $redis.del(RedisKey.payout_batch_in_flight)
+        $redis.del(RedisKey.jobs_holding_deploys)
       end
     end
 
-    context "when the only entries are older than the per-entry TTL (job died mid-batch)" do
+    context "when the only entries are older than the per-entry TTL (job died mid-run)" do
       it "returns 200 and prunes the stale entry" do
-        stale_score = (PayoutBatchInFlightTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
-        $redis.zadd(RedisKey.payout_batch_in_flight, stale_score, "dead-job-token")
+        stale_score = (HoldsDeployWhileRunning::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(RedisKey.jobs_holding_deploys, stale_score, "dead-job-token")
 
-        get :payouts
+        get :deploy_safe
 
         expect(response.status).to eq(200)
-        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(0)
+        expect($redis.zcard(RedisKey.jobs_holding_deploys)).to eq(0)
       ensure
-        $redis.del(RedisKey.payout_batch_in_flight)
+        $redis.del(RedisKey.jobs_holding_deploys)
       end
     end
 
     context "when a stale entry sits alongside a fresh one" do
       it "returns 503 and prunes only the stale entry" do
-        stale_score = (PayoutBatchInFlightTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
-        $redis.zadd(RedisKey.payout_batch_in_flight, stale_score, "dead-job-token")
-        $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "live-job-token")
+        stale_score = (HoldsDeployWhileRunning::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i
+        $redis.zadd(RedisKey.jobs_holding_deploys, stale_score, "dead-job-token")
+        $redis.zadd(RedisKey.jobs_holding_deploys, Time.current.to_i, "live-job-token")
 
-        get :payouts
+        get :deploy_safe
 
         expect(response.status).to eq(503)
-        expect($redis.zscore(RedisKey.payout_batch_in_flight, "dead-job-token")).to be_nil
-        expect($redis.zscore(RedisKey.payout_batch_in_flight, "live-job-token")).to be_present
+        expect($redis.zscore(RedisKey.jobs_holding_deploys, "dead-job-token")).to be_nil
+        expect($redis.zscore(RedisKey.jobs_holding_deploys, "live-job-token")).to be_present
       ensure
-        $redis.del(RedisKey.payout_batch_in_flight)
+        $redis.del(RedisKey.jobs_holding_deploys)
+      end
+    end
+
+    context "when requested at the legacy /healthcheck/payouts path" do
+      it "answers the same, so a deploy script from before the rename still gets a verdict" do
+        $redis.zadd(RedisKey.jobs_holding_deploys, Time.current.to_i, "job-token")
+
+        get :deploy_safe, params: {}
+
+        expect(response.status).to eq(503)
+        expect(Rails.application.routes.recognize_path("/healthcheck/payouts"))
+          .to include(controller: "healthcheck", action: "deploy_safe")
+      ensure
+        $redis.del(RedisKey.jobs_holding_deploys)
       end
     end
   end

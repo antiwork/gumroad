@@ -21,6 +21,12 @@
 module FinanceReportFailureAlert
   def self.included(base)
     base.include(FinanceReportCompletionTracking)
+    # These reports are the other half of what the overnight deploy block used to protect.
+    # They scan whole months of purchases — GenerateCanadaSalesReportJob has taken one to
+    # two hours — and a deploy recycles the Sidekiq workers, killing the run outright.
+    # Announcing "in flight" holds automatic production deploys for exactly as long as the
+    # run takes, instead of blocking every deploy between midnight and 6am ET.
+    base.include(HoldsDeployWhileRunning::ForWholePerform)
 
     base.sidekiq_retries_exhausted do |job, exception|
       args = job["args"]

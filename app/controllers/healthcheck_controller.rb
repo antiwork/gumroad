@@ -17,26 +17,27 @@ class HealthcheckController < ApplicationController
     render plain: "Sidekiq: #{status}", status:
   end
 
-  # Reports whether a weekly payout batch is currently running (see
-  # PayoutBatchInFlightTracking, which every payout batch job uses to register a token
-  # while it runs). The deploy pipeline polls this before deploying to production so
-  # deploys are held only while payouts are actually in flight, not on a fixed clock
-  # window.
+  # Reports whether it is safe to recycle the Sidekiq workers right now — that is, whether
+  # any job that must not be interrupted is currently running (see
+  # HoldsDeployWhileRunning: the weekly payout batches and the finance/tax report
+  # generators each register a token while they run). The deploy pipeline polls this before
+  # deploying to production and waits, so deploys are held only while such work is actually
+  # in flight rather than for a fixed six-hour window every night.
   #
   # Only entries younger than the per-entry TTL count: the key-level EXPIRE is refreshed
   # whenever any job registers, so score-based filtering here is what actually ages out
   # an entry left behind by a job that died mid-batch.
-  def payouts
-    key = RedisKey.payout_batch_in_flight
-    oldest_valid_score = PayoutBatchInFlightTracking::IN_FLIGHT_ENTRY_TTL.ago.to_i
+  def deploy_safe
+    key = RedisKey.jobs_holding_deploys
+    oldest_valid_score = HoldsDeployWhileRunning::IN_FLIGHT_ENTRY_TTL.ago.to_i
     # Prune expired entries first so a dead job's leftover token gets removed rather
     # than lingering until the whole key expires.
     $redis.zremrangebyscore(key, "-inf", "(#{oldest_valid_score}")
     in_flight = $redis.zcard(key) > 0
     status = in_flight ? :service_unavailable : :ok
-    message = in_flight ? "batch in flight" : "no batch in flight"
+    message = in_flight ? "job in flight" : "no job in flight"
 
-    render plain: "Payouts: #{message}", status:
+    render plain: "Deploy safety: #{message}", status:
   end
 
   def paypal_balance

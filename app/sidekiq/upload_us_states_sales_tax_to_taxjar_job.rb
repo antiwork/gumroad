@@ -26,6 +26,11 @@
 class UploadUsStatesSalesTaxToTaxjarJob
   include Sidekiq::Job
   include FinanceReportCompletionTracking
+  # A day's push walks every taxable US purchase and talks to TaxJar for each one, so a
+  # deploy landing mid-run leaves TaxJar with a partial day. This job runs at 03:00 UTC
+  # (11pm ET) — outside the old midnight-6am ET deploy block, which is exactly why holding
+  # deploys on real job state beats holding them on a clock. See HoldsDeployWhileRunning.
+  include HoldsDeployWhileRunning::ForWholePerform
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
   # Resolved default for a no-arg scheduled run (mirrors #perform's default). Used to key

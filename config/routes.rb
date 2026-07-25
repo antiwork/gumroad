@@ -18,7 +18,12 @@ end
 Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
-  get "/healthcheck/payouts" => "healthcheck#payouts"
+  get "/healthcheck/deploy_safe" => "healthcheck#deploy_safe"
+  # Legacy name from when only payout batches held deploys. Kept so the deploy running
+  # during this change's own rollout (its script polls the new path against the currently
+  # deployed app) and any external monitor still get an answer. Safe to delete once no
+  # caller asks for it.
+  get "/healthcheck/payouts" => "healthcheck#deploy_safe"
   get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
   get "/healthcheck/stripe_balance" => "healthcheck#stripe_balance"
   get "/healthcheck/purchases" => "healthcheck#purchases"

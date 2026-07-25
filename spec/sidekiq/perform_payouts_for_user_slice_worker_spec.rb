@@ -45,17 +45,17 @@ describe PerformPayoutsForUserSliceWorker do
     end
 
     describe "the in-flight deploy-freeze flag" do
-      before { $redis.del(RedisKey.payout_batch_in_flight) }
-      after  { $redis.del(RedisKey.payout_batch_in_flight) }
+      before { $redis.del(RedisKey.jobs_holding_deploys) }
+      after  { $redis.del(RedisKey.jobs_holding_deploys) }
 
       it "is held while the slice runs so a deploy cannot recycle it mid-slice" do
         expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_user_ids) do
-          expect($redis.zcard(RedisKey.payout_batch_in_flight)).to be > 0
+          expect($redis.zcard(RedisKey.jobs_holding_deploys)).to be > 0
         end
 
         described_class.new.perform(PayoutProcessorType::PAYPAL, payout_date.to_s, user_ids)
 
-        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(0)
+        expect($redis.zcard(RedisKey.jobs_holding_deploys)).to eq(0)
       end
 
       it "is cleared even when the slice raises" do
@@ -65,16 +65,16 @@ describe PerformPayoutsForUserSliceWorker do
           described_class.new.perform(PayoutProcessorType::PAYPAL, payout_date.to_s, user_ids)
         end.to raise_error(ActiveRecord::StatementTimeout)
 
-        expect($redis.zcard(RedisKey.payout_batch_in_flight)).to eq(0)
+        expect($redis.zcard(RedisKey.jobs_holding_deploys)).to eq(0)
       end
 
       it "leaves a concurrent slice's entry alone" do
-        $redis.zadd(RedisKey.payout_batch_in_flight, Time.current.to_i, "sibling-slice-token")
+        $redis.zadd(RedisKey.jobs_holding_deploys, Time.current.to_i, "sibling-slice-token")
         allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_user_ids)
 
         described_class.new.perform(PayoutProcessorType::PAYPAL, payout_date.to_s, user_ids)
 
-        expect($redis.zscore(RedisKey.payout_batch_in_flight, "sibling-slice-token")).to be_present
+        expect($redis.zscore(RedisKey.jobs_holding_deploys, "sibling-slice-token")).to be_present
       end
     end
   end
