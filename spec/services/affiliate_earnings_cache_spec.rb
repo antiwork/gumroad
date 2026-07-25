@@ -46,8 +46,11 @@ describe AffiliateEarningsCache do
 
     context "when the in-request computation times out" do
       before do
+        # MySQL reports a MAX_EXECUTION_TIME abort as error 3024, which Rails
+        # raises as StatementTimeout — this is the exception the production path
+        # actually sees, so assert against it rather than a sibling class.
         allow(affiliate).to receive(:total_cents_earned).with(timeout_ms: anything)
-          .and_raise(ActiveRecord::QueryCanceled.new("Query execution was interrupted, maximum statement execution time exceeded"))
+          .and_raise(ActiveRecord::StatementTimeout.new("Query execution was interrupted, maximum statement execution time exceeded"))
       end
 
       it "returns nil rather than a wrong number and schedules a background refresh" do
@@ -69,6 +72,15 @@ describe AffiliateEarningsCache do
         .and_raise(ActiveRecord::StatementInvalid.new("Unknown column 'nope'"))
 
       expect { described_class.fetch(affiliate) }.to raise_error(ActiveRecord::StatementInvalid)
+    end
+
+    it "also treats a connection-level cancellation of the query as a timeout" do
+      allow(affiliate).to receive(:total_cents_earned).with(timeout_ms: anything)
+        .and_raise(ActiveRecord::QueryCanceled.new("canceling statement due to statement timeout"))
+
+      expect do
+        expect(described_class.fetch(affiliate)).to be_nil
+      end.to change { RefreshAffiliateEarningsWorker.jobs.size }.by(1)
     end
 
     it "serves a stale value immediately and refreshes it in the background" do

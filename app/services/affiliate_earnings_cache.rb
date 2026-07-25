@@ -75,21 +75,15 @@ class AffiliateEarningsCache
         cents = affiliate.total_cents_earned(timeout_ms: REQUEST_TIMEOUT_MS)
         write(affiliate, cents)
         cents
-      rescue ActiveRecord::QueryCanceled, ActiveRecord::StatementInvalid => e
-        # MySQL reports the MAX_EXECUTION_TIME abort as either a QueryCanceled or
-        # a generic StatementInvalid depending on adapter version, so both are
-        # treated as "too slow, do it in the background". Anything that is not a
-        # timeout is a real error and is re-raised.
-        raise unless timeout_error?(e)
+      rescue ActiveRecord::QueryAborted
+        # MySQL reports the MAX_EXECUTION_TIME abort as error 3024, which Rails
+        # raises as ActiveRecord::StatementTimeout. Its sibling
+        # ActiveRecord::QueryCanceled covers a connection-level cancellation of
+        # the same query, and both descend from QueryAborted — rescuing the
+        # parent means "the database gave up on this statement", however it was
+        # reported, which is exactly the case we want to move to the background.
+        # Any other database error is a real problem and is left to propagate.
         nil
-      end
-
-      def timeout_error?(error)
-        return true if error.is_a?(ActiveRecord::QueryCanceled)
-        # MySQL error 3024: "Query execution was interrupted, maximum statement
-        # execution time exceeded".
-        error.message.include?("maximum statement execution time exceeded") ||
-          error.message.include?("3024")
       end
 
       def read(affiliate)
