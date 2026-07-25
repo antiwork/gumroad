@@ -149,8 +149,7 @@ class AudienceMember < ApplicationRecord
             purchase_price_cents INT PATH '$.price_cents',
             purchase_created_at DATETIME PATH '$.created_at',
             purchase_country CHAR(100) PATH '$.country',
-            purchase_subscription_cancelled INT PATH '$.subscription_cancelled',
-            purchase_license_uses INT PATH '$.license_uses'
+            purchase_subscription_cancelled INT PATH '$.subscription_cancelled'
           ),
           NESTED PATH '$.affiliates[*]' COLUMNS (
             affiliate_id INT PATH '$.id',
@@ -170,7 +169,15 @@ class AudienceMember < ApplicationRecord
         json_filter = json_filter.where("jt.purchase_id IS NOT NULL AND COALESCE(jt.purchase_subscription_cancelled, 0) = 0")
       end
       if params[:minimum_license_uses]
-        json_filter = json_filter.where("jt.purchase_license_uses >= ?", params[:minimum_license_uses].to_i)
+        # Read the use count from the licenses table rather than from a copy kept inside
+        # this row's `details` JSON. Keeping a copy meant every license activation had to
+        # rewrite the buyer's audience_members row, and because MySQL takes a row lock for
+        # that write, concurrent activations for the same buyer queued behind each other
+        # and the license-verification endpoint returned 500s once the lock wait timed out.
+        # A license belongs to exactly one purchase, so joining is a direct lookup.
+        json_filter = json_filter
+          .joins("INNER JOIN licenses ON licenses.purchase_id = jt.purchase_id AND licenses.deleted_at IS NULL")
+          .where("licenses.uses >= ?", params[:minimum_license_uses].to_i)
       end
       timestamp_columns = if params[:type] == "customer"
         %w[purchase_created_at]

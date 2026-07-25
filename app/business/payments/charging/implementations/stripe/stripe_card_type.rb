@@ -29,7 +29,9 @@ class StripeCardType
     # non-card method launched through the Payment Element needs an entry here, otherwise
     # its charges record "generic_card" and the receipt claims a credit card statement
     # line that will never appear.
-    "klarna" => CardType::KLARNA
+    "klarna" => CardType::KLARNA,
+    # Alipay likewise reports payment_method_details.type == "alipay".
+    "alipay" => CardType::ALIPAY
   }.freeze
 
   def self.to_card_type(stripe_card_type)

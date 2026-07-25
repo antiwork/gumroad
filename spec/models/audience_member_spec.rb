@@ -221,19 +221,37 @@ RSpec.describe AudienceMember, :freeze_time do
     end
 
     it "filters by minimum license uses, matching combined filters within a single purchase" do
-      create_member(purchases: [{ "product_id" => 1, "license_uses" => 0 }])
-      member2 = create_member(purchases: [{ "product_id" => 1, "license_uses" => 3 }])
-      member3 = create_member(purchases: [
-                                { "product_id" => 1, "license_uses" => 1 },
-                                { "product_id" => 2, "license_uses" => 5 }
-                              ])
-      create_member(purchases: [{ "product_id" => 1 }])
+      # The use count is read from the licenses table, not from a copy inside the member's
+      # details JSON, so these members need real purchases with real licenses attached.
+      member_without_uses = create_member_with_licenses([{ product_id: 1, uses: 0 }])
+      member_with_three = create_member_with_licenses([{ product_id: 1, uses: 3 }])
+      member_with_two_products = create_member_with_licenses([
+                                                               { product_id: 1, uses: 1 },
+                                                               { product_id: 2, uses: 5 }
+                                                             ])
+      member_without_license = create_member_with_licenses([{ product_id: 1, uses: nil }])
 
-      expect(filtered(minimum_license_uses: 1)).to eq([member2, member3])
-      expect(filtered(minimum_license_uses: 3)).to eq([member2, member3])
-      expect(filtered(minimum_license_uses: 5)).to eq([member3])
-      expect(filtered(minimum_license_uses: 5, bought_product_ids: [1])).to eq([])
-      expect(filtered(minimum_license_uses: 5, bought_product_ids: [2])).to eq([member3])
+      product_ids = { 1 => member_with_three.details["purchases"].first["product_id"] }
+
+      expect(filtered(minimum_license_uses: 1)).to eq([member_with_three, member_with_two_products])
+      expect(filtered(minimum_license_uses: 3)).to eq([member_with_three, member_with_two_products])
+      expect(filtered(minimum_license_uses: 5)).to eq([member_with_two_products])
+      expect(filtered(minimum_license_uses: 1)).not_to include(member_without_uses, member_without_license)
+      expect(filtered(minimum_license_uses: 3, bought_product_ids: [product_ids[1]])).to eq([member_with_three])
+    end
+
+    it "reads the CURRENT license use count, not a value copied into the member row" do
+      # Regression guard for the row-lock removal: activations no longer rewrite the
+      # buyer's audience_members row, so a filter that trusted a copy stored in that row
+      # would go stale the moment a buyer activated a license.
+      member = create_member_with_licenses([{ product_id: 1, uses: 1 }])
+      license = Purchase.find(member.details["purchases"].first["id"]).license
+
+      expect(filtered(minimum_license_uses: 5)).to eq([])
+
+      license.update!(uses: 5)
+
+      expect(filtered(minimum_license_uses: 5)).to eq([member])
     end
 
     it "filters by affiliate products" do
@@ -376,5 +394,29 @@ RSpec.describe AudienceMember, :freeze_time do
 
   def create_member(details = {})
     create(:audience_member, seller:, **details.with_indifferent_access.slice(:purchases, :follower, :affiliates))
+  end
+
+  # Builds a real buyer: one product per spec, a successful purchase, and (when uses is
+  # given) a license carrying that use count. The license filter joins the licenses table,
+  # so a details-JSON-only member can never match it.
+  def create_member_with_licenses(specs)
+    email = generate(:email)
+    purchases = specs.map do |spec|
+      product = create(:product, user: seller, is_licensed: true)
+      purchase = create(:purchase, :from_seller, link: product, seller:, email:)
+      create(:license, purchase:, link: product, uses: spec[:uses]) unless spec[:uses].nil?
+      purchase
+    end
+    AudienceMember.find_by!(email:, seller:).tap do |member|
+      member.details["purchases"] = purchases.map do |purchase|
+        {
+          "id" => purchase.id,
+          "product_id" => purchase.link_id,
+          "price_cents" => purchase.price_cents,
+          "created_at" => purchase.created_at.iso8601
+        }
+      end
+      member.save!
+    end
   end
 end

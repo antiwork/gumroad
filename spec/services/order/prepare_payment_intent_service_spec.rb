@@ -731,6 +731,145 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(:checkout_local_method_klarna, connect_seller)
       end
 
+      # Alipay's append gate is the launch flag alone, mirroring its resolver gate. Flag off,
+      # a stale or crafted alipay token must not re-enter the intent's method list — it fails
+      # closed at confirm instead, exactly like a rolled-back klarna token.
+      it "does not append an alipay token to the USD intent when the seller's launch flag is off" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "alipay", alipay: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_alipay_drift").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      end
+
+      # Flag on, the append is the drift safety net: a launched seller's alipay token stays on
+      # the intent even when the re-run resolver's inputs drift and it drops the method.
+      it "appends a launched seller's alipay token to the USD intent when the re-run resolver drops it" do
+        Feature.activate_user(:checkout_local_method_alipay, seller)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "alipay", alipay: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        allow_any_instance_of(Checkout::PaymentMethodResolver).to receive(:resolve).and_return(
+          Checkout::PaymentMethodResolver::Resolution.new(
+            client_confirm_eligible: true,
+            payment_method_types: %w[card link cashapp],
+            eligible_payment_method_types: %w[card link cashapp],
+            fallback_reason: nil,
+            stripe_connect_account_id: nil
+          )
+        )
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_alipay_drift_on").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp alipay])
+      ensure
+        Feature.deactivate_user(:checkout_local_method_alipay, seller)
+      end
+
+      # Stripe ties Alipay presentment currencies to the account's business country and `usd` is
+      # United States only, so a non-US connected account must never carry an alipay entry on this
+      # lane's USD intent — the incompatible entry fails the ENTIRE intent create, taking card
+      # down with it (gumroad-private#1026). The resolver is stubbed to a card-only set here so
+      # the assertion exercises the append clause's own account gate rather than the resolver's.
+      it "does not append an alipay token on a non-US connected account even when its alipay_payments capability is active" do
+        connect_seller = create(:user, check_merchant_account_is_linked: true)
+        connect_account = create(:merchant_account_stripe_connect, user: connect_seller, country: "DE")
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "alipay_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        Feature.activate_user(:checkout_local_method_alipay, connect_seller)
+        connect_product = create(:product, user: connect_seller, price_cents: 10_00)
+        params = { line_items: [{ uid: "unique-id-0", permalink: connect_product.unique_permalink, perceived_price_cents: connect_product.price_cents, quantity: 1 }] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "alipay", alipay: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        allow_any_instance_of(Checkout::PaymentMethodResolver).to receive(:resolve).and_return(
+          Checkout::PaymentMethodResolver::Resolution.new(
+            client_confirm_eligible: true,
+            payment_method_types: %w[card],
+            eligible_payment_method_types: %w[card],
+            fallback_reason: nil,
+            stripe_connect_account_id: connect_account.charge_processor_merchant_id
+          )
+        )
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_alipay_de_acct").perform
+
+        expect(create_args[:payment_method_types]).not_to include("alipay")
+      ensure
+        Feature.deactivate_user(:checkout_local_method_alipay, connect_seller)
+      end
+
+      # The append re-checks the per-account capability intersection for Alipay too: a connected
+      # account that never enabled alipay_payments must not have the method re-appended, because
+      # that would make Stripe reject the ENTIRE intent create, taking card down with it
+      # (gumroad-private#1026).
+      it "does not append an alipay token when the connected account's alipay_payments capability is not active" do
+        connect_seller = create(:user, check_merchant_account_is_linked: true)
+        connect_account = create(:merchant_account_stripe_connect, user: connect_seller)
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "card_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        Feature.activate_user(:checkout_local_method_alipay, connect_seller)
+        connect_product = create(:product, user: connect_seller, price_cents: 10_00)
+        params = { line_items: [{ uid: "unique-id-0", permalink: connect_product.unique_permalink, perceived_price_cents: connect_product.price_cents, quantity: 1 }] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(type: "alipay", alipay: {})
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_alipay_no_cap").perform
+
+        expect(create_args[:payment_method_types]).not_to include("alipay")
+      ensure
+        Feature.deactivate_user(:checkout_local_method_alipay, connect_seller)
+      end
+
       # The append also re-checks the per-account CAPABILITY intersection, not just the
       # resolver's policy sources: for a direct-charge seller whose capability snapshot
       # dropped a launched method (link_payments deactivated after the Element mounted),
