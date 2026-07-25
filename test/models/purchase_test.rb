@@ -5266,12 +5266,20 @@ class PurchaseTest < ActiveSupport::TestCase
   test "AudienceMember removes member when subscription is deactivated" do
     purchase = create_membership_purchase
 
+    # Removal is still synchronous: it has to be, because nothing re-checks it later.
     assert_difference -> { AudienceMember.count }, -1 do
       purchase.subscription.deactivate!
     end
 
-    assert_difference -> { AudienceMember.count }, 1 do
+    # The re-add is deferred to UpdatePurchaseAudienceMemberDetailsJob, so resubscribe!
+    # itself only enqueues; the member comes back when the job runs.
+    UpdatePurchaseAudienceMemberDetailsJob.jobs.clear
+    assert_no_difference -> { AudienceMember.count } do
       purchase.subscription.resubscribe!
+    end
+
+    assert_difference -> { AudienceMember.count }, 1 do
+      UpdatePurchaseAudienceMemberDetailsJob.drain
     end
   end
 
