@@ -12,6 +12,9 @@ class ChargePresentment < ApplicationRecord
   # Enforce all-or-none so a partially persisted quote can never slip through.
   validate :stripe_fx_quote_fields_all_or_none, if: :stripe_processor?
   validates :presentment_total_cents, :presentment_gumroad_amount_cents, numericality: { greater_than_or_equal_to: 0, only_integer: true }
+  # Signed on purpose: negative when smart rounding lowered the buyer's total, positive
+  # when it raised it. Zero on every charge that was not rounded.
+  validates :rounding_delta_cents, numericality: { only_integer: true }
 
   private
     def stripe_processor?

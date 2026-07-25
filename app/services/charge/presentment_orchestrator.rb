@@ -38,7 +38,8 @@ class Charge::PresentmentOrchestrator
   # must not be re-derived by proportional rounding). Quote fields are nullable because
   # a direct-listed-amount presentment has no FX quote by design.
   def self.persist!(charge:, presentment_currency:, presentment_total_cents:, presentment_gumroad_amount_cents:,
-                    allocations:, stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil)
+                    allocations:, stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil,
+                    rounding_delta_cents: 0)
     ActiveRecord::Base.transaction do
       allocations.each { _1.purchase.purchase_presentment&.destroy! }
       charge.charge_presentment&.destroy!
@@ -50,7 +51,8 @@ class Charge::PresentmentOrchestrator
         presentment_gumroad_amount_cents:,
         stripe_fx_quote_id:,
         stripe_fx_quote_expires_at:,
-        fx_rate:
+        fx_rate:,
+        rounding_delta_cents:
       )
 
       allocations.each do |allocation|
@@ -78,7 +80,15 @@ class Charge::PresentmentOrchestrator
     # The buyer must be charged exactly the verified locked total they last saw; this
     # orchestrator never mints a fresh quote of its own.
     presentment_total_cents = locked_quote.presentment_total_cents
-    presentment_gumroad_amount_cents = presentment_cents_for(gumroad_amount_cents, locked_quote.fx_rate)
+    # Gumroad absorbs the whole rounding difference: the seller's proceeds are the
+    # converted canonical amount either way, so a total rounded UP adds to Gumroad's
+    # share and a total rounded DOWN comes out of it. The quote already refused any
+    # round-down larger than the fee Gumroad collects, so this stays non-negative; clamp
+    # to the total as well so a pathological cart can never ask Stripe for a fee above
+    # the payment (which Stripe rejects, and which would degrade the charge to USD).
+    presentment_gumroad_amount_cents = (
+      presentment_cents_for(gumroad_amount_cents, locked_quote.fx_rate) + locked_quote.rounding_delta_cents.to_i
+    ).clamp(0, presentment_total_cents)
 
     allocations = Charge::PresentmentAllocator.new(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:).allocations
     self.class.persist!(
@@ -89,7 +99,8 @@ class Charge::PresentmentOrchestrator
       allocations:,
       stripe_fx_quote_id: locked_quote.id,
       stripe_fx_quote_expires_at: locked_quote.expires_at,
-      fx_rate: locked_quote.fx_rate
+      fx_rate: locked_quote.fx_rate,
+      rounding_delta_cents: locked_quote.rounding_delta_cents.to_i
     )
 
     Result.new(
