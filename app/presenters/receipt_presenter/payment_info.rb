@@ -5,9 +5,10 @@ class ReceiptPresenter::PaymentInfo
   include CurrencyHelper
   include BuyerPresentmentDisplay
 
-  def initialize(chargeable)
+  def initialize(chargeable, presentment_currency: BuyerPresentmentDisplay::PRESENTMENT_CURRENCY_UNDECIDED)
     @chargeable = chargeable
     @orderable = chargeable.orderable
+    @presentment_currency = presentment_currency
   end
 
   def present?
@@ -374,9 +375,7 @@ class ReceiptPresenter::PaymentInfo
     end
 
     def presentment_currency
-      return @_presentment_currency if defined?(@_presentment_currency)
-
-      @_presentment_currency = buyer_presentment_display_currency(chargeable.successful_purchases)
+      presentment_currency_or_decide(chargeable.successful_purchases)
     end
 
     def format_today_amount(amount_cents)

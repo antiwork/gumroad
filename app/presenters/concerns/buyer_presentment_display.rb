@@ -15,7 +15,18 @@
 # total in canonical USD. That pairing predates this module and is what receipts have
 # always shown for sellers who price in a non-USD currency — the fallback deliberately
 # changes nothing about it rather than introducing a new mixed-currency rendering.
+#
+# Making the decision reads every purchase's refunds, so it is made ONCE per document by
+# the presenter that owns the document (ReceiptPresenter) and handed to each section it
+# renders. A section that decided for itself would repeat that read per section — and per
+# item line, which is one read of every purchase for every line on the receipt.
 module BuyerPresentmentDisplay
+  # Handed to a section built without a document-wide decision: the upcoming-call reminder
+  # mail renders a single item section with no receipt around it, and specs exercise
+  # sections in isolation. Such a section decides for itself from the purchases it has.
+  # Deliberately not nil, because nil is a real decision — "fall back to canonical USD".
+  PRESENTMENT_CURRENCY_UNDECIDED = :undecided
+
   private
     # Returns the buyer's currency when the whole document can be stated in it, or nil
     # when it has to fall back to canonical USD. Every amount on the document must be
@@ -27,5 +38,14 @@ module BuyerPresentmentDisplay
 
       currencies = purchases.filter_map(&:buyer_presentment_currency).uniq
       currencies.one? ? currencies.first : nil
+    end
+
+    # The decision this section was handed, or — when it was built without one — the
+    # decision it makes for itself from the purchases given here, cached so a section that
+    # reads the currency more than once reads refunds at most once.
+    def presentment_currency_or_decide(purchases)
+      return @presentment_currency unless @presentment_currency == PRESENTMENT_CURRENCY_UNDECIDED
+
+      @presentment_currency = buyer_presentment_display_currency(purchases)
     end
 end

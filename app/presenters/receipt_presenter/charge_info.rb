@@ -7,11 +7,12 @@ class ReceiptPresenter::ChargeInfo
   include ERB::Util
   include BuyerPresentmentDisplay
 
-  def initialize(chargeable, for_email:, order_items_count:)
+  def initialize(chargeable, for_email:, order_items_count:, presentment_currency: BuyerPresentmentDisplay::PRESENTMENT_CURRENCY_UNDECIDED)
     @for_email = for_email
     @order_items_count = order_items_count
     @chargeable = chargeable
     @seller = chargeable.seller
+    @presentment_currency = presentment_currency
   end
 
   def formatted_created_at
@@ -49,18 +50,11 @@ class ReceiptPresenter::ChargeInfo
   private
     attr_reader :for_email, :order_items_count, :chargeable, :seller
 
-    # Memoized because deciding this walks every purchase's refunds, and
-    # formatted_total_transaction_amount asks for it twice (once to choose the currency,
-    # once to format in it). nil is a meaningful answer here — it means the document
-    # falls back to canonical USD — so the memo is guarded on defined? rather than ||=,
-    # which would re-run the queries every time the answer is "fall back to USD".
     def presentment_currency
-      return @_presentment_currency if defined?(@_presentment_currency)
-
-      @_presentment_currency = buyer_presentment_display_currency(chargeable.successful_purchases)
+      presentment_currency_or_decide(chargeable.successful_purchases)
     end
 
     def presentment_total_cents
-      chargeable.successful_purchases.sum { _1.buyer_presentment_total_cents.to_i }
+      @_presentment_total_cents ||= chargeable.successful_purchases.sum { _1.buyer_presentment_total_cents.to_i }
     end
 end

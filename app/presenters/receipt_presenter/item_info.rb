@@ -11,19 +11,19 @@ class ReceiptPresenter::ItemInfo
 
   attr_reader :product, :purchase
 
-  # document_purchases is every purchase rendered on the same receipt. A receipt's
-  # currency is decided once for the whole document (see BuyerPresentmentDisplay), so an
-  # item line cannot make that call on its own: a charge where only some purchases can
-  # be stated in the buyer's currency prints entirely in canonical USD, and an item line
-  # that independently chose the buyer's currency would sit under a USD total. Defaults
-  # to this purchase alone for the mails that render a single item section without a full
-  # receipt (the upcoming-call reminder).
-  def initialize(purchase, document_purchases: nil)
+  # presentment_currency is the currency the receipt as a whole is stated in, decided once
+  # by ReceiptPresenter (see BuyerPresentmentDisplay) and handed down. An item line cannot
+  # make that call on its own: a charge where only some purchases can be stated in the
+  # buyer's currency prints entirely in canonical USD, and a line that independently chose
+  # the buyer's currency would sit under a USD total. Left undecided by the mails that
+  # render a single item section with no receipt around it (the upcoming-call reminder),
+  # which then decide from this purchase alone.
+  def initialize(purchase, presentment_currency: BuyerPresentmentDisplay::PRESENTMENT_CURRENCY_UNDECIDED)
     @product = purchase.link
     @purchase = purchase
     @seller = purchase.link.user
     @subscription = purchase.subscription
-    @document_purchases = document_purchases || [purchase]
+    @presentment_currency = presentment_currency
   end
 
   def props
@@ -40,7 +40,7 @@ class ReceiptPresenter::ItemInfo
   end
 
   private
-    attr_reader :seller, :subscription, :document_purchases
+    attr_reader :seller, :subscription
 
     # True when this line should be stated in the buyer's currency: the document as a
     # whole settled on one buyer currency, AND this particular purchase has the
@@ -51,7 +51,7 @@ class ReceiptPresenter::ItemInfo
       return @_show_buyer_presentment_amounts if defined?(@_show_buyer_presentment_amounts)
 
       @_show_buyer_presentment_amounts =
-        buyer_presentment_display_currency(document_purchases).present? && purchase.buyer_presentment?
+        presentment_currency_or_decide([purchase]).present? && purchase.buyer_presentment?
     end
 
     def product_props

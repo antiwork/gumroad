@@ -288,13 +288,13 @@ describe ReceiptPresenter::ItemInfo do
               end
             end
 
-            # A receipt is stated in one currency for the whole document. When a sibling
-            # purchase on the same charge cannot be stated in the buyer's currency, the
-            # receipt falls back to canonical USD everywhere — including this item line,
-            # which would otherwise print CAD under a USD total.
-            context "when a sibling purchase on the same receipt has no buyer-presentment amounts" do
-              let(:usd_only_purchase) { create(:purchase, link: product, seller:, merchant_account:, price_cents: 999) }
-              let(:item_info) { described_class.new(purchase, document_purchases: [purchase, usd_only_purchase]) }
+            # A receipt is stated in one currency for the whole document, and that decision
+            # is made once by ReceiptPresenter and handed to each line. When the receipt as
+            # a whole falls back to canonical USD — because a sibling purchase on the same
+            # charge has no buyer-currency amounts — this line follows it rather than
+            # printing CAD under a USD total.
+            context "when the receipt as a whole fell back to canonical USD" do
+              let(:item_info) { described_class.new(purchase, presentment_currency: nil) }
 
               it "states the item line in canonical USD" do
                 expect(props[:general_attributes]).to eq(
@@ -645,7 +645,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(child_purchase.buyer_presentment?).to be(false)
           expect(child_purchase.free_purchase?).to be(true)
 
-          presenter = described_class.new(child_purchase, document_purchases: [bundle_purchase])
+          presenter = described_class.new(child_purchase, presentment_currency: bundle_purchase.buyer_presentment_currency)
           labels = presenter.props[:general_attributes].map { _1[:label] }
           expect(labels).to include("Bundle")
           expect(labels).not_to include("Product price")

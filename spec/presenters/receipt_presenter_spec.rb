@@ -76,7 +76,7 @@ describe ReceiptPresenter do
 
     describe "#items_infos" do
       it "returns an array" do
-        expect(ReceiptPresenter::ItemInfo).to receive(:new).with(chargeable, document_purchases: anything).and_call_original
+        expect(ReceiptPresenter::ItemInfo).to receive(:new).with(chargeable, presentment_currency: anything).and_call_original
         purchases = presenter.items_infos
         expect(purchases.size).to eq(1)
         expect(purchases.first).to be_a(ReceiptPresenter::ItemInfo)
@@ -172,7 +172,7 @@ describe ReceiptPresenter do
 
     describe "#items_infos" do
       it "returns an array" do
-        expect(ReceiptPresenter::ItemInfo).to receive(:new).with(purchase, document_purchases: anything).and_call_original
+        expect(ReceiptPresenter::ItemInfo).to receive(:new).with(purchase, presentment_currency: anything).and_call_original
         purchases = presenter.items_infos
         expect(purchases.size).to eq(1)
         expect(purchases.first).to be_a(ReceiptPresenter::ItemInfo)
@@ -203,6 +203,36 @@ describe ReceiptPresenter do
       it "returns a GifteeManageSubscription object" do
         expect(presenter.giftee_manage_subscription).to be_a(ReceiptPresenter::GifteeManageSubscription)
         expect(presenter.giftee_manage_subscription.send(:chargeable)).to eq(chargeable)
+      end
+    end
+
+    describe "#presentment_currency" do
+      let(:purchase_two) { create(:purchase, link: product, seller:, price_cents: 999) }
+      let(:purchase_three) { create(:purchase, link: product, seller:, price_cents: 499) }
+      let(:charge) { create(:charge, purchases: [purchase, purchase_two, purchase_three]) }
+
+      # Whether a receipt can be stated in the buyer's currency depends on every purchase's
+      # refunds, so asking the question is not free. It is answered once for the document
+      # and handed to every section, including each item line — otherwise a three-item
+      # receipt would read all three purchases' refunds once per section plus once per line.
+      it "asks each purchase once, no matter how many sections and item lines are rendered" do
+        purchases = [purchase, purchase_two, purchase_three]
+        allow(charge).to receive(:successful_purchases).and_return(purchases)
+        allow(charge).to receive(:unbundled_purchases).and_return(purchases)
+        asked = Hash.new(0)
+        purchases.each do |purchase_on_charge|
+          allow(purchase_on_charge).to receive(:buyer_presentment_display?).and_wrap_original do |original|
+            asked[purchase_on_charge.id] += 1
+            original.call
+          end
+        end
+
+        presenter.charge_info.formatted_total_transaction_amount
+        presenter.payment_info.today_payment_attributes
+        presenter.items_infos.each(&:props)
+
+        expect(asked.values.sum).to be_positive
+        expect(asked.values).to all(be <= 1)
       end
     end
   end

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class ReceiptPresenter
+  include BuyerPresentmentDisplay
+
   attr_reader :for_email
 
   # chargeable is either a Purchase or a Charge
@@ -13,12 +15,13 @@ class ReceiptPresenter
     @_charge_info ||= ReceiptPresenter::ChargeInfo.new(
       chargeable,
       for_email:,
-      order_items_count: chargeable.unbundled_purchases.count
+      order_items_count: chargeable.unbundled_purchases.count,
+      presentment_currency:
     )
   end
 
   def payment_info
-    @_payment_info ||= ReceiptPresenter::PaymentInfo.new(chargeable)
+    @_payment_info ||= ReceiptPresenter::PaymentInfo.new(chargeable, presentment_currency:)
   end
 
   def shipping_info
@@ -26,12 +29,8 @@ class ReceiptPresenter
   end
 
   def items_infos
-    # Every item line has to be stated in the currency the receipt as a whole chose, so
-    # each ItemInfo is handed the same set of purchases that decision is made over (the
-    # set PaymentInfo and ChargeInfo use) rather than deciding line by line.
-    document_purchases = chargeable.successful_purchases
     chargeable.unbundled_purchases.map do |purchase_item|
-      ReceiptPresenter::ItemInfo.new(purchase_item, document_purchases:)
+      ReceiptPresenter::ItemInfo.new(purchase_item, presentment_currency:)
     end
   end
 
@@ -49,6 +48,18 @@ class ReceiptPresenter
 
   def giftee_manage_subscription
     @_giftee_manage_subscription ||= ReceiptPresenter::GifteeManageSubscription.new(chargeable)
+  end
+
+  # The single currency this document is stated in, or nil when it falls back to canonical
+  # USD. Decided here, once, and handed to every section the receipt renders — including
+  # each item line — because making the decision reads every purchase's refunds, so a
+  # section deciding for itself would repeat that read once per line on the receipt.
+  #
+  # Memoized on defined? rather than ||= because nil is a real answer we must not recompute.
+  def presentment_currency
+    return @_presentment_currency if defined?(@_presentment_currency)
+
+    @_presentment_currency = buyer_presentment_display_currency(chargeable.successful_purchases)
   end
 
   private

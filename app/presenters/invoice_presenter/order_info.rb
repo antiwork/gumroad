@@ -3,7 +3,6 @@
 class InvoicePresenter::OrderInfo
   include ActionView::Helpers::TextHelper
   include CurrencyHelper
-  include BuyerPresentmentDisplay
 
   attr_reader :charge_info
 
@@ -14,6 +13,9 @@ class InvoicePresenter::OrderInfo
     receipt_presenter = ReceiptPresenter.new(chargeable, for_email: false)
     @payment_info = receipt_presenter.payment_info
     @charge_info  = receipt_presenter.charge_info
+    # An invoice states the same amounts as the receipt, so it reuses the receipt's one
+    # currency decision instead of making it again — see ReceiptPresenter#presentment_currency.
+    @presentment_currency = receipt_presenter.presentment_currency
     @business_vat_id = business_vat_id
     @business_vat_id_country_code = business_vat_id_country_code
     @business_name = business_name
@@ -138,7 +140,7 @@ class InvoicePresenter::OrderInfo
   end
 
   private
-    attr_reader :additional_notes, :business_vat_id, :business_vat_id_country_code, :business_name, :show_reverse_charge_note, :chargeable, :address_fields, :payment_info
+    attr_reader :additional_notes, :business_vat_id, :business_vat_id_country_code, :business_name, :show_reverse_charge_note, :chargeable, :address_fields, :payment_info, :presentment_currency
 
     def purchase_sales_tax_info
       chargeable.purchase_sales_tax_info
@@ -241,7 +243,7 @@ class InvoicePresenter::OrderInfo
     # authority reads off the document.
     def non_refunded_total_payment_value
       purchases = chargeable.successful_purchases
-      currency = buyer_presentment_display_currency(purchases)
+      currency = presentment_currency
 
       if currency.present?
         amount_cents = purchases.sum do |purchase|
