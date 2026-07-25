@@ -373,6 +373,37 @@ describe Api::Internal::AgentMessagesController do
         expect(response.parsed_body["success"]).to be(false)
       end
 
+      it "puts the failure reason and endpoint id in the request's log payload when a confirmed action fails" do
+        # The 422s from this endpoint are a bucket (permission denials, unknown-key rejections, API
+        # validation failures all land here); the reason and endpoint on the lograge payload are
+        # what make them separable by cause in Elasticsearch.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: false, message: "You don't have permission to do that.")
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(payload[:agent_action_failure_reason]).to eq("You don't have permission to do that.")
+        expect(payload[:agent_action_endpoint]).to eq("create_discount")
+      end
+
+      it "does not add failure fields to the log payload when the confirmed action succeeds" do
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: true, message: "Created discount code LAUNCH.")
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to be_successful
+        expect(payload).not_to have_key(:agent_action_failure_reason)
+        expect(payload).not_to have_key(:agent_action_endpoint)
+      end
+
       it "halts on throttle without invoking the action executor" do
         exhaust_agent_request_throttle(throttle_key)
         expect(Ai::StoreAgentActionExecutor).not_to receive(:new)

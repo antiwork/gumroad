@@ -433,27 +433,96 @@ describe Ai::AnthropicClient do
       expect(client).to have_received(:sleep).once
     end
 
-    it "surfaces the unreadable-tool-call error once retries are exhausted on a completed turn" do
-      # If every attempt produces unparseable tool arguments, it's not transient after all — the
-      # caller still gets the honest "unreadable tool call" failure rather than a lossy {} dispatch.
+    it "falls back to a single non-streamed request when every streamed attempt delivers an unreadable tool call" do
+      # OpenRouter's gateway occasionally loses input_json_delta fragments on EVERY streamed
+      # attempt (seen in production across multiple hosts) — retrying the stream re-rolls the same
+      # lossy channel. A buffered response arrives as one body and can't lose fragments, so the
+      # client replays the request once without streaming instead of failing the seller's turn.
       allow(client).to receive(:sleep)
-      stream = sse(
-        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_read" } }],
-        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{not json" } }],
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
         ["content_block_stop", { index: 0 }],
         ["message_delta", { delta: { stop_reason: "tool_use" } }],
       )
-      stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+      streamed = stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered_body = {
+        "content" => [{ "type" => "tool_use", "id" => "toolu_y", "name" => "api_write", "input" => { "endpoint" => "update_product" } }],
+        "stop_reason" => "tool_use",
+      }
+      buffered = stub_request(:post, url)
+        .with(body: hash_including("stream" => false))
+        .to_return(status: 200, body: buffered_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(streamed).to have_been_requested.times(3)
+      expect(buffered).to have_been_requested.once
+      expect(result.tool_uses).to eq([{ id: "toolu_y", name: "api_write", input: { "endpoint" => "update_product" } }])
+      expect(result.stop_reason).to eq("tool_use")
+    end
+
+    it "hands the fallback's regenerated text to the caller's block in one piece" do
+      # A tool-use turn often carries preamble text. Nothing was streamed before the fallback fired
+      # (the fallback is skipped otherwise), so this is the only time the caller sees the text —
+      # deliver it through the same block the stream would have used.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{broken" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered_body = {
+        "content" => [
+          { "type" => "text", "text" => "Updating that now." },
+          { "type" => "tool_use", "id" => "toolu_y", "name" => "api_write", "input" => { "endpoint" => "update_product" } },
+        ],
+        "stop_reason" => "tool_use",
+      }
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => false))
+        .to_return(status: 200, body: buffered_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      chunks = []
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text }
+
+      expect(chunks).to eq(["Updating that now."])
+      expect(result.text).to eq("Updating that now.")
+    end
+
+    it "surfaces the original unreadable-tool-call error when the non-streamed fallback also fails" do
+      # The fallback must not make the failure murkier: if the buffered replay errors too, the
+      # seller-facing error is the same clear "unreadable tool call" message as before the fallback
+      # existed.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_read" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{not json" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      streamed = stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered = stub_request(:post, url)
+        .with(body: hash_including("stream" => false))
+        .to_return(status: 500, body: { error: { message: "server error" } }.to_json)
 
       expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) }
-        .to raise_error(described_class::TransientError, /unreadable tool call/i)
-      expect(a_request(:post, url)).to have_been_made.times(3)
+        .to raise_error(described_class::Error, /unreadable tool call/i)
+      expect(streamed).to have_been_requested.times(3)
+      expect(buffered).to have_been_requested.once
     end
 
     it "does not retry a corrupted tool call once text has already streamed to the caller" do
       # Tool-use turns often stream preamble text before the tool_use block. Once any delta has
-      # reached the caller, a retry would replay the reply from the start on the seller's screen,
-      # so the corruption surfaces immediately instead — exactly one request, no retry.
+      # reached the caller, retrying — streamed OR via the non-streamed fallback — would replay the
+      # reply from the start on the seller's screen, so the corruption surfaces immediately
+      # instead: exactly one request, no retry, no fallback.
       allow(client).to receive(:sleep)
       stream = sse(
         ["content_block_start", { index: 0, content_block: { type: "text" } }],
@@ -468,6 +537,7 @@ describe Ai::AnthropicClient do
       expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_t| } }
         .to raise_error(described_class::Error, /unreadable tool call/i)
       expect(a_request(:post, url)).to have_been_made.times(1)
+      expect(a_request(:post, url).with(body: hash_including("stream" => false))).not_to have_been_made
       expect(client).not_to have_received(:sleep)
     end
 
@@ -513,6 +583,9 @@ describe Ai::AnthropicClient do
 
       expect(result.tool_uses).to eq([])
       expect(result.stop_reason).to eq("max_tokens")
+      # Truncation is the caller's to handle (ask for a smaller change); the non-streamed fallback
+      # is only for transport corruption and must not fire here.
+      expect(a_request(:post, url).with(body: hash_including("stream" => false))).not_to have_been_made
     end
 
     it "raises Error on a stream-level error event" do
