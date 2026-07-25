@@ -64,10 +64,16 @@ class AffiliateEarningsCache
         return cached[:cents]
       end
 
-      compute_within_request(affiliate) || begin
-        refresh_later(affiliate)
-        nil
-      end
+      result = compute_within_request(affiliate)
+      return result unless result.is_a?(Symbol)
+
+      # Only the request that actually attempted the aggregate hands the work to
+      # the background. A request that lost the claim must NOT enqueue: the claim
+      # holder is running the same sum right now, and the job runs it again with
+      # no time limit, so enqueueing here would put a second, unbounded copy of
+      # the expensive scan on the database alongside the bounded one.
+      refresh_later(affiliate) if result == :timed_out
+      nil
     end
 
     # Recomputes with no time limit and stores the result. Called from the
@@ -76,6 +82,18 @@ class AffiliateEarningsCache
       cents = affiliate.total_cents_earned
       write(affiliate, cents)
       cents
+    end
+
+    # What the background job calls. Recomputing is pointless if a fresh value
+    # has landed since the job was enqueued — the job's uniqueness lock only
+    # collapses jobs that are still waiting in the queue, so a run that is
+    # already in flight does not stop another enqueue for the same affiliate.
+    # Checking the cache first keeps that from becoming a second unbounded scan.
+    def refresh_unless_fresh!(affiliate)
+      cached = read(affiliate)
+      return cached[:cents] if cached && !stale?(cached)
+
+      refresh!(affiliate)
     end
 
     def cache_key(affiliate)
@@ -88,13 +106,18 @@ class AffiliateEarningsCache
     end
 
     private
+      # Returns the amount in cents when it managed to compute it, or a symbol
+      # saying why it could not: :claim_lost when another request is already
+      # running the aggregate, :timed_out when the database aborted this
+      # request's attempt. The caller needs to tell those apart because only
+      # :timed_out should put the work on the background queue.
       def compute_within_request(affiliate)
         # Without this claim, every request that arrives while the value is
         # missing would start its own copy of the same expensive aggregate — a
         # cache stampede that ties up as many web workers as there are reloads.
-        # The loser of the race falls through to the background job, which is
-        # deduplicated by affiliate, so the work still happens exactly once.
-        return nil unless claim_computation(affiliate)
+        # The loser of the race renders the calculating state and waits for
+        # whoever holds the claim; it must not queue a duplicate computation.
+        return :claim_lost unless claim_computation(affiliate)
 
         cents = affiliate.total_cents_earned(timeout_ms: REQUEST_TIMEOUT_MS)
         write(affiliate, cents)
@@ -114,7 +137,7 @@ class AffiliateEarningsCache
         # affiliate has just been shown to be too slow for the request path, so
         # the next few requests should go straight to the calculating state
         # rather than each spending another three seconds proving it again.
-        nil
+        :timed_out
       rescue StandardError
         # An unexpected failure is not evidence that the query is slow, so hand
         # the claim back before letting the error propagate.

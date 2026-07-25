@@ -16,6 +16,19 @@ describe RefreshAffiliateEarningsJob do
     expect(Rails.cache.read(AffiliateEarningsCache.cache_key(affiliate))[:cents]).to eq 10
   end
 
+  it "skips the recomputation when a fresh value is already cached" do
+    affiliate = create(:direct_affiliate, affiliate_basis_points: 1000)
+    Rails.cache.clear
+    AffiliateEarningsCache.refresh!(affiliate)
+
+    # The uniqueness lock only collapses queued jobs, so a second run can start
+    # while one is in flight. Re-reading the cache is what keeps that from
+    # becoming a duplicate unbounded scan.
+    expect_any_instance_of(Affiliate).not_to receive(:total_cents_earned)
+
+    described_class.new.perform(affiliate.id)
+  end
+
   it "does nothing when the affiliate no longer exists" do
     expect { described_class.new.perform(0) }.not_to raise_error
   end

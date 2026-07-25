@@ -110,12 +110,12 @@ describe AffiliateEarningsCache do
         Rails.cache.write(described_class.compute_lock_key(affiliate), true, expires_in: described_class::COMPUTE_LOCK_TTL)
       end
 
-      it "does not run a second copy of the aggregate, and leaves it to the background job" do
+      it "does not run a second copy of the aggregate, and does not queue one either" do
         expect_any_instance_of(Affiliate).not_to receive(:total_cents_earned)
 
         expect do
           expect(described_class.fetch(affiliate)).to be_nil
-        end.to change { RefreshAffiliateEarningsJob.jobs.size }.by(1)
+        end.not_to change { RefreshAffiliateEarningsJob.jobs.size }
       end
     end
 
@@ -154,6 +154,33 @@ describe AffiliateEarningsCache do
 
       expect(described_class.refresh!(affiliate)).to eq 139
       expect(Rails.cache.read(described_class.cache_key(affiliate))[:cents]).to eq 139
+    end
+  end
+
+  describe ".refresh_unless_fresh!" do
+    it "skips the aggregate when a fresh value is already cached" do
+      described_class.refresh!(affiliate)
+
+      expect_any_instance_of(Affiliate).not_to receive(:total_cents_earned)
+      expect(described_class.refresh_unless_fresh!(affiliate)).to eq 0
+    end
+
+    it "recomputes when nothing is cached" do
+      create_purchase_earning(21)
+
+      expect(described_class.refresh_unless_fresh!(affiliate)).to eq 21
+      expect(Rails.cache.read(described_class.cache_key(affiliate))[:cents]).to eq 21
+    end
+
+    it "recomputes when the cached value is stale" do
+      create_purchase_earning(21)
+      Rails.cache.write(
+        described_class.cache_key(affiliate),
+        { cents: 500, computed_at: (described_class::STALE_AFTER + 1.minute).ago },
+        expires_in: described_class::CACHE_TTL
+      )
+
+      expect(described_class.refresh_unless_fresh!(affiliate)).to eq 21
     end
   end
 end
