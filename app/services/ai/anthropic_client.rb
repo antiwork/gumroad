@@ -39,6 +39,13 @@ class Ai::AnthropicClient
     end
   end
 
+  # A "completed" streamed turn (stop_reason arrived) whose tool call's JSON still doesn't parse —
+  # the gateway lost or cut off input_json_delta fragments in transit. Distinguished from the other
+  # transient failures because it gets a dedicated recovery: once the streamed retries are
+  # exhausted, #stream_messages replays the request once WITHOUT streaming. A buffered response
+  # body arrives in one piece, so it cannot lose JSON fragments the way the streaming channel can.
+  class UnreadableToolCallError < TransientError; end
+
   API_URL = "https://api.anthropic.com/v1/messages"
   # OpenRouter exposes an endpoint compatible with Anthropic's Messages API — same request and
   # response shapes, same streaming protocol — so routing through it is just a different URL and
@@ -128,64 +135,119 @@ class Ai::AnthropicClient
   # connect, an immediate 529, silence before the first token). Once any delta has reached the
   # caller a retry would replay the reply from the start on the seller's screen, so mid-stream
   # failures surface immediately instead.
+  #
+  # One failure gets an extra recovery step: when every streamed attempt delivered a tool call
+  # with corrupted JSON (the gateway can lose input_json_delta fragments in transit), the request
+  # is replayed once WITHOUT streaming — see #buffered_fallback. This only happens when nothing
+  # was yielded yet, so the caller never sees doubled output.
   # @yieldparam text [String] a chunk of assistant text
   # @return [Result]
   def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, &on_text)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
     yielded_any = false
 
-    with_retries(retryable: -> { !yielded_any }) do
-      text = +""
-      # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
-      # we parse when the block closes.
-      blocks = {}
-      stop_reason = nil
+    begin
+      with_retries(retryable: -> { !yielded_any }) do
+        text = +""
+        # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
+        # we parse when the block closes.
+        blocks = {}
+        stop_reason = nil
 
-      response = http.post(api_url, json: body)
-      raise_for_status!(response, kind: "stream")
+        response = http.post(api_url, json: body)
+        raise_for_status!(response, kind: "stream")
 
-      each_sse_event(response.body) do |event, data|
-        case event
-        when "message_start"
-          # The first stream event names the model actually generating this reply — the only
-          # place a fallback shows up on a stream. Log it so fallback turns are visible in app logs.
-          log_served_model(data.dig("message", "model"))
-        when "content_block_start"
-          index = data["index"]
-          block = data["content_block"] || {}
-          if block["type"] == "tool_use"
-            blocks[index] = { type: "tool_use", id: block["id"], name: block["name"], json: +"" }
-          else
-            blocks[index] = { type: "text" }
-          end
-        when "content_block_delta"
-          delta = data["delta"] || {}
-          case delta["type"]
-          when "text_delta"
-            chunk = delta["text"].to_s
-            next if chunk.empty?
-            text << chunk
-            yielded_any = true
-            on_text&.call(chunk)
-          when "input_json_delta"
+        each_sse_event(response.body) do |event, data|
+          case event
+          when "message_start"
+            # The first stream event names the model actually generating this reply — the only
+            # place a fallback shows up on a stream. Log it so fallback turns are visible in app logs.
+            log_served_model(data.dig("message", "model"))
+          when "content_block_start"
             index = data["index"]
-            blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
+            block = data["content_block"] || {}
+            if block["type"] == "tool_use"
+              blocks[index] = { type: "tool_use", id: block["id"], name: block["name"], json: +"" }
+            else
+              blocks[index] = { type: "text" }
+            end
+          when "content_block_delta"
+            delta = data["delta"] || {}
+            case delta["type"]
+            when "text_delta"
+              chunk = delta["text"].to_s
+              next if chunk.empty?
+              text << chunk
+              yielded_any = true
+              on_text&.call(chunk)
+            when "input_json_delta"
+              index = data["index"]
+              blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
+            end
+          when "message_delta"
+            stop_reason = data.dig("delta", "stop_reason") || stop_reason
+          when "error"
+            raise embedded_error(data, kind: "stream")
           end
-        when "message_delta"
-          stop_reason = data.dig("delta", "stop_reason") || stop_reason
-        when "error"
-          raise embedded_error(data, kind: "stream")
         end
-      end
 
-      Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
-    rescue HTTP::Error => e
-      raise TransientError, "Anthropic network error: #{e.message}"
+        Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
+      rescue HTTP::Error => e
+        raise TransientError, "Anthropic network error: #{e.message}"
+      end
+    rescue UnreadableToolCallError => e
+      # Every streamed attempt "completed" yet delivered a corrupted tool call — retrying the same
+      # lossy channel again wouldn't help (production showed all three attempts failing this way
+      # across different hosts). But once the seller has already seen part of the reply, silently
+      # re-running the request would double their output, so the honest failure surfaces instead.
+      raise if yielded_any
+
+      buffered_fallback(system:, messages:, tools:, max_tokens:, original_error: e, &on_text)
     end
   end
 
   private
     attr_reader :timeout, :model
+
+    # Last-resort recovery for a streamed turn whose tool-call JSON kept arriving corrupted: replay
+    # the request once with stream: false. A buffered response is delivered as a single body, so
+    # there are no input_json_delta fragments for the gateway to lose — this removes the failure
+    # mode instead of re-rolling the dice on the same lossy channel (widening the retry budget was
+    # considered and rejected: production showed all three streamed attempts failing across
+    # different hosts). Exactly one attempt, no extra retries or sleeps, bounded by the same
+    # connect/write/read timeouts as every other request, so a web request can't hang here.
+    #
+    # The assembled text (the model regenerates the whole turn, so there may be preamble text) is
+    # handed to the caller's block in one piece — nothing was streamed before the fallback fired,
+    # so this is the first and only time the caller sees it.
+    #
+    # If the buffered replay fails too, the seller-facing error must stay as clear as before the
+    # fallback existed, so the ORIGINAL unreadable-tool-call error is what surfaces.
+    def buffered_fallback(system:, messages:, tools:, max_tokens:, original_error:, &on_text)
+      Rails.logger.warn("Anthropic streamed tool call unreadable after retries; falling back to a non-streamed request. (#{original_error.message})")
+
+      body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
+      result = begin
+        response = http.post(api_url, json: body)
+        raise_for_status!(response, kind: "request")
+        # JSON::ParserError is caught alongside our own errors because the failure being recovered
+        # from here is a gateway that truncates bodies: the same gateway can just as easily hand
+        # back a cut-off 200 body, and `parse` raises on that. Letting it through would replace the
+        # clear "unreadable tool call" message with a raw parser error, which reads like a bug in
+        # our code rather than the upstream problem it is.
+        parse_message(response.parse)
+      rescue Error, HTTP::Error, JSON::ParserError
+        raise original_error
+      end
+
+      # A buffered replay can hit the token cap itself. The caller treats a "max_tokens" turn as
+      # unusable — it tells the UI to discard whatever was shown and streams its own truncation
+      # notice instead — so yielding the incomplete text here would only flash a partial answer on
+      # the seller's screen a moment before it gets thrown away. Hand back the result and let the
+      # caller decide what to show.
+      on_text&.call(result.text) if result.text.present? && result.stop_reason != "max_tokens"
+      result
+    end
 
     # Run the block, retrying on TransientError. The wait between attempts is the server's own
     # Retry-After hint when it sent one (a rate-limited 429 says exactly how long to back off —
@@ -420,8 +482,10 @@ class Ai::AnthropicClient
     #     now flows through OpenRouter's Anthropic-compatible gateway, which can lose or cut off
     #     input_json_delta fragments while still delivering the closing stop_reason — so a
     #     "completed" turn no longer proves the tool call arrived intact. A fresh request almost
-    #     always succeeds; a genuinely misbehaving model just exhausts the (small) retry budget and
-    #     surfaces the same "unreadable tool call" message.
+    #     always succeeds. Raised as the UnreadableToolCallError subclass so that when the retries
+    #     DON'T succeed (production has shown all three streamed attempts losing fragments), the
+    #     streaming path can recognize this specific failure and replay the request once without
+    #     streaming — a buffered body can't lose fragments — instead of failing the seller's turn.
     def assemble_tool_uses(blocks, stop_reason: nil)
       truncated = stop_reason == "max_tokens"
       blocks.keys.sort.filter_map do |index|
@@ -435,7 +499,7 @@ class Ai::AnthropicClient
           raise TransientError, "Anthropic stream ended mid-tool-call for #{block[:name].presence || "unknown tool"}." if stop_reason.nil?
           # The turn claims to be complete, yet the tool call's JSON is unreadable — most likely the
           # gateway dropped part of it in transit. Retryable: a re-request regenerates the call.
-          raise TransientError, "Anthropic produced an unreadable tool call for #{block[:name].presence || "unknown tool"}."
+          raise UnreadableToolCallError, "Anthropic produced an unreadable tool call for #{block[:name].presence || "unknown tool"}."
         end
         { id: block[:id], name: block[:name], input: }
       end

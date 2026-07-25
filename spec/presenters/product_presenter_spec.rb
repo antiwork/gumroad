@@ -385,6 +385,7 @@ describe ProductPresenter do
                 id: version1.external_id,
                 name: "Version 1",
                 description: "I am version 1",
+                updated_at: version1.updated_at,
                 price_difference_cents: 0,
                 max_purchase_count: nil,
                 integrations: {
@@ -402,6 +403,7 @@ describe ProductPresenter do
                 id: version2.external_id,
                 name: "Version 2",
                 description: "",
+                updated_at: version2.updated_at,
                 price_difference_cents: 100,
                 max_purchase_count: 100,
                 integrations: {
@@ -683,6 +685,7 @@ describe ProductPresenter do
                   id: tier.external_id,
                   name: "Untitled",
                   description: "I am a tier!",
+                  updated_at: Product::StaleContentWriteGuard.snapshot_at(tier),
                   max_purchase_count: 10,
                   customizable_price: true,
                   recurrence_price_values: {
@@ -818,6 +821,7 @@ describe ProductPresenter do
               id: thirty_minutes.external_id,
               name: "30 minutes",
               description: "Shorter call",
+              updated_at: thirty_minutes.updated_at,
               price_difference_cents: 0,
               duration_in_minutes: 30,
               max_purchase_count: nil,
@@ -836,6 +840,7 @@ describe ProductPresenter do
               id: sixty_minutes.external_id,
               name: "60 minutes",
               description: "Longer call",
+              updated_at: sixty_minutes.updated_at,
               price_difference_cents: 0,
               duration_in_minutes: 60,
               max_purchase_count: nil,

@@ -14,7 +14,8 @@ class Exports::PurchaseExportService
     "License Key", "License Key Activation Count", "License Key Enabled?", "Payment Type", "PayPal Transaction ID", "PayPal Fee Amount", "PayPal Fee Currency",
     "Stripe Transaction ID", "Stripe Fee Amount", "Stripe Fee Currency",
     "Purchasing Power Parity Discounted?", "Upsold?", "Sent Abandoned Cart Email?",
-    "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content"
+    "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content",
+    "Buyer Currency", "Buyer Total", "Buyer Refunded Total"
   ].freeze
   TOTALS_COLUMN_NAME = "Totals"
   TOTALS_FIELDS = [
@@ -34,6 +35,7 @@ class Exports::PurchaseExportService
     CardType::IDEAL => "iDEAL",
     CardType::PIX => "Pix",
     CardType::KLARNA => "Klarna",
+    CardType::ALIPAY => "Alipay",
   }.freeze
 
   def initialize(purchases)
@@ -58,6 +60,11 @@ class Exports::PurchaseExportService
     }
     purchases_with_includes = @purchases.includes(
       :link, :variant_attributes, :license, :purchaser, :offer_code, :product_review, :purchase_custom_fields, :upsell_purchase, :merchant_account,
+      # Buyer-currency columns: the presentment row holds the charged total, and the
+      # refunded buyer-currency total is derived in memory from the refund snapshots
+      # (see Purchase#buyer_presentment_refunded_cents) — preload both so neither
+      # column costs a query per purchase.
+      :purchase_presentment, :refunds,
       subscription: [{ true_original_purchase: :product_review }],
       order: { cart: { sent_abandoned_cart_emails: :installment } },
       gift_received: gift_includes,
@@ -207,7 +214,18 @@ class Exports::PurchaseExportService
         "UTM Medium" => utm_link&.utm_medium,
         "UTM Campaign" => utm_link&.utm_campaign,
         "UTM Term" => utm_link&.utm_term,
-        "UTM Content" => utm_link&.utm_content
+        "UTM Content" => utm_link&.utm_content,
+        # Buyer-currency columns. Populated only for sales charged in the buyer's own
+        # currency; blank for canonical-USD sales. Every other amount column above stays
+        # in USD and keeps its existing seller/accounting meaning — these are what the
+        # buyer's card was actually charged, and are deliberately not part of the Totals
+        # row (summing amounts across mixed buyer currencies is a meaningless number).
+        "Buyer Currency" => purchase.buyer_presentment_currency&.upcase,
+        "Buyer Total" => purchase.buyer_presentment_major_units(purchase.buyer_presentment_total_cents),
+        # Left blank when any effective refund predates buyer-currency snapshots: the
+        # derived sum would silently omit it, and an honest empty cell beats a
+        # plausible-but-low number a seller might reconcile against their statement.
+        "Buyer Refunded Total" => (purchase.buyer_presentment_major_units(purchase.buyer_presentment_refunded_cents) unless purchase.buyer_presentment_refunded_cents_incomplete?)
       }
 
       raise "This data is not JSON safe: #{data.inspect}" if !Rails.env.production? && !data.eql?(JSON.load(JSON.dump(data)))

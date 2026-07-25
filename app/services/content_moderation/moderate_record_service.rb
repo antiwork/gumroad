@@ -116,10 +116,20 @@ class ContentModeration::ModerateRecordService
     # publish, but we still leave a note so the flag rate and false-positive
     # rate can be measured against blocked publishes.
     audit_reasons = ai_results.flat_map { |r| r.respond_to?(:audit_reasoning) ? Array(r.audit_reasoning) : [] }
+
+    reasons = flagged.flat_map(&:reasoning)
+
+    # A spam flag on a product that actually delivers something is downgraded
+    # to a note instead of blocking the publish (see
+    # `spam_flag_should_not_block?`).
+    if spam_flag_should_not_block?
+      downgraded, reasons = reasons.partition { |r| spam_reason?(r) }
+      audit_reasons += downgraded.map { |r| "#{r} (not blocked: listing has content attached)" }
+    end
+
     leave_admin_comment(audit_reasons, blocked: false) if audit_reasons.any?
 
-    if flagged.any?
-      reasons = flagged.flat_map(&:reasoning)
+    if reasons.any?
       leave_admin_comment(reasons)
       CheckResult.new(passed: false, reasons: reasons)
     else
@@ -141,6 +151,51 @@ class ContentModeration::ModerateRecordService
 
     def record_moderation_disabled?
       entity_type == :product && record.content_moderation_disabled?
+    end
+
+    def spam_reason?(reason)
+      reason.to_s.start_with?("spam:")
+    end
+
+    # Whether a spam flag should be recorded as a note instead of blocking the
+    # publish.
+    #
+    # The spam preset is a judgment call about intent, and in practice it fires
+    # on the writing STYLE of the info-product genre (an all-caps headline
+    # repeated in the description, benefit bullets with little prose between
+    # them, earnings framing) rather than on anything that makes a listing
+    # actually spam. A seller with a real ebook attached hit this ten times in
+    # fifteen minutes and had no way to tell what to change
+    # (gumroad-private#1358).
+    #
+    # The signal that separates the two cases is whether the listing delivers
+    # anything: keyword-stuffed link farms and fake listings have nothing
+    # attached, while a product with files, readable content, or a
+    # Gumroad-provisioned community invite is selling something real, however
+    # loudly it is written. So for a product that has a deliverable we keep the
+    # flag as a reviewable note and let the publish through; for an empty
+    # listing the flag still blocks, as do all the other presets and the
+    # blocklist, which key on concrete content rather than tone.
+    #
+    # Posts are unaffected: they have no deliverable of their own, so a spam
+    # flag on a post keeps blocking as before.
+    def spam_flag_should_not_block?
+      entity_type == :product && product_has_deliverable?
+    end
+
+    # Whether the buyer receives something for their money. This is the
+    # inverse of the emptiness test `check_off_platform_fulfillment?` performs,
+    # including the record types whose deliverable is not content at all (a
+    # physical product ships, a bundle delivers its component products, a
+    # call/commission is work the seller performs).
+    def product_has_deliverable?
+      return true if record.is_physical? || record.is_bundle?
+      return true if Link::SERVICE_TYPES.include?(record.native_type)
+      return true if gumroad_managed_integration?
+
+      record.alive_product_files.any? ||
+        record.alive_variants.any? { |variant| variant.alive_product_files.any? } ||
+        has_reader_visible_content?(record)
     end
 
     def extract_content
@@ -192,13 +247,8 @@ class ContentModeration::ModerateRecordService
     # that is decided here in code rather than by a model.
     def check_off_platform_fulfillment?
       return false unless entity_type == :product
-      return false if record.is_physical? || record.is_bundle?
-      return false if Link::SERVICE_TYPES.include?(record.native_type)
-      return false if gumroad_managed_integration?
 
-      record.alive_product_files.empty? &&
-        record.alive_variants.none? { |variant| variant.alive_product_files.any? } &&
-        !has_reader_visible_content?(record)
+      !product_has_deliverable?
     end
 
     # Whether the product holds rich content a buyer could actually read.
