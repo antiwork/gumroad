@@ -12,7 +12,6 @@ describe Communities::ChatMessagesController do
 
   include_context "with user signed in as admin for seller"
 
-
   describe "POST create" do
     it_behaves_like "authorize called for action", :post, :create do
       let(:record) { community }
@@ -32,7 +31,9 @@ describe Communities::ChatMessagesController do
         sign_in seller
       end
 
-      it "returns unauthorized response if the :communities feature flag is disabled" do
+      it "returns unauthorized response if community chat is disabled for the product" do
+        product.update!(community_chat_enabled: false)
+
         post :create, params: { community_id: community.external_id, community_chat_message: { content: "Hello" } }
 
         expect(response).to redirect_to dashboard_path
@@ -169,7 +170,9 @@ describe Communities::ChatMessagesController do
         let(:request_params) { { community_id: community.external_id, id: message.external_id, community_chat_message: { content: "Updated" } } }
       end
 
-      it "returns unauthorized response if the :communities feature flag is disabled" do
+      it "returns unauthorized response if community chat is disabled for the product" do
+        product.update!(community_chat_enabled: false)
+
         put :update, params: { community_id: community.external_id, id: message.external_id, community_chat_message: { content: "Updated" } }
 
         expect(response).to redirect_to dashboard_path
@@ -334,7 +337,9 @@ describe Communities::ChatMessagesController do
         let(:request_params) { { community_id: community.external_id, id: message.external_id } }
       end
 
-      it "returns unauthorized response if the :communities feature flag is disabled" do
+      it "returns unauthorized response if community chat is disabled for the product" do
+        product.update!(community_chat_enabled: false)
+
         delete :destroy, params: { community_id: community.external_id, id: message.external_id }
 
         expect(response).to redirect_to dashboard_path

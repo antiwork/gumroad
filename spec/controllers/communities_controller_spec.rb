@@ -15,7 +15,6 @@ describe CommunitiesController, inertia: true do
 
   include_context "with user signed in as admin for seller"
 
-
   describe "GET index" do
     it_behaves_like "authorize called for action", :get, :index do
       let(:record) { Community }
@@ -45,7 +44,9 @@ describe CommunitiesController, inertia: true do
         end
       end
 
-      it "returns unauthorized response if the :communities feature flag is disabled" do
+      it "returns unauthorized response if community chat is disabled for the product" do
+        product.update!(community_chat_enabled: false)
+
         get :index
 
         expect(response).to redirect_to dashboard_path
@@ -143,7 +144,9 @@ describe CommunitiesController, inertia: true do
         end.to raise_error(ActiveRecord::RecordNotFound)
       end
 
-      it "returns unauthorized response if the :communities feature flag is disabled" do
+      it "returns unauthorized response if community chat is disabled for the product" do
+        product.update!(community_chat_enabled: false)
+
         get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
 
         expect(response).to redirect_to dashboard_path

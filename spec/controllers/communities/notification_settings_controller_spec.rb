@@ -12,7 +12,6 @@ describe Communities::NotificationSettingsController do
 
   include_context "with user signed in as admin for seller"
 
-
   describe "PUT update" do
     it_behaves_like "authorize called for action", :put, :update do
       let(:record) { community }
@@ -20,7 +19,7 @@ describe Communities::NotificationSettingsController do
       let(:request_params) { { community_id: community.external_id } }
     end
 
-    it "returns unauthorized response if the :communities feature flag is disabled" do
+    it "returns unauthorized response for a team member with no access to the community" do
       put :update, params: { community_id: community.external_id }
 
       expect(response).to redirect_to dashboard_path
