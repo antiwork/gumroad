@@ -104,6 +104,46 @@ describe AffiliateEarningsCache do
         described_class.fetch(affiliate)
       end.not_to change { RefreshAffiliateEarningsWorker.jobs.size }
     end
+
+    context "when another request is already computing the same affiliate's sum" do
+      before do
+        Rails.cache.write(described_class.compute_lock_key(affiliate), true, expires_in: described_class::COMPUTE_LOCK_TTL)
+      end
+
+      it "does not run a second copy of the aggregate, and leaves it to the background job" do
+        expect_any_instance_of(Affiliate).not_to receive(:total_cents_earned)
+
+        expect do
+          expect(described_class.fetch(affiliate)).to be_nil
+        end.to change { RefreshAffiliateEarningsWorker.jobs.size }.by(1)
+      end
+    end
+
+    it "releases its claim once the value is cached, so a later cold miss can compute again" do
+      create_purchase_earning(10)
+
+      expect(described_class.fetch(affiliate)).to eq 10
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
+
+      Rails.cache.delete(described_class.cache_key(affiliate))
+      expect(described_class.fetch(affiliate)).to eq 10
+    end
+
+    it "holds the claim after a timeout so the next requests skip the slow path" do
+      allow(affiliate).to receive(:total_cents_earned).with(timeout_ms: anything)
+        .and_raise(ActiveRecord::StatementTimeout.new("Query execution was interrupted, maximum statement execution time exceeded"))
+
+      expect(described_class.fetch(affiliate)).to be_nil
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_present
+    end
+
+    it "hands the claim back when the computation fails for a reason other than a timeout" do
+      allow(affiliate).to receive(:total_cents_earned).with(timeout_ms: anything)
+        .and_raise(ActiveRecord::StatementInvalid.new("Unknown column 'nope'"))
+
+      expect { described_class.fetch(affiliate) }.to raise_error(ActiveRecord::StatementInvalid)
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
+    end
   end
 
   describe ".refresh!" do

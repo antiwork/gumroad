@@ -40,6 +40,14 @@ class AffiliateEarningsCache
   # on the first load, short enough that nobody watches a spinner for it.
   REQUEST_TIMEOUT_MS = 3_000
 
+  # How long one request's claim on the cold computation lasts. Only one request
+  # at a time is allowed to run the bounded aggregate for a given affiliate;
+  # everyone else renders the "calculating" state instead of piling identical
+  # multi-second scans onto the database. The window is a little longer than
+  # REQUEST_TIMEOUT_MS so that a claim cannot expire while the query it is
+  # guarding is still running.
+  COMPUTE_LOCK_TTL = 10.seconds
+
   class << self
     # Returns the affiliate's lifetime earnings in cents, or nil when the value
     # is not known yet and is being computed in the background. Callers must
@@ -70,10 +78,24 @@ class AffiliateEarningsCache
       "affiliate/#{affiliate.id}/total_cents_earned"
     end
 
+    # Exposed for specs and for clearing a stuck claim from a console.
+    def compute_lock_key(affiliate)
+      "affiliate/#{affiliate.id}/total_cents_earned/computing"
+    end
+
     private
       def compute_within_request(affiliate)
+        # Without this claim, every request that arrives while the value is
+        # missing would start its own copy of the same expensive aggregate — a
+        # cache stampede that ties up as many web workers as there are reloads.
+        # The loser of the race falls through to the background job, which is
+        # deduplicated by affiliate, so the work still happens exactly once.
+        return nil unless claim_computation(affiliate)
+
         cents = affiliate.total_cents_earned(timeout_ms: REQUEST_TIMEOUT_MS)
         write(affiliate, cents)
+        # The value is cached now, so nothing else needs to be held back.
+        release_computation(affiliate)
         cents
       rescue ActiveRecord::QueryAborted
         # MySQL reports the MAX_EXECUTION_TIME abort as error 3024, which Rails
@@ -83,7 +105,33 @@ class AffiliateEarningsCache
         # parent means "the database gave up on this statement", however it was
         # reported, which is exactly the case we want to move to the background.
         # Any other database error is a real problem and is left to propagate.
+        #
+        # The claim is deliberately left to expire on its own here: this
+        # affiliate has just been shown to be too slow for the request path, so
+        # the next few requests should go straight to the calculating state
+        # rather than each spending another three seconds proving it again.
         nil
+      rescue StandardError
+        # An unexpected failure is not evidence that the query is slow, so hand
+        # the claim back before letting the error propagate.
+        release_computation(affiliate)
+        raise
+      end
+
+      # Returns true for exactly one caller per COMPUTE_LOCK_TTL window.
+      # `unless_exist` maps to memcached's atomic `add`, so the check and the
+      # write cannot interleave between two web workers.
+      def claim_computation(affiliate)
+        Rails.cache.write(
+          compute_lock_key(affiliate),
+          true,
+          expires_in: COMPUTE_LOCK_TTL,
+          unless_exist: true
+        )
+      end
+
+      def release_computation(affiliate)
+        Rails.cache.delete(compute_lock_key(affiliate))
       end
 
       def read(affiliate)
