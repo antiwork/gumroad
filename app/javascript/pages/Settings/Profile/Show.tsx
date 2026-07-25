@@ -25,6 +25,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { postToMobileApp } from "$app/components/Settings/Layout";
 import { ShareButtons } from "$app/components/ShareButtons";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
+import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -443,7 +444,7 @@ export default function SettingsPage() {
             </section>
           ) : tab === "pages" && showPagesTab ? (
             <>
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 p-4! md:p-8!">
                 <Alert role="status" variant="warning">
                   This sections editor is the old way to lay out your profile and is being phased out. It stays here
                   while your profile still uses sections, and it's the last hand-editable profile layout. Customizing
@@ -454,6 +455,7 @@ export default function SettingsPage() {
                   </Link>{" "}
                   to get the prompt for it.
                 </Alert>
+                <AgentSupportFallbackNote subject="Help with my profile page" />
               </section>
               <section aria-label="Profile section editor">
                 <ProfileSectionsForm
