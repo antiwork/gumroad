@@ -272,7 +272,7 @@ class Checkout::StripePaymentPresenter
           currency: method_forced ? method_forced_element_currency : CLIENT_CONFIRM_CURRENCY,
           # The forced-currency listed amount the element mounts with (nil otherwise, where the
           # frontend keeps deriving the amount from the USD total): the cart's listed subtotal
-          # in its own uniform forced currency. It drives method filtering and may be shown by wallets; the
+          # in its own uniform forced currency, quantities included. It drives method filtering and may be shown by wallets; the
           # deferred intent includes the full tax/tip/shipping composition, so rollout QA must
           # verify wallet totals before this surface is broadly enabled.
           presentment_amount_cents: method_forced ? method_forced_element_amount_cents : nil,
@@ -384,8 +384,14 @@ class Checkout::StripePaymentPresenter
       uniform_method_forced_currency(items)
     end
 
+    # The cart's listed subtotal in its uniform forced currency, INCLUDING quantities:
+    # price_cents is the per-unit listed price and quantity is a separate field, so two
+    # copies of a EUR 24 item must read 4800 here. The charge side derives the intent's
+    # amount from each purchase's displayed_price_cents, which is already quantity-inclusive,
+    # so summing per-unit prices would mount the Element with a smaller amount than the
+    # PaymentIntent it confirms against — Stripe rejects that mismatch.
     def method_forced_element_amount_cents
-      items.sum { _1[:price_cents].to_i }
+      items.sum { _1[:price_cents].to_i * (_1[:quantity] || 1).to_i }
     end
 
     def uniform_method_forced_currency(items)

@@ -1122,6 +1122,41 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
+    # price_cents is the per-unit listed price, while the charge side derives the intent's amount
+    # from displayed_price_cents (already quantity-inclusive). Without the multiplication a cart
+    # of two EUR 15 copies would mount the Element with 1500 and confirm against a 3000 intent,
+    # which Stripe rejects — so pin both paths that carry quantity.
+    it "includes quantities in the forced-currency element amount on the buy-now path" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+
+      item = checkout_product_for(product)
+      item[:quantity] = 2
+
+      props = stripe_payment_props(add_products: [item])
+
+      expect(props[:elements_options][:currency]).to eq("eur")
+      expect(props[:elements_options][:presentment_amount_cents]).to eq(3000)
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "includes CartProduct quantities in the forced-currency element amount on the shopping-cart path" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      cart = create(:cart, :guest)
+      create(:cart_product, cart:, product:, price: 1500, quantity: 2)
+
+      props = stripe_payment_props(cart:)
+
+      expect(props[:elements_options][:currency]).to eq("eur")
+      expect(props[:elements_options][:presentment_amount_cents]).to eq(3000)
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
     it "keeps today's USD element behavior for an EUR-priced product when the buyer-currency flags are off" do
       _seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
