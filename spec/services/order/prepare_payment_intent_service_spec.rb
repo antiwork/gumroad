@@ -789,9 +789,12 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(:checkout_local_method_alipay, seller)
       end
 
-      # Unlike Klarna, Alipay has no account-country rule, so a non-US connected account with
-      # the capability active keeps the method. The capability intersection is the whole gate.
-      it "appends an alipay token on a non-US connected account whose alipay_payments capability is active" do
+      # Stripe ties Alipay presentment currencies to the account's business country and `usd` is
+      # United States only, so a non-US connected account must never carry an alipay entry on this
+      # lane's USD intent — the incompatible entry fails the ENTIRE intent create, taking card
+      # down with it (gumroad-private#1026). The resolver is stubbed to a card-only set here so
+      # the assertion exercises the append clause's own account gate rather than the resolver's.
+      it "does not append an alipay token on a non-US connected account even when its alipay_payments capability is active" do
         connect_seller = create(:user, check_merchant_account_is_linked: true)
         connect_account = create(:merchant_account_stripe_connect, user: connect_seller, country: "DE")
         connect_account.update!(stripe_capabilities_snapshot: {
@@ -808,6 +811,16 @@ describe Order::PreparePaymentIntentService, :vcr do
         allow(Stripe::ConfirmationToken).to receive(:retrieve)
           .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
 
+        allow_any_instance_of(Checkout::PaymentMethodResolver).to receive(:resolve).and_return(
+          Checkout::PaymentMethodResolver::Resolution.new(
+            client_confirm_eligible: true,
+            payment_method_types: %w[card],
+            eligible_payment_method_types: %w[card],
+            fallback_reason: nil,
+            stripe_connect_account_id: connect_account.charge_processor_merchant_id
+          )
+        )
+
         charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
         create_args = nil
         allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
@@ -817,15 +830,15 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         described_class.new(order:, params:, confirmation_token: "ctoken_alipay_de_acct").perform
 
-        expect(create_args[:payment_method_types]).to include("alipay")
+        expect(create_args[:payment_method_types]).not_to include("alipay")
       ensure
         Feature.deactivate_user(:checkout_local_method_alipay, connect_seller)
       end
 
-      # The append re-checks the per-account capability intersection for Alipay too: most
-      # connected accounts will NOT have alipay_payments active (Stripe treats platform-requested
-      # alipay_payments as a private preview), and re-appending it would make Stripe reject the
-      # ENTIRE intent create, taking card down with it (gumroad-private#1026).
+      # The append re-checks the per-account capability intersection for Alipay too: a connected
+      # account that never enabled alipay_payments must not have the method re-appended, because
+      # that would make Stripe reject the ENTIRE intent create, taking card down with it
+      # (gumroad-private#1026).
       it "does not append an alipay token when the connected account's alipay_payments capability is not active" do
         connect_seller = create(:user, check_merchant_account_is_linked: true)
         connect_account = create(:merchant_account_stripe_connect, user: connect_seller)

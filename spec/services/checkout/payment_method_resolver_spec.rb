@@ -283,13 +283,19 @@ describe Checkout::PaymentMethodResolver do
             expect(resolve(buyer_country: "US").payment_method_types).to include("alipay")
           end
 
-          it "offers Alipay on a non-US connected account — Alipay has no cross-border account rule of the kind that gates Klarna" do
+          it "drops Alipay on a non-US connected account — this lane's intents are USD and Stripe only allows USD Alipay on US-based accounts, so the entry would fail the whole intent create" do
             connect_account.update!(country: "DE")
 
-            expect(resolve(buyer_country: "US").payment_method_types).to include("alipay")
+            expect(resolve(buyer_country: "US").payment_method_types).not_to include("alipay")
           end
 
-          it "drops Alipay when the account's alipay_payments capability is not active — the expected outcome for most connected accounts, since Stripe treats platform-requested alipay_payments as a private preview" do
+          it "drops Alipay when the connected account's country is unknown — fails closed" do
+            connect_account.update!(country: nil)
+
+            expect(resolve(buyer_country: "US").payment_method_types).not_to include("alipay")
+          end
+
+          it "drops Alipay when the account's alipay_payments capability is not active — a connected account that never enabled Alipay must never see it listed" do
             connect_account.update!(stripe_capabilities_snapshot: {
                                       "capabilities" => { "link_payments" => "active" },
                                       "refreshed_at" => Time.current.iso8601,

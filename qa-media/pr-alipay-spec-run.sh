@@ -32,31 +32,31 @@ echo "# 2. Whole resolver file: which examples fail on the BRANCH vs on"
 echo "#    UNMODIFIED origin/main, on this same (seed-cleared) database."
 echo "################################################################"
 cd /tmp/gr-1339-alipay
+bundle exec rspec spec/services/checkout/payment_method_resolver_spec.rb \
+  --no-color > /tmp/alipay-branch-whole.txt 2>&1
 printf 'branch total : '
-bundle exec rspec spec/services/checkout/payment_method_resolver_spec.rb \
-  --no-color 2>&1 | grep -E "$count"
-bundle exec rspec spec/services/checkout/payment_method_resolver_spec.rb \
-  --no-color 2>&1 | grep "^rspec ./spec" | sed 's/.*rb:/  branch line /; s/ # .*//'
+grep -E "$count" /tmp/alipay-branch-whole.txt
+grep "^rspec ./spec" /tmp/alipay-branch-whole.txt | sed 's/.*rb:/  branch line /; s/ # .*//'
 
 cd /tmp/gr-1339-baseline
+bundle exec rspec spec/services/checkout/payment_method_resolver_spec.rb \
+  --no-color > /tmp/alipay-main-whole.txt 2>&1
 printf 'main total   : '
-bundle exec rspec spec/services/checkout/payment_method_resolver_spec.rb \
-  --no-color 2>&1 | grep -E "$count"
-bundle exec rspec spec/services/checkout/payment_method_resolver_spec.rb \
-  --no-color 2>&1 | grep "^rspec ./spec" | sed 's/.*rb:/  main   line /; s/ # .*//'
+grep -E "$count" /tmp/alipay-main-whole.txt
+grep "^rspec ./spec" /tmp/alipay-main-whole.txt | sed 's/.*rb:/  main   line /; s/ # .*//'
 cd /tmp/gr-1339-alipay
 
 cat <<'NOTE'
 
   Reading of the two lists: main's nine failures (162, 216, 220, 246, 260,
   268, 276, 284, 300) are the same nine on the branch, shifted down by the
-  block I inserted (162, 316, 320, 346, 360, 368, 376, 384, 400). The single
+  block I inserted (162, 322, 326, 352, 366, 374, 382, 390, 406). The single
   extra branch failure, line 263, is my own Alipay forced-currency example --
   the direct twin of main's line 162 Klarna example, failing for the same
   seed-dependent reason. No pre-existing example changed behaviour.
 
   With the seeded rows present (a database that has not just been through
-  db:test:prepare) the whole file is 88/88 green on the branch and 75/75 on
+  db:test:prepare) the whole file is 89/89 green on the branch and 75/75 on
   main. CI seeds properly, so CI is the authority here.
 NOTE
 
@@ -92,4 +92,4 @@ echo
 echo "################################################################"
 echo "# 5. Lint gate on every changed file"
 echo "################################################################"
-bundle exec rubocop $(git diff --name-only $(git merge-base HEAD origin/main) HEAD) 2>&1 | tail -3
+bundle exec rubocop $(git diff --name-only $(git merge-base HEAD origin/main) HEAD | grep '\.rb$') 2>&1 | tail -3

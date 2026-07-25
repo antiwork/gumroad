@@ -143,6 +143,30 @@ class Checkout::PaymentMethodResolver
   # account gate before re-adding a klarna token — capability/account drift between the Element
   # mounting and prepare running must not re-append a method the resolver correctly dropped.
   def self.klarna_supported_merchant_account?(seller)
+    us_based_merchant_account?(seller)
+  end
+
+  # Whether Alipay can be listed on an intent created for this seller's account. Same shape of
+  # rule as Klarna's, for a different reason: Stripe ties each Alipay presentment currency to the
+  # business's country (docs.stripe.com/payments/alipay — "Supported currencies": `usd` maps to
+  # United States only; only `cny` is valid for any country). This lane creates USD intents, so a
+  # non-US connected account cannot carry an alipay entry even when its alipay_payments capability
+  # is genuinely active — and Standard (dashboard) connected accounts can enable Alipay themselves
+  # from any of Stripe's ~40 supported business countries, so "active capability on a non-US
+  # account" is an ordinary state, not an exotic one. The capability snapshot cannot catch it: the
+  # capability really is active; what is invalid is the (method, account country, intent currency)
+  # combination, and an incompatible payment_method_types entry fails the ENTIRE intent create,
+  # taking card down with it (gumroad-private#1026). An unknown country fails closed. Exposed at
+  # class level for the same reason as Klarna's: the previewed-method append in
+  # Order::PreparePaymentIntentService must re-check the SAME account gate.
+  def self.alipay_supported_merchant_account?(seller)
+    us_based_merchant_account?(seller)
+  end
+
+  # Platform-account (Gumroad-managed) sellers always pass — the platform account is US-based.
+  # Direct-charge sellers pass only when their connected account's country is US. Unknown fails
+  # closed.
+  def self.us_based_merchant_account?(seller)
     return true unless seller&.has_stripe_account_connected?
 
     seller.stripe_connect_account&.country == KLARNA_SUPPORTED_BUYER_COUNTRY
@@ -329,15 +353,22 @@ class Checkout::PaymentMethodResolver
     #   - One-time carts only, inherited from RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES having
     #     already stripped alipay from `eligible` on a recurring lifecycle.
     #
-    # For direct-charge (connect) sellers there is no extra account-country gate either: unlike
-    # Klarna's cross-border rule, Alipay has no requirement tying it to a US-based account. The
-    # per-account capability intersection downstream (account_supported_methods) is the whole
-    # gate for them, and it fails closed — Stripe treats platform-requested alipay_payments on
-    # non-dashboard connected accounts as a private preview, so most connected accounts will
-    # resolve to unavailable and simply never see the method.
+    # For direct-charge (connect) sellers the connected account must be US-based, exactly as for
+    # Klarna, though the underlying rule differs: Stripe ties each Alipay presentment currency to
+    # the business's country and `usd` maps to the United States only (only `cny` is valid for any
+    # country). This lane creates USD intents on the connected account, so an alipay entry on a
+    # non-US account's intent is rejected outright — and because an incompatible
+    # payment_method_types entry fails the ENTIRE intent create, that would take card down with it
+    # (the gumroad-private#1026 failure mode). The per-account capability intersection downstream
+    # (account_supported_methods) cannot substitute for this gate: Standard (dashboard) connected
+    # accounts can enable Alipay themselves from any of Stripe's ~40 supported business countries,
+    # so an active alipay_payments capability on a non-US account is an ordinary state — the
+    # capability really is active; it is the (method, account country, intent currency) combination
+    # that is invalid.
     def alipay_methods(eligible)
       return [] unless sellers.one?
       return [] unless eligible.include?(ALIPAY_PAYMENT_METHOD_TYPE)
+      return [] unless alipay_supported_merchant_account?
       return [] unless Feature.active?(ALIPAY_LAUNCH_FEATURE, sellers.first)
 
       [ALIPAY_PAYMENT_METHOD_TYPE]
@@ -348,6 +379,12 @@ class Checkout::PaymentMethodResolver
     # fourth gate. An unknown country fails closed.
     def klarna_supported_merchant_account?
       self.class.klarna_supported_merchant_account?(sellers.first)
+    end
+
+    # Same US-account rule as Klarna's, for the USD-presentment reason documented on
+    # .alipay_supported_merchant_account?. An unknown country fails closed.
+    def alipay_supported_merchant_account?
+      self.class.alipay_supported_merchant_account?(sellers.first)
     end
 
     # The methods (from our policy-resolved set) that the account the PaymentIntent will be created

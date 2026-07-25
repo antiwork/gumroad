@@ -34,10 +34,14 @@ class StripeConnectPaymentMethodAvailabilityService
     "bancontact" => "bancontact_payments",
     "upi" => "upi_payments",
     "sepa_debit" => "sepa_debit_payments",
-    # Stripe treats platform-requested alipay_payments on non-dashboard connected accounts as a
-    # private preview, so most connected accounts will not report this capability as active and
-    # will simply never be offered Alipay. That is the intended fail-closed behaviour: offering a
-    # method the account cannot accept fails the ENTIRE intent create, card included.
+    # Alipay's account gate lives in the resolver (US-based accounts only, because this lane's
+    # intents are USD and Stripe ties Alipay presentment currencies to the account's business
+    # country). This capability entry is the orthogonal check: whether the account has Alipay
+    # activated at all. Standard (dashboard) connected accounts can enable it themselves, so an
+    # active capability is an ordinary state and must not be read as evidence the method is safe
+    # to list — the country gate is what makes it safe. A missing/inactive capability fails
+    # closed here: offering a method the account cannot accept fails the ENTIRE intent create,
+    # card included.
     "alipay" => "alipay_payments",
   }.freeze
 
