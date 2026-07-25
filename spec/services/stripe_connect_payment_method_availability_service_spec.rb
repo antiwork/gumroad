@@ -105,7 +105,7 @@ describe StripeConnectPaymentMethodAvailabilityService do
       expect(service.available_payment_method_types(%w[alipay])).to eq(%w[alipay])
     end
 
-    it "drops Alipay when the account has no alipay_payments capability — the expected outcome for most connected accounts, since Stripe treats platform-requested alipay_payments as a private preview" do
+    it "drops Alipay when the account has no alipay_payments capability — a connected account that never enabled Alipay must never see it listed" do
       merchant_account.update!(stripe_capabilities_snapshot: {
                                  "capabilities" => { "card_payments" => "active" },
                                  "refreshed_at" => Time.current.iso8601,
