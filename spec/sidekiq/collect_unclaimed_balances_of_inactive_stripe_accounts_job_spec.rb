@@ -214,14 +214,15 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
     # Two executions can overlap: the job has no uniqueness lock, so a cron double-fire or a
     # manual enqueue alongside the scheduled run can both read a positive balance before either
     # of them transfers. Stripe collapses the second transfer into the first only if both carry
-    # the same idempotency key.
-    it "sends an idempotency key derived from the account and amount, so two overlapping runs can't both transfer" do
+    # the same key, so what matters is that the key is DETERMINISTIC — derived from the account
+    # and amount rather than random per request, which is what the Stripe client would otherwise
+    # attach on its own.
+    it "sends a deterministic idempotency key derived from the account and amount, so two overlapping runs can't both transfer" do
       us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
       create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
 
-      # Stubbed rather than replayed from a cassette: this example is about the request the job
-      # sends, and it needs a positive balance on BOTH runs to represent two executions racing
-      # each other — which is exactly the state a cassette of a real sequence wouldn't have.
+      # Stubbed rather than replayed from a cassette: this example is about the exact request the
+      # job sends, so the balance is pinned rather than taken from a recording.
       allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
       allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
       allow(Stripe::Account).to receive(:retrieve).and_return(double(type: "custom", created: 5.years.ago.to_i))
@@ -243,11 +244,13 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
     end
 
     # The transfer id is what stops the account from being selected again, so saving it while
-    # leaving the Balance rows behind would strand them on the dead merchant account forever —
-    # no later run would ever look at the account again.
-    it "does not record the transfer id if moving the balances fails" do
+    # leaving Balance rows behind would strand them on the dead merchant account forever — no
+    # later run would ever look at the account again. Two balances, failing on the second, so
+    # the assertion catches a PARTIAL move and not just an unstamped id.
+    it "does not record the transfer id or move any balances if moving one of them fails" do
       us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SO1bwI533JwXS4r", created_at: 2.months.ago)
-      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 60_00, date: Date.new(2023, 1, 1))
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 40_00, date: Date.new(2023, 1, 2))
 
       allow(Stripe::Payout).to receive(:list).and_return(double(data: []))
       allow(Stripe::Charge).to receive(:list).and_return(double(data: []))
@@ -257,15 +260,21 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       )
       allow(Stripe::Transfer).to receive(:create).and_return(double(id: "tr_collected"))
 
-      # The worker dies part-way through reassigning the balances.
-      allow_any_instance_of(Balance).to receive(:update!).and_raise(Sidekiq::Shutdown)
+      # The worker dies part-way through the loop: the first balance moves, the second doesn't.
+      moved = 0
+      allow_any_instance_of(Balance).to receive(:update!).and_wrap_original do |original, *args|
+        moved += 1
+        raise Sidekiq::Shutdown if moved > 1
+        original.call(*args)
+      end
 
       expect { described_class.new.perform }.to raise_error(Sidekiq::Shutdown)
 
-      # Rolled back together: the account stays selectable so the next run can finish the job,
-      # rather than being marked done with its balances stranded.
+      # Rolled back together, INCLUDING the balance that had already moved, so the account stays
+      # selectable and the next run can finish the job rather than leaving it half-collected.
       expect(us_stripe_account.reload.unclaimed_balance_collection_transfer_id).to be_nil
       expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: us_stripe_account.id).sum(:holding_amount_cents)).to eq 100_00
+      expect(us_stripe_account.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 0
     end
 
     # Continues the example above. After the rollback the money has already left the connected
