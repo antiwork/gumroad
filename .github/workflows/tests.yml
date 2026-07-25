@@ -389,11 +389,18 @@ jobs:
           # public read policy and versioning the compose stack sets. The :test service is
           # declared `public: true`, so without `anonymous set public` any future test that
           # fetches blob.url over plain HTTP would 403 here while passing locally.
+          #
+          # `mc anonymous set` and `mc version enable` each take exactly ONE bucket — passing
+          # two makes mc print its usage text and exit 1 — so they run per bucket in a loop.
+          # (`mc mb` does accept several.)
           docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
-            mc alias set local http://localhost:9000 minioadmin minioadmin &&
-            mc mb --ignore-existing local/gumroad-specs local/gumroad-invoices &&
-            mc anonymous set public local/gumroad-specs local/gumroad-invoices &&
-            mc version enable local/gumroad-specs local/gumroad-invoices"
+            set -e
+            mc alias set local http://localhost:9000 minioadmin minioadmin
+            mc mb --ignore-existing local/gumroad-specs local/gumroad-invoices
+            for bucket in gumroad-specs gumroad-invoices; do
+              mc anonymous set public local/\$bucket
+              mc version enable local/\$bucket
+            done"
 
       - name: Wait for Elasticsearch
         run: |
