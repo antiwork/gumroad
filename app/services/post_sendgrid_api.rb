@@ -82,7 +82,7 @@ class PostSendgridApi
       email: creators_from_email_address(@post.seller.username),
       name: from_email_address_name(@post.seller.name)
     )
-    reply_to = SendGrid::Email.new(email: @post.seller.support_or_form_email)
+    reply_to = SendGrid::Email.new(email: @post.reply_to_email)
 
     mail = SendGrid::Mail.new
     mail.from = from

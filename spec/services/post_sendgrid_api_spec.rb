@@ -241,6 +241,27 @@ describe PostSendgridApi, :freeze_time do
     expect(sent_email_content).to include("post body")
   end
 
+  describe "reply-to for a post about one product" do
+    before do
+      @seller.update!(support_email: "account@example.com")
+      product = create(:product, user: @seller, support_email: "product@example.com")
+      @post = create(:product_installment, name: "post title", message: "post body", seller: @seller, link: product)
+    end
+
+    it "uses the product's support email so replies go to the inbox the seller picked for it" do
+      send_default_email
+
+      expect(sent_email[:reply_to]).to include("product@example.com")
+    end
+
+    it "falls back to the account address when the product has no support email of its own" do
+      @post.link.update!(support_email: nil)
+      send_default_email
+
+      expect(sent_email[:reply_to]).to include("account@example.com")
+    end
+  end
+
   it "sets the correct custom_args" do
     purchase = create(:purchase, :from_seller, seller: @seller)
     follower = create(:follower, user: @seller)

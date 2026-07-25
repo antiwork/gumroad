@@ -503,6 +503,16 @@ class Installment < ApplicationRecord
     (link.try(:name) || seller.name || "Creator").to_s + " - " + "Update"
   end
 
+  # Address that replies to this post's email should go to.
+  #
+  # Sellers can set a support email per product (Settings -> Main -> Support), which receipts
+  # already honor. A post that is scoped to one product should behave the same way, so replies
+  # land in the inbox the seller picked for that product. Posts that go to the whole audience
+  # are not tied to a product, so they fall back to the account-level support address.
+  def reply_to_email
+    link&.support_email_or_default.presence || seller.support_or_form_email
+  end
+
   def post_views_count
     installment_events_count.nil? ? 0 : installment_events_count
   end
