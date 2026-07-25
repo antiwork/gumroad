@@ -39,7 +39,8 @@ logger() {
 # BEFORE this mechanism existed (the pre-rollout window). That is the honest answer: on an app
 # without the tracking code, the old clock guard is the only protection there ever was, so
 # reproducing it exactly is neither weaker nor stronger than the behaviour we are replacing.
-# Once the endpoint is live it answers 200/503 and neither window is consulted again.
+# Once the endpoint is live it answers 200/503 on the healthy paths; the windows stay in place
+# for the abnormal ones (a 5xx or an unreachable host still falls back to the fail-safe window).
 #
 # The window tests are shell snippets evaluated with `eval`; each should succeed when the
 # current time is inside its window. The pre-rollout test defaults to the fail-safe test when
@@ -61,10 +62,10 @@ wait_for_healthcheck() {
       sleep 180
     elif [ "$hc_status" = "404" ]; then
       if eval "$prerollout_window_test"; then
-        logger "$label healthcheck not deployed yet (HTTP 404) and we are inside the pre-rollout window — skipping deployment"
+        logger "$label healthcheck absent (HTTP 404) and we are inside the pre-rollout window — skipping deployment"
         exit 0
       fi
-      logger "$label healthcheck not deployed yet (HTTP 404) and we are outside the pre-rollout window — proceeding so the endpoint can ship"
+      logger "$label healthcheck absent (HTTP 404) and we are outside the pre-rollout window — proceeding so the endpoint can ship"
       return 0
     else
       if eval "$failsafe_window_test"; then
@@ -121,13 +122,25 @@ wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15
 #
 # The last argument is the PRE-ROLLOUT window, used only while production still 404s this
 # endpoint (see wait_for_healthcheck). It reproduces the guard this check replaced — the
-# midnight-6am ET block that used to live in .github/workflows/tests.yml — expressed in UTC:
-# ET is UTC-4 on EDT, so ET 00:00-05:59 is UTC 04:00-09:59. Deliberately NOT the wider fail-safe
-# window above: on an app that has none of the tracking code, the old block is exactly the
-# protection that existed, and widening it here would only delay this endpoint's own rollout.
+# midnight-6am ET block that used to live in .github/workflows/tests.yml — and it is written in
+# ET, exactly as that block was (TZ=America/New_York, hours 0-5). Note this one is deliberately
+# NOT in UTC even though the fail-safe window above is: the fail-safe window is read off the
+# UTC cron schedule, which does not move with daylight saving, whereas this window reproduces a
+# human "midnight to 6am local" rule, so hardcoding a UTC offset would silently be wrong for the
+# ~4.5 months of EST (during EST, ET 05:00 is UTC 10:00 — the busiest scheduled hour, when the
+# quarterly financial reports run).
+#
+# It is also deliberately NARROWER than the fail-safe window: on an app that has none of the
+# tracking code, the old block is exactly the protection that existed, and widening it here
+# would only delay this endpoint's own rollout.
+#
+# REMOVE THIS LAST ARGUMENT once the endpoint is confirmed live in production. It exists only to
+# let the endpoint bootstrap itself. Left in place it would apply this narrow window to every
+# FUTURE 404 as well — a removed route, a web-only rollback, an edge 404 — and those are cases
+# where the tracking code IS live, so the wide fail-safe window is the right answer for them.
 wait_for_healthcheck "Long-running job" "https://gumroad.com/healthcheck/long_running_jobs" 40 skip \
   '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }' \
-  '[ "$(date -u +%-H)" -ge 4 ] && [ "$(date -u +%-H)" -le 9 ]'
+  '[ "$(TZ=America/New_York date +%-H)" -le 5 ]'
 
 ECR_REGISTRY=${ECR_REGISTRY}
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
