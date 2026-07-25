@@ -476,6 +476,22 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = product_file.user
   end
 
+  # Tells a seller which video files on one of their products can never play, so
+  # they can fix it themselves by re-uploading. See
+  # NotifySellersOfUnplayableVideoFilesJob for what makes a file unplayable.
+  def unplayable_video_files(product_id, product_file_ids)
+    @product = Link.find(product_id)
+    @seller = @product.user
+    @product_files = @product.product_files.alive.where(id: product_file_ids).in_order
+    return do_not_send if @product_files.empty?
+
+    @subject = if @product_files.size == 1
+      "Action needed: a video in #{@product.name} can't be played"
+    else
+      "Action needed: #{@product_files.size} videos in #{@product.name} can't be played"
+    end
+  end
+
   def affiliates_data(recipient:, tempfile:, filename:)
     @subject = "Here is your affiliates data!"
     @recipient = recipient

@@ -1,0 +1,25 @@
+<%= header_section(@product_files.size == 1 ? "A video in your product can't be played" : "Videos in your product can't be played") %>
+<div>
+  <p>
+    <% if @product_files.size == 1 %>
+      One of the videos in <%= @product.name %> can't be played by your customers. We couldn't read any video from the file after it finished uploading, so we were never able to prepare a playable version of it.
+    <% else %>
+      <%= @product_files.size %> of the videos in <%= @product.name %> can't be played by your customers. We couldn't read any video from these files after they finished uploading, so we were never able to prepare playable versions of them.
+    <% end %>
+  </p>
+  <ul>
+    <% @product_files.each do |product_file| %>
+      <li><%= product_file.display_name.presence || product_file.s3_filename %></li>
+    <% end %>
+  </ul>
+  <p>
+    This usually means the upload was incomplete or the file was damaged before it reached us, which we can't repair on our end. To fix it, re-upload
+    <%= @product_files.size == 1 ? "the file" : "these files" %> to your product. Playing
+    <%= @product_files.size == 1 ? "it" : "them" %> locally first is worth doing, since a file that won't play on your computer won't play for your customers either.
+  </p>
+  <p><%= link_to("Edit your product", edit_link_url(@product), class: "button primary") %></p>
+  <p>Or you can go here: <%= link_to edit_link_url(@product), edit_link_url(@product) %></p>
+  <p>
+    Everything else in this product is unaffected, and your customers can still access the rest of the content.
+  </p>
+</div>

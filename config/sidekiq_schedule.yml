@@ -75,6 +75,10 @@ remove_deleted_files_from_s3:
   cron: "0 10 * * *" # UTC 10:00
   class: RemoveDeletedFilesFromS3Job
   description: Removes deleted files from S3
+notify_sellers_of_unplayable_video_files:
+  cron: "30 14 * * *" # UTC 14:30
+  class: NotifySellersOfUnplayableVideoFilesJob
+  description: Emails sellers about video files that finished analysis with no usable dimensions, so they can re-upload them
 generate_daily_community_chat_recaps:
   cron: "0 10 * * *" # UTC 10:00
   class: TriggerCommunityChatRecapRunJob

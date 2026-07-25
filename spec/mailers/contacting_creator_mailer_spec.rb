@@ -1704,6 +1704,48 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "unplayable_video_files" do
+    before do
+      @user = create(:user, name: "Person")
+      @product = create(:product, user: @user, name: "Crochet course")
+      @product_file = create(:streamable_video, link: @product, display_name: "Lesson 8")
+      @second_product_file = create(:streamable_video, link: @product, display_name: "Lesson 9")
+    end
+
+    it "names the file and links to the product editor" do
+      mail = ContactingCreatorMailer.unplayable_video_files(@product.id, [@product_file.id])
+
+      expect(mail.subject).to eq("Action needed: a video in Crochet course can't be played")
+      expect(mail.to).to eq([@user.email])
+      expect(mail.body.encoded).to include "Lesson 8"
+      expect(mail.body).to have_link("Edit your product", href: edit_link_url(@product))
+    end
+
+    it "lists every file when more than one is unplayable" do
+      mail = ContactingCreatorMailer.unplayable_video_files(@product.id, [@product_file.id, @second_product_file.id])
+
+      expect(mail.subject).to eq("Action needed: 2 videos in Crochet course can't be played")
+      expect(mail.body.encoded).to include "Lesson 8"
+      expect(mail.body.encoded).to include "Lesson 9"
+    end
+
+    it "falls back to the uploaded filename when the file has no display name" do
+      product_file = create(:streamable_video, link: @product)
+
+      mail = ContactingCreatorMailer.unplayable_video_files(@product.id, [product_file.id])
+
+      expect(mail.body.encoded).to include product_file.s3_filename
+    end
+
+    it "does not send when the files have since been deleted" do
+      @product_file.mark_deleted!
+
+      mail = ContactingCreatorMailer.unplayable_video_files(@product.id, [@product_file.id])
+
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+  end
+
   describe "tax_form_1099k" do
     describe "filed form" do
       it "has the correct subject and body with form download url included" do

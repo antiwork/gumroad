@@ -59,6 +59,10 @@ class ProductFile < ApplicationRecord
   after_commit :schedule_rename_in_storage, on: :update, if: :saved_change_to_display_name?
 
   attr_json_data_accessor :epub_section_info
+  # Set when we have told the seller this video can never play (see
+  # NotifySellersOfUnplayableVideoFilesJob), so the daily sweep does not email
+  # them about the same file again.
+  attr_json_data_accessor :unplayable_video_notified_at
   has_s3_fields :url
 
   scope :in_order, -> { order(position: :asc) }
@@ -66,6 +70,17 @@ class ProductFile < ApplicationRecord
   scope :pdf, -> { where(filetype: "pdf") }
   scope :not_external_link, -> { where.not(filetype: "link") }
   scope :archivable, -> { not_external_link.not_stream_only }
+  # Videos that finished analysis without usable dimensions. Streamable#transcodable?
+  # needs both width and height, so with either missing the transcoder always
+  # bails out, no streaming version is ever produced, and the lesson silently
+  # never plays. Nothing in the system retries these, so the only way out is the
+  # seller replacing the upload — which is what we email them about.
+  scope :unplayable_video, -> do
+    alive
+      .where(filegroup: "video")
+      .analyze_completed
+      .where("product_files.width IS NULL OR product_files.height IS NULL")
+  end
 
   def has_alive_duplicate_files?
     ProductFile.alive.where(url:).exists?

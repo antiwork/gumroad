@@ -151,6 +151,11 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.video_transcode_failed(ProductFile.last&.id)
   end
 
+  def unplayable_video_files
+    product_file = ProductFile.last
+    ContactingCreatorMailer.unplayable_video_files(product_file&.link_id, [product_file&.id])
+  end
+
   def subscription_autocancelled
     ContactingCreatorMailer.subscription_autocancelled(Subscription.where.not(failed_at: nil).last&.id)
   end
