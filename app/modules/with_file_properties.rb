@@ -100,12 +100,22 @@ module WithFileProperties
       self.height = movie.height
       self.bitrate = movie.bitrate if movie.bitrate.present?
     end
+
+    # ffprobe can "succeed" without finding a video stream — a truncated or
+    # corrupt upload yields nil width/height (and duration 0) instead of an
+    # exception. Treat that as a failed analysis: streaming needs the height to
+    # pick an HLS preset, so a file without dimensions can never be transcoded
+    # (see Streamable#transcodable?). Marking it analyzed anyway used to leave
+    # the file permanently unplayable with nothing to retry and no signal to the
+    # seller (gumroad-private#1332).
+    return video_analysis_failed("no video stream found (nil width/height)") if width.blank? || height.blank?
+
     self.analyze_completed = true if respond_to?(:analyze_completed=)
     save!
 
     video_file_analysis_completed
   rescue NoMethodError
-    logger.info("Could not analyze movie product file #{id}")
+    video_analysis_failed("probe output was missing expected fields")
   end
 
   def assign_audio_attributes(path)
@@ -192,6 +202,16 @@ module WithFileProperties
   private
     def transcode_video(streamable)
       TranscodeVideoForStreamingWorker.perform_in(10.seconds, streamable.id, streamable.class.name)
+    end
+
+    # A video we could not read metadata from. Leaves analyze_completed unset so
+    # a later re-analyze can still succeed if the source is replaced, and tells
+    # the seller their file is unusable rather than failing silently.
+    def video_analysis_failed(reason)
+      logger.info("Could not analyze movie #{self.class.name} #{id}: #{reason}")
+      save! if changed?
+      transcoding_failed if respond_to?(:transcoding_failed)
+      nil
     end
 
     def video_file_analysis_completed

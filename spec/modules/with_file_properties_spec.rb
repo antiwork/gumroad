@@ -146,6 +146,54 @@ describe WithFileProperties do
         expect(TranscodeVideoForStreamingWorker).to have_enqueued_sidekiq_job(@video_file.id, @video_file.class.name)
       end
     end
+
+    context "when the file has no readable video stream" do
+      # A truncated or corrupt upload: ffprobe exits cleanly but reports no video
+      # stream, so width/height come back nil (verified against streamio-ffmpeg
+      # with an all-zero-bytes .mp4). Without dimensions the file can never be
+      # transcoded, so it must not be recorded as successfully analyzed
+      # (gumroad-private#1332).
+      let(:corrupt_file) { create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/corrupt.mp4") }
+      let(:corrupt_path) { file_fixture("sample.mov").to_s.sub(".mov", ".mp4") }
+
+      before do
+        allow(FFMPEG::Movie).to receive(:new).and_return(
+          double.tap do |movie_double|
+            allow(movie_double).to receive(:duration).and_return(0)
+            allow(movie_double).to receive(:frame_rate).and_return(nil)
+            allow(movie_double).to receive(:height).and_return(nil)
+            allow(movie_double).to receive(:width).and_return(nil)
+            allow(movie_double).to receive(:bitrate).and_return(nil)
+          end
+        )
+      end
+
+      it "does not set the analyze_completed flag" do
+        expect do
+          corrupt_file.assign_video_attributes(corrupt_path)
+        end.not_to change { corrupt_file.reload.analyze_completed? }.from(false)
+
+        expect(corrupt_file.width).to be_nil
+        expect(corrupt_file.height).to be_nil
+      end
+
+      it "does not queue the file for transcoding" do
+        allow(corrupt_file.link).to receive(:auto_transcode_videos?).and_return(true)
+
+        corrupt_file.assign_video_attributes(corrupt_path)
+
+        expect(TranscodeVideoForStreamingWorker.jobs.size).to eq(0)
+        expect(corrupt_file.reload.queue_for_transcoding?).to eq false
+      end
+
+      it "notifies the seller that the video is unusable" do
+        mail = double("mail")
+        expect(mail).to receive(:deliver_later)
+        expect(ContactingCreatorMailer).to receive(:video_transcode_failed).with(corrupt_file.id).and_return(mail)
+
+        corrupt_file.assign_video_attributes(corrupt_path)
+      end
+    end
   end
 
   describe "epubs" do
