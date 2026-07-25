@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class HealthcheckController < ApplicationController
+  # Where #purchases memoizes its recent-purchase count. Named as a public constant so tests can
+  # reset it between examples: the entry outlives a single example, so a test that leaves a warm
+  # count behind would otherwise decide the next test's result.
+  PURCHASES_COUNT_CACHE_KEY = "healthcheck:purchases:successful_last_10_minutes"
+
   def index
     render plain: "healthcheck"
   end
@@ -73,7 +78,7 @@ class HealthcheckController < ApplicationController
 
   def purchases
     threshold = $redis.get(RedisKey.min_successful_purchases_in_last_10_minutes)
-    count = Rails.cache.fetch("healthcheck:purchases:successful_last_10_minutes", expires_in: 30.seconds) do
+    count = Rails.cache.fetch(PURCHASES_COUNT_CACHE_KEY, expires_in: 30.seconds) do
       Purchase.successful.where(created_at: 10.minutes.ago..Time.current).count
     end
     healthy = threshold.present? && count >= threshold.to_i

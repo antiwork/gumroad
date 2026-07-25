@@ -262,6 +262,12 @@ describe HealthcheckController do
   describe "GET 'purchases'" do
     let(:redis_key) { RedisKey.min_successful_purchases_in_last_10_minutes }
 
+    # The action memoizes its count in Rails.cache for 30 seconds, which is longer than the gap
+    # between two examples. Without this reset, an example that warms the entry decides the result
+    # of whichever example the random ordering happens to run next, instead of that example's own
+    # purchase data.
+    before { Rails.cache.delete(HealthcheckController::PURCHASES_COUNT_CACHE_KEY) }
+
     after { $redis.del(redis_key) }
 
     context "when the successful purchases count meets the threshold" do
@@ -314,6 +320,22 @@ describe HealthcheckController do
 
         expect(response.status).to eq(503)
         expect(response.body).to eq("Purchases: service_unavailable")
+      end
+    end
+
+    context "when a count has already been memoized" do
+      before do
+        $redis.set(redis_key, 2)
+        create_list(:purchase, 2, purchase_state: "successful", created_at: 5.minutes.ago)
+        Rails.cache.write(HealthcheckController::PURCHASES_COUNT_CACHE_KEY, 0, expires_in: 30.seconds)
+      end
+
+      it "reuses the memoized count instead of querying again" do
+        expect(Purchase).not_to receive(:successful)
+
+        get :purchases
+
+        expect(response.status).to eq(503)
       end
     end
   end
