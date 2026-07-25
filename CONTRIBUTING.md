@@ -1,10 +1,8 @@
 # Contributing to Gumroad
 
-## We don't accept pull requests on this repository
+## Contributing from a fork
 
-**This repo is not open to outside pull requests.** A PR opened against `antiwork/gumroad` will be closed without review, no matter how good the change is. That is not a judgement on the work — we simply don't run an inbound review queue here.
-
-Contribute like this instead:
+We don't run an inbound review queue on this repo, so external changes come to us a different way:
 
 1. **Fork the repo** and open the pull request on _your own_ fork.
 2. **Email [support@gumroad.com](mailto:support@gumroad.com)** with a link to it.
@@ -22,7 +20,7 @@ The rest of the guidelines below apply too, with the obvious substitutions for w
 
 A fork PR that skips the evidence gets the same answer as one of ours that skips it: it isn't ready. If your change is good and documented well, the fork is not a barrier — it's just where the work lives until we pull it in.
 
-**Issues and bug reports are still welcome here.** This policy is about pull requests only — [file issues](https://github.com/antiwork/gumroad/issues) and bug reports on this repo as normal.
+**Issues and bug reports are still welcome here.** This is about pull requests only — [file issues](https://github.com/antiwork/gumroad/issues) and bug reports on this repo as normal.
 
 Merged fork commits keep your authorship, so contributions show up under your name in the history. Emailing us a link to your fork PR counts as contributing under the [license terms](#license) at the bottom of this guide.
 
@@ -220,7 +218,7 @@ A great bug report includes:
 
 ## Help
 
-- Any issue with label `help wanted` is one we'd welcome a fix for - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22). Work it on your fork and email [support@gumroad.com](mailto:support@gumroad.com) with the link, per [the policy at the top of this guide](#we-dont-accept-pull-requests-on-this-repository) — don't open the PR here.
+- Any issue with label `help wanted` is one we'd welcome a fix for - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22). Work it on your fork and email [support@gumroad.com](mailto:support@gumroad.com) with the link, per [the route at the top of this guide](#contributing-from-a-fork).
 
 ## When you're corrected, fix the docs
 
