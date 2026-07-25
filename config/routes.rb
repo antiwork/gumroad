@@ -19,10 +19,11 @@ Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
   get "/healthcheck/deploy_safe" => "healthcheck#deploy_safe"
-  # Legacy name from when only payout batches held deploys. Kept so the deploy running
-  # during this change's own rollout (its script polls the new path against the currently
-  # deployed app) and any external monitor still get an answer. Safe to delete once no
-  # caller asks for it.
+  # Legacy name from when only payout batches held deploys. The deploy script asks for the
+  # new name first and falls back to this one, which is what makes this change's own first
+  # deploy safe: that deploy's script runs against the still-running old app, which only
+  # serves this path. Kept afterwards for any external monitor still pointed here. Safe to
+  # delete once nothing asks for it.
   get "/healthcheck/payouts" => "healthcheck#deploy_safe"
   get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
   get "/healthcheck/stripe_balance" => "healthcheck#stripe_balance"
