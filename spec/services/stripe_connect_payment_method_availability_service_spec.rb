@@ -95,6 +95,24 @@ describe StripeConnectPaymentMethodAvailabilityService do
 
       expect(service.available_payment_method_types(%w[some_future_method])).to eq([])
     end
+
+    it "answers for Alipay from the alipay_payments capability" do
+      merchant_account.update!(stripe_capabilities_snapshot: {
+                                 "capabilities" => { "alipay_payments" => "active" },
+                                 "refreshed_at" => Time.current.iso8601,
+                               })
+
+      expect(service.available_payment_method_types(%w[alipay])).to eq(%w[alipay])
+    end
+
+    it "drops Alipay when the account has no alipay_payments capability — the expected outcome for most connected accounts, since Stripe treats platform-requested alipay_payments as a private preview" do
+      merchant_account.update!(stripe_capabilities_snapshot: {
+                                 "capabilities" => { "card_payments" => "active" },
+                                 "refreshed_at" => Time.current.iso8601,
+                               })
+
+      expect(service.available_payment_method_types(%w[alipay])).to eq([])
+    end
   end
 
   describe "#cache_present?" do

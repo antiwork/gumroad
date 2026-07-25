@@ -25,14 +25,17 @@ class Checkout::PaymentMethodResolver
   # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
   # Element, so they are not separate types here. us_bank_account (ACH Direct Debit) is a
   # delayed-notification method: it settles asynchronously via the PaymentIntent webhook lifecycle.
-  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account].freeze
+  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account alipay].freeze
   # Afterpay/Clearpay, Affirm, and UPI are one-time, buyer-present only, so a recurring lifecycle
   # drops them. (Recurring carts currently fall back to Lane A before any Stripe method list is
   # built, but the eligible-policy set is logged and intersected by later units, so it must not
   # claim a recurring-incapable method.) Klarna is here as a v1 launch decision, not a Stripe
   # limitation: Stripe supports Klarna on recurring payments, but memberships/preorders are
   # excluded from Klarna's first launch (gumroad-private#933) so the policy set must not claim it.
-  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna].freeze
+  # Alipay is here for the same reason as Klarna: Stripe does support recurring Alipay
+  # payments, but memberships/preorders are out of scope for its first launch
+  # (gumroad-private#1339), so the policy set must not claim it on a recurring cart.
+  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna alipay].freeze
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
   # element flags themselves since Stripe's dashboard payment-method settings are the emergency
@@ -40,7 +43,10 @@ class Checkout::PaymentMethodResolver
   # below; redirect — confirms via the #5664 return page). The EUR forced-currency methods
   # (iDEAL/Bancontact) launch per-method via LOCAL_METHOD_LAUNCH_FEATURES on
   # Checkout::BuyerCurrencyEligibility — see forced_currency_methods below; SEPA stays
-  # unwired until its own launch. ACH Direct Debit (us_bank_account) was launched and
+  # unwired until its own launch. Klarna and Alipay ride the canonical-USD lane behind their own
+  # per-seller launch flags — see KLARNA_LAUNCH_FEATURE / ALIPAY_LAUNCH_FEATURE, neither of which
+  # lives in this constant because they are flag-gated rather than always-on.
+  # ACH Direct Debit (us_bank_account) was launched and
   # then withdrawn platform-wide: it settles in ~4 business days and content only delivers on
   # settlement, which doesn't fit digital products (gumroad-private#1143). Its webhook settlement
   # lifecycle stays wired so in-flight ACH purchases still complete. Sellers who want it anyway
@@ -83,6 +89,15 @@ class Checkout::PaymentMethodResolver
   # options all reject, never render the method). An unknown total also fails closed.
   KLARNA_MIN_USD_CHARGE_CENTS = 1_00
   KLARNA_MAX_USD_CHARGE_CENTS = 4_000_00
+  # Alipay (Chinese digital wallet; redirect-based) launches behind its own per-seller Flipper
+  # flag, the same ramp lever pattern as Klarna and the forced-currency local methods, so it can
+  # ramp and roll back independently (gumroad-private#1339). Like Klarna and unlike
+  # iDEAL/Bancontact/UPI it does NOT force a presentment currency — USD is a supported Alipay
+  # presentment currency for a US business — so it stays out of
+  # Checkout::BuyerCurrencyEligibility's forced-currency registry and rides the existing
+  # canonical-USD element/intent lane.
+  ALIPAY_PAYMENT_METHOD_TYPE = "alipay"
+  ALIPAY_LAUNCH_FEATURE = :checkout_local_method_alipay
   # Methods that only work for US buyers on USD PaymentIntents. ACH Direct Debit debits a US bank
   # account; Cash App Pay is US-locked. These are dropped from the launched set unless GeoIP ∈ {US}.
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
@@ -100,9 +115,10 @@ class Checkout::PaymentMethodResolver
   # PPP method matrix (U13). On a PPP-discounted checkout, only methods whose funding country is
   # verifiable pre-charge (card/wallets via card.country, and later sepa_debit.country) or whose
   # region lock matches the discount country (Cash App Pay / ACH are US-locked, so US-only) may be
-  # offered. Methods with NO Stripe-owned funding country (Klarna/Afterpay/Affirm/PayPal/Link) are
-  # gated out on PPP checkouts: their preview yields nil country, so a PPP purchase would always
-  # fail closed at prepare — don't render a method that cannot complete.
+  # offered. Methods with NO Stripe-owned funding country (Klarna/Afterpay/Affirm/PayPal/Link, and
+  # Alipay — a wallet whose payment method exposes no funding country either) are gated out on PPP
+  # checkouts: their preview yields nil country, so a PPP purchase would always fail closed at
+  # prepare — don't render a method that cannot complete.
   # sepa_debit is wired but dormant until SEPA launches post-FX.
   PPP_VERIFIABLE_PAYMENT_METHOD_TYPES = %w[card sepa_debit].freeze
   # Region-locked methods are allowed on a PPP checkout only when the buyer's (GeoIP) country —
@@ -237,6 +253,12 @@ class Checkout::PaymentMethodResolver
       # cross-border rule that ties Klarna on this lane to USD intents). Mixed listings would put
       # a USD-only-vetted method on a non-USD intent, so the two surfaces stay mutually exclusive.
       launched += klarna_methods(eligible) if forced.empty?
+      # Alipay is withheld from a forced-currency element mount for the same reason as Klarna:
+      # when a forced-currency method survives, the Element mounts in EUR/INR and the deferred
+      # intent is created in that currency, but this gate vets Alipay for the canonical-USD lane
+      # only. Listing a USD-vetted method on a non-USD intent is what makes Stripe reject the
+      # whole intent create, taking card down with it (gumroad-private#1026).
+      launched += alipay_methods(eligible) if forced.empty?
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched -= IN_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == IN_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
@@ -288,6 +310,37 @@ class Checkout::PaymentMethodResolver
       cart_total_usd_cents.present? &&
         cart_total_usd_cents >= KLARNA_MIN_USD_CHARGE_CENTS &&
         cart_total_usd_cents <= KLARNA_MAX_USD_CHARGE_CENTS
+    end
+
+    # Alipay's launch gate: offered only when the seller's own launch flag
+    # (checkout_local_method_alipay, the gumroad-private#1339 ramp lever) is active. As with
+    # Klarna there is deliberately no Stripe-test-mode bypass — the flag is the QA switch too
+    # (activate it for a QA seller on preview/staging), because a test-mode bypass would offer
+    # Alipay on every test-keyed checkout regardless of the ramp decision.
+    #
+    # Alipay needs fewer cart gates than Klarna, and the absences are deliberate:
+    #   - No buyer-country gate. Alipay is not region-locked the way Cash App Pay is: Stripe
+    #     accepts an Alipay payment from any buyer with an Alipay account, and the buyers this
+    #     targets are largely NOT in mainland China (the sizing on gumroad-private#1339 found
+    #     mainland buyer IPs account for 12 sales in 30 days, while Chinese cards are used from
+    #     Hong Kong, Taiwan and Singapore). A GeoIP lock would gate out most of the cohort.
+    #   - No amount window. Stripe publishes no per-country Alipay transaction limits of the
+    #     kind that forced Klarna's fail-closed window.
+    #   - One-time carts only, inherited from RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES having
+    #     already stripped alipay from `eligible` on a recurring lifecycle.
+    #
+    # For direct-charge (connect) sellers there is no extra account-country gate either: unlike
+    # Klarna's cross-border rule, Alipay has no requirement tying it to a US-based account. The
+    # per-account capability intersection downstream (account_supported_methods) is the whole
+    # gate for them, and it fails closed — Stripe treats platform-requested alipay_payments on
+    # non-dashboard connected accounts as a private preview, so most connected accounts will
+    # resolve to unavailable and simply never see the method.
+    def alipay_methods(eligible)
+      return [] unless sellers.one?
+      return [] unless eligible.include?(ALIPAY_PAYMENT_METHOD_TYPE)
+      return [] unless Feature.active?(ALIPAY_LAUNCH_FEATURE, sellers.first)
+
+      [ALIPAY_PAYMENT_METHOD_TYPE]
     end
 
     # Platform-account sellers always pass (the platform account is US-based). Direct-charge
@@ -400,11 +453,13 @@ class Checkout::PaymentMethodResolver
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify
     # (card/wallets, later sepa_debit) or whose region lock matches the buyer's country (Cash App
     # Pay / ACH — already region-gated above, so surviving entries match by construction). Methods
-    # with no Stripe-owned funding country (Link and Klarna today; Afterpay/Affirm/PayPal when they
-    # launch) are dropped: `previewed_country` would return nil and the purchase would fail closed
+    # with no Stripe-owned funding country (Link, Klarna and Alipay today; Afterpay/Affirm/PayPal
+    # when they launch) are dropped: `previewed_country` returns nil and the purchase would fail closed
     # at prepare anyway — never render a method that cannot complete the discounted purchase.
     # Klarna's US buyer gate is a policy country check on GeoIP, not a Stripe-owned funding
     # country, so it does not qualify for the region-locked allowance.
+    # Alipay is dropped by simple omission from both allowlists: it is neither funding-country
+    # verifiable nor region-locked, so no explicit subtraction is needed here.
     def ppp_method_matrix(launched)
       launched & (PPP_VERIFIABLE_PAYMENT_METHOD_TYPES + PPP_REGION_LOCKED_PAYMENT_METHOD_TYPES)
     end

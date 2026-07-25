@@ -8,6 +8,10 @@ describe StripeIntentStatus do
       expect(described_class.client_handled_next_action?("cashapp_handle_redirect_or_display_qr_code", ["card"])).to eq(true)
     end
 
+    it "accepts Alipay's own redirect action type — Stripe.js owns that redirect, so an abandoned one on the return page must not alert" do
+      expect(described_class.client_handled_next_action?("alipay_handle_redirect", ["card"])).to eq(true)
+    end
+
     it "rejects non-redirect action types even when a client-redirect method is offered" do
       expect(described_class.client_handled_next_action?("boleto_display_details", %w[card klarna])).to eq(false)
     end
@@ -24,6 +28,10 @@ describe StripeIntentStatus do
       it "falls back to the offered menu when the attempted method is unknown" do
         expect(described_class.client_handled_next_action?("redirect_to_url", %w[card klarna])).to eq(true)
         expect(described_class.client_handled_next_action?("redirect_to_url", %w[card link])).to eq(false)
+      end
+
+      it "accepts when the attempted method is Alipay — Stripe surfaces either the generic redirect action or alipay_handle_redirect depending on the confirm" do
+        expect(described_class.client_handled_next_action?("redirect_to_url", %w[card alipay], payment_method_type: "alipay")).to eq(true)
       end
 
       it "keeps alerting when the attempted-method lookup FAILED — a lookup failure is not evidence the redirect was client-owned, and the menu fallback would swallow it (cashapp is on nearly every US menu)" do

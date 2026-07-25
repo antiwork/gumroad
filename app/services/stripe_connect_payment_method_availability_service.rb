@@ -34,6 +34,11 @@ class StripeConnectPaymentMethodAvailabilityService
     "bancontact" => "bancontact_payments",
     "upi" => "upi_payments",
     "sepa_debit" => "sepa_debit_payments",
+    # Stripe treats platform-requested alipay_payments on non-dashboard connected accounts as a
+    # private preview, so most connected accounts will not report this capability as active and
+    # will simply never be offered Alipay. That is the intended fail-closed behaviour: offering a
+    # method the account cannot accept fails the ENTIRE intent create, card included.
+    "alipay" => "alipay_payments",
   }.freeze
 
   def initialize(merchant_account)

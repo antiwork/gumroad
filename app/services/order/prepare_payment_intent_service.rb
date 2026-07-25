@@ -516,6 +516,11 @@ class Order::PreparePaymentIntentService
       if presentment.present? && presentment.presentment_currency != Currency::USD
         method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
         method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
+        # Alipay is dropped on a forced-currency intent for the same reason as Klarna: the
+        # resolver's Alipay gate vets the canonical-USD lane only, so it must never ride a
+        # EUR/INR intent. Belt-and-braces, since the resolver already withholds Alipay whenever a
+        # forced-currency method is on the cart (see launched_method_set).
+        method_types -= [Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
       end
 
       # Klarna is also amount-locked: Stripe validates its transaction limits against the
@@ -547,9 +552,10 @@ class Order::PreparePaymentIntentService
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
 
-      # The allowlist mirrors the resolver's four sources of offerable methods: always-on
-      # launched methods, the seller's ACH opt-in, Klarna's launch flag + account gate, and
-      # the forced-currency local methods (their currency gate is below). Anything else —
+      # The allowlist mirrors the resolver's five sources of offerable methods: always-on
+      # launched methods, the seller's ACH opt-in, Klarna's launch flag + account gate,
+      # Alipay's launch flag, and the forced-currency local methods (their currency gate is
+      # below). Anything else —
       # unlaunched, opted-out, or unknown types — must fail closed at confirm rather than
       # ride the intent. The Klarna clause is load-bearing: it unconditionally re-adds
       # klarna for flag-on sellers so the final-amount strip in intent_payment_method_types
@@ -558,11 +564,18 @@ class Order::PreparePaymentIntentService
       # the flag: capability/account drift after the Element mounts must not re-append
       # klarna onto a non-US connected account's intent, where the incompatible entry
       # fails the whole intent create (gumroad-private#1026).
+      # Alipay's clause is the flag alone, because its resolver gate is the flag alone —
+      # no buyer-country lock, no amount window, and no account-country rule (see
+      # Checkout::PaymentMethodResolver#alipay_methods). The per-account capability re-check
+      # below still applies to it, which is what keeps a connected account that cannot accept
+      # Alipay from having the method re-appended onto its intent.
       return nil unless method_type.in?(Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES) ||
         (method_type.in?(Checkout::PaymentMethodResolver::SELLER_OPT_IN_PAYMENT_METHOD_TYPES) && seller.ach_payments_enabled?) ||
         (method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE &&
           Feature.active?(Checkout::PaymentMethodResolver::KLARNA_LAUNCH_FEATURE, seller) &&
           Checkout::PaymentMethodResolver.klarna_supported_merchant_account?(seller)) ||
+        (method_type == Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE &&
+          Feature.active?(Checkout::PaymentMethodResolver::ALIPAY_LAUNCH_FEATURE, seller)) ||
         Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).present?
 
       # The policy allowlist above is not enough on its own: it mirrors the resolver's four
