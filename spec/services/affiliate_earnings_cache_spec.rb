@@ -137,6 +137,20 @@ describe AffiliateEarningsCache do
       expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_present
     end
 
+    it "keeps holding it long enough to cover the background job it handed the work to" do
+      allow(affiliate).to receive(:total_cents_earned).with(timeout_ms: anything)
+        .and_raise(ActiveRecord::StatementTimeout.new("Query execution was interrupted, maximum statement execution time exceeded"))
+
+      expect(described_class.fetch(affiliate)).to be_nil
+
+      # The claim was taken for a three-second attempt, but it now has to outlast
+      # a queue wait plus an unbounded aggregate. If it lapsed at the shorter
+      # window, the next request would start a competing scan.
+      travel_to(described_class::COMPUTE_LOCK_TTL.from_now + 1.second) do
+        expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_present
+      end
+    end
+
     it "hands the claim back when the computation fails for a reason other than a timeout" do
       allow(affiliate).to receive(:total_cents_earned).with(timeout_ms: anything)
         .and_raise(ActiveRecord::StatementInvalid.new("Unknown column 'nope'"))
@@ -176,6 +190,14 @@ describe AffiliateEarningsCache do
 
       expect(described_class.refresh_unless_fresh!(affiliate)).to eq 21
       expect(Rails.cache.read(described_class.cache_key(affiliate))[:cents]).to eq 21
+    end
+
+    it "releases the claim a timed-out request handed over, so requests stop showing the calculating state" do
+      Rails.cache.write(described_class.compute_lock_key(affiliate), true, expires_in: described_class::BACKGROUND_HANDOFF_LOCK_TTL)
+
+      described_class.refresh_unless_fresh!(affiliate)
+
+      expect(Rails.cache.read(described_class.compute_lock_key(affiliate))).to be_nil
     end
 
     it "recomputes when the cached value is stale" do

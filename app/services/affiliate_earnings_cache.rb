@@ -63,6 +63,18 @@ class AffiliateEarningsCache
   # rather than a wrong number.
   BACKGROUND_TIMEOUT_MS = 15.minutes.in_milliseconds
 
+  # How long the claim is held once the work has been handed to the background
+  # job. It has to outlast a queue wait plus a full background recomputation, so
+  # it is derived from BACKGROUND_TIMEOUT_MS rather than picked independently: if
+  # the job is ever allowed longer, this follows. Without it the claim would keep
+  # its three-second window, lapse while the job was still running, and let the
+  # next request take a fresh claim and start a competing scan — the duplicated
+  # work the handoff was meant to move off the request path. The job clears the
+  # claim as soon as it caches a value, so the calculating state never outstays
+  # the unknown number; this expiry is only the recovery path for a job that dies
+  # without writing one.
+  BACKGROUND_HANDOFF_LOCK_TTL = (BACKGROUND_TIMEOUT_MS / 1_000).seconds + 5.minutes
+
   class << self
     # Returns the affiliate's lifetime earnings in cents, or nil when the value
     # is not known yet and is being computed in the background. Callers must
@@ -84,7 +96,14 @@ class AffiliateEarningsCache
       # a far longer limit, so enqueueing here would put a second, much
       # longer-running copy of the expensive scan on the database alongside the
       # bounded one.
-      refresh_later(affiliate) if result == :timed_out
+      if result == :timed_out
+        # Widen the claim to cover the job before enqueuing it. The claim was
+        # sized for a three-second in-request attempt, so it would otherwise
+        # lapse while the job was still queued or running and let the next
+        # request start a competing scan.
+        hold_claim_for_background_job(affiliate)
+        refresh_later(affiliate)
+      end
       nil
     end
 
@@ -108,6 +127,12 @@ class AffiliateEarningsCache
       return cached[:cents] if cached && !stale?(cached)
 
       refresh!(affiliate)
+    ensure
+      # A value is cached now (this run wrote one, or found one already there),
+      # so release the claim a timed-out request may have handed over. Waiting
+      # for it to expire would keep requests on the calculating state for up to
+      # two minutes after the number was ready.
+      release_computation(affiliate)
     end
 
     def cache_key(affiliate)
@@ -147,10 +172,11 @@ class AffiliateEarningsCache
         # reported, which is exactly the case we want to move to the background.
         # Any other database error is a real problem and is left to propagate.
         #
-        # The claim is deliberately left to expire on its own here: this
-        # affiliate has just been shown to be too slow for the request path, so
-        # the next few requests should go straight to the calculating state
-        # rather than each spending another three seconds proving it again.
+        # The claim is deliberately left in place here: this affiliate has just
+        # been shown to be too slow for the request path, so the next few
+        # requests should go straight to the calculating state rather than each
+        # spending another three seconds proving it again. `fetch` widens it to
+        # cover the background job before enqueuing.
         :timed_out
       rescue StandardError
         # An unexpected failure is not evidence that the query is slow, so hand
@@ -173,6 +199,17 @@ class AffiliateEarningsCache
 
       def release_computation(affiliate)
         Rails.cache.delete(compute_lock_key(affiliate))
+      end
+
+      # Rewrites the claim — unconditionally, since we already hold it — with the
+      # longer background window, so it cannot lapse while the job it is covering
+      # is still queued or running.
+      def hold_claim_for_background_job(affiliate)
+        Rails.cache.write(
+          compute_lock_key(affiliate),
+          true,
+          expires_in: BACKGROUND_HANDOFF_LOCK_TTL
+        )
       end
 
       def read(affiliate)
