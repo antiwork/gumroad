@@ -1076,7 +1076,6 @@ class LinksController < ApplicationController
     end
 
     def toggle_community_chat!(enabled)
-      return unless Feature.active?(:communities, current_seller)
       return if [Link::NATIVE_TYPE_COFFEE, Link::NATIVE_TYPE_BUNDLE].include?(@product.native_type)
 
       @product.toggle_community_chat!(enabled)

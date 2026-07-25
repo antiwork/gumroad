@@ -160,7 +160,7 @@ export type Product = {
   default_offer_code_id?: string | null;
   default_offer_code: OfferCode | null;
   public_files: PublicFileWithStatus[];
-  community_chat_enabled: boolean | null;
+  community_chat_enabled: boolean;
   // External ids of variants / content pages the seller explicitly deleted in
   // this editor session (via the respective confirmation modals). Sent with the
   // save payload so the server can tell an intentional deletion apart from an

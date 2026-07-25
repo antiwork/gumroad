@@ -8,9 +8,6 @@ RSpec.describe CommunityChannel do
   let(:product) { create(:product, community_chat_enabled: true, user: seller) }
   let!(:community) { create(:community, seller: seller, resource: product) }
 
-  before do
-    Feature.activate_user(:communities, seller)
-  end
 
   def subscribe_to_channel
     subscribe(community_id: community.external_id)

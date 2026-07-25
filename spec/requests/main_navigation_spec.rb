@@ -48,8 +48,6 @@ describe "Main Navigation", type: :system, js: true do
 
     context "Community link" do
       it "renders the Community link if the logged in seller has an active community" do
-        Feature.activate_user(:communities, user)
-
         product = create(:product, user: user, community_chat_enabled: true)
         create(:community, seller: user, resource: product)
 
@@ -62,7 +60,6 @@ describe "Main Navigation", type: :system, js: true do
 
       it "renders the Community link if the logged in user has an access to a community" do
         seller = create(:user)
-        Feature.activate_user(:communities, seller)
 
         product = create(:product, user: seller, community_chat_enabled: true)
         create(:community, resource: product, seller: seller)
@@ -76,7 +73,6 @@ describe "Main Navigation", type: :system, js: true do
       end
 
       it "renders the Community link if the logged in user is a seller but has no active communities" do
-        Feature.activate_user(:communities, user)
         create(:product, user: user)
 
         visit library_path

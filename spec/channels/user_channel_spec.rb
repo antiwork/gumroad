@@ -8,9 +8,6 @@ RSpec.describe UserChannel do
   let(:product) { create(:product, community_chat_enabled: true, user: seller) }
   let!(:community) { create(:community, seller: seller, resource: product) }
 
-  before do
-    Feature.activate_user(:communities, seller)
-  end
 
   describe "#subscribed" do
     context "when user is not authenticated" do
