@@ -612,6 +612,47 @@ describe ReceiptPresenter::ItemInfo do
         end
       end
 
+      # A bundle receipt lists the bundle's contents as item lines while the buyer was
+      # charged once for the bundle itself. The child rows exist only to name what was
+      # included: they are created with zero price, zero shipping and no tip, and carry
+      # no presentment snapshot of their own. So a bundle child line prints no monetary
+      # amount in any currency, and cannot disagree with the buyer-currency totals below
+      # it. This pins that, because the item line's currency check reads the child's own
+      # snapshot and would otherwise be a plausible source of a mixed-currency receipt.
+      context "when the receipt is stated in the buyer's currency and contains a bundle" do
+        let(:bundle) { create(:product, user: seller, is_bundle: true, name: "Bundle product") }
+        let(:bundle_purchase) { create(:purchase, link: bundle, seller:, merchant_account:, price_cents: 2_000) }
+        let!(:product) { create(:product, user: seller, name: "Product") }
+        let!(:bundle_product) { create(:bundle_product, bundle:, product:) }
+
+        before do
+          charge = create(:charge, seller:, purchases: [bundle_purchase])
+          charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 26_00)
+          create(:purchase_presentment,
+                 purchase: bundle_purchase,
+                 charge_presentment:,
+                 presentment_price_cents: 26_00,
+                 presentment_tip_cents: 0,
+                 presentment_seller_tax_cents: 0,
+                 presentment_gumroad_tax_cents: 0,
+                 presentment_shipping_cents: 0,
+                 presentment_total_cents: 26_00)
+          bundle_purchase.create_artifacts_and_send_receipt!
+        end
+
+        it "prints no monetary amount on the bundle's child item lines" do
+          child_purchase = bundle_purchase.product_purchases.last
+          expect(child_purchase.buyer_presentment?).to be(false)
+          expect(child_purchase.free_purchase?).to be(true)
+
+          presenter = described_class.new(child_purchase, document_purchases: [bundle_purchase])
+          labels = presenter.props[:general_attributes].map { _1[:label] }
+          expect(labels).to include("Bundle")
+          expect(labels).not_to include("Product price")
+          expect(labels).not_to include("Tip")
+        end
+      end
+
       context "when the purchase is a bundle gift receiver purchase" do
         let(:bundle) { create(:product, user: seller, is_bundle: true, name: "Bundle product") }
         let(:gift) { create(:gift, gift_note: "Hope you like it!", giftee_email: "giftee@example.com", link: bundle) }
