@@ -19,6 +19,11 @@ class CardType
   # the database instead of requiring a walk of Stripe's API to classify them.
   UPI = "upi"
   IDEAL = "ideal"
+  # Pix, Brazil's instant-payment scheme. Also not a card network: the buyer pays from their
+  # Brazilian bank account by scanning a QR code, so recording "pix" here is what keeps the
+  # purchase's real payment method queryable (and stops receipts from promising a credit-card
+  # statement line that will never appear).
+  PIX = "pix"
   # Buy-now-pay-later method offered through the same Payment Element. Not a card network
   # either: Klarna bills the buyer through their own Klarna account, so the purchase's
   # payment method has to be recorded here to stay queryable.

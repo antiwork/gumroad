@@ -28,6 +28,15 @@ class Purchase < ApplicationRecord
   GUMROAD_FIXED_FEE_CENTS = 50
   PROCESSOR_FEE_PER_THOUSAND = 29
   PROCESSOR_FIXED_FEE_CENTS = 30
+  # IOF is a Brazilian consumer tax on any transaction that involves foreign exchange, currently
+  # 3.5% of the transaction value. Every Pix payment to Gumroad is cross-border (we are domiciled
+  # outside Brazil), so it always applies. Gumroad tells Stripe to bill the buyer exactly the
+  # price they agreed to (`amount_includes_iof=always`, see
+  # Order::PreparePaymentIntentService#pix_payment_method_options) and Stripe deducts the IOF from
+  # what settles to us — so the cost has to be charged back to the seller as a fee component, or
+  # it would silently come out of Gumroad's own margin instead (the decision on
+  # gumroad-private#1305 was that the seller absorbs it).
+  PIX_IOF_FEE_PER_THOUSAND = 35
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
 
@@ -4334,7 +4343,18 @@ class Purchase < ApplicationRecord
 
     def calculate_gumroad_fee_per_thousand
       calculate_custom_fee_per_thousand
-      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) +
+        (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0) +
+        pix_iof_fee_per_thousand
+    end
+
+    # The Brazilian IOF tax Gumroad absorbs on the buyer's behalf and recovers from the seller
+    # (see PIX_IOF_FEE_PER_THOUSAND). Keyed on card_type because that is where the purchase records
+    # which payment method it is being paid with — set from the buyer's Payment Element selection at
+    # intent-prepare time, before fees are computed, and re-confirmed from Stripe's own
+    # payment_method_details once the charge exists. Only Pix carries it; every other method reads 0.
+    def pix_iof_fee_per_thousand
+      card_type == CardType::PIX ? PIX_IOF_FEE_PER_THOUSAND : 0
     end
 
     def calculate_custom_fee_per_thousand

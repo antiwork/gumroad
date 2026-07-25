@@ -101,6 +101,17 @@ export const paymentElementBillingDetailsCollection = (
   return "form";
 };
 
+// Payment methods Stripe refuses to confirm without `billing_details.name`. Checkout only asks
+// for the full name when it needs it (digital carts don't), so selecting one of these rows has
+// to require it — otherwise the confirm fails server-side with `parameter_missing` and the buyer
+// sees a generic error they can't act on (the July 2026 UPI ramp-down, gumroad-private#933).
+// Pix additionally needs the buyer's Brazilian tax id (CPF/CNPJ), but that is a Pix-specific
+// field the Payment Element renders and collects inside its own pane, not part of
+// billing_details, so checkout has no field to add for it.
+const PAYMENT_ELEMENT_TYPES_REQUIRING_FULL_NAME = ["upi", "pix"];
+export const paymentElementRequiresFullName = (type: string) =>
+  PAYMENT_ELEMENT_TYPES_REQUIRING_FULL_NAME.includes(type);
+
 // Client-side details about the wallet that paid through the Payment Element, read off the
 // tokenized PaymentMethod (or ConfirmationToken preview). The billing address feeds the
 // tax-location logic in checkout (the wallet sheet is the buyer's source of truth for wallet

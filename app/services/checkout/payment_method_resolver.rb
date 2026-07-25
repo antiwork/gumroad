@@ -92,6 +92,22 @@ class Checkout::PaymentMethodResolver
   # domestic instant-payment rails, so the buyer needs an account at a Brazilian bank. Unknown
   # GeoIP fails safe.
   BR_LOCKED_PAYMENT_METHOD_TYPES = %w[pix].freeze
+  PIX_PAYMENT_METHOD_TYPE = "pix"
+  # Stripe's Pix transaction window: at least 0.50 BRL, at most 3,000 USD per payment
+  # (https://docs.stripe.com/payments/pix#transaction-limits). The floor is in the presentment
+  # currency (BRL, the only currency Pix charges in) and the ceiling is quoted in USD, which is
+  # also the currency Gumroad's canonical cart total is already in — so each bound is checked
+  # against the figure that is natively in its own currency, with no FX conversion invented here.
+  # Enforced at intent-prepare time against the FINAL charged amounts rather than in this resolver:
+  # a BRL cart has no USD item total for the resolver to read (the presenter only passes one for
+  # USD-priced carts), and Stripe validates the intent's final amount anyway. See
+  # Order::PreparePaymentIntentService#block_pix_amount_outside_window.
+  PIX_MIN_BRL_CHARGE_CENTS = 50
+  PIX_MAX_USD_CHARGE_CENTS = 3_000_00
+  # Stripe also caps a single buyer at 10,000 USD of Pix payments per month with one business.
+  # That is a property of the buyer's history, not of this cart, so no cart-shaped gate can see
+  # it: such a payment fails at confirm and surfaces through the payment_intent.payment_failed
+  # webhook like any other decline.
   # Never gated by the per-account capability check on direct-charge sellers. Card processing is
   # the baseline capability of any chargeable Stripe account — an account that truly can't take
   # cards is unusable no matter what we render, and an empty method list would just break the

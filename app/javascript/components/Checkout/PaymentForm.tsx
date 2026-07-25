@@ -19,6 +19,7 @@ import {
   createPaymentElementConfirmationToken,
   isWalletPaymentElementType,
   paymentElementBillingDetailsCollection,
+  paymentElementRequiresFullName,
   preparePaymentRequestPaymentMethodData,
 } from "$app/data/card_payment_method_data";
 import {
@@ -808,16 +809,14 @@ const CreditCardContent = ({
     (async () => {
       if (!useSavedCard && usesPaymentElement && !paymentElementReady) return;
 
-      // Selections in "element-address" collection mode (UPI on digital carts — see
-      // paymentElementBillingDetailsCollection) confirm with the checkout form's name plus the
-      // element-collected street address. Checkout doesn't normally require the full name for
-      // digital purchases, but Stripe rejects these confirms without billing_details.name — so
-      // require it here, with a pointed message instead of a late generic Stripe failure.
+      // Some payment methods (UPI, Pix — see paymentElementRequiresFullName) cannot be confirmed
+      // without billing_details.name, which checkout doesn't otherwise require for digital
+      // purchases. Ask for it here, with a pointed message, instead of letting Stripe reject the
+      // confirm later with a generic failure the buyer can't act on.
       if (
         !useSavedCard &&
         usesPaymentElement &&
-        paymentElementBillingDetailsCollection(paymentElementTypeRef.current, hasShipping(state)) ===
-          "element-address" &&
+        paymentElementRequiresFullName(paymentElementTypeRef.current) &&
         !state.fullName
       ) {
         showAlert("Please enter your full name — it's required for this payment method.", "warning");

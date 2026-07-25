@@ -32,6 +32,7 @@ class Exports::PurchaseExportService
     CardType::PAYPAL => "PayPal",
     CardType::UPI => "UPI",
     CardType::IDEAL => "iDEAL",
+    CardType::PIX => "Pix",
     CardType::KLARNA => "Klarna",
   }.freeze
 

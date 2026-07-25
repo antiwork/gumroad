@@ -37,6 +37,15 @@ class StripeIntentStatus
   # Server-confirmed flows (subscription renewals, off-session charges) only ever create
   # card/mandate intents, so they never carry these methods and keep alerting.
   CLIENT_REDIRECT_PAYMENT_METHOD_TYPES = %w[ideal bancontact klarna cashapp afterpay_clearpay affirm].freeze
+  # Next-action types meaning "the buyer must now go and pay somewhere else": Stripe.js showed a QR
+  # code / copy-paste key, and the buyer pays in their own banking app (Pix). The intent
+  # legitimately stays in requires_action until they do, or until the key expires — so the browser
+  # finishing its confirm call is NOT evidence the payment failed. Finalizers must leave such a
+  # purchase in progress and report it as pending (see Purchase::FinalizeConfirmedChargeService);
+  # the payment_intent.succeeded / payment_intent.payment_failed webhooks decide the real outcome.
+  # Cash App Pay's QR action is deliberately NOT here: its QR is scanned during checkout and
+  # resolves in the same session, so a returning confirm really does mean the buyer gave up.
+  ASYNCHRONOUS_CUSTOMER_INITIATED_ACTION_TYPES = ["pix_display_qr_code"].freeze
 
   # Sentinel returned by attempted_payment_method_type when a payment method IS attached but
   # the lookup failed (Stripe error after retries). It is deliberately distinct from nil ("no
