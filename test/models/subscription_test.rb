@@ -4076,6 +4076,20 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_sidekiq_enqueued(UpdatePurchaseAudienceMemberDetailsWorker, args: [@subscription.original_purchase.id])
   end
 
+  # Deferring the audience-member write means an enqueued update can now run AFTER the
+  # subscription was deactivated and its audience member removed. The job must not resurrect
+  # a member who no longer belongs to the audience, which it doesn't because
+  # add_to_audience_member_details re-checks eligibility against current state.
+  test "the deferred audience member update does not resurrect a deactivated subscriber" do
+    @subscription.cancel_effective_immediately!
+    original_purchase = @subscription.original_purchase
+    assert_nil AudienceMember.find_by(email: original_purchase.email, seller: original_purchase.seller)
+
+    UpdatePurchaseAudienceMemberDetailsWorker.new.perform(original_purchase.id)
+
+    assert_nil AudienceMember.find_by(email: original_purchase.email, seller: original_purchase.seller)
+  end
+
   test "#resubscribe! creates a subscription_event of type restarted" do
     @subscription.cancel_effective_immediately!
     assert_changes -> { @subscription.reload.subscription_events.restarted.count }, from: 0, to: 1 do
