@@ -183,7 +183,27 @@ class ContentModeration::ModerateRecordService
 
       record.alive_product_files.empty? &&
         record.alive_variants.none? { |variant| variant.alive_product_files.any? } &&
-        !record.has_content?
+        !has_reader_visible_content?(record)
+    end
+
+    # Whether the product holds rich content a buyer could actually read.
+    #
+    # Deliberately NOT `Link#has_content?`: that helper counts a rich content
+    # record as content whenever its description array is non-empty, and the
+    # product editor persists a blank placeholder paragraph for a content page
+    # the seller never typed into. Under `has_content?` a completely empty
+    # listing therefore looks like it has content and would skip this preset
+    # entirely — which is one of the exact shapes the preset exists to catch.
+    # `RichContent#has_editor_content?` is the predicate that knows a bare
+    # paragraph is not readable content, while treating a page the seller gave a
+    # title as real work (the title renders in the buyer's page list).
+    #
+    # Both levels are checked regardless of which one currently owns the
+    # content, so a listing whose real pages live on a variant/tier keeps the
+    # preset off just as a product-level page does.
+    def has_reader_visible_content?(product)
+      product.alive_rich_contents.any?(&:has_editor_content?) ||
+        product.alive_variants.any? { |variant| variant.alive_rich_contents.any?(&:has_editor_content?) }
     end
 
     # `blocked: false` records a flag that did not stop the publish (e.g. a

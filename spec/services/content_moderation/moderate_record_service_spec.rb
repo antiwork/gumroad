@@ -177,6 +177,27 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           .with(hash_including(check_off_platform_fulfillment: false))
       end
 
+      it "still asks when the only rich content is the editor's blank placeholder page" do
+        # Opening the content tab creates a page holding one empty paragraph.
+        # That is not something a buyer can read, so a listing in this shape is
+        # still empty and must be asked about.
+        create(:rich_content, entity: product, title: nil, description: [{ "type" => "paragraph" }])
+
+        described_class.check(product.reload, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: true))
+      end
+
+      it "does not ask when a blank page carries a title the seller wrote" do
+        create(:rich_content, entity: product, title: "Week one", description: [{ "type" => "paragraph" }])
+
+        described_class.check(product.reload, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
       it "does not ask when only a variant carries the files" do
         membership = create(:membership_product, user: seller)
         tier = membership.tiers.first
