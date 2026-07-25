@@ -1627,6 +1627,98 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :success
   end
 
+  # Membership tier prices are rows in a separate table (VariantPrice) and
+  # saving them does not bump the tier row's own updated_at, so the tier row's
+  # timestamp alone would let a stale full save silently revert a price another
+  # session had just changed.
+  test "PUT update rejects a two-session membership tier price overwrite: a stale save cannot revert a tier price saved in between" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+
+    # Session B raises the tier's monthly price after session A loaded. Only
+    # the price row changes — the tier row itself is untouched.
+    travel 1.minute
+    first_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 2500 })
+
+    # Session A resubmits the price it was served, echoing its stale snapshot.
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_equal [{ "type" => "variant", "id" => first_tier.external_id, "name" => "First Tier" }],
+                 response.parsed_body["stale_records"].map { _1.slice("type", "id", "name") }
+    assert_equal 2500, first_tier.reload.alive_prices.is_buy.find_by!(recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+  end
+
+  test "PUT update lets a session change a membership tier price and save again, because the response refreshes the tier's price-aware snapshot" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    tier_params = ->(snapshots) do
+      [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: snapshots[first_tier.external_id],
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 900 } } },
+        { id: second_tier.external_id, name: second_tier.name, updated_at: snapshots[second_tier.external_id],
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    end
+    served_snapshots = product.tiers.to_h { [_1.external_id, Product::StaleContentWriteGuard.snapshot_at(_1).as_json] }
+
+    post :update, params: { id: product.unique_permalink, name: product.name, variants: tier_params.call(served_snapshots) }, format: :json
+
+    assert_response :success
+    assert_equal 900, first_tier.reload.alive_prices.is_buy.find_by!(recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+    # The refreshed snapshot has to account for the price row this save wrote,
+    # otherwise the session's next save echoes a timestamp older than the price
+    # and rejects itself.
+    refreshed = response.parsed_body["variant_updated_at"]
+    assert_equal Product::StaleContentWriteGuard.snapshot_at(first_tier).to_i, Time.zone.parse(refreshed[first_tier.external_id]).to_i
+
+    travel 1.second
+    post :update, params: { id: product.unique_permalink, name: product.name, variants: tier_params.call(refreshed) }, format: :json
+
+    assert_response :success
+  end
+
+  test "PUT update does NOT reject a save that resubmits a membership tier's stored prices unchanged" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+
+    # The tier row moves without any seller-editable value changing — the same
+    # bare touch a sale of a limited-quantity tier performs. Resubmitting the
+    # stored prices would overwrite nothing, so the save must go through.
+    travel 1.minute
+    first_tier.touch
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :success
+  end
+
   test "PUT update fails open for payloads that do not echo snapshot timestamps (sessions predating the guard)" do
     setup_guarded_version!
     newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }]

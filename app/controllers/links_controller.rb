@@ -1066,12 +1066,16 @@ class LinksController < ApplicationController
     # Queried fresh (reload / current_base_variants builds a new relation):
     # the save steps above created and soft-deleted rows through the cached
     # association, so the cached copy no longer reflects what's alive.
+    # Variants report the same combined row+prices timestamp the guard compares
+    # against (Product::StaleContentWriteGuard.snapshot_at), so a save that
+    # only changed a membership tier's prices still refreshes the session's
+    # snapshot.
     def content_updated_at_response
       pages = @product.alive_rich_contents.reload.to_a +
         @product.current_base_variants.flat_map { _1.alive_rich_contents.to_a }
       {
         rich_content_updated_at: pages.to_h { [_1.external_id, _1.updated_at] },
-        variant_updated_at: @product.current_base_variants.to_h { [_1.external_id, _1.updated_at] },
+        variant_updated_at: @product.current_base_variants.to_h { [_1.external_id, Product::StaleContentWriteGuard.snapshot_at(_1)] },
       }
     end
 

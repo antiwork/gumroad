@@ -12,7 +12,9 @@
 #
 # How it works: the editor is served each page's and variant's `updated_at`
 # when it loads (and refreshed values after every successful save), and echoes
-# them back with the save payload. Inside the save's transaction, after the
+# them back with the save payload. For a membership tier the served value also
+# covers its prices, which live in a separate table and don't bump the tier
+# row itself (see snapshot_at). Inside the save's transaction, after the
 # product row is locked and before anything is mutated, this guard compares
 # each echoed timestamp against the stored row. Running under that lock is
 # what makes the check binding rather than advisory: concurrent saves of the
@@ -85,18 +87,36 @@ class Product::StaleContentWriteGuard
 
     Array.wrap(variants_params).filter_map do |variant|
       stored = variant[:id].present? ? stored_variants_by_external_id[variant[:id]] : nil
-      next unless stale?(stored, variant[:updated_at])
-      next unless overwrites_variant_attributes?(stored, variant)
+      next unless stale?(stored, variant[:updated_at], changed_at: stored && snapshot_at(stored))
+      next unless overwrites_variant_attributes?(stored, variant) || overwrites_variant_prices?(stored, variant)
 
       { type: "variant", id: stored.external_id, name: stored.name }
     end
   end
   private_class_method :stale_variants
 
+  # When a variant last changed in a way the editor can overwrite. A membership
+  # tier's prices are rows in a separate table (VariantPrice), and saving them
+  # does NOT bump the tier row's own updated_at — so the tier row's timestamp
+  # alone would let a stale save revert a price another session had just
+  # changed. Take the newest of the variant row and its alive price rows so a
+  # price-only change is visible to the freshness check.
+  #
+  # This is also the value served to the editor as the variant's snapshot
+  # timestamp (ProductPresenter) and refreshed after every save
+  # (LinksController#content_updated_at_response). Those three have to agree:
+  # if the editor were served the bare variant timestamp while the check
+  # compared against the newer price timestamp, a seller whose tier prices were
+  # last touched after the tier row itself would be told their own price edit
+  # conflicts.
+  def self.snapshot_at(variant)
+    price_timestamps = variant.respond_to?(:alive_prices) ? variant.alive_prices.map(&:updated_at) : []
+    [variant.updated_at, *price_timestamps].compact.max
+  end
+
   # Variant attributes the editor lets a seller change that live on the variant
   # row itself, so a stale save would revert them. Membership prices live in a
-  # separate table and don't bump the variant's own updated_at, so they're not
-  # part of this comparison.
+  # separate table and are compared separately (overwrites_variant_prices?).
   COMPARED_VARIANT_ATTRIBUTES = %i[name description price_difference_cents max_purchase_count duration_in_minutes].freeze
 
   # Whether a stale variant snapshot would actually change anything the seller
@@ -124,7 +144,62 @@ class Product::StaleContentWriteGuard
   end
   private_class_method :overwrites_variant_attributes?
 
-  # Stale = the stored row changed after the snapshot the client echoed.
+  # Whether the payload's membership prices for this tier differ from what's
+  # stored — the same "would this write revert someone else's change?" question
+  # as overwrites_variant_attributes?, asked of the tier's prices.
+  #
+  # Membership tier prices are VariantPrice rows, not columns on the variant, so
+  # a full editor save that carries stale recurrence_price_values reverts them
+  # without touching any attribute compared above. The editor submits cents
+  # (`price_cents` / `suggested_price_cents`); the older form fields (`price` /
+  # `suggested_price`, formatted strings) are only compared when no cents value
+  # was submitted, so formatting differences can't manufacture a conflict.
+  def self.overwrites_variant_prices?(stored, submitted)
+    submitted_prices = fetch_value(submitted, :recurrence_price_values)
+    return false if submitted_prices.blank?
+    return false unless stored.respond_to?(:recurrence_price_values)
+
+    stored_prices = stored.recurrence_price_values(for_edit: true)
+    # ActionController::Parameters isn't Enumerable, so iterate its pairs
+    # explicitly rather than relying on Enumerable#any?.
+    submitted_prices.each_pair.any? do |recurrence, attributes|
+      stored_attributes = stored_prices[recurrence.to_s] || {}
+      submitted_enabled = fetch_value(attributes, :enabled).to_s == "true"
+      # A recurrence being switched on or off is itself a change.
+      next true if submitted_enabled != (stored_attributes[:enabled] == true)
+      # Prices of a disabled recurrence aren't written, so nothing to protect.
+      next false unless submitted_enabled
+
+      price_differs?(attributes, stored_attributes, :price_cents, :price) ||
+        price_differs?(attributes, stored_attributes, :suggested_price_cents, :suggested_price)
+    end
+  end
+  private_class_method :overwrites_variant_prices?
+
+  def self.price_differs?(submitted_attributes, stored_attributes, cents_key, formatted_key)
+    submitted_cents = fetch_value(submitted_attributes, cents_key)
+    return submitted_cents.to_s != stored_attributes[cents_key].to_s if submitted_cents.present?
+
+    submitted_formatted = fetch_value(submitted_attributes, formatted_key)
+    return false if submitted_formatted.blank?
+
+    submitted_formatted.to_s != stored_attributes[formatted_key].to_s
+  end
+  private_class_method :price_differs?
+
+  # Reads a value from a payload hash that may use symbol or string keys
+  # (ActionController::Parameters and plain hashes both reach this guard).
+  def self.fetch_value(attributes, key)
+    return nil if attributes.nil?
+
+    attributes[key].nil? ? attributes[key.to_s] : attributes[key]
+  end
+  private_class_method :fetch_value
+
+  # Stale = the stored record changed after the snapshot the client echoed.
+  # `changed_at` defaults to the row's own updated_at; callers pass a different
+  # value where a record's editable state also lives in other rows (a
+  # membership tier's prices — see snapshot_at).
   # Compared at whole-second precision because that's what the row's JSON
   # serialization served to the editor (this app's JSON time_precision is 0;
   # the column stores microseconds). Two writes inside the same second can't
@@ -132,7 +207,7 @@ class Product::StaleContentWriteGuard
   # involves minutes-to-days-old snapshots. Unknown ids are new records, not
   # overwrites; missing or unparseable echoes fail open (see the class
   # comment).
-  def self.stale?(stored, echoed_updated_at)
+  def self.stale?(stored, echoed_updated_at, changed_at: nil)
     return false if stored.nil? || echoed_updated_at.blank?
 
     echoed = begin
@@ -142,7 +217,7 @@ class Product::StaleContentWriteGuard
     end
     return false if echoed.nil?
 
-    stored.updated_at.to_i > echoed.to_i
+    (changed_at || stored.updated_at).to_i > echoed.to_i
   end
   private_class_method :stale?
 end

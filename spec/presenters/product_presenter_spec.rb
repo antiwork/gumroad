@@ -685,7 +685,7 @@ describe ProductPresenter do
                   id: tier.external_id,
                   name: "Untitled",
                   description: "I am a tier!",
-                  updated_at: tier.updated_at,
+                  updated_at: Product::StaleContentWriteGuard.snapshot_at(tier),
                   max_purchase_count: 10,
                   customizable_price: true,
                   recurrence_price_values: {

@@ -33,7 +33,8 @@ export type Variant = {
   // variants created in this editor session). Echoed back with each save so
   // the server can reject writes built from a stale snapshot (see the
   // server's Product::StaleContentWriteGuard); refreshed from each save
-  // response.
+  // response. For a membership tier it covers the tier's prices too, which
+  // are stored separately from the tier itself.
   updated_at?: string;
   max_purchase_count: number | null;
   integrations: Record<keyof Product["integrations"], boolean>;
