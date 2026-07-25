@@ -226,9 +226,9 @@ RSpec.describe AudienceMember, :freeze_time do
       member_without_uses = create_member_with_licenses([{ product_id: 1, uses: 0 }])
       member_with_three = create_member_with_licenses([{ product_id: 1, uses: 3 }])
       member_with_two_products = create_member_with_licenses([
-                                                              { product_id: 1, uses: 1 },
-                                                              { product_id: 2, uses: 5 }
-                                                            ])
+                                                               { product_id: 1, uses: 1 },
+                                                               { product_id: 2, uses: 5 }
+                                                             ])
       member_without_license = create_member_with_licenses([{ product_id: 1, uses: nil }])
 
       product_ids = { 1 => member_with_three.details["purchases"].first["product_id"] }

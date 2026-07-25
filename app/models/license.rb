@@ -77,5 +77,4 @@ class License < ApplicationRecord
                                               "fields" => fields
                                             })
     end
-
 end
