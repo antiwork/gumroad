@@ -125,6 +125,29 @@ describe Tag do
       second_product.untag!("Capybara")
       expect(tag.reload.taggings_count).to eq(1)
     end
+
+    # NOTE: there is deliberately no hard-`destroy!` counterpart to the soft-delete
+    # spec below. Hard-destroying a tagged product already raises RecordNotFound from
+    # ProductTagging's `after_commit :update_product_search_index!` (the callback
+    # reloads the now-deleted Link) — a pre-existing condition on main, unrelated to
+    # this counter cache. Products are soft-deleted in production, so that path is not
+    # exercised; the tagging destroy callbacks that keep the counter honest are
+    # covered by the untag! spec above.
+    it "leaves the counter alone when a product is only soft-deleted" do
+      second_product = create(:product)
+      @product.tag!("Capybara")
+      second_product.tag!("Capybara")
+      tag = Tag.find_by(name: "capybara")
+
+      # This is the property that keeps the counter equivalent to the query it
+      # replaced: the old LEFT JOIN + COUNT never filtered on links.deleted_at, so
+      # taggings belonging to soft-deleted products counted towards a tag's
+      # popularity. Soft delete leaves product_taggings rows in place, so the counter
+      # agrees. Anything that later "fixes" soft delete to purge taggings would
+      # change autocomplete ranking.
+      expect { second_product.mark_deleted! }.not_to change { tag.reload.taggings_count }
+      expect(tag.taggings_count).to eq(2)
+    end
   end
 
   describe ".by_text" do

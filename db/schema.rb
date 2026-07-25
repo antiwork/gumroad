@@ -2489,7 +2489,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000009) do
     t.datetime "flagged_at", precision: nil
     t.integer "taggings_count", default: 0, null: false
     t.index ["name", "taggings_count"], name: "index_tags_on_name_and_taggings_count"
-    t.index ["name"], name: "index_tags_on_name"
   end
 
   create_table "taxonomies", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

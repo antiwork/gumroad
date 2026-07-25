@@ -20,4 +20,9 @@
 class BackfillTaggingsCountOnTags < ActiveRecord::Migration[7.1]
   def up
   end
+
+  # Nothing to undo — this migration performs no work. Defined explicitly so a
+  # deploy rollback doesn't raise ActiveRecord::IrreversibleMigration.
+  def down
+  end
 end
