@@ -268,10 +268,21 @@ describe PostResendApi, :freeze_time do
     end
 
     it "falls back to the account address when the product has no support email of its own" do
-      @post.link.update!(support_email: nil)
+      # update_column skips validation on purpose: the column rejects blanks today, but older
+      # rows can still hold an empty string, and those must fall back rather than send an
+      # empty Reply-To.
+      @post.link.update_column(:support_email, "")
       send_default_email
 
       expect(sent_email[:reply_to]).to include("account@example.com")
+    end
+
+    it "uses the product's support email for a post scoped to one of its variants" do
+      variant = create(:variant, variant_category: create(:variant_category, link: @post.link))
+      @post = create(:variant_installment, name: "post title", message: "post body", seller: @seller, link: @post.link, base_variant: variant)
+      send_default_email
+
+      expect(sent_email[:reply_to]).to include("product@example.com")
     end
   end
 
