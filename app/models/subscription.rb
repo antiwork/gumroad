@@ -808,7 +808,7 @@ class Subscription < ApplicationRecord
       self.cancelled_by_buyer = false
       self.failed_at = nil unless pending_cancellation
       save!
-      original_purchase&.add_to_audience_member_details
+      enqueue_original_purchase_audience_member_details_update
 
       if is_deactivated
         # Calculate by how much time do we need to delay the workflow installments
@@ -1262,8 +1262,19 @@ class Subscription < ApplicationRecord
       self.seller_id = link.user_id
     end
 
+    # Same reasoning as the license path: writing the buyer's AudienceMember document rewrites
+    # a JSON column holding every purchase for that buyer and seller, which locks the row for
+    # the duration. Nothing in the response needs it, so it runs in a job where a lock timeout
+    # is retried instead of surfacing as a failed request.
+    def enqueue_original_purchase_audience_member_details_update
+      purchase_id = original_purchase&.id
+      return if purchase_id.nil?
+
+      UpdatePurchaseAudienceMemberDetailsWorker.perform_in(2.seconds, purchase_id)
+    end
+
     def update_original_purchase_audience_member_details
-      original_purchase&.add_to_audience_member_details
+      enqueue_original_purchase_audience_member_details_update
     end
 
     def sync_inventory_counter_caches_for_purchases

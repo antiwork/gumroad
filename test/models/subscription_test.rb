@@ -4058,6 +4058,24 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal 0, ActivateIntegrationsWorker.jobs.size
   end
 
+  test "#resubscribe! enqueues the audience member update instead of writing it in-request" do
+    @subscription.cancel_effective_immediately!
+    UpdatePurchaseAudienceMemberDetailsWorker.jobs.clear
+
+    Purchase.any_instance.expects(:add_to_audience_member_details).never
+    @subscription.resubscribe!
+
+    assert_sidekiq_enqueued(UpdatePurchaseAudienceMemberDetailsWorker, args: [@subscription.original_purchase.id])
+  end
+
+  test "#cancel! enqueues the audience member update for the original purchase" do
+    UpdatePurchaseAudienceMemberDetailsWorker.jobs.clear
+
+    @subscription.cancel!
+
+    assert_sidekiq_enqueued(UpdatePurchaseAudienceMemberDetailsWorker, args: [@subscription.original_purchase.id])
+  end
+
   test "#resubscribe! creates a subscription_event of type restarted" do
     @subscription.cancel_effective_immediately!
     assert_changes -> { @subscription.reload.subscription_events.restarted.count }, from: 0, to: 1 do

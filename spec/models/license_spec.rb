@@ -143,6 +143,49 @@ describe License do
     end
   end
 
+  describe "audience member sync when uses changes" do
+    let!(:purchase) { create(:purchase, :with_license) }
+    let!(:license) { purchase.license }
+
+    before { allow(ElasticsearchIndexerWorker).to receive(:perform_in) }
+
+    it "enqueues the audience member sync instead of writing audience_members in-request" do
+      expect(UpdatePurchaseAudienceMemberDetailsWorker).to receive(:perform_in).with(2.seconds, purchase.id)
+      # The inline version of this write locked the audience_members row for the buyer, which
+      # made concurrent license verifications time out on the lock and return a 500.
+      expect_any_instance_of(Purchase).not_to receive(:add_to_audience_member_details)
+
+      license.increment!(:uses)
+    end
+
+    it "enqueues the audience member sync when uses is updated directly" do
+      expect(UpdatePurchaseAudienceMemberDetailsWorker).to receive(:perform_in).with(2.seconds, purchase.id)
+
+      license.update!(uses: 4)
+    end
+
+    it "does not enqueue the audience member sync when uses does not change" do
+      expect(UpdatePurchaseAudienceMemberDetailsWorker).not_to receive(:perform_in)
+
+      license.update!(disabled_at: Time.current)
+    end
+
+    it "does not enqueue the audience member sync when there is no associated purchase" do
+      license_without_purchase = create(:license, link: create(:product), purchase: nil)
+      expect(UpdatePurchaseAudienceMemberDetailsWorker).not_to receive(:perform_in)
+
+      license_without_purchase.increment!(:uses)
+    end
+
+    it "keeps the audience member details up to date once the job runs" do
+      license.increment!(:uses)
+      UpdatePurchaseAudienceMemberDetailsWorker.new.perform(purchase.id)
+
+      member = AudienceMember.find_by(email: purchase.email, seller: purchase.seller)
+      expect(member.details["purchases"].find { _1["id"] == purchase.id }["license_uses"]).to eq(license.reload.uses)
+    end
+  end
+
   describe "paper_trail versioning" do
     with_versioning do
       let(:license) { create(:license) }
