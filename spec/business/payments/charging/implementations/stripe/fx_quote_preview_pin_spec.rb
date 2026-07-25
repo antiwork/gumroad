@@ -21,17 +21,43 @@ describe "Stripe FX Quotes preview API pin" do
     expect(Stripe.api_version).not_to include("preview")
   end
 
-  it "sends the preview version only from the FX quote and presentment PaymentIntent calls" do
-    app_files = Dir[Rails.root.join("app/**/*.rb")] + Dir[Rails.root.join("lib/**/*.rb")] + Dir[Rails.root.join("config/**/*.rb")]
-    senders = app_files.select { |path| File.read(path).match?(/stripe_version.*API_VERSION|API_VERSION.*stripe_version/) }
+  # Ruby files that are allowed to name a per-request Stripe API version at all. Deliberately
+  # matched on the bare `stripe_version` option rather than on `StripeFxQuote::API_VERSION`, so a
+  # new override written as a raw version string, a local alias, a helper method, or an expression
+  # spread over several lines still trips this list.
+  let(:allowed_stripe_version_senders) do
+    {
+      "app/business/payments/charging/implementations/stripe/stripe_fx_quote.rb" =>
+        "creates the FX quote itself — this *is* the preview endpoint",
+      "app/business/payments/charging/implementations/stripe/stripe_deferred_payment_intent.rb" =>
+        "attaches an FX quote to a deferred PaymentIntent",
+      "app/business/payments/charging/implementations/stripe/stripe_charge_processor.rb" =>
+        "attaches an FX quote to a PaymentIntent",
+      "app/services/stripe_tax_forms_api.rb" =>
+        "passes the global (stable) Stripe.api_version through explicitly, not a preview version",
+    }
+  end
 
-    expect(senders.map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }).to match_array(
-      %w[
-        app/business/payments/charging/implementations/stripe/stripe_fx_quote.rb
-        app/business/payments/charging/implementations/stripe/stripe_deferred_payment_intent.rb
-        app/business/payments/charging/implementations/stripe/stripe_charge_processor.rb
-      ]
-    )
+  def ruby_sources
+    Dir[Rails.root.join("app/**/*.rb")] + Dir[Rails.root.join("lib/**/*.rb")] + Dir[Rails.root.join("config/**/*.rb")]
+  end
+
+  def relative(path) = Pathname.new(path).relative_path_from(Rails.root).to_s
+
+  it "sets a per-request Stripe API version only in the known, reviewed places" do
+    senders = ruby_sources.filter_map { |path| relative(path) if File.read(path).include?("stripe_version") }
+
+    expect(senders).to match_array(allowed_stripe_version_senders.keys),
+                       "a new file overrides the Stripe API version per request. If that is intended, add it to " \
+                       "allowed_stripe_version_senders with the reason, and make sure it is not sending a preview " \
+                       "version outside the FX quote flow."
+  end
+
+  it "hardcodes a preview API version nowhere but the FX quote class" do
+    # Catches an override that skips the constant entirely and writes a preview version inline.
+    carriers = ruby_sources.filter_map { |path| relative(path) if File.read(path).match?(/\d{4}-\d{2}-\d{2}\.preview/) }
+
+    expect(carriers).to eq(["app/business/payments/charging/implementations/stripe/stripe_fx_quote.rb"])
   end
 
   it "guards each PaymentIntent override on an FX quote actually being present" do
@@ -41,13 +67,19 @@ describe "Stripe FX Quotes preview API pin" do
       app/business/payments/charging/implementations/stripe/stripe_deferred_payment_intent.rb
       app/business/payments/charging/implementations/stripe/stripe_charge_processor.rb
     ].each do |relative_path|
-      override_lines = File.readlines(Rails.root.join(relative_path)).grep(/stripe_version\].*API_VERSION/)
+      override_lines = File.readlines(Rails.root.join(relative_path)).grep(/stripe_version/)
 
-      expect(override_lines).to be_present, "expected #{relative_path} to still set the scoped FX preview version"
-      override_lines.each do |line|
-        expect(line).to include("if stripe_fx_quote_id.present?"),
-                        "#{relative_path} sets the FX preview API version without checking for an FX quote: #{line.strip}"
-      end
+      # Both files set the version on exactly one line, guarded inline. If a refactor spreads that
+      # over several lines the count check fails on purpose: re-read the new shape and update this
+      # spec deliberately rather than letting an unguarded override slip through.
+      expect(override_lines.length).to eq(1),
+                                       "expected #{relative_path} to set the scoped FX preview version on exactly one " \
+                                       "line, found #{override_lines.length}"
+      expect(override_lines.first).to include("StripeFxQuote::API_VERSION"),
+                                      "expected #{relative_path} to use the shared pinned constant"
+      expect(override_lines.first).to include("if stripe_fx_quote_id.present?"),
+                                      "#{relative_path} sets the FX preview API version without checking for an FX " \
+                                      "quote: #{override_lines.first.strip}"
     end
   end
 
