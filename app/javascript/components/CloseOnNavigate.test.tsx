@@ -13,8 +13,13 @@ vi.mock("$app/components/Nav", () => ({ useNav: () => ({ open: true, close }) })
 
 // Inertia's router.on("before", …) is a document listener for the "inertia:before" event, so a
 // visit can be simulated by dispatching that event with the visit object Inertia would attach.
-const fireBefore = (visit: { prefetch: boolean }) =>
-  document.dispatchEvent(new CustomEvent("inertia:before", { detail: { visit }, cancelable: true }));
+const fireBefore = (visit: { prefetch?: boolean; async?: boolean }) =>
+  document.dispatchEvent(
+    new CustomEvent("inertia:before", {
+      detail: { visit: { prefetch: false, async: false, ...visit } },
+      cancelable: true,
+    }),
+  );
 
 afterEach(() => {
   cleanup();
@@ -25,7 +30,7 @@ describe("CloseOnNavigate", () => {
   it("closes the nav drawer when a real navigation starts", () => {
     render(<CloseOnNavigate />);
 
-    fireBefore({ prefetch: false });
+    fireBefore({});
 
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -37,6 +42,16 @@ describe("CloseOnNavigate", () => {
     render(<CloseOnNavigate />);
 
     fireBefore({ prefetch: true });
+
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("leaves the nav drawer open for background requests such as polling", () => {
+    // Pages that poll or load props lazily issue async requests that the user did not ask for, and
+    // those would otherwise close the drawer out from under them at an arbitrary moment.
+    render(<CloseOnNavigate />);
+
+    fireBefore({ async: true });
 
     expect(close).not.toHaveBeenCalled();
   });
