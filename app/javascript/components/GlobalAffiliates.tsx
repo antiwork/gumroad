@@ -24,7 +24,7 @@ const DiscoverLinkSection = ({
   affiliateQueryParam,
 }: {
   globalAffiliateId: number;
-  totalSales: string;
+  totalSales: string | null;
   cookieExpiryDays: number;
   affiliateQueryParam: string;
 }) => {
@@ -57,7 +57,16 @@ const DiscoverLinkSection = ({
           products you linked to.
         </FieldsetDescription>
         <FieldsetDescription>
-          To date, you have made <strong>{totalSales}</strong> from Gumroad referrals.
+          {/* A null total means the lifetime earnings figure is still being calculated in the
+              background (it is an expensive sum for affiliates with a long history). Showing a
+              placeholder is better than showing $0, which would read as "you have earned nothing". */}
+          {totalSales === null ? (
+            <>Calculating how much you have made from Gumroad referrals. Check back in a few moments.</>
+          ) : (
+            <>
+              To date, you have made <strong>{totalSales}</strong> from Gumroad referrals.
+            </>
+          )}
         </FieldsetDescription>
       </Fieldset>
     </FormSection>
@@ -266,7 +275,7 @@ const ProductEligibilitySection = ({
 
 type Props = {
   globalAffiliateId: number;
-  totalSales: string;
+  totalSales: string | null;
   cookieExpiryDays: number;
   affiliateQueryParam: string;
 };

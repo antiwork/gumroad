@@ -155,6 +155,30 @@ describe Affiliate do
 
       expect(affiliate.total_cents_earned).to eq 0
     end
+
+    context "with a statement timeout" do
+      it "returns the same sum as the untimed query" do
+        create(:purchase, affiliate:, purchase_state: "successful", price_cents: 100)
+        create(:purchase, affiliate:, purchase_state: "failed", price_cents: 150)
+        create(:purchase, affiliate:, purchase_state: "successful", price_cents: 1399)
+
+        expect(affiliate.total_cents_earned(timeout_ms: 5_000)).to eq 113
+      end
+
+      it "returns zero rather than nil when there is nothing to sum" do
+        expect(affiliate.total_cents_earned(timeout_ms: 5_000)).to eq 0
+      end
+
+      it "asks the database to abort the query after the given time" do
+        expect(affiliate.total_cents_earned(timeout_ms: 1_234)).to eq 0
+
+        # The timeout is expressed as a MySQL optimizer hint, so assert it
+        # actually reaches the SQL rather than trusting the argument alone.
+        expect(affiliate.purchases.paid.not_chargedback_or_chargedback_reversed.reorder(nil).select(
+          Arel.sql("/*+ MAX_EXECUTION_TIME(1234) */ COALESCE(SUM(purchases.affiliate_credit_cents), 0)")
+        ).to_sql).to include "MAX_EXECUTION_TIME(1234)"
+      end
+    end
   end
 
   describe "#total_cents_earned_formatted" do
