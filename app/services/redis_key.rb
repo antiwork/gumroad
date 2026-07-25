@@ -43,6 +43,10 @@ class RedisKey
     def update_cached_srpis_job_delay_hours = "update_cached_srpis_job_delay_hours"
     def tip_options = "tip_options"
     def default_tip_option = "default_tip_option"
+    # These *_max_execution_time_seconds knobs cap how long a report job's query may run.
+    # They are coupled to HoldsDeployWhileRunning::IN_FLIGHT_ENTRY_TTL: a job only holds
+    # automatic production deploys for that TTL, so raising any of these past it means a
+    # still-running job stops holding deploys. Raise the TTL alongside.
     def create_canada_monthly_sales_report_job_max_execution_time_seconds = "create_canada_monthly_sales_report_job:max_execution_time_seconds"
     def generate_sales_report_job_max_execution_time_seconds = "generate_sales_report_job:max_execution_time_seconds"
     def generate_canada_sales_report_job_max_execution_time_seconds = "generate_canada_sales_report_job:max_execution_time_seconds"

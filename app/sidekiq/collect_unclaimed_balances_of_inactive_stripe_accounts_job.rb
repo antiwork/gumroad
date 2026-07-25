@@ -2,6 +2,11 @@
 
 class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
   include Sidekiq::Job
+  # Runs at 10:00 UTC on the 1st and moves money: it creates a Stripe transfer per inactive
+  # account and then stamps the transfer id on the merchant account. A deploy that recycles
+  # Sidekiq between those two steps would leave the transfer unrecorded, so the retry would
+  # transfer again. Hold deploys for the length of the run. See HoldsDeployWhileRunning.
+  include HoldsDeployWhileRunning::ForWholePerform
   sidekiq_options retry: 5, queue: :default
 
   # Stripe considers these accounts inactive after >=3 years, so we use the same time frame.

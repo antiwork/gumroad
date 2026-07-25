@@ -104,6 +104,7 @@ describe HoldsDeployWhileRunning do
       PerformPayoutsForUserSliceWorker,
       PerformDailyInstantPayoutsWorker,
       ExecuteScheduledPayoutsJob,
+      CollectUnclaimedBalancesOfInactiveStripeAccountsJob,
       # Tax upload.
       UploadUsStatesSalesTaxToTaxjarJob,
       # Report generators, via FinanceReportFailureAlert.
