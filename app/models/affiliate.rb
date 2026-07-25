@@ -124,6 +124,13 @@ class Affiliate < ApplicationRecord
   # AffiliateEarningsCache, which owns that flow. With `timeout_ms` set, MySQL
   # aborts the query once the limit is reached and raises, which the caller is
   # expected to catch.
+  #
+  # Note that omitting `timeout_ms` does not mean "no time limit": every
+  # connection in this app is opened with a session `max_execution_time` of five
+  # minutes (see config/database.yml), so an untimed call is really a call with
+  # that cap. A `timeout_ms` larger than the session value raises the ceiling for
+  # that one statement, which is how a background caller asks for more time than
+  # a request would ever be given.
   def total_cents_earned(timeout_ms: nil)
     scope = purchases.paid.not_chargedback_or_chargedback_reversed
     return scope.sum(:affiliate_credit_cents) if timeout_ms.nil?

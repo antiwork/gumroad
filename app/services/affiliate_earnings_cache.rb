@@ -19,13 +19,14 @@
 #     seconds instead of holding the worker. When that happens we hand the work
 #     to a background job and tell the caller "not ready yet" rather than
 #     showing a wrong number.
-#  2. The background job computes the sum with no time limit and writes it to
-#     the cache, so the affiliate's next page load is served from cache. A value
-#     older than STALE_AFTER is still served immediately while a refresh job
-#     recomputes it in the background, so an active affiliate stays off the slow
-#     path between deploys. Production namespaces the cache by deploy revision
-#     (see config/environments/production.rb), so a deploy effectively empties
-#     it: the first visit after one costs a heavy affiliate one bounded attempt
+#  2. The background job recomputes the sum with a much larger time limit than a
+#     request would ever allow and writes it to the cache, so the affiliate's
+#     next page load is served from cache. A value older than STALE_AFTER is
+#     still served immediately while a refresh job recomputes it in the
+#     background, so an active affiliate stays off the slow path between
+#     deploys. Production namespaces the cache by deploy revision (see
+#     config/environments/production.rb), so a deploy effectively empties it:
+#     the first visit after one costs a heavy affiliate one bounded attempt
 #     and, if that times out, a single "calculating" page. That is the intended
 #     worst case, not an unbounded one.
 class AffiliateEarningsCache
@@ -52,6 +53,16 @@ class AffiliateEarningsCache
   # guarding is still running.
   COMPUTE_LOCK_TTL = 10.seconds
 
+  # How long the background recomputation is allowed to run. Every connection in
+  # this app is opened with a session `max_execution_time` of five minutes (see
+  # config/database.yml), so "no time limit" is not actually available to the job
+  # — asking for none would silently mean five minutes. We name the limit we want
+  # instead, and set it above the session cap so that the job, unlike a request,
+  # is genuinely allowed to finish a very heavy sum. If it still cannot, the job
+  # fails, Sidekiq retries it, and the page keeps rendering the calculating state
+  # rather than a wrong number.
+  BACKGROUND_TIMEOUT_MS = 15.minutes.in_milliseconds
+
   class << self
     # Returns the affiliate's lifetime earnings in cents, or nil when the value
     # is not known yet and is being computed in the background. Callers must
@@ -70,16 +81,18 @@ class AffiliateEarningsCache
       # Only the request that actually attempted the aggregate hands the work to
       # the background. A request that lost the claim must NOT enqueue: the claim
       # holder is running the same sum right now, and the job runs it again with
-      # no time limit, so enqueueing here would put a second, unbounded copy of
-      # the expensive scan on the database alongside the bounded one.
+      # a far longer limit, so enqueueing here would put a second, much
+      # longer-running copy of the expensive scan on the database alongside the
+      # bounded one.
       refresh_later(affiliate) if result == :timed_out
       nil
     end
 
-    # Recomputes with no time limit and stores the result. Called from the
-    # background job; also usable from a console to warm a specific affiliate.
+    # Recomputes the sum with the generous background time limit and stores the
+    # result. Called from the background job; also usable from a console to warm
+    # a specific affiliate.
     def refresh!(affiliate)
-      cents = affiliate.total_cents_earned
+      cents = affiliate.total_cents_earned(timeout_ms: BACKGROUND_TIMEOUT_MS)
       write(affiliate, cents)
       cents
     end
@@ -88,7 +101,8 @@ class AffiliateEarningsCache
     # has landed since the job was enqueued — the job's uniqueness lock only
     # collapses jobs that are still waiting in the queue, so a run that is
     # already in flight does not stop another enqueue for the same affiliate.
-    # Checking the cache first keeps that from becoming a second unbounded scan.
+    # Checking the cache first keeps that from becoming a second long-running
+    # scan.
     def refresh_unless_fresh!(affiliate)
       cached = read(affiliate)
       return cached[:cents] if cached && !stale?(cached)

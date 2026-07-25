@@ -147,10 +147,16 @@ describe AffiliateEarningsCache do
   end
 
   describe ".refresh!" do
-    it "computes the sum with no statement timeout and caches it" do
+    it "computes the sum with the background time limit and caches it" do
       create_purchase_earning(139)
 
-      expect(affiliate).to receive(:total_cents_earned).with(no_args).and_call_original
+      # The background limit has to be larger than the request one, and larger
+      # than the session-wide five minute cap the connection is opened with, or
+      # the job would be no more able to finish a heavy sum than the request was.
+      expect(described_class::BACKGROUND_TIMEOUT_MS).to be > described_class::REQUEST_TIMEOUT_MS
+      expect(described_class::BACKGROUND_TIMEOUT_MS).to be > 5.minutes.in_milliseconds
+
+      expect(affiliate).to receive(:total_cents_earned).with(timeout_ms: described_class::BACKGROUND_TIMEOUT_MS).and_call_original
 
       expect(described_class.refresh!(affiliate)).to eq 139
       expect(Rails.cache.read(described_class.cache_key(affiliate))[:cents]).to eq 139
