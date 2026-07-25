@@ -12,8 +12,13 @@
 #
 # How it works: the editor is served each page's and variant's `updated_at`
 # when it loads (and refreshed values after every successful save), and echoes
-# them back with the save payload. Before the save mutates anything, this
-# guard compares each echoed timestamp against the stored row. A stored row
+# them back with the save payload. Inside the save's transaction, after the
+# product row is locked and before anything is mutated, this guard compares
+# each echoed timestamp against the stored row. Running under that lock is
+# what makes the check binding rather than advisory: concurrent saves of the
+# same product are serialized on the row, so the second one re-reads what the
+# first wrote instead of both reading the same pre-write state and both being
+# allowed through. A stored row
 # that changed AFTER the snapshot was served means another session (or another
 # tab) saved in between — the save is rejected with a structured conflict so
 # the editor can tell the seller to reload, and a Sentry notification is sent
