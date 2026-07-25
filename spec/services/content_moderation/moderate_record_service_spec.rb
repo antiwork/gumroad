@@ -219,6 +219,25 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           .with(hash_including(check_off_platform_fulfillment: true))
       end
 
+      it "does not ask when the deliverable is a Gumroad-managed Discord integration" do
+        community_product = create(:product, user: seller, active_integrations: [create(:discord_integration)])
+
+        described_class.check(community_product.reload, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
+      it "does not ask when only a tier carries the Gumroad-managed integration" do
+        membership = create(:membership_product, user: seller)
+        membership.tiers.first.active_integrations << create(:circle_integration)
+
+        described_class.check(membership.reload, :product)
+
+        expect(ContentModeration::Strategies::PromptStrategy).to have_received(:new)
+          .with(hash_including(check_off_platform_fulfillment: false))
+      end
+
       it "does not ask for service products, whose deliverable is the seller's own work" do
         # Service products require an account at least 30 days old.
         seller.update!(created_at: 2.months.ago)
@@ -373,9 +392,21 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
 
       expect(message).to eq(
         "Buyers need to receive what they paid for on Gumroad. This product has no content attached and " \
-        "directs buyers to message you on another platform to get it, which we don't allow. Add the files, " \
+        "directs buyers to message you on another platform to get it, which we don’t allow. Add the files, " \
         "videos, or written content buyers should get when they buy, then publish again."
       )
+    end
+
+    # Otherwise the seller adds the missing files, republishes, and is blocked
+    # again for a reason we knew about but withheld the first time.
+    it "also names a violation that flagged alongside off-platform fulfillment" do
+      message = described_class.seller_message(
+        ["off_platform_fulfillment: buyer must DM on Telegram", "OpenAI moderation flagged: sexual"],
+        "product"
+      )
+
+      expect(message).to start_with("Buyers need to receive what they paid for on Gumroad.")
+      expect(message).to end_with("It also looks like this product contains sexual content.")
     end
   end
 end
