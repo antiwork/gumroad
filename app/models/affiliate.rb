@@ -114,8 +114,32 @@ class Affiliate < ApplicationRecord
     formatted_dollar_amount(cents, with_currency: affiliate_user.should_be_shown_currencies_always?)
   end
 
-  def total_cents_earned
-    purchases.paid.not_chargedback_or_chargedback_reversed.sum(:affiliate_credit_cents)
+  # Lifetime earnings across every purchase attributed to this affiliate.
+  #
+  # For a Gumroad affiliate (GlobalAffiliate) with a long referral history this
+  # sums a very large number of purchase rows, and none of the filters it applies
+  # can be answered from an index alone, so it can take tens of seconds. Callers
+  # that run inside a web request must pass `timeout_ms` so the database gives up
+  # instead of holding a worker until the request is killed; see
+  # AffiliateEarningsCache, which owns that flow. With `timeout_ms` set, MySQL
+  # aborts the query once the limit is reached and raises, which the caller is
+  # expected to catch.
+  #
+  # Note that omitting `timeout_ms` does not mean "no time limit": every
+  # connection in this app is opened with a session `max_execution_time` of five
+  # minutes (see config/database.yml), so an untimed call is really a call with
+  # that cap. A `timeout_ms` larger than the session value raises the ceiling for
+  # that one statement, which is how a background caller asks for more time than
+  # a request would ever be given.
+  def total_cents_earned(timeout_ms: nil)
+    scope = purchases.paid.not_chargedback_or_chargedback_reversed
+    return scope.sum(:affiliate_credit_cents) if timeout_ms.nil?
+
+    # The optimizer hint has to sit immediately after the SELECT keyword, which
+    # is where the plucked expression lands.
+    scope.reorder(nil).pick(
+      Arel.sql("/*+ MAX_EXECUTION_TIME(#{timeout_ms.to_i}) */ COALESCE(SUM(purchases.affiliate_credit_cents), 0)")
+    )
   end
 
   def eligible_for_credit?
