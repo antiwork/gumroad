@@ -58,4 +58,17 @@ describe("ToastAlert", () => {
 
     expect(screen.getByText("Welcome back!")).toBeTruthy();
   });
+
+  it("ignores a stored value that parses but isn't shaped like a toast", () => {
+    // Unlike the "not json" case above, this survives JSON.parse, so the shape
+    // check is the only thing that can reject it. Anything can write to this
+    // storage key — another tab on an older build, or a half-written value — and
+    // a message that isn't a string would reach the DOM as whatever it happens
+    // to be.
+    window.sessionStorage.setItem("pendingAlert", JSON.stringify({ message: 123, status: "warning" }));
+
+    render(<ToastAlert initial={{ message: "Welcome back!", status: "success" }} />);
+
+    expect(screen.getByText("Welcome back!")).toBeTruthy();
+  });
 });
