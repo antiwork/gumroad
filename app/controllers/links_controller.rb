@@ -555,11 +555,6 @@ class LinksController < ApplicationController
         error_message: e.message,
         error_code: "stale_content_conflict",
         stale_records: e.stale_records,
-        # This guard raises before any mutation, so no created records can
-        # have persisted — but the failure contract is uniform: every save
-        # response carries the mapping keys so the editor can always adopt
-        # whatever persisted (here, nothing).
-        **persisted_save_id_mappings_response,
       }, status: :conflict
     rescue Product::RichContentDeletionGuard::HiddenVariantContentConflict => e
       # The fail-closed inconsistent-content case: hidden version-level pages
@@ -574,12 +569,6 @@ class LinksController < ApplicationController
         error_message: e.message,
         error_code: "hidden_variant_content_conflict",
         hidden_variant_pages: all_hidden_variant_pages,
-        # The guard raised inside the transaction, so records this save
-        # created were rolled back — return only mappings for rows that
-        # actually persisted (usually none), never rolled-back ids. The keys
-        # are always present so the editor can adopt them for every error type
-        # instead of retrying with client ids the server cannot recognise.
-        **persisted_save_id_mappings_response,
       }, status: :unprocessable_entity
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       if @product.errors.details[:custom_fields].present?
@@ -587,10 +576,7 @@ class LinksController < ApplicationController
       else
         error_message = @product.errors.full_messages.first || e.message
       end
-      # Same failure contract as the conflict responses above: the mapping
-      # keys are always present, filtered to records that survived the
-      # rollback (an all-or-nothing rollback correctly yields empty mappings).
-      return render json: { error_message:, **persisted_save_id_mappings_response }, status: :unprocessable_entity
+      return render json: { error_message: }, status: :unprocessable_entity
     end
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)
@@ -1078,31 +1064,6 @@ class LinksController < ApplicationController
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
         **content_updated_at_response,
-      }
-    end
-
-    # Failure-path counterpart of save_id_mappings_response: rendered on the
-    # conflict/error responses so a FAILED save still tells the editor which
-    # client-generated ids acquired canonical server ids. Without this, the
-    # editor's retry resubmits the same client ids the server cannot
-    # recognise — re-creating records and tripping the content deletion guard
-    # (retry storms, gumroad-private#1360).
-    #
-    # The failure paths run after the save transaction rolled back, so the
-    # accumulated mappings may reference rows that no longer exist. Verify
-    # each canonical id against the database and report only mappings whose
-    # records actually PERSISTED — handing the editor an id for a rolled-back
-    # row would be worse than handing it nothing. When the rollback undid
-    # everything (the common case), this correctly returns empty mappings;
-    # the keys are still present so the client-side adoption is uniform
-    # across success, warning, and failure responses.
-    def persisted_save_id_mappings_response
-      alive_variant_external_ids = @product.current_base_variants.map(&:external_id).to_set
-      alive_page_external_ids = (@product.alive_rich_contents.reload.to_a +
-        @product.current_base_variants.flat_map { _1.alive_rich_contents.to_a }).map(&:external_id).to_set
-      {
-        variant_id_mappings: save_id_mappings[:variants].select { |_, canonical_id| alive_variant_external_ids.include?(canonical_id) },
-        rich_content_id_mappings: save_id_mappings[:rich_content].select { |_, canonical_id| alive_page_external_ids.include?(canonical_id) },
       }
     end
 
