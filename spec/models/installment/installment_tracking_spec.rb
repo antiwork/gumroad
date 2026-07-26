@@ -10,11 +10,11 @@ describe "InstallmentTracking"  do
 
   describe "click_summary" do
     before do
-      @installment = create(:installment, id: 13)
+      @installment = create(:installment)
     end
 
     it "converts encoded urls back into human-readable format" do
-      CreatorEmailClickSummary.create!(installment_id: 13,
+      CreatorEmailClickSummary.create!(installment_id: @installment.id,
                                        total_unique_clicks: 2,
                                        urls: { "https://www&#46;gumroad&#46;com" => 1,
                                                "https://www&#46;google&#46;com" => 2 })
@@ -27,11 +27,11 @@ describe "InstallmentTracking"  do
 
   describe "#click_rate_percent" do
     before do
-      @installment = create(:installment, id: 13, customer_count: 4)
+      @installment = create(:installment, customer_count: 4)
     end
 
     it "computes the click rate correctly" do
-      CreatorEmailClickSummary.create!(installment_id: 13,
+      CreatorEmailClickSummary.create!(installment_id: @installment.id,
                                        total_unique_clicks: 2,
                                        urls: { "https://www&#46;gumroad&#46;com" => 2,
                                                "https://www&#46;google&#46;com" => 1 })
