@@ -220,7 +220,23 @@ class AudienceMember < ApplicationRecord
       # When we don't need the ids, we can just do a distinct (much faster) on all the rows found by the root query.
       if with_ids
         json_filter = json_filter.group(:id)
-        json_filter = json_filter.select("audience_members.*, max(jt.purchase_id) AS purchase_id, jt.follower_id AS follower_id, max(jt.affiliate_id) AS affiliate_id")
+        # MySQL expands SIBLING nested paths ($.follower and $.purchases[*]) into DISJOINT
+        # rows: the follower row has NULL purchase columns and every purchase row has a NULL
+        # follower_id. So as soon as a purchase predicate is applied (e.g. a "bought these
+        # products" filter), the row carrying the follower id is filtered away and
+        # jt.follower_id comes back NULL for everyone — which made follower workflows and
+        # blasts that also filter on a bought product resolve no recipient and silently send
+        # nothing. When the caller is explicitly asking for followers, read the id out of the
+        # details JSON instead; a member has at most one follower, so it is the same value the
+        # join would have produced whenever the follower row survives. Other filter types keep
+        # reading the join, where a NULL follower_id legitimately means "matched as a buyer or
+        # affiliate, not as a follower" and decides which recipient the send uses.
+        follower_id_select = if params[:type] == "follower"
+          "max(CAST(JSON_UNQUOTE(JSON_EXTRACT(audience_members.details, '$.follower.id')) AS UNSIGNED))"
+        else
+          "jt.follower_id"
+        end
+        json_filter = json_filter.select("audience_members.*, max(jt.purchase_id) AS purchase_id, #{follower_id_select} AS follower_id, max(jt.affiliate_id) AS affiliate_id")
         json_filter_sql = json_filter.to_sql
       elsif json_filter.where_clause.present?
         json_filter_sql = json_filter.to_sql

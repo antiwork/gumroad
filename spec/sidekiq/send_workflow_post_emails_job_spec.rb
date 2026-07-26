@@ -129,6 +129,14 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
       end
 
+      it "when follower_type? is true and a bought-product filter is set, it still sends to the matching follower" do
+        @post.update!(installment_type: Installment::FOLLOWER_TYPE, bought_products: [@products[0].unique_permalink])
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
+      end
+
       it "when affiliate_type? is true, it sends the expected emails at the right times" do
         @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
         described_class.new.perform(@post.id)

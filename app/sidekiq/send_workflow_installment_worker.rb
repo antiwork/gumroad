@@ -25,6 +25,11 @@ class SendWorkflowInstallmentWorker
       installment.send_installment_from_workflow_for_affiliate_user(affiliate_user_id)
     elsif subscription_id.present? && purchase_id.nil? && follower_id.nil? && affiliate_user_id.nil?
       installment.send_installment_from_workflow_for_member_cancellation(subscription_id)
+    else
+      # Exactly one recipient id is expected. Anything else (most importantly all four nil)
+      # used to fall through and return without sending, erroring, or retrying, which is how
+      # a whole class of workflows could deliver nothing at all without anyone noticing.
+      Rails.logger.error("[#{self.class.name}] installment_id=#{installment_id} got an unusable recipient combination (purchase=#{purchase_id.inspect} follower=#{follower_id.inspect} affiliate=#{affiliate_user_id.inspect} subscription=#{subscription_id.inspect}); nothing sent")
     end
   end
 end
