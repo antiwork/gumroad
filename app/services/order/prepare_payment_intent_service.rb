@@ -283,14 +283,19 @@ class Order::PreparePaymentIntentService
     def block_pix_amount_outside_window(presentment)
       return false unless pix_selected?
 
-      # A Pix payment always has a BRL presentment (Pix forces BRL), so a missing one is a bug on our
-      # side, not a cart the buyer can fix by picking a cheaper basket. Fail it closed the same way,
-      # but keep the two causes distinguishable: PIX_AMOUNT_OUTSIDE_WINDOW is what monitoring watches
-      # to see how often real carts fall outside Stripe's window, and folding our own broken state
-      # into that number would make the metric mean two things at once. The buyer gets the generic
-      # retry message because retrying is in fact the right advice for a transient internal fault.
+      # A Pix payment normally always has a BRL presentment (Pix forces BRL), so a missing one is
+      # our own state being wrong, not a cart the buyer can fix by picking a cheaper basket. The one
+      # way to reach here without a presentment is a Pix token confirming while the seller's
+      # buyer-currency flags are off, which is what a rolled-back local-method rollout looks like:
+      # the presentment layer no longer runs, but a token minted before the rollback can still
+      # arrive. (With the flags on, prepare_unconfirmed_charge's own nil-presentment guard fails the
+      # order before this method is ever called.) Fail closed either way, but keep the two causes
+      # distinguishable: PIX_AMOUNT_OUTSIDE_WINDOW is what monitoring watches to see how often real
+      # carts fall outside Stripe's window, and folding our own broken state into that number would
+      # make the metric mean two things at once. The buyer gets the generic retry message, which is
+      # the right advice here: the same cart succeeds once the flags are back on.
       if presentment.blank?
-        Rails.logger.error("Pix payment blocked for order #{order.id}: no BRL presentment record exists at prepare time, which should be impossible for a Pix cart")
+        Rails.logger.error("Pix payment blocked for order #{order.id}: no BRL presentment record exists at prepare time, so the presentment layer did not run for this Pix cart (most likely the seller's buyer-currency flags are off)")
         cleanup_prepare_time_presentment_records
         fail_purchases_with(GENERIC_CHARGE_ERROR)
         return true
