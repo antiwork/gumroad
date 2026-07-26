@@ -1520,6 +1520,38 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_not response.parsed_body.key?("skipped_collections")
   end
 
+  test "PUT update does not delete product files when the payload's pages can't be read" do
+    # The editor derives which files to submit from the content it is
+    # submitting: a file is kept if some page embeds it. So a payload whose
+    # pages the server can't read carries a file list derived from that same
+    # unreadable content — and the file save deletes every file missing from
+    # the list. Before, the rejected save rolled that back; now the save
+    # commits, so the file step has to be skipped along with the pages.
+    page = create_rich_content(entity: @product, description: guard_content_description)
+    file = create_product_file(link: @product)
+    @product.reload
+
+    post :update, params: @params.merge(rich_content: "not-a-list", files: []), format: :json
+
+    assert_response :success
+    assert_equal false, file.reload.deleted?
+    assert_equal false, page.reload.deleted?
+  end
+
+  test "PUT update does not delete product files when the payload's versions can't be read" do
+    # Same reason as the pages case: the file list came from content the server
+    # couldn't read, so it can't be allowed to decide which files survive.
+    setup_guarded_version!
+    file = create_product_file(link: @product)
+    @product.reload
+
+    post :update, params: @params.merge(variants: "not-a-list", files: []), format: :json
+
+    assert_response :success
+    assert_equal false, file.reload.deleted?
+    assert_equal ["variants"], response.parsed_body["skipped_collections"]
+  end
+
   test "PUT update blocks deleting a title-only page missing from the payload" do
     # A page can carry nothing but a title (its body is an empty paragraph).
     # That title is seller-authored work and renders in the buyer's page list,

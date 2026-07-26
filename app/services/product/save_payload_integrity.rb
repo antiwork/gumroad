@@ -49,16 +49,29 @@ class Product::SavePayloadIntegrity
   # including entries whose ids the server doesn't recognise — is a payload the
   # save can act on.
   Result = Struct.new(:skipped_pages_reason, :skipped_variants_reason, keyword_init: true) do
+    # Pages are skipped when the pages themselves were unreadable, and ALSO
+    # when the versions were: the editor decides which files to submit from the
+    # content it is submitting (a file is kept if some page embeds it), so a
+    # payload that couldn't describe its versions also can't be trusted about
+    # which files and pages that content needs. Applying the readable half of
+    # the content against a file list derived from the unreadable half is how
+    # you delete a file a surviving page still embeds.
     def skip_pages?
-      skipped_pages_reason.present?
+      skipped_pages_reason.present? || skipped_variants_reason.present?
     end
 
     def skip_variants?
       skipped_variants_reason.present?
     end
 
-    def any?
+    # Whether any of the product's content — pages, versions, or the files they
+    # embed — has to be left as the server already has it.
+    def skip_content?
       skip_pages? || skip_variants?
+    end
+
+    def any?
+      skip_content?
     end
   end
 

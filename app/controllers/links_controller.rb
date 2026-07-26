@@ -522,7 +522,14 @@ class LinksController < ApplicationController
         product_permitted_params[:variants].each { rich_content_params.push(*_1[:rich_content]) } if !payload_integrity.skip_variants? && product_permitted_params[:variants].present?
         rich_content_params = rich_content_params.flat_map { _1[:description] = _1.dig(:description, :content) }
         rich_contents_to_keep = []
-        SaveFilesService.perform(@product, product_permitted_params, rich_content_params)
+        # The submitted file list is derived from the submitted content — the
+        # editor keeps a file if one of the pages it is sending embeds it — and
+        # this step deletes every stored file missing from that list. So a
+        # payload whose content couldn't be read can't be allowed to decide
+        # which files survive either. Skipping this also means files added in
+        # such a save aren't stored, which is the same "left as it was" outcome
+        # the seller is told about.
+        SaveFilesService.perform(@product, product_permitted_params, rich_content_params) unless payload_integrity.skip_content?
         existing_rich_contents = @product.alive_rich_contents.to_a
         rich_content.each.with_index do |product_rich_content, index|
           rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
@@ -1108,12 +1115,14 @@ class LinksController < ApplicationController
     # Names the collections this save left alone because it couldn't interpret
     # them. The save succeeded, but part of what the editor sent was not
     # applied, and the editor must not present its local state as saved — it
-    # should reload that collection from the server. Omitted entirely on a
-    # normal save so the response shape doesn't change for the common case.
+    # should reload that collection from the server. Reports what the payload
+    # actually got wrong (not the wider set of things skipped as a consequence),
+    # and is omitted entirely on a normal save so the response shape doesn't
+    # change for the common case.
     def skipped_collections_response
       skipped = []
-      skipped << "rich_content" if payload_integrity.skip_pages?
-      skipped << "variants" if payload_integrity.skip_variants?
+      skipped << "rich_content" if payload_integrity.skipped_pages_reason.present?
+      skipped << "variants" if payload_integrity.skipped_variants_reason.present?
       return {} if skipped.empty?
 
       { skipped_collections: skipped }
