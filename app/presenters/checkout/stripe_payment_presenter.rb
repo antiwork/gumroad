@@ -60,16 +60,29 @@ class Checkout::StripePaymentPresenter
     # token. Wallets stay disabled for the same reason as CardElement candidates: a wallet payment
     # would charge canonical USD while the cart displays buyer-currency totals.
     #
-    # The method-forced lane is checked FIRST because both can now match the same cart. Since
-    # quoting stopped requiring a USD-priced product (gumroad-private#1371), a EUR-priced cart
-    # seen by, say, a Canadian buyer is a valid quote candidate as well as a valid iDEAL cart.
-    # The method-forced lane is the better of the two: it charges the product's listed EUR price
-    # as-is, where the quote lane would convert that price to USD and back to CAD. It also
-    # carries the local payment methods, which the server-confirm element cannot mount at all.
-    if client_confirm_eligible? && method_forced_shape?(checkout_items)
-      return client_confirm_props
-    end
-
+    # This branch has to come before the client-confirm one below, and the reason is a
+    # correctness constraint rather than a preference. Whenever a cart is a presentment
+    # candidate the surcharge endpoint quotes it, and the browser then both displays the quoted
+    # local total and submits the quote token with the payment. The client-confirm lane cannot
+    # honor a token — Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote
+    # fails the purchase closed rather than charge canonical USD behind a local-currency total —
+    # so sending a quoted cart there makes every payment attempt on it fail. The rule: if the
+    # surcharge endpoint would quote the cart, checkout must mount a lane that can honor the
+    # quote (this element, or CardElement via the fallback above).
+    #
+    # The two shapes really can overlap, and this is where that is decided. A product listed in
+    # a forced currency, bought by someone whose own currency is different — a EUR product and a
+    # Canadian buyer — is both a quote candidate and a method-forced cart. The quote lane takes
+    # it: the buyer sees CA$, which is the point of quoting, and the local methods it gives up
+    # (iDEAL, Bancontact) require a bank in the country that issues them, so a Canadian buyer
+    # could never have paid with them anyway.
+    #
+    # The carts the method-forced lane exists for are untouched, because they are not
+    # candidates. That lane serves a buyer paying a product listed in their OWN currency (a
+    # Dutch buyer on a EUR product, a Brazilian buyer on a BRL one — #6346), and
+    # buyer_currency_display_props returns display_mode "default" when the two currencies
+    # match, so those carts are never quoted, produce no candidate here, and fall through to
+    # the client-confirm branch below with their local method tabs intact.
     if buyer_currency_presentment_element_shape?(checkout_items)
       return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, buyer_currency_presentment: true, disable_wallets: true)
     end
@@ -329,6 +342,15 @@ class Checkout::StripePaymentPresenter
         # card shape (2) runs in live mode since the production rollout; the method-forced
         # shape (1) runs in live mode only when the resolver exposes a launched local method
         # whose Connect-account capabilities can accept the product's forced currency.
+        #
+        # Shape 1 is still reachable even though props now always hands a quoted cart to the
+        # buyer-currency element. The gap between "is a candidate" and "gets the element" is a
+        # product that OFFERS an installment plan: it is a candidate (the display converts) but
+        # the element shape rejects it, because quote creation cannot see whether the buyer
+        # picked installments. Such a cart is never quoted either — quotable_product? rejects
+        # installment-plan products — so it carries no token and the client-confirm lane can
+        # charge it safely. Keeping shape 1 listed means it keeps the local-method tabs instead
+        # of being kicked back to CardElement.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported

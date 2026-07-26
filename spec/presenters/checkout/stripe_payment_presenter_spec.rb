@@ -918,16 +918,58 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
-    it "does not fall back to CardElement for a non-EU tester (buyer-local display) — the EUR element mounts with wallets disabled" do
+    it "mounts the buyer-currency element, not the forced-currency one, for a Canadian buyer of an EUR-priced product" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      # Referenced so the forced-currency methods really are on offer for this cart (see the
+      # note in the matched-currency example below). Without it the resolver returns no local
+      # methods, the cart is not method-forced at all, and the example would pass without
+      # exercising the overlap it exists to pin.
+      platform_merchant_account
       add_products = [
         checkout_product_for(
           product,
           buyer_currency_display: {
             display_mode: "buyer_local",
             buyer_currency_shown: Currency::CAD,
+          }
+        )
+      ]
+
+      # This cart is both shapes at once: an EUR listing carries the forced local methods, and
+      # a Canadian buyer of it is an ordinary quote candidate. It must take the quote lane. The
+      # surcharge endpoint quotes this cart, so the checkout shows CA$ totals and submits the
+      # quote token — and the client-confirm lane rejects any request carrying a token
+      # (Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote), which would
+      # fail every payment attempt. Giving up the iDEAL/Bancontact tabs costs this buyer
+      # nothing: both methods need a bank in the country that issues them.
+      expect(stripe_payment_props(add_products:)).to eq(
+        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps the forced-currency element for a buyer whose own currency is the listed one" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      # Referenced so the USD-holding platform account exists: the resolver only offers the
+      # forced-currency methods when it does (forced_currency_settlement_supported?), and the
+      # lazy let above means an example that never touches it depends on how the database
+      # happened to be seeded.
+      platform_merchant_account
+      # A Dutch buyer of a EUR product — the shape #6346 is about. The currencies match, so
+      # buyer_currency_display_props yields display_mode "default", no quote is created, and
+      # nothing is submitted for prepare to reject. This cart must keep the forced-currency
+      # element and its local method tabs: it is what makes iDEAL reachable at all.
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "default",
+            buyer_currency_shown: Currency::EUR,
           }
         )
       ]
