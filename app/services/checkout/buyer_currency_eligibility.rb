@@ -32,7 +32,9 @@ class Checkout::BuyerCurrencyEligibility
   # `direct_listed_amount` is only set by the method-forced mode: true means the
   # product is already priced in the forced currency, so the charge path can use
   # the listed price as-is and skip fetching an FX quote. For the card mode
-  # (#decision) it is always nil because that mode requires USD-priced products.
+  # (#decision) it is always nil: that mode always charges through the locked FX
+  # quote, and the one cart that could use a listed price as-is (a product priced
+  # in the buyer's own currency) is rejected by that mode instead of charged directly.
   Decision = Struct.new(:eligible, :currency, :fallback_reason, :direct_listed_amount, keyword_init: true) do
     def eligible?
       eligible

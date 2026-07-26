@@ -320,8 +320,9 @@ class Checkout::StripePaymentPresenter
         #      forced-currency intent in Order::PreparePaymentIntentService); kicking it back
         #      to CardElement would make the iDEAL/Bancontact tabs unreachable for any tester
         #      whose GeoIP currency differs from the product's.
-        #   2. The buyer-currency card shape (one seller's USD-priced one-time items — the
-        #      same cart shape the eligibility service's card mode accepts), which mounts the
+        #   2. The buyer-currency card shape (one seller's one-time items, each priced in a
+        #      currency other than the buyer's own — the same cart shape the eligibility
+        #      service's card mode accepts), which mounts the
         #      server-confirm Payment Element in the buyer's quote currency (see props).
         # Non-flagged sellers never produce a candidate (buyer_presentment_candidate? checks
         # the seller flags), so neither branch changes behavior for unflagged checkouts. The
