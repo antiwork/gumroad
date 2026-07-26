@@ -302,7 +302,31 @@ describe User, :vcr do
 
         expect(@user.avatar_url).not_to include("stale-128px-url")
         expect(@user.avatar_url).not_to include("stale-unchecked-url")
-        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v3")).to eq(@user.avatar_variant.url)
+        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v3")).to eq(
+          { url: @user.avatar_variant.url, key: @user.avatar_variant.key }
+        )
+      end
+
+      it "regenerates the avatar when the file behind an already cached URL disappears" do
+        # The cached URL is served for a day, so a variant that vanishes after
+        # the entry is written must not keep being handed out for the rest of
+        # that day. The variant's storage key is cached next to the URL so
+        # every cache hit can confirm the file is still there.
+        stale_url = @user.avatar_url
+        stale_key = @user.reload.avatar_variant.key
+        expect(stale_url).to include(stale_key)
+
+        @user.avatar.blob.service.delete(stale_key)
+        # Clear only the presence shortcut: the URL entry stays, which is
+        # exactly the situation being tested.
+        Rails.cache.delete("active_storage_variant_present_#{stale_key}")
+
+        url = @user.reload.avatar_url
+
+        expect(url).not_to include(stale_key)
+        rebuilt_key = @user.reload.avatar_variant.key
+        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
       end
 
       it "regenerates the resized avatar and serves a working URL when its file is gone from storage" do

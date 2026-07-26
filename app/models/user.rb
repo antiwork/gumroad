@@ -464,36 +464,13 @@ class User < ApplicationRecord
   def avatar_url
     return ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png") unless avatar.attached?
 
-    # The version suffix on the cache key lets us abandon previously cached
-    # URLs without a backfill: every user's avatar URL is simply recomputed on
-    # its next read, and the old entries are left behind for memcached to
-    # evict. "_v2" moved us from 128x128 to 400x400 variants. "_v3" abandons
-    # the entries written before this method checked that the variant file
-    # still exists, some of which pointed at files that had disappeared from
-    # storage and so returned 403 forever.
-    cache_key = "attachment_#{avatar.id}_variant_url_v3"
-    cached_variant_url = Rails.cache.read(cache_key).presence
-
-    if cached_variant_url.nil?
-      # Confirm against storage rather than the presence cache here: this URL is
-      # about to be remembered for a day, so it has to be checked at the moment
-      # we write it. Otherwise a variant that vanished just after its presence
-      # was confirmed could be served for the presence lifetime and then get a
-      # fresh full-length URL entry on top of it.
-      cached_variant_url = avatar_variant(verify_storage: true)&.url.presence
-      # Only ever cache a real URL. A blank value here means we could not work
-      # out where the variant lives on this pass, and caching that would leave
-      # the seller with no profile picture until the entry expired, with no way
-      # for them to fix it. The expiry bounds how long any single cached URL
-      # can outlive the file it points at.
-      Rails.cache.write(cache_key, cached_variant_url, expires_in: AVATAR_VARIANT_URL_CACHE_TTL) if cached_variant_url
-    end
+    variant_url = cached_avatar_variant_url
 
     # Falling back to the original upload, which is the size the seller
     # uploaded but is otherwise correct, beats showing no avatar at all.
-    return avatar.url if cached_variant_url.nil?
+    return avatar.url if variant_url.blank?
 
-    cdn_url_for(cached_variant_url)
+    cdn_url_for(variant_url)
   rescue => e
     Rails.logger.warn("User#avatar_url error (#{id}): #{e.class} => #{e.message}")
     avatar.url
@@ -1282,6 +1259,47 @@ class User < ApplicationRecord
     end
 
   private
+    # The cached avatar variant URL, resolving and caching it when there is no
+    # usable entry.
+    #
+    # The version suffix on the cache key lets us abandon previously cached
+    # URLs without a backfill: every user's avatar URL is simply recomputed on
+    # its next read, and the old entries are left behind for memcached to
+    # evict. "_v2" moved us from 128x128 to 400x400 variants. "_v3" abandons
+    # the entries written before we checked that the variant file still
+    # exists, some of which pointed at files that had disappeared from storage
+    # and so returned 403 forever.
+    def cached_avatar_variant_url
+      cache_key = "attachment_#{avatar.id}_variant_url_v3"
+      cached = Rails.cache.read(cache_key)
+
+      # A cached URL is only worth serving while the file behind it is still
+      # there, so the variant's storage key is cached next to the URL and
+      # checked on every hit. Without that check a variant that disappeared
+      # just after its URL was written would 403 for the rest of the day. The
+      # check is normally answered by the short-lived presence entry, so it
+      # costs at most one storage lookup per variant per hour.
+      if cached.is_a?(Hash) && cached[:url].present? && cached[:key].present? &&
+         avatar_variant_file_present?(cached[:key])
+        return cached[:url]
+      end
+
+      # Ask storage directly rather than trusting the presence entry: this URL
+      # is about to be remembered for a day, so it has to be true at the moment
+      # we write it.
+      variant = avatar_variant(verify_storage: true)
+      url = variant&.url.presence
+      # Only ever cache a real URL. A blank value here means we could not work
+      # out where the variant lives on this pass, and caching that would leave
+      # the seller with no profile picture until the entry expired, with no way
+      # for them to fix it. The expiry bounds how long any single cached URL
+      # can outlive the file it points at.
+      if url && variant.key.present?
+        Rails.cache.write(cache_key, { url:, key: variant.key }, expires_in: AVATAR_VARIANT_URL_CACHE_TTL)
+      end
+      url
+    end
+
     # Returns the resized avatar, having confirmed that the resized file is
     # really still in storage.
     #
@@ -1299,7 +1317,7 @@ class User < ApplicationRecord
     # the original upload, which is normally still intact.
     def stored_avatar_variant(verify_storage: false, **transformations)
       variant = avatar.variant(**transformations).processed
-      return variant if avatar_variant_file_present?(variant, verify_storage:)
+      return variant if avatar_variant_file_present?(variant.key, verify_storage:)
 
       Rails.logger.warn("User#stored_avatar_variant (#{id}): variant file missing from storage, regenerating it")
       variant.destroy
@@ -1314,8 +1332,7 @@ class User < ApplicationRecord
     # storage directly. Callers that are about to remember the resulting URL for
     # a long time pass it, so the answer they cache was true at the moment they
     # cached it.
-    def avatar_variant_file_present?(variant, verify_storage: false)
-      key = variant.key
+    def avatar_variant_file_present?(key, verify_storage: false)
       # No key at all means Active Storage has nothing to check; let the caller
       # deal with the empty URL that follows rather than resizing in a loop.
       return true if key.blank?
@@ -1323,7 +1340,7 @@ class User < ApplicationRecord
       cache_key = "active_storage_variant_present_#{key}"
       return true if !verify_storage && Rails.cache.read(cache_key)
 
-      unless variant.service.exist?(key)
+      unless avatar.blob.service.exist?(key)
         # Drop any stale confirmation so another caller does not trust it.
         Rails.cache.delete(cache_key)
         return false
