@@ -187,7 +187,7 @@
 - id: 133
   slug: "133-pay-what-you-want-pricing"
   title: '"Pay what you want" pricing'
-  description: "In this article:  Suggest a Price Create a free product To allow your customers to name their own price for your product, simply enter \"0+\" as the price"
+  description: "In this article:  Suggest a Price Create a free product To allow your customers to name their own price for your product, open the product editor, go to the Product tab, and turn on Allow customers to pay what they want under the Amount field"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 134
   slug: "134-how-does-gumroad-handle-chargebacks"
