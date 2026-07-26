@@ -30,9 +30,10 @@ describe Order::ChargeService, :vcr do
     # Rounding is switched off deliberately. The examples that call this cover the
     # presentment charge plumbing — the idempotency key, Gumroad's share of the charge,
     # which purchases get a presentment row — not price endings. Buyer-currency price
-    # rounding (Checkout::PresentmentRounding) nudges every converted total by a cent or
-    # two, so leaving it on would make these examples assert the rounding rule's output
-    # instead of the behaviour they are named for. The rounding rule has its own spec.
+    # rounding (Checkout::PresentmentRounding) can move a converted total onto the
+    # seller's price ending, by as much as half a major unit, so leaving it on would make
+    # these examples assert the rounding rule's output instead of the behaviour they are
+    # named for. The rounding rule has its own spec.
     def configure_seller_1_for_presentment_charges
       seller_1.update!(
         check_merchant_account_is_linked: true,
