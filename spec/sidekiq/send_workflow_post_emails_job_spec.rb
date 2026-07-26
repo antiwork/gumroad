@@ -171,6 +171,27 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
       end
 
+      it "when the affiliate id is missing and nothing on the member is in scope, it skips them instead of sending" do
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
+
+        member = AudienceMember.find_by!(seller: @seller, email: @affiliates[0].affiliate_user.email)
+        # Every entry left on the member is for a product this post is not about. There is no
+        # legitimate affiliate to send as, so the job must skip rather than reach for one of them.
+        details = member.details.deep_dup
+        details["affiliates"] = [
+          { "id" => @affiliates[0].id + 1_000, "product_id" => @products[2].id, "created_at" => 1.hour.ago.iso8601 },
+        ]
+        allow(member).to receive(:details).and_return(details)
+        allow(member).to receive(:affiliate_id).and_return(nil)
+        allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
+
+        expect(Rails.logger).to receive(:error).with(/could not resolve a affiliate recipient/)
+
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      end
+
       it "when audience_type? is true, it sends the expected emails at the right times" do
         described_class.new.perform(@post.id)
 
