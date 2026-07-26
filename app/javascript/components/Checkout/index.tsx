@@ -245,15 +245,21 @@ export const Checkout = ({
   // an INR product with UPI): the buyer is charged the listed price as-is, so the summary shows
   // the listed currency rather than dividing that price by our USD exchange rate. Null on every
   // other checkout, which keeps the canonical USD rendering below.
-  const listedCurrency = getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items);
+  const listedCurrency = getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
+    willSaveCard: state.willSaveCard,
+    usingSavedCard: state.usingSavedCard,
+    paymentMethod: state.paymentMethod,
+  });
   const listedAmounts = getCheckoutListedCurrencyAmounts(listedCurrency, {
     lines: cart.items.map((item) => ({
       priceCents: hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity,
       discountCents: hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity - getDiscountedPrice(cart, item).price,
     })),
-    // The tip is submitted, and charged, in the listed currency's minor units, so it is displayed
-    // verbatim rather than converted.
-    tipCents: computeTip(state),
+    // The tip lives in checkout state as canonical USD cents on every lane — `computeTip` takes its
+    // percentage of `getTotalPriceFromProducts`, which `getProducts` builds with `convertToUSD` —
+    // and the submission path converts it into listed minor units by allocating it across the cart
+    // lines. So it is converted for display here exactly like tax and shipping, not shown verbatim.
+    tipCents: toBuyerCurrencyCents(computeTip(state), listedCurrency ?? { rate: 1 }),
     usdTaxCents: state.surcharges.type === "loaded" ? state.surcharges.result.tax_cents : 0,
     usdTaxIncludedCents: state.surcharges.type === "loaded" ? state.surcharges.result.tax_included_cents : 0,
     usdShippingCents: state.surcharges.type === "loaded" ? state.surcharges.result.shipping_rate_cents : 0,
@@ -315,7 +321,6 @@ export const Checkout = ({
                     <TipSelector
                       buyerCurrencyDisplay={localCurrency}
                       presentmentTipCents={localAmounts?.tipCents ?? null}
-                      tipAmountsAreInDisplayCurrency={listedAmounts != null}
                     />
                   </div>
                 ) : null}
@@ -508,17 +513,9 @@ export const Checkout = ({
 const TipSelector = ({
   buyerCurrencyDisplay,
   presentmentTipCents,
-  tipAmountsAreInDisplayCurrency = false,
 }: {
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   presentmentTipCents?: number | null;
-  // True on the method-forced listed-currency lane, where the tip the buyer enters is already in
-  // the currency shown (it is submitted, and charged, in the product's own minor units). The
-  // FX-quoted lane is the opposite: the tip is held in canonical USD cents in state and converted
-  // for display, so a tip typed in the buyer's currency must be converted back before it is
-  // stored. Converting on the listed lane would divide the buyer's tip by the exchange rate and
-  // then charge that smaller number as listed currency.
-  tipAmountsAreInDisplayCurrency?: boolean;
 }) => {
   const [state, dispatch] = useState();
   const errors = getErrors(state);
@@ -530,8 +527,10 @@ const TipSelector = ({
   }, [showPercentageOptions]);
 
   const tipPercentages = [0, 15, 20, 25];
+  // The tip is canonical USD cents in state on every lane, so a tip typed into the box is shown
+  // converted into whichever currency the summary displays, and converted back before it is stored.
   const fixedTipCents =
-    buyerCurrencyDisplay && !tipAmountsAreInDisplayCurrency && state.tip.type === "fixed" && state.tip.amount != null
+    buyerCurrencyDisplay && state.tip.type === "fixed" && state.tip.amount != null
       ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
       : state.tip.type === "fixed"
         ? state.tip.amount
@@ -594,7 +593,7 @@ const TipSelector = ({
                 tip: {
                   type: "fixed",
                   amount:
-                    buyerCurrencyDisplay && !tipAmountsAreInDisplayCurrency && newAmount != null
+                    buyerCurrencyDisplay && newAmount != null
                       ? toCanonicalCents(newAmount, buyerCurrencyDisplay)
                       : newAmount,
                 },

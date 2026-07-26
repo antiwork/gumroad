@@ -23,6 +23,7 @@ import {
   getCheckoutBuyerCurrencyDisplay,
   getCheckoutListedCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
+  toBuyerCurrencyCents,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import {
   type CartItem,
@@ -201,10 +202,14 @@ const CheckoutIndexPage = () => {
       paymentMethod: state.paymentMethod,
     },
   );
-  // The method-forced listed-currency lane, for the large-tip confirmation below: on that lane the
-  // tip and the cart total are already in the product's listed currency, so they are shown verbatim
-  // rather than converted (see getCheckoutListedCurrencyDisplay).
-  const listedCurrency = getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items);
+  // The method-forced listed-currency lane, for the large-tip confirmation below. The tip and the
+  // cart total are canonical USD cents in state, so both are converted into the listed currency for
+  // display — the modal must quote the same numbers the summary and the charge do.
+  const listedCurrency = getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
+    willSaveCard: state.willSaveCard,
+    usingSavedCard: state.usingSavedCard,
+    paymentMethod: state.paymentMethod,
+  });
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
@@ -792,14 +797,17 @@ const CheckoutIndexPage = () => {
         <p>
           You're about to leave a tip of{" "}
           {listedCurrency
-            ? formatPresentmentCents(computeTip(state), listedCurrency)
+            ? formatPresentmentCents(toBuyerCurrencyCents(computeTip(state), listedCurrency), listedCurrency)
             : formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay, {
                 usdSymbolFormat: "short",
                 noCentsIfWhole: true,
               })}{" "}
           on a{" "}
           {listedCurrency
-            ? formatPresentmentCents(getTotalPriceFromProducts(state), listedCurrency)
+            ? formatPresentmentCents(
+                toBuyerCurrencyCents(getTotalPriceFromProducts(state), listedCurrency),
+                listedCurrency,
+              )
             : formatCheckoutPrice(getTotalPriceFromProducts(state), buyerCurrencyDisplay, {
                 usdSymbolFormat: "short",
                 noCentsIfWhole: true,

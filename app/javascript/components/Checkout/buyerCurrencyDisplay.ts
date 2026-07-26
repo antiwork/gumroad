@@ -41,6 +41,12 @@ export type CheckoutBuyerCurrencyDisplay = {
 // the same way for either, and the rest of the checkout never has to know which lane it is on.
 export type CheckoutLocalCurrencyFormat = Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "rate" | "subunitToUnit">;
 
+// The subset of the FX lane's options the listed lane needs: which payment the buyer has selected,
+// since only a new card confirmed through the Payment Element charges in the listed currency.
+export type CheckoutListedCurrencyOptions = Pick<CheckoutBuyerCurrencyOptions, "willSaveCard" | "paymentMethod"> & {
+  usingSavedCard?: boolean;
+};
+
 export const getCheckoutBuyerCurrencyDisplay = (
   surcharges: SurchargesResponse | null,
   { cartPermalinks, willSaveCard = false, paymentMethod = "card" }: CheckoutBuyerCurrencyOptions,
@@ -99,21 +105,42 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
 // the charged amounts agree by construction rather than by coincidence.
 //
 // Returns null (canonical USD display, today's behavior) unless the server chose this lane AND the
-// cart still has the single-item, priced-in-that-currency shape the lane assumes. Those are the
-// server's own gates, re-checked here because the cart can be edited after the page rendered.
+// payment the buyer has actually selected will go through it AND the cart still has the
+// single-item, priced-in-that-currency shape the lane assumes.
+//
+// The payment-selection gates matter as much as the cart shape, and for the same reason as on the
+// FX-quoted lane above: only a new card confirmed through the Payment Element reaches
+// Charge::MethodForcedPresentment. A saved card (the default whenever the buyer has one on file)
+// and PayPal both charge canonical USD through other paths, so showing listed-currency totals for
+// them would recreate exactly the display/charge mismatch this lane exists to fix — just pointed
+// at a different set of buyers.
 export const getCheckoutListedCurrencyDisplay = (
   checkoutPayment: CheckoutPaymentConfig,
-  // Only the two pricing fields are read, so callers can pass cart items directly and tests
+  // Only the pricing/plan fields are read, so callers can pass cart items directly and tests
   // don't have to build a whole product.
-  cartItems: readonly { product: Pick<CartItem["product"], "currency_code" | "exchange_rate"> }[],
+  cartItems: readonly {
+    product: Pick<CartItem["product"], "currency_code" | "exchange_rate">;
+    pay_in_installments?: boolean;
+    recurrence?: string | null;
+  }[],
+  { willSaveCard = false, paymentMethod = "card", usingSavedCard = false }: CheckoutListedCurrencyOptions = {},
 ): CheckoutLocalCurrencyFormat | null => {
   if (checkoutPayment.integration !== "payment_element_client_confirm") return null;
   const listedCurrency = checkoutPayment.elements_options.listed_currency_display;
   if (!listedCurrency) return null;
+  if (willSaveCard || usingSavedCard || paymentMethod !== "card") return null;
   if (cartItems.length !== 1) return null;
 
-  const product = cartItems[0]?.product;
+  const item = cartItems[0];
+  const product = item?.product;
   if (!product) return null;
+  // Installment plans and subscriptions are shapes the client-confirm Element never accepts, so
+  // the server withholds this lane for them at render. Both are toggleable in the cart's Edit
+  // popover afterwards, and `checkoutPayment` is an Inertia prop that does not refresh on cart
+  // edits — so without re-checking here, toggling "pay in installments" would leave listed-currency
+  // rows on screen for a charge that has silently dropped back to canonical USD.
+  if (item.pay_in_installments) return null;
+  if (item.recurrence) return null;
   if (product.currency_code !== listedCurrency.currency) return null;
   // A zero or missing rate would make every converted row 0; fall back to canonical USD instead.
   if (!(product.exchange_rate > 0)) return null;
@@ -227,7 +254,9 @@ export const getCheckoutListedCurrencyAmounts = (
     usdTaxIncludedCents,
     usdShippingCents,
   }: {
-    // Both already in the listed currency's minor units.
+    // The line prices/discounts are already in the listed currency's minor units (that is what the
+    // cart holds on this lane); `tipCents` must be converted by the caller, since the tip is
+    // canonical USD cents in checkout state.
     lines: { priceCents: number; discountCents: number }[];
     tipCents: number;
     usdTaxCents: number;

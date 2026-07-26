@@ -299,6 +299,41 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     // A zero rate would convert every USD-side row (tax, shipping) to zero.
     expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems({ exchangeRate: 0 }))).toBeNull();
   });
+
+  // Only a new card confirmed through the Payment Element reaches Charge::MethodForcedPresentment.
+  // Every other selection charges canonical USD, so the summary must keep showing USD for it.
+  it("stays in canonical USD while the buyer pays with a card already on file", () => {
+    // This is the DEFAULT for any returning buyer, so getting it wrong would mis-display the
+    // common case rather than an edge case.
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems(), { usingSavedCard: true }),
+    ).toBeNull();
+  });
+
+  it("stays in canonical USD while the buyer is saving a card for future charges", () => {
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems(), { willSaveCard: true }),
+    ).toBeNull();
+  });
+
+  it("stays in canonical USD while a non-card payment method is selected", () => {
+    // PayPal charges USD or the merchant-account currency at its own rate, never the listed price.
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems(), { paymentMethod: "paypal" }),
+    ).toBeNull();
+  });
+
+  it("stays in canonical USD for installment and subscription carts", () => {
+    // Both are shapes the client-confirm Element rejects, and both are toggleable after render
+    // while `checkoutPayment` stays frozen — so the client has to re-check them itself.
+    const brlItem = { product: { currency_code: "brl" as const, exchange_rate: 5.45 } };
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, pay_in_installments: true }]),
+    ).toBeNull();
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, recurrence: "monthly" }]),
+    ).toBeNull();
+  });
 });
 
 describe("getCheckoutListedCurrencyAmounts", () => {

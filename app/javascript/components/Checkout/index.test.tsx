@@ -152,6 +152,7 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   availablePaymentMethods: [],
   paymentMethod: "card",
   willSaveCard: false,
+  usingSavedCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
   status: { type: "input", errors: new Set() },
@@ -276,9 +277,14 @@ describe("Checkout method-forced listed-currency amounts", () => {
     },
   });
 
+  // `getProducts` always converts cart prices to canonical USD before they land in checkout state
+  // (`price: convertToUSD(item, price)`), so state carries 915 for a R$49.90 product at rate 5.45
+  // while the cart item carries the listed 4 990. Using the realistic USD value here matters: the
+  // percentage tip is computed off state, so a fixture holding listed units in state would hide a
+  // tip that is displayed in the wrong currency.
   const brlState = (overrides: Partial<State> = {}): State =>
     buildState({
-      products: [stateProduct({ permalink: "brl", price: 4_990 })],
+      products: [stateProduct({ permalink: "brl", price: 915 })],
       checkoutPayment: listedCurrencyPayment(),
       surcharges: {
         type: "loaded",
@@ -288,7 +294,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
           shipping_rate_cents: 0,
           tax_cents: 0,
           tax_included_cents: 0,
-          subtotal: 4_990,
+          subtotal: 915,
           buyer_currency_quote: null,
         },
       },
@@ -350,10 +356,84 @@ describe("Checkout method-forced listed-currency amounts", () => {
     };
 
     const { getAllByLabelText } = renderCheckout(
-      brlState({ products: [stateProduct({ permalink: "brl", price: 4_990 }), stateProduct({ permalink: "second" })] }),
+      brlState({ products: [stateProduct({ permalink: "brl", price: 915 }), stateProduct({ permalink: "second" })] }),
       cart,
     );
 
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15", "US$10"]);
+  });
+
+  // The tip is canonical USD cents in state on every lane (`computeTip` takes its percentage of
+  // `getTotalPriceFromProducts`, which holds converted USD), and the submission path converts it
+  // into listed minor units. Displaying it verbatim under an R$ label therefore understates what
+  // the buyer is about to be charged — a 20% tip on R$49.90 rendered as R$1.83 instead of R$9.98.
+  const tippingProduct = () => ({ ...brlProduct(), has_tipping_enabled: true });
+
+  const tippingCart = (): CartState => ({
+    items: [cartItem({ product: tippingProduct(), price: 4_990 })],
+    discountCodes: [],
+  });
+
+  it("converts the tip into the listed currency instead of labelling USD cents with the listed symbol", () => {
+    const { getAllByText, queryByText } = renderCheckout(
+      brlState({
+        products: [stateProduct({ permalink: "brl", price: 915, hasTippingEnabled: true })],
+        tip: { type: "percentage", percentage: 20 },
+      }),
+      tippingCart(),
+    );
+
+    // 20% of the canonical 915 USD cents is 183, which converts to 183 * 5.45 = 997 BRL cents.
+    expect(getAllByText("R$9.97").length).toBeGreaterThan(0);
+    // The unconverted USD figure must not appear under an R$ label.
+    expect(queryByText("R$1.83")).toBeNull();
+    // Total is the listed price plus the converted tip: 4990 + 997.
+    expect(getAllByText("R$59.87").length).toBeGreaterThan(0);
+  });
+
+  it("converts a fixed tip typed in the listed currency back to canonical cents before storing it", () => {
+    // A fixed tip of 1 000 canonical USD cents is R$54.50 at rate 5.45. Displaying it verbatim as
+    // R$10.00 would under-quote the charge by the exchange-rate factor.
+    const { getAllByText } = renderCheckout(
+      brlState({
+        products: [stateProduct({ permalink: "brl", price: 915, hasTippingEnabled: true })],
+        tip: { type: "fixed", amount: 1_000 },
+      }),
+      tippingCart(),
+    );
+
+    expect(getAllByText("R$54.50").length).toBeGreaterThan(0);
+    // 4990 + 5450
+    expect(getAllByText("R$104.40").length).toBeGreaterThan(0);
+  });
+
+  it("stays in canonical USD while a saved card is selected, because that charge is not in the listed currency", () => {
+    // Saved cards stay on the server-confirm path, which never reaches
+    // Charge::MethodForcedPresentment — and `usingSavedCard` defaults true for any buyer with a
+    // card on file, so this is the DEFAULT render for a returning buyer, not an edge case.
+    const { getAllByLabelText } = renderCheckout(brlState({ usingSavedCard: true }), brlCart());
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
+  });
+
+  it("stays in canonical USD while PayPal is selected", () => {
+    // PayPal charges USD (or the merchant-account currency at PayPal's own rate), never the listed
+    // price, so the summary must show the USD totals that charge will use.
+    const { getAllByLabelText } = renderCheckout(brlState({ paymentMethod: "paypal" }), brlCart());
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
+  });
+
+  it("stays in canonical USD when the buyer toggles pay-in-installments after the page rendered", () => {
+    // `checkoutPayment` is an Inertia prop that does not refresh on cart edits, so the client has to
+    // re-check this itself: the element silently drops to a canonical-USD CardElement.
+    const cart: CartState = {
+      items: [cartItem({ product: brlProduct(), price: 4_990, pay_in_installments: true })],
+      discountCodes: [],
+    };
+
+    const { getAllByLabelText } = renderCheckout(brlState(), cart);
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
   });
 });
