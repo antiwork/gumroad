@@ -59,6 +59,31 @@ const clickLink = (container: HTMLElement, selector: string) => {
   return event;
 };
 
+// happy-dom has no ResizeObserver and never lays anything out, so stand one in and drive it by
+// hand. Calling resizeObserved() plays the part of an article image finishing loading and making
+// the article taller.
+const resizeCallbacks = new Set<ResizeObserverCallback>();
+
+class FakeResizeObserver implements ResizeObserver {
+  constructor(private readonly callback: ResizeObserverCallback) {
+    resizeCallbacks.add(callback);
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {
+    resizeCallbacks.delete(this.callback);
+  }
+}
+window.ResizeObserver = FakeResizeObserver;
+globalThis.ResizeObserver = FakeResizeObserver;
+
+const resizeObserved = () => {
+  act(() => {
+    // Snapshot first: constructing the observer we hand the callback registers it again.
+    for (const callback of [...resizeCallbacks]) callback([], new FakeResizeObserver(callback));
+  });
+};
+
 describe("HelpCenterArticle", () => {
   beforeEach(() => {
     window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
@@ -168,6 +193,62 @@ describe("HelpCenterArticle", () => {
     await flushFrames();
 
     expect(order).toEqual(["inertia-scroll-reset", "scrollIntoView"]);
+  });
+
+  it("scrolls to the target again while the article is still growing", async () => {
+    // Article images carry no width or height, so the browser re-lays out the article as each one
+    // loads and the target drifts away from where we scrolled to. On a real preview load of
+    // "Getting paid" that left the heading 140px above the top of the viewport — just out of sight.
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#${ANCHOR_ID}`;
+
+    renderArticle({ slug: "13-getting-paid", content: `<h3 id="${ANCHOR_ID}">Address verification</h3>` });
+
+    await flushFrames();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+    resizeObserved();
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops correcting the scroll position once the reader scrolls themselves", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#${ANCHOR_ID}`;
+
+    renderArticle({ slug: "13-getting-paid", content: `<h3 id="${ANCHOR_ID}">Address verification</h3>` });
+
+    await flushFrames();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new Event("wheel"));
+    resizeObserved();
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops correcting the scroll position after the article has had time to settle", async () => {
+    // Only the timers are faked: flushFrames needs requestAnimationFrame to keep working.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#${ANCHOR_ID}`;
+
+      renderArticle({ slug: "13-getting-paid", content: `<h3 id="${ANCHOR_ID}">Address verification</h3>` });
+
+      await flushFrames();
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+      act(() => void vi.advanceTimersByTime(5000));
+      resizeObserved();
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("handles a percent-encoded fragment", async () => {

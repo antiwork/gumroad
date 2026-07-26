@@ -196,7 +196,41 @@ export default function HelpCenterArticle() {
       target?.scrollIntoView();
     };
     const frame = requestAnimationFrame(scroll);
-    return () => cancelAnimationFrame(frame);
+
+    // Scrolling once is not enough. The images in an article body carry no width or height, so the
+    // browser only learns how tall they are as each one finishes loading, and it lays the article
+    // out again every time. Those reflows move the target after we already scrolled to it: on a
+    // fresh load of "Getting paid" the heading came to rest 140px above the top of the viewport,
+    // just out of sight, which reads to the reader as landing in the wrong place.
+    //
+    // So keep the target in view for as long as the article's height is still settling. Two things
+    // end that: the reader taking over (we must never fight their own scrolling), and a short grace
+    // period, after which any further height change belongs to something other than the initial
+    // load and re-scrolling would be an unwanted jump.
+    const content = contentRef.current;
+    const RESETTLE_WINDOW_MS = 3000;
+    const INTERACTION_EVENTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+
+    let observer: ResizeObserver | null = null;
+    const stopResettling = () => {
+      observer?.disconnect();
+      observer = null;
+      clearTimeout(timer);
+      for (const event of INTERACTION_EVENTS) window.removeEventListener(event, stopResettling);
+    };
+    const timer = setTimeout(stopResettling, RESETTLE_WINDOW_MS);
+
+    // ResizeObserver is missing in some test environments; the scroll above still happens without it.
+    if (typeof ResizeObserver !== "undefined" && content) {
+      observer = new ResizeObserver(() => scroll());
+      observer.observe(content);
+    }
+    for (const event of INTERACTION_EVENTS) window.addEventListener(event, stopResettling, { passive: true });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      stopResettling();
+    };
   }, [article.slug]);
 
   return (
