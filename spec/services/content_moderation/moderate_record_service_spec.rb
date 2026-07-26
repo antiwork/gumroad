@@ -610,6 +610,37 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(storage_lookups).to eq(1)
       end
 
+      # Running out of time is one event for the whole save, so it has to be
+      # reported once with the total left unchecked. A line per tier would both
+      # flood the log and leave nobody able to see how many files that was.
+      it "logs a single warning naming the total left unchecked across all tiers" do
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+        membership.tiers.each do |tier|
+          2.times { tier.product_files << create(:product_file, link: membership, analyze_completed: false) }
+          tier.save!
+        end
+        membership.reload
+        # The tally covers every list the check walked: the product's own file
+        # list plus one per tier. Everything but the single lookup that burned
+        # the budget went unchecked.
+        walked_files = membership.alive_product_files.count +
+          membership.alive_variants.sum { |tier| tier.alive_product_files.count }
+        unchecked = walked_files - 1
+
+        warnings = []
+        allow(Rails.logger).to receive(:warn) { |message| warnings << message }
+
+        expect(described_class.check(membership, :product).passed).to eq(false)
+
+        budget_warnings = warnings.grep(/storage check budget spent/)
+        expect(budget_warnings.size).to eq(1)
+        expect(budget_warnings.first).to include("#{unchecked} unverifiable file(s) left unchecked")
+      end
+
       # A file that finished analyzing is answered from its own row, so a real
       # deliverable sitting behind a pile of unfinished uploads still publishes
       # and still costs nothing to confirm.

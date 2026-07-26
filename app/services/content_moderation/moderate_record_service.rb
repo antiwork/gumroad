@@ -10,6 +10,32 @@ class ContentModeration::ModerateRecordService
   # from the check by its position in the list.
   STORAGE_CHECK_TIME_BUDGET_SECONDS = 2.0
 
+  # One storage-check budget, shared by a product and every variant it carries,
+  # so a single save spends one budget however many file lists it contains.
+  #
+  # It also tallies how many files each list had to leave unchecked once the time
+  # ran out. The tally is deliberately kept here rather than logged by each list,
+  # because running out of time is one event for the whole save: a membership with
+  # ten tiers would otherwise emit ten separate warnings for it, and none of them
+  # would say how many files went unchecked in total. The caller logs the tally
+  # once, after the whole check has finished.
+  class StorageCheckBudget
+    attr_reader :unchecked_file_count
+
+    def initialize(seconds:)
+      @deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds
+      @unchecked_file_count = 0
+    end
+
+    def spent?
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) >= @deadline
+    end
+
+    def record_unchecked_files(count)
+      @unchecked_file_count += count
+    end
+  end
+
   CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
 
   CATEGORY_LABELS = {
@@ -223,11 +249,25 @@ class ContentModeration::ModerateRecordService
       # carries its own files and a separate list per variant, so giving each
       # list its own budget would multiply the worst case by the number of
       # variants a single save can contain.
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + STORAGE_CHECK_TIME_BUDGET_SECONDS
+      budget = StorageCheckBudget.new(seconds: STORAGE_CHECK_TIME_BUDGET_SECONDS)
 
-      has_deliverable_file?(record, deadline:) ||
-        record.alive_variants.any? { |variant| has_deliverable_file?(variant, deadline:) } ||
-        has_readable_body_content?(record)
+      found_file = has_deliverable_file?(record, budget:) ||
+        record.alive_variants.any? { |variant| has_deliverable_file?(variant, budget:) }
+
+      # Say so once for the whole save when a spent budget left files unchecked
+      # and we ended up failing, so a failure that only means "we ran out of time"
+      # is explicable from the logs. Logged here rather than inside the per-list
+      # check so a membership with many tiers produces one line carrying the
+      # total, not one line per tier.
+      if !found_file && budget.unchecked_file_count.positive?
+        Rails.logger.warn(
+          "ContentModeration: storage check budget spent with " \
+          "#{budget.unchecked_file_count} unverifiable file(s) left unchecked on " \
+          "#{record.class.name} ##{record.id}"
+        )
+      end
+
+      found_file || has_readable_body_content?(record)
     end
 
     # An attached file only counts when there is really something in storage
@@ -284,7 +324,7 @@ class ContentModeration::ModerateRecordService
     # This can only decide how cheaply an honest seller is confirmed; it can never
     # let an empty listing through, because passing still requires an object to
     # actually be in storage.
-    def has_deliverable_file?(owner, deadline:)
+    def has_deliverable_file?(owner, budget:)
       unverifiable_from_row = []
 
       owner.alive_product_files.each do |file|
@@ -297,11 +337,8 @@ class ContentModeration::ModerateRecordService
       unverifiable_from_row
         .sort_by { -_1.id }
         .each_with_index do |file, checked|
-          if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
-            Rails.logger.warn(
-              "ContentModeration: storage check budget spent after #{checked} of " \
-              "#{unverifiable_from_row.size} unverifiable files on #{owner.class.name} ##{owner.id}"
-            )
+          if budget.spent?
+            budget.record_unchecked_files(unverifiable_from_row.size - checked)
             break
           end
 
