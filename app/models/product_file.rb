@@ -188,13 +188,28 @@ class ProductFile < ApplicationRecord
   # has run — costs a lookup. A file whose object has since been purged keeps its
   # flag, so that case is answered from `deleted_from_cdn_at` first.
   #
+  # A lookup that comes back absent is not thrown away: it enqueues
+  # RecordProductFileMissingFromStorageJob, which writes `deleted_from_cdn_at` on
+  # rows whose upload can no longer be in flight. That is how a never-finished
+  # upload stops costing a lookup on every later save (gumroad-private#1370).
+  #
   # External links are always considered present: there is no storage object to
   # look for, and the URL is the deliverable.
   def stored_file_present?
     known_from_row = stored_file_presence_known_from_row
     return known_from_row unless known_from_row.nil?
 
-    s3_object.exists?
+    present = s3_object.exists?
+    # A lookup that proves the object is absent is the only place we ever learn
+    # that this row's upload never finished, and right now nothing remembers it:
+    # the next caller pays the same lookup to reach the same answer. Hand the
+    # finding to a job so the row can record it and answer for itself from then
+    # on (gumroad-private#1370). This runs in the middle of a save, so it must
+    # not write here — the job re-checks and does the write.
+    if !present && RecordProductFileMissingFromStorageJob.eligible?(self)
+      RecordProductFileMissingFromStorageJob.perform_async(id)
+    end
+    present
   rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
     # Storage being unreachable is not evidence that the file is missing, and a
     # caller deciding whether a seller may publish should not turn our own
