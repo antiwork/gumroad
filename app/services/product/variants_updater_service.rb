@@ -75,6 +75,13 @@ class Product::VariantsUpdaterService
     categories_to_delete.each do |variant_category|
       next if variant_category.has_alive_grouping_variants_with_purchases?
 
+      # Captured before the sweep: these are the versions whose removal this
+      # operation authorises, and the same list the guard checks. Read afterwards
+      # it would still be accurate today (the sweep does not soft-delete them)
+      # but that is an accident of the missing `dependent:` option, not something
+      # the audit should rely on.
+      affected_variant_external_ids = variant_category.alive_variants.map(&:external_id)
+
       Product::VariantCategoryUpdaterService.ensure_deletion_intent!(
         product:,
         variants: variant_category.alive_variants.to_a,
@@ -83,20 +90,27 @@ class Product::VariantsUpdaterService
       )
       variant_category.mark_deleted!
 
-      # Marking the category deleted does NOT delete its variants —
+      # Marking the grouping deleted does NOT soft-delete its versions —
       # VariantCategory's `has_many :variants` has no `dependent:` option — so
-      # any variants still alive here stay alive under a deleted category. The
-      # audit records that count so the consequence is visible in data rather
-      # than something you have to know to go looking for.
+      # any versions alive here stay alive under a deleted grouping. Two
+      # consequences for the audit:
+      #
+      # 1. `alive_child_variant_count` records that, so the no-cascade behaviour
+      #    is visible in data rather than something you have to know to look for.
+      # 2. Intent has to be judged against the versions this sweep AUTHORISED
+      #    removing (`affected_variant_external_ids`), not against soft-deleted
+      #    rows — there are none here. Judging it from the deleted set would
+      #    report a sweep the seller explicitly confirmed as omission-driven.
       ProductVariantDeletionAudit.record_deletion(
         actor_user_id: deletion_audit_context[:actor_user_id],
-        link_id: product.id,
+        product_id: product.id,
         route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT,
         deleted_variant_category_external_ids: [variant_category.external_id],
+        affected_variant_external_ids: affected_variant_external_ids,
         confirmed_removed_variant_ids:,
         alive_child_variant_count: variant_category.variants.alive.count,
         revision_token: deletion_audit_context[:revision_token],
-        request_id: deletion_audit_context[:request_id],
+        correlation_id: deletion_audit_context[:correlation_id],
       )
     end
 

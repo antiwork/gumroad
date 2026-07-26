@@ -194,13 +194,13 @@ class Product::VariantCategoryUpdaterService
     def record_deletion_audit(route:, deleted_variant_external_ids: [], deleted_variant_category_external_ids: [])
       ProductVariantDeletionAudit.record_deletion(
         actor_user_id: deletion_audit_context[:actor_user_id],
-        link_id: product.id,
+        product_id: product.id,
         route:,
         deleted_variant_external_ids:,
         deleted_variant_category_external_ids:,
         confirmed_removed_variant_ids:,
         revision_token: deletion_audit_context[:revision_token],
-        request_id: deletion_audit_context[:request_id],
+        correlation_id: deletion_audit_context[:correlation_id],
       )
     end
 

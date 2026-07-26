@@ -931,14 +931,18 @@ class LinksController < ApplicationController
     # Who and which request is performing this save, for the deletion audit
     # trail (ProductVariantDeletionAudit). `logged_in_user` rather than
     # `current_seller`: on a collaborator or admin save those differ, and the
-    # audit wants the person who actually pressed save. `revision_token` is
-    # always nil today — the editor-scoped revision token proposed in
-    # gumroad-private#1379 does not exist yet; the key is here so the audit shape
-    # doesn't change when it ships.
+    # audit wants the person who actually pressed save.
+    #
+    # `correlation_id` is a server-side digest, not the raw request id — Rails
+    # takes `X-Request-Id` from the client, so the raw value is caller-controlled
+    # (see AuditCorrelationId). `revision_token` is always nil today: the
+    # editor-scoped revision token proposed in gumroad-private#1379 does not
+    # exist yet, and the key is here so the audit shape doesn't change when it
+    # ships.
     def deletion_audit_context
       @_deletion_audit_context ||= {
         actor_user_id: logged_in_user&.id,
-        request_id: request.request_id,
+        correlation_id: AuditCorrelationId.for(request.request_id),
         revision_token: nil,
       }
     end

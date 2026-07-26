@@ -1771,22 +1771,24 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000010) do
 
   create_table "product_variant_deletion_audits", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "actor_user_id", null: false
-    t.bigint "link_id", null: false
+    t.bigint "product_id", null: false
     t.string "route", null: false
     t.string "intent_source", null: false
     t.json "deleted_variant_external_ids"
     t.json "deleted_variant_category_external_ids"
+    t.json "affected_variant_external_ids"
     t.json "confirmed_deleted_variant_external_ids"
     t.integer "deleted_variant_count", default: 0, null: false
+    t.integer "affected_variant_count", default: 0, null: false
     t.integer "confirmed_deleted_variant_count", default: 0, null: false
     t.integer "unconfirmed_deleted_variant_count", default: 0, null: false
     t.integer "alive_child_variant_count", default: 0, null: false
     t.string "revision_token"
-    t.string "request_id"
+    t.string "correlation_id", limit: 64
     t.datetime "created_at", null: false
     t.index ["actor_user_id", "created_at"], name: "idx_on_actor_user_id_created_at_0b984cfaae"
     t.index ["intent_source", "created_at"], name: "idx_on_intent_source_created_at_69e15c2c5d"
-    t.index ["link_id", "created_at"], name: "idx_on_link_id_created_at_953dd2e139"
+    t.index ["product_id", "created_at"], name: "idx_on_product_id_created_at_cea2c3e72d"
   end
 
   create_table "public_files", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

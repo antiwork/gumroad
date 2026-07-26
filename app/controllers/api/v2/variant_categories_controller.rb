@@ -28,27 +28,33 @@ class Api::V2::VariantCategoriesController < Api::V2::BaseController
   end
 
   def destroy
-    # Captured before the deletion: afterwards the category is gone and the
-    # count would be harder to attribute to this request.
+    # Captured before the deletion: afterwards the grouping is gone and the count
+    # would be harder to attribute to this request. `already_deleted` matters for
+    # the audit — `mark_deleted` succeeds on a row that was ALREADY deleted, so a
+    # retrying or looping client would otherwise add an audit row per call for a
+    # deletion that only happened once.
     alive_child_variant_count = @variant_category.variants.alive.count
+    already_deleted = @variant_category.deleted_at.present?
 
     if @variant_category.mark_deleted
       # This endpoint is an explicit, single-purpose destructive call and
-      # deliberately sits outside the product editor's deletion guards — a
-      # caller asked for exactly this. Two things make it worth recording:
-      # it carries no confirmation or revision context at all, and
-      # `mark_deleted` does NOT cascade (VariantCategory's `has_many :variants`
-      # has no `dependent:` option), so any live versions stay alive under a
-      # deleted grouping. `alive_child_variant_count` makes that visible.
-      ProductVariantDeletionAudit.record_deletion(
-        actor_user_id: current_resource_owner&.id,
-        link_id: @product.id,
-        route: ProductVariantDeletionAudit::API_V2_VARIANT_CATEGORY_DESTROY,
-        deleted_variant_category_external_ids: [@variant_category.external_id],
-        intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
-        alive_child_variant_count:,
-        request_id: request.request_id,
-      )
+      # deliberately sits outside the product editor's deletion guards — a caller
+      # asked for exactly this. Two things make it worth recording: it carries no
+      # confirmation or revision context at all, and `mark_deleted` does NOT
+      # cascade (VariantCategory's `has_many :variants` has no `dependent:`
+      # option), so any live versions stay alive under a deleted grouping.
+      # `alive_child_variant_count` makes that visible.
+      unless already_deleted
+        ProductVariantDeletionAudit.record_deletion(
+          actor_user_id: current_resource_owner&.id,
+          product_id: @product.id,
+          route: ProductVariantDeletionAudit::API_V2_VARIANT_CATEGORY_DESTROY,
+          deleted_variant_category_external_ids: [@variant_category.external_id],
+          intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
+          alive_child_variant_count:,
+          correlation_id: AuditCorrelationId.for(request.request_id),
+        )
+      end
       success_with_variant_category
     else
       error_with_variant_category(@variant_category)
