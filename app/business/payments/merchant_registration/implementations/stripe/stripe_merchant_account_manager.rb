@@ -1368,9 +1368,9 @@ module StripeMerchantAccountManager
     document_verification_error = verification_errors.select { |_field, error| error[:code].starts_with?("verification_document") }.first
     skip_more_kyc_email = requirements_only_soft_future?(requirements, new_requests, all_fields_needed, requirements_due_at)
     email_sent = if document_verification_error.present?
-      ContactingCreatorMailer.stripe_document_verification_failed(user.id, document_verification_error[1][:reason]).deliver_later(queue: "critical")
+      ContactingCreatorMailer.stripe_document_verification_failed(user.id, seller_facing_verification_reason(user, document_verification_error[1])).deliver_later(queue: "critical")
     elsif verification_errors.present?
-      ContactingCreatorMailer.stripe_identity_verification_failed(user.id, verification_errors.first[1][:reason]).deliver_later(queue: "critical")
+      ContactingCreatorMailer.stripe_identity_verification_failed(user.id, seller_facing_verification_reason(user, verification_errors.first[1])).deliver_later(queue: "critical")
     elsif skip_more_kyc_email
       nil
     else
@@ -1385,6 +1385,19 @@ module StripeMerchantAccountManager
 
   def self.prefecture_kana(kanji)
     Compliance::Countries.japan_prefecture_kana(kanji)
+  end
+
+  # Stripe's own rejection reason is what we normally forward to the seller, but for an
+  # address-mismatch rejection on a seller whose registered address is a P.O. Box that reason is
+  # actively wrong: it asks them to fix the address or upload a matching document, and neither is
+  # possible (see UserComplianceInfoRequest for the full explanation of the deadlock). Send those
+  # sellers to support instead of into another round of the same rejected upload.
+  def self.seller_facing_verification_reason(user, verification_error)
+    if UserComplianceInfoRequest.po_box_address_deadlock?(user:, error_code: verification_error[:code])
+      return UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE
+    end
+
+    verification_error[:reason]
   end
 
   # Stripe has nothing further the seller could submit: no currently-due or

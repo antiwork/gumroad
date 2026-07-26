@@ -207,4 +207,79 @@ describe UserComplianceInfoRequest do
       expect(request_1.reload.state).to eq("provided")
     end
   end
+
+  describe "#verification_error_message" do
+    let(:user) { create(:user) }
+    let(:request) do
+      create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID)
+    end
+
+    def set_error(code)
+      request.verification_error = { "code" => code }
+      request.save!
+    end
+
+    context "when the seller has never given us a P.O. Box address" do
+      before { create(:user_compliance_info_business, user:) }
+
+      it "returns the standard address mismatch copy" do
+        set_error("verification_document_address_mismatch")
+
+        expect(request.reload.verification_error_message).to include("upload a document with address that matches the account")
+        expect(request.reload.verification_error_message).not_to include("P.O. Box")
+      end
+    end
+
+    context "when the seller's registered address is a P.O. Box" do
+      before { create(:user_compliance_info_business, user:, business_street_address: "PO Box 65") }
+
+      it "explains the deadlock instead of asking for another upload" do
+        set_error("verification_document_address_mismatch")
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+
+      it "explains the deadlock for the keyed address match failure too" do
+        set_error("verification_failed_address_match")
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+
+      it "still explains the deadlock once the P.O. Box has been edited off the account" do
+        # This is the real-world sequence: the P.O. Box is rejected on the account, the seller
+        # replaces it with something our payment partner accepts, and only then does the document
+        # get rejected for not matching. The P.O. Box only survives in the older revisions.
+        create(:user_compliance_info_business, user:, business_street_address: "NW-22-34-19-W2")
+        set_error("verification_document_address_mismatch")
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+
+      it "leaves unrelated rejection reasons alone" do
+        set_error("verification_document_expired")
+
+        expect(request.reload.verification_error_message).to include("issue or expiry date")
+      end
+
+      it "overrides the reason our payment partner supplied, because that reason is the misleading one" do
+        request.verification_error = {
+          "code" => "verification_document_address_mismatch",
+          "message" => "Address on the account doesn't match the verification document."
+        }
+        request.save!
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+    end
+
+    context "when the P.O. Box is only in an individual address" do
+      before { create(:user_compliance_info, user:, street_address: "P.O. Box 65") }
+
+      it "explains the deadlock" do
+        set_error("verification_document_address_mismatch")
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+    end
+  end
 end
