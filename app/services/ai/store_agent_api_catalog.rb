@@ -181,7 +181,7 @@ module Ai::StoreAgentApiCatalog
     # edit_emails too (not view_sales) to match the real contract.
     ep("list_emails", :get, "/emails", "List the creator's email posts. Returns 10 per page; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "edit_emails", params: %w[page_key]),
     ep("get_email", :get, "/emails/:id", "Get one email post.", read: true, scope: "edit_emails", path_params: %w[id]),
-    ep("create_email", :post, "/emails", "Draft a new email post to subscribers/customers.", scope: "edit_emails", params: %w[subject body audience product_id link_id publish draft]),
+    ep("create_email", :post, "/emails", "Draft a new email post to subscribers/customers. audience must be one of: all, audience, customers, seller, followers, follower, product. Use product only with product_id/link_id.", scope: "edit_emails", params: %w[subject body audience product_id link_id publish draft]),
     ep("preview_email", :post, "/emails/:id/preview", "Send a preview of an email to the creator.", scope: "edit_emails", path_params: %w[id]),
     ep("send_email", :post, "/emails/:id/send", "Send an email post to its audience.", scope: "edit_emails", path_params: %w[id]),
     ep("delete_email", :delete, "/emails/:id", "Delete an email post.", scope: "edit_emails", path_params: %w[id]),
