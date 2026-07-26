@@ -1801,6 +1801,18 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "gumroad.com/settings/payments"
       expect(mail.body.encoded).to include settings_payments_url
     end
+
+    it "drops the upload instructions and points at support when the reason is one the seller can't act on" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_document_verification_failed(creator.id, UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "uploading it again won&#39;t help"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "upload a valid document"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+      expect(mail.body.encoded).to_not include "Here&#39;s what Stripe reported"
+    end
   end
 
   describe "#stripe_identity_verification_failed" do
@@ -1816,6 +1828,18 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include stripe_error_reason
       expect(mail.body.encoded).to include "gumroad.com/settings/payments"
       expect(mail.body.encoded).to include settings_payments_url
+    end
+
+    it "drops the update instructions and points at support when the reason is one the seller can't act on" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_identity_verification_failed(creator.id, UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "uploading it again won&#39;t help"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "update the relevant information"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+      expect(mail.body.encoded).to_not include "Here&#39;s what Stripe reported"
     end
   end
 

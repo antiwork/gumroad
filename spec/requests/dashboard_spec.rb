@@ -144,7 +144,7 @@ describe "Dashboard", js: true, type: :system do
 
       visit dashboard_path
 
-      expect(page).to have_text("Your registered address is a P.O. Box")
+      expect(page).to have_text("Your registered address appears to be a P.O. Box")
       expect(page).to have_text("uploading it again won't help")
       expect(page).not_to have_text("upload a document with address that matches the account")
     end
