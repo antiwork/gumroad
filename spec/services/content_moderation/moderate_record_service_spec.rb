@@ -6,6 +6,9 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
   let(:strategy_result) { Struct.new(:status, :reasoning, keyword_init: true) }
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, name: "Test", description: "Clean description") }
+  # A file whose upload finished: `analyze` only sets analyze_completed after it
+  # has successfully read the stored object.
+  let(:uploaded_file) { create(:product_file, analyze_completed: true) }
 
   before do
     Feature.activate(:content_moderation)
@@ -18,6 +21,12 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
     allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
       instance_double(ContentModeration::Strategies::PromptStrategy, perform: strategy_result.new(status: "compliant", reasoning: []))
     )
+  end
+
+  # An unfinished upload leaves a ProductFile row whose storage key was never
+  # written, which is what `exists? == false` stands for here.
+  def stub_missing_storage_objects
+    allow_any_instance_of(ProductFile).to receive(:s3_object).and_return(double("s3_object", exists?: false))
   end
 
   describe ".check" do
@@ -317,6 +326,338 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         contents = ContentModerationAdminCommentJob.jobs.map { |j| j["args"].second }
         expect(contents).to include(a_string_including("blocked publish of"))
         expect(contents).to include(a_string_including("flagged but did not block"))
+      end
+    end
+
+    # A corroborated spam flag is still a judgment call about the seller's
+    # intent, and it fires on the writing style of the info-product genre. On a
+    # listing that actually delivers something we keep it as a reviewable note
+    # rather than blocking the publish.
+    context "when the spam preset flags a product that has a deliverable" do
+      # Enough abandoned rows that any fixed-size slice of the file list would
+      # have left the genuine file out.
+      let(:abandoned_upload_count) { 8 }
+
+      # Only `only` is really in storage; every other file's lookup says missing.
+      # Pass `only: nil` for a listing where nothing was ever really uploaded.
+      def stub_storage_presence(only:)
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do |file|
+          double("s3_object", exists?: only.present? && file.id == only.id)
+        end
+      end
+
+      before do
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: ContentModeration::Strategies::PromptStrategy::Result.new(
+                            status: "flagged",
+                            reasoning: ["spam: reads like a sales pitch and lacks coherent prose"],
+                            audit_reasoning: []
+                          ))
+        )
+      end
+
+      it "publishes and records the flag as a non-blocking note when files are attached" do
+        ContentModerationAdminCommentJob.clear
+        product.product_files << uploaded_file
+        product.save!
+
+        result = described_class.check(product.reload, :product)
+
+        expect(result.passed).to eq(true)
+        expect(result.reasons).to eq([])
+        contents = ContentModerationAdminCommentJob.jobs.map { |j| j["args"].second }
+        expect(contents).to contain_exactly(
+          a_string_including("flagged but did not block").and(
+            a_string_including("not blocked: listing has content attached")
+          )
+        )
+      end
+
+      it "publishes when the deliverable is readable content instead of files" do
+        create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Lesson one" }] }])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      it "publishes when the deliverable is a Gumroad-managed community invite" do
+        community_product = create(:product, user: seller, active_integrations: [create(:discord_integration)])
+
+        expect(described_class.check(community_product.reload, :product).passed).to eq(true)
+      end
+
+      # A spammer can produce any of these states for free, so they don't count
+      # as a deliverable for the purpose of letting a spam flag through — even
+      # though the off-platform-fulfillment preset treats them as "not empty".
+      it "still blocks when the only content page has a title and an empty body" do
+        create(:rich_content, entity: product, title: "Chapter one", description: [{ "type" => "paragraph" }])
+
+        result = described_class.check(product.reload, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
+      end
+
+      # These pages look non-empty in the editor, but every block in them renders
+      # its content from somewhere else and that somewhere else is empty, so the
+      # buyer opens the page and sees nothing.
+      it "still blocks when the only content page is a posts block and the seller has published no posts" do
+        create(:rich_content, entity: product, title: nil, description: [{ "type" => "posts" }])
+
+        result = described_class.check(product.reload, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
+      end
+
+      it "still blocks when the only content page embeds a file that isn't there" do
+        create(:rich_content, entity: product, title: nil, description: [
+                 { "type" => "fileEmbedGroup", "content" => [{ "type" => "fileEmbed", "attrs" => { "id" => "nonexistent" } }] }
+               ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only content page recommends other listings" do
+        create(:rich_content, entity: product, title: nil, description: [{ "type" => "moreLikeThis" }])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only content page is a review the buyer may not even be able to load" do
+        create(:rich_content, entity: product, title: nil, description: [{ "type" => "reviewCard", "attrs" => { "reviewId" => "missing" } }])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only content page advertises another product" do
+        create(:rich_content, entity: product, title: nil, description: [
+                 { "type" => "upsellCard", "attrs" => { "id" => "missing", "productId" => "missing" } }
+               ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only content page asks the buyer to fill in a form" do
+        create(:rich_content, entity: product, title: nil, description: [
+                 { "type" => "shortAnswer", "attrs" => { "label" => "Your name" } },
+                 { "type" => "fileUpload" }
+               ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      # The file itself is the deliverable, so an attached file publishes whether
+      # or not the seller also embedded it in a page.
+      it "publishes when a page embeds a file the seller actually uploaded" do
+        product_file = uploaded_file
+        product.product_files << product_file
+        product.save!
+        create(:rich_content, entity: product, title: nil, description: [
+                 { "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id } }
+               ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # An upload that never finished still leaves an alive ProductFile row
+      # pointing at a storage key nothing was written to, and nothing deletes
+      # that row afterwards. The row must not stand in for a deliverable.
+      it "still blocks when the only attached file's upload never finished" do
+        stub_missing_storage_objects
+        product.product_files << create(:product_file, analyze_completed: false)
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only file on a tier is an unfinished upload" do
+        stub_missing_storage_objects
+        membership = create(:membership_product, user: seller, name: "Members", description: "Join us")
+        tier = membership.tiers.first
+        tier.product_files << create(:product_file, link: membership, analyze_completed: false)
+        tier.save!
+
+        expect(described_class.check(membership.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the attached file has been purged from storage" do
+        product.product_files << create(:product_file, analyze_completed: true, deleted_from_cdn_at: Time.current)
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "publishes when the attached file is an external link, which needs nothing in storage" do
+        product.product_files << create(:external_link)
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # Storage being unreachable is our problem, not evidence the seller
+      # attached nothing.
+      it "publishes when storage can't be reached to confirm the file" do
+        allow_any_instance_of(ProductFile).to receive(:s3_object)
+          .and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
+        product.product_files << create(:product_file, analyze_completed: false)
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # A seller who abandoned a run of uploads and then finished a real one must
+      # not be told their listing delivers nothing just because the dead rows
+      # outnumber what we'd previously pay to look up.
+      it "publishes when a just-uploaded file sits behind a pile of abandoned uploads" do
+        abandoned = Array.new(abandoned_upload_count) do |index|
+          create(:product_file, analyze_completed: false, position: index)
+        end
+        # Created last and ordered last, so the seller's own `position` ordering
+        # buries it and only creation order picks it out first.
+        finished = create(:product_file, analyze_completed: false, position: abandoned.size)
+        stub_storage_presence(only: finished)
+        (abandoned + [finished]).each { product.product_files << _1 }
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # The other way a file goes unanalyzed forever is that it really was stored
+      # but analysis never succeeded — retries ran out, or it's a video whose
+      # metadata can't be read. That leaves a real deliverable as the oldest row
+      # on a listing that has collected abandoned uploads since.
+      it "publishes when a long-stored unanalyzed file sits in front of a pile of abandoned uploads" do
+        stored = create(:product_file, analyze_completed: false, position: 1)
+        abandoned = Array.new(abandoned_upload_count) do |index|
+          create(:product_file, analyze_completed: false, position: index + 2)
+        end
+        stub_storage_presence(only: stored)
+        ([stored] + abandoned).each { product.product_files << _1 }
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # The case no fixed slice of the list can reach: the real file is neither
+      # the newest nor the oldest row, because abandoned uploads surround it on
+      # both sides. Every file has to stay eligible for a lookup.
+      it "publishes when the stored file sits between two runs of abandoned uploads" do
+        older = Array.new(abandoned_upload_count) do |index|
+          create(:product_file, analyze_completed: false, position: index)
+        end
+        stored = create(:product_file, analyze_completed: false, position: older.size)
+        newer = Array.new(abandoned_upload_count) do |index|
+          create(:product_file, analyze_completed: false, position: older.size + 1 + index)
+        end
+        stub_storage_presence(only: stored)
+        (older + [stored] + newer).each { product.product_files << _1 }
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # The save API takes each file's storage URL from the client, so submitting
+      # a long list of never-uploaded rows costs a caller nothing. Attaching many
+      # of them must not buy what attaching one doesn't.
+      it "still blocks when many attached files are all unfinished uploads" do
+        stub_storage_presence(only: nil)
+        (abandoned_upload_count + 3).times do
+          product.product_files << create(:product_file, analyze_completed: false)
+        end
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      # The list length is up to the caller, so a save must not turn into an
+      # unbounded run of requests to storage. Once the time budget is gone we
+      # stop asking, however many rows are left.
+      it "stops checking storage once the time budget is spent" do
+        storage_lookups = 0
+        # Each lookup burns the whole budget, so the very next one is not made.
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          storage_lookups += 1
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        5.times { product.product_files << create(:product_file, analyze_completed: false) }
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+        expect(storage_lookups).to eq(1)
+      end
+
+      # A file that finished analyzing is answered from its own row, so a real
+      # deliverable sitting behind a pile of unfinished uploads still publishes
+      # and still costs nothing to confirm.
+      it "publishes without checking storage when one of many attached files has been analyzed" do
+        expect_any_instance_of(ProductFile).not_to receive(:s3_object)
+        abandoned_upload_count.times do
+          product.product_files << create(:product_file, analyze_completed: false)
+        end
+        product.product_files << uploaded_file
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      it "still blocks a bundle with no products in it" do
+        bundle = create(:product, user: seller, is_bundle: true, name: "Bundle", description: "Everything you need")
+
+        expect(described_class.check(bundle.reload, :product).passed).to eq(false)
+      end
+
+      it "publishes a bundle that actually contains products" do
+        bundle = create(:product, user: seller, is_bundle: true, name: "Bundle", description: "Everything you need")
+        create(:bundle_product, bundle:, product: create(:product, user: seller))
+
+        expect(described_class.check(bundle.reload, :product).passed).to eq(true)
+      end
+
+      it "still blocks a coffee listing, which has no deliverable by design" do
+        coffee = create(:coffee_product, name: "Buy me a coffee", description: "Support my work")
+
+        expect(described_class.check(coffee.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only integration is scheduling plumbing rather than the deliverable" do
+        scheduled = create(:product, user: seller, name: "Session", description: "Book a session", active_integrations: [create(:zoom_integration)])
+
+        expect(described_class.check(scheduled.reload, :product).passed).to eq(false)
+      end
+
+      it "publishes a commission, where the deliverable is work the seller performs" do
+        commission = create(:commission_product, name: "Custom art", description: "I will draw you")
+
+        expect(described_class.check(commission.reload, :product).passed).to eq(true)
+      end
+
+      it "still blocks an empty listing, where a spam flag has no real product behind it" do
+        result = described_class.check(product, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
+      end
+
+      it "still blocks a post, which has no deliverable of its own" do
+        post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
+
+        expect(described_class.check(post, :post).passed).to eq(false)
+      end
+
+      it "still blocks on a non-spam reason flagged alongside the spam one" do
+        product.product_files << uploaded_file
+        product.save!
+        allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["OpenAI moderation flagged: sexual"]))
+        )
+
+        result = described_class.check(product.reload, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["OpenAI moderation flagged: sexual"])
       end
     end
 

@@ -838,6 +838,80 @@ describe ProductFile do
     end
   end
 
+  describe "#stored_file_present?" do
+    it "returns true without asking storage when the file has been analyzed" do
+      product_file = create(:product_file, analyze_completed: true)
+      expect(product_file).not_to receive(:s3_object)
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    # `size` is accepted from the client by the product-save API, so it must not
+    # be what lets a file skip the storage check.
+    it "still asks storage for a never-analyzed file that claims a size" do
+      product_file = create(:product_file, size: 1_024, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    it "returns true for an external link, which has no storage object" do
+      product_file = create(:external_link)
+      expect(product_file).not_to receive(:s3_object)
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    it "asks storage when the file has never been analyzed" do
+      product_file = create(:product_file, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: true))
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    it "returns false when the upload never finished, so nothing was written" do
+      product_file = create(:product_file, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    it "returns false when the object has been purged from storage" do
+      product_file = create(:product_file, analyze_completed: true, deleted_from_cdn_at: Time.current)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    it "returns true when storage can't be reached, since an outage isn't evidence the file is gone" do
+      product_file = create(:product_file, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+  end
+
+  describe "#stored_file_presence_known_from_row" do
+    it "returns true for an analyzed file" do
+      expect(create(:product_file, analyze_completed: true).stored_file_presence_known_from_row).to eq(true)
+    end
+
+    it "returns true for an external link" do
+      expect(create(:external_link).stored_file_presence_known_from_row).to eq(true)
+    end
+
+    it "returns false for a file purged from storage" do
+      product_file = create(:product_file, analyze_completed: true, deleted_from_cdn_at: Time.current)
+
+      expect(product_file.stored_file_presence_known_from_row).to eq(false)
+    end
+
+    # This is the row a never-finished upload leaves behind: only storage can say
+    # whether anything was written.
+    it "returns nil for a never-analyzed file, which only storage can answer for" do
+      expect(create(:product_file, analyze_completed: false).stored_file_presence_known_from_row).to be_nil
+    end
+  end
+
   describe "#display_extension" do
     it "returns URL for files which are external links" do
       product_file = create(:product_file, filetype: "link", url: "http://gumroad.com")

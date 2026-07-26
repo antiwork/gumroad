@@ -94,6 +94,19 @@ module AudienceMember::Searchable
       # SQL behavior so callers don't have to special-case seller-less records.
       return 0 if seller_id.blank?
 
+      # The license-use filter now reads live `licenses` rows, which only the SQL twin can
+      # join to — Elasticsearch has no joins. Count through SQL for those so the number the
+      # seller sees and the recipients the blast selects come from one source. This index
+      # still carries a `license_uses` copy per purchase, but activations no longer refresh
+      # it: that refresh rewrote the buyer's audience_members row on every activation, and
+      # the row lock it took made concurrent activations queue until the license-verify
+      # endpoint timed out with a 500.
+      if params[:minimum_license_uses].present?
+        relation = AudienceMember.filter(seller_id:, params:)
+        relation = relation.limit(limit) if limit
+        return relation.count
+      end
+
       options = {
         index: index_name,
         body: { query: filter_query(seller_id:, params:) },

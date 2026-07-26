@@ -71,6 +71,13 @@
     <p>Append your links with <code>__sale_info__</code> to capture sales parameters like <code>sale_id</code>, <code>product_id</code>, and <code>product_permalink</code> on the respective download page. </p>
     <p>For example, a link like <code>https://example.com?__sale_info__</code> will be replaced with <code> https://example.com?sale_id=PURCHASE_ID_HERE&amp;product_id=PRODUCT_ID_HERE&amp;product_permalink=PERMALINK_HERE</code> on the download page. </p>
   </div>
+  <h3 id="Include-the-license-key-in-a-link-or-button-Lk3yP">Include the license key in a link or button</h3>
+  <div data-html-block>
+    <p>If your product generates <a href="76-license-keys" target="_self">license keys</a>, you can put <code>__license_key__</code> anywhere in a link or button URL and each customer's own key is filled in when they open their content page. The stored link keeps the placeholder, so it stays correct for every customer.</p>
+    <p>For example, a button pointing at <code>https://example.com/activate?key=__license_key__</code> becomes <code>https://example.com/activate?key=THEIR_LICENSE_KEY</code> for that customer.</p>
+    <p>This works with custom app URL schemes too, so you can send customers straight into your app with their license already filled in — a button pointing at <code>yourapp://activate?key=__license_key__</code> opens your app and activates the license in one tap. Schemes that can run code in the browser (<code>javascript:</code>, <code>data:</code>, <code>vbscript:</code>, <code>file:</code>, <code>blob:</code>) are not allowed.</p>
+    <p>You can combine it with the sales parameters above: <code>https://example.com/activate?key=__license_key__&amp;__sale_info__</code>.</p>
+  </div>
   <h3 id="versions">Versions</h3>
   <p>Versions can help you sell different sets of content, software access levels, or optional added services within the same product at different price points. Read <a href="126-setting-up-versions-on-a-digital-product" target="_self">this article</a> to know all about setting up versions.</p>
   <h3 id="test-publish">Publish your product</h3>

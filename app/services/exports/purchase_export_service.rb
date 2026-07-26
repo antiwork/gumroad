@@ -35,6 +35,7 @@ class Exports::PurchaseExportService
     CardType::IDEAL => "iDEAL",
     CardType::BANCONTACT => "Bancontact",
     CardType::KLARNA => "Klarna",
+    CardType::ALIPAY => "Alipay",
   }.freeze
 
   def initialize(purchases)

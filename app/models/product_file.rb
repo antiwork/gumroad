@@ -167,6 +167,58 @@ class ProductFile < ApplicationRecord
     filetype == "link"
   end
 
+  # Whether there is really something in storage behind this row, i.e. whether a
+  # buyer could be given the file.
+  #
+  # A ProductFile can outlive its upload. The product-save API takes the storage
+  # URL from the browser (see `WithProductFiles#save_files!`), so a save that
+  # lands while a multipart upload is still in flight — or that never finishes
+  # because the tab was closed — leaves a row pointing at a key that was never
+  # written. Nothing later deletes it: `analyze` gives up on the missing object
+  # and the row stays alive. So "an alive ProductFile exists" is not the same
+  # claim as "the buyer receives a file", and anything treating a file as proof
+  # that a listing delivers something has to ask this instead (gumroad#6320).
+  #
+  # `analyze_completed` is set by `analyze` only after it has successfully read
+  # the stored object, and unlike `size` it is a server-side flag rather than
+  # something the save API accepts from the client (see LinkPolicy's permitted
+  # `files` attributes, which include `size`). So a completed analysis proves the
+  # upload finished and needs no request to storage. Only a file we have never
+  # analyzed — which includes one uploaded seconds ago, before AnalyzeFileWorker
+  # has run — costs a lookup. A file whose object has since been purged keeps its
+  # flag, so that case is answered from `deleted_from_cdn_at` first.
+  #
+  # External links are always considered present: there is no storage object to
+  # look for, and the URL is the deliverable.
+  def stored_file_present?
+    known_from_row = stored_file_presence_known_from_row
+    return known_from_row unless known_from_row.nil?
+
+    s3_object.exists?
+  rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
+    # Storage being unreachable is not evidence that the file is missing, and a
+    # caller deciding whether a seller may publish should not turn our own
+    # outage into a rejection. Assume the file is there and log it.
+    Rails.logger.warn("ProductFile#stored_file_present? failed (#{id}): #{e.class} => #{e.message}")
+    true
+  end
+
+  # Whether this row on its own already answers `stored_file_present?`, with no
+  # request to storage: `true` for known-present, `false` for known-missing, and
+  # `nil` when only storage can say.
+  #
+  # A caller checking many files uses this to answer from the rows first and
+  # spend its storage requests only on the files that genuinely need one, instead
+  # of giving up on the check because the list is long.
+  def stored_file_presence_known_from_row
+    return true if external_link?
+    return false unless s3?
+    return false if deleted_from_cdn?
+    return true if analyze_completed?
+
+    nil
+  end
+
   def signed_url
     return url if external_link?
 
