@@ -191,10 +191,8 @@ class ProductFile < ApplicationRecord
   # External links are always considered present: there is no storage object to
   # look for, and the URL is the deliverable.
   def stored_file_present?
-    return true if external_link?
-    return false unless s3?
-    return false if deleted_from_cdn?
-    return true if analyze_completed?
+    known_from_row = stored_file_presence_known_from_row
+    return known_from_row unless known_from_row.nil?
 
     s3_object.exists?
   rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
@@ -203,6 +201,22 @@ class ProductFile < ApplicationRecord
     # outage into a rejection. Assume the file is there and log it.
     Rails.logger.warn("ProductFile#stored_file_present? failed (#{id}): #{e.class} => #{e.message}")
     true
+  end
+
+  # Whether this row on its own already answers `stored_file_present?`, with no
+  # request to storage: `true` for known-present, `false` for known-missing, and
+  # `nil` when only storage can say.
+  #
+  # A caller checking many files uses this to answer from the rows first and
+  # spend its storage requests only on the files that genuinely need one, instead
+  # of giving up on the check because the list is long.
+  def stored_file_presence_known_from_row
+    return true if external_link?
+    return false unless s3?
+    return false if deleted_from_cdn?
+    return true if analyze_completed?
+
+    nil
   end
 
   def signed_url

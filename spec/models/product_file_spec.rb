@@ -890,6 +890,28 @@ describe ProductFile do
     end
   end
 
+  describe "#stored_file_presence_known_from_row" do
+    it "returns true for an analyzed file" do
+      expect(create(:product_file, analyze_completed: true).stored_file_presence_known_from_row).to eq(true)
+    end
+
+    it "returns true for an external link" do
+      expect(create(:external_link).stored_file_presence_known_from_row).to eq(true)
+    end
+
+    it "returns false for a file purged from storage" do
+      product_file = create(:product_file, analyze_completed: true, deleted_from_cdn_at: Time.current)
+
+      expect(product_file.stored_file_presence_known_from_row).to eq(false)
+    end
+
+    # This is the row a never-finished upload leaves behind: only storage can say
+    # whether anything was written.
+    it "returns nil for a never-analyzed file, which only storage can answer for" do
+      expect(create(:product_file, analyze_completed: false).stored_file_presence_known_from_row).to be_nil
+    end
+  end
+
   describe "#display_extension" do
     it "returns URL for files which are external links" do
       product_file = create(:product_file, filetype: "link", url: "http://gumroad.com")

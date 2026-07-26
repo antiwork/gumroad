@@ -494,13 +494,35 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(product.reload, :product).passed).to eq(true)
       end
 
-      # A listing with this many files attached is not the empty-listing case
-      # this check exists to catch, so we stop paying for storage lookups.
-      it "publishes without checking storage once more files are attached than we're willing to look up" do
-        expect_any_instance_of(ProductFile).not_to receive(:s3_object)
-        (described_class::MAX_FILES_CHECKED_FOR_STORAGE + 1).times do
+      # The save API takes each file's storage URL from the client, so submitting
+      # a long list of never-uploaded rows costs a caller nothing. Attaching many
+      # of them must not buy what attaching one doesn't.
+      it "still blocks when many attached files are all unfinished uploads" do
+        storage_lookups = 0
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          storage_lookups += 1
+          double("s3_object", exists?: false)
+        end
+        (described_class::MAX_FILES_CHECKED_FOR_STORAGE + 3).times do
           product.product_files << create(:product_file, analyze_completed: false)
         end
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+        # Only as many lookups as we said we'd pay for, so a long list can't turn
+        # one save into an unbounded run of requests to storage.
+        expect(storage_lookups).to eq(described_class::MAX_FILES_CHECKED_FOR_STORAGE)
+      end
+
+      # A file that finished analyzing is answered from its own row, so a real
+      # deliverable sitting behind a pile of unfinished uploads still publishes
+      # and still costs nothing to confirm.
+      it "publishes without checking storage when one of many attached files has been analyzed" do
+        expect_any_instance_of(ProductFile).not_to receive(:s3_object)
+        (described_class::MAX_FILES_CHECKED_FOR_STORAGE + 3).times do
+          product.product_files << create(:product_file, analyze_completed: false)
+        end
+        product.product_files << uploaded_file
         product.save!
 
         expect(described_class.check(product.reload, :product).passed).to eq(true)

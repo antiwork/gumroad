@@ -230,17 +230,29 @@ class ContentModeration::ModerateRecordService
     # pointing at a key that was never written, and nothing deletes that row
     # afterwards (see `ProductFile#stored_file_present?`). Counting it here
     # would hand back the bypass the rest of this method closes — attach nothing,
-    # abandon an upload, publish anyway.
+    # abandon an upload, publish anyway. The same goes for a long list of such
+    # rows: the save API takes each file's storage URL from the client, so a
+    # caller can submit as many never-uploaded rows as it likes, and "there are
+    # a lot of them" is not evidence that any one is real.
     #
-    # Only files up to MAX_FILES_CHECKED_FOR_STORAGE are inspected. Each check is
-    # a request to storage, and a listing that has attached that many files is
-    # not the empty-listing case this method exists to catch, so beyond the limit
-    # we accept the files as a deliverable without asking.
+    # Most files answer from the row alone (an analyzed file, an external link, a
+    # purged object), so those are settled first and for free. Only files the row
+    # cannot answer for cost a request to storage, and at most
+    # MAX_FILES_CHECKED_FOR_STORAGE of those are made — enough to prove a
+    # deliverable exists without turning a save into a long series of lookups.
     def has_deliverable_file?(owner)
-      files = owner.alive_product_files
-      return true if files.size > MAX_FILES_CHECKED_FOR_STORAGE
+      unverifiable_from_row = []
 
-      files.any?(&:stored_file_present?)
+      owner.alive_product_files.each do |file|
+        case file.stored_file_presence_known_from_row
+        when true then return true
+        when nil then unverifiable_from_row << file
+        end
+      end
+
+      unverifiable_from_row
+        .first(MAX_FILES_CHECKED_FOR_STORAGE)
+        .any?(&:stored_file_present?)
     end
 
     # Rich content with something in the body, ignoring pages that only have a
