@@ -631,7 +631,11 @@ export const videoFrameStyle = (file: FileItem): React.CSSProperties | undefined
 
   const style: React.CSSProperties = { aspectRatio: `${width} / ${height}` };
   if (height > width) {
-    style.maxWidth = `calc(${MAX_PORTRAIT_PLAYER_HEIGHT} * ${width} / ${height})`;
+    // Set an explicit width rather than a max-width: the frame is a grid item
+    // whose children are absolutely positioned, so it has no intrinsic width of
+    // its own, and the centring margins below suppress the grid's default
+    // stretch — leaving a max-width alone would collapse the box to nothing.
+    style.width = `min(100%, calc(${MAX_PORTRAIT_PLAYER_HEIGHT} * ${width} / ${height}))`;
     style.marginInline = "auto";
   }
   return style;
@@ -755,6 +759,11 @@ const VideoEmbedPreview = ({
         style={{
           position: "absolute",
           height: "100%",
+          // Constrain the still to the frame in both axes. Height alone was
+          // enough while every frame was 16:9 like the images themselves, but a
+          // portrait frame is narrower than a landscape still, which would then
+          // spill out past the row's edges.
+          width: "100%",
           // When the box has been reshaped to the video's own ratio, show the
           // whole still ("cover" would crop the top and bottom off a 9:16
           // frame). Files with unknown dimensions keep the old 16:9 box, where

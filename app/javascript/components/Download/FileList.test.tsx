@@ -72,7 +72,7 @@ describe("FileList", () => {
       const style = videoFrameStyle(videoFile({ width: 1080, height: 1920 }));
 
       expect(style?.aspectRatio).toBe("1080 / 1920");
-      expect(style?.maxWidth).toBe("calc(80svh * 1080 / 1920)");
+      expect(style?.width).toBe("min(100%, calc(80svh * 1080 / 1920))");
       expect(style?.marginInline).toBe("auto");
     });
 
@@ -80,7 +80,8 @@ describe("FileList", () => {
       const style = videoFrameStyle(videoFile({ width: 1920, height: 1080 }));
 
       expect(style?.aspectRatio).toBe("1920 / 1080");
-      expect(style?.maxWidth).toBeUndefined();
+      expect(style?.width).toBeUndefined();
+      expect(style?.marginInline).toBeUndefined();
     });
 
     it("leaves the frame alone when the video's dimensions are unknown or unusable", () => {
