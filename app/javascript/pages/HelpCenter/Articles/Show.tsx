@@ -67,13 +67,40 @@ const textDirectiveTerm = (fragment: string): string | null => {
 // next and scroll them to an unrelated passage that happened to match.
 let textDirectivePendingScroll: { path: string; passage: string } | null = null;
 
+// The one place a hidden text directive survives: the performance entry that records how this
+// document was loaded. Its `name` is the URL the browser was asked for, recorded before the
+// directive is stripped out of `location`, so opening or reloading a text-fragment URL directly —
+// where no click of ours ran and there is nothing remembered — can still be resolved from here.
+// This is the direct-load case: the browser does its own text-fragment scrolling on a normal page,
+// but an article body arrives as raw HTML after render, so by the time the passage exists the
+// browser has long given up and only we can scroll to it.
+const textDirectiveFromPageLoad = (): string | null => {
+  // A document restored from the back/forward cache has no fresh navigation entry, and neither
+  // does a test environment that never navigated; neither is worth failing over.
+  const navigation = performance.getEntriesByType("navigation")[0];
+  if (!navigation) return null;
+
+  let loadedUrl;
+  try {
+    loadedUrl = new URL(navigation.name);
+  } catch {
+    return null;
+  }
+  // Only act on it if this is still the article that URL named. Inertia visits do not create a new
+  // navigation entry, so after a client-side visit away this entry still describes the article the
+  // reader arrived on and its wording must not follow them.
+  if (loadedUrl.pathname !== window.location.pathname) return null;
+
+  return textDirectiveTerm(loadedUrl.hash.slice(1));
+};
+
 // Firefox and Safari do not implement text directives at all, so nothing strips them and the
 // fragment is still readable after a plain page load. Read whichever source has it.
 const takePendingTextDirective = (fragment: string): string | null => {
   const pending = textDirectivePendingScroll;
   textDirectivePendingScroll = null;
   if (pending?.path === window.location.pathname) return pending.passage;
-  return textDirectiveTerm(fragment);
+  return textDirectiveTerm(fragment) ?? textDirectiveFromPageLoad();
 };
 
 // Finds the smallest element whose text contains the given wording, so we scroll as close to the
@@ -168,10 +195,7 @@ export default function HelpCenterArticle() {
 
     let id: string | null = null;
     if (passage === null) {
-      // Nothing to scroll to. Note that on a direct page load of a text-directive URL in a browser
-      // that hides the directive, this is where we end up and there is nothing we can do: the
-      // wording is unrecoverable from script, so the browser's own text-fragment scrolling is the
-      // only thing that can act on it.
+      // Nothing to scroll to.
       if (!fragment) return;
 
       id = fragment;

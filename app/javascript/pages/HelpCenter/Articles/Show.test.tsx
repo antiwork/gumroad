@@ -84,6 +84,20 @@ const resizeObserved = () => {
   });
 };
 
+// Chromium strips a text directive out of `location` before any script runs, so a direct load of
+// such a URL can only be recognised from the navigation timing entry, which keeps the URL the
+// browser was actually asked for. happy-dom does not record navigations, so stand the entry in.
+// Verified against real Chromium 1.62: on a fresh load, a reload and a back/forward restore of
+// `…#:~:text=…`, `location.hash` is empty while the navigation entry's name keeps the directive.
+const loadedFromBrowserWith = (url: string) => {
+  vi.spyOn(performance, "getEntriesByType").mockImplementation((type: string) =>
+    type === "navigation"
+      ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the component reads only `name` off the entry, and constructing a real PerformanceNavigationTiming is not possible
+        [{ name: url } as PerformanceEntry]
+      : [],
+  );
+};
+
 describe("HelpCenterArticle", () => {
   beforeEach(() => {
     window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
@@ -91,6 +105,7 @@ describe("HelpCenterArticle", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -452,6 +467,82 @@ describe("HelpCenterArticle", () => {
     await flushFrames();
 
     expect(scrollIntoView).toHaveBeenCalled();
+    expect(scrollIntoView.mock.instances[0]).toBe(destination.container.querySelector("#passage"));
+  });
+
+  it("scrolls to the passage when a text-fragment URL is opened directly", async () => {
+    // The case a reader hits by pasting or bookmarking a text-fragment URL, or by reloading one.
+    // No click of ours ran, and Chromium has already emptied the hash, so the only thing left that
+    // still knows what wording was asked for is the navigation entry.
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
+    loadedFromBrowserWith(
+      `https://gumroad.com${GETTING_PAID_PATH}#:~:text=For%20our%20review%2C%20we%20require%20your%20account`,
+    );
+
+    const { container } = renderArticle({
+      slug: "13-getting-paid",
+      content: `<h3 id="${ANCHOR_ID}">Address verification</h3><p id="passage">For our review, we require your
+                account to be legitimate in two major ways:</p>`,
+    });
+
+    await flushFrames();
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(scrollIntoView.mock.instances[0]).toBe(container.querySelector("#passage"));
+  });
+
+  it("does not carry a directly-loaded passage into the next article the reader visits", async () => {
+    // An Inertia visit creates no new navigation entry, so the one describing the article the
+    // reader originally landed on is still there afterwards. Its wording must not follow them.
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
+    loadedFromBrowserWith(
+      `https://gumroad.com${GETTING_PAID_PATH}#:~:text=For%20our%20review%2C%20we%20require%20your%20account`,
+    );
+    renderArticle({ slug: "13-getting-paid", content: `<p>For our review, we require your account.</p>` });
+    await flushFrames();
+
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    cleanup();
+    window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
+    renderArticle({
+      slug: "260-your-payout-settings-page",
+      content: `<p>For our review, we require your account to be verified.</p>`,
+    });
+
+    await flushFrames();
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("prefers the passage from the click over the one the page was loaded with", async () => {
+    // The reader landed on "Getting paid" by a text-fragment URL, read on into another article,
+    // then followed a link back to a *different* passage of "Getting paid". The navigation entry
+    // still names the passage they arrived with hours ago and its path still matches, so only
+    // preferring the click keeps them on the passage they just asked for.
+    loadedFromBrowserWith(`https://gumroad.com${GETTING_PAID_PATH}#:~:text=We%20accept%20no%20P.O.%20boxes`);
+
+    window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
+    const source = renderArticle({
+      slug: "260-your-payout-settings-page",
+      content: `<a id="cross" href="${GETTING_PAID_PATH}#:~:text=For%20our%20review">Review process</a>`,
+    });
+    clickLink(source.container, "#cross");
+
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    cleanup();
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
+    const destination = renderArticle({
+      slug: "13-getting-paid",
+      content: `<p id="passage">For our review, we require your account to be legitimate.</p>
+                <p id="boxes">We accept no P.O. boxes here.</p>`,
+    });
+
+    await flushFrames();
+
     expect(scrollIntoView.mock.instances[0]).toBe(destination.container.querySelector("#passage"));
   });
 
