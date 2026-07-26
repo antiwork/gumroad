@@ -58,15 +58,24 @@ export type PaymentElementConfig = {
 // the browser never widens it — card and Link everywhere (stripe_link_enabled reflects the
 // resolved set; Link auto-enables with the Payment Element, dropped only by the PPP gate), plus
 // the US-locked methods (cashapp, us_bank_account) for US buyers.
-// Currency is "usd" everywhere except the method-forced local-method surface (iDEAL/Bancontact),
+// Currency is "usd" everywhere except the method-forced local-method surface (iDEAL/Bancontact/UPI),
 // where the server mounts the element in the payment method's forced currency (e.g. "eur") and
 // supplies presentment_amount_cents — the single product's listed price in that currency — so
 // Stripe shows the EUR-only method tabs (it hides methods that can't charge in the element's
 // currency). When presentment_amount_cents is null the amount derives from the USD total below.
+// listed_currency_display is non-null on that same surface and tells the checkout summary to
+// render the cart in the listed currency, matching what the element and the charge use.
+export type ListedCurrencyDisplayConfig = {
+  currency: string;
+  // The backend's authoritative minor-unit scale for the currency, so formatting never relies on
+  // the currencies.json single_unit heuristic.
+  subunit_to_unit: number;
+};
 export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: string;
   presentment_amount_cents: number | null;
+  listed_currency_display: ListedCurrencyDisplayConfig | null;
   payment_method_types: string[];
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;

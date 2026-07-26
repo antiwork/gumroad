@@ -95,6 +95,7 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
     presentment_amount_cents: null,
+    listed_currency_display: null,
     payment_method_types: ["card"],
     stripe_link_enabled: false,
     stripe_connect_account_id: null,

@@ -19,7 +19,9 @@ import { Button } from "$app/components/Button";
 import { Checkout } from "$app/components/Checkout";
 import {
   formatCheckoutPrice,
+  formatPresentmentCents,
   getCheckoutBuyerCurrencyDisplay,
+  getCheckoutListedCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import {
@@ -199,6 +201,10 @@ const CheckoutIndexPage = () => {
       paymentMethod: state.paymentMethod,
     },
   );
+  // The method-forced listed-currency lane, for the large-tip confirmation below: on that lane the
+  // tip and the cart total are already in the product's listed currency, so they are shown verbatim
+  // rather than converted (see getCheckoutListedCurrencyDisplay).
+  const listedCurrency = getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items);
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
@@ -785,15 +791,19 @@ const CheckoutIndexPage = () => {
       >
         <p>
           You're about to leave a tip of{" "}
-          {formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay, {
-            usdSymbolFormat: "short",
-            noCentsIfWhole: true,
-          })}{" "}
+          {listedCurrency
+            ? formatPresentmentCents(computeTip(state), listedCurrency)
+            : formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay, {
+                usdSymbolFormat: "short",
+                noCentsIfWhole: true,
+              })}{" "}
           on a{" "}
-          {formatCheckoutPrice(getTotalPriceFromProducts(state), buyerCurrencyDisplay, {
-            usdSymbolFormat: "short",
-            noCentsIfWhole: true,
-          })}{" "}
+          {listedCurrency
+            ? formatPresentmentCents(getTotalPriceFromProducts(state), listedCurrency)
+            : formatCheckoutPrice(getTotalPriceFromProducts(state), buyerCurrencyDisplay, {
+                usdSymbolFormat: "short",
+                noCentsIfWhole: true,
+              })}{" "}
           purchase. Are you sure?
         </p>
       </Modal>

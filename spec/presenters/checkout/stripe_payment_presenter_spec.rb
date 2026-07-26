@@ -48,7 +48,7 @@ describe Checkout::StripePaymentPresenter do
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -60,6 +60,11 @@ describe Checkout::StripePaymentPresenter do
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency:,
         presentment_amount_cents:,
+        # Every method-forced element mounts in a non-USD currency, so it also tells the checkout
+        # summary to render that currency. Defaults to the forced currency at the standard 1/100
+        # minor-unit scale, which covers EUR/BRL/INR; pass it explicitly for anything else.
+        listed_currency_display: listed_currency_display ||
+          (currency == "usd" ? nil : { currency:, subunit_to_unit: 100 }),
         payment_method_types:,
         stripe_link_enabled:,
         stripe_connect_account_id:,
@@ -1090,8 +1095,36 @@ describe Checkout::StripePaymentPresenter do
 
       expect(props[:elements_options][:currency]).to eq("usd")
       expect(props[:elements_options][:presentment_amount_cents]).to be_nil
+      expect(props[:elements_options][:listed_currency_display]).to be_nil
     ensure
       deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "tells the checkout summary to render the listed currency whenever the element mounts in it" do
+      # The buyer is charged the listed price directly on this lane
+      # (Charge::MethodForcedPresentment#direct_listed_amount_result) and there is no FX quote in
+      # the surcharge response, so without this the checkout summary divided the listed price by
+      # our own USD exchange rate: an INR-priced product showed a US$ cart total next to a Stripe
+      # sheet about to charge rupees (gumroad-private#1371). The same defect hits every
+      # forced-currency method — iDEAL (EUR), UPI (INR), Pix (BRL) once launched.
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "inr", price_cents: 499_000)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.10", "India")
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.10")
+
+      expect(props[:elements_options][:currency]).to eq("inr")
+      expect(props[:elements_options][:presentment_amount_cents]).to eq(499_000)
+      # Same currency as the element mount and the charge, carrying the backend's own minor-unit
+      # scale so the browser never has to guess how to denominate it.
+      expect(props[:elements_options][:listed_currency_display]).to eq(currency: "inr", subunit_to_unit: 100)
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
     end
 
     it "keeps today's USD element behavior for an EUR-priced product when the buyer-currency flags are off" do

@@ -249,3 +249,111 @@ describe("Checkout buyer-currency line amounts", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$3.34", "US$6.67"]);
   });
 });
+
+describe("Checkout method-forced listed-currency amounts", () => {
+  // A BRL product paid with Pix (the reported case): the Payment Element mounts in BRL and the
+  // charge bills the listed R$49.90 directly, with no FX quote in the response. Before this
+  // was fixed every row divided the listed price by the product's stored USD rate, so the
+  // buyer saw a US$9.15 cart summary and was then charged R$49.90 by the sheet beside it.
+  const brlProduct = () =>
+    cartProduct({ id: "brl-product", permalink: "brl", name: "Curso", currency_code: "brl", exchange_rate: 5.45 });
+
+  const listedCurrencyPayment = (): CheckoutPaymentConfig => ({
+    integration: "payment_element_client_confirm",
+    fallback_reason: null,
+    disable_wallets: true,
+    request_apple_pay_merchant_tokens: false,
+    payment_element_wallets: false,
+    flat_payment_methods: true,
+    elements_options: {
+      stripe_elements_mode: "payment",
+      currency: "brl",
+      presentment_amount_cents: 4_990,
+      listed_currency_display: { currency: "brl", subunit_to_unit: 100 },
+      payment_method_types: ["card", "pix"],
+      stripe_link_enabled: false,
+      stripe_connect_account_id: null,
+    },
+  });
+
+  const brlState = (overrides: Partial<State> = {}): State =>
+    buildState({
+      products: [stateProduct({ permalink: "brl", price: 4_990 })],
+      checkoutPayment: listedCurrencyPayment(),
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 4_990,
+          buyer_currency_quote: null,
+        },
+      },
+      ...overrides,
+    });
+
+  const brlCart = (): CartState => ({
+    items: [cartItem({ product: brlProduct(), price: 4_990 })],
+    discountCodes: [],
+  });
+
+  it("renders the listed price the buyer is actually charged, not a USD conversion of it", () => {
+    const { getAllByLabelText, getAllByText, queryByText } = renderCheckout(brlState(), brlCart());
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["R$49.90"]);
+    // Subtotal and Total rows both show the listed amount, which is what the Stripe sheet
+    // next to them and the charge itself use.
+    expect(getAllByText("R$49.90")).toHaveLength(3);
+    // The old rendering: 4990 / 5.45 ≈ 915 canonical cents, labelled US$.
+    expect(queryByText("US$9.15")).toBeNull();
+  });
+
+  it("converts the USD-side tax and shipping rows at the product's stored rate", () => {
+    // The surcharge endpoint answers in USD, and Charge::MethodForcedPresentment converts those
+    // same two figures back with this same stored rate, so display and charge agree.
+    const { getByText } = renderCheckout(
+      brlState({
+        surcharges: {
+          type: "loaded",
+          result: {
+            vat_id_valid: false,
+            has_vat_id_input: false,
+            shipping_rate_cents: 545,
+            tax_cents: 109,
+            tax_included_cents: 0,
+            subtotal: 4_990,
+            buyer_currency_quote: null,
+          },
+        },
+      }),
+      brlCart(),
+    );
+
+    expect(getByText("R$5.94")).toBeTruthy();
+    expect(getByText("R$29.70")).toBeTruthy();
+    // 4990 + 594 + 2970
+    expect(getByText("R$85.54")).toBeTruthy();
+  });
+
+  it("stays in canonical USD when the cart no longer matches the forced-currency lane", () => {
+    // A second item means the server would no longer mount a forced-currency element, so the
+    // listed-currency display must not be shown for a charge that will be canonical USD.
+    const cart: CartState = {
+      items: [
+        cartItem({ product: brlProduct(), price: 4_990 }),
+        cartItem({ product: cartProduct({ id: "second", permalink: "second", name: "Second" }), price: 1_000 }),
+      ],
+      discountCodes: [],
+    };
+
+    const { getAllByLabelText } = renderCheckout(
+      brlState({ products: [stateProduct({ permalink: "brl", price: 4_990 }), stateProduct({ permalink: "second" })] }),
+      cart,
+    );
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15", "US$10"]);
+  });
+});

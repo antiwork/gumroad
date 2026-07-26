@@ -6,7 +6,8 @@ import {
   formatUSDCentsWithExpandedCurrencySymbol,
 } from "$app/utils/currency";
 
-import type { PaymentMethodType } from "$app/components/Checkout/payment";
+import type { CartItem } from "$app/components/Checkout/cartState";
+import type { CheckoutPaymentConfig, PaymentMethodType } from "$app/components/Checkout/payment";
 
 type BuyerCurrencyQuote = NonNullable<SurchargesResponse["buyer_currency_quote"]>;
 export type BuyerCurrencyLineAllocation = NonNullable<BuyerCurrencyQuote["line_allocations"]>[number];
@@ -31,6 +32,14 @@ export type CheckoutBuyerCurrencyDisplay = {
   presentmentTotalCents: number;
   lineAllocations: BuyerCurrencyLineAllocation[];
 };
+
+// Everything the checkout table needs to render a non-USD amount: which currency to label it
+// with, how many minor units make one unit of it, and the rate that turns a canonical USD cent
+// figure into that currency. Both non-USD checkout lanes produce one of these — the FX-quoted
+// buyer-currency lane (rate from the locked quote) and the method-forced listed-currency lane
+// (rate from the product's stored USD exchange rate) — so every formatting helper below works
+// the same way for either, and the rest of the checkout never has to know which lane it is on.
+export type CheckoutLocalCurrencyFormat = Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "rate" | "subunitToUnit">;
 
 export const getCheckoutBuyerCurrencyDisplay = (
   surcharges: SurchargesResponse | null,
@@ -77,6 +86,45 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
   options: CheckoutBuyerCurrencyOptions,
 ): string | null =>
   getCheckoutBuyerCurrencyDisplay(surcharges, options) ? (surcharges?.buyer_currency_quote?.token ?? null) : null;
+
+// The method-forced local-method lane (a single product priced in the currency the payment method
+// forces — a BRL product paid with Pix, an EUR product with iDEAL, an INR product with UPI).
+// Charge::MethodForcedPresentment charges that listed price directly and there is no FX quote
+// anywhere in the flow, so the cart must be shown in the listed currency: converting the listed
+// price to USD for display (what happens when this returns null) showed a Brazilian buyer a
+// US$9.16 total next to a Stripe sheet about to charge R$49.90 (gumroad-private#1371).
+//
+// `rate` is the product's own stored USD exchange rate — the same rate the charge uses to convert
+// the USD-side amounts (tax, shipping) back into the listed currency — so the displayed rows and
+// the charged amounts agree by construction rather than by coincidence.
+//
+// Returns null (canonical USD display, today's behavior) unless the server chose this lane AND the
+// cart still has the single-item, priced-in-that-currency shape the lane assumes. Those are the
+// server's own gates, re-checked here because the cart can be edited after the page rendered.
+export const getCheckoutListedCurrencyDisplay = (
+  checkoutPayment: CheckoutPaymentConfig,
+  // Only the two pricing fields are read, so callers can pass cart items directly and tests
+  // don't have to build a whole product.
+  cartItems: readonly { product: Pick<CartItem["product"], "currency_code" | "exchange_rate"> }[],
+): CheckoutLocalCurrencyFormat | null => {
+  if (checkoutPayment.integration !== "payment_element_client_confirm") return null;
+  const listedCurrency = checkoutPayment.elements_options.listed_currency_display;
+  if (!listedCurrency) return null;
+  if (cartItems.length !== 1) return null;
+
+  const product = cartItems[0]?.product;
+  if (!product) return null;
+  if (product.currency_code !== listedCurrency.currency) return null;
+  // A zero or missing rate would make every converted row 0; fall back to canonical USD instead.
+  if (!(product.exchange_rate > 0)) return null;
+  if (!(listedCurrency.subunit_to_unit > 0)) return null;
+
+  return {
+    currencyCode: product.currency_code,
+    rate: product.exchange_rate,
+    subunitToUnit: listedCurrency.subunit_to_unit,
+  };
+};
 
 export const toBuyerCurrencyCents = (
   canonicalCents: number,
@@ -142,6 +190,73 @@ export const formatPresentmentCents = (
   cents: number,
   buyerCurrencyDisplay: Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "subunitToUnit">,
 ) => formatMinorUnitPriceWithIntl(buyerCurrencyDisplay.currencyCode, cents, buyerCurrencyDisplay.subunitToUnit);
+
+// All the listed-currency amounts the checkout table displays on the method-forced lane. Two
+// different kinds of input meet here, and keeping them straight is the whole point of this
+// function:
+//
+//   * Line prices, discounts and the tip are ALREADY in the listed currency — they come from the
+//     cart, which stores the seller's set prices in their own minor units, and the charge bills
+//     that listed amount as-is. They must be displayed verbatim: converting them to USD and back
+//     would round twice and could disagree with the charge by a cent.
+//   * Tax and shipping come back from the surcharge endpoint in USD, so they are converted with
+//     the product's stored exchange rate — the same rate
+//     Charge::MethodForcedPresentment#direct_listed_amount_result uses on those same two figures,
+//     so the totals shown here and the amount charged agree by construction.
+//
+// Returns null when there is no listed-currency lane, leaving every row in canonical USD.
+export type CheckoutListedCurrencyAmounts = {
+  // Per cart line, in cart order: the line's undiscounted price, since the table itemizes the
+  // discount in its own row.
+  linePriceCents: number[];
+  discountCents: number;
+  tipCents: number;
+  taxCents: number;
+  taxIncludedCents: number;
+  shippingCents: number;
+  subtotalCents: number;
+  totalCents: number;
+};
+
+export const getCheckoutListedCurrencyAmounts = (
+  listedCurrency: CheckoutLocalCurrencyFormat | null | undefined,
+  {
+    lines,
+    tipCents,
+    usdTaxCents,
+    usdTaxIncludedCents,
+    usdShippingCents,
+  }: {
+    // Both already in the listed currency's minor units.
+    lines: { priceCents: number; discountCents: number }[];
+    tipCents: number;
+    usdTaxCents: number;
+    usdTaxIncludedCents: number;
+    usdShippingCents: number;
+  },
+): CheckoutListedCurrencyAmounts | null => {
+  if (!listedCurrency) return null;
+
+  const linePriceCents = lines.map((line) => line.priceCents);
+  const discountCents = lines.reduce((sum, line) => sum + Math.max(line.discountCents, 0), 0);
+  const taxCents = toBuyerCurrencyCents(usdTaxCents, listedCurrency);
+  const taxIncludedCents = toBuyerCurrencyCents(usdTaxIncludedCents, listedCurrency);
+  const shippingCents = toBuyerCurrencyCents(usdShippingCents, listedCurrency);
+  const subtotalCents = linePriceCents.reduce((sum, cents) => sum + cents, 0) + tipCents;
+
+  return {
+    linePriceCents,
+    discountCents,
+    tipCents,
+    taxCents,
+    taxIncludedCents,
+    shippingCents,
+    subtotalCents,
+    // Tax included in the price is already part of the line prices, so it is only ever displayed,
+    // never added — exactly as the canonical USD total treats it.
+    totalCents: subtotalCents - discountCents + taxCents + shippingCents,
+  };
+};
 
 export const formatCheckoutPrice = (
   price: number,

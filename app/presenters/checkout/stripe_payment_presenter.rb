@@ -277,6 +277,19 @@ class Checkout::StripePaymentPresenter
           # deferred intent includes the full tax/tip/shipping composition, so rollout QA must
           # verify wallet totals before this surface is broadly enabled.
           presentment_amount_cents: method_forced ? items.first[:price_cents].to_i : nil,
+          # Present only on the method-forced lane, where the single product is priced in the
+          # currency the payment method forces and Charge::MethodForcedPresentment charges that
+          # listed price directly (no FX quote anywhere in the flow). The checkout summary reads
+          # this to render the cart in the listed currency instead of dividing the listed price by
+          # our own USD exchange rate — a buyer of a R$49.90 product was previously shown a
+          # US$9.16 cart total and then charged R$49.90 by the Stripe sheet next to it
+          # (gumroad-private#1371). subunit_to_unit is the backend's authoritative minor-unit
+          # scale for the currency (the Money gem's value, which is non-ISO for some currencies),
+          # so the browser never has to guess how to format it.
+          listed_currency_display: method_forced ? {
+            currency: method_forced_element_currency,
+            subunit_to_unit: subunit_to_unit(method_forced_element_currency),
+          } : nil,
           payment_method_types:,
           # Derived from the resolver's method list (not a second flag check) so the Element's Link
           # config and the deferred intent's payment_method_types cannot drift: Stripe rejects a
