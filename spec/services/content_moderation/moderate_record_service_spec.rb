@@ -403,6 +403,29 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(product.reload, :product).passed).to eq(false)
       end
 
+      it "still blocks when the only content page is a review the buyer may not even be able to load" do
+        create(:rich_content, entity: product, title: nil, description: [{ "type" => "reviewCard", "attrs" => { "reviewId" => "missing" } }])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only content page advertises another product" do
+        create(:rich_content, entity: product, title: nil, description: [
+                 { "type" => "upsellCard", "attrs" => { "id" => "missing", "productId" => "missing" } }
+               ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only content page asks the buyer to fill in a form" do
+        create(:rich_content, entity: product, title: nil, description: [
+                 { "type" => "shortAnswer", "attrs" => { "label" => "Your name" } },
+                 { "type" => "fileUpload" }
+               ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
       # The file itself is the deliverable, so an attached file publishes whether
       # or not the seller also embedded it in a page.
       it "publishes when a page embeds a file the seller actually uploaded" do

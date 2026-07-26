@@ -220,14 +220,16 @@ class ContentModeration::ModerateRecordService
     # title. See `product_has_substantive_deliverable?` for why the title alone
     # doesn't count here even though it counts for the off-platform preset.
     #
-    # Nodes whose rendered output comes from elsewhere are also ignored (see
+    # Blocks that don't themselves give the buyer anything are also ignored (see
     # RichContent::NODE_TYPES_WITHOUT_OWN_CONTENT): a `posts` block on a listing
-    # with no published posts, or a `fileEmbed` pointing at a file that was
-    # deleted or never finished uploading, both render nothing for the buyer, so
-    # dropping one into an otherwise empty page is not a deliverable. A file that
-    # really is attached still downgrades the flag — the `alive_product_files`
-    # checks in `product_has_substantive_deliverable?` cover that case directly,
-    # without needing the embed node to vouch for it.
+    # with no published posts and a `fileEmbed` pointing at a missing file both
+    # render nothing at all, and a recommendation, an upsell for another product
+    # or a form field asks something of the buyer rather than delivering to them.
+    # Each is one click to insert, so dropping one into an otherwise empty page
+    # is not a deliverable. A file that really is attached still downgrades the
+    # flag — the `alive_product_files` checks in
+    # `product_has_substantive_deliverable?` cover that case directly, without
+    # needing the embed node to vouch for it.
     def has_readable_body_content?(product)
       has_own_body_content = ->(rich_content) do
         rich_content.has_body_content?(excluding_node_types: RichContent::NODE_TYPES_WITHOUT_OWN_CONTENT)

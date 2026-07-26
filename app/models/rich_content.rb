@@ -17,24 +17,47 @@ class RichContent < ApplicationRecord
   LONG_ANSWER_NODE_TYPE = "longAnswer"
   FILE_UPLOAD_NODE_TYPE = "fileUpload"
   MORE_LIKE_THIS_NODE_TYPE = "moreLikeThis"
+  REVIEW_CARD_NODE_TYPE = "reviewCard"
+  UPSELL_CARD_NODE_TYPE = "upsellCard"
   CUSTOM_FIELD_NODE_TYPES = [SHORT_ANSWER_NODE_TYPE, LONG_ANSWER_NODE_TYPE, FILE_UPLOAD_NODE_TYPE].freeze
   COMMON_CONTAINER_NODE_TYPES = [ORDERED_LIST_NODE_TYPE, BULLET_LIST_NODE_TYPE, LIST_ITEM_NODE_TYPE, BLOCKQUOTE_NODE_TYPE].freeze
   FILE_EMBED_CONTAINER_NODE_TYPES = [FILE_EMBED_GROUP_NODE_TYPE, *COMMON_CONTAINER_NODE_TYPES].freeze
 
-  # Nodes that occupy space in the editor but whose rendered output for the buyer
-  # comes from somewhere else, so their presence alone proves nothing about what
-  # the seller actually wrote or attached:
+  # Nodes that occupy space in the editor but do not, by themselves, mean the
+  # buyer receives anything. Each one is a single click to insert and costs the
+  # seller no work, so their presence proves nothing about what was written or
+  # attached. Two reasons a node lands here:
   #
-  #   - `posts` renders the product's published posts, and renders NOTHING for a
-  #     buyer when the seller has published none,
-  #   - `fileEmbed` / `fileEmbedGroup` render uploaded files, and render nothing
-  #     once the referenced file is deleted or was never finished uploading,
-  #   - `moreLikeThis` renders other listings recommended by Gumroad, which is
-  #     not this listing's deliverable at all.
+  # It renders content fetched from elsewhere, and that elsewhere can be empty —
+  # in which case the buyer opens the page and sees nothing at all:
+  #
+  #   - `posts` renders the product's published posts, and renders nothing when
+  #     the seller has published none,
+  #   - `fileEmbed` / `fileEmbedGroup` render an uploaded file, and render
+  #     nothing once that file is deleted or was never finished uploading,
+  #   - `reviewCard` renders one of the product's reviews, and renders nothing
+  #     when that review can't be fetched.
+  #
+  # Or it points at something other than this listing's deliverable, so it can't
+  # stand in for one no matter how well it renders:
+  #
+  #   - `moreLikeThis` renders other listings Gumroad recommends,
+  #   - `upsellCard` advertises another product the buyer could also buy,
+  #   - the custom-field nodes (`shortAnswer`, `longAnswer`, `fileUpload`) are
+  #     form inputs that ask the BUYER for something rather than giving them
+  #     anything.
   #
   # Callers that need "did the seller put something here themselves" (rather than
   # "does the editor show a block here") pass this to `has_body_content?`.
-  NODE_TYPES_WITHOUT_OWN_CONTENT = [POSTS_NODE_TYPE, FILE_EMBED_NODE_TYPE, FILE_EMBED_GROUP_NODE_TYPE, MORE_LIKE_THIS_NODE_TYPE].freeze
+  NODE_TYPES_WITHOUT_OWN_CONTENT = [
+    POSTS_NODE_TYPE,
+    FILE_EMBED_NODE_TYPE,
+    FILE_EMBED_GROUP_NODE_TYPE,
+    REVIEW_CARD_NODE_TYPE,
+    MORE_LIKE_THIS_NODE_TYPE,
+    UPSELL_CARD_NODE_TYPE,
+    *CUSTOM_FIELD_NODE_TYPES
+  ].freeze
 
   DESCRIPTION_JSON_SCHEMA = {
     type: "array",
