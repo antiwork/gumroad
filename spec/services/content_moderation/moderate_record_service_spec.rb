@@ -377,6 +377,45 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
       end
 
+      # These pages look non-empty in the editor, but every block in them renders
+      # its content from somewhere else and that somewhere else is empty, so the
+      # buyer opens the page and sees nothing.
+      it "still blocks when the only content page is a posts block and the seller has published no posts" do
+        create(:rich_content, entity: product, title: nil, description: [{ "type" => "posts" }])
+
+        result = described_class.check(product.reload, :product)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
+      end
+
+      it "still blocks when the only content page embeds a file that isn't there" do
+        create(:rich_content, entity: product, title: nil, description: [
+                 { "type" => "fileEmbedGroup", "content" => [{ "type" => "fileEmbed", "attrs" => { "id" => "nonexistent" } }] }
+               ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only content page recommends other listings" do
+        create(:rich_content, entity: product, title: nil, description: [{ "type" => "moreLikeThis" }])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      # The file itself is the deliverable, so an attached file publishes whether
+      # or not the seller also embedded it in a page.
+      it "publishes when a page embeds a file the seller actually uploaded" do
+        product_file = create(:product_file)
+        product.product_files << product_file
+        product.save!
+        create(:rich_content, entity: product, title: nil, description: [
+                 { "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id } }
+               ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
       it "still blocks a bundle with no products in it" do
         bundle = create(:product, user: seller, is_bundle: true, name: "Bundle", description: "Everything you need")
 

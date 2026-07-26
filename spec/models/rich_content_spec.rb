@@ -320,4 +320,44 @@ describe RichContent do
       expect(rich_content.has_editor_content?).to be(true)
     end
   end
+
+  describe "#has_body_content?" do
+    let(:product) { create(:product) }
+
+    it "ignores the title" do
+      rich_content = create(:rich_content, entity: product, title: "Bonus resources", description: [{ "type" => "paragraph" }])
+      expect(rich_content.has_body_content?).to be(false)
+    end
+
+    it "returns true for a body with text" do
+      rich_content = create(:rich_content, entity: product, title: nil, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Lesson one" }] }])
+      expect(rich_content.has_body_content?).to be(true)
+    end
+
+    context "with excluding_node_types" do
+      it "treats an excluded leaf node as no content" do
+        rich_content = create(:rich_content, entity: product, title: nil, description: [{ "type" => "posts" }])
+
+        expect(rich_content.has_body_content?).to be(true)
+        expect(rich_content.has_body_content?(excluding_node_types: described_class::NODE_TYPES_WITHOUT_OWN_CONTENT)).to be(false)
+      end
+
+      it "treats a container holding only excluded nodes as no content" do
+        rich_content = create(:rich_content, entity: product, title: nil, description: [
+                                { "type" => "fileEmbedGroup", "content" => [{ "type" => "fileEmbed", "attrs" => { "id" => "abc" } }] }
+                              ])
+
+        expect(rich_content.has_body_content?(excluding_node_types: described_class::NODE_TYPES_WITHOUT_OWN_CONTENT)).to be(false)
+      end
+
+      it "still sees the seller's own writing alongside an excluded node" do
+        rich_content = create(:rich_content, entity: product, title: nil, description: [
+                                { "type" => "posts" },
+                                { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Read these in order" }] }
+                              ])
+
+        expect(rich_content.has_body_content?(excluding_node_types: described_class::NODE_TYPES_WITHOUT_OWN_CONTENT)).to be(true)
+      end
+    end
+  end
 end
