@@ -588,6 +588,28 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(storage_lookups).to eq(1)
       end
 
+      # A membership carries a separate file list per tier, so the budget has to
+      # cover the whole save rather than being handed out once per list —
+      # otherwise a product's worst case multiplies by how many tiers it has.
+      it "spends one budget across the product and all of its variants" do
+        storage_lookups = 0
+        # The first lookup burns the whole budget, so nothing after it is asked,
+        # in this tier or any later one.
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          storage_lookups += 1
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+        membership.tiers.each do |tier|
+          2.times { tier.product_files << create(:product_file, link: membership, analyze_completed: false) }
+          tier.save!
+        end
+
+        expect(described_class.check(membership.reload, :product).passed).to eq(false)
+        expect(storage_lookups).to eq(1)
+      end
+
       # A file that finished analyzing is answered from its own row, so a real
       # deliverable sitting behind a pile of unfinished uploads still publishes
       # and still costs nothing to confirm.
