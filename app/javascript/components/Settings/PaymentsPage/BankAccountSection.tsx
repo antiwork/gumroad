@@ -789,12 +789,26 @@ const BankAccountSection = ({
     "ZA",
   ];
 
+  type AccountNumberInputProps = Partial<
+    Pick<React.ComponentPropsWithoutRef<"input">, "placeholder" | "maxLength" | "pattern" | "inputMode" | "title">
+  >;
+
+  // A handful of countries are not in `country_supports_iban?` (so they get the generic
+  // "Account #" box below rather than the dedicated IBAN box), yet their bank-account models
+  // still require an IBAN-shaped value, e.g. MoroccoBankAccount's /^MA[0-9]{20,26}$/. Showing
+  // the generic "1234567890" hint there tells sellers to enter their short local account number,
+  // which is always rejected. Give those countries a real example instead.
+  const ibanShapedNonIbanAccountNumberInputProps: Record<string, AccountNumberInputProps> = {
+    MA: { placeholder: "MA64011519000001205000534921", maxLength: 28, pattern: "MA[0-9]{20,26}" },
+    SN: { placeholder: "SN08SN0100152000048500003035", maxLength: 28, pattern: "SN[0-9SN]{20,26}" },
+    RS: { placeholder: "RS35260005601001611379", maxLength: 22, pattern: "RS[0-9]{18,20}" },
+    MD: { placeholder: "MD24AG000225100013104168", maxLength: 24, pattern: "MD[0-9]{2}[A-Z0-9]{20}" },
+  };
+
   const isGibraltar = user.country_code === "GI";
   const isOman = user.country_code === "OM";
-  const nonIbanAccountNumberInputProps: Pick<
-    React.ComponentPropsWithoutRef<"input">,
-    "placeholder" | "maxLength" | "pattern" | "inputMode" | "title"
-  > = isGibraltar
+  const ibanShapedProps = user.country_code ? ibanShapedNonIbanAccountNumberInputProps[user.country_code] : undefined;
+  const nonIbanAccountNumberInputProps: AccountNumberInputProps = isGibraltar
     ? { placeholder: "01234567", maxLength: 8, pattern: "[0-9]{8}", inputMode: "numeric" }
     : isOman
       ? {
@@ -804,7 +818,7 @@ const BankAccountSection = ({
           inputMode: "numeric",
           title: "Enter your 6 to 16 digit account number, not your IBAN",
         }
-      : { placeholder: "1234567890" };
+      : (ibanShapedProps ?? { placeholder: "1234567890" });
 
   const getRoutingNumberLabel = (countryCode: string) => {
     switch (true) {
@@ -2460,9 +2474,11 @@ const BankAccountSection = ({
                   <Fieldset state={errorFieldNames.has("account_number") ? "danger" : undefined}>
                     <FieldsetTitle>
                       <Label htmlFor={`${uid}-account-number`}>
-                        {user.country_code && ["US", "MX", "AR", "PE", "SV"].includes(user.country_code)
-                          ? "Account number"
-                          : "Account #"}
+                        {ibanShapedProps
+                          ? "IBAN"
+                          : user.country_code && ["US", "MX", "AR", "PE", "SV"].includes(user.country_code)
+                            ? "Account number"
+                            : "Account #"}
                       </Label>
                     </FieldsetTitle>
                     <Input
@@ -2478,9 +2494,11 @@ const BankAccountSection = ({
                   <Fieldset state={errorFieldNames.has("account_number_confirmation") ? "danger" : undefined}>
                     <FieldsetTitle>
                       <Label htmlFor={`${uid}-confirm-account-number`}>
-                        {user.country_code && ["US", "MX", "AR", "PE", "SV"].includes(user.country_code)
-                          ? "Confirm account number"
-                          : "Confirm account #"}
+                        {ibanShapedProps
+                          ? "Confirm IBAN"
+                          : user.country_code && ["US", "MX", "AR", "PE", "SV"].includes(user.country_code)
+                            ? "Confirm account number"
+                            : "Confirm account #"}
                       </Label>
                     </FieldsetTitle>
                     <Input

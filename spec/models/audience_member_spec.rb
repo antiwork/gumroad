@@ -334,6 +334,19 @@ RSpec.describe AudienceMember, :freeze_time do
         expect(results[0].follower_id).to eq(1)
         expect(results[0].affiliate_id).to eq(nil)
       end
+
+      it "still returns the follower id when a bought-product filter is applied" do
+        member = create_member(
+          purchases: [{ "id" => 10, "product_id" => 42, "created_at" => 3.days.ago.iso8601 }],
+          follower: { "id" => 7, "created_at" => 5.days.ago.iso8601 }
+        )
+
+        results = filtered_with_ids(type: "follower", bought_product_ids: [42])
+        expect(results.size).to eq(1)
+        expect(results[0]).to eq(member)
+        expect(results[0].follower_id).to eq(7)
+        expect(results[0].purchase_id).to eq(10)
+      end
     end
   end
 
