@@ -143,12 +143,17 @@ describe Api::Mobile::AgentController do
     it "returns unprocessable when the executor reports failure" do
       executor_double = instance_double(Ai::StoreAgentActionExecutor)
       allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
-      allow(executor_double).to receive(:execute).and_return(success: false, message: "That change couldn't be saved.")
+      allow(executor_double).to receive(:execute).and_return(
+        success: false,
+        message: "That change couldn't be saved.",
+        failure_reason: "api_failure",
+        failure_status: 422,
+      )
 
       post :execute, params: valid_params
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body).to eq("success" => false, "message" => "That change couldn't be saved.")
     end
 
     it "halts on throttle without invoking the action executor" do
