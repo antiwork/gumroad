@@ -145,6 +145,19 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
       end
 
+      it "when affiliate_type? is true and a bought-product filter is set, it still resolves the matching affiliate" do
+        create(:purchase, link: @products[0], email: @affiliates[0].affiliate_user.email, created_at: 2.hours.ago)
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink], bought_products: [@products[0].unique_permalink])
+
+        member = AudienceMember.filter(seller_id: @post.seller_id, params: @post.audience_members_filter_params, with_ids: true).sole
+        expect(member.affiliate_id).to eq(@affiliates[0].id)
+
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+      end
+
       it "enqueues an affiliate id the worker can actually resolve to a user" do
         @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
         described_class.new.perform(@post.id)
