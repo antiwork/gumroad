@@ -40,14 +40,21 @@ class User < ApplicationRecord
   # How long a resolved avatar variant URL stays cached. Avatar URLs are stable
   # for as long as the seller keeps the same picture, so this is only about
   # bounding how long a cached URL can keep being served after the file behind
-  # it goes away.
-  AVATAR_VARIANT_URL_CACHE_TTL = 1.week
+  # it goes away. A day is short enough that a seller whose variant disappears
+  # right after a cache write is not left without a picture for a week, and long
+  # enough that virtually every read still hits the cache.
+  AVATAR_VARIANT_URL_CACHE_TTL = 1.day
 
   # How long we remember that an avatar variant's file was confirmed present in
   # storage, so a normal page view does not pay for a storage lookup. Only
   # confirmations are remembered, never absences, so a seller whose avatar is
   # repaired sees it immediately.
-  AVATAR_VARIANT_PRESENCE_CACHE_TTL = 1.week
+  #
+  # Kept far shorter than the URL cache above on purpose. This entry exists only
+  # to spare repeated storage lookups inside a burst of reads; if it lived as
+  # long as a cached URL, a variant that disappeared right after being confirmed
+  # could keep being served for one presence lifetime *plus* one URL lifetime.
+  AVATAR_VARIANT_PRESENCE_CACHE_TTL = 1.hour
 
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
@@ -468,7 +475,12 @@ class User < ApplicationRecord
     cached_variant_url = Rails.cache.read(cache_key).presence
 
     if cached_variant_url.nil?
-      cached_variant_url = avatar_variant&.url.presence
+      # Confirm against storage rather than the presence cache here: this URL is
+      # about to be remembered for a day, so it has to be checked at the moment
+      # we write it. Otherwise a variant that vanished just after its presence
+      # was confirmed could be served for the presence lifetime and then get a
+      # fresh full-length URL entry on top of it.
+      cached_variant_url = avatar_variant(verify_storage: true)&.url.presence
       # Only ever cache a real URL. A blank value here means we could not work
       # out where the variant lives on this pass, and caching that would leave
       # the seller with no profile picture until the entry expired, with no way
@@ -487,12 +499,12 @@ class User < ApplicationRecord
     avatar.url
   end
 
-  def avatar_variant
+  def avatar_variant(verify_storage: false)
     return unless avatar.attached?
 
     # 400x400 so avatars stay sharp on Retina/high-DPI screens: the profile
     # settings preview box is 200 CSS px, which is 400 device px at 2x.
-    stored_avatar_variant(resize_to_limit: [400, 400])
+    stored_avatar_variant(verify_storage:, resize_to_limit: [400, 400])
   end
 
   def username
@@ -1285,9 +1297,9 @@ class User < ApplicationRecord
     #
     # When the file is gone we throw the stale row away and resize again from
     # the original upload, which is normally still intact.
-    def stored_avatar_variant(**transformations)
+    def stored_avatar_variant(verify_storage: false, **transformations)
       variant = avatar.variant(**transformations).processed
-      return variant if avatar_variant_file_present?(variant)
+      return variant if avatar_variant_file_present?(variant, verify_storage:)
 
       Rails.logger.warn("User#stored_avatar_variant (#{id}): variant file missing from storage, regenerating it")
       variant.destroy
@@ -1298,15 +1310,24 @@ class User < ApplicationRecord
       avatar.variant(**transformations).processed
     end
 
-    def avatar_variant_file_present?(variant)
+    # verify_storage skips the "we saw this file recently" shortcut and asks
+    # storage directly. Callers that are about to remember the resulting URL for
+    # a long time pass it, so the answer they cache was true at the moment they
+    # cached it.
+    def avatar_variant_file_present?(variant, verify_storage: false)
       key = variant.key
       # No key at all means Active Storage has nothing to check; let the caller
       # deal with the empty URL that follows rather than resizing in a loop.
       return true if key.blank?
 
       cache_key = "active_storage_variant_present_#{key}"
-      return true if Rails.cache.read(cache_key)
-      return false unless variant.service.exist?(key)
+      return true if !verify_storage && Rails.cache.read(cache_key)
+
+      unless variant.service.exist?(key)
+        # Drop any stale confirmation so another caller does not trust it.
+        Rails.cache.delete(cache_key)
+        return false
+      end
 
       Rails.cache.write(cache_key, true, expires_in: AVATAR_VARIANT_PRESENCE_CACHE_TTL)
       true

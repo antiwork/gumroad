@@ -343,6 +343,25 @@ describe User, :vcr do
 
         expect(@user.reload.avatar_url).to eq("https://public-files.gumroad.com/#{variant_key}")
       end
+
+      it "regenerates the avatar even when the missing file was confirmed present earlier" do
+        # The presence cache only exists to spare repeated storage lookups. It
+        # must never be what a freshly cached URL is based on, or a variant that
+        # disappears just after being confirmed would be served for the presence
+        # lifetime and then get a fresh URL entry on top of it.
+        orphaned = @user.avatar.variant(resize_to_limit: [400, 400]).processed
+        orphaned_key = orphaned.key
+        Rails.cache.write("active_storage_variant_present_#{orphaned_key}", true)
+        @user.avatar.blob.service.delete(orphaned_key)
+
+        url = @user.reload.avatar_url
+
+        expect(url).not_to include(orphaned_key)
+        expect(Rails.cache.read("active_storage_variant_present_#{orphaned_key}")).to be_nil
+        rebuilt_key = @user.reload.avatar_variant.key
+        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+      end
     end
 
     describe "#avatar_variant" do
