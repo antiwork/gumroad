@@ -178,10 +178,12 @@ class Checkout::BuyerCurrencyEligibility
     purchases.each do |purchase|
       return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
       return fallback(:unsupported_product_type) if unquotable_product?(purchase.link)
-      # A product already priced in the buyer's currency is charged its listed price
-      # directly rather than round-tripped through an FX quote — see the comment on
-      # BuyerCurrencyQuote#quotable_product?. Any product currency other than the
-      # buyer's own is quotable, including non-USD ones.
+      # A product already priced in the buyer's currency is withheld from the quote
+      # lane so an FX round trip can never misprice it — see the comment on
+      # BuyerCurrencyQuote#quotable_product?. (It only pays its listed price directly
+      # on the method-forced local-method lane; a card checkout for it charges
+      # canonical USD.) Any product currency other than the buyer's own is quotable,
+      # including non-USD ones.
       return fallback(:listed_currency_is_buyer_currency) if purchase.link.price_currency_type.to_s.downcase == buyer_currency
     end
 

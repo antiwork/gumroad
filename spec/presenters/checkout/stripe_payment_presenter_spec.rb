@@ -252,7 +252,9 @@ describe Checkout::StripePaymentPresenter do
     # buyer-local display stays off (buyer_currency_display_props returns "default" when
     # the two currencies match) and it is not a presentment candidate. The quote locks the
     # whole cart total, so that one item takes the whole cart back to canonical USD —
-    # which is right here, because that item is charged its listed CAD price directly.
+    # which is right here, because quoting that item would round-trip its listed CAD
+    # price through two FX rates and charge the buyer an amount that drifts from the
+    # price on the page.
     add_products = [
       checkout_product_for(product, buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }),
       checkout_product_for(cad_product, buyer_currency_display: { display_mode: "default", buyer_currency_shown: Currency::CAD }),

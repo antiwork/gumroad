@@ -276,9 +276,10 @@ class Checkout::BuyerCurrencyQuote
     # Converting a R$49.90 listing to USD and back through a Stripe FX quote returns
     # something near but not equal to R$49.90 (two conversions, two rates, two
     # roundings), so the buyer would be charged an amount that differs from the price
-    # on the page. That cart is charged its listed price directly instead — the
-    # direct-listed lane Charge::MethodForcedPresentment already implements for local
-    # payment methods — so it is withheld from quoting rather than mispriced by it.
+    # on the page. That cart is withheld from quoting so it is never mispriced by the
+    # round trip. It only pays its listed price on the method-forced local-method lane
+    # (Charge::MethodForcedPresentment, for EUR/INR listings paid via iDEAL, Bancontact
+    # or UPI); a plain card checkout for that cart falls back to canonical USD today.
     def quotable_product?(product, buyer_currency:)
       return false if product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
       return false if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?
