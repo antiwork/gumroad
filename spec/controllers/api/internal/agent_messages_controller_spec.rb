@@ -373,44 +373,58 @@ describe Api::Internal::AgentMessagesController do
         expect(response.parsed_body["success"]).to be(false)
       end
 
-      it "puts the failure reason and endpoint id in the request's log payload when a confirmed action fails" do
+      it "puts fixed failure metadata and the catalog endpoint id in the request's log payload" do
         # The 422s from this endpoint are a bucket (permission denials, unknown-key rejections, API
-        # validation failures all land here); the reason and endpoint on the lograge payload are
-        # what make them separable by cause in Elasticsearch.
+        # validation failures all land here). Fixed categories, the upstream status, and a
+        # catalog-resolved endpoint separate those causes without copying seller or API text into
+        # Elasticsearch.
         executor_double = instance_double(Ai::StoreAgentActionExecutor)
         allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
-        allow(executor_double).to receive(:execute).and_return(success: false, message: "You don't have permission to do that.")
+        allow(executor_double).to receive(:execute).and_return(
+          success: false,
+          message: "You don't have permission to do that.",
+          failure_reason: "permission_denied",
+          failure_status: 403,
+        )
 
         payload = {}
         post :execute, params: valid_params, format: :json
         controller.send(:append_info_to_payload, payload)
 
         expect(response).to have_http_status(:unprocessable_entity)
-        expect(payload[:agent_action_failure_reason]).to eq("You don't have permission to do that.")
+        expect(response.parsed_body).to eq("success" => false, "message" => "You don't have permission to do that.")
+        expect(payload[:agent_action_failure_reason]).to eq("permission_denied")
+        expect(payload[:agent_action_failure_status]).to eq(403)
         expect(payload[:agent_action_endpoint]).to eq("create_offer_code")
       end
 
-      it "bounds the logged failure reason so a reflected seller value can't bloat or split the log line" do
-        # Validation failures are reflected from the v2 API, which echoes seller-supplied values back
-        # in its messages. Structured logs are long-lived and searchable, so the reason is collapsed
-        # to one line and capped — enough to tell the 422 buckets apart without carrying an arbitrary
-        # amount of seller text into the log.
+      it "never copies a reflected API validation value into the request's log payload" do
+        # The v2 API can echo a rejected callback URL, including its query credentials. The seller
+        # still needs that exact message, but the long-lived log gets only a fixed category and
+        # integer status.
         executor_double = instance_double(Ai::StoreAgentActionExecutor)
         allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
-        reflected = "Name is invalid:\n#{"A" * 500}"
-        allow(executor_double).to receive(:execute).and_return(success: false, message: reflected)
+        secret = "seller-secret-token"
+        reflected = "Invalid post URL 'not-a-url?token=#{secret}'"
+        allow(executor_double).to receive(:execute).and_return(
+          success: false,
+          message: reflected,
+          failure_reason: "api_failure",
+          failure_status: 422,
+        )
 
         payload = {}
         post :execute, params: valid_params, format: :json
         controller.send(:append_info_to_payload, payload)
 
-        logged = payload[:agent_action_failure_reason]
         expect(response).to have_http_status(:unprocessable_entity)
-        expect(logged.length).to be <= 200
-        expect(logged).not_to include("\n")
-        expect(logged).to start_with("Name is invalid: AAA")
-        # The seller still gets the API's full message; only the log copy is bounded.
-        expect(response.parsed_body["message"]).to eq(reflected)
+        expect(response.parsed_body).to eq("success" => false, "message" => reflected)
+        expect(payload).to include(
+          agent_action_failure_reason: "api_failure",
+          agent_action_failure_status: 422,
+          agent_action_endpoint: "create_offer_code",
+        )
+        expect(payload.to_json).not_to include(secret)
       end
 
       it "omits the endpoint from the log payload when the confirmed action names one the catalog doesn't have" do
@@ -419,14 +433,18 @@ describe Api::Internal::AgentMessagesController do
         # catalog doesn't have contributes no value of its own choosing to the metric.
         executor_double = instance_double(Ai::StoreAgentActionExecutor)
         allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
-        allow(executor_double).to receive(:execute).and_return(success: false, message: "That action isn't supported.")
+        allow(executor_double).to receive(:execute).and_return(
+          success: false,
+          message: "That action isn't supported.",
+          failure_reason: "unsupported_action",
+        )
 
         payload = {}
         post :execute, params: { type: "api_write", params: { endpoint: "not_a_real_endpoint" } }, format: :json
         controller.send(:append_info_to_payload, payload)
 
         expect(response).to have_http_status(:unprocessable_entity)
-        expect(payload[:agent_action_failure_reason]).to eq("That action isn't supported.")
+        expect(payload[:agent_action_failure_reason]).to eq("unsupported_action")
         expect(payload).not_to have_key(:agent_action_endpoint)
       end
 

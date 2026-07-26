@@ -181,8 +181,11 @@ module User::Compliance
   # replaced it — and that replacement is exactly what makes their verification document stop
   # matching the account. See UserComplianceInfoRequest for the full deadlock.
   #
-  # Memoized per instance: the dashboard and settings pages ask this once per outstanding
-  # compliance request, and the answer cannot change within a single request.
+  # Memoized per instance so that repeated asks on the same User object are free. Note the
+  # dashboard and settings pages reach this through each outstanding compliance request, which
+  # loads its own User, so the memo mostly saves work within a request rather than across it. The
+  # cheap error-code guard in UserComplianceInfoRequest runs first, so the read only ever happens
+  # for a seller who already has an address-mismatch rejection.
   def po_box_in_address_history?
     return @po_box_in_address_history unless @po_box_in_address_history.nil?
 

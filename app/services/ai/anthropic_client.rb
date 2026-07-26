@@ -235,7 +235,7 @@ class Ai::AnthropicClient
         # back a cut-off 200 body, and `parse` raises on that. Letting it through would replace the
         # clear "unreadable tool call" message with a raw parser error, which reads like a bug in
         # our code rather than the upstream problem it is.
-        parse_message(response.parse)
+        parse_buffered_fallback(response.parse)
       rescue Error, HTTP::Error, JSON::ParserError
         raise original_error
       end
@@ -246,6 +246,43 @@ class Ai::AnthropicClient
       # the seller's screen a moment before it gets thrown away. Hand back the result and let the
       # caller decide what to show.
       on_text&.call(result.text) if result.text.present? && result.stop_reason != "max_tokens"
+      result
+    end
+
+    # The regular buffered parser remains forgiving because existing callers can handle an empty
+    # result. This fallback cannot: it runs only after a failed streamed turn, so accepting damaged
+    # JSON as a blank reply or coercing a broken tool input to {} would hide the original error and
+    # could dispatch a different action. Require the parts of a complete Messages response that the
+    # agent consumes before allowing the replay to replace that error.
+    def parse_buffered_fallback(body)
+      content = body["content"] if body.is_a?(Hash)
+      stop_reason = body["stop_reason"] if body.is_a?(Hash)
+      valid_envelope = content.is_a?(Array) && stop_reason.is_a?(String) && stop_reason.present?
+
+      valid_blocks = valid_envelope && content.all? do |block|
+        next false unless block.is_a?(Hash) && block["type"].is_a?(String)
+
+        case block["type"]
+        when "text"
+          block["text"].is_a?(String)
+        when "tool_use"
+          block["id"].is_a?(String) && block["id"].present? &&
+            block["name"].is_a?(String) && block["name"].present? &&
+            block["input"].is_a?(Hash)
+        else
+          true
+        end
+      end
+
+      raise Error, "Anthropic buffered fallback returned an unreadable response." unless valid_blocks
+
+      result = parse_message(body)
+      usable_output = result.text.present? || result.tool_uses.present? || result.stop_reason == "max_tokens"
+      tool_stop_is_complete = result.stop_reason != "tool_use" || result.tool_uses.present?
+      unless usable_output && tool_stop_is_complete
+        raise Error, "Anthropic buffered fallback returned an unreadable response."
+      end
+
       result
     end
 

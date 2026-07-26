@@ -102,10 +102,27 @@ class UserComplianceInfoRequest < ApplicationRecord
   ].freeze
 
   PO_BOX_ADDRESS_DEADLOCK_MESSAGE = "The address on your document doesn't match the address on " \
+    "your account. Your registered address appears to be a P.O. Box, which our payment partner " \
+    "can't accept on the account itself, so a document showing that P.O. Box will never match " \
+    "and uploading it again won't help. Please contact support and we'll sort out together which " \
+    "address and document will work for you."
+  PREVIOUS_PO_BOX_ADDRESS_DEADLOCK_MESSAGE = "The address on your document doesn't match the address on " \
     "your account. Your registered address is a P.O. Box, which our payment partner can't accept " \
     "on the account itself, so a document showing that P.O. Box will never match and uploading " \
     "it again won't help. Please contact support and we'll sort out together which address and " \
     "document will work for you."
+  UNACTIONABLE_VERIFICATION_MESSAGES = [
+    PO_BOX_ADDRESS_DEADLOCK_MESSAGE,
+    PREVIOUS_PO_BOX_ADDRESS_DEADLOCK_MESSAGE,
+  ].freeze
+
+  # The messages above that a seller cannot act on themselves. Emails carrying one of these must
+  # not also tell the seller to go fix it in their payout settings — the whole point is that there
+  # is nothing there for them to fix, and support has to unblock them. Keep the previous copy here
+  # too so messages enqueued before a wording change still render the safe support-only template.
+  def self.unactionable_verification_message?(message)
+    UNACTIONABLE_VERIFICATION_MESSAGES.include?(message)
+  end
 
   def verification_error_message
     return nil if verification_error.blank?
