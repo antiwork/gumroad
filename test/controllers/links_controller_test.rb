@@ -1552,6 +1552,112 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal ["variants"], response.parsed_body["skipped_collections"]
   end
 
+  test "PUT update does not crash when a page entry isn't a record and the product has versions" do
+    # The pages-skip decision is made inside the transaction, but several
+    # helpers read the raw payload before it and index into each entry —
+    # `"not-a-record"[:id]` raises TypeError, so the save 500s before it can
+    # decide to skip anything. That leaves the seller in the same dead end the
+    # rejection did, for one of this feature's own two reason codes.
+    setup_guarded_version!
+
+    post :update, params: @params.merge(
+      rich_content: ["not-a-record"],
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal ["rich_content"], response.parsed_body["skipped_collections"]
+    assert_equal false, @version1_page.reload.deleted?
+  end
+
+  test "PUT update leaves a page alone when the page's own body can't be read" do
+    # A page entry that IS a record but whose body isn't one passes a
+    # collection-level check, and permitting then silently drops the body while
+    # keeping the entry — so the save reads "this page now has no body" and
+    # overwrites the seller's content with an empty document. That's a
+    # committed content wipe from a malformed payload, which is the whole class
+    # of bug this is meant to stop.
+    page = create_rich_content(entity: @product, description: guard_content_description, title: "Chapter 1")
+
+    post :update, params: @params.merge(
+      rich_content: [{ id: page.external_id, title: "Chapter 1", description: "corrupt" }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal guard_content_description, page.reload.description
+    assert_equal ["rich_content"], response.parsed_body["skipped_collections"]
+  end
+
+  test "PUT update leaves a page alone when the page body's content isn't a list of nodes" do
+    page = create_rich_content(entity: @product, description: guard_content_description, title: "Chapter 1")
+
+    post :update, params: @params.merge(
+      rich_content: [{ id: page.external_id, title: "Chapter 1", description: { type: "doc", content: "corrupt" } }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal guard_content_description, page.reload.description
+  end
+
+  test "PUT update leaves a page alone when the page body's nodes aren't records" do
+    # Nodes that are bare strings pass every downstream filter (`node["type"]`
+    # on a String is nil) and would be stored as the page's content.
+    page = create_rich_content(entity: @product, description: guard_content_description, title: "Chapter 1")
+
+    post :update, params: @params.merge(
+      rich_content: [{ id: page.external_id, title: "Chapter 1", description: { type: "doc", content: ["corrupt"] } }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal guard_content_description, page.reload.description
+  end
+
+  test "PUT update leaves a version's pages alone when one of their bodies can't be read" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: "corrupt" }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal guard_content_description, @version1_page.reload.description
+    assert_equal ["variants"], response.parsed_body["skipped_collections"]
+  end
+
+  test "PUT update does not apply the shared-content flag from a payload whose pages can't be read" do
+    # Same reason as the versions case: flipping the flag decides which side's
+    # content buyers see, and this payload couldn't describe the product-level
+    # side it is turning on.
+    setup_guarded_version!
+    @product.update!(has_same_rich_content_for_all_variants: false)
+
+    post :update, params: @params.merge(
+      rich_content: "not-a-list",
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }],
+      has_same_rich_content_for_all_variants: true
+    ), format: :json
+
+    assert_response :success
+    assert_equal false, @product.reload.has_same_rich_content_for_all_variants?
+  end
+
+  test "PUT update leaves a coffee product's suggested amounts alone when its versions can't be read" do
+    # A coffee product's suggested amounts ARE its versions, and the price shown
+    # on the page is derived from them. A payload that couldn't describe them
+    # must not move that price.
+    @seller.update!(created_at: (User::MIN_AGE_FOR_SERVICE_PRODUCTS + 1.day).ago)
+    product = create_product(user: @seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 1000)
+    product.update!(suggested_price_cents: 1000)
+    amount = product.alive_variants.first
+
+    post :update, params: { id: product.unique_permalink, name: "Renamed coffee", variants: "not-a-list", suggested_price_cents: 50 }, as: :json
+
+    assert_response :success
+    assert_equal "Renamed coffee", product.reload.name
+    assert_equal 1000, product.suggested_price_cents
+    assert_equal false, amount.reload.deleted?
+  end
+
   test "PUT update blocks deleting a title-only page missing from the payload" do
     # A page can carry nothing but a title (its body is an empty paragraph).
     # That title is seller-authored work and renders in the buyer's page list,

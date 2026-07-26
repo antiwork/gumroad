@@ -352,19 +352,29 @@ const ProductEditPage = (props: Props) => {
       });
       saved = true;
       // Part of what this save sent could not be interpreted by the server, so
-      // that collection was left as the server already had it. The editor's
+      // that content was left as the server already had it. The editor's
       // in-memory copy of it is therefore NOT what is stored, and continuing to
       // edit from it would keep re-sending the same unreadable payload. Reload
-      // so the seller sees the real stored state, and say plainly that this part
-      // did not save — the seller did nothing wrong, so the message must not
-      // ask them to fix anything.
+      // so the seller sees the real stored state.
+      //
+      // The message goes through showAlertAfterReload rather than showAlert: a
+      // toast is delivered by an async window.postMessage, so calling showAlert
+      // and reloading immediately unloads the document before the message is
+      // ever dispatched and the seller sees an unexplained reload with their
+      // content edits gone.
+      //
+      // Resolving FALSE is deliberate even though the save itself succeeded:
+      // callers chain on this result (publish, "Save and continue", open
+      // preview), and none of those should proceed on a save whose content was
+      // discarded — publishing would race the reload and put the product live
+      // with content the seller never reviewed.
       if (response.skipped_collections?.length) {
         showAlertAfterReload(
-          "Your changes were saved, but this product's content couldn't be read from your browser and was left as it was. Reloading it now.",
+          "Your changes were saved, but this product's content couldn't be read from your browser, so it was left as it was. It's been reloaded here — please re-apply any content edits.",
           "warning",
         );
         window.location.reload();
-        return true;
+        return false;
       }
       // The version pages the seller chose to keep were never loaded into this
       // editor session (the shared-content flag hid them), so the in-memory

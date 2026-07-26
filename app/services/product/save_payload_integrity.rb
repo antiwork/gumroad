@@ -43,6 +43,12 @@
 # Treating an unknown id as "uninterpretable" here would make the first save of
 # every new page skip the pages collection — silently dropping the seller's new
 # content, which is worse than the message this class replaces.
+#
+# Scope note: this reads the two collections the dashboard editor sends as JSON
+# arrays. Rails' strong parameters also accepts an integer-keyed hash
+# (`variants[0][name]=…`) where an array is declared, which this would call
+# uninterpretable — the editor always sends JSON, so that only matters if some
+# scripted client ever posts this endpoint form-encoded.
 class Product::SavePayloadIntegrity
   # A collection is uninterpretable if it isn't a list, or if it is a list whose
   # entries aren't records. Anything else — including an empty list, and
@@ -90,7 +96,7 @@ class Product::SavePayloadIntegrity
 
   def check
     result = Result.new(
-      skipped_pages_reason: uninterpretable_reason(raw_params[:rich_content], collection: "pages"),
+      skipped_pages_reason: uninterpretable_reason(raw_params[:rich_content], collection: "pages", pages: true),
       skipped_variants_reason: uninterpretable_reason(raw_params[:variants], collection: "variants"),
     )
 
@@ -99,7 +105,7 @@ class Product::SavePayloadIntegrity
     # content, which is the deletion this is preventing.
     if !result.skip_variants? && raw_params[:variants].is_a?(Array)
       raw_params[:variants].each do |variant|
-        reason = uninterpretable_reason(variant[:rich_content], collection: "version_pages")
+        reason = uninterpretable_reason(variant[:rich_content], collection: "version_pages", pages: true)
         next if reason.blank?
 
         result.skipped_variants_reason = reason
@@ -114,12 +120,43 @@ class Product::SavePayloadIntegrity
   private
     attr_reader :product, :raw_params
 
-    def uninterpretable_reason(value, collection:)
+    # pages: whether this collection holds content PAGES, whose bodies get the
+    # extra check below. Versions are not pages — a version's `description` is
+    # an ordinary string field, so applying the page-body rule to them would
+    # reject every version that has a description.
+    def uninterpretable_reason(value, collection:, pages: false)
       return nil if value.nil?
       return "#{collection}_not_a_list" unless value.is_a?(Array)
       return "#{collection}_entry_not_a_record" unless value.all? { record?(_1) }
+      return "#{collection}_body_not_a_record" if pages && !value.all? { readable_page_body?(_1) }
 
       nil
+    end
+
+    # A page's body has to be readable too, not just the page entry. This is
+    # where the most damaging shape hides: an entry that IS a record but whose
+    # `description` isn't one passes an entry-level check, and permitting then
+    # DROPS the unreadable body while keeping the entry. The save reads that as
+    # "this page now has no body" and replaces the seller's content with an
+    # empty document — a committed content wipe, from a payload the seller
+    # can't see or fix. The nodes matter for the same reason: a body whose
+    # `content` is a scalar crashes the save mid-transaction, and one whose
+    # nodes are bare strings gets stored as the page's content (every
+    # downstream filter reads `node["type"]`, which is nil on a String, so
+    # nothing rejects them).
+    #
+    # Absent or blank is fine — a page can legitimately be submitted with no
+    # body (the rest of the save already treats a blank description as "no
+    # body"), and an empty node list is a page the seller emptied on purpose.
+    def readable_page_body?(page)
+      body = page[:description]
+      return true if body.blank?
+      return false unless record?(body)
+
+      nodes = body[:content]
+      return true if nodes.nil?
+
+      nodes.is_a?(Array) && nodes.all? { record?(_1) }
     end
 
     def record?(value)

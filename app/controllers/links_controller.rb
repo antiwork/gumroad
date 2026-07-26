@@ -446,12 +446,21 @@ class LinksController < ApplicationController
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
-          # The shared-content flag decides whether version content is shown or
-          # hidden, so it can only be applied by a save that could actually read
-          # the versions it came with. When they were uninterpretable, applying
-          # it would flip the visibility of content this save is otherwise
-          # leaving untouched.
-          *(payload_integrity.skip_variants? ? [:has_same_rich_content_for_all_variants] : []),
+          # The shared-content flag decides which side's content buyers see —
+          # the product's own pages, or each version's. Applying it from a save
+          # that couldn't read one of those two sides would flip the visibility
+          # of content this save is otherwise leaving untouched, which is the
+          # shape of the July 21 hidden-content incident. `skip_pages?` is true
+          # whenever either side was unreadable.
+          *(payload_integrity.skip_pages? ? [:has_same_rich_content_for_all_variants] : []),
+          # These two only make sense alongside the versions they describe.
+          # `subscription_duration` (a membership's default billing period) is
+          # normally validated against every tier's enabled recurrences inside
+          # VariantsUpdaterService, which a skipped versions list bypasses — so
+          # applying it here could commit a default period no tier has a price
+          # for. `suggested_price_cents` is derived from the coffee product's
+          # submitted amounts, which is the same collection.
+          *(payload_integrity.skip_variants? ? [:subscription_duration, :suggested_price_cents] : []),
           :cancellation_discount,
           :custom_button_text_option,
           :custom_summary,
@@ -1017,17 +1026,39 @@ class LinksController < ApplicationController
     # consumed/mutated by earlier steps.
     def payload_page_descriptions
       @_payload_page_descriptions ||= begin
-        pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
+        # Only page entries that are records can be read. This runs before the
+        # save decides whether to skip the pages, so it has to tolerate any
+        # entry shape rather than raise (`"not-a-record"[:id]` is a TypeError,
+        # which would 500 the save before it could skip anything).
+        pages = params[:rich_content].is_a?(Array) ? params[:rich_content].select { payload_record?(_1) } : []
         snapshot_variants_params.each do |variant|
-          pages.concat(variant[:rich_content].to_a) if variant[:rich_content].is_a?(Array)
+          variant_pages = variant[:rich_content]
+          pages.concat(variant_pages.select { payload_record?(_1) }) if variant_pages.is_a?(Array)
         end
         known_page_ids = (@product.alive_rich_contents.map(&:external_id) +
           @product.current_base_variants.flat_map { |variant| variant.alive_rich_contents.map(&:external_id) }).to_set
         pages.filter_map do |page|
           next if page[:id].present? && known_page_ids.include?(page[:id])
-          page[:description].present? ? page[:description][:content].as_json : nil
+          # A body that isn't a record can't be asked for its nodes. Such a
+          # payload is skipped by Product::SavePayloadIntegrity, but this method
+          # runs before that decision is applied.
+          next unless payload_record?(page[:description])
+          page[:description][:content].as_json
         end
       end
+    end
+
+    # Whether a raw payload value is a record we can index by key. Raw params
+    # can hold anything the client sent, and several pre-decision helpers read
+    # them before Product::SavePayloadIntegrity's verdict is acted on.
+    #
+    # Some of these checks are defense-in-depth rather than reachable today: a
+    # non-record VERSION entry makes the whole versions collection skipped, so
+    # the version-page filters below can't currently see one. They stay because
+    # the cost is a type check and the failure mode is a 500 inside the save
+    # transaction.
+    def payload_record?(value)
+      value.is_a?(ActionController::Parameters) || value.is_a?(Hash)
     end
 
     # The request-wide rewrite allowance shared by every deletion-guard

@@ -24,9 +24,12 @@ export type SaveProductResponse = {
   rich_content_updated_at?: Record<string, string>;
   variant_updated_at?: Record<string, string>;
   // Collections the server could not interpret in this payload and therefore
-  // left untouched ("rich_content", "variants"). The save itself succeeded, so
-  // the editor must not treat its local copy of those collections as saved —
-  // it reloads instead of showing "Changes saved!".
+  // left untouched. Names what the PAYLOAD got wrong ("rich_content",
+  // "variants"), not the full set of steps skipped as a consequence — an
+  // unreadable versions list also causes the pages and files to be left alone,
+  // because the submitted file list is derived from the same content. Treat a
+  // non-empty value as "reload this product; your local copy of its content is
+  // not what's stored", never as an exhaustive list of what didn't save.
   skipped_collections?: string[];
 };
 
