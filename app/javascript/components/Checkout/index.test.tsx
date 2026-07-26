@@ -417,6 +417,25 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByText("R$104.43").length).toBeGreaterThan(0);
   });
 
+  it("shows the charged tip inside the custom-tip box, not a rate conversion of the stored cents", () => {
+    // The box the buyer types into has to quote the same figure as the row beneath it. Typing
+    // R$10.00 stores round(1000 / 5.45) = 183 canonical cents, and the order allocates that back
+    // as floor(183 * 4990 / 915) = 998 centavos, so the summary and the charge are R$9.98.
+    // Converting the stored cents at the exchange rate instead (round(183 * 5.45) = 997) would put
+    // R$9.97 in the box while R$9.98 sat directly below it and R$9.98 was charged.
+    const { getByLabelText, getAllByText, queryByText } = renderCheckout(
+      brlState({
+        products: [stateProduct({ permalink: "brl", price: 915, hasTippingEnabled: true })],
+        tip: { type: "fixed", amount: 183 },
+      }),
+      tippingCart(),
+    );
+
+    expect(getByLabelText("Tip").getAttribute("value")).toBe("9.98");
+    expect(getAllByText("R$9.98").length).toBeGreaterThan(0);
+    expect(queryByText("R$9.97")).toBeNull();
+  });
+
   it("stays in canonical USD while a saved card is selected, because that charge is not in the listed currency", () => {
     // Saved cards stay on the server-confirm path, which never reaches
     // Charge::MethodForcedPresentment — and `usingSavedCard` defaults true for any buyer with a

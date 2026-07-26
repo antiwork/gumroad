@@ -535,14 +535,24 @@ const TipSelector = ({
   }, [showPercentageOptions]);
 
   const tipPercentages = [0, 15, 20, 25];
-  // The tip is canonical USD cents in state on every lane, so a tip typed into the box is shown
-  // converted into whichever currency the summary displays, and converted back before it is stored.
+  // The tip is canonical USD cents in state on every lane, so a tip typed into the box has to be
+  // converted back into whichever currency the summary displays before it can be shown again.
+  //
+  // Show the SAME figure the row below and the charge use (`presentmentTipCents`, which comes from
+  // the submission's own per-line allocation) rather than converting the stored canonical cents at
+  // the exchange rate. The two disagree: on a R$49.90 product whose canonical price rounded to 915
+  // cents, the allocation divides by 4990/915 while the stored rate is 5.45, so typing R$10.00
+  // stores 183 canonical cents and the rate conversion renders R$9.97 in the box while the summary
+  // and the charge are R$9.98. Two different amounts on one screen is exactly what this lane
+  // exists to remove, and the box is the number the buyer typed into, so it must be the charged one.
   const fixedTipCents =
-    buyerCurrencyDisplay && state.tip.type === "fixed" && state.tip.amount != null
-      ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
-      : state.tip.type === "fixed"
-        ? state.tip.amount
-        : null;
+    state.tip.type !== "fixed" || state.tip.amount == null
+      ? null
+      : buyerCurrencyDisplay && presentmentTipCents != null
+        ? presentmentTipCents
+        : buyerCurrencyDisplay
+          ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
+          : state.tip.amount;
 
   return (
     <div className="@container flex flex-col gap-2 sm:gap-3">
