@@ -162,6 +162,94 @@ describe RichContent do
     end
   end
 
+  describe "link href scheme validation" do
+    let(:product) { create(:product) }
+
+    def build_content(href, node_type: "button")
+      build(:rich_content, entity: product, description: [{ "type" => node_type, "attrs" => { "href" => href }, "content" => [{ "type" => "text", "text" => "Go" }] }])
+    end
+
+    it "allows https links" do
+      expect(build_content("https://example.com/activate?key=__license_key__")).to be_valid
+    end
+
+    it "allows custom app schemes so sellers can deep-link into their own app" do
+      expect(build_content("goodsnooze://activate?key=__license_key__")).to be_valid
+      expect(build_content("my-app.desktop://open", node_type: "tiptap-link")).to be_valid
+    end
+
+    it "rejects schemes that can execute script or read local files" do
+      %w[javascript:alert(1) data:text/html,<script>alert(1)</script> vbscript:msgbox(1) file:///etc/passwd blob:https://example.com/x].each do |href|
+        content = build_content(href)
+        expect(content).not_to be_valid, "expected #{href} to be rejected"
+        expect(content.errors.full_messages.join).to include("URL schemes")
+      end
+    end
+
+    it "rejects a blocked scheme in a link mark nested inside a list" do
+      content = build(:rich_content, entity: product, description: [
+                        { "type" => "bulletList", "content" => [
+                          { "type" => "listItem", "content" => [
+                            { "type" => "paragraph", "content" => [
+                              { "type" => "text", "text" => "Click", "marks" => [{ "type" => "link", "attrs" => { "href" => "javascript:alert(1)" } }] }
+                            ] }
+                          ] }
+                        ] }
+                      ])
+      expect(content).not_to be_valid
+    end
+
+    it "rejects a blocked scheme on an image's click-through link" do
+      content = build(:rich_content, entity: product, description: [{ "type" => "image", "attrs" => { "src" => "https://example.com/a.png", "link" => "javascript:alert(1)" } }])
+      expect(content).not_to be_valid
+    end
+
+    it "allows a custom scheme on an image's click-through link" do
+      content = build(:rich_content, entity: product, description: [{ "type" => "image", "attrs" => { "src" => "https://example.com/a.png", "link" => "goodsnooze://activate?key=__license_key__" } }])
+      expect(content).to be_valid
+    end
+
+    it "rejects a blocked scheme on a media embed's source URL" do
+      content = build(:rich_content, entity: product, description: [{ "type" => "mediaEmbed", "attrs" => { "html" => "<iframe></iframe>", "title" => "Demo", "url" => "javascript:alert(1)" } }])
+      expect(content).not_to be_valid
+    end
+
+    it "is case-insensitive about the blocked scheme" do
+      expect(build_content("JavaScript:alert(1)")).not_to be_valid
+    end
+
+    # A browser throws away leading control characters and strips tabs/newlines from anywhere in a
+    # URL before parsing it, so all of these load as plain `javascript:alert(1)` and run the script
+    # when clicked. The validation has to clean the value the same way the browser will, otherwise
+    # an API write can store a link that looks inert here and executes in the buyer's browser.
+    it "rejects a blocked scheme hidden behind characters a browser strips from the URL" do
+      [
+        "\u0000javascript:alert(1)",
+        "\u0001javascript:alert(1)",
+        "\u001Fjavascript:alert(1)",
+        " \tjavascript:alert(1)",
+        "\njavascript:alert(1)",
+        "java\tscript:alert(1)",
+        "java\nscript:alert(1)",
+        "java\rscript:alert(1)",
+        "j\ta\nv\ra\rscript:alert(1)",
+      ].each do |href|
+        content = build_content(href)
+        expect(content).not_to be_valid, "expected #{href.inspect} to be rejected"
+        expect(content.errors.full_messages.join).to include("URL schemes")
+      end
+    end
+
+    it "rejects the same hidden scheme on an image's click-through link" do
+      content = build(:rich_content, entity: product, description: [{ "type" => "image", "attrs" => { "src" => "https://example.com/a.png", "link" => "\u0001java\tscript:alert(1)" } }])
+      expect(content).not_to be_valid
+    end
+
+    it "still allows a custom scheme that merely has surrounding whitespace" do
+      expect(build_content("  goodsnooze://activate?key=__license_key__  ")).to be_valid
+    end
+  end
+
   describe "#has_posts?" do
     let(:product) { create(:product) }
 
