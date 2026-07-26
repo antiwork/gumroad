@@ -1005,6 +1005,21 @@ describe "Purchase Process", :vcr do
         # 10% flat + 2.9% processor on $10.00, plus the $0.50 + $0.30 fixed fees — no IOF.
         expect(purchase.fee_cents).to eq(209)
       end
+
+      # On a direct charge the money settles into the seller's own Stripe account and Stripe deducts
+      # the IOF from that balance, so the seller has already absorbed it. Recovering it again through
+      # fee_cents would bill them for the same Brazilian tax twice. Same reasoning as the processor
+      # fee, which is gated on the identical condition.
+      it "charges no IOF component on a direct charge, where the seller already absorbs it" do
+        purchase = build(:purchase, price_cents: 10_00, card_type: CardType::PIX)
+        allow(purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
+
+        purchase.send(:calculate_fees)
+
+        # 10% flat only: no processor fee and no IOF, plus the $0.50 fixed Gumroad fee.
+        expect(purchase.fee_cents).to eq(150)
+        expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(0)
+      end
     end
   end
 

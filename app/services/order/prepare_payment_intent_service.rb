@@ -282,9 +282,23 @@ class Order::PreparePaymentIntentService
     # Pix, so there is no "silently drop the method and let their card through" branch.
     def block_pix_amount_outside_window(presentment)
       return false unless pix_selected?
+
+      # A Pix payment always has a BRL presentment (Pix forces BRL), so a missing one is a bug on our
+      # side, not a cart the buyer can fix by picking a cheaper basket. Fail it closed the same way,
+      # but keep the two causes distinguishable: PIX_AMOUNT_OUTSIDE_WINDOW is what monitoring watches
+      # to see how often real carts fall outside Stripe's window, and folding our own broken state
+      # into that number would make the metric mean two things at once. The buyer gets the generic
+      # retry message because retrying is in fact the right advice for a transient internal fault.
+      if presentment.blank?
+        Rails.logger.error("Pix payment blocked for order #{order.id}: no BRL presentment record exists at prepare time, which should be impossible for a Pix cart")
+        cleanup_prepare_time_presentment_records
+        fail_purchases_with(GENERIC_CHARGE_ERROR)
+        return true
+      end
+
       return false if pix_amount_within_window?(presentment)
 
-      Rails.logger.error("Pix payment blocked for order #{order.id}: charged amount #{amount_cents} USD cents / #{presentment&.presentment_total_cents.inspect} presentment cents is outside Stripe's Pix window")
+      Rails.logger.error("Pix payment blocked for order #{order.id}: charged amount #{amount_cents} USD cents / #{presentment.presentment_total_cents} presentment cents is outside Stripe's Pix window")
       purchases_to_charge.each { _1.error_code = PurchaseErrorCode::PIX_AMOUNT_OUTSIDE_WINDOW if _1.error_code.blank? }
       # The snapshot belongs to an intent that will never exist, so drop it rather than orphaning it.
       cleanup_prepare_time_presentment_records
@@ -295,11 +309,9 @@ class Order::PreparePaymentIntentService
     # Each of Stripe's two Pix bounds is compared against the amount already denominated in that
     # bound's own currency: the 0.50 BRL floor against the BRL presentment total the intent is
     # created with, and the 3,000 USD ceiling against the canonical USD total. Nothing is converted,
-    # so no FX rate can drift the answer. A Pix payment always has a BRL presentment (Pix forces
-    # BRL), so a missing one means something upstream went wrong and the payment fails closed.
+    # so no FX rate can drift the answer. Callers guarantee a presentment exists — the blank case is
+    # handled as an internal fault by block_pix_amount_outside_window above.
     def pix_amount_within_window?(presentment)
-      return false if presentment.blank?
-
       presentment.presentment_total_cents >= Checkout::PaymentMethodResolver::PIX_MIN_BRL_CHARGE_CENTS &&
         amount_cents <= Checkout::PaymentMethodResolver::PIX_MAX_USD_CHARGE_CENTS
     end

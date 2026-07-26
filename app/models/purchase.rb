@@ -4403,8 +4403,17 @@ class Purchase < ApplicationRecord
     # which payment method it is being paid with — set from the buyer's Payment Element selection at
     # intent-prepare time, before fees are computed, and re-confirmed from Stripe's own
     # payment_method_details once the charge exists. Only Pix carries it; every other method reads 0.
+    #
+    # Gated on the charge riding Gumroad's own Stripe account, for the same reason
+    # PROCESSOR_FEE_PER_THOUSAND above is: we can only recover a cost we actually paid. On a direct
+    # charge the money never touches a Gumroad account — Stripe settles into the seller's own
+    # account and deducts the IOF from that balance itself — so the seller has already absorbed it.
+    # Adding it to fee_cents there would bill them for the same tax a second time.
     def pix_iof_fee_per_thousand
-      card_type == CardType::PIX ? PIX_IOF_FEE_PER_THOUSAND : 0
+      return 0 unless card_type == CardType::PIX
+      return 0 unless charged_using_gumroad_merchant_account?
+
+      PIX_IOF_FEE_PER_THOUSAND
     end
 
     def calculate_custom_fee_per_thousand

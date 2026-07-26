@@ -1834,6 +1834,30 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(PurchasePresentment.count).to eq(0)
       end
 
+      # A Pix cart always produces a BRL presentment (Pix forces BRL), so a missing one means our own
+      # presentment layer failed, not that the buyer's basket is priced outside Stripe's window. The
+      # gate must still fail closed, but it must not stamp PIX_AMOUNT_OUTSIDE_WINDOW — that code is
+      # the metric for how often real carts fall outside the window, and mixing an internal fault
+      # into it would make the number mean two different things.
+      it "fails closed with the generic error, not PIX_AMOUNT_OUTSIDE_WINDOW, when no BRL presentment exists at all" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        allow_any_instance_of(Charge::MethodForcedPresentment).to receive(:perform).and_return(nil)
+
+        create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_no_presentment")
+
+        expect(create_args).to be_nil
+        response = responses["unique-id-0"]
+        expect(response[:success]).to eq(false)
+        expect(response[:error_message]).to eq(described_class::GENERIC_CHARGE_ERROR)
+        expect(response[:error_code]).to eq(PurchaseErrorCode::PROCESSING_ERROR)
+        expect(response[:error_code]).not_to eq(PurchaseErrorCode::PIX_AMOUNT_OUTSIDE_WINDOW)
+        expect(order.purchases.first.reload).to be_failed
+        expect(ChargePresentment.count).to eq(0)
+        expect(PurchasePresentment.count).to eq(0)
+      end
+
       it "rejects a Pix token when the server-owned buyer country is outside Brazil" do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
