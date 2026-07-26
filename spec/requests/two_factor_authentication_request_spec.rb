@@ -25,4 +25,22 @@ describe "Two-Factor Authentication endpoint", type: :request do
 
     expect(response).to have_http_status(:not_found)
   end
+
+  context "when there is no pending two-factor login in the session" do
+    before do
+      allow_any_instance_of(TwoFactorAuthenticationController).to receive(:user_for_two_factor_authentication).and_return(nil)
+    end
+
+    it "sends the visitor back to the login page instead of 404ing" do
+      get "/two-factor"
+
+      expect(response).to redirect_to(login_url(next: "/two-factor"))
+    end
+
+    it "keeps the page the visitor was headed to in the next param" do
+      get "/two-factor?next=/dashboard"
+
+      expect(response).to redirect_to(login_url(next: "/two-factor?next=/dashboard"))
+    end
+  end
 end

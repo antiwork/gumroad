@@ -92,12 +92,13 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
   end
 
   shared_examples_for "check user in session for html request" do
-    it "raises ActionController::RoutingError when user is not found in session" do
+    it "redirects to the login page instead of 404ing when the user is not found in session" do
       controller.reset_two_factor_auth_login_session
 
-      expect do
-        call_action
-      end.to raise_error(ActionController::RoutingError, "Not Found")
+      call_action
+
+      expect(response).to redirect_to(login_url(next: (request.fullpath if request.get?)))
+      expect(flash[:warning]).to eq "Your login session expired. Please sign in again."
     end
   end
 
