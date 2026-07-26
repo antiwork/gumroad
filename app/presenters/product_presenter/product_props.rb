@@ -116,8 +116,8 @@ class ProductPresenter::ProductProps
         subscription_has_lapsed: purchase_info[:subscription_has_lapsed],
         membership: purchase_info[:membership],
         # Only present for licensed products, and only when the visitor is identified
-        # (signed-in purchaser or an HMAC'd receipt link) — see
-        # Link#purchase_info_with_license_key.
+        # (signed-in purchaser or an HMAC'd receipt link). Link#purchase_info_for_product_page
+        # strips it for purchases matched by the browser cookie alone.
         license_key: purchase_info[:license_key],
       }
     end

@@ -183,9 +183,10 @@ export type Purchase = {
   membership: { tier_name: string | null; tier_description: string | null; manage_url: string } | null;
   // Present only for licensed products, and only when the backend could identify the
   // visitor (signed-in purchaser, or an HMAC'd receipt/review link). Purchases matched
-  // by the browser cookie alone never carry the key — see
-  // Link#purchase_info_with_license_key.
-  license_key: string | null;
+  // by the browser cookie alone never carry the key — Link#purchase_info_for_product_page
+  // strips it, because a cookie identifies a browser rather than a person. Optional
+  // rather than nullable because the strip removes the key entirely.
+  license_key?: string | null;
 };
 export type ProductDiscount =
   | {
@@ -819,7 +820,7 @@ const ExistingPurchaseCard = ({
             </li>
           </CardContent>
         )}
-        {purchase.license_key !== null ? <LicenseKeyRow licenseKey={purchase.license_key} /> : null}
+        {purchase.license_key ? <LicenseKeyRow licenseKey={purchase.license_key} /> : null}
         {!isPreorder && allowRating ? (
           <ReviewForm
             permalink={permalink}

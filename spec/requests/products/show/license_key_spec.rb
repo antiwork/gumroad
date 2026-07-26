@@ -32,6 +32,13 @@ describe "License key on the product page", :js, type: :system do
     end
   end
 
+  # The guest/cookie-only path (purchase matched by _gumroad_guid alone must NOT expose
+  # the key) is asserted at the model and presenter layers instead — see
+  # test/models/link_test.rb and spec/presenters/product_presenter/product_props_spec.rb.
+  # Injecting a _gumroad_guid cookie for the seller's subdomain from a system spec is
+  # unreliable (the cookie lands on the wrong host and no purchase is matched), which
+  # would make this a test that passes for the wrong reason.
+
   context "when the product is not licensed" do
     let(:product) { create(:product, user: seller) }
 

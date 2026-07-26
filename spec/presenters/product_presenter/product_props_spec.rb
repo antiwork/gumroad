@@ -767,6 +767,19 @@ describe ProductPresenter::ProductProps do
         expect(props[:purchase][:id]).to eq(purchase.external_id)
         expect(props[:purchase][:license_key]).to be_nil
       end
+
+      it "does not serialize a license_key key at all on the cookie-only path" do
+        # The frontend renders the key row on truthiness rather than an explicit null
+        # check, because the strip removes the entry entirely and it arrives as
+        # undefined after JSON serialization rather than null.
+        purchase = create(:free_purchase, link: product, seller:, browser_guid: "some-guid")
+        create(:license, link: product, purchase:)
+        allow(request).to receive(:cookie_jar).and_return({ _gumroad_guid: "some-guid" })
+
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+
+        expect(props[:purchase].to_json).not_to include(purchase.license_key)
+      end
     end
   end
 end
