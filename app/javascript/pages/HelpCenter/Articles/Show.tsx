@@ -60,14 +60,20 @@ const textDirectiveTerm = (fragment: string): string | null => {
 // which we can see it. This lives outside the component because Inertia may re-mount the page
 // component between the click and the render of the destination article, which would throw away a
 // ref, and it is a single value because only one navigation is ever in flight.
-let textDirectivePendingScroll: string | null = null;
+//
+// The article path the reader was heading to is remembered alongside the wording, because the visit
+// may never reach that article: it can be cancelled, redirected elsewhere, or fail. Without the
+// path, wording left over from such a visit would be picked up by whichever article the reader read
+// next and scroll them to an unrelated passage that happened to match.
+let textDirectivePendingScroll: { path: string; passage: string } | null = null;
 
 // Firefox and Safari do not implement text directives at all, so nothing strips them and the
 // fragment is still readable after a plain page load. Read whichever source has it.
 const takePendingTextDirective = (fragment: string): string | null => {
   const pending = textDirectivePendingScroll;
   textDirectivePendingScroll = null;
-  return pending ?? textDirectiveTerm(fragment);
+  if (pending?.path === window.location.pathname) return pending.passage;
+  return textDirectiveTerm(fragment);
 };
 
 // Finds the smallest element whose text contains the given wording, so we scroll as close to the
@@ -115,12 +121,24 @@ export default function HelpCenterArticle() {
       e.preventDefault();
       // Remember a text directive before navigating, because the browser will hide it from us
       // afterwards (see takePendingTextDirective).
-      textDirectivePendingScroll = textDirectiveTerm(resolvedUrl.hash.slice(1));
+      const passage = textDirectiveTerm(resolvedUrl.hash.slice(1));
+      textDirectivePendingScroll = passage === null ? null : { path: resolvedUrl.pathname, passage };
       // Carry the fragment through the Inertia visit. Articles deep-link into each other's
       // sections (for example the payout settings requirements point at "Address verification" in
       // "Getting paid"), and navigating to the pathname alone silently drops the "#section" part,
       // dumping the reader at the top of the destination article instead.
-      router.get(`${resolvedUrl.pathname}${resolvedUrl.hash}`);
+      const url = `${resolvedUrl.pathname}${resolvedUrl.hash}`;
+      if (passage === null) {
+        router.get(url);
+      } else {
+        // A cancelled or failed visit never renders the article that would consume the remembered
+        // wording, so forget it here instead of leaving it behind for a later visit to that same
+        // article to act on.
+        const forget = () => {
+          textDirectivePendingScroll = null;
+        };
+        router.get(url, {}, { onCancel: forget, onError: forget });
+      }
     };
 
     container.addEventListener("click", onLinkClick);

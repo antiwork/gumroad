@@ -6,9 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import HelpCenterArticle from "./Show";
 
+type VisitOptions = { onCancel?: () => void; onError?: () => void };
+
 const mocks = vi.hoisted(() => ({
   usePage: vi.fn(),
-  routerGet: vi.fn(),
+  routerGet: vi.fn<(url: string, data?: Record<string, never>, options?: VisitOptions) => void>(),
 }));
 
 vi.mock("@inertiajs/react", () => ({
@@ -202,7 +204,7 @@ describe("HelpCenterArticle", () => {
     const event = clickLink(container, "#cross");
 
     expect(event.defaultPrevented).toBe(true);
-    expect(mocks.routerGet).toHaveBeenCalledWith(`${GETTING_PAID_PATH}#:~:text=For%20our%20review`);
+    expect(mocks.routerGet.mock.calls[0]?.[0]).toBe(`${GETTING_PAID_PATH}#:~:text=For%20our%20review`);
 
     // Chromium hides a text directive from scripts once a history entry exists for it, and an
     // Inertia visit creates one, so the destination article renders with an EMPTY hash. The
@@ -237,6 +239,53 @@ describe("HelpCenterArticle", () => {
     cleanup();
     renderArticle({
       slug: "260-your-payout-settings-page",
+      content: `<p>For our review, we require your account.</p>`,
+    });
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("does not scroll an unrelated article the reader goes to after a cancelled text-fragment visit", () => {
+    // The visit the reader clicked never renders — they navigate somewhere else instead. The
+    // remembered wording is for a different article, so the one they do end up reading must be
+    // left alone even though its text happens to contain the same words.
+    const { container } = renderArticle({
+      slug: "79-gumroad-discover",
+      content: `<a id="cross" href="${GETTING_PAID_PATH}#:~:text=For%20our%20review">risk review process</a>`,
+    });
+    clickLink(container, "#cross");
+
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    cleanup();
+    window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
+    renderArticle({
+      slug: "260-your-payout-settings-page",
+      content: `<p>For our review, we require your account.</p>`,
+    });
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("forgets a text-fragment passage when the visit carrying it is cancelled", () => {
+    // Cancelling means the destination article never renders, so a later visit to that same
+    // article — arriving without any fragment — must not inherit the abandoned wording.
+    const { container } = renderArticle({
+      slug: "79-gumroad-discover",
+      content: `<a id="cross" href="${GETTING_PAID_PATH}#:~:text=For%20our%20review">risk review process</a>`,
+    });
+    clickLink(container, "#cross");
+
+    const options = mocks.routerGet.mock.calls[0]?.[2];
+    expect(typeof options?.onCancel).toBe("function");
+    options?.onCancel?.();
+
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    cleanup();
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
+    renderArticle({
+      slug: "13-getting-paid",
       content: `<p>For our review, we require your account.</p>`,
     });
 
