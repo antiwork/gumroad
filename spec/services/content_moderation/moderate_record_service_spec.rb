@@ -334,6 +334,18 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
     # listing that actually delivers something we keep it as a reviewable note
     # rather than blocking the publish.
     context "when the spam preset flags a product that has a deliverable" do
+      # Enough abandoned rows that any fixed-size slice of the file list would
+      # have left the genuine file out.
+      let(:abandoned_upload_count) { 8 }
+
+      # Only `only` is really in storage; every other file's lookup says missing.
+      # Pass `only: nil` for a listing where nothing was ever really uploaded.
+      def stub_storage_presence(only:)
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do |file|
+          double("s3_object", exists?: only.present? && file.id == only.id)
+        end
+      end
+
       before do
         allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
           instance_double(ContentModeration::Strategies::PromptStrategy,
@@ -496,17 +508,15 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
 
       # A seller who abandoned a run of uploads and then finished a real one must
       # not be told their listing delivers nothing just because the dead rows
-      # outnumber the lookups we're willing to pay for.
-      it "publishes when a just-uploaded file sits behind more abandoned uploads than the cap" do
-        abandoned = Array.new(described_class::MAX_FILES_CHECKED_FOR_STORAGE + 3) do |index|
+      # outnumber what we'd previously pay to look up.
+      it "publishes when a just-uploaded file sits behind a pile of abandoned uploads" do
+        abandoned = Array.new(abandoned_upload_count) do |index|
           create(:product_file, analyze_completed: false, position: index)
         end
         # Created last and ordered last, so the seller's own `position` ordering
-        # buries it past the cap and only creation order can pick it out.
+        # buries it and only creation order picks it out first.
         finished = create(:product_file, analyze_completed: false, position: abandoned.size)
-        allow_any_instance_of(ProductFile).to receive(:s3_object) do |file|
-          double("s3_object", exists?: file.id == finished.id)
-        end
+        stub_storage_presence(only: finished)
         (abandoned + [finished]).each { product.product_files << _1 }
         product.save!
 
@@ -514,17 +524,34 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       end
 
       # The other way a file goes unanalyzed forever is that it really was stored
-      # but analysis ran out of retries, which can leave a real deliverable as the
-      # oldest row on a listing that has collected abandoned uploads since.
-      it "publishes when a long-stored unanalyzed file sits in front of more abandoned uploads than the cap" do
+      # but analysis never succeeded — retries ran out, or it's a video whose
+      # metadata can't be read. That leaves a real deliverable as the oldest row
+      # on a listing that has collected abandoned uploads since.
+      it "publishes when a long-stored unanalyzed file sits in front of a pile of abandoned uploads" do
         stored = create(:product_file, analyze_completed: false, position: 1)
-        abandoned = Array.new(described_class::MAX_FILES_CHECKED_FOR_STORAGE + 3) do |index|
+        abandoned = Array.new(abandoned_upload_count) do |index|
           create(:product_file, analyze_completed: false, position: index + 2)
         end
-        allow_any_instance_of(ProductFile).to receive(:s3_object) do |file|
-          double("s3_object", exists?: file.id == stored.id)
-        end
+        stub_storage_presence(only: stored)
         ([stored] + abandoned).each { product.product_files << _1 }
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # The case no fixed slice of the list can reach: the real file is neither
+      # the newest nor the oldest row, because abandoned uploads surround it on
+      # both sides. Every file has to stay eligible for a lookup.
+      it "publishes when the stored file sits between two runs of abandoned uploads" do
+        older = Array.new(abandoned_upload_count) do |index|
+          create(:product_file, analyze_completed: false, position: index)
+        end
+        stored = create(:product_file, analyze_completed: false, position: older.size)
+        newer = Array.new(abandoned_upload_count) do |index|
+          create(:product_file, analyze_completed: false, position: older.size + 1 + index)
+        end
+        stub_storage_presence(only: stored)
+        (older + [stored] + newer).each { product.product_files << _1 }
         product.save!
 
         expect(described_class.check(product.reload, :product).passed).to eq(true)
@@ -534,20 +561,31 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       # a long list of never-uploaded rows costs a caller nothing. Attaching many
       # of them must not buy what attaching one doesn't.
       it "still blocks when many attached files are all unfinished uploads" do
-        storage_lookups = 0
-        allow_any_instance_of(ProductFile).to receive(:s3_object) do
-          storage_lookups += 1
-          double("s3_object", exists?: false)
-        end
-        (described_class::MAX_FILES_CHECKED_FOR_STORAGE + 3).times do
+        stub_storage_presence(only: nil)
+        (abandoned_upload_count + 3).times do
           product.product_files << create(:product_file, analyze_completed: false)
         end
         product.save!
 
         expect(described_class.check(product.reload, :product).passed).to eq(false)
-        # Only as many lookups as we said we'd pay for, so a long list can't turn
-        # one save into an unbounded run of requests to storage.
-        expect(storage_lookups).to eq(described_class::MAX_FILES_CHECKED_FOR_STORAGE)
+      end
+
+      # The list length is up to the caller, so a save must not turn into an
+      # unbounded run of requests to storage. Once the time budget is gone we
+      # stop asking, however many rows are left.
+      it "stops checking storage once the time budget is spent" do
+        storage_lookups = 0
+        # Each lookup burns the whole budget, so the very next one is not made.
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          storage_lookups += 1
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        5.times { product.product_files << create(:product_file, analyze_completed: false) }
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+        expect(storage_lookups).to eq(1)
       end
 
       # A file that finished analyzing is answered from its own row, so a real
@@ -555,7 +593,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       # and still costs nothing to confirm.
       it "publishes without checking storage when one of many attached files has been analyzed" do
         expect_any_instance_of(ProductFile).not_to receive(:s3_object)
-        (described_class::MAX_FILES_CHECKED_FOR_STORAGE + 3).times do
+        abandoned_upload_count.times do
           product.product_files << create(:product_file, analyze_completed: false)
         end
         product.product_files << uploaded_file

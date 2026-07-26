@@ -4,13 +4,11 @@ class ContentModeration::ModerateRecordService
   AUTHOR_NAME = "ContentModeration"
   ADMIN_COMMENT_DEDUP_WINDOW = 5.minutes
 
-  # How many attached files we're willing to look up in storage while deciding
-  # whether a listing delivers anything (see `has_deliverable_file?`).
-  MAX_FILES_CHECKED_FOR_STORAGE = 5
-
-  # How many of those lookups go to the most recently created rows. The rest go
-  # to the oldest ones — see `has_deliverable_file?` for why both ends matter.
-  NEWEST_FILES_CHECKED_FOR_STORAGE = 3
+  # How long we're willing to spend looking files up in storage while deciding
+  # whether a listing delivers anything (see `has_deliverable_file?`). This is a
+  # time budget rather than a file count so that no attached file is excluded
+  # from the check by its position in the list.
+  STORAGE_CHECK_TIME_BUDGET_SECONDS = 2.0
 
   CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
 
@@ -241,29 +239,37 @@ class ContentModeration::ModerateRecordService
     #
     # Most files answer from the row alone (an analyzed file, an external link, a
     # purged object), so those are settled first and for free. Only files the row
-    # cannot answer for cost a request to storage, and at most
-    # MAX_FILES_CHECKED_FOR_STORAGE of those are made — enough to prove a
-    # deliverable exists without turning a save into a long series of lookups.
+    # cannot answer for cost a request to storage, and those are bounded by a time
+    # budget rather than a file count.
     #
-    # Which files get those lookups is chosen by creation order, from both ends.
-    # The only file a row cannot answer for is one that has never been analyzed,
-    # and there are two ways to get there. Either the seller uploaded it moments
-    # ago and AnalyzeFileWorker hasn't run yet, which makes it one of the most
-    # recently created rows, or analysis never finished — usually because the
-    # upload itself never finished (nothing deletes that row afterwards), but
-    # sometimes because a genuinely stored file ran out of analysis retries long
-    # ago and stayed behind. So the newest rows are checked first and the leftover
-    # lookups go to the oldest rows: between them they cover the fresh upload and
-    # the long-stored file whose analysis never completed, instead of spending the
-    # whole budget on whichever end of a pile of abandoned uploads sorts first.
-    # Ordering by id is deliberate: alive_product_files is ordered by the seller's
-    # chosen `position`, which says nothing about when a row was created, so on a
-    # listing with more abandoned rows than the cap the real file could sit past
-    # the cap and never be queried at all.
+    # A count-based cap had to choose WHICH files to spend it on, and every choice
+    # left a real deliverable unreachable. A file a row cannot answer for has
+    # never been analyzed successfully, and a genuinely stored file lands in that
+    # state at either end of creation order: it was uploaded moments ago and
+    # AnalyzeFileWorker hasn't run yet (the newest such row), or its analysis will
+    # never succeed even though the object is really there — the worker exhausted
+    # its retries, or it's a video whose metadata can't be read, which clears the
+    # flag deliberately (see WithFileProperties#video_analysis_failed) and which
+    # nothing ever revisits, so it ages into being the oldest such row. Checking
+    # the newest few plus the oldest few covers both, but then a stored file
+    # sitting BETWEEN two runs of abandoned uploads falls in the gap and the
+    # seller is told their listing delivers nothing.
     #
-    # Ordering only decides which honest sellers we can confirm cheaply; it can
-    # never let an empty listing through, because passing still requires an object
-    # to actually be in storage.
+    # There is no ordering that fixes this, because the save API takes each file's
+    # storage URL from the client: whatever slice we pick, a caller can submit
+    # enough dead rows to push a real file out of it, and a legitimate seller can
+    # land there by accident. So instead every unverifiable file is eligible, and
+    # what's capped is the time spent — we stop asking once the budget is gone.
+    # Ordering newest-first still matters, since the freshly-uploaded file is the
+    # single likeliest deliverable and usually answers on the first request.
+    #
+    # A listing carrying many dead rows therefore costs a bounded amount of time
+    # instead of a bounded number of files, and no attached file is excluded from
+    # the check by its position in the list.
+    #
+    # This can only decide how cheaply an honest seller is confirmed; it can never
+    # let an empty listing through, because passing still requires an object to
+    # actually be in storage.
     def has_deliverable_file?(owner)
       unverifiable_from_row = []
 
@@ -274,20 +280,16 @@ class ContentModeration::ModerateRecordService
         end
       end
 
-      files_to_check(unverifiable_from_row).any?(&:stored_file_present?)
-    end
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + STORAGE_CHECK_TIME_BUDGET_SECONDS
 
-    # At most MAX_FILES_CHECKED_FOR_STORAGE files, taken from the newest and
-    # oldest rows by creation order. `max_by`/`min_by` with a count pick those
-    # ends without ordering the whole collection, which matters because the number
-    # of rows here is up to the caller submitting the save.
-    def files_to_check(files)
-      return files if files.size <= MAX_FILES_CHECKED_FOR_STORAGE
+      unverifiable_from_row
+        .sort_by { -_1.id }
+        .each do |file|
+          return true if file.stored_file_present?
+          break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+        end
 
-      newest = files.max_by(NEWEST_FILES_CHECKED_FOR_STORAGE, &:id)
-      oldest = files.min_by(MAX_FILES_CHECKED_FOR_STORAGE - NEWEST_FILES_CHECKED_FOR_STORAGE, &:id)
-
-      newest + oldest
+      false
     end
 
     # Rich content with something in the body, ignoring pages that only have a
