@@ -60,6 +60,19 @@ describe RecordProductFileMissingFromStorageJob do
       expect(file.reload.deleted_from_cdn?).to eq(false)
     end
 
+    # The grace period itself, pinned at a fixed age rather than derived from the
+    # constant: a two-day-old row is past the one day the first version of this
+    # job allowed, and still inside the three days a multi-gigabyte upload on a
+    # slow link can need. Shortening the constant back would retire this row.
+    it "does not touch a row that is two days old" do
+      file = old_unanalyzed_file(created_at: 2.days.ago)
+      expect_any_instance_of(ProductFile).not_to receive(:s3_object)
+
+      described_class.new.perform(file.id)
+
+      expect(file.reload.deleted_from_cdn?).to eq(false)
+    end
+
     # The same accented filename can be stored under a different Unicode
     # normalization form than the key we persisted, so `exists?` says missing for
     # a file buyers can still download (the download path probes the variants).
@@ -68,6 +81,20 @@ describe RecordProductFileMissingFromStorageJob do
       file = old_unanalyzed_file
       stub_storage(file, exists: false)
       allow(S3KeyUnicodeNormalization).to receive(:existing_variant).with(file.s3_key).and_return("#{file.s3_key}-nfd")
+
+      described_class.new.perform(file.id)
+
+      expect(file.reload.deleted_from_cdn?).to eq(false)
+    end
+
+    # A storage fault while probing the variants means we could not tell whether
+    # the object is there. The marker is permanent, so an unknown answer must not
+    # produce one — the row is left alone and stays eligible for a later attempt.
+    it "leaves the row alone when the variant check cannot reach storage" do
+      file = old_unanalyzed_file
+      stub_storage(file, exists: false)
+      allow(S3KeyUnicodeNormalization).to receive(:existing_variant)
+        .and_raise(Seahorse::Client::NetworkingError.new(SocketError.new("getaddrinfo failed")))
 
       described_class.new.perform(file.id)
 

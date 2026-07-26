@@ -62,7 +62,7 @@ class RecordProductFileMissingFromStorageJob
     # S3Retrievable#confirm_s3_key!). Recording "nothing in storage" for such a
     # row would be wrong and, since nothing revisits the marker, wrong forever.
     # For plain-ASCII keys there are no variants and this makes no S3 call.
-    return if S3KeyUnicodeNormalization.existing_variant(file.s3_key).present?
+    return if object_exists_under_another_unicode_form?(file)
 
     # `mark_deleted_from_cdn` uses `update_column`, which skips paper_trail, and
     # nothing ever clears the marker. So without a log line there is no record of
@@ -88,4 +88,26 @@ class RecordProductFileMissingFromStorageJob
       file.created_at.present? &&
       file.created_at <= UPLOAD_GRACE_PERIOD.ago
   end
+
+  private
+    # Whether the object is really in storage under a different Unicode encoding
+    # of the same filename. Answers false only when storage positively said there
+    # is no such object.
+    #
+    # A storage fault here (service error, network failure) means we could not
+    # tell, and "could not tell" must never become "there is nothing in storage",
+    # because that write is permanent. So a fault is treated as "it might be
+    # there" and the row is left alone — the same direction in which
+    # `ProductFile#stored_file_present?` already resolves an unknown answer. The
+    # row stays eligible, so the next save that needs the answer enqueues this
+    # job again; the only thing a fault costs is one wasted job.
+    def object_exists_under_another_unicode_form?(file)
+      S3KeyUnicodeNormalization.existing_variant(file.s3_key).present?
+    rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
+      Rails.logger.info(
+        "RecordProductFileMissingFromStorageJob could not check Unicode key variants for " \
+        "product_file=#{file.id}, leaving the row alone (#{e.class}: #{e.message})"
+      )
+      true
+    end
 end
