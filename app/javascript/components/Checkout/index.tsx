@@ -72,8 +72,8 @@ import {
 } from "./cartState";
 import {
   computeTip,
+  computeTipForListedLines,
   computeTipForPrice,
-  computeTipForProductTotal,
   getErrors,
   getFutureInstallmentsTotal,
   getTotalPrice,
@@ -251,33 +251,23 @@ export const Checkout = ({
     usingSavedCard: state.usingSavedCard,
     paymentMethod: state.paymentMethod,
   });
-  // The cart's total in the listed currency, which is the basis the SUBMITTED per-line tip uses:
-  // Show.tsx hands computeTipsForLines each line's `getDiscountedPrice(...)`, in the product's own
-  // minor units. Needed below to display a percentage tip as the same figure that gets charged.
-  const listedProductTotalCents = cart.items.reduce(
-    (sum, item) => sum + (hasFreeTrial(item, isGift) ? 0 : getDiscountedPrice(cart, item).price),
-    0,
-  );
+  // The per-line bases the ORDER submits its tip from: Show.tsx hands computeTipsForLines each
+  // line's `getDiscountedPrice(...)`, in the product's own minor units. Passing the same bases to
+  // computeTipForListedLines below makes the displayed tip the submitted tip by construction.
+  const listedTipLines = cart.items.map((item) => ({
+    price: hasFreeTrial(item, isGift) ? 0 : getDiscountedPrice(cart, item).price,
+    permalink: item.product.permalink,
+  }));
   const listedAmounts = getCheckoutListedCurrencyAmounts(listedCurrency, {
     lines: cart.items.map((item) => ({
       priceCents: hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity,
       discountCents: hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity - getDiscountedPrice(cart, item).price,
     })),
-    // The tip lives in checkout state as canonical USD cents on every lane — `computeTip` takes its
-    // percentage of `getTotalPriceFromProducts`, which `getProducts` builds with `convertToUSD` —
-    // so it has to be expressed in listed minor units here.
-    //
-    // A FIXED tip is converted like tax and shipping: the buyer typed a local amount, it was stored
-    // canonically, and the same rate takes it back. A PERCENTAGE tip instead recomputes the
-    // percentage against the listed total, because that is exactly what the order submits. Routing a
-    // percentage through the canonical figure rounds twice — to canonical cents, then back up by the
-    // rate — and lands 1-2 minor units off the tip actually charged (a 15% tip on a R$49.90 product
-    // displays R$7.47 against R$7.48 billed), which is the display/charge mismatch this PR exists to
-    // remove.
-    tipCents:
-      state.tip.type === "fixed"
-        ? toBuyerCurrencyCents(computeTip(state), listedCurrency ?? { rate: 1 })
-        : computeTipForProductTotal(state, listedProductTotalCents),
+    // The tip is canonical USD cents in checkout state on every lane, so it has to be expressed in
+    // listed minor units here. Both tip types go through the submission's own allocation rather than
+    // a conversion of their own, because any separate arithmetic drifts from what gets charged by a
+    // minor unit — see computeTipForListedLines.
+    tipCents: computeTipForListedLines(state, listedTipLines),
     usdTaxCents: state.surcharges.type === "loaded" ? state.surcharges.result.tax_cents : 0,
     usdTaxIncludedCents: state.surcharges.type === "loaded" ? state.surcharges.result.tax_included_cents : 0,
     usdShippingCents: state.surcharges.type === "loaded" ? state.surcharges.result.shipping_rate_cents : 0,

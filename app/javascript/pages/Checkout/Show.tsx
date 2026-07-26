@@ -23,7 +23,6 @@ import {
   getCheckoutBuyerCurrencyDisplay,
   getCheckoutListedCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
-  toBuyerCurrencyCents,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import {
   type CartItem,
@@ -40,7 +39,7 @@ import { computeInitialCheckout, type InitialCheckout } from "$app/components/Ch
 import {
   canUseStripePaymentElement,
   computeTip,
-  computeTipForProductTotal,
+  computeTipForListedLines,
   computeTipsForLines,
   type CheckoutPaymentConfig,
   createReducer,
@@ -211,18 +210,17 @@ const CheckoutIndexPage = () => {
     usingSavedCard: state.usingSavedCard,
     paymentMethod: state.paymentMethod,
   });
-  // The tip and cart total the confirmation modal quotes, in listed minor units. Same split the cart
-  // summary makes: a percentage tip is recomputed against the LISTED cart total (the basis the order
-  // submits from), while a fixed tip is converted back from its canonical figure.
-  const listedProductTotalCents = cartForm.data.cart.items.reduce(
-    (sum, item) => sum + getDiscountedPrice(cartForm.data.cart, item).price,
-    0,
-  );
-  const listedTipCents = listedCurrency
-    ? state.tip.type === "fixed"
-      ? toBuyerCurrencyCents(computeTip(state), listedCurrency)
-      : computeTipForProductTotal(state, listedProductTotalCents)
-    : 0;
+  // The tip and cart total the confirmation modal quotes, in listed minor units. The tip runs
+  // through the submission's own per-line allocation (see computeTipForListedLines) so the modal
+  // quotes the figure that will actually be charged, and the cart total is the listed total itself
+  // rather than the canonical total converted back — both for the same reason: any separate
+  // arithmetic can land a minor unit away from the charge.
+  const listedTipLines = cartForm.data.cart.items.map((item) => ({
+    price: getDiscountedPrice(cartForm.data.cart, item).price,
+    permalink: item.product.permalink,
+  }));
+  const listedProductTotalCents = listedTipLines.reduce((sum, line) => sum + line.price, 0);
+  const listedTipCents = listedCurrency ? computeTipForListedLines(state, listedTipLines) : 0;
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
@@ -817,10 +815,7 @@ const CheckoutIndexPage = () => {
               })}{" "}
           on a{" "}
           {listedCurrency
-            ? formatPresentmentCents(
-                toBuyerCurrencyCents(getTotalPriceFromProducts(state), listedCurrency),
-                listedCurrency,
-              )
+            ? formatPresentmentCents(listedProductTotalCents, listedCurrency)
             : formatCheckoutPrice(getTotalPriceFromProducts(state), buyerCurrencyDisplay, {
                 usdSymbolFormat: "short",
                 noCentsIfWhole: true,

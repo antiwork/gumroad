@@ -480,25 +480,11 @@ export function isTipSuspiciouslyLarge(state: State): boolean {
 }
 
 export function computeTip(state: State) {
-  return computeTipForProductTotal(state, getTotalPriceFromProducts(state));
-}
-
-// The tip in the minor units of whatever currency `productTotalCents` is expressed in.
-//
-// A percentage tip is a percentage OF something, so the units of the answer follow the basis given.
-// Canonical callers pass the canonical USD cart total, which is what `computeTip` does. The
-// method-forced listed-currency lane passes the LISTED total, because that is the basis the order
-// submits from: `computeTipsForLines` is handed each line's `getDiscountedPrice(...)`, in the
-// product's own minor units. Displaying a percentage tip by converting the canonical figure back up
-// instead rounds twice and lands a minor unit or two off the tip actually charged.
-//
-// A fixed tip needs no basis — it is whatever the buyer typed, always stored in canonical USD cents.
-export function computeTipForProductTotal(state: State, productTotalCents: number) {
   if (!isTippingEnabled(state)) return 0;
   if (state.tip.type === "fixed") {
     return state.tip.amount ?? 0;
   }
-  return Math.round((state.tip.percentage / 100) * productTotalCents);
+  return Math.round((state.tip.percentage / 100) * getTotalPriceFromProducts(state));
 }
 
 export function computeTipForPrice(state: State, price: number, permalink: string | undefined = undefined) {
@@ -539,6 +525,26 @@ export function computeTipsForLines(
   }
   const percentage = state.tip.percentage;
   return lines.map((line) => Math.round((percentage / 100) * line.price));
+}
+
+// The tip to DISPLAY on the method-forced listed-currency lane, in the listed currency's minor
+// units: the exact figure the order will submit, obtained by running the submission's own
+// allocation over the same per-line bases.
+//
+// The tip lives in checkout state as canonical USD cents on every lane (`computeTip` takes its
+// percentage of `getTotalPriceFromProducts`, and those prices are built with `convertToUSD`), so
+// something has to turn it into listed units for display. Doing that arithmetic separately is what
+// went wrong twice on this lane: a percentage tip re-derived from the canonical figure rounds twice
+// and lands a minor unit low, and a fixed tip converted at the exchange rate disagrees with
+// `allocateFixedTipCents`, which floors each line's exact share and then hands out the leftover
+// minor units. Both were display/charge mismatches of exactly the kind this lane exists to remove.
+//
+// Rather than keep a parallel conversion in step with the allocator, ask the allocator. Callers pass
+// the same per-line prices they will submit — each line's `getDiscountedPrice(...)`, in the
+// product's own minor units — so display and charge agree by construction, for both tip types and
+// for any future change to how tips are split.
+export function computeTipForListedLines(state: State, lines: { price: number; permalink: string | undefined }[]) {
+  return computeTipsForLines(state, lines).reduce((sum, tip) => sum + (tip ?? 0), 0);
 }
 
 function allocateFixedTipCents(tipAmountCents: number, lines: { price: number }[], totalPriceCents: number): number[] {

@@ -395,10 +395,13 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByText("R$59.88").length).toBeGreaterThan(0);
   });
 
-  it("converts a fixed tip typed in the listed currency back to canonical cents before storing it", () => {
-    // A fixed tip of 1 000 canonical USD cents is R$54.50 at rate 5.45. Displaying it verbatim as
-    // R$10.00 would under-quote the charge by the exchange-rate factor.
-    const { getAllByText } = renderCheckout(
+  it("shows the fixed tip the order actually submits, not a rate-converted conversion", () => {
+    // A fixed tip is stored in canonical USD cents (1 000 here), and the order allocates it across
+    // the cart from the listed per-line prices: allocateFixedTipCents takes 1000 * 4990 / 915 and
+    // floors it, so tip_cents is 5 453 and the charge bills R$54.53. Converting at the stored
+    // exchange rate instead (1000 * 5.45 = 5450) shows R$54.50 — three centavos under the charge,
+    // the display/charge mismatch this lane exists to remove.
+    const { getAllByText, queryByText } = renderCheckout(
       brlState({
         products: [stateProduct({ permalink: "brl", price: 915, hasTippingEnabled: true })],
         tip: { type: "fixed", amount: 1_000 },
@@ -406,9 +409,12 @@ describe("Checkout method-forced listed-currency amounts", () => {
       tippingCart(),
     );
 
-    expect(getAllByText("R$54.50").length).toBeGreaterThan(0);
-    // 4990 + 5450
-    expect(getAllByText("R$104.40").length).toBeGreaterThan(0);
+    expect(getAllByText("R$54.53").length).toBeGreaterThan(0);
+    expect(queryByText("R$54.50")).toBeNull();
+    // Displaying the canonical figure verbatim under an R$ label would under-quote by the whole rate.
+    expect(queryByText("R$10")).toBeNull();
+    // 4990 + 5453
+    expect(getAllByText("R$104.43").length).toBeGreaterThan(0);
   });
 
   it("stays in canonical USD while a saved card is selected, because that charge is not in the listed currency", () => {

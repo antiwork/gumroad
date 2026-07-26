@@ -4,7 +4,7 @@ import {
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
-  computeTipForProductTotal,
+  computeTipForListedLines,
   computeTipsForLines,
   getChargeTodayPrice,
   getFutureInstallmentsTotal,
@@ -1330,45 +1330,64 @@ describe("getFutureInstallmentsTotal", () => {
   });
 });
 
-describe("computeTipForProductTotal", () => {
-  // The method-forced listed-currency lane displays a percentage tip by recomputing it against the
-  // LISTED cart total, because that is the basis the order submits from: computeTipsForLines gets
-  // each line's getDiscountedPrice(...), in the product's own minor units. Converting the canonical
-  // tip back up instead rounds twice and lands a minor unit off what is charged.
-  it("takes a percentage tip from the basis it is given, so a listed total yields a listed tip", () => {
+describe("computeTipForListedLines", () => {
+  const sumTips = (sum: number, tip: number | null) => sum + (tip ?? 0);
+
+  // The method-forced listed-currency lane displays the tip by running the SUBMISSION's own
+  // allocation over the same per-line bases the order sends, so the figure on screen is the figure
+  // charged. Deriving it separately — a percentage re-taken from the canonical total, or a fixed tip
+  // converted at the exchange rate — drifts by a minor unit, which is the mismatch this lane exists
+  // to remove.
+  it("gives a percentage tip in listed units, matching what the order submits", () => {
     // R$49.90 listed at a 5.45 rate is ~916 canonical USD cents.
     const s = state({
-      products: [product({ price: 916, hasTippingEnabled: true })],
+      products: [product({ permalink: "prod", price: 916, hasTippingEnabled: true })],
       tip: { type: "percentage", percentage: 15 },
     });
+    const lines = [{ price: 4_990, permalink: "prod" }];
 
-    expect(computeTipForProductTotal(s, 4_990)).toBe(749);
+    expect(computeTipForListedLines(s, lines)).toBe(749);
+    expect(computeTipForListedLines(s, lines)).toBe(computeTipsForLines(s, lines).reduce(sumTips, 0));
+    // Converting the canonical figure back up instead lands two centavos low.
     expect(computeTip(s)).toBe(137);
   });
 
-  it("matches the per-line tip the order actually submits for the same listed basis", () => {
+  // Greptile P1 (2026-07-26): a fixed tip was displayed as round(canonicalTip * rate) while
+  // submission allocates it from the listed/canonical price ratio and floors the result. Typing
+  // R$10.00 on a R$49.90 product at 5.45 stores 183 canonical cents; the display showed 183 * 5.45
+  // = R$9.97 while allocateFixedTipCents submits floor(183 * 4990 / 916) = R$9.96.
+  it("gives a fixed tip as the amount the order submits, not the rate-converted amount", () => {
     const s = state({
       products: [product({ permalink: "prod", price: 916, hasTippingEnabled: true })],
-      tip: { type: "percentage", percentage: 20 },
+      tip: { type: "fixed", amount: 183 },
     });
+    const lines = [{ price: 4_990, permalink: "prod" }];
 
-    const submitted = computeTipsForLines(s, [{ price: 4_990, permalink: "prod" }]);
-    expect(computeTipForProductTotal(s, 4_990)).toBe(submitted[0]);
+    expect(computeTipForListedLines(s, lines)).toBe(996);
+    expect(computeTipForListedLines(s, lines)).toBe(computeTipsForLines(s, lines).reduce(sumTips, 0));
+    // The rate conversion the display used to do disagrees by a centavo.
+    expect(Math.round(computeTip(s) * 5.45)).toBe(997);
   });
 
-  it("ignores the basis for a fixed tip, which is stored canonically either way", () => {
+  it("sums the per-line allocation across a multi-line cart", () => {
     const s = state({
-      products: [product({ price: 916, hasTippingEnabled: true })],
-      tip: { type: "fixed", amount: 500 },
+      products: [
+        product({ permalink: "a", price: 916, hasTippingEnabled: true }),
+        product({ permalink: "b", price: 916, hasTippingEnabled: true }),
+      ],
+      tip: { type: "fixed", amount: 183 },
     });
+    const lines = [
+      { price: 4_990, permalink: "a" },
+      { price: 4_990, permalink: "b" },
+    ];
 
-    expect(computeTipForProductTotal(s, 4_990)).toBe(500);
-    expect(computeTipForProductTotal(s, 916)).toBe(500);
+    expect(computeTipForListedLines(s, lines)).toBe(computeTipsForLines(s, lines).reduce(sumTips, 0));
   });
 
-  it("is zero when tipping is disabled regardless of basis", () => {
+  it("is zero when tipping is disabled", () => {
     const s = state({ products: [product({ price: 916 })], tip: { type: "percentage", percentage: 15 } });
-    expect(computeTipForProductTotal(s, 4_990)).toBe(0);
+    expect(computeTipForListedLines(s, [{ price: 4_990, permalink: "product-a" }])).toBe(0);
   });
 });
 
