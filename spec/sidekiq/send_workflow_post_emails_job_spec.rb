@@ -147,12 +147,16 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
       it "when affiliate_type? is true and the join supplies no affiliate id, it falls back within the post's product scope" do
         # A member gets one details["affiliates"] entry per product they are an affiliate for.
-        # Give this person an extra product the post is NOT about, so the fallback has an
-        # out-of-scope entry available to pick.
+        # A seller can currently only have one alive DirectAffiliate per person, so those entries
+        # all share an id today and the fallback cannot pick a wrong one via the factories. Write
+        # the out-of-scope entry into the details JSON directly, with a higher id, so this stays
+        # covered if that one-relationship-per-person rule is ever relaxed.
         other_product = create(:product, user: @seller, name: "Unrelated product")
-        @affiliates[0].products << other_product
         member = @seller.audience_members.find_by(email: @affiliates[0].affiliate_user.email)
-        expect(member.details["affiliates"].map { _1["product_id"] }).to include(other_product.id)
+        member.details["affiliates"] << { "id" => @affiliates[0].id + 1_000,
+                                          "product_id" => other_product.id,
+                                          "created_at" => 1.hour.ago.iso8601 }
+        member.save!
 
         # The aggregate over the JSON_TABLE join can come back NULL for a member who still
         # qualifies, which is the situation the fallback exists for.
@@ -169,10 +173,13 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         allow_any_instance_of(AudienceMember).to receive(:affiliate_id).and_return(nil)
         unrelated_product = create(:product, user: @seller, name: "Not an affiliate product")
         @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
-        # Narrow the resolved scope to a product nobody is an affiliate for, leaving the
-        # fallback with nothing legitimate to choose.
-        allow_any_instance_of(Installment).to receive(:audience_members_filter_params)
-          .and_wrap_original { |original| original.call.merge(affiliate_product_ids: [unrelated_product.id]) }
+        # Narrow only the id-resolution scope, not the audience query, so the member is still
+        # selected and the fallback is the thing under test: it must find nothing legitimate to
+        # send as rather than reaching for an out-of-scope relationship.
+        allow_any_instance_of(described_class).to receive(:enqueue_email_job).and_wrap_original do |original, **kwargs|
+          original.receiver.instance_variable_get(:@filters)[:affiliate_product_ids] = [unrelated_product.id]
+          original.call(**kwargs)
+        end
 
         described_class.new.perform(@post.id)
 
