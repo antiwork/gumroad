@@ -4,7 +4,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import HelpCenterArticle from "./Show";
+import HelpCenterArticleModule from "./Show";
 
 type VisitOptions = { onCancel?: () => void; onError?: () => void };
 
@@ -30,6 +30,16 @@ vi.mock("$app/components/HelpCenterPage/CategorySidebar", () => ({
 const GETTING_PAID_PATH = "/help/article/13-getting-paid";
 const PAYOUT_SETTINGS_PATH = "/help/article/260-your-payout-settings-page";
 const ANCHOR_ID = "Address-verification-dK7mR";
+
+// The component only reads the directive a document was loaded with once, exactly as a real page
+// does, so that state has to be reset between tests. Reloading the module is what a fresh page
+// load actually is, and it keeps each test independent of the ones before it.
+let HelpCenterArticle = HelpCenterArticleModule;
+
+const reloadPage = async () => {
+  vi.resetModules();
+  HelpCenterArticle = (await import("./Show")).default;
+};
 
 const renderArticle = ({ slug, content }: { slug: string; content: string }) => {
   mocks.usePage.mockReturnValue({
@@ -99,8 +109,9 @@ const loadedFromBrowserWith = (url: string) => {
 };
 
 describe("HelpCenterArticle", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
+    await reloadPage();
   });
 
   afterEach(() => {
@@ -544,6 +555,57 @@ describe("HelpCenterArticle", () => {
     await flushFrames();
 
     expect(scrollIntoView.mock.instances[0]).toBe(destination.container.querySelector("#passage"));
+  });
+
+  it("does not apply a loaded passage to a different article the load was redirected to", async () => {
+    // A text-fragment URL that redirects — a renamed or merged article — leaves the navigation
+    // entry naming the URL that was asked for while a different article is what actually renders.
+    // The wording belongs to the article the reader asked for, so the one they land on is left
+    // alone even where the same words appear in it.
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
+    loadedFromBrowserWith(`https://gumroad.com${GETTING_PAID_PATH}#:~:text=For%20our%20review`);
+
+    renderArticle({
+      slug: "260-your-payout-settings-page",
+      content: `<p id="passage">For our review, we require your account.</p>`,
+    });
+
+    await flushFrames();
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("does not scroll to the loaded passage again when the reader returns to that article", async () => {
+    // The navigation entry keeps describing the load for as long as the page lives, and its path
+    // matches again the moment the reader comes back. Coming back is an ordinary visit with no
+    // fragment, so they must land at the top rather than at the passage they read on the way in.
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
+    loadedFromBrowserWith(`https://gumroad.com${GETTING_PAID_PATH}#:~:text=For%20our%20review`);
+    renderArticle({
+      slug: "13-getting-paid",
+      content: `<p id="passage">For our review, we require your account.</p>`,
+    });
+    await flushFrames();
+
+    cleanup();
+    window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
+    renderArticle({ slug: "260-your-payout-settings-page", content: `<p>Payout settings.</p>` });
+    await flushFrames();
+
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    cleanup();
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
+    renderArticle({
+      slug: "13-getting-paid",
+      content: `<p id="passage">For our review, we require your account.</p>`,
+    });
+
+    await flushFrames();
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
   it("does nothing when there is no fragment", async () => {

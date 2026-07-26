@@ -74,7 +74,17 @@ let textDirectivePendingScroll: { path: string; passage: string } | null = null;
 // This is the direct-load case: the browser does its own text-fragment scrolling on a normal page,
 // but an article body arrives as raw HTML after render, so by the time the passage exists the
 // browser has long given up and only we can scroll to it.
+//
+// Read at most once. The entry describes how the document was loaded and never changes, so the
+// path check alone is not enough: a reader who lands on an article by text-fragment URL, reads on,
+// and later comes BACK to that same article arrives with no fragment but a still-matching path,
+// and would be scrolled to the passage they read earlier instead of the top. Spending the entry on
+// first use makes it what it is meant to be — how the reader got here, once.
+let pageLoadTextDirectiveTaken = false;
+
 const textDirectiveFromPageLoad = (): string | null => {
+  if (pageLoadTextDirectiveTaken) return null;
+
   // A document restored from the back/forward cache has no fresh navigation entry, and neither
   // does a test environment that never navigated; neither is worth failing over.
   const navigation = performance.getEntriesByType("navigation")[0];
@@ -91,7 +101,11 @@ const textDirectiveFromPageLoad = (): string | null => {
   // reader arrived on and its wording must not follow them.
   if (loadedUrl.pathname !== window.location.pathname) return null;
 
-  return textDirectiveTerm(loadedUrl.hash.slice(1));
+  const passage = textDirectiveTerm(loadedUrl.hash.slice(1));
+  if (passage === null) return null;
+
+  pageLoadTextDirectiveTaken = true;
+  return passage;
 };
 
 // Firefox and Safari do not implement text directives at all, so nothing strips them and the
