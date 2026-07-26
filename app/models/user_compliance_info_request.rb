@@ -208,23 +208,11 @@ class UserComplianceInfoRequest < ApplicationRecord
   # P.O. Box as their address. That combination is the deadlock described above: the P.O. Box was
   # rejected on the account, so the account now carries a different address, and the document the
   # seller keeps uploading still shows the P.O. Box.
-  #
-  # We look through the seller's recent address revisions rather than only the current one, because
-  # by the time the document is rejected the P.O. Box has usually already been edited off the
-  # account — that edit is exactly what created the mismatch. The lookback is capped so this stays
-  # a cheap two-column read even for a seller with a long compliance history.
-  ADDRESS_HISTORY_REVISIONS_CHECKED = 25
-
   def self.po_box_address_deadlock?(user:, error_code:)
     return false unless error_code.in?(ADDRESS_MISMATCH_ERROR_CODES)
     return false if user.blank?
 
-    user.user_compliance_infos
-        .order(id: :desc)
-        .limit(ADDRESS_HISTORY_REVISIONS_CHECKED)
-        .pluck(:street_address, :business_street_address)
-        .flatten
-        .any? { |address| PoBoxAddress.match?(address) }
+    user.po_box_in_address_history?
   end
 
   private
