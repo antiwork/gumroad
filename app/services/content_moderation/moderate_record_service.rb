@@ -13,26 +13,42 @@ class ContentModeration::ModerateRecordService
   # One storage-check budget, shared by a product and every variant it carries,
   # so a single save spends one budget however many file lists it contains.
   #
-  # It also tallies how many files each list had to leave unchecked once the time
-  # ran out. The tally is deliberately kept here rather than logged by each list,
-  # because running out of time is one event for the whole save: a membership with
-  # ten tiers would otherwise emit ten separate warnings for it, and none of them
-  # would say how many files went unchecked in total. The caller logs the tally
+  # It also tracks which files were left unchecked once the time ran out. The
+  # tracking is deliberately kept here rather than logged by each list, because
+  # running out of time is one event for the whole save: a membership with ten
+  # tiers would otherwise emit ten separate warnings for it, and none of them
+  # would say how many files went unchecked in total. The caller logs the total
   # once, after the whole check has finished.
+  #
+  # Files are tracked by id rather than counted, because the same file can be
+  # reached through more than one list: a file attached to a tier still carries
+  # the product in `ProductFile#link_id`, so the product's own list and the
+  # tier's list both walk it. Adding up per-list counts would report a total
+  # larger than the number of files the seller actually attached, and would also
+  # count a file we did look up, because a later list reaches that same file
+  # again after the budget is gone. So the total is the files that were asked
+  # about nowhere: everything skipped, minus everything looked up.
   class StorageCheckBudget
-    attr_reader :unchecked_file_count
-
     def initialize(seconds:)
       @deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds
-      @unchecked_file_count = 0
+      @checked_file_ids = Set.new
+      @skipped_file_ids = Set.new
     end
 
     def spent?
       Process.clock_gettime(Process::CLOCK_MONOTONIC) >= @deadline
     end
 
-    def record_unchecked_files(count)
-      @unchecked_file_count += count
+    def record_checked_file(file)
+      @checked_file_ids << file.id
+    end
+
+    def record_unchecked_files(files)
+      @skipped_file_ids.merge(files.map(&:id))
+    end
+
+    def unchecked_file_count
+      (@skipped_file_ids - @checked_file_ids).size
     end
   end
 
@@ -254,12 +270,19 @@ class ContentModeration::ModerateRecordService
       found_file = has_deliverable_file?(record, budget:) ||
         record.alive_variants.any? { |variant| has_deliverable_file?(variant, budget:) }
 
+      # Readable page content is a deliverable in its own right, so a product
+      # that has some passes whether or not we got through its files. The whole
+      # answer therefore has to be settled before deciding whether to warn.
+      has_deliverable = found_file || has_readable_body_content?(record)
+
       # Say so once for the whole save when a spent budget left files unchecked
-      # and we ended up failing, so a failure that only means "we ran out of time"
-      # is explicable from the logs. Logged here rather than inside the per-list
-      # check so a membership with many tiers produces one line carrying the
-      # total, not one line per tier.
-      if !found_file && budget.unchecked_file_count.positive?
+      # and the check failed anyway, so a failure that only means "we ran out of
+      # time" is explicable from the logs. A save that passed needs no such line:
+      # nothing was rejected, and a failure-shaped warning on a success sends the
+      # reader looking for a problem that isn't there. Logged here rather than
+      # inside the per-list check so a membership with many tiers produces one
+      # line carrying the total, not one line per tier.
+      if !has_deliverable && budget.unchecked_file_count.positive?
         Rails.logger.warn(
           "ContentModeration: storage check budget spent with " \
           "#{budget.unchecked_file_count} unverifiable file(s) left unchecked on " \
@@ -267,7 +290,7 @@ class ContentModeration::ModerateRecordService
         )
       end
 
-      found_file || has_readable_body_content?(record)
+      has_deliverable
     end
 
     # An attached file only counts when there is really something in storage
@@ -334,16 +357,20 @@ class ContentModeration::ModerateRecordService
         end
       end
 
-      unverifiable_from_row
-        .sort_by { -_1.id }
-        .each_with_index do |file, checked|
-          if budget.spent?
-            budget.record_unchecked_files(unverifiable_from_row.size - checked)
-            break
-          end
+      # Newest first, so the file most likely to be a fresh upload is asked about
+      # before the budget runs out. The order also decides which files get left
+      # unchecked, so the sorted list — not the original — is what gets recorded.
+      newest_first = unverifiable_from_row.sort_by { -_1.id }
 
-          return true if file.stored_file_present?
+      newest_first.each_with_index do |file, checked|
+        if budget.spent?
+          budget.record_unchecked_files(newest_first.drop(checked))
+          break
         end
+
+        budget.record_checked_file(file)
+        return true if file.stored_file_present?
+      end
 
       false
     end

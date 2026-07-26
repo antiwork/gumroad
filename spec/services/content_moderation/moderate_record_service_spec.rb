@@ -624,12 +624,14 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           tier.save!
         end
         membership.reload
-        # The tally covers every list the check walked: the product's own file
-        # list plus one per tier. Everything but the single lookup that burned
-        # the budget went unchecked.
-        walked_files = membership.alive_product_files.count +
-          membership.alive_variants.sum { |tier| tier.alive_product_files.count }
-        unchecked = walked_files - 1
+        # A file attached to a tier still carries the product in its `link_id`,
+        # so the product's own list and the tier's list both walk it. Each file
+        # counts once however many lists reached it, so the expected total is the
+        # number of distinct files the seller attached, less the single one whose
+        # lookup burned the budget.
+        walked_file_ids = membership.alive_product_files.map(&:id) +
+          membership.alive_variants.flat_map { |tier| tier.alive_product_files.map(&:id) }
+        unchecked = walked_file_ids.uniq.size - 1
 
         warnings = []
         allow(Rails.logger).to receive(:warn) { |message| warnings << message }
@@ -639,6 +641,60 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         budget_warnings = warnings.grep(/storage check budget spent/)
         expect(budget_warnings.size).to eq(1)
         expect(budget_warnings.first).to include("#{unchecked} unverifiable file(s) left unchecked")
+      end
+
+      # The same file is reachable through more than one list, so a total that
+      # added up per-list counts would claim more files went unchecked than the
+      # seller ever attached — and would even count the one file that was looked
+      # up, because a later list reaches it again after the budget is gone. The
+      # number in the log is what someone reasons about when a save is rejected,
+      # so it has to be the real one.
+      it "counts each file once however many lists reach it" do
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+        tier = membership.tiers.first
+        2.times { tier.product_files << create(:product_file, link: membership, analyze_completed: false) }
+        tier.save!
+        membership.reload
+        # Both files hang off the one tier, and both are therefore also on the
+        # product's own list — two lists of the same two files.
+        distinct_file_ids = (membership.alive_product_files.map(&:id) +
+          membership.alive_variants.flat_map { |t| t.alive_product_files.map(&:id) }).uniq
+        expect(distinct_file_ids.size).to eq(2)
+
+        warnings = []
+        allow(Rails.logger).to receive(:warn) { |message| warnings << message }
+
+        expect(described_class.check(membership, :product).passed).to eq(false)
+
+        # One of the two was looked up before the budget went, so exactly one
+        # file was never asked about.
+        expect(warnings.grep(/storage check budget spent/).first)
+          .to include("1 unverifiable file(s) left unchecked")
+      end
+
+      # Files are only half of what counts as a deliverable: a listing whose files
+      # all went unverifiable can still deliver through its content page, and that
+      # save passes. Nothing was rejected on a passing save, so the log should stay
+      # quiet — the warning exists to explain a rejection, and attaching it to a
+      # success sends the reader hunting a failure that never happened.
+      it "stays quiet about a spent budget when readable content makes the save pass anyway" do
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        2.times { product.product_files << create(:product_file, analyze_completed: false) }
+        product.save!
+        create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Lesson one" }] }])
+
+        warnings = []
+        allow(Rails.logger).to receive(:warn) { |message| warnings << message }
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+        expect(warnings.grep(/storage check budget spent/)).to be_empty
       end
 
       # A file that finished analyzing is answered from its own row, so a real
