@@ -1475,8 +1475,22 @@ class LinksControllerUpdateTest < ActionController::TestCase
   # snapshot, before anything is mutated. Each "two-session" test simulates
   # session A loading (capturing snapshot timestamps), session B saving
   # (bumping the rows), then session A saving from its stale snapshot.
+  #
+  # The seller-visible rejection is OFF by default in production: enforcing it
+  # blocked hundreds of legitimate saves because the timestamps the editor
+  # echoes aren't yet trustworthy (see Product::StaleContentWriteGuard's class
+  # comment). The tests that assert the 409 therefore turn the flag on
+  # explicitly via enforce_stale_content_block!, and the tests below them cover
+  # the DEFAULT (flag off) behavior — which is what production runs today.
+
+  # Turns on the seller-blocking 409 path for tests that assert it. Without
+  # this, a stale save is detected and reported but allowed through.
+  def enforce_stale_content_block!
+    Feature.activate(Product::StaleContentWriteGuard::BLOCK_FEATURE_NAME)
+  end
 
   test "PUT update rejects a two-session page overwrite: a save echoing a stale page snapshot cannot replace content saved in between" do
+    enforce_stale_content_block!
     setup_guarded_version!
     stale_snapshot = @version1_page.updated_at.as_json
     newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Session B's newer content" }] }]
@@ -1500,6 +1514,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update rejects a two-session product-level page overwrite" do
+    enforce_stale_content_block!
     product_page = create_rich_content(entity: @product, description: guard_content_description, title: "Shared page")
     stale_snapshot = product_page.updated_at.as_json
     newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Session B's newer content" }] }]
@@ -1517,6 +1532,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update rejects a two-session variant overwrite: a save echoing a stale variant snapshot cannot revert attributes saved in between" do
+    enforce_stale_content_block!
     setup_guarded_version!
     stale_snapshot = @version1.updated_at.as_json
 
@@ -1537,6 +1553,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update rejects a stale save before mutating ANY part of the payload" do
+    enforce_stale_content_block!
     setup_guarded_version!
     stale_snapshot = @version1_page.updated_at.as_json
     original_name = @product.name
@@ -1554,6 +1571,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update sends a Sentry notification alongside the stale-save rejection" do
+    enforce_stale_content_block!
     setup_guarded_version!
     stale_snapshot = @version1_page.updated_at.as_json
     notified = []
@@ -1574,6 +1592,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update allows a save echoing the CURRENT snapshot timestamps and refreshes them in the response" do
+    enforce_stale_content_block!
     setup_guarded_version!
     updated_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edited by this session" }] }]
 
@@ -1608,6 +1627,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   # therefore read the post-lock state and reject, even though the echoed
   # timestamps were current when the request started.
   test "PUT update checks freshness while holding the product row lock, so a save committed just before the lock is honored" do
+    enforce_stale_content_block!
     setup_guarded_version!
     snapshot_current_at_request_time = @version1_page.updated_at.as_json
     concurrent_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Committed by the concurrent save" }] }]
@@ -1635,6 +1655,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update does NOT reject a save whose variant row was only touched by a buyer's purchase" do
+    enforce_stale_content_block!
     setup_guarded_version!
     @version1.update!(max_purchase_count: 100)
     stale_variant_snapshot = @version1.reload.updated_at.as_json
@@ -1660,6 +1681,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   # timestamp alone would let a stale full save silently revert a price another
   # session had just changed.
   test "PUT update rejects a two-session membership tier price overwrite: a stale save cannot revert a tier price saved in between" do
+    enforce_stale_content_block!
     product = create_membership_product_with_preset_tiered_pricing(user: @seller)
     first_tier = product.tiers.find_by!(name: "First Tier")
     second_tier = product.tiers.find_by!(name: "Second Tier")
@@ -1691,6 +1713,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update lets a session change a membership tier price and save again, because the response refreshes the tier's price-aware snapshot" do
+    enforce_stale_content_block!
     product = create_membership_product_with_preset_tiered_pricing(user: @seller)
     first_tier = product.tiers.find_by!(name: "First Tier")
     second_tier = product.tiers.find_by!(name: "Second Tier")
@@ -1721,6 +1744,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update does NOT reject a save that resubmits a membership tier's stored prices unchanged" do
+    enforce_stale_content_block!
     product = create_membership_product_with_preset_tiered_pricing(user: @seller)
     first_tier = product.tiers.find_by!(name: "First Tier")
     second_tier = product.tiers.find_by!(name: "Second Tier")
@@ -1748,6 +1772,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update rejects a stale tier save that would re-enable a recurrence another session turned off" do
+    enforce_stale_content_block!
     # Both tiers carry the same set of recurrences — the editor enforces that,
     # and a payload with mismatched sets is rejected before the guard runs.
     product = create_membership_product_with_preset_tiered_pricing(
@@ -1788,6 +1813,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update fails open for payloads that do not echo snapshot timestamps (sessions predating the guard)" do
+    enforce_stale_content_block!
     setup_guarded_version!
     newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }]
 
@@ -1806,6 +1832,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update ignores unparseable echoed timestamps instead of failing the save" do
+    enforce_stale_content_block!
     setup_guarded_version!
 
     post :update, params: @params.merge(
@@ -1813,6 +1840,156 @@ class LinksControllerUpdateTest < ActionController::TestCase
     ), format: :json
 
     assert_response :success
+  end
+
+  # --- enforcement is OFF by default (gumroad-private#1295) --------------------
+  # In production the seller-visible 409 blocked 363 saves for 61 sellers in
+  # about twelve hours, and every sampled block submitted exactly as many pages
+  # and variants as the product had — nothing was being overwritten. The
+  # rejection is therefore gated off while the payload contract is fixed
+  # (gumroad-private#1329). These tests pin the DEFAULT behavior: staleness is
+  # still detected and still reported to Sentry, but the save goes through, and
+  # the deletion guards are unaffected.
+
+  # The tab a seller had open when the guard deployed is the case the guard's
+  # "fail open for legacy sessions" allowance was supposed to cover and did
+  # NOT: page timestamps were already part of the editor payload long before
+  # the guard shipped (RichContents#rich_content_json), so such a tab carries a
+  # real page id AND a page timestamp it has no way to refresh. It was blocked
+  # on its very next save. With enforcement off it saves normally.
+  test "PUT update lets a pre-deploy editor tab save: a real page id with an unrefreshed page timestamp is not blocked" do
+    setup_guarded_version!
+    # The timestamp this tab was served when it loaded, before the guard existed.
+    pre_deploy_snapshot = @version1_page.updated_at.as_json
+    seller_edit = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edit made in the old tab" }] }]
+
+    # The stored page moves on afterwards, for any reason at all — another save
+    # from this same seller, a support restore, a background touch.
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Something else" }] }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: pre_deploy_snapshot, description: { type: "doc", content: seller_edit } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal seller_edit, @version1_page.reload.description
+  end
+
+  test "PUT update lets ordinary consecutive saves through even when the session never refreshes its page snapshot" do
+    setup_guarded_version!
+    snapshot = @version1_page.updated_at.as_json
+    save = ->(text) do
+      post :update, params: @params.merge(
+        variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: snapshot, description: { type: "doc", content: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => text }] }] } }] }]
+      ), format: :json
+    end
+
+    # Save a minute after the editor loaded, so this save's own write lands on a
+    # later second than the snapshot the session is holding.
+    travel 1.minute
+    save.call("First save")
+    assert_response :success
+
+    # The session still echoes the snapshot it was served on load — it never
+    # adopted the timestamp the first save handed back. The stored row is now
+    # newer, so with enforcement on this second save is rejected and refreshing
+    # does not help: this is the retry-storm shape sellers were stuck in.
+    save.call("Second save")
+
+    assert_response :success
+    assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Second save" }] }], @version1_page.reload.description
+  end
+
+  test "PUT update still reports a stale snapshot to Sentry when enforcement is off, under an observe-only message" do
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+    message, context = notified.find { |m, _| m == Product::StaleContentWriteGuard::OBSERVED_MESSAGE }
+    assert_not_nil message, "Expected the observe-only stale-snapshot notification (got: #{notified.map(&:first).inspect})"
+    assert_equal @product.id, context[:product_id]
+    assert_equal [@version1_page.external_id], context[:stale_page_external_ids]
+    # The blocking message must not be sent while the flag is off — the two are
+    # separate Sentry issues and the blocking one has to stay at zero events.
+    assert_nil notified.find { |m, _| m == Product::StaleContentWriteGuard::BLOCKED_MESSAGE }
+  end
+
+  # The two deletion guards (#6178, #6244) are what actually stopped the July
+  # 13/18/21 wipes, and gating the stale-write rejection must not weaken them.
+  # These re-assert both malformed-payload shapes with enforcement OFF, so a
+  # future change that accidentally routes the deletion guards through the same
+  # flag fails here.
+
+  test "PUT update still blocks a payload missing a content-bearing page when stale-write enforcement is off" do
+    setup_guarded_version!
+    # A stale snapshot AND an omitted page: the stale-write guard stays silent
+    # (enforcement off) and the deletion guard has to catch the omission.
+    stale_snapshot = @version1_page.updated_at.as_json
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: stale_snapshot, rich_content: [] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_includes response.parsed_body["error_message"], "refresh the page"
+    assert @version1_page.reload.alive?
+  end
+
+  test "PUT update still blocks a payload missing a content-bearing variant when stale-write enforcement is off" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(variants: [{ id: nil, name: "Brand new version" }]), format: :json
+
+    assert_response :unprocessable_entity
+    assert_includes response.parsed_body["error_message"], "refresh the page"
+    assert @version1.reload.alive?
+    assert @version1_page.reload.alive?
+  end
+
+  # The kill switch reads a Flipper flag, which is a Redis round trip, and it
+  # runs inside the save's transaction while that transaction holds the product
+  # row lock. If the feature store is unreachable the save must still go
+  # through: a 500 here would recreate the failure this gate exists to remove.
+  test "PUT update still saves when the enforcement flag lookup itself fails" do
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    seller_edit = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Saved despite a flag-store outage" }] }]
+    # Simulate the feature store failing for THIS flag only, without mocha:
+    # a `.with` matcher turns every OTHER flag lookup in the request into an
+    # unexpected invocation (custom_html_pages, cancellation_discounts), so
+    # override the singleton and restore it in an ensure block.
+    original = Feature.method(:active?)
+    Feature.define_singleton_method(:active?) do |name, actor = nil|
+      raise Redis::CannotConnectError, "Error connecting to Redis" if name == Product::StaleContentWriteGuard::BLOCK_FEATURE_NAME
+
+      original.call(name, actor)
+    end
+
+    begin
+      travel 1.minute
+      @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+      post :update, params: @params.merge(
+        variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: seller_edit } }] }]
+      ), format: :json
+    ensure
+      Feature.define_singleton_method(:active?, original)
+    end
+
+    assert_response :success
+    assert_equal seller_edit, @version1_page.reload.description
   end
 
   # --- the July 21, 2026 incident shape (gumroad-private#1230) -----------------

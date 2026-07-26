@@ -416,8 +416,16 @@ class LinksController < ApplicationController
         # stored rows would silently overwrite content another session saved in
         # between (gumroad-private#1295). The deletion guards below can't catch
         # this — an in-place update under an existing id deletes nothing.
-        # Raising here rolls the transaction back (nothing has been written
-        # yet) and releases the lock; the rescue below renders the 409.
+        #
+        # NOTE: the seller-visible rejection is currently gated OFF by default
+        # (the `product_editor_stale_content_block` Flipper flag) because
+        # enforcing it blocked hundreds of legitimate saves — see
+        # Product::StaleContentWriteGuard's class comment for why. By default
+        # this call therefore DETECTS and reports staleness to Sentry and
+        # returns normally, letting the save continue. It only raises when the
+        # flag is on; raising rolls the transaction back (nothing has been
+        # written yet) and releases the lock, and the rescue below renders the
+        # 409.
         Product::StaleContentWriteGuard.ensure_fresh!(
           product: @product,
           pages_params: snapshot_pages_params,
