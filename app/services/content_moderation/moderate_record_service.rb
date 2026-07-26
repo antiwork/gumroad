@@ -51,6 +51,7 @@ class ContentModeration::ModerateRecordService
       (@skipped_file_ids - @checked_file_ids).size
     end
   end
+  private_constant :StorageCheckBudget
 
   CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
 
