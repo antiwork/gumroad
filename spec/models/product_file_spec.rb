@@ -894,7 +894,7 @@ describe ProductFile do
     # — otherwise the next caller pays the same lookup for the same answer.
     it "asks for the row to be retired when the object is proved absent" do
       product_file = create(:product_file, analyze_completed: false)
-      product_file.update_column(:created_at, 3.days.ago)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
       allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
 
       expect do
@@ -916,7 +916,7 @@ describe ProductFile do
 
     it "does not ask for a row to be retired when the file is really there" do
       product_file = create(:product_file, analyze_completed: false)
-      product_file.update_column(:created_at, 3.days.ago)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
       allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: true))
 
       expect do
@@ -928,12 +928,63 @@ describe ProductFile do
     # either.
     it "does not ask for a row to be retired when storage can't be reached" do
       product_file = create(:product_file, analyze_completed: false)
-      product_file.update_column(:created_at, 3.days.ago)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
       allow(product_file).to receive(:s3_object).and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
 
       expect do
         expect(product_file.stored_file_present?).to eq(true)
       end.not_to change { RecordProductFileMissingFromStorageJob.jobs.size }
+    end
+
+    # This runs inside a product validation, so a queueing problem must not turn
+    # into a failed save for the seller.
+    it "still answers the caller when the row can't be queued for retirement" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    # Redis being down is the expected reason to end up here and resolves on its
+    # own, so it stays a log line. Alerting on it would page us for an outage we
+    # already know about.
+    it "does not report an unreachable queue" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    # Anything that isn't the queue being unreachable is a bug in how we enqueue.
+    # It must still not fail the seller's save, but it has to be reported instead
+    # of silently skipping retirement forever.
+    it "reports an unexpected queueing failure without failing the caller" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      error = ArgumentError.new("Job arguments to RecordProductFileMissingFromStorageJob must be native JSON types")
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, product_file_id: product_file.id)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    # Reporting is best-effort too: Sentry goes over the network and can fail on
+    # its own, and this path runs inside a seller's save, so a failure to report
+    # must not fail that save.
+    it "still answers the caller when the queueing failure can't be reported" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(ArgumentError.new("bad argument"))
+      allow(ErrorNotifier).to receive(:notify).and_raise(Errno::ECONNREFUSED)
+
+      expect(product_file.stored_file_present?).to eq(false)
     end
   end
 
