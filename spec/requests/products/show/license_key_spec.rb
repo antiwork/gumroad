@@ -16,7 +16,7 @@ describe "License key on the product page", :js, type: :system do
     it "shows the license key inline so the buyer does not have to open the content page" do
       visit short_link_path(product)
 
-      expect(page).to have_text("You've purchased this product")
+      expect(page).to have_text("You already own this product")
       expect(page).to have_text("License key")
       expect(page).to have_text(license.serial)
       expect(page).to have_button("Copy")
