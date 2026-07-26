@@ -38,6 +38,7 @@ import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
   canUseStripePaymentElement,
+  canUseStripePaymentElementClientConfirm,
   computeTip,
   computeTipForListedLines,
   computeTipsForLines,
@@ -209,12 +210,18 @@ const CheckoutIndexPage = () => {
   // satisfy both, and then it is the quote's allocation that is on screen and locked into the
   // token. Following the same precedence here keeps the modal, the summary and the submitted tip
   // all reading from the one lane that is actually in effect.
-  const listedCurrency = buyerCurrencyDisplay
-    ? null
-    : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
-        usingSavedCard: state.usingSavedCard,
-        paymentMethod: state.paymentMethod,
-      });
+  //
+  // Also gated on the same dynamic eligibility PaymentForm uses to mount the element (matching
+  // the summary in index.tsx): if a discount or surcharge reload drops the loaded canonical total
+  // below Stripe's Payment Element minimum, PaymentForm falls back to the CardElement and the
+  // charge is canonical USD, so the tip basis and the modal must fall back too.
+  const listedCurrency =
+    buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state)
+      ? null
+      : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
+          usingSavedCard: state.usingSavedCard,
+          paymentMethod: state.paymentMethod,
+        });
   // The tip and cart total the confirmation modal quotes, in listed minor units. The tip runs
   // through the submission's own per-line allocation (see computeTipForListedLines) so the modal
   // quotes the figure that will actually be charged, and the cart total is the listed total itself

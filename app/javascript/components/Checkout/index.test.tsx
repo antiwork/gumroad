@@ -462,6 +462,33 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
   });
 
+  it("stays in canonical USD when the loaded total falls below the Payment Element minimum", () => {
+    // PaymentForm re-checks canUseStripePaymentElementClientConfirm after surcharges load: a
+    // discount can drop the canonical total below Stripe's Payment Element minimum, at which
+    // point the form falls back to the CardElement and charges canonical USD. The summary must
+    // follow the same predicate, or it would show listed-currency totals for a USD charge.
+    const { getAllByLabelText } = renderCheckout(
+      brlState({
+        products: [stateProduct({ permalink: "brl", price: 40 })],
+        surcharges: {
+          type: "loaded",
+          result: {
+            vat_id_valid: false,
+            has_vat_id_input: false,
+            shipping_rate_cents: 0,
+            tax_cents: 0,
+            tax_included_cents: 0,
+            subtotal: 40,
+            buyer_currency_quote: null,
+          },
+        },
+      }),
+      brlCart(),
+    );
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
+  });
+
   it("stays in canonical USD when the buyer toggles pay-in-installments after the page rendered", () => {
     // `checkoutPayment` is an Inertia prop that does not refresh on cart edits, so the client has to
     // re-check this itself: the element silently drops to a canonical-USD CardElement.
