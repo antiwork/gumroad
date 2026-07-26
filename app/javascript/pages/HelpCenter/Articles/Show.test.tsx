@@ -292,6 +292,38 @@ describe("HelpCenterArticle", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
+  it("keeps the second passage when a new text-fragment click cancels the visit still in flight", () => {
+    // Starting a visit cancels any visit still in flight, and Inertia does that synchronously from
+    // inside router.get — so the first visit's cancellation callback runs after the second click
+    // has already remembered its wording. The reader is heading to the second article, so that is
+    // the wording that has to survive.
+    window.location.href = `https://gumroad.com/help/article/79-gumroad-discover`;
+    const { container } = renderArticle({
+      slug: "79-gumroad-discover",
+      content: `
+        <a id="first" href="${GETTING_PAID_PATH}#:~:text=For%20our%20review">risk review process</a>
+        <a id="second" href="${PAYOUT_SETTINGS_PATH}#:~:text=no%20P.O.%20boxes">payout address</a>
+      `,
+    });
+
+    clickLink(container, "#first");
+    clickLink(container, "#second");
+    // What Inertia does inside the second router.get: cancel the first visit.
+    mocks.routerGet.mock.calls[0]?.[2]?.onCancel?.();
+
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    cleanup();
+    window.location.href = `https://gumroad.com${PAYOUT_SETTINGS_PATH}`;
+    const destination = renderArticle({
+      slug: "260-your-payout-settings-page",
+      content: `<p>A physical address is required.</p><p id="passage">We accept no P.O. boxes here.</p>`,
+    });
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(scrollIntoView.mock.instances[0]).toBe(destination.container.querySelector("#passage"));
+  });
+
   it("does nothing when there is no fragment", () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;

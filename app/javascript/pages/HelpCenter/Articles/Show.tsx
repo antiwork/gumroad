@@ -122,20 +122,29 @@ export default function HelpCenterArticle() {
       // Remember a text directive before navigating, because the browser will hide it from us
       // afterwards (see takePendingTextDirective).
       const passage = textDirectiveTerm(resolvedUrl.hash.slice(1));
-      textDirectivePendingScroll = passage === null ? null : { path: resolvedUrl.pathname, passage };
+      const pending = passage === null ? null : { path: resolvedUrl.pathname, passage };
+      textDirectivePendingScroll = pending;
       // Carry the fragment through the Inertia visit. Articles deep-link into each other's
       // sections (for example the payout settings requirements point at "Address verification" in
       // "Getting paid"), and navigating to the pathname alone silently drops the "#section" part,
       // dumping the reader at the top of the destination article instead.
       const url = `${resolvedUrl.pathname}${resolvedUrl.hash}`;
-      if (passage === null) {
+      if (pending === null) {
         router.get(url);
       } else {
         // A cancelled or failed visit never renders the article that would consume the remembered
         // wording, so forget it here instead of leaving it behind for a later visit to that same
         // article to act on.
+        //
+        // Only forget this visit's own wording. Starting a visit cancels any visit still in
+        // flight, and Inertia runs that cancellation synchronously from inside `router.get` — so
+        // when a reader clicks a second text-fragment link before the first visit arrives, the
+        // first visit's callback fires *after* the second click has already stored its wording.
+        // Clearing unconditionally would throw away the wording the reader is currently heading
+        // to, and a hidden directive cannot be recovered from the URL afterwards, so they would
+        // land at the top of the article they just asked for.
         const forget = () => {
-          textDirectivePendingScroll = null;
+          if (textDirectivePendingScroll === pending) textDirectivePendingScroll = null;
         };
         router.get(url, {}, { onCancel: forget, onError: forget });
       }
