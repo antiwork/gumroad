@@ -4838,6 +4838,12 @@ class Purchase < ApplicationRecord
       # record. The time-boxed check above deliberately ignores gifts older than a few minutes,
       # which means an unresolved gift paid by bank debit would otherwise be invisible here — so
       # look it up explicitly, with no window, exactly like the non-gift settling lookup.
+      #
+      # `payment_settling` requires a stripe_status, so a gift stuck `in_progress` with no status
+      # at all, older than the window above, is caught by neither check. That gap is inherited
+      # rather than introduced: direct purchases of the same products have always behaved this way,
+      # because the window above is what bounds them too. Widening it here would only re-create the
+      # lifetime block this change exists to remove.
       unless is_recurring_subscription_charge
         settling_gifts = self.class.payment_settling.joins(:gift_given).where(
           gifts: { giftee_email: recipient_email },
@@ -4854,7 +4860,19 @@ class Purchase < ApplicationRecord
       end
 
       if settling.any?
-        errors.add :base, "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+        # Same two-reader problem as add_errors_for_existing_purchase below, and it reaches this
+        # site for the first time now that the gift lookup above is windowed: a gift settling over
+        # a bank debit for days is no longer caught up there, so it lands here instead. "Your
+        # previous payment" is wrong for both readers this can face — a *different* sender gifting
+        # the same product has made no previous payment, and a giftee buying it directly has not
+        # either. Telling either of them "do not pay again" abandons a legitimate purchase.
+        errors.add :base, if is_gift_sender_purchase
+          "A gift of this product to #{giftee_email} is still being paid for. We will email you when it completes — please don't send it again yet."
+        elsif settling.any?(&:is_gift_sender_purchase)
+          "Someone is in the middle of gifting you this product. Give that a moment to complete before paying for it yourself."
+        else
+          "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+        end
       end
     end
 

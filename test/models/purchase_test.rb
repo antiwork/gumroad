@@ -2538,7 +2538,7 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase2 = build_purchase(link: product, email: "another-sender@gumroad.com", ip_address: ip,
                                gift_given: second_gift, is_gift_sender_purchase: true, created_at: Time.current)
     assert_not purchase2.valid?
-    assert_equal ["Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."], purchase2.errors[:base]
+    assert_equal ["A gift of this product to giftee@gumroad.com is still being paid for. We will email you when it completes — please don't send it again yet."], purchase2.errors[:base]
   end
 
   test "not_double_charged settling already blocks a direct purchase by the giftee while a gift to them is in progress" do
@@ -2550,6 +2550,8 @@ class PurchaseTest < ActiveSupport::TestCase
                     purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
     purchase2 = build_purchase(link: product, email: "giftee@gumroad.com", ip_address: ip, created_at: Time.current)
     assert_not purchase2.valid?
+    # The giftee has not paid for anything, so they must not be told their own payment is processing.
+    assert_equal ["Someone is in the middle of gifting you this product. Give that a moment to complete before paying for it yourself."], purchase2.errors[:base]
   end
 
   # context "purchasing physical products"
