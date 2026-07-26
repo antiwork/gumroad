@@ -226,7 +226,18 @@ class ProductFile < ApplicationRecord
         # its own. Anything else reaching here is a bug in how we enqueue (a bad
         # argument, a serialization error), which would otherwise sit in the logs
         # silently skipping retirement forever, so report it.
-        ErrorNotifier.notify(e, product_file_id: id) unless EXPECTED_ENQUEUE_ERRORS.any? { e.is_a?(_1) }
+        unless EXPECTED_ENQUEUE_ERRORS.any? { e.is_a?(_1) }
+          begin
+            ErrorNotifier.notify(e, product_file_id: id)
+          rescue StandardError => notifier_error
+            # Reporting the problem must not become a bigger problem than the one
+            # being reported. Sentry talks over the network and can fail on its
+            # own, and this whole path runs inside a seller's save, so an
+            # exception from the notifier would fail that save for a reason the
+            # seller has nothing to do with. Log and move on.
+            Rails.logger.warn("RecordProductFileMissingFromStorageJob enqueue failure could not be reported (#{id}): #{notifier_error.class} => #{notifier_error.message}")
+          end
+        end
       end
     end
     present

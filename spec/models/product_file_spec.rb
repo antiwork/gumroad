@@ -973,6 +973,19 @@ describe ProductFile do
 
       expect(product_file.stored_file_present?).to eq(false)
     end
+
+    # Reporting is best-effort too: Sentry goes over the network and can fail on
+    # its own, and this path runs inside a seller's save, so a failure to report
+    # must not fail that save.
+    it "still answers the caller when the queueing failure can't be reported" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(ArgumentError.new("bad argument"))
+      allow(ErrorNotifier).to receive(:notify).and_raise(Errno::ECONNREFUSED)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
   end
 
   describe "#stored_file_presence_known_from_row" do
