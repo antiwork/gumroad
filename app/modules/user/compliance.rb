@@ -170,16 +170,25 @@ module User::Compliance
     user_compliance_infos.alive.last
   end
 
-  # How many of the seller's most recent compliance revisions we scan when asking whether they
-  # ever gave us a P.O. Box. Capped so this stays a cheap two-column read even for a seller with
-  # a long compliance history.
-  PO_BOX_ADDRESS_HISTORY_REVISIONS_CHECKED = 25
+  # How many compliance revisions we read per query while scanning a seller's address history.
+  # This bounds how much we hold in memory at once; it does NOT cap how far back we look.
+  PO_BOX_ADDRESS_HISTORY_BATCH_SIZE = 100
 
-  # Whether a P.O. Box appears anywhere in the seller's recent address history, individual or
-  # business. We look at the history rather than only the current record because our payment
-  # partner rejects a P.O. Box on the account, so a seller in that situation has usually already
+  # Whether a P.O. Box appears anywhere in the seller's address history, individual or business.
+  # We look at the history rather than only the current record because our payment partner
+  # rejects a P.O. Box on the account, so a seller in that situation has usually already
   # replaced it — and that replacement is exactly what makes their verification document stop
   # matching the account. See UserComplianceInfoRequest for the full deadlock.
+  #
+  # The entire history is scanned on purpose. Every compliance edit writes a new revision,
+  # including edits that have nothing to do with the address (a corrected tax id, a new phone
+  # number, another address attempt), and a seller working this problem makes a lot of them. Any
+  # cap on how many revisions we read lets those later edits push the one revision carrying the
+  # P.O. Box out of view, at which point the seller silently goes back to being told to retry a
+  # document that can never match — the exact bug this message exists to prevent.
+  #
+  # This stays cheap despite having no cap: it reads two short columns, stops at the first match,
+  # and is memoized. Sellers have a handful of revisions, not thousands.
   #
   # Memoized per instance: the dashboard and settings pages ask this once per outstanding
   # compliance request, and the answer cannot change within a single request.
@@ -187,11 +196,13 @@ module User::Compliance
     return @po_box_in_address_history unless @po_box_in_address_history.nil?
 
     @po_box_in_address_history = user_compliance_infos
-                                   .order(id: :desc)
-                                   .limit(PO_BOX_ADDRESS_HISTORY_REVISIONS_CHECKED)
-                                   .pluck(:street_address, :business_street_address)
-                                   .flatten
-                                   .any? { |address| PoBoxAddress.match?(address) }
+                                   .in_batches(of: PO_BOX_ADDRESS_HISTORY_BATCH_SIZE)
+                                   .any? do |revisions|
+      revisions
+        .pluck(:street_address, :business_street_address)
+        .flatten
+        .any? { |address| PoBoxAddress.match?(address) }
+    end
   end
 
   SUPPORTED_COUNTRIES.each do |country|

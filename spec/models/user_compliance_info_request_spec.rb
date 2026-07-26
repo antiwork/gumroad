@@ -255,6 +255,24 @@ describe UserComplianceInfoRequest do
         expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
       end
 
+      it "still explains the deadlock after many later unrelated compliance edits" do
+        # Every compliance edit creates a revision, including edits that never touch the address
+        # (a corrected tax id, a new phone number, another address attempt). A seller working this
+        # problem makes a lot of them, which pushes the revision carrying the P.O. Box a long way
+        # back. It still has to be found, or they silently go back to being told to retry.
+        40.times do |index|
+          create(
+            :user_compliance_info_business,
+            user:,
+            business_street_address: "NW-22-34-19-W2",
+            business_phone: "000000000#{index % 10}"
+          )
+        end
+        set_error("verification_document_address_mismatch")
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+
       it "leaves unrelated rejection reasons alone" do
         set_error("verification_document_expired")
 
@@ -267,6 +285,18 @@ describe UserComplianceInfoRequest do
           "message" => "Address on the account doesn't match the verification document."
         }
         request.save!
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+    end
+
+    context "when the P.O. Box is written in the short rural form" do
+      # The form the seller on the originating ticket actually had: no "PO Box" prefix, just a
+      # box number and a rural route. This is exactly the case that has no civic street address.
+      before { create(:user_compliance_info_business, user:, business_street_address: "Box 65, RR 2") }
+
+      it "explains the deadlock" do
+        set_error("verification_document_address_mismatch")
 
         expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
       end
