@@ -159,6 +159,24 @@ class AudienceMember < ApplicationRecord
         ))
       SQL
       json_filter = json_filter.joins("INNER JOIN #{json_table} AS jt")
+      # MySQL expands sibling JSON_TABLE paths into disjoint rows. A purchase predicate keeps
+      # only purchase rows, and an affiliate-product predicate keeps only affiliate rows; asking
+      # one `jt` row to satisfy both made affiliate posts with purchase filters resolve nobody.
+      # For affiliate posts, keep purchase predicates on `jt` and read affiliate identity from a
+      # second expansion (`affiliate_jt`) that is filtered only by affiliate-specific constraints.
+      if params[:type] == "affiliate"
+        affiliate_json_table = <<~SQL.squish
+          JSON_TABLE(details, '$.affiliates[*]' COLUMNS (
+            affiliate_id INT PATH '$.id',
+            affiliate_product_id INT PATH '$.product_id',
+            affiliate_created_at DATETIME PATH '$.created_at'
+          ))
+        SQL
+        json_filter = json_filter.joins("INNER JOIN #{affiliate_json_table} AS affiliate_jt")
+        json_filter = json_filter.where("affiliate_jt.affiliate_product_id IN (?)", params[:affiliate_product_ids]) if params[:affiliate_product_ids]
+        json_filter = json_filter.where("affiliate_jt.affiliate_created_at > ?", params[:created_after]) if params[:created_after]
+        json_filter = json_filter.where("affiliate_jt.affiliate_created_at < ?", params[:created_before]) if params[:created_before]
+      end
       json_filter = json_filter.where("jt.purchase_price_cents > ?", params[:paid_more_than_cents]) if params[:paid_more_than_cents]
       json_filter = json_filter.where("jt.purchase_price_cents < ?", params[:paid_less_than_cents]) if params[:paid_less_than_cents]
       if params[:active_customers_only]
@@ -188,15 +206,15 @@ class AudienceMember < ApplicationRecord
           %w[follower_created_at]
         end
       elsif params[:type] == "affiliate"
-        %w[affiliate_created_at]
+        []
       else
         %w[purchase_created_at follower_created_at affiliate_created_at]
       end
-      if params[:created_after]
+      if params[:created_after] && timestamp_columns.any?
         where_conditions = timestamp_columns.map { "jt.#{_1} > :date" }.join(" OR ")
         json_filter = json_filter.where(where_conditions, date: params[:created_after])
       end
-      if params[:created_before]
+      if params[:created_before] && timestamp_columns.any?
         where_conditions = timestamp_columns.map { "jt.#{_1} < :date" }.join(" OR ")
         json_filter = json_filter.where(where_conditions, date: params[:created_before])
       end
@@ -206,7 +224,7 @@ class AudienceMember < ApplicationRecord
         json_filter = json_filter.where("jt.purchase_product_id IN (?)", params[:bought_product_ids]) if params[:bought_product_ids]
         json_filter = json_filter.where("jt.purchase_variant_id IN (?)", params[:bought_variant_ids]) if params[:bought_variant_ids]
       end
-      if params[:affiliate_product_ids]
+      if params[:affiliate_product_ids] && params[:type] != "affiliate"
         json_filter = json_filter.where("jt.affiliate_product_id IN (?)", params[:affiliate_product_ids])
       end
       # COLLATE makes this binary-exact like the JSON_CONTAINS country subquery above and the
@@ -236,7 +254,12 @@ class AudienceMember < ApplicationRecord
         else
           "jt.follower_id"
         end
-        json_filter = json_filter.select("audience_members.*, max(jt.purchase_id) AS purchase_id, #{follower_id_select} AS follower_id, max(jt.affiliate_id) AS affiliate_id")
+        affiliate_id_select = if params[:type] == "affiliate"
+          "max(affiliate_jt.affiliate_id)"
+        else
+          "max(jt.affiliate_id)"
+        end
+        json_filter = json_filter.select("audience_members.*, max(jt.purchase_id) AS purchase_id, #{follower_id_select} AS follower_id, #{affiliate_id_select} AS affiliate_id")
         json_filter_sql = json_filter.to_sql
       elsif json_filter.where_clause.present?
         json_filter_sql = json_filter.to_sql
