@@ -19,6 +19,60 @@ interface Props {
   sidebar_categories: SidebarCategory[];
 }
 
+// A URL fragment does not have to be an element id. It can also be a browser "text directive",
+// written "#:~:text=[prefix-,]start[,end][,-suffix]", which asks the browser to find and scroll to
+// a passage by its wording instead — one help article uses this to point at a paragraph of
+// another. Browsers only act on a text directive when they load a document, so it does nothing on
+// an Inertia visit, and even on a fresh page load the passage is not in the document yet (the
+// article body is injected as raw HTML by this component). Both cases need us to do the search.
+// Returns the wording to look for, or null if the fragment is not a text directive we understand.
+const textDirectiveTerm = (fragment: string): string | null => {
+  if (!fragment.startsWith(":~:")) return null;
+
+  const textDirective = fragment
+    .slice(":~:".length)
+    .split("&")
+    .find((directive) => directive.startsWith("text="));
+  if (!textDirective) return null;
+
+  // The passage itself is the first comma-separated term that is not context: a "prefix-" term
+  // ends with a dash, a "-suffix" term starts with one. We only search for the passage's start,
+  // which is enough to know where to scroll to.
+  const passage = textDirective
+    .slice("text=".length)
+    .split(",")
+    .find((term) => term.length > 0 && !term.endsWith("-") && !term.startsWith("-"));
+  if (!passage) return null;
+
+  try {
+    return decodeURIComponent(passage);
+  } catch {
+    // A malformed escape sequence means the term isn't encoded — use it as-is.
+    return passage;
+  }
+};
+
+// Finds the smallest element whose text contains the given wording, so we scroll as close to the
+// passage as possible rather than to the whole article. Whitespace and case are ignored because
+// the wording in a link is written by hand and the HTML wraps and indents freely.
+const elementContainingText = (root: HTMLElement, text: string): HTMLElement | null => {
+  const normalize = (value: string) => value.replace(/\s+/gu, " ").trim().toLowerCase();
+  const needle = normalize(text);
+  if (!needle) return null;
+
+  let match: HTMLElement | null = null;
+  let candidate: HTMLElement | null = root;
+  while (candidate && normalize(candidate.textContent).includes(needle)) {
+    match = candidate;
+    candidate =
+      [...candidate.children].find(
+        (child): child is HTMLElement => child instanceof HTMLElement && normalize(child.textContent).includes(needle),
+      ) ?? null;
+  }
+
+  return match === root ? null : match;
+};
+
 export default function HelpCenterArticle() {
   const { article, sidebar_categories } = typia.assert<Props>(usePage().props);
   const contentRef = React.useRef<HTMLDivElement>(null);
@@ -59,6 +113,13 @@ export default function HelpCenterArticle() {
   React.useEffect(() => {
     const fragment = window.location.hash.slice(1);
     if (!fragment) return;
+
+    const passage = textDirectiveTerm(fragment);
+    if (passage !== null) {
+      const container = contentRef.current;
+      if (container) elementContainingText(container, passage)?.scrollIntoView();
+      return;
+    }
 
     let id = fragment;
     try {

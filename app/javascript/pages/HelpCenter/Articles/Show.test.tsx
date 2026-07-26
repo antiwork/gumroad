@@ -149,6 +149,60 @@ describe("HelpCenterArticle", () => {
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
+  it("scrolls to the passage a text-fragment link quotes", () => {
+    // "Gumroad Discover" links at a paragraph of "Getting paid" by quoting its wording rather than
+    // naming a heading id. getElementById cannot resolve that, so the reader used to stay at the
+    // top of the destination article.
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#:~:text=For%20our%20review%2C%20we%20require%20your%20account%20to%20be%20legitimate`;
+
+    const { container } = renderArticle({
+      slug: "13-getting-paid",
+      content: `<h3 id="${ANCHOR_ID}">Address verification</h3><p id="passage">For our review, we require your
+                account to be legitimate in two major ways:</p>`,
+    });
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(container.querySelector("#passage")).not.toBeNull();
+  });
+
+  it("ignores a text-fragment whose passage is not in the article", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#:~:text=wording%20that%20is%20not%20here`;
+
+    renderArticle({ slug: "13-getting-paid", content: `<p>For our review, we require your account.</p>` });
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("skips the prefix and suffix context terms of a text-fragment", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#:~:text=review-,we%20require%20your%20account,-legitimate`;
+
+    const { container } = renderArticle({
+      slug: "13-getting-paid",
+      content: `<p>Before review</p><p id="passage">We require your account to be legitimate</p>`,
+    });
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(container.querySelector("#passage")).not.toBeNull();
+  });
+
+  it("still navigates client-side to an article linked by a text-fragment", () => {
+    const { container } = renderArticle({
+      slug: "79-gumroad-discover",
+      content: `<a id="cross" href="${GETTING_PAID_PATH}#:~:text=For%20our%20review">risk review process</a>`,
+    });
+
+    const event = clickLink(container, "#cross");
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(mocks.routerGet).toHaveBeenCalledWith(`${GETTING_PAID_PATH}#:~:text=For%20our%20review`);
+  });
+
   it("does nothing when there is no fragment", () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
