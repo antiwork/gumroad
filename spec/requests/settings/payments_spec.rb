@@ -109,6 +109,67 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(@user.stripe_account).to be_present
     end
 
+    it "names the missing required fields when the save is blocked client-side" do
+      visit settings_payments_path
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      fill_in("Address", with: "address_full_match")
+      select("California", from: "State")
+      fill_in("Phone number", with: "(502) 254-1982")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      # City, ZIP code and the date of birth are left blank on purpose.
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please complete the required fields below:")
+        expect(page).to have_status(text: "City")
+        expect(page).to have_status(text: "Postal code")
+        expect(page).to have_status(text: "Date of birth")
+      end.to_not change { @user.alive_user_compliance_info.reload.first_name }
+
+      fill_in("City", with: "barnabasville")
+      fill_in("ZIP code", with: "12345")
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+
+      click_on("Update settings")
+      expect(page).to have_alert(text: "Thanks! You're all set.")
+      expect(@user.alive_user_compliance_info.reload.first_name).to eq("barnabas")
+    end
+
+    it "keeps the specific validation message when one applies instead of the generic field list" do
+      visit settings_payments_path
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      fill_in("Address", with: "P.O. Box 123, Smith street")
+      fill_in("City", with: "barnabasville")
+      select("California", from: "State")
+      fill_in("ZIP code", with: "12345")
+      fill_in("Phone number", with: "(502) 254-1982")
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+
+      click_on("Update settings")
+
+      expect(page).to have_status(text: "We cannot accept a P.O. Box as a valid address.")
+      expect(page).not_to have_status(text: "Please complete the required fields below:")
+    end
+
     it "allows the creator to switch to debit card as payout method" do
       visit settings_payments_path
 

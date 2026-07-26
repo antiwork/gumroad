@@ -49,6 +49,74 @@ const HAS_KATAKANA = /[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F]/u;
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
 
+// Human-readable names for every field the client-side validation can reject, so a failed save
+// can tell the seller exactly which fields are blocking it. Without this the only signal was a red
+// outline on the field itself, which is normally scrolled off-screen: the save button lives in the
+// sticky header at the top of the page while the compliance and bank fields sit far below the fold,
+// so sellers pressed "Update settings", saw nothing happen, and reported the button as dead. See
+// antiwork/gumroad-private#1388.
+const FIELD_LABELS: Record<FormFieldName, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  first_name_kanji: "First name (Kanji)",
+  last_name_kanji: "Last name (Kanji)",
+  first_name_kana: "First name (Kana)",
+  last_name_kana: "Last name (Kana)",
+  building_number: "Block / Building number",
+  building_number_kana: "Block / Building number (Kana)",
+  street_address_kanji: "Town/Cho-me (Kanji)",
+  street_address_kana: "Town/Cho-me (Kana)",
+  street_address: "Address",
+  city: "City",
+  city_kana: "City (Kana)",
+  state: "State or province",
+  zip_code: "Postal code",
+  dob_year: "Date of birth",
+  dob_month: "Date of birth",
+  dob_day: "Date of birth",
+  phone: "Phone number",
+  nationality: "Nationality",
+  individual_tax_id: "Tax ID",
+  business_type: "Business type",
+  business_name: "Legal business name",
+  business_name_kanji: "Business name (Kanji)",
+  business_name_kana: "Business name (Kana)",
+  business_street_address: "Business address",
+  business_building_number: "Business block / building number",
+  business_building_number_kana: "Business block / building number (Kana)",
+  business_street_address_kanji: "Business town/Cho-me (Kanji)",
+  business_street_address_kana: "Business town/Cho-me (Kana)",
+  business_city: "Business city",
+  business_city_kana: "Business city (Kana)",
+  business_state: "Business state or province",
+  business_zip_code: "Business postal code",
+  business_phone: "Business phone number",
+  job_title: "Job title",
+  business_tax_id: "Business tax ID",
+  routing_number: "Routing number",
+  transit_number: "Transit number",
+  institution_number: "Institution number",
+  bsb_number: "BSB number",
+  bank_code: "Bank code",
+  branch_code: "Branch code",
+  clearing_code: "Clearing code",
+  sort_code: "Sort code",
+  ifsc: "IFSC",
+  account_type: "Account type",
+  account_holder_full_name: "Pay to the order of",
+  account_number: "Account number",
+  account_number_confirmation: "Confirm account number",
+  paypal_email_address: "PayPal email address",
+};
+
+const missingFieldsErrorMessage = (fieldNames: Set<FormFieldName>) => {
+  // Deduplicate labels: the three date-of-birth inputs share one label, and several country-specific
+  // bank fields reuse the same one too.
+  const labels = [...new Set([...fieldNames].map((fieldName) => FIELD_LABELS[fieldName]))];
+  if (labels.length === 0) return null;
+  return `Please complete the required fields below: ${labels.join(", ")}.`;
+};
+
 const PERU_DNI_DIGIT_COUNT = 9;
 // A Singapore NRIC/FIN is a leading letter (S/T/F/G/M), seven digits, and a trailing checksum
 // letter — e.g. S1234567A. Mirrors the authoritative server-side check in
@@ -222,10 +290,20 @@ export default function PaymentsPage() {
   }, [props.bank_account_details.account_number_visual]);
 
   React.useEffect(() => {
-    if ((errors?.base && errors.base.length > 0) || clientErrorMessage) {
+    const hasError = (errors?.base && errors.base.length > 0) || clientErrorMessage || errorFieldNames.size > 0;
+    if (!hasError) return;
+
+    // Prefer scrolling to the first field that actually failed validation — the seller needs to see
+    // the input, not just the banner at the top of the form. Falls back to the form itself for
+    // server-side errors that aren't tied to a specific field.
+    const firstInvalidField = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (firstInvalidField) {
+      firstInvalidField.scrollIntoView({ behavior: "smooth", block: "center" });
+      firstInvalidField.focus({ preventScroll: true });
+    } else {
       formRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [errors, clientErrorMessage]);
+  }, [errors, clientErrorMessage, errorFieldNames]);
 
   const isStreetAddressPOBox = (input: string) =>
     input
@@ -839,7 +917,18 @@ export default function PaymentsPage() {
       validateComplianceInfoFields();
     }
 
-    return errorFieldNames.size === 0;
+    if (errorFieldNames.size === 0) return true;
+
+    // Some individual checks above (P.O. Box address, phone format, Kana character sets, and so on)
+    // already set a specific message explaining what is wrong. Only fall back to the generic
+    // "these fields are missing" list when none of them did, so the save always says something.
+    setClientErrorMessage((currentMessage) => {
+      if (currentMessage) return currentMessage;
+      const message = missingFieldsErrorMessage(errorFieldNames);
+      return message ? { message } : null;
+    });
+
+    return false;
   };
 
   const handleSave = asyncVoid(async () => {
