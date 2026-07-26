@@ -91,4 +91,20 @@ describe("PriceInput", () => {
 
     expect(currencySelect().disabled).toBe(false);
   });
+
+  // `name` is a form-submission attribute, not an accessible name, so the accessibility tree
+  // reported this combobox with an empty name and a screen reader announced it unlabelled.
+  it("gives the currency selector an accessible name", () => {
+    render(
+      <PriceInput
+        currencyCode="usd"
+        cents={300}
+        ariaLabel="Amount"
+        onChange={() => {}}
+        currencyCodeSelector={{ options: ["usd", "eur"], onChange: () => {} }}
+      />,
+    );
+
+    expect(screen.getByLabelText<HTMLSelectElement>("Currency")).toBe(currencySelect());
+  });
 });
