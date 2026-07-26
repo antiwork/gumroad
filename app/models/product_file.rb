@@ -179,12 +179,14 @@ class ProductFile < ApplicationRecord
   # claim as "the buyer receives a file", and anything treating a file as proof
   # that a listing delivers something has to ask this instead (gumroad#6320).
   #
-  # `size` is filled in by `analyze` from the stored object's byte count, so a
-  # file that has a size has definitely been uploaded and no request to storage
-  # is needed. Only a file we've never successfully analyzed — which includes one
-  # uploaded seconds ago, before AnalyzeFileWorker has run — costs a lookup. A
-  # file whose object has since been purged from storage keeps its size, so that
-  # case is answered from `deleted_from_cdn_at` before the shortcut applies.
+  # `analyze_completed` is set by `analyze` only after it has successfully read
+  # the stored object, and unlike `size` it is a server-side flag rather than
+  # something the save API accepts from the client (see LinkPolicy's permitted
+  # `files` attributes, which include `size`). So a completed analysis proves the
+  # upload finished and needs no request to storage. Only a file we have never
+  # analyzed — which includes one uploaded seconds ago, before AnalyzeFileWorker
+  # has run — costs a lookup. A file whose object has since been purged keeps its
+  # flag, so that case is answered from `deleted_from_cdn_at` first.
   #
   # External links are always considered present: there is no storage object to
   # look for, and the URL is the deliverable.
@@ -192,7 +194,7 @@ class ProductFile < ApplicationRecord
     return true if external_link?
     return false unless s3?
     return false if deleted_from_cdn?
-    return true if size.present?
+    return true if analyze_completed?
 
     s3_object.exists?
   rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e

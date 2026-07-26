@@ -6,9 +6,9 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
   let(:strategy_result) { Struct.new(:status, :reasoning, keyword_init: true) }
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, name: "Test", description: "Clean description") }
-  # A file whose upload finished: `analyze` records the stored object's byte
-  # count, so a size means the object is really in storage.
-  let(:uploaded_file) { create(:product_file, size: 1_024) }
+  # A file whose upload finished: `analyze` only sets analyze_completed after it
+  # has successfully read the stored object.
+  let(:uploaded_file) { create(:product_file, analyze_completed: true) }
 
   before do
     Feature.activate(:content_moderation)
@@ -453,7 +453,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       # that row afterwards. The row must not stand in for a deliverable.
       it "still blocks when the only attached file's upload never finished" do
         stub_missing_storage_objects
-        product.product_files << create(:product_file, size: nil)
+        product.product_files << create(:product_file, analyze_completed: false)
         product.save!
 
         expect(described_class.check(product.reload, :product).passed).to eq(false)
@@ -463,14 +463,14 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         stub_missing_storage_objects
         membership = create(:membership_product, user: seller, name: "Members", description: "Join us")
         tier = membership.tiers.first
-        tier.product_files << create(:product_file, link: membership, size: nil)
+        tier.product_files << create(:product_file, link: membership, analyze_completed: false)
         tier.save!
 
         expect(described_class.check(membership.reload, :product).passed).to eq(false)
       end
 
       it "still blocks when the attached file has been purged from storage" do
-        product.product_files << create(:product_file, size: 1_024, deleted_from_cdn_at: Time.current)
+        product.product_files << create(:product_file, analyze_completed: true, deleted_from_cdn_at: Time.current)
         product.save!
 
         expect(described_class.check(product.reload, :product).passed).to eq(false)
@@ -488,7 +488,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       it "publishes when storage can't be reached to confirm the file" do
         allow_any_instance_of(ProductFile).to receive(:s3_object)
           .and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
-        product.product_files << create(:product_file, size: nil)
+        product.product_files << create(:product_file, analyze_completed: false)
         product.save!
 
         expect(described_class.check(product.reload, :product).passed).to eq(true)
@@ -499,7 +499,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       it "publishes without checking storage once more files are attached than we're willing to look up" do
         expect_any_instance_of(ProductFile).not_to receive(:s3_object)
         (described_class::MAX_FILES_CHECKED_FOR_STORAGE + 1).times do
-          product.product_files << create(:product_file, size: nil)
+          product.product_files << create(:product_file, analyze_completed: false)
         end
         product.save!
 
