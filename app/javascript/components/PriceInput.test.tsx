@@ -27,6 +27,15 @@ const effectiveOpacityWhileDisabled = (element: HTMLElement) => {
   return values.length > 0 ? Math.max(...values) : 100;
 };
 
+// The currency <select> carries name="Currency" rather than a label, so query it by that. It is
+// deliberately invisible (stretched over the currency pill as its hit area), which is why it is
+// not reachable through the usual accessible-name queries.
+const currencySelect = () => {
+  const select = document.querySelector<HTMLSelectElement>('select[name="Currency"]');
+  if (!select) throw new Error("currency selector not rendered");
+  return select;
+};
+
 describe("PriceInput", () => {
   it("shows the amount when disabled", () => {
     render(<PriceInput currencyCode="usd" cents={300} ariaLabel="Minimum amount" disabled />);
@@ -50,5 +59,36 @@ describe("PriceInput", () => {
     const input = screen.getByLabelText<HTMLInputElement>("Amount");
     expect(input.disabled).toBe(false);
     expect(input.value).toBe("9.99");
+  });
+
+  // The currency selector is an invisible <select> stretched over the currency pill. CSS opacity
+  // never blocked clicks, so before it was given the real `disabled` attribute a seller could
+  // change the currency of a field the UI presents as disabled.
+  it("disables the currency selector when disabled", () => {
+    render(
+      <PriceInput
+        currencyCode="usd"
+        cents={300}
+        ariaLabel="Minimum amount"
+        currencyCodeSelector={{ options: ["usd", "eur"], onChange: () => {} }}
+        disabled
+      />,
+    );
+
+    expect(currencySelect().disabled).toBe(true);
+  });
+
+  it("leaves the currency selector usable when enabled", () => {
+    render(
+      <PriceInput
+        currencyCode="usd"
+        cents={300}
+        ariaLabel="Amount"
+        onChange={() => {}}
+        currencyCodeSelector={{ options: ["usd", "eur"], onChange: () => {} }}
+      />,
+    );
+
+    expect(currencySelect().disabled).toBe(false);
   });
 });
