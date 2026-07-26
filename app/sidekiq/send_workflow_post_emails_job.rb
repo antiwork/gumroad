@@ -44,16 +44,36 @@ class SendWorkflowPostEmailsJob
 
   private
     def enqueue_email_job(member:, type:, id:)
+      # The id columns come from an aggregate over a JSON_TABLE join, and a row can be
+      # filtered out of that join even though the member still qualifies (see the comment
+      # on the `with_ids` select in AudienceMember.filter). If that happens the id arrives
+      # nil and the worker below would have nothing to send to, so fall back to reading it
+      # out of the same `details` JSON the timestamps are already read from.
       if type == :purchase
-        created_at = Time.zone.parse(member.details["purchases"].find { _1["id"] == id }["created_at"])
+        purchase = member.details["purchases"].find { _1["id"] == id }
+        return log_unresolvable_recipient(member:, type:) if purchase.nil?
+        created_at = Time.zone.parse(purchase["created_at"])
         SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, id, nil, nil)
       elsif type == :follower
+        id ||= member.details.dig("follower", "id")
+        return log_unresolvable_recipient(member:, type:) if id.nil?
         created_at = Time.zone.parse(member.details.dig("follower", "created_at"))
         SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, id, nil)
       elsif type == :affiliate
-        created_at = Time.zone.parse(member.details["affiliates"].find { _1["id"] == id }["created_at"])
+        affiliates = member.details["affiliates"] || []
+        id ||= affiliates.filter_map { _1["id"] }.max
+        affiliate = affiliates.find { _1["id"] == id }
+        return log_unresolvable_recipient(member:, type:) if affiliate.nil?
+        created_at = Time.zone.parse(affiliate["created_at"])
         SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, nil, id)
       end
+    end
+
+    # Skipping a member silently is how the follower/bought-product bug stayed invisible for
+    # so long, so leave a trace whenever we cannot resolve who to send to.
+    def log_unresolvable_recipient(member:, type:)
+      Rails.logger.error("[#{self.class.name}] installment_id=#{@post.id} could not resolve a #{type} recipient for audience member #{member.id}; skipping")
+      nil
     end
 
     # Tunable via Redis so a stuck job can be unblocked without a deploy.
