@@ -138,11 +138,24 @@ class Ai::AnthropicClient
   #
   # One failure gets an extra recovery step: when every streamed attempt delivered a tool call
   # with corrupted JSON (the gateway can lose input_json_delta fragments in transit), the request
-  # is replayed once WITHOUT streaming — see #buffered_fallback. This only happens when nothing
-  # was yielded yet, so the caller never sees doubled output.
+  # is replayed once WITHOUT streaming — see #buffered_fallback.
+  #
+  # That replay regenerates the turn from the start, so it must not leave earlier text on the
+  # seller's screen. When nothing has been yielded there is nothing to clean up. When text HAS
+  # been yielded, the caller can still opt in by passing `on_discard_streamed_text`: a callable
+  # that erases everything streamed so far (the store agent already has one — it discards tool-use
+  # preamble from the UI on every normal tool call). Without that callable the honest error
+  # surfaces instead, because silently replaying would duplicate the reply on screen.
+  #
+  # This distinction is the difference between the fallback running and never running at all: a
+  # tool-use turn usually streams a sentence of preamble ("Let me update that for you…") before the
+  # tool call, so in production the corrupted-tool-call failure nearly always arrives with text
+  # already yielded.
+  #
+  # @param on_discard_streamed_text [#call, nil] erases text already streamed to the seller
   # @yieldparam text [String] a chunk of assistant text
   # @return [Result]
-  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, &on_text)
+  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, on_discard_streamed_text: nil, &on_text)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
     yielded_any = false
 
@@ -198,9 +211,17 @@ class Ai::AnthropicClient
     rescue UnreadableToolCallError => e
       # Every streamed attempt "completed" yet delivered a corrupted tool call — retrying the same
       # lossy channel again wouldn't help (production showed all three attempts failing this way
-      # across different hosts). But once the seller has already seen part of the reply, silently
-      # re-running the request would double their output, so the honest failure surfaces instead.
-      raise if yielded_any
+      # across different hosts), so the buffered replay is the only remaining recovery.
+      #
+      # The replay regenerates the whole turn, so anything already on the seller's screen has to go
+      # first. If the caller gave us a way to erase it, use that and recover; otherwise the honest
+      # failure surfaces rather than doubling the reply on screen.
+      raise if yielded_any && on_discard_streamed_text.nil?
+
+      if yielded_any
+        on_discard_streamed_text.call
+        yielded_any = false
+      end
 
       buffered_fallback(system:, messages:, tools:, max_tokens:, original_error: e, &on_text)
     end
@@ -218,8 +239,11 @@ class Ai::AnthropicClient
     # connect/write/read timeouts as every other request, so a web request can't hang here.
     #
     # The assembled text (the model regenerates the whole turn, so there may be preamble text) is
-    # handed to the caller's block in one piece — nothing was streamed before the fallback fired,
-    # so this is the first and only time the caller sees it.
+    # handed to the caller's block in one piece — nothing is on screen when the fallback fires, so
+    # this is the first and only time the caller sees it. Two kinds of replay text are withheld,
+    # both because the caller is going to throw them away the moment it inspects the result:
+    # a truncated turn, and a tool-use turn (whose text is preamble, not the answer). Yielding
+    # either would flash it onto the seller's screen for an instant before it is cleared again.
     #
     # If the buffered replay fails too, the seller-facing error must stay as clear as before the
     # fallback existed, so the ORIGINAL unreadable-tool-call error is what surfaces.
@@ -240,12 +264,13 @@ class Ai::AnthropicClient
         raise original_error
       end
 
-      # A buffered replay can hit the token cap itself. The caller treats a "max_tokens" turn as
-      # unusable — it tells the UI to discard whatever was shown and streams its own truncation
-      # notice instead — so yielding the incomplete text here would only flash a partial answer on
-      # the seller's screen a moment before it gets thrown away. Hand back the result and let the
-      # caller decide what to show.
-      on_text&.call(result.text) if result.text.present? && result.stop_reason != "max_tokens"
+      # A buffered replay can hit the token cap itself, and it can come back as a tool-use turn.
+      # The caller discards the text in both cases — a "max_tokens" turn is unusable and gets
+      # replaced by a truncation notice, and a tool-use turn's text is preamble that gets cleared
+      # before the real reply — so yielding it here would only flash it onto the seller's screen a
+      # moment before it is thrown away. Hand back the result and let the caller decide what to show.
+      discarded_by_caller = result.stop_reason == "max_tokens" || result.tool_uses.present?
+      on_text&.call(result.text) if result.text.present? && !discarded_by_caller
       result
     end
 
