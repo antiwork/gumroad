@@ -170,6 +170,30 @@ module User::Compliance
     user_compliance_infos.alive.last
   end
 
+  # How many of the seller's most recent compliance revisions we scan when asking whether they
+  # ever gave us a P.O. Box. Capped so this stays a cheap two-column read even for a seller with
+  # a long compliance history.
+  PO_BOX_ADDRESS_HISTORY_REVISIONS_CHECKED = 25
+
+  # Whether a P.O. Box appears anywhere in the seller's recent address history, individual or
+  # business. We look at the history rather than only the current record because our payment
+  # partner rejects a P.O. Box on the account, so a seller in that situation has usually already
+  # replaced it — and that replacement is exactly what makes their verification document stop
+  # matching the account. See UserComplianceInfoRequest for the full deadlock.
+  #
+  # Memoized per instance: the dashboard and settings pages ask this once per outstanding
+  # compliance request, and the answer cannot change within a single request.
+  def po_box_in_address_history?
+    return @po_box_in_address_history unless @po_box_in_address_history.nil?
+
+    @po_box_in_address_history = user_compliance_infos
+                                   .order(id: :desc)
+                                   .limit(PO_BOX_ADDRESS_HISTORY_REVISIONS_CHECKED)
+                                   .pluck(:street_address, :business_street_address)
+                                   .flatten
+                                   .any? { |address| PoBoxAddress.match?(address) }
+  end
+
   SUPPORTED_COUNTRIES.each do |country|
     define_method("signed_up_from_#{
       country.common_name

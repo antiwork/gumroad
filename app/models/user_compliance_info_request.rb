@@ -84,8 +84,32 @@ class UserComplianceInfoRequest < ApplicationRecord
     bank_account.user.user_compliance_info_requests.requested.where(field_needed: UserComplianceInfoFields::BANK_ACCOUNT).find_each(&:mark_provided!)
   end
 
+  # Our payment partner will not accept a P.O. Box in the address on a payout account. A seller
+  # whose only registered address IS a P.O. Box (common for rural sellers with no civic street
+  # address) therefore has to put something else on the account — and then every document they
+  # own, from business registration to tax notices, still shows the P.O. Box. The document is
+  # rejected for not matching the account, and the two rules cancel each other out: the address
+  # allowed on the account can never be the address printed on the document.
+  #
+  # The generic mismatch copy tells these sellers to "correct the address or upload a matching
+  # document", both of which are impossible, so they re-upload the same file indefinitely. When
+  # we can see a P.O. Box in the seller's own address history, say plainly that re-uploading
+  # will not work and send them to support, who can work out an accepted address and document
+  # for their situation.
+  ADDRESS_MISMATCH_ERROR_CODES = %w[
+    verification_document_address_mismatch
+    verification_failed_address_match
+  ].freeze
+
+  PO_BOX_ADDRESS_DEADLOCK_MESSAGE = "The address on your document doesn't match the address on " \
+    "your account. Your registered address is a P.O. Box, which our payment partner can't accept " \
+    "on the account itself, so a document showing that P.O. Box will never match and uploading " \
+    "it again won't help. Please contact support and we'll sort out together which address and " \
+    "document will work for you."
+
   def verification_error_message
     return nil if verification_error.blank?
+    return PO_BOX_ADDRESS_DEADLOCK_MESSAGE if po_box_address_deadlock?
     return verification_error["message"] if verification_error["message"]
 
     case verification_error["code"]
@@ -179,4 +203,20 @@ class UserComplianceInfoRequest < ApplicationRecord
       "We have identified holding companies with significant percentage ownership. Upload a Memorandum of Association for each of the holding companies."
     end
   end
+
+  # True when an address-mismatch rejection has hit a seller who has, at some point, given us a
+  # P.O. Box as their address. That combination is the deadlock described above: the P.O. Box was
+  # rejected on the account, so the account now carries a different address, and the document the
+  # seller keeps uploading still shows the P.O. Box.
+  def self.po_box_address_deadlock?(user:, error_code:)
+    return false unless error_code.in?(ADDRESS_MISMATCH_ERROR_CODES)
+    return false if user.blank?
+
+    user.po_box_in_address_history?
+  end
+
+  private
+    def po_box_address_deadlock?
+      self.class.po_box_address_deadlock?(user:, error_code: verification_error["code"])
+    end
 end
