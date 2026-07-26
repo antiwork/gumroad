@@ -53,7 +53,6 @@ class RecordProductFileMissingFromStorageJob
     file = ProductFile.alive.find_by(id: product_file_id)
     return if file.nil?
     return unless self.class.eligible?(file)
-    return if file.s3_object.exists?
     # The same accented filename can be encoded two valid ways in Unicode, and S3
     # compares keys byte-for-byte, so a key persisted in one normalization form
     # misses an object stored under the other — `exists?` says missing for a file
@@ -63,6 +62,17 @@ class RecordProductFileMissingFromStorageJob
     # row would be wrong and, since nothing revisits the marker, wrong forever.
     # For plain-ASCII keys there are no variants and this makes no S3 call.
     return if object_exists_under_another_unicode_form?(file)
+    # The key we actually persisted is asked about LAST, so the answer we act on
+    # is the newest one we have and the write happens immediately after it. An
+    # upload that finishes between the last lookup and the write still gets marked
+    # missing — that race is inherent to checking and then writing — but ordering
+    # it this way keeps the gap at one request, the same as it was before the
+    # variant check existed, instead of leaving up to two more round trips between
+    # the canonical answer and the write. (Cost of the order: for an accented
+    # filename whose object really is present under the persisted key, we now pay
+    # the variant lookups first. That is a handful of rows, and a wasted lookup is
+    # the cheap side of this trade — the expensive side is a permanent wrong mark.)
+    return if file.s3_object.exists?
 
     # `mark_deleted_from_cdn` uses `update_column`, which skips paper_trail, and
     # nothing ever clears the marker. So without a log line there is no record of

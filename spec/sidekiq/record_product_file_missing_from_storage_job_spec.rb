@@ -101,6 +101,29 @@ describe RecordProductFileMissingFromStorageJob do
       expect(file.reload.deleted_from_cdn?).to eq(false)
     end
 
+    # Checking storage and then writing always leaves a window in which an upload
+    # can finish, and the write is permanent, so the window has to stay as narrow
+    # as it was before the variant check was added. That means the key we actually
+    # persisted is the LAST thing asked about, immediately before the write, rather
+    # than the first with two more round trips behind it.
+    it "asks about the persisted key last, immediately before writing" do
+      file = old_unanalyzed_file
+      questions_asked = []
+      allow(S3KeyUnicodeNormalization).to receive(:existing_variant) do
+        questions_asked << :unicode_variants
+        nil
+      end
+      allow_any_instance_of(ProductFile).to receive(:s3_object) do
+        questions_asked << :persisted_key
+        double("s3_object", exists?: false)
+      end
+      allow_any_instance_of(ProductFile).to receive(:mark_deleted_from_cdn) { questions_asked << :write }
+
+      described_class.new.perform(file.id)
+
+      expect(questions_asked).to eq([:unicode_variants, :persisted_key, :write])
+    end
+
     # The variant guard must not cost an extra storage request for the ordinary
     # case. A plain-ASCII key has no alternative normalization forms, so the real
     # module answers without asking storage at all — pinned here without the stub
