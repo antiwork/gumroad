@@ -24,7 +24,13 @@ const inputGroupVariants = cva(
         // "Minimum amount" mirror of the price) renders that value at 30% opacity, which sellers
         // read as an empty field. Signal "not editable" with a tinted background and the cursor
         // instead, so the value itself stays at full contrast.
-        true: "cursor-not-allowed bg-active-bg",
+        //
+        // The background tint is a translucent overlay, and Windows High Contrast mode (and any
+        // other forced-colours mode) replaces author background colours with a system colour, so
+        // the tint disappears there and a disabled group would look identical to an editable one.
+        // A dashed border survives forced colours, so the state stays visible without relying on
+        // colour alone.
+        true: "cursor-not-allowed bg-active-bg forced-colors:border-dashed",
         false: "",
       },
       readOnly: {

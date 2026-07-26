@@ -71,6 +71,10 @@ export const PriceInput = React.forwardRef<
             {getLongCurrencySymbol(currencyCode)}
             <TypeSafeOptionSelect
               name="Currency"
+              // The select is invisible, so without an accessible name the accessibility tree
+              // exposed this combobox with an empty name. `name` alone is a form-submission
+              // attribute, not an accessible name.
+              aria-label="Currency"
               value={currencyCode}
               onChange={currencyCodeSelector.onChange}
               options={currencyCodeSelector.options.map((currencyCode) => ({
