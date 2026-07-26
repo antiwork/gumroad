@@ -219,8 +219,14 @@ class ContentModeration::ModerateRecordService
       return true if record.native_type.in?([Link::NATIVE_TYPE_CALL, Link::NATIVE_TYPE_COMMISSION])
       return true if gumroad_fulfilled_community_integration?
 
-      has_deliverable_file?(record) ||
-        record.alive_variants.any? { |variant| has_deliverable_file?(variant) } ||
+      # One budget for the whole product, not one per file list. A product
+      # carries its own files and a separate list per variant, so giving each
+      # list its own budget would multiply the worst case by the number of
+      # variants a single save can contain.
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + STORAGE_CHECK_TIME_BUDGET_SECONDS
+
+      has_deliverable_file?(record, deadline:) ||
+        record.alive_variants.any? { |variant| has_deliverable_file?(variant, deadline:) } ||
         has_readable_body_content?(record)
     end
 
@@ -267,10 +273,18 @@ class ContentModeration::ModerateRecordService
     # instead of a bounded number of files, and no attached file is excluded from
     # the check by its position in the list.
     #
+    # An exhausted budget still fails the check, which is deliberate: running out
+    # of time means we could not prove there is a deliverable, and passing on
+    # "we don't know" would hand back exactly the bypass this method exists to
+    # close, since the caller decides how many rows the check has to get through.
+    # What the budget changes is that exhaustion now takes genuinely slow storage
+    # responses rather than being guaranteed by row count alone, and when it does
+    # happen we say so in the log instead of failing silently.
+    #
     # This can only decide how cheaply an honest seller is confirmed; it can never
     # let an empty listing through, because passing still requires an object to
     # actually be in storage.
-    def has_deliverable_file?(owner)
+    def has_deliverable_file?(owner, deadline:)
       unverifiable_from_row = []
 
       owner.alive_product_files.each do |file|
@@ -280,13 +294,18 @@ class ContentModeration::ModerateRecordService
         end
       end
 
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + STORAGE_CHECK_TIME_BUDGET_SECONDS
-
       unverifiable_from_row
         .sort_by { -_1.id }
-        .each do |file|
+        .each_with_index do |file, checked|
+          if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+            Rails.logger.warn(
+              "ContentModeration: storage check budget spent after #{checked} of " \
+              "#{unverifiable_from_row.size} unverifiable files on #{owner.class.name} ##{owner.id}"
+            )
+            break
+          end
+
           return true if file.stored_file_present?
-          break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
         end
 
       false
