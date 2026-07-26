@@ -174,7 +174,7 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
         ErrorNotifier.notify(e)
       end
 
-      render json: result, status: result[:success] ? :ok : :unprocessable_entity
+      render json: public_action_result(result), status: result[:success] ? :ok : :unprocessable_entity
     rescue => e
       # The executor only rescues expected validation failures; log + report anything unexpected from
       # a real store mutation (e.g. ActiveRecord::StatementInvalid, or a RecordNotFound raised inside
@@ -186,6 +186,12 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
   end
 
   private
+    # The executor includes fixed failure metadata for the web request's structured log. It is not
+    # part of either client API, so mobile strips it just as the web controller does.
+    def public_action_result(result)
+      result.except(:failure_reason, :failure_status)
+    end
+
     def seller
       current_resource_owner
     end

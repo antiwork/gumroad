@@ -263,7 +263,7 @@ const AffiliatedPage = ({
       {isShowingGlobalAffiliates && globalAffiliatesData.global_affiliate_id != null ? (
         <GlobalAffiliates
           globalAffiliateId={globalAffiliatesData.global_affiliate_id}
-          totalSales={globalAffiliatesData.global_affiliate_sales ?? "$0"}
+          totalSales={globalAffiliatesData.global_affiliate_sales}
           cookieExpiryDays={globalAffiliatesData.cookie_expiry_days}
           affiliateQueryParam={globalAffiliatesData.affiliate_query_param}
         />

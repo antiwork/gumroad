@@ -100,6 +100,17 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
     result = ::Ai::StoreAgentActionExecutor.new(seller: current_seller, pundit_user:)
       .execute(type:, params: action_params)
 
+    unless result[:success]
+      # About a quarter of confirmed actions come back 422, but the status alone is a bucket —
+      # permission denials, unknown-key rejections, and API validation failures all land here.
+      # Stash only the executor's fixed category, numeric upstream status, and catalog-resolved
+      # endpoint. The API message can contain reflected seller input such as a callback URL with
+      # credentials, so it must remain in the response and never reach long-lived logs.
+      @agent_action_failure_reason = result[:failure_reason]
+      @agent_action_failure_status = result[:failure_status]
+      @agent_action_endpoint = ::Ai::StoreAgentApiCatalog.find(action_params["endpoint"])&.id
+    end
+
     # Recording the applied status must not mask a store change that already committed: if the
     # bookkeeping write fails after `execute` succeeded, returning an error would prompt the seller
     # to retry the confirmation — running the action a second time (a duplicate discount, refund,
@@ -112,7 +123,7 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
       ErrorNotifier.notify(e)
     end
 
-    render json: result, status: result[:success] ? :ok : :unprocessable_entity
+    render json: public_action_result(result), status: result[:success] ? :ok : :unprocessable_entity
   rescue ActiveRecord::RecordNotFound
     # Re-raise so the controller-level rescue_from renders the JSON 404 — without this the generic
     # rescue below would report an unknown conversation id as a 500.
@@ -126,6 +137,22 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
   end
 
   private
+    # Attach the confirmed-action failure details (set in #execute) to this request's structured
+    # log line, so the steady ~25% of confirmations that return 422 can be broken down by cause
+    # and endpoint in Elasticsearch instead of being one opaque bucket.
+    def append_info_to_payload(payload)
+      super
+      payload[:agent_action_failure_reason] = @agent_action_failure_reason if @agent_action_failure_reason
+      payload[:agent_action_failure_status] = @agent_action_failure_status if @agent_action_failure_status
+      payload[:agent_action_endpoint] = @agent_action_endpoint if @agent_action_endpoint
+    end
+
+    # failure_reason and failure_status are server-only telemetry. Keeping them out of the response
+    # preserves the existing web/mobile contract and avoids exposing logging details to clients.
+    def public_action_result(result)
+      result.except(:failure_reason, :failure_status)
+    end
+
     # Runs before throttling so a team member denied the Agent tab can't burn the seller-scoped
     # rate-limit quota for users who are allowed to use it.
     def authorize_store_agent

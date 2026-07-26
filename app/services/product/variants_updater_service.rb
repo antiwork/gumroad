@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -31,7 +31,10 @@ class Product::VariantsUpdaterService
   # mutated anything, attached to every blocked-save notification.
   # id_mappings: per-request accumulator of client id → canonical server id for
   # newly created variants and pages, returned to the editor after the save.
-  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil)
+  # deletion_audit_context: :actor_user_id, :request_id and :revision_token for
+  # the deletion audit trail (ProductVariantDeletionAudit), threaded down rather
+  # than read from a global so these services still work off-request.
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {})
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
@@ -42,6 +45,7 @@ class Product::VariantsUpdaterService
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
+    @deletion_audit_context = deletion_audit_context || {}
   end
 
   def perform
@@ -60,7 +64,8 @@ class Product::VariantsUpdaterService
         preserved_rich_content_ids:,
         rewrite_budget:,
         deletion_guard_diagnostics:,
-        id_mappings:
+        id_mappings:,
+        deletion_audit_context:
       )
       variant_category = variant_category_updater.perform
       keep_categories << variant_category if category[:id].present?
@@ -70,6 +75,13 @@ class Product::VariantsUpdaterService
     categories_to_delete.each do |variant_category|
       next if variant_category.has_alive_grouping_variants_with_purchases?
 
+      # Captured before the sweep: these are the versions whose removal this
+      # operation authorises, and the same list the guard checks. Read afterwards
+      # it would still be accurate today (the sweep does not soft-delete them)
+      # but that is an accident of the missing `dependent:` option, not something
+      # the audit should rely on.
+      affected_variant_external_ids = variant_category.alive_variants.map(&:external_id)
+
       Product::VariantCategoryUpdaterService.ensure_deletion_intent!(
         product:,
         variants: variant_category.alive_variants.to_a,
@@ -77,6 +89,30 @@ class Product::VariantsUpdaterService
         diagnostics: deletion_guard_diagnostics
       )
       variant_category.mark_deleted!
+
+      # Marking the grouping deleted does NOT soft-delete its versions —
+      # VariantCategory's `has_many :variants` has no `dependent:` option — so
+      # any versions alive here stay alive under a deleted grouping. Two
+      # consequences for the audit:
+      #
+      # 1. `alive_child_variant_count` records that, so the no-cascade behaviour
+      #    is visible in data rather than something you have to know to look for.
+      # 2. Intent has to be judged against the versions this sweep AUTHORISED
+      #    removing (`affected_variant_external_ids`), not against soft-deleted
+      #    rows — there are none here. Judging it from the deleted set would
+      #    report a sweep the seller explicitly confirmed as omission-driven.
+      ProductVariantDeletionAudit.record_deletion(
+        actor_user_id: deletion_audit_context[:actor_user_id],
+        product_id: product.id,
+        route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT,
+        deleted_variant_category_external_ids: [variant_category.external_id],
+        affected_variant_external_ids: affected_variant_external_ids,
+        confirmed_removed_variant_ids:,
+        alive_child_variant_count: variant_category.variants.alive.count,
+        revision_token: deletion_audit_context[:revision_token],
+        correlation_id: deletion_audit_context[:correlation_id],
+        request_id: deletion_audit_context[:request_id],
+      )
     end
 
     begin

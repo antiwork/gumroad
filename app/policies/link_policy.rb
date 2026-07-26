@@ -124,6 +124,11 @@ class LinkPolicy < ApplicationPolicy
         # canonical server id so the next save updates the created variant
         # instead of re-creating it.
         :client_id,
+        # The variant's snapshot timestamp as served to the editor, echoed
+        # back so the stale-write guard can reject a save built from an
+        # outdated snapshot (see Product::StaleContentWriteGuard). Never
+        # written to the record.
+        :updated_at,
         :name,
         :description,
         :price_difference_cents,

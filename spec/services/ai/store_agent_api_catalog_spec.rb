@@ -53,6 +53,15 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  describe ".manifest" do
+    it "lists the allowed create_email audience values before the model proposes the write" do
+      manifest = described_class.manifest(:write)
+
+      expect(manifest).to include("create_email")
+      expect(manifest).to include("audience must be one of: all, audience, customers, seller, followers, follower, product")
+    end
+  end
+
   describe "profile custom HTML endpoints" do
     it "exposes a targeted-edit write so an existing page never has to be fully regenerated" do
       endpoint = described_class.find("edit_user_custom_html")

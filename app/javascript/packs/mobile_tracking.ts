@@ -65,6 +65,12 @@ if (enabled) {
         valueIsSingleUnit: getIsSingleUnitCurrency(typia.assert<CurrencyCode>(result.currency_type)),
         quantity: result.quantity,
         tax: result.non_formatted_seller_tax_amount,
+        ...(result.buyer_presentment_currency
+          ? {
+              buyer_presentment_currency: result.buyer_presentment_currency,
+              buyer_presentment_value: result.buyer_presentment_value,
+            }
+          : {}),
       });
       if (has_receipt_third_party_analytics)
         addThirdPartyAnalytics({

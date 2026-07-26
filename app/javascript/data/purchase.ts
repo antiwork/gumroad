@@ -218,6 +218,10 @@ export type ConfirmedPurchaseResponse = {
   sales_tax_label: string | null;
   has_sales_tax_or_shipping_to_show: boolean;
   total_price_including_tax_and_shipping: string;
+  // Present only when the sale was charged in the buyer's own currency.
+  buyer_presentment_currency?: string;
+  buyer_presentment_total_cents?: number;
+  buyer_presentment_value?: number | null;
   quantity: number;
   show_quantity: boolean;
   shipped?: boolean;

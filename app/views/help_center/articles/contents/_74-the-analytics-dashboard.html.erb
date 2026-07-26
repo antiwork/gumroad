@@ -357,6 +357,18 @@
         <td>Sent Abandoned Cart Email?</td>
         <td>1 if an <a href="131-using-workflows-to-send-automated-updates#Send-abandoned-cart-emails-UYdro">abandoned cart email</a> was sent for that purchase's cart, otherwise 0.</td>
       </tr>
+      <tr>
+        <td>Buyer Currency</td>
+        <td>The currency the buyer's card was actually charged in, for sales <a href="46-what-currency-does-gumroad-use">charged in the customer's local currency</a> instead of USD. Blank when the sale was charged in USD.</td>
+      </tr>
+      <tr>
+        <td>Buyer Total</td>
+        <td>The total the buyer was charged, in the currency shown in the Buyer Currency column. Blank when the sale was charged in USD. Every other amount column in this CSV stays in USD, so use this one when you are reconciling against what your customer sees on their statement.</td>
+      </tr>
+      <tr>
+        <td>Buyer Refunded Total</td>
+        <td>The total refunded to the buyer, in the currency shown in the Buyer Currency column. Blank when the sale was charged in USD, and also blank if a refund on the sale was issued before we started recording refund amounts in the buyer's currency, because in that case the total cannot be worked out. Use the Partial Refund ($) and Refunded? columns for the USD picture.</td>
+      </tr>
     </tbody>
   </table>
   <p>You can filter a specific column for a more granular view of your data. Whether you are using Excel, Google Sheets, or Numbers on Mac, you can use the same filtering techniques to single out a specific data point to find exactly what you're looking for.</p>
