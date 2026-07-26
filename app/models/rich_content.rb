@@ -176,12 +176,35 @@ class RichContent < ApplicationRecord
         end
 
         blocked = hrefs.compact.filter_map do |href|
-          scheme = href.to_s.strip[/\A([a-zA-Z][a-zA-Z0-9+.-]*):/, 1]&.downcase
+          scheme = browser_canonicalized_scheme(href)
           scheme if scheme.in?(BLOCKED_HREF_SCHEMES)
         end
 
         blocked + collect_blocked_hrefs(node["content"])
       end
+    end
+
+    # Returns the scheme a BROWSER will see, not the scheme the raw string appears to have.
+    #
+    # Browsers do not read a URL literally. Before parsing it they discard any leading and trailing
+    # C0 control characters and spaces, and they delete every tab, newline, and carriage return from
+    # anywhere inside the string (this is the "URL cleanup" step in the WHATWG URL standard,
+    # https://url.spec.whatwg.org/#url-parsing). So `"\u0001javascript:alert(1)"` and
+    # `"java\tscript:alert(1)"` both load as plain `javascript:alert(1)` once the browser is done
+    # with them, and clicking such a link runs the script.
+    #
+    # Ruby's `String#strip` only removes ASCII whitespace and NUL, and it never touches the middle
+    # of the string, so matching a scheme against the stored value would let both of the examples
+    # above through this validation and then hand them to a browser that happily executes them.
+    # Doing the same cleanup here first is what makes the stored value and the loaded value agree.
+    URL_CLEANUP_LEADING_TRAILING = /\A[\x00-\x20]+|[\x00-\x20]+\z/
+    URL_CLEANUP_TAB_OR_NEWLINE = /[\t\n\r]/
+    def browser_canonicalized_scheme(href)
+      canonicalized = href.to_s
+        .gsub(URL_CLEANUP_LEADING_TRAILING, "")
+        .gsub(URL_CLEANUP_TAB_OR_NEWLINE, "")
+
+      canonicalized[/\A([a-zA-Z][a-zA-Z0-9+.-]*):/, 1]&.downcase
     end
 
     def embedded_files_belong_to_product

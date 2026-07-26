@@ -217,6 +217,37 @@ describe RichContent do
     it "is case-insensitive about the blocked scheme" do
       expect(build_content("JavaScript:alert(1)")).not_to be_valid
     end
+
+    # A browser throws away leading control characters and strips tabs/newlines from anywhere in a
+    # URL before parsing it, so all of these load as plain `javascript:alert(1)` and run the script
+    # when clicked. The validation has to clean the value the same way the browser will, otherwise
+    # an API write can store a link that looks inert here and executes in the buyer's browser.
+    it "rejects a blocked scheme hidden behind characters a browser strips from the URL" do
+      [
+        "\u0000javascript:alert(1)",
+        "\u0001javascript:alert(1)",
+        "\u001Fjavascript:alert(1)",
+        " \tjavascript:alert(1)",
+        "\njavascript:alert(1)",
+        "java\tscript:alert(1)",
+        "java\nscript:alert(1)",
+        "java\rscript:alert(1)",
+        "j\ta\nv\ra\rscript:alert(1)",
+      ].each do |href|
+        content = build_content(href)
+        expect(content).not_to be_valid, "expected #{href.inspect} to be rejected"
+        expect(content.errors.full_messages.join).to include("URL schemes")
+      end
+    end
+
+    it "rejects the same hidden scheme on an image's click-through link" do
+      content = build(:rich_content, entity: product, description: [{ "type" => "image", "attrs" => { "src" => "https://example.com/a.png", "link" => "\u0001java\tscript:alert(1)" } }])
+      expect(content).not_to be_valid
+    end
+
+    it "still allows a custom scheme that merely has surrounding whitespace" do
+      expect(build_content("  goodsnooze://activate?key=__license_key__  ")).to be_valid
+    end
   end
 
   describe "#has_posts?" do
