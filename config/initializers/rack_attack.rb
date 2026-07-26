@@ -183,11 +183,67 @@ class Rack::Attack
   throttle_by_ip path: "/discover",                       requests: 60, period: 30.seconds # Initial: 120rpm, Max: 600 requests/9 hours
   throttle_by_ip path: "/discover_search",                requests: 60, period: 30.seconds # Initial: 120rpm, Max: 600 requests/9 hours
   throttle_by_ip path: "/offer_codes/compute_discount",   requests: 60, period: 30.seconds # Initial: 120rpm, Max: 600 requests/9 hours
-  throttle_by_ip path: "/purchases",                      requests: 40, period: 60.seconds # Initial: 40rpm,  Max: 200 requests/9 hours
   throttle_by_ip path: "/stripe/setup_intents",           requests: 40, period: 60.seconds # Initial: 40rpm,  Max: 200 requests/9 hours
   throttle_by_ip path: "/settings/credit_card",           requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
 
-  throttle_by_ip_for_period path: "/purchases", requests: 50, period: 1.hour
+  # Checkout. Buyers submit orders to `POST /orders` (OrdersController#create) and
+  # `POST /orders/prepare`. There is no `POST /purchases` route — `PurchasesController`
+  # has no `create` action — so the two `/purchases` rules that used to live here were
+  # matching a path nothing posts to, leaving checkout entirely unthrottled. These
+  # replace them at the same limits, pointed at the routes checkout actually uses.
+  #
+  # Matched by regex because checkout is mounted on several hosts/prefixes
+  # (gumroad.com, custom domains, and the short domain all include
+  # `product_info_and_purchase_routes`) and the route accepts a format suffix, so an
+  # exact string compare on "/orders" would miss `/orders.json` and every
+  # non-primary-host variant. Keyed on IP alone so all variants share one counter.
+  CHECKOUT_ORDER_PATH = %r{\A/orders(?:/prepare)?(?:\.[^/]+)?\z}
+  # Total checkout attempts allowed per product per hour, across all source IPs.
+  CHECKOUT_PER_PRODUCT_HOURLY_LIMIT = 600
+  # Initial: 40rpm, Max: 200 requests/9 hours
+  throttle_with_exponential_backoff(name: "checkout_orders/ip", requests: 40, period: 60.seconds) do |req|
+    req.remote_ip if req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
+  end
+  throttle("checkout_orders/ip/period", limit: 50, period: 1.hour) do |req|
+    req.remote_ip if req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
+  end
+
+  # Per-product checkout cap, on top of the per-IP rules above.
+  #
+  # The per-IP limits do nothing against a proxy pool: an operator renting thousands of
+  # residential IPs stays under every per-IP budget while hammering one product. That is
+  # exactly how a $0 product was used as an open email relay — each checkout sends the
+  # buyer's address a receipt from our transactional sending domain, so a walked list of
+  # scraped addresses turns free checkouts into bulk unsolicited mail on our reputation
+  # and with our branding.
+  #
+  # So cap total checkout attempts per product per hour, keyed on the product permalink
+  # rather than the source IP. 600/hour is far above anything organic (a genuine product
+  # doing 600 sales in an hour is a launch spike we would hear about, and it recovers on
+  # the next window) and far below the ~16-29K/hour this abuse sustained.
+  #
+  # The limit is a proc rather than a literal so it is read per request instead of frozen
+  # at boot — that lets specs exercise the throttle without issuing 600 real checkouts,
+  # and lets the cap be lowered in an incident without a deploy.
+  #
+  # No exponential-backoff tiers here: with a 1-hour base period the derived rpm is 10, so
+  # a level-2 tier would allow only 20 requests per 64 seconds — stricter than the base
+  # limit, and it would block a legitimate burst (the same trap the media-upload and walks
+  # throttles above document).
+  throttle("checkout_orders/product", limit: ->(_req) { CHECKOUT_PER_PRODUCT_HOURLY_LIMIT }, period: 1.hour) do |req|
+    if req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
+      # A cart can hold several products; key on the first permalink so a mixed cart can't
+      # dodge the cap by padding itself with other products. Requests with no identifiable
+      # product fall through to the per-IP rules above rather than sharing one global bucket.
+      line_items = req.params["line_items"]
+      line_items = line_items.values if line_items.respond_to?(:values) && !line_items.is_a?(Array)
+      if line_items.is_a?(Array)
+        line_items.filter_map { |item| item["permalink"].presence if item.respond_to?(:[]) && !item.is_a?(String) }.first
+      end
+    end
+  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+    nil
+  end
 
   # Help Center contact form. Each submission sends an email into the support
   # inbox, so without a limit a single IP could flood support (and burn email

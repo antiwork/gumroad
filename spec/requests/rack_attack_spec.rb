@@ -500,4 +500,154 @@ describe "Rack::Attack throttle", type: :request do
       end
     end
   end
+
+  describe "POST /orders checkout throttles" do
+    # Real free products: OrdersController#validate_order_request looks each line item's
+    # permalink up before the request reaches the app, and a nonexistent permalink makes
+    # the CAPTCHA-skip check blow up on nil — which would mask what these specs measure.
+    let!(:product) { create(:product, price_cents: 0) }
+    let!(:other_product) { create(:product, price_cents: 0) }
+
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    def checkout(path: "/orders", permalinks: [product.unique_permalink], ip:, uid: "u1")
+      line_items = permalinks.each_with_index.map do |permalink, i|
+        { uid: "#{uid}-#{i}", permalink:, perceived_price_cents: "0" }
+      end
+      post path, params: { line_items: }, headers: { "HTTP_CF_CONNECTING_IP" => ip }
+    end
+
+    # The route these throttles must cover. Guards against the regression this replaced:
+    # the old rules pointed at "/purchases", which has no POST route, so checkout was
+    # entirely unthrottled. If checkout ever moves again, this fails loudly.
+    it "has no POST route for the legacy /purchases checkout path" do
+      expect { Rails.application.routes.recognize_path("/purchases", method: :post) }
+        .to raise_error(ActionController::RoutingError)
+    end
+
+    it "throttles a single IP past 40 order submissions/min" do
+      travel_to(Time.current) do
+        40.times do |i|
+          checkout(ip: "10.5.0.1", uid: "u#{i}")
+          expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+        end
+
+        checkout(ip: "10.5.0.1", uid: "over")
+        expect(response.status).to eq(429)
+      end
+    end
+
+    context "per-product cap" do
+      # Exercising the real 600/hour cap would mean issuing 600 checkouts per example, so
+      # stub the limit down. The throttle reads it per request precisely so this works.
+      before { stub_const("Rack::Attack::CHECKOUT_PER_PRODUCT_HOURLY_LIMIT", 5) }
+
+      it "throttles one product past the cap even when the source IP rotates" do
+        # This is the case the per-IP rules miss: a residential-proxy pool keeps every
+        # individual IP well under its budget while hammering one product's checkout,
+        # which is what let a free product blast receipts to a scraped address list.
+        travel_to(Time.current) do
+          5.times do |i|
+            checkout(ip: "10.6.0.#{i + 1}", uid: "u#{i}")
+            expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+          end
+
+          checkout(ip: "10.7.0.1", uid: "over")
+          expect(response.status).to eq(429)
+
+          # The cap is per product, so a different product still gets its own budget.
+          checkout(ip: "10.7.0.2", permalinks: [other_product.unique_permalink], uid: "other")
+          expect(response.status).not_to eq(429)
+        end
+      end
+
+      it "shares one bucket across formatted route variants and /orders/prepare" do
+        travel_to(Time.current) do
+          2.times do |i|
+            checkout(path: "/orders.json", ip: "10.8.0.#{i + 1}", uid: "j#{i}")
+            expect(response.status).not_to eq(429), "json request #{i + 1} unexpectedly throttled"
+          end
+
+          3.times do |i|
+            checkout(path: "/orders/prepare", ip: "10.9.0.#{i + 1}", uid: "p#{i}")
+            expect(response.status).not_to eq(429), "prepare request #{i + 1} unexpectedly throttled"
+          end
+
+          checkout(ip: "10.9.9.9", uid: "over")
+          expect(response.status).to eq(429)
+        end
+      end
+
+      it "keys a mixed cart on the first permalink so padding cannot dodge the cap" do
+        travel_to(Time.current) do
+          5.times do |i|
+            padding = create(:product, price_cents: 0)
+            checkout(ip: "10.10.0.#{i + 1}", permalinks: [product.unique_permalink, padding.unique_permalink], uid: "a#{i}")
+            expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+          end
+
+          fresh = create(:product, price_cents: 0)
+          checkout(ip: "10.11.0.1", permalinks: [product.unique_permalink, fresh.unique_permalink], uid: "over")
+          expect(response.status).to eq(429)
+        end
+      end
+    end
+
+    # Malformed `line_items` must not make the THROTTLE raise — the per-product key
+    # extractor reads request params, so a bad shape there would take down the middleware
+    # for every request on the path rather than just the bad one.
+    #
+    # Verified against unmodified main: all three shapes below already raise inside
+    # `OrdersController` before this change (`line_items` is treated as an Array of Hashes
+    # without checking, so a String or bare Hash blows up — NoMethodError for some shapes,
+    # TypeError for others). That is a pre-existing controller bug, not something introduced
+    # here, and fixing it is out of scope. So assert on WHERE the failure comes from: it must
+    # never originate in the rate limiter.
+    it "does not make the throttle raise when line_items is absent or malformed" do
+      [
+        { line_items: "not-an-array" },
+        { line_items: ["a string, not a hash"] },
+        { email: "buyer@example.com" },
+      ].each_with_index do |params, i|
+        raised = nil
+        begin
+          post "/orders", params:, headers: { "HTTP_CF_CONNECTING_IP" => "10.12.0.#{i + 1}" }
+        rescue StandardError => e
+          raised = e
+        end
+
+        if raised
+          expect(raised.backtrace.join("\n")).not_to include("rack_attack.rb"),
+                                                     "params #{params.inspect} raised from the rate limiter: #{raised.class}: #{raised.message}"
+        else
+          expect(response.status).not_to eq(429)
+        end
+      end
+    end
+
+    # The throttle key extractor in isolation, so the pre-existing controller crash above
+    # can't hide a regression in it. These are the shapes that reach it in production.
+    describe "per-product throttle key extraction" do
+      def product_key_for(params)
+        req = Rack::Attack::Request.new(Rack::MockRequest.env_for("/orders", method: "POST", params:))
+        Rack::Attack.throttles["checkout_orders/product"].block.call(req)
+      end
+
+      it "returns the first permalink for a well-formed cart" do
+        expect(product_key_for({ "line_items" => [{ "permalink" => "abc" }, { "permalink" => "def" }] })).to eq("abc")
+      end
+
+      it "handles line_items arriving as a hash of indexed items" do
+        expect(product_key_for({ "line_items" => { "0" => { "permalink" => "abc" } } })).to eq("abc")
+      end
+
+      it "returns nil rather than raising for malformed or absent line_items" do
+        expect(product_key_for({ "line_items" => "not-an-array" })).to be_nil
+        expect(product_key_for({ "line_items" => ["a string, not a hash"] })).to be_nil
+        expect(product_key_for({ "line_items" => [{ "permalink" => "" }] })).to be_nil
+        expect(product_key_for({ "email" => "buyer@example.com" })).to be_nil
+      end
+    end
+  end
 end
