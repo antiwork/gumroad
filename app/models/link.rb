@@ -939,6 +939,12 @@ class Link < ApplicationRecord
     eligible_purchases = Purchase.none
     eligible_purchases = requested_user.purchases.where(link: self) if requested_user
 
+    # Whether the purchase we end up returning belongs to the signed-in visitor rather
+    # than merely to whoever is using this browser. Captured before the browser_guid
+    # fallback below replaces the relation, because it decides whether the license key
+    # may travel to the page (see the strip below).
+    matched_signed_in_purchaser = eligible_purchases.present?
+
     # When a gift purchase is made, we set the same browser_guid for the gifter and giftee purchases.
     # When fetching purchases using browser_guid, exclude gift receiver purchases so that we won't show
     # the giftee purchase to gifter on the same browser.
@@ -951,7 +957,15 @@ class Link < ApplicationRecord
     end
 
     bought_purchase = eligible_purchases.not_is_gift_sender_purchase.last
-    bought_purchase&.purchase_info unless bought_purchase&.rental_expired?
+    return nil if bought_purchase.nil? || bought_purchase.rental_expired?
+
+    info = bought_purchase.purchase_info
+    # The license key is a credential, and the product page is public. Keep it only when
+    # we know WHO the visitor is: a signed-in purchaser, or someone presenting the HMAC'd
+    # purchase id + email digest from their own email (handled above). A purchase matched
+    # by the _gumroad_guid cookie alone proves nothing about identity — anyone on a shared
+    # or public browser would otherwise see the previous buyer's key.
+    matched_signed_in_purchaser ? info : info.except(:license_key)
   end
 
   def save_duration!(duration)
