@@ -170,28 +170,42 @@ module User::Compliance
     user_compliance_infos.alive.last
   end
 
-  # How many of the seller's most recent compliance revisions we scan when asking whether they
-  # ever gave us a P.O. Box. Capped so this stays a cheap two-column read even for a seller with
-  # a long compliance history.
-  PO_BOX_ADDRESS_HISTORY_REVISIONS_CHECKED = 25
-
-  # Whether a P.O. Box appears anywhere in the seller's recent address history, individual or
-  # business. We look at the history rather than only the current record because our payment
-  # partner rejects a P.O. Box on the account, so a seller in that situation has usually already
-  # replaced it — and that replacement is exactly what makes their verification document stop
-  # matching the account. See UserComplianceInfoRequest for the full deadlock.
+  # Whether a P.O. Box appears anywhere in the seller's address history, individual or business.
+  # We look at the whole history rather than only the current record because our payment partner
+  # rejects a P.O. Box on the account, so a seller in that situation has usually already replaced
+  # it — and that replacement is exactly what makes their verification document stop matching the
+  # account. See UserComplianceInfoRequest for the full deadlock.
   #
-  # Memoized per instance: the dashboard and settings pages ask this once per outstanding
-  # compliance request, and the answer cannot change within a single request.
+  # Every revision is scanned, with no recency cutoff. An earlier version of this capped the scan
+  # at the most recent revisions, which was wrong: compliance revisions are created for edits to
+  # any field, not just the address, so a seller who changed their phone number or tax ID a few
+  # times after replacing the P.O. Box would silently fall back to the misleading generic copy.
+  #
+  # Scanning the whole history still costs almost nothing, because the database does the
+  # discarding rather than Ruby. The number of compliance revisions per seller only grows, so
+  # rather than hand every revision's addresses back to Ruby we first ask the database for the
+  # few rows whose address could possibly be a post office box (PoBoxAddress::POSSIBLE_MATCH_SQL_HINT
+  # is a deliberate superset of what the Ruby check matches), then run the real check on those.
+  # For the overwhelming majority of sellers that returns no rows at all, however long their
+  # history is.
+  #
+  # Memoized per instance so that repeated asks on the same User object are free. Note the
+  # dashboard and settings pages reach this through each outstanding compliance request, which
+  # loads its own User, so the memo mostly saves work within a request rather than across it. The
+  # cheap error-code guard in UserComplianceInfoRequest runs first, so the read only ever happens
+  # for a seller who already has an address-mismatch rejection.
   def po_box_in_address_history?
     return @po_box_in_address_history unless @po_box_in_address_history.nil?
 
     @po_box_in_address_history = user_compliance_infos
-                                   .order(id: :desc)
-                                   .limit(PO_BOX_ADDRESS_HISTORY_REVISIONS_CHECKED)
+                                   .where(
+                                     "street_address LIKE :hint OR business_street_address LIKE :hint",
+                                     hint: PoBoxAddress::POSSIBLE_MATCH_SQL_HINT
+                                   )
+                                   .distinct
                                    .pluck(:street_address, :business_street_address)
                                    .flatten
-                                   .any? { |address| PoBoxAddress.match?(address) }
+                                   .any? { |address| PoBoxAddress.possible_match?(address) }
   end
 
   SUPPORTED_COUNTRIES.each do |country|
