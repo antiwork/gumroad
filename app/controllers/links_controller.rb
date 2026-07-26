@@ -905,6 +905,7 @@ class LinksController < ApplicationController
           rewrite_budget: page_rewrite_budget,
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
+          deletion_audit_context:,
         ).perform
       elsif variant_category.present?
         Product::VariantsUpdaterService.new(
@@ -922,8 +923,24 @@ class LinksController < ApplicationController
           rewrite_budget: page_rewrite_budget,
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
+          deletion_audit_context:,
         ).perform
       end
+    end
+
+    # Who and which request is performing this save, for the deletion audit
+    # trail (ProductVariantDeletionAudit). `logged_in_user` rather than
+    # `current_seller`: on a collaborator or admin save those differ, and the
+    # audit wants the person who actually pressed save. `revision_token` is
+    # always nil today — the editor-scoped revision token proposed in
+    # gumroad-private#1379 does not exist yet; the key is here so the audit shape
+    # doesn't change when it ships.
+    def deletion_audit_context
+      @_deletion_audit_context ||= {
+        actor_user_id: logged_in_user&.id,
+        request_id: request.request_id,
+        revision_token: nil,
+      }
     end
 
     # External ids of variants the seller explicitly removed in the editor (via

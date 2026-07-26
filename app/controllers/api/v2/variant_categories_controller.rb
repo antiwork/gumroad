@@ -28,7 +28,27 @@ class Api::V2::VariantCategoriesController < Api::V2::BaseController
   end
 
   def destroy
+    # Captured before the deletion: afterwards the category is gone and the
+    # count would be harder to attribute to this request.
+    alive_child_variant_count = @variant_category.variants.alive.count
+
     if @variant_category.mark_deleted
+      # This endpoint is an explicit, single-purpose destructive call and
+      # deliberately sits outside the product editor's deletion guards — a
+      # caller asked for exactly this. Two things make it worth recording:
+      # it carries no confirmation or revision context at all, and
+      # `mark_deleted` does NOT cascade (VariantCategory's `has_many :variants`
+      # has no `dependent:` option), so any live versions stay alive under a
+      # deleted grouping. `alive_child_variant_count` makes that visible.
+      ProductVariantDeletionAudit.record_deletion(
+        actor_user_id: current_resource_owner&.id,
+        link_id: @product.id,
+        route: ProductVariantDeletionAudit::API_V2_VARIANT_CATEGORY_DESTROY,
+        deleted_variant_category_external_ids: [@variant_category.external_id],
+        intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
+        alive_child_variant_count:,
+        request_id: request.request_id,
+      )
       success_with_variant_category
     else
       error_with_variant_category(@variant_category)

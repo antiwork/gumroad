@@ -5592,3 +5592,144 @@ class LinksControllerWithoutEmailTest < ActionController::TestCase
     assert_response :success
   end
 end
+
+# Covers the deletion audit trail (ProductVariantDeletionAudit), added because a
+# July 2026 production investigation of 55 candidate products could not tell
+# whether a deleted version had been explicitly confirmed by the seller: the
+# confirmation list arrives on the request and was never stored anywhere.
+#
+# These tests assert the audit records what actually happened, and — just as
+# importantly — that it cannot alter or break the save it observes.
+class LinksControllerDeletionAuditTest < ActionController::TestCase
+  tests LinksController
+  include LinksControllerTestHelpers
+
+  setup do
+    sign_in_seller_area!
+    @product = create_product_with_pdf_file(user: @seller)
+    product_file = @product.product_files.alive.first
+    @params = {
+      id: @product.unique_permalink,
+      name: "sumlink",
+      description: "New description",
+      files: [{ id: product_file.external_id, url: product_file.url }],
+    }
+    @category = create_variant_category(link: @product, title: "Versions")
+  end
+
+  # The `options.nil?` branch: the category is submitted with no options, which
+  # the save reads as "remove this whole grouping".
+  test "a category submitted with no options records an audit for the variants it actually deleted" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    assert_difference -> { ProductVariantDeletionAudit.count }, 1 do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :success
+    end
+
+    audit = ProductVariantDeletionAudit.last
+    assert_equal ProductVariantDeletionAudit::EDITOR_CATEGORY_OMITTED, audit.route
+    assert_equal @product.id, audit.link_id
+    assert_equal @logged_in_user.id, audit.actor_user_id
+    assert_equal [variant.external_id], audit.deleted_variant_external_ids
+    assert_equal 1, audit.deleted_variant_count
+    # Nothing was confirmed, so the deletion was driven purely by omission.
+    assert_equal ProductVariantDeletionAudit::PAYLOAD_OMISSION, audit.intent_source
+    assert_equal 0, audit.confirmed_deleted_variant_count
+    assert_equal 1, audit.unconfirmed_deleted_variant_count
+    # The revision token does not exist yet (gumroad-private#1379).
+    assert_nil audit.revision_token
+  end
+
+  # The diff branch: the category survives, one of its versions is missing from
+  # the submitted list AND was explicitly confirmed for removal.
+  test "a confirmed removal from a surviving category records intent as confirmed ids" do
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    assert_difference -> { ProductVariantDeletionAudit.count }, 1 do
+      post :update, params: @params.merge(
+        variants: [{ id: kept.external_id, name: "Kept" }],
+        confirmed_removed_variant_ids: [removed.external_id],
+      ), format: :json
+      assert_response :success
+    end
+
+    audit = ProductVariantDeletionAudit.last
+    assert_equal ProductVariantDeletionAudit::EDITOR_VARIANTS_DIFFED, audit.route
+    assert_equal [removed.external_id], audit.deleted_variant_external_ids
+    assert_equal [removed.external_id], audit.confirmed_deleted_variant_external_ids
+    assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
+    assert_equal 0, audit.unconfirmed_deleted_variant_count
+    # The kept version is untouched.
+    assert kept.reload.alive?
+  end
+
+  # The confirmation list can name rows this request never deleted. Only the
+  # intersection with what actually died belongs in the audit, otherwise the
+  # record overstates what the seller agreed to in this save.
+  test "only confirmed ids that were actually deleted are recorded" do
+    removed = create_variant(variant_category: @category, name: "Removed")
+    already_gone = create_variant(variant_category: @category, name: "Already gone")
+    already_gone_external_id = already_gone.external_id
+    already_gone.mark_deleted!
+
+    post :update, params: @params.merge(
+      variants: [],
+      confirmed_removed_variant_ids: [removed.external_id, already_gone_external_id],
+    ), format: :json
+    assert_response :success
+
+    audit = ProductVariantDeletionAudit.last
+    assert_equal [removed.external_id], audit.deleted_variant_external_ids
+    assert_equal [removed.external_id], audit.confirmed_deleted_variant_external_ids
+    assert_not_includes audit.deleted_variant_external_ids, already_gone_external_id
+  end
+
+  # A blocked save deleted nothing, so there is nothing to audit. This also pins
+  # that the audit did not weaken the guard.
+  test "a save blocked by the deletion guard writes no audit and still fails" do
+    protected_variant = create_variant(variant_category: @category, name: "Paid version", price_difference_cents: 500)
+
+    assert_no_difference -> { ProductVariantDeletionAudit.count } do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :unprocessable_entity
+    end
+
+    assert protected_variant.reload.alive?
+  end
+
+  # Observability must never take down a save. Rather than stub the audit to
+  # raise — which would only prove the rescue runs on a fake error — this makes
+  # the real INSERT fail at the database level the way a bad migration or a
+  # schema drift would, by pointing the model at a table that does not exist.
+  test "a failing audit write does not stop the deletion" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    ProductVariantDeletionAudit.stub(:table_name, "product_variant_deletion_audits_missing") do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :success
+    end
+
+    # The deletion still happened and committed, and nothing was recorded.
+    assert_not variant.reload.alive?
+  end
+
+  # The audit is deliberately non-PII and its schema is fixed. If someone adds a
+  # column that carries seller or buyer content, this fails.
+  test "the audit stores no personal data" do
+    create_variant(variant_category: @category, name: "Secret version name")
+
+    post :update, params: @params.merge(variants: []), format: :json
+    assert_response :success
+
+    values = ProductVariantDeletionAudit.last.attributes.values.map(&:to_s).join(" ")
+    assert_not_includes values, @seller.email
+    assert_not_includes values, "Secret version name"
+    assert_not_includes values, "New description"
+    assert_not_includes values, "Versions"
+
+    # No open-ended blob to smuggle content into later.
+    assert_empty ProductVariantDeletionAudit.column_names & %w[metadata payload params_snapshot data]
+  end
+end

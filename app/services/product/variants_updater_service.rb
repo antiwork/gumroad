@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -31,7 +31,10 @@ class Product::VariantsUpdaterService
   # mutated anything, attached to every blocked-save notification.
   # id_mappings: per-request accumulator of client id → canonical server id for
   # newly created variants and pages, returned to the editor after the save.
-  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil)
+  # deletion_audit_context: :actor_user_id, :request_id and :revision_token for
+  # the deletion audit trail (ProductVariantDeletionAudit), threaded down rather
+  # than read from a global so these services still work off-request.
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {})
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
@@ -42,6 +45,7 @@ class Product::VariantsUpdaterService
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
+    @deletion_audit_context = deletion_audit_context || {}
   end
 
   def perform
@@ -60,7 +64,8 @@ class Product::VariantsUpdaterService
         preserved_rich_content_ids:,
         rewrite_budget:,
         deletion_guard_diagnostics:,
-        id_mappings:
+        id_mappings:,
+        deletion_audit_context:
       )
       variant_category = variant_category_updater.perform
       keep_categories << variant_category if category[:id].present?
@@ -77,6 +82,22 @@ class Product::VariantsUpdaterService
         diagnostics: deletion_guard_diagnostics
       )
       variant_category.mark_deleted!
+
+      # Marking the category deleted does NOT delete its variants —
+      # VariantCategory's `has_many :variants` has no `dependent:` option — so
+      # any variants still alive here stay alive under a deleted category. The
+      # audit records that count so the consequence is visible in data rather
+      # than something you have to know to go looking for.
+      ProductVariantDeletionAudit.record_deletion(
+        actor_user_id: deletion_audit_context[:actor_user_id],
+        link_id: product.id,
+        route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT,
+        deleted_variant_category_external_ids: [variant_category.external_id],
+        confirmed_removed_variant_ids:,
+        alive_child_variant_count: variant_category.variants.alive.count,
+        revision_token: deletion_audit_context[:revision_token],
+        request_id: deletion_audit_context[:request_id],
+      )
     end
 
     begin
