@@ -60,13 +60,43 @@ class SendWorkflowPostEmailsJob
         created_at = Time.zone.parse(member.details.dig("follower", "created_at"))
         SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, id, nil)
       elsif type == :affiliate
-        affiliates = member.details["affiliates"] || []
-        id ||= affiliates.filter_map { _1["id"] }.max
-        affiliate = affiliates.find { _1["id"] == id }
+        affiliate = resolve_affiliate(member:, id:)
         return log_unresolvable_recipient(member:, type:) if affiliate.nil?
+        # The worker's last positional argument is an affiliate USER id — it does
+        # `User.find_by(id: affiliate_user_id)`. What we have resolved here is a
+        # DirectAffiliate id: that is what `details["affiliates"]` stores and what
+        # `max(jt.affiliate_id)` aggregates. The two id spaces are unrelated, so passing the
+        # affiliate id sent the email to whichever user happened to share that number, or to
+        # nobody at all. Translate it, the same way DirectAffiliate's own enqueue path does.
+        affiliate_user_id = Affiliate.where(id: affiliate["id"]).pick(:affiliate_user_id)
+        return log_unresolvable_recipient(member:, type:) if affiliate_user_id.nil?
         created_at = Time.zone.parse(affiliate["created_at"])
-        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, nil, id)
+        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, nil, affiliate_user_id)
       end
+    end
+
+    # A person can be an affiliate for several of the seller's products, and `details["affiliates"]`
+    # holds one entry per (affiliate relationship, product) pair, each with its own id and
+    # created_at. When the join handed us an id, that entry already satisfied the post's filters,
+    # so use it directly. When it did not, we cannot just take the newest entry on the member: if
+    # the post is scoped to specific products ("affiliate of these products"), only the entries for
+    # those products are legitimate recipients. Sending with any other entry would email the person
+    # as the affiliate of a product this post is not about, and would schedule the delayed delivery
+    # off that unrelated relationship's created_at. So narrow to the post's products first, then
+    # take the highest id, which is the entry `max(jt.affiliate_id)` in AudienceMember.filter would
+    # have picked. With no product scope, every entry is a valid recipient.
+    def resolve_affiliate(member:, id:)
+      affiliates = member.details["affiliates"] || []
+      return affiliates.find { _1["id"] == id } if id.present?
+
+      product_ids = @filters[:affiliate_product_ids]
+      candidates = if product_ids.present?
+        allowed = product_ids.map(&:to_i).to_set
+        affiliates.select { allowed.include?(_1["product_id"].to_i) }
+      else
+        affiliates
+      end
+      candidates.select { _1["id"].present? }.max_by { _1["id"] }
     end
 
     # Skipping a member silently is how the follower/bought-product bug stayed invisible for
