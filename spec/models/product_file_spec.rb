@@ -888,6 +888,53 @@ describe ProductFile do
 
       expect(product_file.stored_file_present?).to eq(true)
     end
+
+    # Proving the object is absent is the only moment we learn this row's upload
+    # never finished, so the finding is handed to a job that records it on the row
+    # — otherwise the next caller pays the same lookup for the same answer.
+    it "asks for the row to be retired when the object is proved absent" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, 3.days.ago)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect do
+        expect(product_file.stored_file_present?).to eq(false)
+      end.to change { RecordProductFileMissingFromStorageJob.jobs.size }.by(1)
+      expect(RecordProductFileMissingFromStorageJob.jobs.last["args"]).to eq([product_file.id])
+    end
+
+    # The row is still within the window where a large upload could be in
+    # progress, so its absence proves nothing durable yet.
+    it "does not ask for a row to be retired while its upload could still be in flight" do
+      product_file = create(:product_file, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect do
+        expect(product_file.stored_file_present?).to eq(false)
+      end.not_to change { RecordProductFileMissingFromStorageJob.jobs.size }
+    end
+
+    it "does not ask for a row to be retired when the file is really there" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, 3.days.ago)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: true))
+
+      expect do
+        expect(product_file.stored_file_present?).to eq(true)
+      end.not_to change { RecordProductFileMissingFromStorageJob.jobs.size }
+    end
+
+    # An outage is not evidence the file is gone, so it must not retire the row
+    # either.
+    it "does not ask for a row to be retired when storage can't be reached" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, 3.days.ago)
+      allow(product_file).to receive(:s3_object).and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
+
+      expect do
+        expect(product_file.stored_file_present?).to eq(true)
+      end.not_to change { RecordProductFileMissingFromStorageJob.jobs.size }
+    end
   end
 
   describe "#stored_file_presence_known_from_row" do
