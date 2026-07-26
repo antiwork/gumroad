@@ -155,12 +155,18 @@ class Charge::PresentmentOrchestrator
     def rounding_absorbable?(rounding_delta_cents)
       return true unless rounding_delta_cents.negative?
 
-      # Only the Gumroad fee counts. gumroad_amount_cents also carries affiliate credit and
-      # Gumroad-collected tax, and neither is Gumroad's to give up — the affiliate is owed
-      # their cut and the tax gets remitted — so a floor built from the fee alone is the
-      # honest measure of what a round-down can come out of. Converted to presentment cents
-      # because the delta is a presentment-currency amount.
-      absorbable_presentment_cents = presentment_cents_for(purchases.sum { _1.fee_cents.to_i }, locked_quote.fx_rate)
+      # Only Gumroad's own percentage fee counts. gumroad_amount_cents also carries
+      # affiliate credit and Gumroad-collected tax, and neither is Gumroad's to give up —
+      # the affiliate is owed their cut and the tax gets remitted. fee_cents is no good
+      # either: on a charge through a Gumroad-owned Stripe account it also contains the
+      # processor's percentage and fixed costs, which Gumroad is only holding on its way to
+      # Stripe, so a fee-waived sale can still show a positive fee_cents made up entirely of
+      # those pass-through costs. Spending that on a price reduction would leave Gumroad
+      # paying Stripe out of pocket, so the floor is built from
+      # Purchase#gumroad_percentage_fee_cents, which is zero exactly when the percentage fee
+      # is waived. Converted to presentment cents because the delta is a presentment-currency
+      # amount.
+      absorbable_presentment_cents = presentment_cents_for(purchases.sum { _1.gumroad_percentage_fee_cents }, locked_quote.fx_rate)
       return true if rounding_delta_cents.abs <= absorbable_presentment_cents
 
       @fallback_reason = "rounding_delta_exceeds_gumroad_fee"

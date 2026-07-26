@@ -195,5 +195,42 @@ describe Charge::PresentmentOrchestrator do
       expect(result).to have_attributes(processor_amount_cents: 12_99,
                                         processor_gumroad_amount_cents: 4_24)
     end
+
+    # On a sale charged through a Gumroad-owned Stripe account, fee_cents also holds the
+    # processor's percentage and fixed costs, which Gumroad only collects on its way to
+    # Stripe. A waived sale therefore still shows a positive fee_cents made up entirely of
+    # money that is already owed elsewhere, and spending it on a price reduction would mean
+    # Gumroad paying Stripe out of pocket.
+    it "refuses when the only fee left on a Gumroad-managed charge is the processor's own cost" do
+      gumroad_merchant_account = create(:merchant_account, user: nil)
+      waived_purchase = create(:purchase,
+                               link: product,
+                               seller:,
+                               merchant_account: gumroad_merchant_account,
+                               price_cents: 10_00,
+                               total_transaction_cents: 10_00)
+      # Turned on after the purchase exists, which is the real sequence being tested: the
+      # waiver begins while the buyer is already on the checkout page.
+      Feature.activate_user(:waive_gumroad_fee_on_new_sales, seller)
+      waived_purchase.send(:calculate_fees)
+      waived_purchase.save!
+
+      # The fee is not zero — it is the processor's percentage plus fixed components — which
+      # is exactly why reading fee_cents here would have accepted the stale reduction.
+      expect(waived_purchase.reload.fee_cents).to be > 0
+      expect(waived_purchase.gumroad_percentage_fee_cents).to eq(0)
+
+      orchestrator = described_class.new(charge:,
+                                         merchant_account: gumroad_merchant_account,
+                                         purchases: [waived_purchase],
+                                         amount_cents: 10_00,
+                                         gumroad_amount_cents: 3_00,
+                                         eligibility_decision:,
+                                         locked_quote:)
+
+      expect(orchestrator.perform).to be_nil
+      expect(orchestrator.fallback_reason).to eq("rounding_delta_exceeds_gumroad_fee")
+      expect(charge.reload.charge_presentment).to be_nil
+    end
   end
 end
