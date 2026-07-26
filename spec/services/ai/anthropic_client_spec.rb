@@ -624,11 +624,11 @@ describe Ai::AnthropicClient do
       expect(buffered).to have_been_requested.once
     end
 
-    it "does not retry a corrupted tool call once text has already streamed to the caller" do
-      # Tool-use turns often stream preamble text before the tool_use block. Once any delta has
-      # reached the caller, retrying — streamed OR via the non-streamed fallback — would replay the
-      # reply from the start on the seller's screen, so the corruption surfaces immediately
-      # instead: exactly one request, no retry, no fallback.
+    it "does not retry a corrupted tool call once text has streamed and the caller can't discard it" do
+      # Tool-use turns often stream preamble text before the tool_use block. When the caller has no
+      # way to erase what the seller already saw, replaying the turn — streamed OR buffered — would
+      # duplicate the reply on screen, so the corruption surfaces immediately instead: exactly one
+      # request, no retry, no fallback.
       allow(client).to receive(:sleep)
       stream = sse(
         ["content_block_start", { index: 0, content_block: { type: "text" } }],
@@ -645,6 +645,78 @@ describe Ai::AnthropicClient do
       expect(a_request(:post, url)).to have_been_made.times(1)
       expect(a_request(:post, url).with(body: hash_including("stream" => false))).not_to have_been_made
       expect(client).not_to have_received(:sleep)
+    end
+
+    it "discards the streamed preamble and falls back when the caller can erase what was shown" do
+      # The production shape of this failure: the model streams a sentence of preamble, then the
+      # tool call's JSON arrives corrupted. Because the caller (the store agent) can clear the
+      # preamble from the UI, the buffered replay is safe — it regenerates the turn onto an empty
+      # transcript rather than appending a second copy underneath the first.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "Let me update that…" } }],
+        ["content_block_start", { index: 1, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+        ["content_block_stop", { index: 1 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      streamed = stub_request(:post, url).with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered = stub_request(:post, url).with(body: hash_including("stream" => false)).to_return(
+        status: 200,
+        body: {
+          content: [{ type: "tool_use", id: "toolu_x", name: "api_write", input: { "endpoint" => "update_product" } }],
+          stop_reason: "tool_use",
+        }.to_json,
+        headers: { "Content-Type" => "application/json" },
+      )
+
+      discarded = 0
+      chunks = []
+      result = client.stream_messages(
+        system: "s",
+        messages: [{ role: "user", content: "x" }],
+        on_discard_streamed_text: -> { discarded += 1 },
+      ) { |t| chunks << t }
+
+      expect(discarded).to eq(1)
+      expect(result.tool_uses.first[:input]).to eq("endpoint" => "update_product")
+      # Only ONE streamed attempt: the existing retry veto still applies while the preamble is on
+      # screen, so the streamed request is not replayed. The buffered replay is the recovery, and
+      # it runs only after the preamble has been discarded.
+      expect(streamed).to have_been_requested.once
+      expect(buffered).to have_been_requested.once
+      # The preamble was yielded, then discarded — the caller is responsible for clearing it, and
+      # the buffered turn here carries no text of its own to replace it with.
+      expect(chunks).to eq(["Let me update that…"])
+    end
+
+    it "surfaces the original error when the buffered replay fails after discarding streamed text" do
+      # The discard already happened, so the seller's screen is empty. A failed replay must still
+      # end in the clear unreadable-tool-call error rather than a raw upstream error.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "Let me update that…" } }],
+        ["content_block_start", { index: 1, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: '{"endpoint":"cut off' } }],
+        ["content_block_stop", { index: 1 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url).with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      stub_request(:post, url).with(body: hash_including("stream" => false)).to_return(status: 500, body: "boom")
+
+      discarded = 0
+      expect do
+        client.stream_messages(
+          system: "s",
+          messages: [{ role: "user", content: "x" }],
+          on_discard_streamed_text: -> { discarded += 1 },
+        ) { |_t| }
+      end.to raise_error(described_class::Error, /unreadable tool call/i)
+      expect(discarded).to eq(1)
     end
 
     it "retries when the stream drops mid-tool-call, leaving cut-off JSON and no stop_reason" do

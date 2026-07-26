@@ -138,11 +138,24 @@ class Ai::AnthropicClient
   #
   # One failure gets an extra recovery step: when every streamed attempt delivered a tool call
   # with corrupted JSON (the gateway can lose input_json_delta fragments in transit), the request
-  # is replayed once WITHOUT streaming — see #buffered_fallback. This only happens when nothing
-  # was yielded yet, so the caller never sees doubled output.
+  # is replayed once WITHOUT streaming — see #buffered_fallback.
+  #
+  # That replay regenerates the turn from the start, so it must not leave earlier text on the
+  # seller's screen. When nothing has been yielded there is nothing to clean up. When text HAS
+  # been yielded, the caller can still opt in by passing `on_discard_streamed_text`: a callable
+  # that erases everything streamed so far (the store agent already has one — it discards tool-use
+  # preamble from the UI on every normal tool call). Without that callable the honest error
+  # surfaces instead, because silently replaying would duplicate the reply on screen.
+  #
+  # This distinction is the difference between the fallback running and never running at all: a
+  # tool-use turn usually streams a sentence of preamble ("Let me update that for you…") before the
+  # tool call, so in production the corrupted-tool-call failure nearly always arrives with text
+  # already yielded.
+  #
+  # @param on_discard_streamed_text [#call, nil] erases text already streamed to the seller
   # @yieldparam text [String] a chunk of assistant text
   # @return [Result]
-  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, &on_text)
+  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, on_discard_streamed_text: nil, &on_text)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
     yielded_any = false
 
@@ -198,9 +211,17 @@ class Ai::AnthropicClient
     rescue UnreadableToolCallError => e
       # Every streamed attempt "completed" yet delivered a corrupted tool call — retrying the same
       # lossy channel again wouldn't help (production showed all three attempts failing this way
-      # across different hosts). But once the seller has already seen part of the reply, silently
-      # re-running the request would double their output, so the honest failure surfaces instead.
-      raise if yielded_any
+      # across different hosts), so the buffered replay is the only remaining recovery.
+      #
+      # The replay regenerates the whole turn, so anything already on the seller's screen has to go
+      # first. If the caller gave us a way to erase it, use that and recover; otherwise the honest
+      # failure surfaces rather than doubling the reply on screen.
+      raise if yielded_any && on_discard_streamed_text.nil?
+
+      if yielded_any
+        on_discard_streamed_text.call
+        yielded_any = false
+      end
 
       buffered_fallback(system:, messages:, tools:, max_tokens:, original_error: e, &on_text)
     end
