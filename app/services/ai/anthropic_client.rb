@@ -239,8 +239,11 @@ class Ai::AnthropicClient
     # connect/write/read timeouts as every other request, so a web request can't hang here.
     #
     # The assembled text (the model regenerates the whole turn, so there may be preamble text) is
-    # handed to the caller's block in one piece — nothing was streamed before the fallback fired,
-    # so this is the first and only time the caller sees it.
+    # handed to the caller's block in one piece — nothing is on screen when the fallback fires, so
+    # this is the first and only time the caller sees it. Two kinds of replay text are withheld,
+    # both because the caller is going to throw them away the moment it inspects the result:
+    # a truncated turn, and a tool-use turn (whose text is preamble, not the answer). Yielding
+    # either would flash it onto the seller's screen for an instant before it is cleared again.
     #
     # If the buffered replay fails too, the seller-facing error must stay as clear as before the
     # fallback existed, so the ORIGINAL unreadable-tool-call error is what surfaces.
@@ -261,12 +264,13 @@ class Ai::AnthropicClient
         raise original_error
       end
 
-      # A buffered replay can hit the token cap itself. The caller treats a "max_tokens" turn as
-      # unusable — it tells the UI to discard whatever was shown and streams its own truncation
-      # notice instead — so yielding the incomplete text here would only flash a partial answer on
-      # the seller's screen a moment before it gets thrown away. Hand back the result and let the
-      # caller decide what to show.
-      on_text&.call(result.text) if result.text.present? && result.stop_reason != "max_tokens"
+      # A buffered replay can hit the token cap itself, and it can come back as a tool-use turn.
+      # The caller discards the text in both cases — a "max_tokens" turn is unusable and gets
+      # replaced by a truncation notice, and a tool-use turn's text is preamble that gets cleared
+      # before the real reply — so yielding it here would only flash it onto the seller's screen a
+      # moment before it is thrown away. Hand back the result and let the caller decide what to show.
+      discarded_by_caller = result.stop_reason == "max_tokens" || result.tool_uses.present?
+      on_text&.call(result.text) if result.text.present? && !discarded_by_caller
       result
     end
 

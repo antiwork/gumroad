@@ -464,10 +464,40 @@ describe Ai::AnthropicClient do
       expect(result.stop_reason).to eq("tool_use")
     end
 
-    it "hands the fallback's regenerated text to the caller's block in one piece" do
-      # A tool-use turn often carries preamble text. Nothing was streamed before the fallback fired
-      # (the fallback is skipped otherwise), so this is the only time the caller sees the text —
-      # deliver it through the same block the stream would have used.
+    it "hands the fallback's regenerated text to the caller's block in one piece when the replay is the final answer" do
+      # A replay that comes back with no tool call is the finished reply, and it is what the seller
+      # is meant to read. Nothing was streamed before the fallback fired (the fallback either
+      # discards that text or is skipped), so this is the only time the caller sees it — deliver it
+      # through the same block the stream would have used.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{broken" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered_body = {
+        "content" => [{ "type" => "text", "text" => "Your product is already priced at $10." }],
+        "stop_reason" => "end_turn",
+      }
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => false))
+        .to_return(status: 200, body: buffered_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      chunks = []
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text }
+
+      expect(chunks).to eq(["Your product is already priced at $10."])
+      expect(result.text).to eq("Your product is already priced at $10.")
+    end
+
+    it "withholds the fallback's text from the caller's block when the buffered replay is a tool-use turn" do
+      # A tool-use turn's text is preamble, not the answer: the caller clears it before rendering the
+      # real reply. Yielding it here would flash the regenerated preamble onto the seller's screen
+      # for an instant, between the discard that preceded the replay and the caller's own reset. The
+      # text is still returned so the caller can record it as part of the turn.
       allow(client).to receive(:sleep)
       corrupted = sse(
         ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
@@ -491,8 +521,9 @@ describe Ai::AnthropicClient do
       chunks = []
       result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text }
 
-      expect(chunks).to eq(["Updating that now."])
+      expect(chunks).to be_empty
       expect(result.text).to eq("Updating that now.")
+      expect(result.tool_uses.first[:name]).to eq("api_write")
     end
 
     it "withholds the fallback's text from the caller's block when the buffered replay is itself truncated" do
