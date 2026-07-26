@@ -2293,7 +2293,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Bank Code", with: "060")
         fill_in("Account #", with: "000123456789")
         fill_in("Confirm account #", with: "000123456789")
-        fill_in("Cédula de Ciudadanía (CC)", with: "1.123.123.123")
+        # A seven-digit value: the shape of a Cédula de Extranjería, the ID issued to foreign
+        # residents of Colombia. It used to be rejected by the field's exact 13-character length.
+        fill_in("Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)", with: "1234567")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in COP.")
@@ -2303,6 +2305,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.individual_tax_id.decrypt("1234")).to eq("1234567")
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
         expect(compliance_info.street_address).to eq("address_full_match")

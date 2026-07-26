@@ -666,7 +666,11 @@ export default function PaymentsPage() {
     }
     if (
       form.data.user.country !== null &&
-      form.data.user.country in props.user.individual_tax_id_needed_countries &&
+      // individual_tax_id_needed_countries is an array of country codes, so membership has to be
+      // tested with includes(). The `in` operator was used here before, which checks object keys —
+      // for an array those are the indexes ("0", "1", …), so this check never fired for any country
+      // and the missing tax ID only surfaced as a server-side error after the save round-tripped.
+      props.user.individual_tax_id_needed_countries.includes(form.data.user.country) &&
       !props.user.individual_tax_id_entered &&
       !form.data.user.individual_tax_id
     ) {
