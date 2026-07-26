@@ -393,12 +393,46 @@ class LinksController < ApplicationController
         return render json: { error_message: "Use the API to publish custom_html; the dashboard only supports removing it." }, status: :unprocessable_entity
       end
 
-      # Capture the deletion-guard diagnostics (alive counts, persisted
-      # shared-content flag) NOW, before assign_attributes and the save steps
-      # below mutate the product — they describe the pre-save state.
-      deletion_guard_diagnostics
-
       ActiveRecord::Base.transaction do
+        # Serialize concurrent saves of the same product. `lock!` takes a
+        # SELECT ... FOR UPDATE on the product row and reloads it (dropping
+        # stale association caches), so the freshness check below reads the
+        # committed state and no second save can slip between the check and
+        # the writes: a concurrent save blocks here until this transaction
+        # commits, then re-reads the rows this save just wrote and sees its own
+        # snapshot as stale. Without the lock, two saves echoing the same
+        # (fresh) timestamps could both pass the check and the last writer
+        # would silently win — the exact overwrite this guard exists to stop.
+        @product.lock!
+
+        # Capture the deletion-guard diagnostics (alive counts, persisted
+        # shared-content flag) NOW, after the lock/reload but before
+        # assign_attributes and the save steps below mutate the product — they
+        # describe the committed pre-save state.
+        deletion_guard_diagnostics
+
+        # Reject a save built from a stale snapshot BEFORE any mutation: a
+        # payload that echoes page/variant snapshot timestamps older than the
+        # stored rows would silently overwrite content another session saved in
+        # between (gumroad-private#1295). The deletion guards below can't catch
+        # this — an in-place update under an existing id deletes nothing.
+        #
+        # NOTE: the seller-visible rejection is currently gated OFF by default
+        # (the `product_editor_stale_content_block` Flipper flag) because
+        # enforcing it blocked hundreds of legitimate saves — see
+        # Product::StaleContentWriteGuard's class comment for why. By default
+        # this call therefore DETECTS and reports staleness to Sentry and
+        # returns normally, letting the save continue. It only raises when the
+        # flag is on; raising rolls the transaction back (nothing has been
+        # written yet) and releases the lock, and the rescue below renders the
+        # 409.
+        Product::StaleContentWriteGuard.ensure_fresh!(
+          product: @product,
+          pages_params: snapshot_pages_params,
+          variants_params: snapshot_variants_params,
+          diagnostics: deletion_guard_diagnostics
+        )
+
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
@@ -512,6 +546,16 @@ class LinksController < ApplicationController
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
         @product.generate_product_files_archives!
       end
+    rescue Product::StaleContentWriteGuard::StaleContentConflict => e
+      # Raised before any mutation: the payload's echoed snapshot timestamps
+      # are older than the stored rows, meaning another session saved after
+      # this session loaded. Return the conflicting records so the editor can
+      # show the seller what changed and offer a reload.
+      return render json: {
+        error_message: e.message,
+        error_code: "stale_content_conflict",
+        stale_records: e.stale_records,
+      }, status: :conflict
     rescue Product::RichContentDeletionGuard::HiddenVariantContentConflict => e
       # The fail-closed inconsistent-content case: hidden version-level pages
       # AND real product-level content both exist, so the save must not pick a
@@ -957,6 +1001,29 @@ class LinksController < ApplicationController
       @_page_rewrite_budget ||= Product::RichContentDeletionGuard.build_rewrite_budget(payload_page_descriptions)
     end
 
+    # Every page in the save payload (product-level and variant-level) with the
+    # snapshot timestamp the editor echoed for it, for the stale-write guard
+    # (Product::StaleContentWriteGuard). Reads the RAW params like
+    # payload_page_descriptions does, and runs before the save mutates anything.
+    def snapshot_pages_params
+      pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
+      (params[:variants].is_a?(Array) ? params[:variants] : []).each do |variant|
+        pages.concat(variant[:rich_content].to_a) if variant[:rich_content].is_a?(Array)
+      end
+      pages.filter_map { |page| { id: page[:id], updated_at: page[:updated_at] } if page.is_a?(ActionController::Parameters) || page.is_a?(Hash) }
+    end
+
+    # Every variant in the save payload with the snapshot timestamp the editor
+    # echoed for it, for the stale-write guard. The whole variant hash is
+    # passed through (not just id/updated_at) because the guard compares the
+    # submitted attributes against the stored row: a variant row's updated_at
+    # is also bumped by ordinary sales, so a newer timestamp alone doesn't mean
+    # another editor session saved.
+    def snapshot_variants_params
+      variants = params[:variants].is_a?(Array) ? params[:variants] : []
+      variants.select { |variant| variant.is_a?(ActionController::Parameters) || variant.is_a?(Hash) }
+    end
+
     # Non-PII diagnostics attached to every blocked-save notification so an
     # incident like the July 21, 2026 wipe is diagnosable from the alert alone
     # (the request body isn't retained). Must be built BEFORE the save mutates
@@ -996,6 +1063,27 @@ class LinksController < ApplicationController
       {
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
+        **content_updated_at_response,
+      }
+    end
+
+    # Fresh post-save snapshot timestamps for every alive page and variant,
+    # keyed by external id. The editor adopts these so its NEXT save echoes
+    # the timestamps this save produced — without this, the session's second
+    # save would echo pre-save timestamps and reject itself as stale.
+    # Queried fresh (reload / current_base_variants builds a new relation):
+    # the save steps above created and soft-deleted rows through the cached
+    # association, so the cached copy no longer reflects what's alive.
+    # Variants report the same combined row+prices timestamp the guard compares
+    # against (Product::StaleContentWriteGuard.snapshot_at), so a save that
+    # only changed a membership tier's prices still refreshes the session's
+    # snapshot.
+    def content_updated_at_response
+      pages = @product.alive_rich_contents.reload.to_a +
+        @product.current_base_variants.flat_map { _1.alive_rich_contents.to_a }
+      {
+        rich_content_updated_at: pages.to_h { [_1.external_id, _1.updated_at] },
+        variant_updated_at: @product.current_base_variants.to_h { [_1.external_id, Product::StaleContentWriteGuard.snapshot_at(_1)] },
       }
     end
 
@@ -1182,6 +1270,7 @@ class LinksController < ApplicationController
             <meta name="viewport" content="width=device-width, initial-scale=1">
             #{SANDBOX_COMPAT_SCRIPT}
             #{self.class.pages_tailwind_head}
+            #{self.class.tailwind_v3_gradient_compat_head(custom_html)}
           </head>
           <body>
             #{custom_html}

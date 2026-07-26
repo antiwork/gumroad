@@ -114,17 +114,22 @@ class AffiliatedProductsPresenter
       end
     end
 
-    # Same idea for the global affiliate's lifetime earnings, which sums
-    # affiliate_credit_cents across all of the affiliate's paid purchases.
+    # Same idea for the global affiliate's lifetime earnings, but that aggregate
+    # is heavy enough that it cannot be computed inside the request at all for
+    # affiliates with a long history — see AffiliateEarningsCache, which serves a
+    # cached value and pushes the computation to a background job otherwise. A
+    # nil amount means "not computed yet", which the page renders as a
+    # calculating state; it must not be shown as $0.
+    #
     # Only the raw cents amount is cached — formatting also depends on the
     # user's currency-display preference, which can change at any time, so it
     # is applied fresh on every request rather than baked into the cache.
     def cached_global_affiliate_sales(global_affiliate)
       return nil if global_affiliate.nil?
 
-      cents = Rails.cache.fetch("affiliated_products/global_affiliate_earned_cents/#{global_affiliate.id}", expires_in: STATS_CACHE_TTL) do
-        global_affiliate.total_cents_earned
-      end
+      cents = AffiliateEarningsCache.fetch(global_affiliate)
+      return nil if cents.nil?
+
       global_affiliate.total_cents_earned_formatted(cents)
     end
 

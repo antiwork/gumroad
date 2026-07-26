@@ -135,6 +135,19 @@ describe "Dashboard", js: true, type: :system do
 
       expect(page).to have_text("The uploaded document is missing the name. Please upload another document that contains the name.")
     end
+
+    it "explains the P.O. Box deadlock instead of asking for another document upload" do
+      create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_po_box_#{SecureRandom.hex(8)}")
+      create(:user_compliance_info, user: seller, street_address: "PO Box 65")
+      create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID,
+                                            verification_error: { code: "verification_document_address_mismatch" })
+
+      visit dashboard_path
+
+      expect(page).to have_text("Your registered address appears to be a P.O. Box")
+      expect(page).to have_text("uploading it again won't help")
+      expect(page).not_to have_text("upload a document with address that matches the account")
+    end
   end
 
   describe "tax form download notice" do

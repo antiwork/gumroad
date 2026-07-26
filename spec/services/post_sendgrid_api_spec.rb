@@ -241,6 +241,45 @@ describe PostSendgridApi, :freeze_time do
     expect(sent_email_content).to include("post body")
   end
 
+  describe "reply-to for a post about one product" do
+    before do
+      @seller.update!(support_email: "account@example.com")
+      product = create(:product, user: @seller, support_email: "product@example.com")
+      @post = create(:product_installment, name: "post title", message: "post body", seller: @seller, link: product)
+    end
+
+    it "uses the product's support email so replies go to the inbox the seller picked for it" do
+      send_default_email
+
+      expect(sent_email[:reply_to]).to include("product@example.com")
+    end
+
+    it "falls back to the account address when the product has no support email of its own" do
+      @post.link.update!(support_email: nil)
+      send_default_email
+
+      expect(sent_email[:reply_to]).to include("account@example.com")
+    end
+
+    it "falls back to the account address when the product's support email is blank" do
+      # A blank support email is rejected by the model validation, so update_column is the only
+      # way to reproduce a row saved before that validation existed. Those rows have to fall
+      # back rather than send an empty Reply-To.
+      @post.link.update_column(:support_email, "")
+      send_default_email
+
+      expect(sent_email[:reply_to]).to include("account@example.com")
+    end
+
+    it "uses the product's support email for a post scoped to one of its variants" do
+      variant = create(:variant, variant_category: create(:variant_category, link: @post.link))
+      @post = create(:variant_installment, name: "post title", message: "post body", seller: @seller, link: @post.link, base_variant: variant)
+      send_default_email
+
+      expect(sent_email[:reply_to]).to include("product@example.com")
+    end
+  end
+
   it "sets the correct custom_args" do
     purchase = create(:purchase, :from_seller, seller: @seller)
     follower = create(:follower, user: @seller)

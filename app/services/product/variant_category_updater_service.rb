@@ -177,9 +177,15 @@ class Product::VariantCategoryUpdaterService
       variant_ids = variants.respond_to?(:pluck) ? variants.pluck(:id) : variants.map(&:id)
       return if variant_ids.empty?
 
+      # Only stamp variants that aren't already deleted, so a variant keeps the
+      # timestamp from the save that actually deleted it. Support uses that
+      # timestamp to find which rows a bad save wiped.
       now = Time.current
-      BaseVariant.where(id: variant_ids).update_all(deleted_at: now, updated_at: now)
+      BaseVariant.where(id: variant_ids).alive.update_all(deleted_at: now, updated_at: now)
 
+      # Cleanup runs for every id, including ones deleted earlier: an earlier
+      # delete may not have finished cleaning up, and both workers are safe to
+      # run twice.
       variant_ids.each do |variant_id|
         DeleteProductRichContentWorker.perform_async(product.id, variant_id)
         DeleteProductFilesArchivesWorker.perform_async(product.id, variant_id)

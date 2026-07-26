@@ -97,6 +97,7 @@ describe ProductPresenter::ProductProps do
               free_trial: nil,
               is_quantity_enabled: false,
               is_multiseat_license: false,
+              is_licensed: false,
               hide_sold_out_variants: false,
               native_type: "membership",
               is_stream_only: false,
@@ -166,7 +167,8 @@ describe ProductPresenter::ProductProps do
               is_gift_receiver_purchase: false,
               show_view_content_button_on_product_page: false,
               subscription_has_lapsed: false,
-              total_price_including_tax_and_shipping: "$0 a month"
+              total_price_including_tax_and_shipping: "$0 a month",
+              license_key: nil
             },
             wishlists: [],
           )
@@ -346,6 +348,7 @@ describe ProductPresenter::ProductProps do
               free_trial: nil,
               is_quantity_enabled: false,
               is_multiseat_license: false,
+              is_licensed: false,
               hide_sold_out_variants: false,
               native_type: "commission",
               is_stream_only: false,
@@ -403,7 +406,8 @@ describe ProductPresenter::ProductProps do
               is_gift_receiver_purchase: false,
               show_view_content_button_on_product_page: false,
               subscription_has_lapsed: false,
-              total_price_including_tax_and_shipping: "$2"
+              total_price_including_tax_and_shipping: "$2",
+              license_key: nil
             },
             wishlists: [],
           )
@@ -730,6 +734,51 @@ describe ProductPresenter::ProductProps do
         props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product]
 
         expect(props[:is_multiseat_license]).to be(false)
+      end
+    end
+
+    context "licensed product" do
+      let(:product) { create(:product, user: seller, is_licensed: true) }
+
+      it "exposes is_licensed so the page can offer the license key lookup" do
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product]
+
+        expect(props[:is_licensed]).to be(true)
+      end
+
+      it "includes the license key for a signed-in buyer" do
+        purchase = create(:free_purchase, link: product, purchaser: buyer, seller:)
+        license = create(:license, link: product, purchase:)
+
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: SellerContext.new(user: buyer, seller: buyer))
+
+        expect(props[:purchase][:license_key]).to eq(license.serial)
+      end
+
+      it "omits the license key when the purchase was only matched by the browser cookie" do
+        # A guest checkout leaves a _gumroad_guid cookie behind. That identifies the
+        # browser, not the person, so the key must not be rendered on a public page.
+        purchase = create(:free_purchase, link: product, seller:, browser_guid: "some-guid")
+        create(:license, link: product, purchase:)
+        allow(request).to receive(:cookie_jar).and_return({ _gumroad_guid: "some-guid" })
+
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+
+        expect(props[:purchase][:id]).to eq(purchase.external_id)
+        expect(props[:purchase][:license_key]).to be_nil
+      end
+
+      it "does not serialize a license_key key at all on the cookie-only path" do
+        # The frontend renders the key row on truthiness rather than an explicit null
+        # check, because the strip removes the entry entirely and it arrives as
+        # undefined after JSON serialization rather than null.
+        purchase = create(:free_purchase, link: product, seller:, browser_guid: "some-guid")
+        create(:license, link: product, purchase:)
+        allow(request).to receive(:cookie_jar).and_return({ _gumroad_guid: "some-guid" })
+
+        props = described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+
+        expect(props[:purchase].to_json).not_to include(purchase.license_key)
       end
     end
   end

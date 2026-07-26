@@ -169,10 +169,10 @@ class ReceiptPresenter::PaymentInfo
 
     def credit_card_note
       return if orderable.card_type.blank?
-      # Non-card methods: PayPal/Link wallets, local bank-transfer methods (UPI, iDEAL) and
-      # buy-now-pay-later (Klarna). None of them produce a credit card statement line, so
-      # the note would be wrong.
-      return if orderable.card_type.in?([CardType::PAYPAL, CardType::LINK, CardType::UPI, CardType::IDEAL, CardType::KLARNA])
+      # Non-card methods: PayPal/Link wallets, local bank-transfer methods (UPI, iDEAL),
+      # buy-now-pay-later (Klarna) and the Alipay wallet. None of them produce a credit card
+      # statement line, so the note would be wrong.
+      return if orderable.card_type.in?([CardType::PAYPAL, CardType::LINK, CardType::UPI, CardType::IDEAL, CardType::KLARNA, CardType::ALIPAY])
 
       # TODO: Update when multiple charges per receipt are supported
       "The charge will be listed as GUMRD.COM* on your credit card statement."

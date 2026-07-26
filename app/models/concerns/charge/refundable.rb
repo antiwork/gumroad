@@ -5,7 +5,8 @@ module Charge::Refundable
 
   # A refund reached a terminal unsuccessful status after Stripe had accepted it.
   # "failed" means the buyer's bank returned an asynchronous bank-transfer refund
-  # (iDEAL, Bancontact, ACH) days after creation; "canceled" means a pending refund
+  # (iDEAL, Bancontact, ACH) days after creation, or that an asynchronous wallet refund
+  # (Alipay, which settles in up to five minutes) did not complete; "canceled" means a pending refund
   # was canceled before completing. Either way the money is back in our Stripe
   # balance and the buyer did NOT receive it. Per the reversal-depth decision on
   # PR #5779: automatically reverse the balance debits and refunded flags (the

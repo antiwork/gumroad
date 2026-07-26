@@ -8,6 +8,12 @@ class ProductFile < ApplicationRecord
   MAXIMUM_THUMBNAIL_FILE_SIZE = 5.megabytes
   MAX_EPUB_READER_ARCHIVE_SIZE = 32.megabytes
 
+  # Enqueueing the retirement job (see `stored_file_present?`) is best-effort, but
+  # only these failures are expected: Redis is unreachable, or the Sidekiq client
+  # can't talk to it. Those need no alert. Everything else that reaches the same
+  # rescue is a bug worth reporting rather than logging and forgetting.
+  EXPECTED_ENQUEUE_ERRORS = [Redis::BaseError, RedisClient::Error].freeze
+
   has_paper_trail
 
   belongs_to :link, optional: true
@@ -165,6 +171,98 @@ class ProductFile < ApplicationRecord
 
   def external_link?
     filetype == "link"
+  end
+
+  # Whether there is really something in storage behind this row, i.e. whether a
+  # buyer could be given the file.
+  #
+  # A ProductFile can outlive its upload. The product-save API takes the storage
+  # URL from the browser (see `WithProductFiles#save_files!`), so a save that
+  # lands while a multipart upload is still in flight — or that never finishes
+  # because the tab was closed — leaves a row pointing at a key that was never
+  # written. Nothing later deletes it: `analyze` gives up on the missing object
+  # and the row stays alive. So "an alive ProductFile exists" is not the same
+  # claim as "the buyer receives a file", and anything treating a file as proof
+  # that a listing delivers something has to ask this instead (gumroad#6320).
+  #
+  # `analyze_completed` is set by `analyze` only after it has successfully read
+  # the stored object, and unlike `size` it is a server-side flag rather than
+  # something the save API accepts from the client (see LinkPolicy's permitted
+  # `files` attributes, which include `size`). So a completed analysis proves the
+  # upload finished and needs no request to storage. Only a file we have never
+  # analyzed — which includes one uploaded seconds ago, before AnalyzeFileWorker
+  # has run — costs a lookup. A file whose object has since been purged keeps its
+  # flag, so that case is answered from `deleted_from_cdn_at` first.
+  #
+  # A lookup that comes back absent is not thrown away: it enqueues
+  # RecordProductFileMissingFromStorageJob, which writes `deleted_from_cdn_at` on
+  # rows whose upload can no longer be in flight. That is how a never-finished
+  # upload stops costing a lookup on every later save (gumroad-private#1370).
+  #
+  # External links are always considered present: there is no storage object to
+  # look for, and the URL is the deliverable.
+  def stored_file_present?
+    known_from_row = stored_file_presence_known_from_row
+    return known_from_row unless known_from_row.nil?
+
+    present = s3_object.exists?
+    # A lookup that proves the object is absent is the only place we ever learn
+    # that this row's upload never finished, and right now nothing remembers it:
+    # the next caller pays the same lookup to reach the same answer. Hand the
+    # finding to a job so the row can record it and answer for itself from then
+    # on (gumroad-private#1370). This runs in the middle of a save, so it must
+    # not write here — the job re-checks and does the write.
+    if !present && RecordProductFileMissingFromStorageJob.eligible?(self)
+      begin
+        RecordProductFileMissingFromStorageJob.perform_async(id)
+      rescue StandardError => e
+        # This method is called from a product validation, so a queueing problem
+        # (Redis down) must not fail the seller's save. We already have the
+        # answer the caller asked for; recording it is an optimization, and a
+        # later save will enqueue again.
+        Rails.logger.warn("RecordProductFileMissingFromStorageJob enqueue failed (#{id}): #{e.class} => #{e.message}")
+        # Redis being unreachable is the failure this rescue exists for, and it
+        # needs no alert: it is already visible as an outage and it resolves on
+        # its own. Anything else reaching here is a bug in how we enqueue (a bad
+        # argument, a serialization error), which would otherwise sit in the logs
+        # silently skipping retirement forever, so report it.
+        unless EXPECTED_ENQUEUE_ERRORS.any? { e.is_a?(_1) }
+          begin
+            ErrorNotifier.notify(e, product_file_id: id)
+          rescue StandardError => notifier_error
+            # Reporting the problem must not become a bigger problem than the one
+            # being reported. Sentry talks over the network and can fail on its
+            # own, and this whole path runs inside a seller's save, so an
+            # exception from the notifier would fail that save for a reason the
+            # seller has nothing to do with. Log and move on.
+            Rails.logger.warn("RecordProductFileMissingFromStorageJob enqueue failure could not be reported (#{id}): #{notifier_error.class} => #{notifier_error.message}")
+          end
+        end
+      end
+    end
+    present
+  rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
+    # Storage being unreachable is not evidence that the file is missing, and a
+    # caller deciding whether a seller may publish should not turn our own
+    # outage into a rejection. Assume the file is there and log it.
+    Rails.logger.warn("ProductFile#stored_file_present? failed (#{id}): #{e.class} => #{e.message}")
+    true
+  end
+
+  # Whether this row on its own already answers `stored_file_present?`, with no
+  # request to storage: `true` for known-present, `false` for known-missing, and
+  # `nil` when only storage can say.
+  #
+  # A caller checking many files uses this to answer from the rows first and
+  # spend its storage requests only on the files that genuinely need one, instead
+  # of giving up on the check because the list is long.
+  def stored_file_presence_known_from_row
+    return true if external_link?
+    return false unless s3?
+    return false if deleted_from_cdn?
+    return true if analyze_completed?
+
+    nil
   end
 
   def signed_url
