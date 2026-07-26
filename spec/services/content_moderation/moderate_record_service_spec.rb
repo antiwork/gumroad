@@ -513,6 +513,23 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(product.reload, :product).passed).to eq(true)
       end
 
+      # The other way a file goes unanalyzed forever is that it really was stored
+      # but analysis ran out of retries, which can leave a real deliverable as the
+      # oldest row on a listing that has collected abandoned uploads since.
+      it "publishes when a long-stored unanalyzed file sits in front of more abandoned uploads than the cap" do
+        stored = create(:product_file, analyze_completed: false, position: 1)
+        abandoned = Array.new(described_class::MAX_FILES_CHECKED_FOR_STORAGE + 3) do |index|
+          create(:product_file, analyze_completed: false, position: index + 2)
+        end
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do |file|
+          double("s3_object", exists?: file.id == stored.id)
+        end
+        ([stored] + abandoned).each { product.product_files << _1 }
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
       # The save API takes each file's storage URL from the client, so submitting
       # a long list of never-uploaded rows costs a caller nothing. Attaching many
       # of them must not buy what attaching one doesn't.

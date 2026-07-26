@@ -8,6 +8,10 @@ class ContentModeration::ModerateRecordService
   # whether a listing delivers anything (see `has_deliverable_file?`).
   MAX_FILES_CHECKED_FOR_STORAGE = 5
 
+  # How many of those lookups go to the most recently created rows. The rest go
+  # to the oldest ones — see `has_deliverable_file?` for why both ends matter.
+  NEWEST_FILES_CHECKED_FOR_STORAGE = 3
+
   CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
 
   CATEGORY_LABELS = {
@@ -241,16 +245,25 @@ class ContentModeration::ModerateRecordService
     # MAX_FILES_CHECKED_FOR_STORAGE of those are made — enough to prove a
     # deliverable exists without turning a save into a long series of lookups.
     #
-    # Those lookups go newest row first. The only file a row cannot answer for is
-    # one that has never been analyzed, and there are two ways to get there: the
-    # seller uploaded it moments ago and AnalyzeFileWorker hasn't run yet, or the
-    # upload never finished and never will. The first kind is the most recently
-    # created row, so newest-first spends the lookups on the file most likely to
-    # be a real deliverable. Without it, a seller whose genuine new upload sits
-    # behind MAX_FILES_CHECKED_FOR_STORAGE abandoned rows would be told their
-    # listing delivers nothing. Sorting by id is deliberate: alive_product_files
-    # is ordered by the seller's chosen `position`, which says nothing about
-    # which row was created last.
+    # Which files get those lookups is chosen by creation order, from both ends.
+    # The only file a row cannot answer for is one that has never been analyzed,
+    # and there are two ways to get there. Either the seller uploaded it moments
+    # ago and AnalyzeFileWorker hasn't run yet, which makes it one of the most
+    # recently created rows, or analysis never finished — usually because the
+    # upload itself never finished (nothing deletes that row afterwards), but
+    # sometimes because a genuinely stored file ran out of analysis retries long
+    # ago and stayed behind. So the newest rows are checked first and the leftover
+    # lookups go to the oldest rows: between them they cover the fresh upload and
+    # the long-stored file whose analysis never completed, instead of spending the
+    # whole budget on whichever end of a pile of abandoned uploads sorts first.
+    # Ordering by id is deliberate: alive_product_files is ordered by the seller's
+    # chosen `position`, which says nothing about when a row was created, so on a
+    # listing with more abandoned rows than the cap the real file could sit past
+    # the cap and never be queried at all.
+    #
+    # Ordering only decides which honest sellers we can confirm cheaply; it can
+    # never let an empty listing through, because passing still requires an object
+    # to actually be in storage.
     def has_deliverable_file?(owner)
       unverifiable_from_row = []
 
@@ -261,10 +274,20 @@ class ContentModeration::ModerateRecordService
         end
       end
 
-      unverifiable_from_row
-        .sort_by { -_1.id }
-        .first(MAX_FILES_CHECKED_FOR_STORAGE)
-        .any?(&:stored_file_present?)
+      files_to_check(unverifiable_from_row).any?(&:stored_file_present?)
+    end
+
+    # At most MAX_FILES_CHECKED_FOR_STORAGE files, taken from the newest and
+    # oldest rows by creation order. `max_by`/`min_by` with a count pick those
+    # ends without ordering the whole collection, which matters because the number
+    # of rows here is up to the caller submitting the save.
+    def files_to_check(files)
+      return files if files.size <= MAX_FILES_CHECKED_FOR_STORAGE
+
+      newest = files.max_by(NEWEST_FILES_CHECKED_FOR_STORAGE, &:id)
+      oldest = files.min_by(MAX_FILES_CHECKED_FOR_STORAGE - NEWEST_FILES_CHECKED_FOR_STORAGE, &:id)
+
+      newest + oldest
     end
 
     # Rich content with something in the body, ignoring pages that only have a
