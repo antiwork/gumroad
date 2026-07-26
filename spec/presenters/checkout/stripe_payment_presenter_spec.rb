@@ -212,7 +212,7 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
-  it "falls back to CardElement when any item in a multi-item candidate cart fails a presentment gate" do
+  it "selects the buyer-currency presentment Payment Element for a cart priced in a currency other than the buyer's" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     eur_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 500)
@@ -224,11 +224,38 @@ describe Checkout::StripePaymentPresenter do
       display_mode: "buyer_local",
       buyer_currency_shown: Currency::CAD,
     }
-    # The quote locks the whole cart total, so a single non-USD item invalidates the
-    # whole cart's presentment — everything falls back to canonical USD on CardElement.
+    # The seller pricing one item in euros says nothing about what a Canadian buyer is
+    # quoted: the quote converts the cart's canonical USD total into the buyer's currency
+    # either way, so both items present in CAD.
     add_products = [
       checkout_product_for(product, buyer_currency_display:),
       checkout_product_for(eur_product, buyer_currency_display:),
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "falls back to CardElement when an item is already priced in the buyer's own currency" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    cad_product = create(:product, user: seller, price_currency_type: "cad", price_cents: 500)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    # A product already priced in the buyer's currency has nothing to convert, so its
+    # buyer-local display stays off (buyer_currency_display_props returns "default" when
+    # the two currencies match) and it is not a presentment candidate. The quote locks the
+    # whole cart total, so that one item takes the whole cart back to canonical USD —
+    # which is right here, because that item is charged its listed CAD price directly.
+    add_products = [
+      checkout_product_for(product, buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }),
+      checkout_product_for(cad_product, buyer_currency_display: { display_mode: "default", buyer_currency_shown: Currency::CAD }),
     ]
 
     expect(stripe_payment_props(add_products:)).to eq(
@@ -1142,7 +1169,7 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
-    it "keeps the CardElement fallback for an EUR-priced product when the client-confirm flag is off" do
+    it "mounts the buyer-currency element for an EUR-priced product when the client-confirm flag is off" do
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
@@ -1158,14 +1185,13 @@ describe Checkout::StripePaymentPresenter do
         )
       ]
 
+      # Without the client-confirm flag the iDEAL surface is unreachable, but this Canadian
+      # buyer of a EUR-priced product is still an ordinary quote candidate: the cart's
+      # canonical USD total converts into CAD exactly as a USD-priced cart's would
+      # (gumroad-private#1371). It used to dead-end on CardElement because quoting refused
+      # any non-USD listing.
       expect(stripe_payment_props(add_products:)).to eq(
-        integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
-        fallback_reason: "buyer_currency_presentment_unsupported",
-        disable_wallets: true,
-        request_apple_pay_merchant_tokens: false,
-        payment_element_wallets: false,
-        flat_payment_methods: false,
-        elements_options: nil,
+        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller

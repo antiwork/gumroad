@@ -157,10 +157,6 @@ class Checkout::BuyerCurrencyQuote
 
     seller = products.first.user
     return unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-    # The quote locks the whole cart total, so every item must individually support
-    # presentment; one unsupported item (whose charge amount could differ from the total
-    # the quote locked) means the whole cart falls back to canonical USD.
-    return unless products.all? { |product| quotable_product?(product) }
 
     merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
                        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
@@ -169,6 +165,11 @@ class Checkout::BuyerCurrencyQuote
     buyer_currency = buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    # The quote locks the whole cart total, so every item must individually support
+    # presentment; one unsupported item (whose charge amount could differ from the total
+    # the quote locked) means the whole cart falls back to canonical USD. The buyer's
+    # currency is known by this point because one of the product gates depends on it.
+    return unless products.all? { |product| quotable_product?(product, buyer_currency:) }
     # Checked last because the marker is scoped to the presentment currency: a mismatch
     # learned for EUR must not suppress quoting for GBP buyers of the same seller.
     return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)
@@ -255,8 +256,21 @@ class Checkout::BuyerCurrencyQuote
       end
     end
 
-    def quotable_product?(product)
-      return false unless product.price_currency_type.to_s.downcase == Currency::USD
+    # What the seller priced the product in has no bearing on what the buyer should be
+    # quoted: the quote converts the cart's canonical USD total into the buyer's own
+    # currency, and USD is only the unit our money flows are normalized to internally.
+    # A euro-priced product bought from Brazil is quoted in reais exactly like a
+    # dollar-priced one (gumroad-private#1371).
+    #
+    # The one product currency that must NOT go through this lane is the buyer's own.
+    # Converting a R$49.90 listing to USD and back through a Stripe FX quote returns
+    # something near but not equal to R$49.90 (two conversions, two rates, two
+    # roundings), so the buyer would be charged an amount that differs from the price
+    # on the page. That cart is charged its listed price directly instead — the
+    # direct-listed lane Charge::MethodForcedPresentment already implements for local
+    # payment methods — so it is withheld from quoting rather than mispriced by it.
+    def quotable_product?(product, buyer_currency:)
+      return false if product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
       return false if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?
       # Commissions charge only a deposit now and installment plans charge only the first
       # payment, so a quote locked against the full cart total can never match the charged

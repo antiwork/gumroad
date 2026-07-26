@@ -197,11 +197,34 @@ describe Checkout::BuyerCurrencyQuote do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller) if other_seller
     end
 
-    it "returns nil when any item in the cart is priced in a non-USD currency" do
+    it "quotes a cart priced in a non-USD currency that is not the buyer's own" do
+      # The seller pricing in euros says nothing about what a Canadian buyer should see:
+      # the cart total reaching this service is canonical USD either way, so it converts
+      # into the buyer's currency exactly as a USD-priced cart does.
       eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
-      expect(StripeFxQuote).not_to receive(:create)
 
       result = described_class.create(line_items: line_items_for(product, eur_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 25_00)
+    end
+
+    it "returns nil when an item is already priced in the buyer's own currency" do
+      # Converting a listed CAD price to USD and back through an FX quote would charge a
+      # Canadian buyer something a cent or two off the CAD price on the page. That cart is
+      # charged its listed price directly instead, so it must not be quoted here.
+      cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(cad_product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
+    it "returns nil when only one item of a mixed cart is priced in the buyer's currency" do
+      cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(product, cad_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end

@@ -59,6 +59,17 @@ class Checkout::StripePaymentPresenter
     # display/method-filtering while the charge path prices the intent from the verified quote
     # token. Wallets stay disabled for the same reason as CardElement candidates: a wallet payment
     # would charge canonical USD while the cart displays buyer-currency totals.
+    #
+    # The method-forced lane is checked FIRST because both can now match the same cart. Since
+    # quoting stopped requiring a USD-priced product (gumroad-private#1371), a EUR-priced cart
+    # seen by, say, a Canadian buyer is a valid quote candidate as well as a valid iDEAL cart.
+    # The method-forced lane is the better of the two: it charges the product's listed EUR price
+    # as-is, where the quote lane would convert that price to USD and back to CAD. It also
+    # carries the local payment methods, which the server-confirm element cannot mount at all.
+    if client_confirm_eligible? && method_forced_shape?(checkout_items)
+      return client_confirm_props
+    end
+
     if buyer_currency_presentment_element_shape?(checkout_items)
       return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, buyer_currency_presentment: true, disable_wallets: true)
     end
@@ -327,7 +338,7 @@ class Checkout::StripePaymentPresenter
 
     # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
     # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
-    # one-time, USD-priced, non-commission items that all belong to ONE seller and are each a
+    # one-time, non-commission items that all belong to ONE seller and are each a
     # presentment candidate (candidate? already covers the seller's flags and an active
     # buyer-local display). One seller matters because the order pipeline creates one
     # charge per seller, and the quote locks the cart total for a single PaymentIntent —
@@ -335,6 +346,15 @@ class Checkout::StripePaymentPresenter
     # Question 9 on issue #5419), so they stay on CardElement. Products that offer installments
     # stay on CardElement even when the buyer chooses a one-time purchase because quote creation
     # cannot see that choice and rejects the product.
+    #
+    # There is deliberately no condition on the currency the SELLER priced in. The quote
+    # converts the cart's canonical USD total into the buyer's currency, which works the same
+    # whether the seller listed in dollars, euros or reais (gumroad-private#1371). The one
+    # excluded case — a product priced in the buyer's own currency, which is charged its listed
+    # price directly instead of round-tripped through a quote — is already excluded by
+    # buyer_currency_presentment_candidate?: the buyer-local display only turns on when the
+    # buyer's currency differs from the product's.
+    #
     # Charge-time-only gates (merchant account model, wallet params, GeoIP re-check, quote
     # verification) stay in the eligibility service — when any of them falls back, the charge
     # simply runs canonical USD, which the currency-less card PaymentMethod the server-confirm
@@ -351,8 +371,7 @@ class Checkout::StripePaymentPresenter
           item[:recurrence].blank? &&
           !item[:pay_in_installments] && !item[:offers_installment_plan] &&
           !item[:is_preorder] && !item[:has_free_trial] &&
-          item[:native_type] != Link::NATIVE_TYPE_COMMISSION &&
-          item[:product_currency] == Currency::USD
+          item[:native_type] != Link::NATIVE_TYPE_COMMISSION
       end
     end
 
