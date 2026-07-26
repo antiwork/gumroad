@@ -248,6 +248,19 @@ describe ContactingCreatorMailer do
   end
 
   describe "seller_update" do
+    # The mailer reports on "last week", which it defines as the seven days ending at the most
+    # recent Sunday midnight (`Date.today.beginning_of_week(:sunday)`). These examples rely on
+    # being able to create a purchase that lands *after* that window closes, so that it is
+    # excluded from the totals — they do this with `5.minutes.ago`.
+    #
+    # That only holds if "now" is comfortably past Sunday midnight. When the suite runs during the
+    # first minutes of a Sunday in UTC, the window closes at today's midnight, so `5.minutes.ago`
+    # falls back into Saturday and is counted as part of last week — the excluded purchase silently
+    # becomes an included one and the expected totals shift. Pinning the clock to a mid-week moment
+    # keeps the window boundary a fixed distance from "now", so these examples do not depend on
+    # which day of the week CI happens to run.
+    before { travel_to(Time.utc(2024, 5, 1, 12, 0, 0)) } # a Wednesday
+
     before do
       @user = create(:user)
       allow_any_instance_of(User).to receive(:secure_external_id).and_return("sample-secure-id")
