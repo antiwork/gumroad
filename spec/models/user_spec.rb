@@ -421,6 +421,28 @@ describe User, :vcr do
         expect(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL).to be <= 5.minutes
         expect(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL).to be < User::AVATAR_VARIANT_URL_CACHE_TTL
       end
+
+      it "does not extend the cached URL's lifetime when serving it" do
+        # The bound above only holds because a cache hit returns without
+        # rewriting the URL entry. If a hit rewrote it, the day-long expiry
+        # would be pushed back on every read, so a frequently viewed seller's
+        # entry would never expire and the storage key cached beside it would
+        # be the only thing left catching a variant that had gone missing.
+        @user.avatar_url
+        url_cache_key = "attachment_#{@user.avatar.id}_variant_url_v3"
+        cached_entry = Rails.cache.read(url_cache_key)
+        expect(cached_entry[:url]).to be_present
+
+        url_cache_writes = 0
+        allow(Rails.cache).to receive(:write).and_wrap_original do |original, *args, **kwargs|
+          url_cache_writes += 1 if args.first == url_cache_key
+          original.call(*args, **kwargs)
+        end
+
+        # The cache holds the raw storage URL; avatar_url serves it through the CDN.
+        expect(@user.reload.avatar_url).to include(cached_entry[:key])
+        expect(url_cache_writes).to eq(0)
+      end
     end
 
     describe "#avatar_variant" do
