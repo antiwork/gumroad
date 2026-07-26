@@ -102,7 +102,17 @@ class Charge::PresentmentOrchestrator
       presentment_cents_for(gumroad_amount_cents, locked_quote.fx_rate) + rounding_delta_cents
     ).clamp(0, presentment_total_cents)
 
-    allocations = Charge::PresentmentAllocator.new(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:).allocations
+    # The allocator derives every component from the EXACT converted total and then carries
+    # the price-ending difference on the non-tax components only, so the persisted tax rows
+    # (and the receipt built from them) show the true converted tax rather than a share of a
+    # cosmetic adjustment. The exact total is recoverable from the signed quote: the locked
+    # total is the exact one plus the difference.
+    allocations = Charge::PresentmentAllocator.new(
+      purchases:,
+      presentment_total_cents: presentment_total_cents - rounding_delta_cents,
+      presentment_gumroad_amount_cents:,
+      rounding_delta_cents:
+    ).allocations
     self.class.persist!(
       charge:,
       presentment_currency: eligibility_decision.currency,

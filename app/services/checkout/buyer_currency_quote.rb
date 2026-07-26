@@ -225,7 +225,10 @@ class Checkout::BuyerCurrencyQuote
       fx_rate: quote.fx_rate,
       stripe_fx_quote_id: quote.id,
       stripe_fx_quote_expires_at: quote.expires_at,
-      line_allocations: line_allocations_for(presentment_total_cents)
+      # Built from the EXACT converted total plus the rounding difference, so the tax the
+      # checkout displays is the true converted tax and the cosmetic difference shows up on
+      # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
+      line_allocations: line_allocations_for(converted_total_cents, rounding.delta_cents)
     )
   rescue StripeFxQuote::SettlementCurrencyMismatch => e
     # Expected condition, not a defect: the account settles this currency in itself
@@ -257,14 +260,18 @@ class Checkout::BuyerCurrencyQuote
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
     end
 
-    # Splits the locked presentment total across the cart lines with the SAME shared
+    # Splits the presentment amounts across the cart lines with the SAME shared
     # largest-remainder code the charge later uses to persist purchase presentment rows
     # (Charge::PresentmentAllocator). The browser renders these amounts verbatim instead of
     # converting each line itself, so the line items the buyer sees always sum to the locked
     # total and match the persisted rows on the receipt.
-    def line_allocations_for(presentment_total_cents)
+    #
+    # The total passed in is the exact converted one; the rounding difference is applied on
+    # top of the split, so the line totals sum to the rounded total that was locked.
+    def line_allocations_for(converted_total_cents, rounding_delta_cents)
       Charge::PresentmentAllocator.allocate_lines(
-        presentment_total_cents:,
+        presentment_total_cents: converted_total_cents,
+        rounding_delta_cents:,
         lines: line_items.map do |line_item|
           Charge::PresentmentAllocator::Line.new(
             canonical_total_cents: line_item.canonical_total_cents,

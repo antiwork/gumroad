@@ -231,5 +231,151 @@ describe Charge::PresentmentAllocator do
                                                     presentment_gumroad_amount_cents: 0)
       expect(allocations.sum(&:presentment_total_cents)).to eq(12_50)
     end
+
+    it "keeps the tax components at their exact converted value and carries a price-ending round-up on the price" do
+      # Reviewer regression case: with the difference spread proportionally over every
+      # component, a total rounded up to CA$16.49 reported CA$1.50 of tax where the exact
+      # conversion (CA$16.37) gives CA$1.49 — a cosmetic cent labelled as tax collected, on
+      # the checkout, the receipt and the persisted row. Tax must stay at the exact figure.
+      purchase = instance_double(Purchase,
+                                 total_transaction_cents: 11_00,
+                                 total_transaction_amount_for_gumroad_cents: 3_00,
+                                 tip: nil,
+                                 tax_cents: 1_00,
+                                 gumroad_tax_cents: 0,
+                                 shipping_cents: 0)
+
+      exact = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 16_37,
+        presentment_gumroad_amount_cents: 4_46
+      ).allocations.sole
+      rounded = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 16_37,
+        presentment_gumroad_amount_cents: 4_58,
+        rounding_delta_cents: 12
+      ).allocations.sole
+
+      expect(rounded.presentment_seller_tax_cents).to eq(exact.presentment_seller_tax_cents)
+      expect(rounded.presentment_price_cents).to eq(exact.presentment_price_cents + 12)
+      expect(rounded.presentment_total_cents).to eq(16_49)
+      expect(rounded.presentment_price_cents +
+             rounded.presentment_tip_cents +
+             rounded.presentment_seller_tax_cents +
+             rounded.presentment_gumroad_tax_cents +
+             rounded.presentment_shipping_cents).to eq(rounded.presentment_total_cents)
+    end
+
+    it "keeps the tax components at their exact converted value when the total is rounded down" do
+      purchase = instance_double(Purchase,
+                                 total_transaction_cents: 11_00,
+                                 total_transaction_amount_for_gumroad_cents: 3_00,
+                                 tip: nil,
+                                 tax_cents: 60,
+                                 gumroad_tax_cents: 40,
+                                 shipping_cents: 0)
+
+      exact = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 16_37,
+        presentment_gumroad_amount_cents: 4_46
+      ).allocations.sole
+      rounded = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 16_37,
+        presentment_gumroad_amount_cents: 4_08,
+        rounding_delta_cents: -38
+      ).allocations.sole
+
+      expect(rounded.presentment_seller_tax_cents).to eq(exact.presentment_seller_tax_cents)
+      expect(rounded.presentment_gumroad_tax_cents).to eq(exact.presentment_gumroad_tax_cents)
+      expect(rounded.presentment_price_cents).to eq(exact.presentment_price_cents - 38)
+      expect(rounded.presentment_total_cents).to eq(15_99)
+    end
+
+    it "spreads the difference across a multi-line cart's non-tax components in proportion to them" do
+      taxed_purchase = instance_double(Purchase,
+                                       total_transaction_cents: 11_00,
+                                       total_transaction_amount_for_gumroad_cents: 3_00,
+                                       tip: nil,
+                                       tax_cents: 1_00,
+                                       gumroad_tax_cents: 0,
+                                       shipping_cents: 0)
+      plain_purchase = instance_double(Purchase,
+                                       total_transaction_cents: 5_00,
+                                       total_transaction_amount_for_gumroad_cents: 1_50,
+                                       tip: nil,
+                                       tax_cents: 0,
+                                       gumroad_tax_cents: 0,
+                                       shipping_cents: 0)
+
+      exact = described_class.new(
+        purchases: [taxed_purchase, plain_purchase],
+        presentment_total_cents: 21_37,
+        presentment_gumroad_amount_cents: 5_63
+      ).allocations
+      rounded = described_class.new(
+        purchases: [taxed_purchase, plain_purchase],
+        presentment_total_cents: 21_37,
+        presentment_gumroad_amount_cents: 5_75,
+        rounding_delta_cents: 12
+      ).allocations
+
+      expect(rounded.sum(&:presentment_total_cents)).to eq(21_49)
+      expect(rounded.map(&:presentment_seller_tax_cents)).to eq(exact.map(&:presentment_seller_tax_cents))
+      expect(rounded.map(&:presentment_gumroad_tax_cents)).to eq(exact.map(&:presentment_gumroad_tax_cents))
+      # Both lines carry part of the increase, weighted by their own non-tax money.
+      expect(rounded.map(&:presentment_price_cents).zip(exact.map(&:presentment_price_cents)).map { _1 - _2 }.sum).to eq(12)
+      rounded.each_with_index do |allocation, index|
+        expect(allocation.presentment_price_cents).to be > exact[index].presentment_price_cents
+      end
+    end
+
+    it "never takes a component below zero when the reduction is larger than one component can give up" do
+      # A tip-only line cannot give up more than the tip it was allocated, so the remainder
+      # of the reduction has to move on to another non-tax component.
+      purchase = instance_double(Purchase,
+                                 total_transaction_cents: 10_00,
+                                 total_transaction_amount_for_gumroad_cents: 10_00,
+                                 tip: instance_double(Tip, value_usd_cents: 20),
+                                 tax_cents: 0,
+                                 gumroad_tax_cents: 0,
+                                 shipping_cents: 0)
+
+      allocation = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 10_00,
+        presentment_gumroad_amount_cents: 9_00,
+        rounding_delta_cents: -1_00
+      ).allocations.sole
+
+      expect(allocation.presentment_total_cents).to eq(9_00)
+      expect(allocation.presentment_price_cents).to be >= 0
+      expect(allocation.presentment_tip_cents).to be >= 0
+      expect(allocation.presentment_price_cents + allocation.presentment_tip_cents).to eq(9_00)
+    end
+
+    it "raises when only tax components are left to carry the difference" do
+      # A tax-only cart has no honest place to put the difference. Raising makes the
+      # orchestrator fall back to a canonical USD charge instead of persisting rows that
+      # disagree with what was charged.
+      purchase = instance_double(Purchase,
+                                 total_transaction_cents: 1_00,
+                                 total_transaction_amount_for_gumroad_cents: 1_00,
+                                 tip: nil,
+                                 tax_cents: 1_00,
+                                 gumroad_tax_cents: 0,
+                                 shipping_cents: 0)
+
+      expect do
+        described_class.new(
+          purchases: [purchase],
+          presentment_total_cents: 1_00,
+          presentment_gumroad_amount_cents: 1_00,
+          rounding_delta_cents: 5
+        ).allocations
+      end.to raise_error(ArgumentError, /no non-tax component/)
+    end
   end
 end
