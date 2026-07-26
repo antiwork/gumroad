@@ -70,6 +70,21 @@ describe("HelpCenterArticle", () => {
     expect(mocks.routerGet).toHaveBeenCalledWith(`${GETTING_PAID_PATH}#${ANCHOR_ID}`);
   });
 
+  it("does not call a hook while handling the click", () => {
+    // usePage() is a React hook, so reading it from inside the click handler throws
+    // "invalid hook call" and takes the whole interceptor down with it — preventDefault never
+    // runs and the click falls through to a full page load.
+    const { container } = renderArticle({
+      slug: "260-your-payout-settings-page",
+      content: `<a id="cross" href="${GETTING_PAID_PATH}#${ANCHOR_ID}">Address verification</a>`,
+    });
+    const callsAfterRender = mocks.usePage.mock.calls.length;
+
+    clickLink(container, "#cross");
+
+    expect(mocks.usePage.mock.calls.length).toBe(callsAfterRender);
+  });
+
   it("navigates to a fragment-less internal article unchanged", () => {
     const { container } = renderArticle({
       slug: "260-your-payout-settings-page",
