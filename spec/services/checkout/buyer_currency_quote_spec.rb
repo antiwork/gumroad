@@ -498,6 +498,57 @@ describe Checkout::BuyerCurrencyQuote do
                                                 presentment_total_cents: 12_50)
     end
 
+    it "verifies a EUR-priced cart's token against the purchase totals the charge path computes" do
+      # Greptile P1 (2026-07-26) claimed the broadened gate locks LISTED-currency cents in the
+      # token while charge-time verification passes USD totals, so a non-USD listing could never
+      # complete. This walks both halves with real objects to settle it.
+      #
+      # Both sides are canonical USD, and neither reads price_currency_type: the checkout sends
+      # already-converted prices to the surcharge endpoint (getProducts does
+      # `price: convertToUSD(item, price)`), so the line item's price_cents is USD; and the
+      # purchase stores `price_cents = displayed_price_usd_cents` with
+      # `total_transaction_cents = price_cents`, which is what Order::ChargeService sums into
+      # amount_cents. The listing currency only decides how the USD figure was derived.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      eur_purchase = build(:purchase, link: eur_product, seller:, purchase_state: "in_progress")
+      # Run the real pricing step rather than trusting the factory, which assigns
+      # price_cents straight from the product and so would not exercise the conversion.
+      eur_purchase.set_price_and_rate
+
+      # The charge path's own inputs, read off the purchase rather than restated by hand.
+      charge_total_cents = eur_purchase.total_transaction_cents
+      expect(charge_total_cents).to eq(eur_purchase.price_cents)
+      expect(charge_total_cents).not_to eq(eur_product.price_cents), "expected the purchase total to be converted USD, not the listed EUR cents"
+
+      result = described_class.create(
+        line_items: [
+          described_class::LineItem.new(
+            permalink: eur_product.unique_permalink,
+            product: eur_product,
+            price_cents: charge_total_cents,
+            tip_cents: 0,
+            seller_tax_cents: 0,
+            gumroad_tax_cents: 0,
+            shipping_cents: 0
+          )
+        ],
+        canonical_total_cents: charge_total_cents,
+        ip: "24.48.0.1"
+      )
+
+      verified_quote = described_class.verify!(
+        token: result.token,
+        seller:,
+        merchant_account:,
+        currency: Currency::CAD,
+        canonical_total_cents: charge_total_cents,
+        canonical_line_items: [{ permalink: eur_product.unique_permalink, total_cents: charge_total_cents }]
+      )
+
+      expect(verified_quote.currency).to eq(Currency::CAD)
+      expect(verified_quote.canonical_total_cents).to eq(charge_total_cents)
+    end
+
     it "rejects expired tokens" do
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
