@@ -17,9 +17,47 @@ class RichContent < ApplicationRecord
   LONG_ANSWER_NODE_TYPE = "longAnswer"
   FILE_UPLOAD_NODE_TYPE = "fileUpload"
   MORE_LIKE_THIS_NODE_TYPE = "moreLikeThis"
+  REVIEW_CARD_NODE_TYPE = "reviewCard"
+  UPSELL_CARD_NODE_TYPE = "upsellCard"
   CUSTOM_FIELD_NODE_TYPES = [SHORT_ANSWER_NODE_TYPE, LONG_ANSWER_NODE_TYPE, FILE_UPLOAD_NODE_TYPE].freeze
   COMMON_CONTAINER_NODE_TYPES = [ORDERED_LIST_NODE_TYPE, BULLET_LIST_NODE_TYPE, LIST_ITEM_NODE_TYPE, BLOCKQUOTE_NODE_TYPE].freeze
   FILE_EMBED_CONTAINER_NODE_TYPES = [FILE_EMBED_GROUP_NODE_TYPE, *COMMON_CONTAINER_NODE_TYPES].freeze
+
+  # Nodes that occupy space in the editor but do not, by themselves, mean the
+  # buyer receives anything. Each one is a single click to insert and costs the
+  # seller no work, so their presence proves nothing about what was written or
+  # attached. Two reasons a node lands here:
+  #
+  # It renders content fetched from elsewhere, and that elsewhere can be empty —
+  # in which case the buyer opens the page and sees nothing at all:
+  #
+  #   - `posts` renders the product's published posts, and renders nothing when
+  #     the seller has published none,
+  #   - `fileEmbed` / `fileEmbedGroup` render an uploaded file, and render
+  #     nothing once that file is deleted or was never finished uploading,
+  #   - `reviewCard` renders one of the product's reviews, and renders nothing
+  #     when that review can't be fetched.
+  #
+  # Or it points at something other than this listing's deliverable, so it can't
+  # stand in for one no matter how well it renders:
+  #
+  #   - `moreLikeThis` renders other listings Gumroad recommends,
+  #   - `upsellCard` advertises another product the buyer could also buy,
+  #   - the custom-field nodes (`shortAnswer`, `longAnswer`, `fileUpload`) are
+  #     form inputs that ask the BUYER for something rather than giving them
+  #     anything.
+  #
+  # Callers that need "did the seller put something here themselves" (rather than
+  # "does the editor show a block here") pass this to `has_body_content?`.
+  NODE_TYPES_WITHOUT_OWN_CONTENT = [
+    POSTS_NODE_TYPE,
+    FILE_EMBED_NODE_TYPE,
+    FILE_EMBED_GROUP_NODE_TYPE,
+    REVIEW_CARD_NODE_TYPE,
+    MORE_LIKE_THIS_NODE_TYPE,
+    UPSELL_CARD_NODE_TYPE,
+    *CUSTOM_FIELD_NODE_TYPES
+  ].freeze
 
   DESCRIPTION_JSON_SCHEMA = {
     type: "array",
@@ -100,8 +138,13 @@ class RichContent < ApplicationRecord
   # `has_editor_content?` this ignores the page title: a titled but otherwise
   # empty page shows up in the buyer's page list, which is enough to say the
   # seller did some work, but it is not something the buyer can read.
-  def has_body_content?
-    description.present? && description.any? { node_has_content?(_1) }
+  #
+  # `excluding_node_types:` drops node types from the walk entirely, for callers
+  # that need a stricter answer than "the editor shows something here". See
+  # NODE_TYPES_WITHOUT_OWN_CONTENT for the set the moderation code passes and
+  # why.
+  def has_body_content?(excluding_node_types: [])
+    description.present? && description.any? { node_has_content?(_1, excluding_node_types:) }
   end
 
   def owning_product
@@ -254,13 +297,14 @@ class RichContent < ApplicationRecord
     # text, media/embed nodes (which have no "content" array), or a container
     # with at least one contentful child. A bare `{"type" => "paragraph"}` — the
     # editor's blank placeholder — is not content.
-    def node_has_content?(node)
+    def node_has_content?(node, excluding_node_types: [])
       return false unless node.is_a?(Hash)
+      return false if node["type"].in?(excluding_node_types)
       return true if node["text"].present?
 
       children = node["content"]
       if children.is_a?(Array)
-        children.any? { node_has_content?(_1) }
+        children.any? { node_has_content?(_1, excluding_node_types:) }
       else
         # Leaf nodes without a content array (fileEmbed, image, licenseKey,
         # posts, horizontal rule, etc.) render something by themselves —

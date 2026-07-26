@@ -4,6 +4,10 @@ class ContentModeration::ModerateRecordService
   AUTHOR_NAME = "ContentModeration"
   ADMIN_COMMENT_DEDUP_WINDOW = 5.minutes
 
+  # How many attached files we're willing to look up in storage while deciding
+  # whether a listing delivers anything (see `has_deliverable_file?`).
+  MAX_FILES_CHECKED_FOR_STORAGE = 5
+
   CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
 
   CATEGORY_LABELS = {
@@ -196,6 +200,8 @@ class ContentModeration::ModerateRecordService
     #     buyer's page list, but there is nothing to read),
     #   - a bundle with no component products in it,
     #   - a "coffee"/tip listing, which has no deliverable by design,
+    #   - an attached file whose upload never finished, so there is nothing in
+    #     storage to hand the buyer (see `has_deliverable_file?`),
     #   - an integration Gumroad does not fulfil on purchase (only a Circle or
     #     Discord invite is itself the thing the buyer receives; a Zoom or
     #     Google Calendar connection is scheduling plumbing attached to a call).
@@ -211,17 +217,65 @@ class ContentModeration::ModerateRecordService
       return true if record.native_type.in?([Link::NATIVE_TYPE_CALL, Link::NATIVE_TYPE_COMMISSION])
       return true if gumroad_fulfilled_community_integration?
 
-      record.alive_product_files.any? ||
-        record.alive_variants.any? { |variant| variant.alive_product_files.any? } ||
+      has_deliverable_file?(record) ||
+        record.alive_variants.any? { |variant| has_deliverable_file?(variant) } ||
         has_readable_body_content?(record)
+    end
+
+    # An attached file only counts when there is really something in storage
+    # behind it.
+    #
+    # An alive `ProductFile` row is not by itself proof that the buyer receives a
+    # file: a product save that races an unfinished multipart upload leaves a row
+    # pointing at a key that was never written, and nothing deletes that row
+    # afterwards (see `ProductFile#stored_file_present?`). Counting it here
+    # would hand back the bypass the rest of this method closes — attach nothing,
+    # abandon an upload, publish anyway. The same goes for a long list of such
+    # rows: the save API takes each file's storage URL from the client, so a
+    # caller can submit as many never-uploaded rows as it likes, and "there are
+    # a lot of them" is not evidence that any one is real.
+    #
+    # Most files answer from the row alone (an analyzed file, an external link, a
+    # purged object), so those are settled first and for free. Only files the row
+    # cannot answer for cost a request to storage, and at most
+    # MAX_FILES_CHECKED_FOR_STORAGE of those are made — enough to prove a
+    # deliverable exists without turning a save into a long series of lookups.
+    def has_deliverable_file?(owner)
+      unverifiable_from_row = []
+
+      owner.alive_product_files.each do |file|
+        case file.stored_file_presence_known_from_row
+        when true then return true
+        when nil then unverifiable_from_row << file
+        end
+      end
+
+      unverifiable_from_row
+        .first(MAX_FILES_CHECKED_FOR_STORAGE)
+        .any?(&:stored_file_present?)
     end
 
     # Rich content with something in the body, ignoring pages that only have a
     # title. See `product_has_substantive_deliverable?` for why the title alone
     # doesn't count here even though it counts for the off-platform preset.
+    #
+    # Blocks that don't themselves give the buyer anything are also ignored (see
+    # RichContent::NODE_TYPES_WITHOUT_OWN_CONTENT): a `posts` block on a listing
+    # with no published posts and a `fileEmbed` pointing at a missing file both
+    # render nothing at all, and a recommendation, an upsell for another product
+    # or a form field asks something of the buyer rather than delivering to them.
+    # Each is one click to insert, so dropping one into an otherwise empty page
+    # is not a deliverable. A file that really is attached still downgrades the
+    # flag — the `alive_product_files` checks in
+    # `product_has_substantive_deliverable?` cover that case directly, without
+    # needing the embed node to vouch for it.
     def has_readable_body_content?(product)
-      product.alive_rich_contents.any?(&:has_body_content?) ||
-        product.alive_variants.any? { |variant| variant.alive_rich_contents.any?(&:has_body_content?) }
+      has_own_body_content = ->(rich_content) do
+        rich_content.has_body_content?(excluding_node_types: RichContent::NODE_TYPES_WITHOUT_OWN_CONTENT)
+      end
+
+      product.alive_rich_contents.any?(&has_own_body_content) ||
+        product.alive_variants.any? { |variant| variant.alive_rich_contents.any?(&has_own_body_content) }
     end
 
     # An integration whose invite IS what the buyer receives, and which Gumroad
