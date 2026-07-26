@@ -1530,6 +1530,35 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_empty @product.reload.alive_rich_contents
   end
 
+  # The three tests above assert the failure CONTRACT (keys always present, no
+  # rolled-back ids). They cannot prove the filter works, because every failure
+  # path rolls everything back, so an implementation that always returned empty
+  # maps would satisfy them too. This test exercises the filter directly: an
+  # accumulator holding one live canonical id and one that no longer exists must
+  # report the live one and drop the dead one. Without the filter, the dead id
+  # would be handed to the editor, which would then address a row the server no
+  # longer has — the failure this whole change exists to prevent.
+  test "persisted save id mappings reports live canonical ids and drops ids whose rows are gone" do
+    page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Alive" }] }])
+    category = create_variant_category(link: @product, title: "Versions")
+    variant = create_variant(variant_category: category, name: "Alive version")
+    dead_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Doomed" }] }])
+    dead_page_external_id = dead_page.external_id
+    dead_page.mark_deleted!
+
+    @controller.instance_variable_set(:@product, @product.reload)
+    mappings = @controller.send(:save_id_mappings)
+    mappings[:rich_content]["client-alive"] = page.external_id
+    mappings[:rich_content]["client-dead"] = dead_page_external_id
+    mappings[:variants]["client-variant-alive"] = variant.external_id
+    mappings[:variants]["client-variant-dead"] = "nonexistent-external-id"
+
+    response_body = @controller.send(:persisted_save_id_mappings_response)
+
+    assert_equal({ "client-alive" => page.external_id }, response_body[:rich_content_id_mappings])
+    assert_equal({ "client-variant-alive" => variant.external_id }, response_body[:variant_id_mappings])
+  end
+
   test "PUT update repeated saves with adopted canonical ids never consume the deletion-guard rewrite budget" do
     # create → save: page created under a client id, mapping returned.
     post :update, params: @params.merge(
