@@ -20,10 +20,11 @@ const inputGroupVariants = cva(
     variants: {
       disabled: {
         // Don't fade the whole group with `opacity`: CSS opacity applies to the entire subtree,
-        // so a disabled group that exists purely to display a computed value (e.g. the PWYW
-        // "Minimum amount" mirror of the price) renders that value at 30% opacity, which sellers
-        // read as an empty field. Signal "not editable" with a tinted background and the cursor
-        // instead, so the value itself stays at full contrast.
+        // so a disabled group that exists purely to display a value (a percentage discount's
+        // fixed-amount field, a published workflow's price, the card field while a payment is
+        // processing) renders that value at 30% opacity, which sellers read as an empty field.
+        // Signal "not editable" with a tinted background and the cursor instead, so the value
+        // itself stays at full contrast.
         //
         // The background tint is a translucent overlay, and Windows High Contrast mode (and any
         // other forced-colours mode) replaces author background colours with a system colour, so

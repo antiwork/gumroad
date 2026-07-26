@@ -38,14 +38,15 @@ const currencySelect = () => {
 
 describe("PriceInput", () => {
   it("shows the amount when disabled", () => {
-    render(<PriceInput currencyCode="usd" cents={300} ariaLabel="Minimum amount" disabled />);
+    render(<PriceInput currencyCode="usd" cents={300} ariaLabel="Amount" disabled />);
 
-    const input = screen.getByLabelText<HTMLInputElement>("Minimum amount");
+    const input = screen.getByLabelText<HTMLInputElement>("Amount");
     expect(input.disabled).toBe(true);
     expect(input.value).toBe("3");
 
     // The value has to stay legible. A disabled group used to fade its whole subtree with
-    // `opacity-30`, which sellers read as an empty field (the PWYW "Minimum amount" mirror).
+    // `opacity-30`, so a group disabled only to display a value (a percentage discount's fixed
+    // amount, a published workflow's price) rendered that value at 30% opacity and read as empty.
     // Nothing from the input up to the group may fade the value out — including the input's own
     // `disabled:opacity-30`, which the disabled-group override has to cancel.
     for (let node: HTMLElement | null = input; node; node = node.parentElement) {
@@ -69,7 +70,7 @@ describe("PriceInput", () => {
       <PriceInput
         currencyCode="usd"
         cents={300}
-        ariaLabel="Minimum amount"
+        ariaLabel="Amount"
         currencyCodeSelector={{ options: ["usd", "eur"], onChange: () => {} }}
         disabled
       />,

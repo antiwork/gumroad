@@ -30,7 +30,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
           // Inside a disabled InputGroup the group itself signals the disabled state (tinted
           // background, not-allowed cursor), so the input must not fade its own text on top of
           // that: a faded value in a group that exists to DISPLAY a value reads as an empty
-          // field, which is what made the PWYW "Minimum amount" mirror look unset to sellers.
+          // field, so sellers conclude nothing is set when in fact it is.
           inputGroupDisabled && "disabled:opacity-100",
           className,
         )}
