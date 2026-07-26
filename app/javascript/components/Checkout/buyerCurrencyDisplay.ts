@@ -43,7 +43,16 @@ export type CheckoutLocalCurrencyFormat = Pick<CheckoutBuyerCurrencyDisplay, "cu
 
 // The subset of the FX lane's options the listed lane needs: which payment the buyer has selected,
 // since only a new card confirmed through the Payment Element charges in the listed currency.
-export type CheckoutListedCurrencyOptions = Pick<CheckoutBuyerCurrencyOptions, "willSaveCard" | "paymentMethod"> & {
+//
+// Unlike the FX-quoted lane, `willSaveCard` is deliberately NOT consulted here. On the FX lane,
+// saving a card reroutes the charge to the canonical path, so the display must follow. On this
+// client-confirm lane the checkbox changes nothing about the charge: the submit branch runs on
+// "client-confirm and not a saved card" alone, the ConfirmationToken inherits the element's
+// mounted (listed) currency, and the client-confirm payload never carries `save_card`
+// (see buildStartCartPurchasePayload in $app/data/purchase.ts). Gating on it would re-show the
+// wrong USD summary for every logged-in buyer entering a new card, since the checkbox defaults
+// to checked while logged in.
+export type CheckoutListedCurrencyOptions = Pick<CheckoutBuyerCurrencyOptions, "paymentMethod"> & {
   usingSavedCard?: boolean;
 };
 
@@ -123,12 +132,12 @@ export const getCheckoutListedCurrencyDisplay = (
     pay_in_installments?: boolean;
     recurrence?: string | null;
   }[],
-  { willSaveCard = false, paymentMethod = "card", usingSavedCard = false }: CheckoutListedCurrencyOptions = {},
+  { paymentMethod = "card", usingSavedCard = false }: CheckoutListedCurrencyOptions = {},
 ): CheckoutLocalCurrencyFormat | null => {
   if (checkoutPayment.integration !== "payment_element_client_confirm") return null;
   const listedCurrency = checkoutPayment.elements_options.listed_currency_display;
   if (!listedCurrency) return null;
-  if (willSaveCard || usingSavedCard || paymentMethod !== "card") return null;
+  if (usingSavedCard || paymentMethod !== "card") return null;
   if (cartItems.length !== 1) return null;
 
   const item = cartItems[0];

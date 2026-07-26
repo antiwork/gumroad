@@ -252,7 +252,6 @@ export const Checkout = ({
   const listedCurrency = buyerCurrencyDisplay
     ? null
     : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
-        willSaveCard: state.willSaveCard,
         usingSavedCard: state.usingSavedCard,
         paymentMethod: state.paymentMethod,
       });

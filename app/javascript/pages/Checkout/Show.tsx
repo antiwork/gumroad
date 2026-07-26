@@ -212,7 +212,6 @@ const CheckoutIndexPage = () => {
   const listedCurrency = buyerCurrencyDisplay
     ? null
     : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
-        willSaveCard: state.willSaveCard,
         usingSavedCard: state.usingSavedCard,
         paymentMethod: state.paymentMethod,
       });

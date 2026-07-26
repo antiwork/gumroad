@@ -310,12 +310,6 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     ).toBeNull();
   });
 
-  it("stays in canonical USD while the buyer is saving a card for future charges", () => {
-    expect(
-      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems(), { willSaveCard: true }),
-    ).toBeNull();
-  });
-
   it("stays in canonical USD while a non-card payment method is selected", () => {
     // PayPal charges USD or the merchant-account currency at its own rate, never the listed price.
     expect(

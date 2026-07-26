@@ -434,6 +434,17 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(queryByText("R$9.96")).toBeNull();
   });
 
+  it("keeps the listed currency while the save-card box is checked, because the checkbox does not change the charge", () => {
+    // Unlike the FX-quoted lane, where saving a card reroutes the charge to the canonical path,
+    // the client-confirm submit branch ignores the checkbox and the payload never carries
+    // `save_card` — the ConfirmationToken still charges the listed amount. The checkbox defaults
+    // to checked for logged-in buyers, so gating on it would re-show the wrong USD summary for
+    // every logged-in buyer entering a new card.
+    const { getAllByLabelText } = renderCheckout(brlState({ willSaveCard: true }), brlCart());
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["R$49.90"]);
+  });
+
   it("stays in canonical USD while a saved card is selected, because that charge is not in the listed currency", () => {
     // Saved cards stay on the server-confirm path, which never reaches
     // Charge::MethodForcedPresentment — and `usingSavedCard` defaults true for any buyer with a
