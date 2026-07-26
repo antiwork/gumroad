@@ -79,11 +79,35 @@ class Api::V2::VariantsController < Api::V2::BaseController
   end
 
   def destroy
-    if @variant.update_attribute(:deleted_at, Time.current)
-      success_with_variant
-    else
-      error_with_variant
+    # Deleting a single version, outside the product editor's deletion guards.
+    # Audited for the same reason as the grouping-level destroy: an explicit
+    # destructive API call with no confirmation or revision context.
+    #
+    # Claim the alive -> deleted transition in one conditional UPDATE rather than
+    # `update_attribute`, so two overlapping DELETEs cannot both record the same
+    # deletion. `update_all` reports how many rows it changed, and the
+    # `deleted_at: nil` predicate means only the first request sees 1.
+    claimed = BaseVariant.where(id: @variant.id, deleted_at: nil)
+                         .update_all(deleted_at: Time.current, updated_at: Time.current)
+
+    if claimed.zero?
+      # Already deleted, or a concurrent request won the race. Report success —
+      # the row is deleted either way — but record nothing, because this request
+      # did not perform the deletion.
+      @variant.reload
+      return success_with_variant
     end
+
+    @variant.reload
+    ProductVariantDeletionAudit.record_deletion(
+      actor_user_id: current_resource_owner&.id,
+      product_id: @product.id,
+      route: ProductVariantDeletionAudit::API_V2_VARIANT_DESTROY,
+      deleted_variant_external_ids: [@variant.external_id],
+      intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
+      correlation_id: AuditCorrelationId.log_for(request.request_id),
+    )
+    success_with_variant
   end
 
   private

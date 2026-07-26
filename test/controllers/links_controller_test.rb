@@ -5634,8 +5634,8 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_equal [variant.external_id], audit.deleted_variant_external_ids
     assert_equal 1, audit.deleted_variant_count
     assert_equal ProductVariantDeletionAudit::PAYLOAD_OMISSION, audit.intent_source
-    assert_equal 0, audit.confirmed_deleted_variant_count
-    assert_equal 1, audit.unconfirmed_deleted_variant_count
+    assert_equal 0, audit.confirmed_affected_variant_count
+    assert_equal 1, audit.unconfirmed_affected_variant_count
     # The revision token does not exist yet (gumroad-private#1379).
     assert_nil audit.revision_token
   end
@@ -5657,9 +5657,9 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     audit = ProductVariantDeletionAudit.last
     assert_equal ProductVariantDeletionAudit::EDITOR_VARIANTS_DIFFED, audit.route
     assert_equal [removed.external_id], audit.deleted_variant_external_ids
-    assert_equal [removed.external_id], audit.confirmed_deleted_variant_external_ids
+    assert_equal [removed.external_id], audit.confirmed_affected_variant_external_ids
     assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
-    assert_equal 0, audit.unconfirmed_deleted_variant_count
+    assert_equal 0, audit.unconfirmed_affected_variant_count
     assert kept.reload.alive?
   end
 
@@ -5680,7 +5680,7 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
 
     audit = ProductVariantDeletionAudit.last
     assert_equal [removed.external_id], audit.deleted_variant_external_ids
-    assert_equal [removed.external_id], audit.confirmed_deleted_variant_external_ids
+    assert_equal [removed.external_id], audit.confirmed_affected_variant_external_ids
     assert_not_includes audit.deleted_variant_external_ids, already_gone_external_id
   end
 
@@ -5708,7 +5708,7 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_equal [swept.external_id], audit.deleted_variant_category_external_ids
     assert_equal [child.external_id], audit.affected_variant_external_ids
     assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
-    assert_equal 0, audit.unconfirmed_deleted_variant_count
+    assert_equal 0, audit.unconfirmed_affected_variant_count
     # The no-cascade behaviour is recorded rather than left to be discovered.
     assert_equal 1, audit.alive_child_variant_count
   end
@@ -5729,8 +5729,8 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_not_nil audit
     assert_equal ProductVariantDeletionAudit::MIXED, audit.intent_source
     assert_equal 2, audit.affected_variant_count
-    assert_equal 1, audit.confirmed_deleted_variant_count
-    assert_equal 1, audit.unconfirmed_deleted_variant_count
+    assert_equal 1, audit.confirmed_affected_variant_count
+    assert_equal 1, audit.unconfirmed_affected_variant_count
     assert_includes audit.affected_variant_external_ids, unconfirmed_child.external_id
   end
 
@@ -5747,7 +5747,7 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     audit = ProductVariantDeletionAudit.where(route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT).last
     assert_not_nil audit
     assert_equal ProductVariantDeletionAudit::PAYLOAD_OMISSION, audit.intent_source
-    assert_equal 0, audit.confirmed_deleted_variant_count
+    assert_equal 0, audit.confirmed_affected_variant_count
   end
 
   # A blocked save deleted nothing, so there is nothing to audit. This also pins
@@ -5767,28 +5767,41 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
   # nothing about rollback. This one lets the deletion and the audit scheduling
   # both happen, then fails the transaction afterwards: the after-commit callback
   # must not fire, because the deletion it would describe never committed.
-  test "an audit scheduled inside a transaction that later fails is never written" do
+  test "a real deletion rolled back writes no audit and leaves the variant alive" do
     variant = create_variant(variant_category: @category, name: "Plain version")
 
     assert_no_difference -> { ProductVariantDeletionAudit.count } do
-      assert_raises(ActiveRecord::Rollback.new.class, ActiveRecord::RecordInvalid) do
+      assert_raises(ActiveRecord::RecordInvalid) do
         ActiveRecord::Base.transaction do
-          ProductVariantDeletionAudit.record_deletion(
-            actor_user_id: @logged_in_user.id,
-            product_id: @product.id,
-            route: ProductVariantDeletionAudit::EDITOR_CATEGORY_OMITTED,
-            deleted_variant_external_ids: [variant.external_id],
-          )
+          # A REAL deletion through the same service the editor uses, so this
+          # exercises the actual audit scheduling rather than a bare call.
+          Product::VariantCategoryUpdaterService.new(
+            product: @product,
+            category_params: { id: @category.external_id, options: nil },
+            confirmed_removed_variant_ids: [variant.external_id],
+            deletion_audit_context: { actor_user_id: @logged_in_user.id }
+          ).perform
+
+          # The deletion is real at this point...
+          assert_not BaseVariant.find(variant.id).alive?
+
+          # ...and then the transaction fails.
           raise ActiveRecord::RecordInvalid.new(Link.new)
         end
       end
     end
+
+    # The deletion was rolled back, so the version is alive again and the audit
+    # that would have described it was never written. This is why audits are
+    # written after commit rather than inline.
+    assert variant.reload.alive?
   end
 
-  # Observability must never take down a save. Rather than stub the audit to
-  # raise — which only proves the rescue runs on a fake error — this makes the
-  # real INSERT fail inside the database by dropping a NOT NULL column's value,
-  # the way schema drift or a bad migration would.
+  # Observability must never take down a save. This stubs `create!` to raise the
+  # error a real database failure produces, rather than executing a genuinely
+  # failing INSERT — the point being verified is that the rescue path swallows a
+  # persistence error and leaves the deletion committed, not that any particular
+  # SQL is rejected.
   test "a failing audit write does not stop the deletion" do
     variant = create_variant(variant_category: @category, name: "Plain version")
 

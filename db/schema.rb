@@ -1777,11 +1777,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000010) do
     t.json "deleted_variant_external_ids"
     t.json "deleted_variant_category_external_ids"
     t.json "affected_variant_external_ids"
-    t.json "confirmed_deleted_variant_external_ids"
+    t.json "confirmed_affected_variant_external_ids"
     t.integer "deleted_variant_count", default: 0, null: false
     t.integer "affected_variant_count", default: 0, null: false
-    t.integer "confirmed_deleted_variant_count", default: 0, null: false
-    t.integer "unconfirmed_deleted_variant_count", default: 0, null: false
+    t.integer "confirmed_affected_variant_count", default: 0, null: false
+    t.integer "unconfirmed_affected_variant_count", default: 0, null: false
     t.integer "alive_child_variant_count", default: 0, null: false
     t.string "revision_token"
     t.string "correlation_id", limit: 64

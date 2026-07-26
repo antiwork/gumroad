@@ -942,7 +942,7 @@ class LinksController < ApplicationController
     def deletion_audit_context
       @_deletion_audit_context ||= {
         actor_user_id: logged_in_user&.id,
-        correlation_id: AuditCorrelationId.for(request.request_id),
+        correlation_id: AuditCorrelationId.log_for(request.request_id),
         revision_token: nil,
       }
     end

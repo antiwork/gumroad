@@ -577,6 +577,37 @@ describe Api::V2::VariantsController do
             message: "The variant was deleted successfully."
           }.as_json(api_scopes: ["edit_products"]))
         end
+
+        # This endpoint deletes a single version outside the product editor's
+        # deletion guards, so it is audited (ProductVariantDeletionAudit,
+        # gumroad-private#1379). It is easy to miss when auditing deletion paths
+        # because it sets `deleted_at` directly rather than via `mark_deleted`.
+        describe "deletion audit" do
+          it "records the deletion with an explicit-destroy intent" do
+            expect { delete @action, params: @params }
+              .to change { ProductVariantDeletionAudit.count }.by(1)
+
+            audit = ProductVariantDeletionAudit.last
+            expect(audit.route).to eq(ProductVariantDeletionAudit::API_V2_VARIANT_DESTROY)
+            expect(audit.intent_source).to eq(ProductVariantDeletionAudit::API_EXPLICIT_DESTROY)
+            expect(audit.product_id).to eq(@product.id)
+            expect(audit.actor_user_id).to eq(@user.id)
+            expect(audit.deleted_variant_external_ids).to eq([@variant.external_id])
+            expect(audit.deleted_variant_count).to eq(1)
+          end
+
+          # A second DELETE deletes nothing, so it is not a deletion this request
+          # performed and must not add a row. The alive -> deleted transition is
+          # claimed with a conditional UPDATE precisely so two overlapping
+          # requests cannot both record the same deletion.
+          it "does not record a second audit when the variant was already deleted" do
+            delete @action, params: @params
+            expect(ProductVariantDeletionAudit.count).to eq(1)
+
+            expect { delete @action, params: @params }
+              .not_to change { ProductVariantDeletionAudit.count }
+          end
+        end
       end
     end
   end

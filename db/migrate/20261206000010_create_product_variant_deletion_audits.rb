@@ -35,17 +35,22 @@ class CreateProductVariantDeletionAudits < ActiveRecord::Migration[7.1]
       # omission-driven.
       t.json :affected_variant_external_ids
 
-      # The subset of the affected versions whose ids the editor explicitly
+      # The subset of the AFFECTED versions whose ids the editor explicitly
       # confirmed for removal. Stored as the intersection, not the full confirmed
       # list, because that list can name rows this request never touched.
-      t.json :confirmed_deleted_variant_external_ids
+      #
+      # Named `affected`, not `deleted`, on purpose: for a category sweep the
+      # affected versions are still ALIVE (marking a grouping deleted does not
+      # cascade), so calling these "deleted" would assert something false about
+      # rows that still exist.
+      t.json :confirmed_affected_variant_external_ids
 
       # Denormalised counts so the common questions ("how much was removed
       # without explicit confirmation?") are answerable without parsing JSON.
       t.integer :deleted_variant_count, null: false, default: 0
       t.integer :affected_variant_count, null: false, default: 0
-      t.integer :confirmed_deleted_variant_count, null: false, default: 0
-      t.integer :unconfirmed_deleted_variant_count, null: false, default: 0
+      t.integer :confirmed_affected_variant_count, null: false, default: 0
+      t.integer :unconfirmed_affected_variant_count, null: false, default: 0
 
       # Child versions left ALIVE under a grouping this request deleted.
       # VariantCategory#mark_deleted does not cascade (`has_many :variants` has

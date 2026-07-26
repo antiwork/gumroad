@@ -50,6 +50,11 @@ class ProductVariantDeletionAudit < ApplicationRecord
     # DELETE /v2/variant_categories/:id — an explicit, single-purpose
     # destructive API call, deliberately outside the editor's guards.
     API_V2_VARIANT_CATEGORY_DESTROY = "api_v2_variant_category_destroy",
+    # DELETE /v2/products/:product_id/variant_categories/:variant_category_id/variants/:id —
+    # deletes a single version, also outside the editor's guards. Easy to miss
+    # when auditing deletion paths because it sets `deleted_at` through
+    # `update_attribute` rather than the `mark_deleted` helper.
+    API_V2_VARIANT_DESTROY = "api_v2_variant_destroy",
   ].freeze
 
   # How the deletion was authorised.
@@ -124,11 +129,11 @@ class ProductVariantDeletionAudit < ApplicationRecord
       deleted_variant_external_ids: deleted_variants,
       deleted_variant_category_external_ids: deleted_categories,
       affected_variant_external_ids: affected,
-      confirmed_deleted_variant_external_ids: confirmed,
+      confirmed_affected_variant_external_ids: confirmed,
       deleted_variant_count: deleted_variants.size,
       affected_variant_count: affected.size,
-      confirmed_deleted_variant_count: confirmed.size,
-      unconfirmed_deleted_variant_count: affected.size - confirmed.size,
+      confirmed_affected_variant_count: confirmed.size,
+      unconfirmed_affected_variant_count: affected.size - confirmed.size,
       alive_child_variant_count:,
       revision_token:,
       correlation_id:,

@@ -28,37 +28,46 @@ class Api::V2::VariantCategoriesController < Api::V2::BaseController
   end
 
   def destroy
-    # Captured before the deletion: afterwards the grouping is gone and the count
-    # would be harder to attribute to this request. `already_deleted` matters for
-    # the audit — `mark_deleted` succeeds on a row that was ALREADY deleted, so a
-    # retrying or looping client would otherwise add an audit row per call for a
-    # deletion that only happened once.
+    # This endpoint is an explicit, single-purpose destructive call and
+    # deliberately sits outside the product editor's deletion guards — a caller
+    # asked for exactly this. Two things make it worth auditing: it carries no
+    # confirmation or revision context at all, and marking a grouping deleted does
+    # NOT cascade (VariantCategory's `has_many :variants` has no `dependent:`
+    # option), so any live versions stay alive under a deleted grouping.
+    #
+    # The audit must describe a deletion that this request actually performed.
+    # `mark_deleted` succeeds on a row that was already deleted, so two
+    # overlapping DELETEs would otherwise both record the same deletion. Claiming
+    # the alive -> deleted transition in a single conditional UPDATE makes exactly
+    # one request the winner: `update_all` returns the number of rows it changed,
+    # and the `deleted_at: nil` predicate means only the first request sees 1.
     alive_child_variant_count = @variant_category.variants.alive.count
-    already_deleted = @variant_category.deleted_at.present?
 
-    if @variant_category.mark_deleted
-      # This endpoint is an explicit, single-purpose destructive call and
-      # deliberately sits outside the product editor's deletion guards — a caller
-      # asked for exactly this. Two things make it worth recording: it carries no
-      # confirmation or revision context at all, and `mark_deleted` does NOT
-      # cascade (VariantCategory's `has_many :variants` has no `dependent:`
-      # option), so any live versions stay alive under a deleted grouping.
-      # `alive_child_variant_count` makes that visible.
-      unless already_deleted
-        ProductVariantDeletionAudit.record_deletion(
-          actor_user_id: current_resource_owner&.id,
-          product_id: @product.id,
-          route: ProductVariantDeletionAudit::API_V2_VARIANT_CATEGORY_DESTROY,
-          deleted_variant_category_external_ids: [@variant_category.external_id],
-          intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
-          alive_child_variant_count:,
-          correlation_id: AuditCorrelationId.for(request.request_id),
-        )
-      end
-      success_with_variant_category
-    else
-      error_with_variant_category(@variant_category)
+    # NOTE: `variant_categories` has no `updated_at` column (see db/schema.rb), so
+    # only `deleted_at` is written here. `base_variants` does have one, which is
+    # why the single-variant destroy sets both.
+    claimed = VariantCategory.where(id: @variant_category.id, deleted_at: nil)
+                             .update_all(deleted_at: Time.current)
+
+    if claimed.zero?
+      # Either already deleted, or a concurrent request won the race. Reload so
+      # the response reflects committed state, and record nothing: the deletion
+      # this request would have described was not performed by this request.
+      @variant_category.reload
+      return success_with_variant_category
     end
+
+    @variant_category.reload
+    ProductVariantDeletionAudit.record_deletion(
+      actor_user_id: current_resource_owner&.id,
+      product_id: @product.id,
+      route: ProductVariantDeletionAudit::API_V2_VARIANT_CATEGORY_DESTROY,
+      deleted_variant_category_external_ids: [@variant_category.external_id],
+      intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
+      alive_child_variant_count:,
+      correlation_id: AuditCorrelationId.log_for(request.request_id),
+    )
+    success_with_variant_category
   end
 
   private
