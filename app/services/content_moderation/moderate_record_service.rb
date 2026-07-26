@@ -4,6 +4,10 @@ class ContentModeration::ModerateRecordService
   AUTHOR_NAME = "ContentModeration"
   ADMIN_COMMENT_DEDUP_WINDOW = 5.minutes
 
+  # How many attached files we're willing to look up in storage while deciding
+  # whether a listing delivers anything (see `has_deliverable_file?`).
+  MAX_FILES_CHECKED_FOR_STORAGE = 5
+
   CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
 
   CATEGORY_LABELS = {
@@ -196,6 +200,8 @@ class ContentModeration::ModerateRecordService
     #     buyer's page list, but there is nothing to read),
     #   - a bundle with no component products in it,
     #   - a "coffee"/tip listing, which has no deliverable by design,
+    #   - an attached file whose upload never finished, so there is nothing in
+    #     storage to hand the buyer (see `has_deliverable_file?`),
     #   - an integration Gumroad does not fulfil on purchase (only a Circle or
     #     Discord invite is itself the thing the buyer receives; a Zoom or
     #     Google Calendar connection is scheduling plumbing attached to a call).
@@ -211,9 +217,30 @@ class ContentModeration::ModerateRecordService
       return true if record.native_type.in?([Link::NATIVE_TYPE_CALL, Link::NATIVE_TYPE_COMMISSION])
       return true if gumroad_fulfilled_community_integration?
 
-      record.alive_product_files.any? ||
-        record.alive_variants.any? { |variant| variant.alive_product_files.any? } ||
+      has_deliverable_file?(record) ||
+        record.alive_variants.any? { |variant| has_deliverable_file?(variant) } ||
         has_readable_body_content?(record)
+    end
+
+    # An attached file only counts when there is really something in storage
+    # behind it.
+    #
+    # An alive `ProductFile` row is not by itself proof that the buyer receives a
+    # file: a product save that races an unfinished multipart upload leaves a row
+    # pointing at a key that was never written, and nothing deletes that row
+    # afterwards (see `ProductFile#stored_file_present?`). Counting it here
+    # would hand back the bypass the rest of this method closes — attach nothing,
+    # abandon an upload, publish anyway.
+    #
+    # Only files up to MAX_FILES_CHECKED_FOR_STORAGE are inspected. Each check is
+    # a request to storage, and a listing that has attached that many files is
+    # not the empty-listing case this method exists to catch, so beyond the limit
+    # we accept the files as a deliverable without asking.
+    def has_deliverable_file?(owner)
+      files = owner.alive_product_files
+      return true if files.size > MAX_FILES_CHECKED_FOR_STORAGE
+
+      files.any?(&:stored_file_present?)
     end
 
     # Rich content with something in the body, ignoring pages that only have a

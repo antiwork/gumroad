@@ -6,6 +6,9 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
   let(:strategy_result) { Struct.new(:status, :reasoning, keyword_init: true) }
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, name: "Test", description: "Clean description") }
+  # A file whose upload finished: `analyze` records the stored object's byte
+  # count, so a size means the object is really in storage.
+  let(:uploaded_file) { create(:product_file, size: 1_024) }
 
   before do
     Feature.activate(:content_moderation)
@@ -18,6 +21,12 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
     allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
       instance_double(ContentModeration::Strategies::PromptStrategy, perform: strategy_result.new(status: "compliant", reasoning: []))
     )
+  end
+
+  # An unfinished upload leaves a ProductFile row whose storage key was never
+  # written, which is what `exists? == false` stands for here.
+  def stub_missing_storage_objects
+    allow_any_instance_of(ProductFile).to receive(:s3_object).and_return(double("s3_object", exists?: false))
   end
 
   describe ".check" do
@@ -338,7 +347,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
 
       it "publishes and records the flag as a non-blocking note when files are attached" do
         ContentModerationAdminCommentJob.clear
-        product.product_files << create(:product_file)
+        product.product_files << uploaded_file
         product.save!
 
         result = described_class.check(product.reload, :product)
@@ -429,12 +438,70 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       # The file itself is the deliverable, so an attached file publishes whether
       # or not the seller also embedded it in a page.
       it "publishes when a page embeds a file the seller actually uploaded" do
-        product_file = create(:product_file)
+        product_file = uploaded_file
         product.product_files << product_file
         product.save!
         create(:rich_content, entity: product, title: nil, description: [
                  { "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id } }
                ])
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # An upload that never finished still leaves an alive ProductFile row
+      # pointing at a storage key nothing was written to, and nothing deletes
+      # that row afterwards. The row must not stand in for a deliverable.
+      it "still blocks when the only attached file's upload never finished" do
+        stub_missing_storage_objects
+        product.product_files << create(:product_file, size: nil)
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the only file on a tier is an unfinished upload" do
+        stub_missing_storage_objects
+        membership = create(:membership_product, user: seller, name: "Members", description: "Join us")
+        tier = membership.tiers.first
+        tier.product_files << create(:product_file, link: membership, size: nil)
+        tier.save!
+
+        expect(described_class.check(membership.reload, :product).passed).to eq(false)
+      end
+
+      it "still blocks when the attached file has been purged from storage" do
+        product.product_files << create(:product_file, size: 1_024, deleted_from_cdn_at: Time.current)
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(false)
+      end
+
+      it "publishes when the attached file is an external link, which needs nothing in storage" do
+        product.product_files << create(:external_link)
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # Storage being unreachable is our problem, not evidence the seller
+      # attached nothing.
+      it "publishes when storage can't be reached to confirm the file" do
+        allow_any_instance_of(ProductFile).to receive(:s3_object)
+          .and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
+        product.product_files << create(:product_file, size: nil)
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
+      # A listing with this many files attached is not the empty-listing case
+      # this check exists to catch, so we stop paying for storage lookups.
+      it "publishes without checking storage once more files are attached than we're willing to look up" do
+        expect_any_instance_of(ProductFile).not_to receive(:s3_object)
+        (described_class::MAX_FILES_CHECKED_FOR_STORAGE + 1).times do
+          product.product_files << create(:product_file, size: nil)
+        end
+        product.save!
 
         expect(described_class.check(product.reload, :product).passed).to eq(true)
       end
@@ -484,7 +551,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       end
 
       it "still blocks on a non-spam reason flagged alongside the spam one" do
-        product.product_files << create(:product_file)
+        product.product_files << uploaded_file
         product.save!
         allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(
           instance_double(ContentModeration::Strategies::ClassifierStrategy,

@@ -838,6 +838,49 @@ describe ProductFile do
     end
   end
 
+  describe "#stored_file_present?" do
+    it "returns true without asking storage when the file has an analyzed size" do
+      product_file = create(:product_file, size: 1_024)
+      expect(product_file).not_to receive(:s3_object)
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    it "returns true for an external link, which has no storage object" do
+      product_file = create(:external_link)
+      expect(product_file).not_to receive(:s3_object)
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    it "asks storage when the file has never been analyzed" do
+      product_file = create(:product_file, size: nil)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: true))
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    it "returns false when the upload never finished, so nothing was written" do
+      product_file = create(:product_file, size: nil)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    it "returns false when the object has been purged from storage" do
+      product_file = create(:product_file, size: 1_024, deleted_from_cdn_at: Time.current)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    it "returns true when storage can't be reached, since an outage isn't evidence the file is gone" do
+      product_file = create(:product_file, size: nil)
+      allow(product_file).to receive(:s3_object).and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+  end
+
   describe "#display_extension" do
     it "returns URL for files which are external links" do
       product_file = create(:product_file, filetype: "link", url: "http://gumroad.com")
