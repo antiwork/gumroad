@@ -25,29 +25,54 @@
 # lookup happened during a save, and by the time this job runs the upload may
 # have completed, the file may have been analyzed, or the row may have been
 # deleted.
+#
+# Nothing ever clears the marker, and `stored_file_presence_known_from_row`
+# consults it before `analyze_completed?`, so a wrong mark is not self-healing:
+# the row would read as empty even if the object later appeared. That is why
+# every way a real object can look absent is excluded before writing — the grace
+# period below, the Unicode key variants in `perform`, and the storage-error
+# path in `ProductFile#stored_file_present?`, which answers "present" on an
+# outage and so never reaches the enqueue. If a row is ever marked wrongly, the
+# recovery is to null `deleted_from_cdn_at` on it; there is deliberately no
+# automatic un-marking, because "the object is back" and "the object was purged"
+# are indistinguishable from the row.
 class RecordProductFileMissingFromStorageJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low, lock: :until_executed
 
   # How long after a row is created we still allow for its upload to be in
-  # flight. A multipart upload of a large file over a slow connection can take a
-  # long while, and marking a row that is still uploading would tell every later
-  # caller the file is missing when it is about to be there. A day is far longer
-  # than any real upload and still retires the row long before it can matter.
-  UPLOAD_GRACE_PERIOD = 1.day
+  # flight. A multipart upload of a very large file over a slow connection can
+  # take a long while, and marking a row that is still uploading would tell every
+  # later caller the file is missing when it is about to be there — permanently,
+  # since nothing revisits the marker. Three days covers a multi-gigabyte upload
+  # on a slow link with room to spare, and still retires the row long before the
+  # repeated lookups matter.
+  UPLOAD_GRACE_PERIOD = 3.days
 
   def perform(product_file_id)
     file = ProductFile.alive.find_by(id: product_file_id)
     return if file.nil?
     return unless self.class.eligible?(file)
     return if file.s3_object.exists?
+    # The same accented filename can be encoded two valid ways in Unicode, and S3
+    # compares keys byte-for-byte, so a key persisted in one normalization form
+    # misses an object stored under the other — `exists?` says missing for a file
+    # that is really there and that buyers can still download, because the
+    # download path probes the variants (see SignedUrlHelper and
+    # S3Retrievable#confirm_s3_key!). Recording "nothing in storage" for such a
+    # row would be wrong and, since nothing revisits the marker, wrong forever.
+    # For plain-ASCII keys there are no variants and this makes no S3 call.
+    return if S3KeyUnicodeNormalization.existing_variant(file.s3_key).present?
 
     file.mark_deleted_from_cdn
   end
 
   # Whether this row is one whose absence from storage is worth recording: an S3
-  # file we have never successfully analyzed, not already marked, and old enough
-  # that its upload cannot still be in progress.
+  # file not marked analyzed, not already marked, and old enough that its upload
+  # cannot still be in progress. (Only video analysis sets `analyze_completed`,
+  # so a successfully analyzed PDF or image also passes this gate — the storage
+  # lookup in `perform` is what actually decides, and it answers those rows
+  # "present".)
   def self.eligible?(file)
     file.s3? &&
       !file.analyze_completed? &&

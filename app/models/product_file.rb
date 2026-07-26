@@ -207,7 +207,15 @@ class ProductFile < ApplicationRecord
     # on (gumroad-private#1370). This runs in the middle of a save, so it must
     # not write here — the job re-checks and does the write.
     if !present && RecordProductFileMissingFromStorageJob.eligible?(self)
-      RecordProductFileMissingFromStorageJob.perform_async(id)
+      begin
+        RecordProductFileMissingFromStorageJob.perform_async(id)
+      rescue StandardError => e
+        # This method is called from a product validation, so a queueing problem
+        # (Redis down) must not fail the seller's save. We already have the
+        # answer the caller asked for; recording it is an optimization, and a
+        # later save will enqueue again.
+        Rails.logger.warn("RecordProductFileMissingFromStorageJob enqueue failed (#{id}): #{e.class} => #{e.message}")
+      end
     end
     present
   rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e

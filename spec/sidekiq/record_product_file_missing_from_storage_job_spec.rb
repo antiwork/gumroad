@@ -2,7 +2,7 @@
 
 describe RecordProductFileMissingFromStorageJob do
   # A row old enough that its upload cannot still be in flight.
-  def old_unanalyzed_file(created_at: 3.days.ago, **attrs)
+  def old_unanalyzed_file(created_at: described_class::UPLOAD_GRACE_PERIOD.ago - 1.day, **attrs)
     create(:product_file, analyze_completed: false, **attrs).tap do
       _1.update_column(:created_at, created_at)
     end
@@ -14,6 +14,12 @@ describe RecordProductFileMissingFromStorageJob do
 
       double("s3_object", exists?: exists)
     end
+  end
+
+  before do
+    # Plain-ASCII keys have no alternative normalization forms, so this is what
+    # the real module returns for them; the Unicode case is covered explicitly.
+    allow(S3KeyUnicodeNormalization).to receive(:existing_variant).and_return(nil)
   end
 
   describe "#perform" do
@@ -44,10 +50,24 @@ describe RecordProductFileMissingFromStorageJob do
 
     # A large file uploading over a slow connection is the case that must not be
     # retired: marking it would tell every later caller the file is missing right
-    # before it arrives.
+    # before it arrives, and nothing would ever undo that.
     it "does not touch a row whose upload could still be in flight" do
       file = old_unanalyzed_file(created_at: 1.hour.ago)
       expect_any_instance_of(ProductFile).not_to receive(:s3_object)
+
+      described_class.new.perform(file.id)
+
+      expect(file.reload.deleted_from_cdn?).to eq(false)
+    end
+
+    # The same accented filename can be stored under a different Unicode
+    # normalization form than the key we persisted, so `exists?` says missing for
+    # a file buyers can still download (the download path probes the variants).
+    # Recording that row as empty would be wrong forever.
+    it "leaves the row alone when the object exists under another Unicode form of the key" do
+      file = old_unanalyzed_file
+      stub_storage(file, exists: false)
+      allow(S3KeyUnicodeNormalization).to receive(:existing_variant).with(file.s3_key).and_return("#{file.s3_key}-nfd")
 
       described_class.new.perform(file.id)
 
