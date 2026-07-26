@@ -1356,7 +1356,29 @@ describe("computeTipForListedLines", () => {
   // submission allocates it from the listed/canonical price ratio and floors the result. Typing
   // R$10.00 on a R$49.90 product at 5.45 stores 183 canonical cents; the display showed 183 * 5.45
   // = R$9.97 while allocateFixedTipCents submits floor(183 * 4990 / 916) = R$9.96.
-  it("gives a fixed tip as the amount the order submits, not the rate-converted amount", () => {
+  //
+  // The fix for that drift is to keep what the buyer typed: `listedAmount` carries R$10.00 through
+  // to the charge, so both figures are 1 000 and neither is a rounding of the other.
+  it("gives a fixed tip as the amount the buyer typed, in listed units", () => {
+    const s = state({
+      products: [product({ permalink: "prod", price: 916, hasTippingEnabled: true })],
+      tip: { type: "fixed", amount: 183, listedAmount: 1_000 },
+    });
+    const lines = [{ price: 4_990, permalink: "prod" }];
+
+    expect(computeTipForListedLines(s, lines)).toBe(1_000);
+    expect(computeTipForListedLines(s, lines)).toBe(
+      computeTipsForLines(s, lines, { basis: "listed" }).reduce(sumTips, 0),
+    );
+    // Both of the arithmetic paths that were tried before land short of what the buyer chose:
+    // the rate conversion by three centavos, the canonical allocation by four.
+    expect(Math.round(computeTip(s) * 5.45)).toBe(997);
+    expect(computeTipsForLines(s, lines).reduce(sumTips, 0)).toBe(996);
+  });
+
+  // A tip carried over from a canonical-USD render (the buyer typed it before switching to the
+  // local payment method, so it was only ever stored canonically) still has to produce something.
+  it("falls back to the canonical allocation when no typed listed amount was recorded", () => {
     const s = state({
       products: [product({ permalink: "prod", price: 916, hasTippingEnabled: true })],
       tip: { type: "fixed", amount: 183 },
@@ -1365,8 +1387,24 @@ describe("computeTipForListedLines", () => {
 
     expect(computeTipForListedLines(s, lines)).toBe(996);
     expect(computeTipForListedLines(s, lines)).toBe(computeTipsForLines(s, lines).reduce(sumTips, 0));
-    // The rate conversion the display used to do disagrees by a centavo.
-    expect(Math.round(computeTip(s) * 5.45)).toBe(997);
+  });
+
+  it("splits a typed listed tip across a multi-line cart without inventing minor units", () => {
+    const s = state({
+      products: [
+        product({ permalink: "a", price: 916, hasTippingEnabled: true }),
+        product({ permalink: "b", price: 916, hasTippingEnabled: true }),
+      ],
+      tip: { type: "fixed", amount: 183, listedAmount: 1_001 },
+    });
+    const lines = [
+      { price: 4_990, permalink: "a" },
+      { price: 4_990, permalink: "b" },
+    ];
+
+    const perLine = computeTipsForLines(s, lines, { basis: "listed" });
+    expect(perLine).toEqual([501, 500]);
+    expect(computeTipForListedLines(s, lines)).toBe(1_001);
   });
 
   it("sums the per-line allocation across a multi-line cart", () => {

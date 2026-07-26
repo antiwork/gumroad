@@ -246,11 +246,16 @@ export const Checkout = ({
   // an INR product with UPI): the buyer is charged the listed price as-is, so the summary shows
   // the listed currency rather than dividing that price by our USD exchange rate. Null on every
   // other checkout, which keeps the canonical USD rendering below.
-  const listedCurrency = getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
-    willSaveCard: state.willSaveCard,
-    usingSavedCard: state.usingSavedCard,
-    paymentMethod: state.paymentMethod,
-  });
+  //
+  // Suppressed while the FX-quoted lane is displaying, so that exactly one lane is ever in effect
+  // and `localCurrency` below cannot silently prefer one while the tip is computed for the other.
+  const listedCurrency = buyerCurrencyDisplay
+    ? null
+    : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
+        willSaveCard: state.willSaveCard,
+        usingSavedCard: state.usingSavedCard,
+        paymentMethod: state.paymentMethod,
+      });
   // The per-line bases the ORDER submits its tip from: Show.tsx hands computeTipsForLines each
   // line's `getDiscountedPrice(...)`, in the product's own minor units. Passing the same bases to
   // computeTipForListedLines below makes the displayed tip the submitted tip by construction.
@@ -329,6 +334,7 @@ export const Checkout = ({
                     <TipSelector
                       buyerCurrencyDisplay={localCurrency}
                       presentmentTipCents={localAmounts?.tipCents ?? null}
+                      isListedCurrency={listedCurrency != null}
                     />
                   </div>
                 ) : null}
@@ -521,9 +527,13 @@ export const Checkout = ({
 const TipSelector = ({
   buyerCurrencyDisplay,
   presentmentTipCents,
+  isListedCurrency = false,
 }: {
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   presentmentTipCents?: number | null;
+  // True only on the method-forced listed-currency lane, where the charge bills the listed amount
+  // directly and so a typed tip must be preserved exactly as typed (see `Tip.listedAmount`).
+  isListedCurrency?: boolean;
 }) => {
   const [state, dispatch] = useState();
   const errors = getErrors(state);
@@ -614,6 +624,11 @@ const TipSelector = ({
                     buyerCurrencyDisplay && newAmount != null
                       ? toCanonicalCents(newAmount, buyerCurrencyDisplay)
                       : newAmount,
+                  // Keep the amount exactly as typed, in the currency it was typed in, so the
+                  // method-forced lane can bill that figure rather than a canonical rounding of
+                  // it. `amount` above stays the canonical USD source of truth every other
+                  // consumer reads; this is only consulted on that one lane.
+                  listedAmount: isListedCurrency ? newAmount : null,
                 },
               });
             }}

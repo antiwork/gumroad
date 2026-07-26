@@ -395,21 +395,20 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByText("R$59.88").length).toBeGreaterThan(0);
   });
 
-  it("shows the fixed tip the order actually submits, not a rate-converted conversion", () => {
-    // A fixed tip is stored in canonical USD cents (1 000 here), and the order allocates it across
-    // the cart from the listed per-line prices: allocateFixedTipCents takes 1000 * 4990 / 915 and
-    // floors it, so tip_cents is 5 453 and the charge bills R$54.53. Converting at the stored
-    // exchange rate instead (1000 * 5.45 = 5450) shows R$54.50 — three centavos under the charge,
-    // the display/charge mismatch this lane exists to remove.
+  it("charges and shows the fixed tip exactly as the buyer typed it", () => {
+    // The buyer typed R$54.53 into the tip box, so `listedAmount` holds 5 453 and `amount` holds
+    // the canonical rounding of it. The lane bills the listed figure directly, so both the summary
+    // and the charge are R$54.53 — no arithmetic between what was typed and what is billed.
     const { getAllByText, queryByText } = renderCheckout(
       brlState({
         products: [stateProduct({ permalink: "brl", price: 915, hasTippingEnabled: true })],
-        tip: { type: "fixed", amount: 1_000 },
+        tip: { type: "fixed", amount: 1_000, listedAmount: 5_453 },
       }),
       tippingCart(),
     );
 
     expect(getAllByText("R$54.53").length).toBeGreaterThan(0);
+    // Converting the canonical figure at the stored rate lands three centavos under.
     expect(queryByText("R$54.50")).toBeNull();
     // Displaying the canonical figure verbatim under an R$ label would under-quote by the whole rate.
     expect(queryByText("R$10")).toBeNull();
@@ -417,23 +416,22 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByText("R$104.43").length).toBeGreaterThan(0);
   });
 
-  it("shows the charged tip inside the custom-tip box, not a rate conversion of the stored cents", () => {
-    // The box the buyer types into has to quote the same figure as the row beneath it. Typing
-    // R$10.00 stores round(1000 / 5.45) = 183 canonical cents, and the order allocates that back
-    // as floor(183 * 4990 / 915) = 998 centavos, so the summary and the charge are R$9.98.
-    // Converting the stored cents at the exchange rate instead (round(183 * 5.45) = 997) would put
-    // R$9.97 in the box while R$9.98 sat directly below it and R$9.98 was charged.
+  it("shows the typed tip unchanged inside the custom-tip box", () => {
+    // gumroad-private#1376: the box the buyer types into used to re-derive its own value from the
+    // stored canonical cents, so typing R$10.00 redisplayed as R$9.97 and billed R$9.96 — the
+    // buyer's own choice drifted underneath them. The typed amount is now what is kept and billed.
     const { getByLabelText, getAllByText, queryByText } = renderCheckout(
       brlState({
         products: [stateProduct({ permalink: "brl", price: 915, hasTippingEnabled: true })],
-        tip: { type: "fixed", amount: 183 },
+        tip: { type: "fixed", amount: 183, listedAmount: 1_000 },
       }),
       tippingCart(),
     );
 
-    expect(getByLabelText("Tip").getAttribute("value")).toBe("9.98");
-    expect(getAllByText("R$9.98").length).toBeGreaterThan(0);
+    expect(getByLabelText("Tip").getAttribute("value")).toBe("10");
+    expect(getAllByText("R$10.00").length).toBeGreaterThan(0);
     expect(queryByText("R$9.97")).toBeNull();
+    expect(queryByText("R$9.96")).toBeNull();
   });
 
   it("stays in canonical USD while a saved card is selected, because that charge is not in the listed currency", () => {
@@ -464,5 +462,51 @@ describe("Checkout method-forced listed-currency amounts", () => {
     const { getAllByLabelText } = renderCheckout(brlState(), cart);
 
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
+  });
+
+  it("defers to the FX-quoted lane when a quote is also usable, so only one lane is ever in effect", () => {
+    // The two lanes are near-mutually-exclusive but not provably so: a non-USD buyer of a
+    // non-USD-priced product can satisfy both. The quote's allocation is the one locked into the
+    // token and verified at charge time, so it must win. Pinned here because the tip basis in
+    // Show.tsx follows the same precedence — if display and submission ever disagreed about which
+    // lane is in effect, the tip would be computed in one currency and rendered in the other.
+    const { getAllByLabelText, queryByText } = renderCheckout(
+      brlState({
+        surcharges: {
+          type: "loaded",
+          result: {
+            vat_id_valid: false,
+            has_vat_id_input: false,
+            shipping_rate_cents: 0,
+            tax_cents: 0,
+            tax_included_cents: 0,
+            subtotal: 915,
+            buyer_currency_quote: {
+              token: "quote-token",
+              currency: "cad",
+              canonical_total_cents: 915,
+              presentment_total_cents: 1_144,
+              rate: 1.25,
+              subunit_to_unit: 100,
+              expires_at: "2126-07-01T00:00:00Z",
+              line_allocations: [
+                {
+                  permalink: "brl",
+                  price_cents: 1_144,
+                  tip_cents: 0,
+                  tax_cents: 0,
+                  shipping_cents: 0,
+                  total_cents: 1_144,
+                },
+              ],
+            },
+          },
+        },
+      }),
+      brlCart(),
+    );
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$11.44"]);
+    expect(queryByText("R$49.90")).toBeNull();
   });
 });

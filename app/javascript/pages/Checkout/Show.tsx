@@ -202,14 +202,20 @@ const CheckoutIndexPage = () => {
       paymentMethod: state.paymentMethod,
     },
   );
-  // The method-forced listed-currency lane, for the large-tip confirmation below. The tip and the
-  // cart total are canonical USD cents in state, so both are converted into the listed currency for
-  // display — the modal must quote the same numbers the summary and the charge do.
-  const listedCurrency = getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
-    willSaveCard: state.willSaveCard,
-    usingSavedCard: state.usingSavedCard,
-    paymentMethod: state.paymentMethod,
-  });
+  // The method-forced listed-currency lane, for the large-tip confirmation below and for the tip
+  // basis the order submits. Suppressed whenever the FX-quoted buyer-currency lane is displaying,
+  // exactly as the checkout summary's precedence does (`buyerCurrencyDisplay ?? listedCurrency`):
+  // the two lanes are near-mutually-exclusive, but a non-USD buyer of a non-USD-priced product can
+  // satisfy both, and then it is the quote's allocation that is on screen and locked into the
+  // token. Following the same precedence here keeps the modal, the summary and the submitted tip
+  // all reading from the one lane that is actually in effect.
+  const listedCurrency = buyerCurrencyDisplay
+    ? null
+    : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
+        willSaveCard: state.willSaveCard,
+        usingSavedCard: state.usingSavedCard,
+        paymentMethod: state.paymentMethod,
+      });
   // The tip and cart total the confirmation modal quotes, in listed minor units. The tip runs
   // through the submission's own per-line allocation (see computeTipForListedLines) so the modal
   // quotes the figure that will actually be charged, and the cart total is the listed total itself
@@ -458,6 +464,11 @@ const CheckoutIndexPage = () => {
                   : discountedPriceToChargeNow,
               permalink: item.product.permalink,
             })),
+            // These bases are the products' own minor units. On the method-forced lane that is a
+            // non-USD currency the charge bills directly, so a fixed tip is allocated from the
+            // amount the buyer typed in that currency — typing R$10.00 bills R$10.00 rather than
+            // the R$9.96 that round-tripping it through canonical USD cents produces.
+            { basis: listedCurrency ? "listed" : "canonical" },
           );
 
           return linePricing.map(({ item, discounted, discountedPriceToChargeNow }, index) => {

@@ -167,7 +167,25 @@ export type Gift =
   | { type: "normal"; email: string; note: string }
   | { type: "anonymous"; id: string; name: string; note: string };
 
-export type Tip = { type: "percentage"; percentage: number } | { type: "fixed"; amount: number | null };
+export type Tip =
+  | { type: "percentage"; percentage: number }
+  | {
+      type: "fixed";
+      // Canonical USD cents. Every USD-side consumer reads this — the surcharge quote's tax basis,
+      // the large-tip threshold, the canonical totals — so it is always populated.
+      amount: number | null;
+      // The exact amount the buyer typed, in the listed currency's minor units, on the
+      // method-forced listed-currency lane (a BRL product paid with Pix, an EUR product with
+      // iDEAL, an INR product with UPI). That lane bills the listed amount directly, so the tip
+      // the buyer chose has to survive to the charge unchanged; deriving it from `amount` cannot
+      // do that, because converting a typed R$10.00 to canonical cents throws away roughly a
+      // fifth of a centavo of precision at a 5.45 rate and no canonical figure converts back to
+      // exactly R$10.00 (183 canonical cents bills R$9.96, 184 bills R$10.02).
+      //
+      // Null on every other checkout and whenever the buyer picked a percentage instead, in
+      // which case the listed lane takes its percentage of the listed price — already exact.
+      listedAmount?: number | null;
+    };
 
 export type State = {
   products: Product[];
@@ -514,14 +532,22 @@ export function computeTipForPrice(state: State, price: number, permalink: strin
 export function computeTipsForLines(
   state: State,
   lines: { price: number; permalink: string | undefined }[],
+  // Which currency the caller's line prices — and therefore the tips it wants back — are in.
+  // "canonical" (the default) is USD, as `state.products` holds. "listed" means the caller is on
+  // the method-forced lane and passed the products' own minor units, in which case a fixed tip is
+  // allocated from the amount the buyer literally typed rather than from its canonical rounding,
+  // so the tip charged is the tip chosen. See the `listedAmount` note on `Tip`.
+  { basis = "canonical" }: { basis?: "canonical" | "listed" } = {},
 ): (number | null)[] {
   if (!isTippingEnabled(state)) return lines.map(() => null);
   if (state.tip.type === "fixed") {
-    const totalPriceCents = getTotalPriceFromProducts(state);
+    const listedAmount = basis === "listed" ? state.tip.listedAmount : null;
+    const totalPriceCents =
+      listedAmount != null ? lines.reduce((sum, line) => sum + line.price, 0) : getTotalPriceFromProducts(state);
     if (totalPriceCents === 0) {
       return lines.map((line) => computeTipForFreeCart(state, line.permalink));
     }
-    return allocateFixedTipCents(state.tip.amount ?? 0, lines, totalPriceCents);
+    return allocateFixedTipCents(listedAmount ?? state.tip.amount ?? 0, lines, totalPriceCents);
   }
   const percentage = state.tip.percentage;
   return lines.map((line) => Math.round((percentage / 100) * line.price));
@@ -544,7 +570,7 @@ export function computeTipsForLines(
 // product's own minor units — so display and charge agree by construction, for both tip types and
 // for any future change to how tips are split.
 export function computeTipForListedLines(state: State, lines: { price: number; permalink: string | undefined }[]) {
-  return computeTipsForLines(state, lines).reduce((sum, tip) => sum + (tip ?? 0), 0);
+  return computeTipsForLines(state, lines, { basis: "listed" }).reduce<number>((sum, tip) => sum + (tip ?? 0), 0);
 }
 
 function allocateFixedTipCents(tipAmountCents: number, lines: { price: number }[], totalPriceCents: number): number[] {
