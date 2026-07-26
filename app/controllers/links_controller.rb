@@ -411,6 +411,19 @@ class LinksController < ApplicationController
         # describe the committed pre-save state.
         deletion_guard_diagnostics
 
+        # Validate the payload's SHAPE before the content guards run. A payload
+        # the server can't interpret — content pages or versions sent as
+        # something other than a list — otherwise reaches the deletion guards,
+        # which can only describe it as "the content shown in the editor may be
+        # out of date, refresh the page". Refreshing doesn't fix a malformed
+        # payload, so the seller retries into the same message and the real
+        # problem stays invisible. Shape problems now fail with their own
+        # specific error.
+        #
+        # This only adds a step BEFORE the guards; the guards themselves still
+        # run pre-mutation exactly as they did.
+        Product::SavePayloadShapeValidator.validate!(product: @product, raw_params: params)
+
         # Reject a save built from a stale snapshot BEFORE any mutation: a
         # payload that echoes page/variant snapshot timestamps older than the
         # stored rows would silently overwrite content another session saved in
@@ -546,6 +559,15 @@ class LinksController < ApplicationController
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
         @product.generate_product_files_archives!
       end
+    rescue Product::SavePayloadShapeValidator::InvalidPayload => e
+      # Raised before any mutation: the payload can't be interpreted, so no
+      # guard verdict about it would be meaningful. The reason code lets the
+      # editor tell this apart from a staleness or deletion-intent rejection.
+      return render json: {
+        error_message: e.message,
+        error_code: Product::SavePayloadShapeValidator::InvalidPayload::ERROR_CODE,
+        reason: e.reason,
+      }, status: :unprocessable_entity
     rescue Product::StaleContentWriteGuard::StaleContentConflict => e
       # Raised before any mutation: the payload's echoed snapshot timestamps
       # are older than the stored rows, meaning another session saved after
@@ -950,15 +972,29 @@ class LinksController < ApplicationController
       Array.wrap(product_permitted_params[:preserved_rich_content_ids])
     end
 
+    # An immutable copy of the permitted save payload, taken before any of the
+    # save steps run. Several later steps mutate `product_permitted_params` in
+    # place (the coffee path rewrites :variants, SaveFilesService consumes the
+    # page descriptions), so a check that reads the live permitted params can
+    # see a payload that no longer matches what the client actually submitted.
+    # The old workaround was for those checks to read the RAW `params` instead,
+    # which skips the policy's permitted-attribute filtering — the checks were
+    # reading a different, wider object than the save itself. Snapshotting the
+    # permitted params once gives every pre-mutation check the same filtered
+    # view of the request, and it can't be consumed out from under them.
+    def save_payload_snapshot
+      @_save_payload_snapshot ||= product_permitted_params.deep_dup
+    end
+
     # Every page id present anywhere in the save payload (product-level and
     # variant-level). A page whose id appears here isn't being deleted — at most
     # it's moving between the product level and a variant (e.g. toggling "use the
     # same content for all versions"), so the deletion guards must not block it.
     def payload_page_ids
       @_payload_page_ids ||= begin
-        product_pages = product_permitted_params[:rich_content]
+        product_pages = save_payload_snapshot[:rich_content]
         ids = product_pages.is_a?(Array) ? product_pages.map { _1[:id] } : []
-        (product_permitted_params[:variants] || []).each do |variant|
+        (save_payload_snapshot[:variants] || []).each do |variant|
           variant_pages = variant[:rich_content]
           ids.concat(variant_pages.map { _1[:id] }) if variant_pages.is_a?(Array)
         end
@@ -974,15 +1010,9 @@ class LinksController < ApplicationController
     # already has are in-place updates of that page — their content must NOT
     # unlock deleting a different stored page that happens to have the same
     # content (two duplicate-content pages, an outdated payload omits one).
-    # NOTE: reads the RAW params, not the permitted ones — by the time the
-    # deletion guards run, the permitted variant params may have been
-    # consumed/mutated by earlier steps.
     def payload_page_descriptions
       @_payload_page_descriptions ||= begin
-        pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
-        (params[:variants].is_a?(Array) ? params[:variants] : []).each do |variant|
-          pages.concat(variant[:rich_content].to_a) if variant[:rich_content].is_a?(Array)
-        end
+        pages = snapshot_pages
         known_page_ids = (@product.alive_rich_contents.map(&:external_id) +
           @product.current_base_variants.flat_map { |variant| variant.alive_rich_contents.map(&:external_id) }).to_set
         pages.filter_map do |page|
@@ -1001,16 +1031,24 @@ class LinksController < ApplicationController
       @_page_rewrite_budget ||= Product::RichContentDeletionGuard.build_rewrite_budget(payload_page_descriptions)
     end
 
-    # Every page in the save payload (product-level and variant-level) with the
-    # snapshot timestamp the editor echoed for it, for the stale-write guard
-    # (Product::StaleContentWriteGuard). Reads the RAW params like
-    # payload_page_descriptions does, and runs before the save mutates anything.
-    def snapshot_pages_params
-      pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
-      (params[:variants].is_a?(Array) ? params[:variants] : []).each do |variant|
-        pages.concat(variant[:rich_content].to_a) if variant[:rich_content].is_a?(Array)
+    # Every page the payload submitted, product-level and variant-level, read
+    # from the pre-mutation snapshot.
+    def snapshot_pages
+      @_snapshot_pages ||= begin
+        product_pages = save_payload_snapshot[:rich_content]
+        pages = product_pages.is_a?(Array) ? product_pages.to_a : []
+        snapshot_variants_params.each do |variant|
+          variant_pages = variant[:rich_content]
+          pages.concat(variant_pages.to_a) if variant_pages.is_a?(Array)
+        end
+        pages
       end
-      pages.filter_map { |page| { id: page[:id], updated_at: page[:updated_at] } if page.is_a?(ActionController::Parameters) || page.is_a?(Hash) }
+    end
+
+    # Every page in the save payload with the snapshot timestamp the editor
+    # echoed for it, for the stale-write guard (Product::StaleContentWriteGuard).
+    def snapshot_pages_params
+      snapshot_pages.filter_map { |page| { id: page[:id], updated_at: page[:updated_at] } if page.is_a?(ActionController::Parameters) || page.is_a?(Hash) }
     end
 
     # Every variant in the save payload with the snapshot timestamp the editor
@@ -1020,7 +1058,8 @@ class LinksController < ApplicationController
     # is also bumped by ordinary sales, so a newer timestamp alone doesn't mean
     # another editor session saved.
     def snapshot_variants_params
-      variants = params[:variants].is_a?(Array) ? params[:variants] : []
+      variants = save_payload_snapshot[:variants]
+      return [] unless variants.is_a?(Array)
       variants.select { |variant| variant.is_a?(ActionController::Parameters) || variant.is_a?(Hash) }
     end
 
@@ -1029,12 +1068,14 @@ class LinksController < ApplicationController
     # (the request body isn't retained). Must be built BEFORE the save mutates
     # the product — the alive counts and the persisted shared-content flag
     # describe the pre-save state; `update` calls this before
-    # assign_attributes and the value is memoized.
+    # assign_attributes and the value is memoized. The submitted counts read
+    # the pre-mutation snapshot, so they describe the payload as received even
+    # though later steps rewrite it.
     def deletion_guard_diagnostics
       @_deletion_guard_diagnostics ||= {
-        submitted_variant_count: params[:variants].is_a?(Array) ? params[:variants].size : 0,
+        submitted_variant_count: snapshot_variants_params.size,
         alive_variant_count: @product.alive_variants.count,
-        submitted_page_count: submitted_page_count,
+        submitted_page_count: snapshot_pages.size,
         alive_page_count: @product.alive_rich_contents.count + @product.current_base_variants.sum { |variant| variant.alive_rich_contents.count },
         persisted_has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants?,
         # Whether the product level had visible content BEFORE this save
@@ -1042,13 +1083,8 @@ class LinksController < ApplicationController
         # this (not from the live rows, which the transaction has already
         # mutated by the time the per-variant guards run).
         persisted_product_level_has_editor_content: @product.alive_rich_contents.any?(&:has_editor_content?),
-        submitted_has_same_rich_content_for_all_variants: params.key?(:has_same_rich_content_for_all_variants) ? ActiveModel::Type::Boolean.new.cast(params[:has_same_rich_content_for_all_variants]) : nil,
+        submitted_has_same_rich_content_for_all_variants: save_payload_snapshot.key?(:has_same_rich_content_for_all_variants) ? ActiveModel::Type::Boolean.new.cast(save_payload_snapshot[:has_same_rich_content_for_all_variants]) : nil,
       }
-    end
-
-    def submitted_page_count
-      count = params[:rich_content].is_a?(Array) ? params[:rich_content].size : 0
-      count + (params[:variants].is_a?(Array) ? params[:variants].sum { |variant| variant[:rich_content].is_a?(Array) ? variant[:rich_content].size : 0 } : 0)
     end
 
     # Accumulates client id → canonical server id for records this save

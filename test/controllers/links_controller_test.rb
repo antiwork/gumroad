@@ -1397,6 +1397,91 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_nil context[:submitted_has_same_rich_content_for_all_variants]
   end
 
+  # --- payload shape validation (runs BEFORE the content guards) -------------
+  # A payload the server can't interpret used to reach the deletion guards,
+  # which could only report it as "the editor may be out of date, refresh the
+  # page" — advice that doesn't help, because refreshing doesn't fix a
+  # malformed request. gumroad-private#1363.
+
+  test "PUT update rejects a save whose content pages aren't a list with a shape error, not a staleness one" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(rich_content: "not-a-list"), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal Product::SavePayloadShapeValidator::InvalidPayload::ERROR_CODE, response.parsed_body["error_code"]
+    assert_equal Product::SavePayloadShapeValidator::PAGES_NOT_A_LIST, response.parsed_body["error_message"]
+    assert_not_includes response.parsed_body["error_message"], "out of date"
+    assert_equal false, @version1_page.reload.deleted?
+  end
+
+  test "PUT update rejects a save whose versions aren't a list" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(variants: "not-a-list"), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal Product::SavePayloadShapeValidator::VARIANTS_NOT_A_LIST, response.parsed_body["error_message"]
+    assert_equal false, @version1.reload.deleted?
+  end
+
+
+
+
+
+  test "PUT update reports a malformed payload to Sentry with its reason" do
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(rich_content: "not-a-list"), format: :json
+
+    _message, context = notified.find { |message, _| message == "Rejected product save with a malformed payload" }
+    assert_not_nil context, "Expected a malformed-payload notification (got: #{notified.inspect})"
+    assert_equal "pages_not_a_list", context[:reason]
+    assert_equal @product.id, context[:product_id]
+  end
+
+  test "PUT update still accepts a well-formed save that deletes a page the seller confirmed" do
+    # The shape validator must not reject the ids the editor legitimately
+    # reports for records that no longer exist as live rows.
+    setup_guarded_version!
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }],
+      confirmed_removed_rich_content_ids: [@version1_page.external_id]
+    ), format: :json
+
+    assert_response :success
+    assert_equal true, @version1_page.reload.deleted?
+  end
+
+  test "PUT update accepts a save that submits new pages and versions without ids" do
+    post :update, params: @params.merge(
+      rich_content: [{ id: nil, title: "New page", description: { type: "doc", content: guard_content_description } }],
+      variants: [{ id: nil, name: "New version" }]
+    ), format: :json
+
+    assert_response :success
+  end
+
+  test "PUT update accepts a save whose pages carry client-generated ids the server has never seen" do
+    # The shape validator deliberately does NOT check that payload ids name
+    # records of this product. A page the seller just created is submitted under
+    # a client-generated id, and the save response hands back
+    # rich_content_id_mappings so the editor can adopt the canonical one. An
+    # unrecognised id is therefore indistinguishable from a genuinely foreign one
+    # until client ids are namespaced per owner (gumroad-private#1360), so
+    # rejecting it here would break the ordinary first save of new content.
+    post :update, params: @params.merge(
+      rich_content: [{ id: "client-page-guid", title: "New page", description: { type: "doc", content: guard_content_description } }],
+      variants: [{ id: nil, client_id: "client-variant-guid", name: "New version", rich_content: [{ id: "another-client-guid", title: nil, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+    page = @product.reload.alive_rich_contents.sole
+    assert_equal page.external_id, response.parsed_body["rich_content_id_mappings"]["client-page-guid"]
+  end
+
   test "PUT update blocks deleting a title-only page missing from the payload" do
     # A page can carry nothing but a title (its body is an empty paragraph).
     # That title is seller-authored work and renders in the buyer's page list,
