@@ -4,6 +4,7 @@ import {
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
+  computeTipForProductTotal,
   computeTipsForLines,
   getChargeTodayPrice,
   getFutureInstallmentsTotal,
@@ -1326,6 +1327,48 @@ describe("getFutureInstallmentsTotal", () => {
         }),
       ),
     ).toBe(0);
+  });
+});
+
+describe("computeTipForProductTotal", () => {
+  // The method-forced listed-currency lane displays a percentage tip by recomputing it against the
+  // LISTED cart total, because that is the basis the order submits from: computeTipsForLines gets
+  // each line's getDiscountedPrice(...), in the product's own minor units. Converting the canonical
+  // tip back up instead rounds twice and lands a minor unit off what is charged.
+  it("takes a percentage tip from the basis it is given, so a listed total yields a listed tip", () => {
+    // R$49.90 listed at a 5.45 rate is ~916 canonical USD cents.
+    const s = state({
+      products: [product({ price: 916, hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 15 },
+    });
+
+    expect(computeTipForProductTotal(s, 4_990)).toBe(749);
+    expect(computeTip(s)).toBe(137);
+  });
+
+  it("matches the per-line tip the order actually submits for the same listed basis", () => {
+    const s = state({
+      products: [product({ permalink: "prod", price: 916, hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 20 },
+    });
+
+    const submitted = computeTipsForLines(s, [{ price: 4_990, permalink: "prod" }]);
+    expect(computeTipForProductTotal(s, 4_990)).toBe(submitted[0]);
+  });
+
+  it("ignores the basis for a fixed tip, which is stored canonically either way", () => {
+    const s = state({
+      products: [product({ price: 916, hasTippingEnabled: true })],
+      tip: { type: "fixed", amount: 500 },
+    });
+
+    expect(computeTipForProductTotal(s, 4_990)).toBe(500);
+    expect(computeTipForProductTotal(s, 916)).toBe(500);
+  });
+
+  it("is zero when tipping is disabled regardless of basis", () => {
+    const s = state({ products: [product({ price: 916 })], tip: { type: "percentage", percentage: 15 } });
+    expect(computeTipForProductTotal(s, 4_990)).toBe(0);
   });
 });
 

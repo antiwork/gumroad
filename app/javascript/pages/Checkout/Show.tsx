@@ -40,6 +40,7 @@ import { computeInitialCheckout, type InitialCheckout } from "$app/components/Ch
 import {
   canUseStripePaymentElement,
   computeTip,
+  computeTipForProductTotal,
   computeTipsForLines,
   type CheckoutPaymentConfig,
   createReducer,
@@ -210,6 +211,18 @@ const CheckoutIndexPage = () => {
     usingSavedCard: state.usingSavedCard,
     paymentMethod: state.paymentMethod,
   });
+  // The tip and cart total the confirmation modal quotes, in listed minor units. Same split the cart
+  // summary makes: a percentage tip is recomputed against the LISTED cart total (the basis the order
+  // submits from), while a fixed tip is converted back from its canonical figure.
+  const listedProductTotalCents = cartForm.data.cart.items.reduce(
+    (sum, item) => sum + getDiscountedPrice(cartForm.data.cart, item).price,
+    0,
+  );
+  const listedTipCents = listedCurrency
+    ? state.tip.type === "fixed"
+      ? toBuyerCurrencyCents(computeTip(state), listedCurrency)
+      : computeTipForProductTotal(state, listedProductTotalCents)
+    : 0;
   const [results, setResults] = React.useState<Result[] | null>(null);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
@@ -797,7 +810,7 @@ const CheckoutIndexPage = () => {
         <p>
           You're about to leave a tip of{" "}
           {listedCurrency
-            ? formatPresentmentCents(toBuyerCurrencyCents(computeTip(state), listedCurrency), listedCurrency)
+            ? formatPresentmentCents(listedTipCents, listedCurrency)
             : formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay, {
                 usdSymbolFormat: "short",
                 noCentsIfWhole: true,

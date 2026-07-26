@@ -374,7 +374,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
     discountCodes: [],
   });
 
-  it("converts the tip into the listed currency instead of labelling USD cents with the listed symbol", () => {
+  it("shows the percentage tip the order actually submits, not a double-rounded conversion", () => {
     const { getAllByText, queryByText } = renderCheckout(
       brlState({
         products: [stateProduct({ permalink: "brl", price: 915, hasTippingEnabled: true })],
@@ -383,12 +383,16 @@ describe("Checkout method-forced listed-currency amounts", () => {
       tippingCart(),
     );
 
-    // 20% of the canonical 915 USD cents is 183, which converts to 183 * 5.45 = 997 BRL cents.
-    expect(getAllByText("R$9.97").length).toBeGreaterThan(0);
-    // The unconverted USD figure must not appear under an R$ label.
+    // The order submits 20% of the LISTED price: computeTipsForLines gets getDiscountedPrice(...) =
+    // 4 990, so tip_cents is 998 and the charge bills R$9.98. Routing the display through the
+    // canonical figure instead (20% of 915 = 183, then 183 * 5.45 = 997) shows R$9.97 — a centavo
+    // under what is charged, which is the display/charge mismatch this change exists to remove.
+    expect(getAllByText("R$9.98").length).toBeGreaterThan(0);
+    expect(queryByText("R$9.97")).toBeNull();
+    // The unconverted USD figure must not appear under an R$ label either.
     expect(queryByText("R$1.83")).toBeNull();
-    // Total is the listed price plus the converted tip: 4990 + 997.
-    expect(getAllByText("R$59.87").length).toBeGreaterThan(0);
+    // Total is the listed price plus that same tip: 4990 + 998.
+    expect(getAllByText("R$59.88").length).toBeGreaterThan(0);
   });
 
   it("converts a fixed tip typed in the listed currency back to canonical cents before storing it", () => {
