@@ -1465,6 +1465,180 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edited content" }] }], page.reload.description
   end
 
+  # --- atomic mapping adoption on failure (gumroad-private#1360, PR 1) ---------
+  # Only the success and warning responses used to carry the id mappings. A
+  # FAILED save left the editor holding its client-generated ids, so the
+  # seller's retry resubmitted ids the server couldn't recognise — re-creating
+  # records and tripping the deletion guard (retry storms). Every failure
+  # response must now carry the mapping keys too, filtered to records that
+  # actually PERSISTED: the save transaction rolls back on these paths, so
+  # handing back an id for a rolled-back row would be worse than nothing.
+
+  test "PUT update returns id mapping keys on the hidden-variant-content conflict, excluding rolled-back records" do
+    setup_guarded_version!
+    product_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }])
+    @product.update!(has_same_rich_content_for_all_variants: true)
+
+    # The payload creates a NEW page under a client id AND trips the conflict
+    # (the hidden version page is absent while real product-level content
+    # exists). The new page is created inside the transaction, then the guard
+    # raises and everything rolls back.
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: true,
+      rich_content: [
+        { id: product_page.external_id, title: nil, description: { type: "doc", content: product_page.description } },
+        { id: "client-page-guid", title: "New page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Draft" }] }] } },
+      ],
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "hidden_variant_content_conflict", response.parsed_body["error_code"]
+    # The mapping keys are present so the editor can always adopt them...
+    assert response.parsed_body.key?("rich_content_id_mappings")
+    assert response.parsed_body.key?("variant_id_mappings")
+    # ...but the rolled-back page must NOT be reported: its canonical id no
+    # longer exists server-side, so adopting it would strand the editor on a
+    # dead id. The rollback undid the creation, so the mapping set is empty.
+    assert_equal({}, response.parsed_body["rich_content_id_mappings"])
+    assert_equal({}, response.parsed_body["variant_id_mappings"])
+    assert_equal [product_page.external_id], @product.reload.alive_rich_contents.map(&:external_id)
+  end
+
+  test "PUT update returns id mapping keys on a generic save failure, excluding rolled-back records" do
+    # Make @product.save! (which runs AFTER the rich-content processing that
+    # populates the mappings) fail: suggested price without a default price
+    # record raises RecordInvalid and rolls the transaction back.
+    @product.prices.destroy_all
+    @product.update_column(:customizable_price, true)
+
+    post :update, params: @params.merge(
+      suggested_price: "10",
+      customizable_price: true,
+      rich_content: [{ id: "client-page-guid", title: "New page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Draft" }] }] } }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "Default price cents can't be blank", response.parsed_body["error_message"]
+    # Uniform failure contract: the keys are present. The rollback undid the
+    # page creation, so the mappings are (correctly) empty — documented-empty,
+    # not stale ids for rows that no longer exist.
+    assert response.parsed_body.key?("rich_content_id_mappings")
+    assert response.parsed_body.key?("variant_id_mappings")
+    assert_equal({}, response.parsed_body["rich_content_id_mappings"])
+    assert_equal({}, response.parsed_body["variant_id_mappings"])
+    assert_empty @product.reload.alive_rich_contents
+  end
+
+  test "PUT update repeated saves with adopted canonical ids never consume the deletion-guard rewrite budget" do
+    # create → save: page created under a client id, mapping returned.
+    post :update, params: @params.merge(
+      rich_content: [{ id: "client-page-guid", title: "New page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Draft" }] }] } }]
+    ), format: :json
+    assert_response :success
+    page = @product.reload.alive_rich_contents.sole
+    assert_equal page.external_id, response.parsed_body["rich_content_id_mappings"]["client-page-guid"]
+
+    # Track the rewrite budgets the guard receives on the follow-up saves: a
+    # save addressing the page by its canonical id has no unknown-id payload
+    # pages, so the budget must be EMPTY and stay untouched — the save must
+    # not survive by spending rewrite allowance (which edited content would
+    # not earn anyway).
+    budgets = []
+    original = Product::RichContentDeletionGuard.method(:ensure_intent!)
+    Product::RichContentDeletionGuard.stubs(:ensure_intent!).with do |**kwargs|
+      budgets << kwargs[:rewrite_budget].dup
+      original.call(**kwargs)
+      true
+    end
+
+    # edit → save: same page under the adopted canonical id.
+    post :update, params: @params.merge(
+      rich_content: [{ id: page.external_id, title: "New page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Draft, edited" }] }] } }]
+    ), format: :json
+    assert_response :success
+
+    # save again, unchanged payload.
+    post :update, params: @params.merge(
+      rich_content: [{ id: page.external_id, title: "New page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Draft, edited" }] }] } }]
+    ), format: :json
+    assert_response :success
+
+    assert budgets.any?, "Expected the deletion guard to run on the follow-up saves"
+    assert budgets.all?(&:empty?), "Expected empty rewrite budgets (no unknown-id pages), got: #{budgets.inspect}"
+    assert_equal [page.external_id], @product.reload.alive_rich_contents.map(&:external_id)
+    assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Draft, edited" }] }], page.reload.description
+  end
+
+  test "PUT update keeps an uploaded file attached across create, edit, save, and save again" do
+    # Item 4 of gumroad-private#1360: a page created with an embedded uploaded
+    # file must survive create → edit → save → save with the file still
+    # attached. The file is submitted under a client-generated uuid; the
+    # server rewrites the embed to the file's canonical id
+    # (apply_rich_content_id_mappings) and maps the page id in the response.
+    file_client_id = SecureRandom.uuid
+    file_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"
+
+    post :update, params: @params.merge(
+      files: [{ id: file_client_id, url: file_url }],
+      rich_content: [{ id: "client-page-guid", title: "New page", description: { type: "doc", content: [
+        { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Draft" }] },
+        { "type" => "fileEmbed", "attrs" => { "id" => file_client_id, "uid" => "11111111-2222-3333-4444-555555555555" } },
+      ] } }]
+    ), format: :json
+
+    assert_response :success
+    page = @product.reload.alive_rich_contents.sole
+    assert_equal page.external_id, response.parsed_body["rich_content_id_mappings"]["client-page-guid"]
+    file = @product.alive_product_files.find { _1.url == file_url }
+    assert_not_nil file
+    embedded_ids = page.description.select { _1["type"] == "fileEmbed" }.map { _1.dig("attrs", "id") }
+    assert_equal [file.external_id], embedded_ids
+
+    # edit → save, then save again, with the canonical page and file ids the
+    # responses reported — the editor's post-adoption payloads.
+    2.times do |i|
+      post :update, params: @params.merge(
+        files: [{ id: file.external_id, url: file_url }],
+        rich_content: [{ id: page.external_id, title: "New page", description: { type: "doc", content: [
+          { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Draft, edited #{i}" }] },
+          { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => "11111111-2222-3333-4444-555555555555" } },
+        ] } }]
+      ), format: :json
+      assert_response :success
+    end
+
+    assert_equal [page.external_id], @product.reload.alive_rich_contents.map(&:external_id)
+    assert_equal false, file.reload.deleted?
+    assert_equal [file.id], @product.alive_product_files.map(&:id)
+    embedded_ids = page.reload.description.select { _1["type"] == "fileEmbed" }.map { _1.dig("attrs", "id") }
+    assert_equal [file.external_id], embedded_ids
+  end
+
+  test "PUT update failure-path mappings do not weaken the deletion guards" do
+    # The guards (#6178/#6244) must still block blind payloads — returning
+    # mappings on failure responses is additive, not a bypass.
+    setup_guarded_version!
+    product_page = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level content" }] }])
+
+    # A payload missing a content-bearing PAGE is rejected.
+    post :update, params: @params.merge(
+      rich_content: [],
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: nil, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+    assert_response :unprocessable_entity
+    assert_equal false, product_page.reload.deleted?
+
+    # A payload missing a content-bearing VARIANT is rejected.
+    post :update, params: @params.merge(
+      rich_content: [{ id: product_page.external_id, title: nil, description: { type: "doc", content: product_page.description } }],
+      variants: [{ id: nil, name: "Brand new version" }]
+    ), format: :json
+    assert_response :unprocessable_entity
+    assert_equal false, @version1.reload.deleted?
+    assert_equal false, @version1_page.reload.deleted?
+  end
+
   # --- stale-snapshot overwrite guard (gumroad-private#1295) -------------------
   # The editor submits the full product on every save, so a session working
   # from an outdated snapshot resubmits existing page/variant ids carrying old

@@ -25,6 +25,17 @@ export type SaveProductResponse = {
   variant_updated_at?: Record<string, string>;
 };
 
+// Client-generated id → canonical server id mappings a FAILED save response
+// carries for records that persisted despite the failure (empty when the
+// server rolled everything back). Attached to every error `saveProduct`
+// throws so the editor can adopt them before retrying — retrying with client
+// ids the server cannot recognise re-creates records and trips the server's
+// content deletion guard (gumroad-private#1360).
+export type SaveErrorIdMappings = {
+  variant_id_mappings?: Record<string, string>;
+  rich_content_id_mappings?: Record<string, string>;
+};
+
 // The server's fail-closed answer when a save would delete version-level pages
 // that are hidden by the "use the same content for all versions" flag while
 // real product-level content also exists: neither side can be picked
@@ -34,6 +45,7 @@ export class HiddenVariantContentConflictError extends Error {
   constructor(
     message: string,
     public hiddenPages: { id: string; title: string | null; variant_name: string | null }[],
+    public idMappings: SaveErrorIdMappings = {},
   ) {
     super(message);
   }
@@ -50,6 +62,19 @@ export class StaleContentConflictError extends Error {
   constructor(
     message: string,
     public staleRecords: { type: "page" | "variant"; id: string; name: string | null }[],
+    public idMappings: SaveErrorIdMappings = {},
+  ) {
+    super(message);
+  }
+}
+
+// Generic save failure. Extends ResponseError so existing
+// `assertResponseError` handling keeps working, while carrying the id
+// mappings the failure response reported (see SaveErrorIdMappings).
+export class SaveProductError extends ResponseError {
+  constructor(
+    message: string,
+    public idMappings: SaveErrorIdMappings = {},
   ) {
     super(message);
   }
@@ -124,12 +149,20 @@ export const saveProduct = async (
       error_code?: string;
       hidden_variant_pages?: { id: string; title: string | null; variant_name: string | null }[];
       stale_records?: { type: "page" | "variant"; id: string; name: string | null }[];
+      // Mappings for records that persisted despite the failure — attached to
+      // every thrown error so the editor adopts canonical ids before retrying.
+      variant_id_mappings?: Record<string, string>;
+      rich_content_id_mappings?: Record<string, string>;
     }>(await response.json());
+    const idMappings = {
+      variant_id_mappings: error.variant_id_mappings,
+      rich_content_id_mappings: error.rich_content_id_mappings,
+    };
     if (error.error_code === "hidden_variant_content_conflict")
-      throw new HiddenVariantContentConflictError(error.error_message, error.hidden_variant_pages ?? []);
+      throw new HiddenVariantContentConflictError(error.error_message, error.hidden_variant_pages ?? [], idMappings);
     if (error.error_code === "stale_content_conflict")
-      throw new StaleContentConflictError(error.error_message, error.stale_records ?? []);
-    throw new ResponseError(error.error_message);
+      throw new StaleContentConflictError(error.error_message, error.stale_records ?? [], idMappings);
+    throw new SaveProductError(error.error_message, idMappings);
   }
   if (response.status === 204) return {};
   return typia.assert<SaveProductResponse>(await response.json());

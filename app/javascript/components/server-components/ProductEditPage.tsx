@@ -6,6 +6,8 @@ import typia from "typia";
 
 import {
   HiddenVariantContentConflictError,
+  SaveErrorIdMappings,
+  SaveProductError,
   SaveProductResponse,
   StaleContentConflictError,
   saveProduct,
@@ -411,12 +413,38 @@ const ProductEditPage = (props: Props) => {
         }
       }
     } catch (e) {
+      // Even a FAILED save may have persisted records the editor created
+      // under client-generated ids (and some failure paths persist nothing —
+      // the server filters the mappings to what actually survived). Adopt the
+      // canonical ids for every error type before surfacing the error,
+      // otherwise the seller's retry resubmits ids the server cannot
+      // recognise — re-creating records and tripping the content deletion
+      // guard (gumroad-private#1360).
+      const adoptFailedSaveIdMappings = (idMappings: SaveErrorIdMappings) => {
+        if (
+          !Object.keys(idMappings.variant_id_mappings ?? {}).length &&
+          !Object.keys(idMappings.rich_content_id_mappings ?? {}).length
+        )
+          return;
+        // Keep serverIdMappings and the baseline in sync with the live state,
+        // the same way the success path does, so adoption survives a re-render.
+        setServerIdMappings((previous) => ({
+          ...previous,
+          ...idMappings.variant_id_mappings,
+          ...idMappings.rich_content_id_mappings,
+        }));
+        applyCanonicalIds(lastSavedProductRef.current, idMappings);
+        updateProduct((current) => applyCanonicalIds(current, idMappings));
+      };
       if (e instanceof HiddenVariantContentConflictError) {
+        adoptFailedSaveIdMappings(e.idMappings);
         setHiddenContentConflict(e.hiddenPages);
       } else if (e instanceof StaleContentConflictError) {
+        adoptFailedSaveIdMappings(e.idMappings);
         setStaleContentConflict(e.staleRecords);
       } else {
         assertResponseError(e);
+        if (e instanceof SaveProductError) adoptFailedSaveIdMappings(e.idMappings);
         showAlert(e.message, "error");
       }
     }
