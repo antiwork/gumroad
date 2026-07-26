@@ -37,7 +37,7 @@ import {
   ShippingCountry,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
-import { showAlert } from "$app/components/server-components/Alert";
+import { showAlert, showAlertAfterReload } from "$app/components/server-components/Alert";
 
 const routes: RouteObject[] = [
   {
@@ -359,7 +359,7 @@ const ProductEditPage = (props: Props) => {
       // did not save — the seller did nothing wrong, so the message must not
       // ask them to fix anything.
       if (response.skipped_collections?.length) {
-        showAlert(
+        showAlertAfterReload(
           "Your changes were saved, but this product's content couldn't be read from your browser and was left as it was. Reloading it now.",
           "warning",
         );
