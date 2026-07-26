@@ -1852,6 +1852,17 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to_not include "Go to payout settings"
       expect(mail.body.encoded).to_not include "Here&#39;s what Stripe reported"
     end
+
+    it "also treats the previously queued P.O. Box wording as unactionable" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_identity_verification_failed(creator.id, UserComplianceInfoRequest::PREVIOUS_PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "Your registered address is a P.O. Box"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "update the relevant information"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+    end
   end
 
   describe "#review_submitted" do
