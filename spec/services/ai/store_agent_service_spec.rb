@@ -551,6 +551,30 @@ describe Ai::StoreAgentService do
         expect(result[:proposed_action]).to be_nil
       end
 
+      it "tells the seller how to get an answer instead of only that the request was too big" do
+        # The old wording ("try asking me to change or summarize a smaller section") left sellers
+        # re-pasting the same request; the reply has to name a next step that works.
+        expect(described_class::TRUNCATED_REPLY).to match(/pieces|one at a time/i)
+        expect(described_class::TRUNCATED_REPLY).to include("support@gumroad.com")
+      end
+
+      it "asks the model for a cap that fits a whole page on the path page authoring uses" do
+        # A landing page is markup plus inline CSS/JS, JSON-escaped inside the tool call. 8,192
+        # tokens could not hold one, so every page request truncated on its first turn.
+        expect(described_class::MAX_REPLY_TOKENS).to be >= 32_000
+      end
+
+      it "keeps a smaller cap on the buffered path, whose reply time is bounded by Rack::Timeout" do
+        # Nothing streams back on this path until generation finishes, so an oversized cap turns
+        # into a request that outlives the 120s service timeout instead of a page.
+        expect(described_class::MAX_BUFFERED_REPLY_TOKENS).to be < described_class::MAX_REPLY_TOKENS
+        allow(client).to receive(:messages).and_return(text_result("You have 3 products."))
+
+        service.respond(messages: [{ role: "user", content: "How many products?" }])
+
+        expect(client).to have_received(:messages).with(hash_including(max_tokens: described_class::MAX_BUFFERED_REPLY_TOKENS))
+      end
+
       it "handles a truncated tool-call turn gracefully instead of raising" do
         # The client drops a tool call whose JSON was cut off mid-stream, so the truncated turn
         # arrives here with no usable tool_uses and stop_reason "max_tokens".
@@ -722,6 +746,23 @@ describe Ai::StoreAgentService do
       final_tokens = events.filter_map { |event, payload| payload[:text] if event == :token }
       expect(final_tokens.last).to eq(described_class::TRUNCATED_REPLY)
       expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
+    end
+
+    it "gives the model the full page-sized token budget on the streaming path" do
+      # The Agent tab streams, and streaming is bounded by silence between chunks rather than the
+      # reply's total length — so this is the path that can afford to emit a whole page in one
+      # tool call, which is exactly what a landing-page request needs.
+      captured = nil
+      allow(client).to receive(:stream_messages) do |args, &on_text|
+        captured = args
+        on_text&.call("Done.")
+        text_result("Done.")
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      collect_events([{ role: "user", content: "Build and publish a custom landing page" }])
+
+      expect(captured[:max_tokens]).to eq(described_class::MAX_REPLY_TOKENS)
     end
   end
 end
