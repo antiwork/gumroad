@@ -4786,11 +4786,21 @@ class Purchase < ApplicationRecord
       already = already.where("purchases.id != ?", id) if id
       already = already.not_is_gift_sender_purchase unless is_gift_sender_purchase
 
-      already += self.class.joins(:gift_given).where(
-        gifts: { giftee_email: recipient_email },
-        link:,
-        purchase_state: limiting_purchase_states
-      ) unless is_recurring_subscription_charge
+      # A gift purchase is stored under the *sender's* email, so the lookup above can't see an
+      # earlier gift of this product to the same recipient — it has to go through the gift record.
+      # This uses the same time window as the lookup above on purpose: the point is to stop one
+      # checkout being submitted twice, not to cap a recipient at one gift of a product for life.
+      # Without the window, a single successful gift permanently blocked every later gift of that
+      # product to that address, from any sender.
+      unless is_recurring_subscription_charge
+        already_gifted = self.class.joins(:gift_given).where(
+          gifts: { giftee_email: recipient_email },
+          link:,
+          purchase_state: limiting_purchase_states
+        ).where("purchases.created_at > ?", last_allowed_purchase_at)
+        already_gifted = already_gifted.where("purchases.id != ?", id) if id
+        already += already_gifted
+      end
 
       if variant_attributes.present?
         already = already.select do |purchase|
@@ -4824,11 +4834,18 @@ class Purchase < ApplicationRecord
       settling = settling.where("purchases.id != ?", id) if id
       settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase
 
-      # No gift join is needed here, even though gift purchases are stored under the sender's
-      # email rather than the giftee's. The gift lookup in `not_double_charged` above
-      # (`joins(:gift_given).where(gifts: { giftee_email: ... })`) has no created_at window,
-      # so an in_progress gift — including one settling over a bank debit for days — already
-      # blocks repeat gifts to the same giftee until it resolves.
+      # Gift purchases are stored under the sender's email, so they only turn up via the gift
+      # record. The time-boxed check above deliberately ignores gifts older than a few minutes,
+      # which means an unresolved gift paid by bank debit would otherwise be invisible here — so
+      # look it up explicitly, with no window, exactly like the non-gift settling lookup.
+      unless is_recurring_subscription_charge
+        settling_gifts = self.class.payment_settling.joins(:gift_given).where(
+          gifts: { giftee_email: recipient_email },
+          link:
+        )
+        settling_gifts = settling_gifts.where("purchases.id != ?", id) if id
+        settling += settling_gifts
+      end
 
       if variant_attributes.present?
         settling = settling.select do |purchase|
@@ -4852,13 +4869,25 @@ class Purchase < ApplicationRecord
       potential_duplicates.each(&:cancel_charge_intent)
     end
 
+    # The wording here has to work for two different readers. On a normal purchase the person
+    # reading it is the buyer, so "you" is right. On a gift the person reading it is the sender,
+    # who has not been charged and whose mailbox is not where anything was delivered — telling
+    # them "it has been emailed to you" reads like the gift went through, so they try again.
     def add_errors_for_existing_purchase(purchases)
       if purchases.any?(&:successful?)
-        errors.add :base, "You have already paid for this product. It has been emailed to you."
+        errors.add :base, if is_gift_sender_purchase
+          "This product was just sent as a gift to #{giftee_email}. Check with them before sending it again."
+        else
+          "You have already paid for this product. It has been emailed to you."
+        end
       elsif purchases.any?(&:preorder_authorization_successful?)
         errors.add :base, "You have already pre-ordered this product. A confirmation has been emailed to you."
       elsif purchases.any?(&:in_progress?)
-        errors.add :base, "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
+        errors.add :base, if is_gift_sender_purchase
+          "A gift of this product to #{giftee_email} is still going through. We will email you if it succeeds."
+        else
+          "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
+        end
       end
     end
 
