@@ -74,6 +74,22 @@ describe RecordProductFileMissingFromStorageJob do
       expect(file.reload.deleted_from_cdn?).to eq(false)
     end
 
+    # The variant guard must not cost an extra storage request for the ordinary
+    # case. A plain-ASCII key has no alternative normalization forms, so the real
+    # module answers without asking storage at all — pinned here without the stub
+    # the other examples use.
+    it "asks storage nothing extra for a plain-ASCII key" do
+      file = old_unanalyzed_file
+      stub_storage(file, exists: false)
+      allow(S3KeyUnicodeNormalization).to receive(:existing_variant).and_call_original
+      expect(file.s3_key).to match(/\A[[:ascii:]]+\z/)
+      expect(Aws::S3::Resource).not_to receive(:new)
+
+      described_class.new.perform(file.id)
+
+      expect(file.reload.deleted_from_cdn?).to eq(true)
+    end
+
     it "does not touch a row whose analysis has since succeeded" do
       file = old_unanalyzed_file
       file.update!(analyze_completed: true)

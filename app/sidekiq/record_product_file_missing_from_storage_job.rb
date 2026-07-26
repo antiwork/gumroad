@@ -64,6 +64,14 @@ class RecordProductFileMissingFromStorageJob
     # For plain-ASCII keys there are no variants and this makes no S3 call.
     return if S3KeyUnicodeNormalization.existing_variant(file.s3_key).present?
 
+    # `mark_deleted_from_cdn` uses `update_column`, which skips paper_trail, and
+    # nothing ever clears the marker. So without a log line there is no record of
+    # what we marked or why — and if a bad batch ever went out, the only trace
+    # would be the timestamp itself. Log enough to reconstruct the decision.
+    Rails.logger.info(
+      "RecordProductFileMissingFromStorageJob marking product_file=#{file.id} " \
+      "as missing from storage (s3_key=#{file.s3_key.inspect}, created_at=#{file.created_at.iso8601})"
+    )
     file.mark_deleted_from_cdn
   end
 
