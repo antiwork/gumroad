@@ -60,7 +60,9 @@ class ReceiptPresenter::PaymentInfo
       return unless chargeable.shipping_cents > 0
 
       amount_cents = chargeable.successful_purchases.sum do |purchase|
-        next 0 if purchase.is_free_trial_purchase?
+        # Free lines have no presentment row to read from; they moved no money in
+        # either currency, so they contribute zero to every document sum.
+        next 0 if purchase.is_free_trial_purchase? || purchase.total_transaction_cents.to_i.zero?
         presentment_currency.present? ? purchase.purchase_presentment.presentment_shipping_cents : purchase.shipping_cents
       end
 
@@ -75,7 +77,7 @@ class ReceiptPresenter::PaymentInfo
     return unless chargeable.taxable?
 
     amount_cents = chargeable.successful_purchases.sum do |purchase|
-      next 0 if purchase.is_free_trial_purchase?
+      next 0 if purchase.is_free_trial_purchase? || purchase.total_transaction_cents.to_i.zero?
       # Net of refunds in both currencies: a standalone VAT refund (valid VAT ID supplied
       # at invoice time) must not leave the invoice claiming we still hold that tax.
       presentment_currency.present? ? purchase.buyer_presentment_non_refunded_tax_cents : purchase.non_refunded_tax_amount
@@ -259,7 +261,7 @@ class ReceiptPresenter::PaymentInfo
         today_tax_price_attributes.blank?
 
       amount_cents = chargeable.successful_purchases.sum do |purchase|
-        next 0 if purchase.is_free_trial_purchase?
+        next 0 if purchase.is_free_trial_purchase? || purchase.total_transaction_cents.to_i.zero?
         presentment_currency.present? ? purchase.buyer_presentment_total_cents : purchase.total_transaction_cents
       end
       {

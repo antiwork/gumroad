@@ -684,6 +684,49 @@ describe ReceiptPresenter::PaymentInfo do
 
       it_behaves_like "payment attributes for single purchase"
 
+      context "when a free purchase shares the charge with a buyer-currency purchase" do
+        let(:free_purchase) do
+          create(
+            :free_purchase,
+            link: create(:product, name: "Free product", user: seller, price_cents: 0),
+            seller:
+          )
+        end
+
+        before do
+          charge.purchases << free_purchase
+          charge.order.purchases << free_purchase
+          charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 21_80)
+          create(:purchase_presentment,
+                 purchase:,
+                 charge_presentment:,
+                 presentment_price_cents: 21_80,
+                 presentment_tip_cents: 0,
+                 presentment_seller_tax_cents: 0,
+                 presentment_gumroad_tax_cents: 0,
+                 presentment_shipping_cents: 0,
+                 presentment_total_cents: 21_80)
+        end
+
+        # A free line — a $0 product, or a line made free by a 100%-off discount — is
+        # attached to the same charge as its paid siblings but moved no money and has no
+        # presentment row. It prints no amounts of its own, so it must not force a
+        # receipt for a charge genuinely processed in the buyer's currency back to USD.
+        it "keeps the receipt in the buyer's currency" do
+          expect(today_payment_attributes).to eq(
+            [
+              { label: "Digital product", value: "CAD$21.80" },
+              { label: "Amount paid", value: "CAD$21.80" },
+              { label: nil, value: link_to("Generate invoice", invoice_url) },
+            ]
+          )
+        end
+
+        it "omits the note claiming the charge was processed in USD" do
+          expect(payment_info.notes.join).not_to include("United States Dollars")
+        end
+      end
+
       context "with multiple purchases" do
         let(:purchase_two) do
           create(

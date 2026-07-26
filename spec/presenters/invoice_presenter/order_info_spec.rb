@@ -402,6 +402,41 @@ describe InvoicePresenter::OrderInfo do
 
     it_behaves_like "chargeable"
 
+    context "when a free purchase shares the charge with a buyer-currency purchase" do
+      let(:free_purchase) do
+        create(
+          :free_purchase,
+          email: "customer@example.com",
+          link: create(:product, name: "Free product", user: seller, price_cents: 0),
+          seller:
+        )
+      end
+
+      before do
+        charge.purchases << free_purchase
+        order.purchases << free_purchase
+        charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 21_80)
+        create(:purchase_presentment,
+               purchase:,
+               charge_presentment:,
+               presentment_currency: Currency::EUR,
+               presentment_price_cents: 21_80,
+               presentment_tip_cents: 0,
+               presentment_seller_tax_cents: 0,
+               presentment_gumroad_tax_cents: 0,
+               presentment_shipping_cents: 0,
+               presentment_total_cents: 21_80)
+      end
+
+      # A free line moved no money and has no presentment row, so it must not force
+      # the invoice's payment total back to USD under buyer-currency line items.
+      it "keeps the payment total in the buyer's currency" do
+        expect(presenter.pdf_attributes).to include(
+          { label: "Payment Total", value: "€21.80" }
+        )
+      end
+    end
+
     context "when the charge has a second purchase" do
       let(:second_purchase) do
         create(

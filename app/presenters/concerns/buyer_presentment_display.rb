@@ -34,6 +34,13 @@ module BuyerPresentmentDisplay
     # purchase with USD cents from another produces a number that is wrong in both
     # currencies.
     def buyer_presentment_display_currency(purchases)
+      # A line that moved no money (a $0 product, or a line made free by a 100%-off
+      # discount) is completed before charging and attached to the same charge as its
+      # paid siblings, so it never gets a buyer-currency (presentment) row. Such a line
+      # prints no amounts on the document, so it gets no say in the currency decision;
+      # counting it would force a receipt for a charge genuinely processed in the
+      # buyer's currency back to USD.
+      purchases = purchases.reject { _1.total_transaction_cents.to_i.zero? }
       return nil unless purchases.any? && purchases.all?(&:buyer_presentment_display?)
 
       currencies = purchases.filter_map(&:buyer_presentment_currency).uniq
