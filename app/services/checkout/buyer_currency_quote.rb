@@ -33,40 +33,42 @@ class Checkout::BuyerCurrencyQuote
   LineItem = Struct.new(:permalink, :product, :price_cents, :tip_cents,
                         :seller_tax_cents, :gumroad_tax_cents, :shipping_cents,
                         keyword_init: true) do
-    extend CurrencyHelper
-
-    # Builds a line from one product's surcharge calculation. The surcharge endpoint
-    # receives product-priced amounts from the browser, while charge-time verification
-    # compares the signed quote against Purchase#total_transaction_cents, which is always
-    # stored in USD. Normalize every product-priced component here so the token's
-    # "canonical" line totals use the same units the charge path will later verify.
+    # Builds a line from one product's surcharge calculation. The submitted price includes
+    # the buyer's tip share, so the tip is carved back out here; the tax lands in the same
+    # bucket Purchase#calculate_taxes will use at charge time (seller-responsible lookup
+    # rates vs Gumroad-collected VAT / marketplace-facilitator tax).
+    #
+    # UNITS: `tax_result.price_cents` is ALREADY canonical USD cents, for every cart,
+    # whatever currency the seller priced the product in. The browser converts before it
+    # posts — getProducts in pages/Checkout/Show.tsx sends
+    # `price: convertToUSD(item, price)` — and Purchase#set_price_and_rate independently
+    # arrives at the same USD figure for total_transaction_cents, which is what charge-time
+    # verification compares this token against. Do NOT convert by price_currency_type here:
+    # that double-converts (a €10.00 product posts 1233 USD cents, converting again gives
+    # 1520) and makes every non-USD-priced checkout fail quote verification. Covered by the
+    # units-invariant example in the spec.
     def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:)
-      product_currency = product.price_currency_type.to_s.downcase
-      listed_price_cents = tax_result.price_cents.to_i
+      price_cents = tax_result.price_cents.to_i
       # The submitted price and tip are buyer-controlled request params. A crafted
       # negative price would make clamp's bounds invalid (min > max) and raise, and a
       # nested/non-scalar tip has no #to_i — sanitize both so a malformed request falls
       # back to canonical USD (no quote) instead of erroring the surcharge endpoint.
-      listed_tip_cents = tip_cents.is_a?(String) || tip_cents.is_a?(Numeric) ? tip_cents.to_i : 0
-      listed_tip_cents = listed_tip_cents.clamp(0, [listed_price_cents, 0].max)
-      listed_tax_cents = tax_result.tax_cents > 0 ? tax_result.tax_cents.round.to_i : 0
+      tip_cents = tip_cents.is_a?(String) || tip_cents.is_a?(Numeric) ? tip_cents.to_i : 0
+      tip_cents = tip_cents.clamp(0, [price_cents, 0].max)
+      tax_cents = tax_result.tax_cents > 0 ? tax_result.tax_cents.round.to_i : 0
       seller_responsible = if tax_result.zip_tax_rate.present?
         tax_result.zip_tax_rate.is_seller_responsible
       else
         tax_result.used_taxjar && !tax_result.gumroad_is_mpf
       end
 
-      canonical_price_cents = get_usd_cents(product_currency, listed_price_cents)
-      canonical_tip_cents = get_usd_cents(product_currency, listed_tip_cents)
-      canonical_tax_cents = get_usd_cents(product_currency, listed_tax_cents)
-
       new(
         permalink:,
         product:,
-        price_cents: canonical_price_cents - canonical_tip_cents,
-        tip_cents: canonical_tip_cents,
-        seller_tax_cents: seller_responsible ? canonical_tax_cents : 0,
-        gumroad_tax_cents: seller_responsible ? 0 : canonical_tax_cents,
+        price_cents: price_cents - tip_cents,
+        tip_cents:,
+        seller_tax_cents: seller_responsible ? tax_cents : 0,
+        gumroad_tax_cents: seller_responsible ? 0 : tax_cents,
         shipping_cents: shipping_usd_cents.round.to_i
       )
     end

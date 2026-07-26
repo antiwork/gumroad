@@ -21,24 +21,6 @@ describe Checkout::BuyerCurrencyQuote do
     products.map { |product| { permalink: product.unique_permalink, total_cents: product.price_cents } }
   end
 
-  def surcharge_line_item_for(product, price_cents:, tip_cents: 0, tax_cents: 0, shipping_usd_cents: 0)
-    tax_result = double(
-      price_cents:,
-      tax_cents:,
-      zip_tax_rate: nil,
-      used_taxjar: false,
-      gumroad_is_mpf: false
-    )
-
-    described_class::LineItem.from_surcharge(
-      permalink: product.unique_permalink,
-      product:,
-      tax_result:,
-      tip_cents:,
-      shipping_usd_cents:
-    )
-  end
-
   let(:seller) { create(:user, disable_buyer_local_currency: false) }
   let(:product) { create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD) }
   let!(:merchant_account) do
@@ -215,29 +197,55 @@ describe Checkout::BuyerCurrencyQuote do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller) if other_seller
     end
 
-    it "normalizes non-USD product-priced surcharge lines before signing the quote" do
-      # The surcharge endpoint receives product-priced cents from the browser. The quote
-      # token must store the same USD canonical total Purchase#prepare_for_charge! will
-      # later produce, otherwise charge-time verification rejects the quote as mismatched.
+    it "quotes a cart priced in a non-USD currency that is not the buyer's own" do
+      # The seller pricing in euros says nothing about what a Canadian buyer should see:
+      # the cart total reaching this service is canonical USD either way, so it converts
+      # into the buyer's currency exactly as a USD-priced cart does.
       eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
-      allow(described_class::LineItem).to receive(:get_rate).with(Currency::EUR).and_return("0.8")
 
-      line_item = surcharge_line_item_for(eur_product, price_cents: 10_00)
+      result = described_class.create(line_items: line_items_for(product, eur_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
 
-      expect(line_item.canonical_total_cents).to eq(12_50)
-      result = described_class.create(line_items: [line_item], canonical_total_cents: 12_50, ip: "24.48.0.1")
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 25_00)
+    end
 
-      expect(result).to have_attributes(currency: Currency::CAD,
-                                        canonical_total_cents: 12_50,
-                                        presentment_total_cents: 15_63)
+    it "treats a non-USD line's submitted price as already-canonical USD, matching the purchase total" do
+      # LOAD-BEARING UNITS INVARIANT. The browser converts before it posts — getProducts in
+      # pages/Checkout/Show.tsx sends `price: convertToUSD(item, price)` — so the surcharge
+      # endpoint's `price` is USD cents for every cart, whatever currency the seller priced in.
+      # LineItem.from_surcharge must therefore pass it through untouched.
+      #
+      # A reviewer read the field as product-priced and proposed converting it here. That is a
+      # DOUBLE conversion, and it manufactures exactly the charge-time mismatch it was meant to
+      # prevent: a €10.00 product posts 1233 USD cents, and converting again yields 1520 against
+      # a purchase whose total_transaction_cents is 1233 — every such checkout would fail
+      # verification. This example pins the two figures to each other so the mistake reddens.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+
+      purchase = build(:purchase, link: eur_product, seller:, purchase_state: "in_progress")
+      purchase.set_price_and_rate
+      posted_price_cents = purchase.total_transaction_cents
+      expect(posted_price_cents).not_to eq(eur_product.price_cents), "expected the purchase total to be converted USD, not the listed EUR cents"
+
+      tax_result = double(price_cents: posted_price_cents, tax_cents: 0, zip_tax_rate: nil, used_taxjar: false, gumroad_is_mpf: false)
+      line_item = described_class::LineItem.from_surcharge(
+        permalink: eur_product.unique_permalink,
+        product: eur_product,
+        tax_result:,
+        tip_cents: 0,
+        shipping_usd_cents: 0
+      )
+
+      expect(line_item.canonical_total_cents).to eq(posted_price_cents)
+
+      result = described_class.create(line_items: [line_item], canonical_total_cents: posted_price_cents, ip: "24.48.0.1")
       expect do
         described_class.verify!(
           token: result.token,
           seller:,
           merchant_account:,
           currency: Currency::CAD,
-          canonical_total_cents: 12_50,
-          canonical_line_items: [{ permalink: eur_product.unique_permalink, total_cents: 12_50 }]
+          canonical_total_cents: posted_price_cents,
+          canonical_line_items: [{ permalink: eur_product.unique_permalink, total_cents: posted_price_cents }]
         )
       end.not_to raise_error
     end
