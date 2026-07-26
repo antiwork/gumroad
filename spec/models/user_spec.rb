@@ -386,6 +386,41 @@ describe User, :vcr do
         expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
         expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
       end
+
+      it "heals a variant that disappeared while it was cached as present, once that entry expires" do
+        # Checking storage on every read is not affordable on pages that show
+        # many sellers, so a confirmation is remembered for a few minutes and a
+        # variant that vanishes inside that window keeps being served. This
+        # pins how long that can last: once the confirmation expires the next
+        # read notices the file is gone and rebuilds the avatar, without having
+        # to wait for the much longer URL entry to expire.
+        stale_url = @user.avatar_url
+        stale_key = @user.reload.avatar_variant.key
+        expect(stale_url).to include(stale_key)
+
+        @user.avatar.blob.service.delete(stale_key)
+
+        # Still inside the confirmation window: the dead URL is served.
+        expect(@user.reload.avatar_url).to eq(stale_url)
+
+        travel_to(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL.from_now + 1.second) do
+          url = @user.reload.avatar_url
+
+          expect(url).not_to include(stale_key)
+          rebuilt_key = @user.reload.avatar_variant.key
+          expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+          expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+        end
+      end
+
+      it "bounds how long a broken avatar is served to minutes, not the URL cache lifetime" do
+        # The confirmation window is the worst case for a seller whose variant
+        # disappears, so it must stay far below the day-long URL cache. If
+        # someone lengthens it, this fails rather than quietly restoring the
+        # hours-long outage the storage check was added to remove.
+        expect(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL).to be <= 5.minutes
+        expect(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL).to be < User::AVATAR_VARIANT_URL_CACHE_TTL
+      end
     end
 
     describe "#avatar_variant" do

@@ -50,11 +50,18 @@ class User < ApplicationRecord
   # confirmations are remembered, never absences, so a seller whose avatar is
   # repaired sees it immediately.
   #
-  # Kept far shorter than the URL cache above on purpose. This entry exists only
-  # to spare repeated storage lookups inside a burst of reads; if it lived as
-  # long as a cached URL, a variant that disappeared right after being confirmed
-  # could keep being served for one presence lifetime *plus* one URL lifetime.
-  AVATAR_VARIANT_PRESENCE_CACHE_TTL = 1.hour
+  # This is the ceiling on how long a broken avatar can keep being served. A
+  # page that lists many sellers (a profile, a review list, a community thread)
+  # asks for one avatar URL per person, so checking storage on every read is not
+  # affordable and this entry is what makes the check cheap. But while the entry
+  # says "present", a variant that has since disappeared keeps being handed out
+  # and every request for it fails with a 403.
+  #
+  # Minutes rather than an hour is the balance we want: a seller whose variant
+  # vanishes is missing their picture for a few minutes rather than most of an
+  # afternoon, and the cost is at most one storage lookup per variant per window
+  # across the whole fleet, since the entry is shared through memcached.
+  AVATAR_VARIANT_PRESENCE_CACHE_TTL = 5.minutes
 
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
@@ -1276,9 +1283,14 @@ class User < ApplicationRecord
       # A cached URL is only worth serving while the file behind it is still
       # there, so the variant's storage key is cached next to the URL and
       # checked on every hit. Without that check a variant that disappeared
-      # just after its URL was written would 403 for the rest of the day. The
-      # check is normally answered by the short-lived presence entry, so it
-      # costs at most one storage lookup per variant per hour.
+      # just after its URL was written would 403 for the rest of the day.
+      #
+      # The check is usually answered by the short-lived presence entry rather
+      # than by storage, which is what keeps a page full of avatars cheap. That
+      # entry is also the remaining gap: a variant that disappears while it says
+      # "present" keeps being served until it expires, so its lifetime
+      # (AVATAR_VARIANT_PRESENCE_CACHE_TTL, a few minutes) is deliberately the
+      # worst case for a broken avatar.
       if cached.is_a?(Hash) && cached[:url].present? && cached[:key].present? &&
          avatar_variant_file_present?(cached[:key])
         return cached[:url]
