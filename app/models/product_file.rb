@@ -8,6 +8,12 @@ class ProductFile < ApplicationRecord
   MAXIMUM_THUMBNAIL_FILE_SIZE = 5.megabytes
   MAX_EPUB_READER_ARCHIVE_SIZE = 32.megabytes
 
+  # Enqueueing the retirement job (see `stored_file_present?`) is best-effort, but
+  # only these failures are expected: Redis is unreachable, or the Sidekiq client
+  # can't talk to it. Those need no alert. Everything else that reaches the same
+  # rescue is a bug worth reporting rather than logging and forgetting.
+  EXPECTED_ENQUEUE_ERRORS = [Redis::BaseError, RedisClient::Error].freeze
+
   has_paper_trail
 
   belongs_to :link, optional: true
@@ -215,6 +221,12 @@ class ProductFile < ApplicationRecord
         # answer the caller asked for; recording it is an optimization, and a
         # later save will enqueue again.
         Rails.logger.warn("RecordProductFileMissingFromStorageJob enqueue failed (#{id}): #{e.class} => #{e.message}")
+        # Redis being unreachable is the failure this rescue exists for, and it
+        # needs no alert: it is already visible as an outage and it resolves on
+        # its own. Anything else reaching here is a bug in how we enqueue (a bad
+        # argument, a serialization error), which would otherwise sit in the logs
+        # silently skipping retirement forever, so report it.
+        ErrorNotifier.notify(e, product_file_id: id) unless EXPECTED_ENQUEUE_ERRORS.any? { e.is_a?(_1) }
       end
     end
     present
