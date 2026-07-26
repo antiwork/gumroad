@@ -37,6 +37,18 @@ class User < ApplicationRecord
 
   MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
 
+  # How long a resolved avatar variant URL stays cached. Avatar URLs are stable
+  # for as long as the seller keeps the same picture, so this is only about
+  # bounding how long a cached URL can keep being served after the file behind
+  # it goes away.
+  AVATAR_VARIANT_URL_CACHE_TTL = 1.week
+
+  # How long we remember that an avatar variant's file was confirmed present in
+  # storage, so a normal page view does not pay for a storage lookup. Only
+  # confirmations are remembered, never absences, so a seller whose avatar is
+  # repaired sees it immediately.
+  AVATAR_VARIANT_PRESENCE_CACHE_TTL = 1.week
+
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
   has_many :affiliate_requests, foreign_key: :seller_id
@@ -436,7 +448,7 @@ class User < ApplicationRecord
 
   def resized_avatar_url(size:)
     return ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png") unless avatar.attached?
-    cdn_url_for(avatar.variant(resize_to_limit: [size, size]).processed.url)
+    cdn_url_for(stored_avatar_variant(resize_to_limit: [size, size]).url)
   rescue ActiveStorage::FileNotFoundError, Errno::ENOENT, ActiveRecord::InvalidForeignKey => e
     Rails.logger.warn("User#resized_avatar_url error (#{id}): #{e.class} => #{e.message}")
     ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png")
@@ -445,12 +457,30 @@ class User < ApplicationRecord
   def avatar_url
     return ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png") unless avatar.attached?
 
-    # The "_v2" suffix versions the cache key: we previously served 128x128
-    # variants, and the old (unversioned) key still holds those URLs. Using a
-    # new key makes every user's avatar URL regenerate lazily on next read,
-    # so existing uploads get the sharper 400x400 variant without any manual
-    # backfill. Old keys are simply left behind and evicted by memcached.
-    cached_variant_url = Rails.cache.fetch("attachment_#{avatar.id}_variant_url_v2") { avatar_variant.url }
+    # The version suffix on the cache key lets us abandon previously cached
+    # URLs without a backfill: every user's avatar URL is simply recomputed on
+    # its next read, and the old entries are left behind for memcached to
+    # evict. "_v2" moved us from 128x128 to 400x400 variants. "_v3" abandons
+    # the entries written before this method checked that the variant file
+    # still exists, some of which pointed at files that had disappeared from
+    # storage and so returned 403 forever.
+    cache_key = "attachment_#{avatar.id}_variant_url_v3"
+    cached_variant_url = Rails.cache.read(cache_key).presence
+
+    if cached_variant_url.nil?
+      cached_variant_url = avatar_variant&.url.presence
+      # Only ever cache a real URL. A blank value here means we could not work
+      # out where the variant lives on this pass, and caching that would leave
+      # the seller with no profile picture until the entry expired, with no way
+      # for them to fix it. The expiry bounds how long any single cached URL
+      # can outlive the file it points at.
+      Rails.cache.write(cache_key, cached_variant_url, expires_in: AVATAR_VARIANT_URL_CACHE_TTL) if cached_variant_url
+    end
+
+    # Falling back to the original upload, which is the size the seller
+    # uploaded but is otherwise correct, beats showing no avatar at all.
+    return avatar.url if cached_variant_url.nil?
+
     cdn_url_for(cached_variant_url)
   rescue => e
     Rails.logger.warn("User#avatar_url error (#{id}): #{e.class} => #{e.message}")
@@ -462,7 +492,7 @@ class User < ApplicationRecord
 
     # 400x400 so avatars stay sharp on Retina/high-DPI screens: the profile
     # settings preview box is 200 CSS px, which is 400 device px at 2x.
-    avatar.variant(resize_to_limit: [400, 400]).processed
+    stored_avatar_variant(resize_to_limit: [400, 400])
   end
 
   def username
@@ -1240,6 +1270,54 @@ class User < ApplicationRecord
     end
 
   private
+    # Returns the resized avatar, having confirmed that the resized file is
+    # really still in storage.
+    #
+    # Active Storage decides a variant is "already processed" purely from the
+    # presence of an active_storage_variant_records row — it never asks storage
+    # whether the resized file is still there. So when a variant's file
+    # disappears but its row survives, Active Storage keeps handing out a URL
+    # for the missing file: nothing raises, the rescue fallbacks in the avatar
+    # methods above never run, and every request for that URL fails with a 403
+    # forever. The seller sees no profile picture anywhere and has no way to
+    # tell it is our problem rather than their upload having failed, so most of
+    # them never report it.
+    #
+    # When the file is gone we throw the stale row away and resize again from
+    # the original upload, which is normally still intact.
+    def stored_avatar_variant(**transformations)
+      variant = avatar.variant(**transformations).processed
+      return variant if avatar_variant_file_present?(variant)
+
+      Rails.logger.warn("User#stored_avatar_variant (#{id}): variant file missing from storage, regenerating it")
+      variant.destroy
+      # The row we just deleted may still be held by the blob's loaded
+      # association, which would make the next lookup short-circuit on it
+      # again, so drop what is loaded before resizing.
+      avatar.blob.variant_records.reset
+      avatar.variant(**transformations).processed
+    end
+
+    def avatar_variant_file_present?(variant)
+      key = variant.key
+      # No key at all means Active Storage has nothing to check; let the caller
+      # deal with the empty URL that follows rather than resizing in a loop.
+      return true if key.blank?
+
+      cache_key = "active_storage_variant_present_#{key}"
+      return true if Rails.cache.read(cache_key)
+      return false unless variant.service.exist?(key)
+
+      Rails.cache.write(cache_key, true, expires_in: AVATAR_VARIANT_PRESENCE_CACHE_TTL)
+      true
+    rescue => e
+      # A lookup that itself failed is not evidence the file is gone.
+      # Regenerating avatars for everyone because storage was briefly
+      # unreachable would be far worse than serving the URL we already have.
+      Rails.logger.warn("User#avatar_variant_file_present? error (#{id}): #{e.class} => #{e.message}")
+      true
+    end
+
     def append_http
       self.notification_endpoint = "http://#{notification_endpoint}" if notification_endpoint.present? && !notification_endpoint.include?("http")
     end

@@ -270,6 +270,17 @@ describe User, :vcr do
         variant = @user.avatar.variant(resize_to_limit: [256, 256]).processed.key
         expect(@user.resized_avatar_url(size: 256)).to match("https://public-files.gumroad.com/#{variant}")
       end
+
+      it "regenerates the resized avatar when its file is gone from storage" do
+        orphaned_key = @user.avatar.variant(resize_to_limit: [256, 256]).processed.key
+        @user.avatar.blob.service.delete(orphaned_key)
+
+        url = @user.reload.resized_avatar_url(size: 256)
+
+        expect(url).not_to include(orphaned_key)
+        expect(url).to start_with("https://public-files.gumroad.com/")
+        expect(@user.avatar.blob.service.exist?(url.split("/").last)).to be(true)
+      end
     end
 
     describe "#avatar_url" do
@@ -282,13 +293,55 @@ describe User, :vcr do
       end
 
       it "caches the variant URL under a versioned key so previously cached 128px URLs are not reused" do
-        # The old, unversioned cache key holds URLs for the smaller 128x128
-        # variants we used to serve. A stale value there must not leak into
-        # what we serve now — only the "_v2" key should be read.
+        # The older cache keys hold URLs for the smaller 128x128 variants we
+        # used to serve, and for variants written before we checked that the
+        # resized file still existed. A stale value there must not leak into
+        # what we serve now — only the newest key should be read.
         Rails.cache.write("attachment_#{@user.avatar.id}_variant_url", "https://example.com/stale-128px-url")
+        Rails.cache.write("attachment_#{@user.avatar.id}_variant_url_v2", "https://example.com/stale-unchecked-url")
 
         expect(@user.avatar_url).not_to include("stale-128px-url")
-        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v2")).to eq(@user.avatar_variant.url)
+        expect(@user.avatar_url).not_to include("stale-unchecked-url")
+        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v3")).to eq(@user.avatar_variant.url)
+      end
+
+      it "regenerates the resized avatar and serves a working URL when its file is gone from storage" do
+        # Active Storage treats a variant as processed as soon as its database
+        # row exists, so without the storage check this would serve a URL for a
+        # file that is no longer there — a 403 for the seller, forever.
+        orphaned = @user.avatar.variant(resize_to_limit: [400, 400]).processed
+        orphaned_key = orphaned.key
+        orphaned_record_id = orphaned.image.record.id
+        @user.avatar.blob.service.delete(orphaned_key)
+
+        url = @user.reload.avatar_url
+
+        expect(ActiveStorage::VariantRecord.where(id: orphaned_record_id)).not_to exist
+        expect(url).not_to include(orphaned_key)
+        rebuilt_key = @user.reload.avatar_variant.key
+        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+      end
+
+      it "does not cache a blank URL" do
+        # A blank URL means we could not work out where the variant lives right
+        # now. Caching it would leave the seller with no picture until the entry
+        # expired, so we fall back to the original upload and try again later.
+        allow(@user).to receive(:avatar_variant).and_return(nil)
+
+        expect(@user.avatar_url).to eq(@user.avatar.url)
+        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v3")).to be_nil
+      end
+
+      it "keeps serving the existing URL when the storage lookup itself fails" do
+        # A failed lookup is not evidence the file is gone, and regenerating
+        # every avatar because storage was briefly unreachable would be worse
+        # than serving the URL we already have.
+        variant_key = @user.avatar_variant.key
+        Rails.cache.clear
+        allow_any_instance_of(ActiveStorage::Service::S3Service).to receive(:exist?).and_raise(Aws::S3::Errors::ServiceError.new(nil, "boom"))
+
+        expect(@user.reload.avatar_url).to eq("https://public-files.gumroad.com/#{variant_key}")
       end
     end
 
