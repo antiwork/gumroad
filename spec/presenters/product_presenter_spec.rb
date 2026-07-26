@@ -145,6 +145,7 @@ describe ProductPresenter do
             free_trial: nil,
             is_quantity_enabled: false,
             is_multiseat_license: false,
+            is_licensed: false,
             hide_sold_out_variants: false,
             native_type: "digital",
             is_stream_only: false,
@@ -181,7 +182,8 @@ describe ProductPresenter do
             is_gift_receiver_purchase: false,
             show_view_content_button_on_product_page: false,
             subscription_has_lapsed: false,
-            total_price_including_tax_and_shipping: "$1"
+            total_price_including_tax_and_shipping: "$1",
+            license_key: nil
           },
           wishlists: [],
         }

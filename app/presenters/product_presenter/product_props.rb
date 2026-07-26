@@ -56,6 +56,7 @@ class ProductPresenter::ProductProps
         is_physical: product.is_physical,
         custom_view_content_button_text: product.custom_view_content_button_text.presence,
         is_multiseat_license: product.multiseat_license_enabled?,
+        is_licensed: product.is_licensed?,
         hide_sold_out_variants: product.hide_sold_out_variants?,
         native_type: product.native_type,
         preorder: product.is_in_preorder_state ? { release_date: product.preorder_link.release_at } : nil,
@@ -114,6 +115,10 @@ class ProductPresenter::ProductProps
         content_url: purchase_info[:content_url],
         subscription_has_lapsed: purchase_info[:subscription_has_lapsed],
         membership: purchase_info[:membership],
+        # Only present for licensed products, and only when the visitor is identified
+        # (signed-in purchaser or an HMAC'd receipt link) — see
+        # Link#purchase_info_with_license_key.
+        license_key: purchase_info[:license_key],
       }
     end
 

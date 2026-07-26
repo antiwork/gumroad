@@ -2924,6 +2924,41 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil product.purchase_info_for_product_page(nil, nil)
   end
 
+  # --- #purchase_info_for_product_page (license keys) -------------------------
+  #
+  # The product page is public, so the license key only travels to it when the
+  # visitor is identified: a signed-in purchaser, or someone presenting the HMAC'd
+  # purchase id + email digest from their own email. A _gumroad_guid cookie match
+  # identifies a browser, not a person.
+
+  test "purchase_info_for_product_page includes the license key for a signed-in purchaser" do
+    product = create_product(is_in_preorder_state: false, is_licensed: true)
+    user = create_user
+    purchase = create_purchase(link: product, purchaser: user)
+    license = create_license(link: product, purchase:)
+
+    assert_equal license.serial, product.purchase_info_for_product_page(user, nil)[:license_key]
+  end
+
+  test "purchase_info_for_product_page omits the license key when only the browser guid matches" do
+    product = create_product(is_in_preorder_state: false, is_licensed: true)
+    purchase = create_purchase(link: product, browser_guid: "a-browser-guid")
+    create_license(link: product, purchase:)
+
+    info = product.purchase_info_for_product_page(nil, "a-browser-guid")
+    assert_equal purchase.external_id, info[:id]
+    assert_nil info[:license_key]
+  end
+
+  test "purchase_info_for_product_page includes the license key for a matching email digest" do
+    product = create_product(is_in_preorder_state: false, is_licensed: true)
+    purchase = create_purchase(link: product)
+    license = create_license(link: product, purchase:)
+
+    info = product.purchase_info_for_product_page(nil, nil, purchase_id: purchase.external_id, purchase_email_digest: purchase.email_digest)
+    assert_equal license.serial, info[:license_key]
+  end
+
   # --- service product validation --------------------------------------------
 
   test "a service product is invalid for a seller not yet eligible" do

@@ -32,7 +32,7 @@ import { variantLabel } from "$app/utils/labels";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackBuyerCurrencyDisplayView, trackProductEvent } from "$app/utils/user_analytics";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import {
   CartItem,
   CartItemEnd,
@@ -42,6 +42,7 @@ import {
   CartItemMedia,
   CartItemTitle,
 } from "$app/components/CartItemList";
+import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -138,6 +139,7 @@ export type Product = {
   streamable: boolean;
   is_quantity_enabled: boolean;
   is_multiseat_license: boolean;
+  is_licensed: boolean;
   hide_sold_out_variants?: boolean;
   native_type: ProductNativeType;
   sales_count: number | null;
@@ -179,6 +181,11 @@ export type Purchase = {
   total_price_including_tax_and_shipping: string;
   subscription_has_lapsed: boolean;
   membership: { tier_name: string | null; tier_description: string | null; manage_url: string } | null;
+  // Present only for licensed products, and only when the backend could identify the
+  // visitor (signed-in purchaser, or an HMAC'd receipt/review link). Purchases matched
+  // by the browser cookie alone never carry the key — see
+  // Link#purchase_info_with_license_key.
+  license_key: string | null;
 };
 export type ProductDiscount =
   | {
@@ -463,6 +470,8 @@ export const Product = ({
             isBundle={isBundle}
             customViewContentButtonText={product.custom_view_content_button_text}
           />
+        ) : product.is_licensed && !product.can_edit ? (
+          <LicenseKeyLookupPrompt />
         ) : null}
         {isBundle ? (
           <section className="grid gap-4 border-t border-border p-6">
@@ -810,6 +819,7 @@ const ExistingPurchaseCard = ({
             </li>
           </CardContent>
         )}
+        {purchase.license_key !== null ? <LicenseKeyRow licenseKey={purchase.license_key} /> : null}
         {!isPreorder && allowRating ? (
           <ReviewForm
             permalink={permalink}
@@ -823,6 +833,37 @@ const ExistingPurchaseCard = ({
     </section>
   );
 };
+
+// Shows the buyer's license key inline in the "you already own this" card so a returning
+// buyer does not have to open the content page (or email the seller) to find it. Only
+// rendered when the backend included the key, which it does only for identified visitors.
+const LicenseKeyRow = ({ licenseKey }: { licenseKey: string }) => (
+  <CardContent>
+    <div className="grid grow gap-1">
+      <h5 className="font-bold">License key</h5>
+      <div className="break-all">{licenseKey}</div>
+    </div>
+    <CopyToClipboard text={licenseKey}>
+      <Button>Copy</Button>
+    </CopyToClipboard>
+  </CardContent>
+);
+
+// For a licensed product where we could not identify the visitor as a past buyer, point
+// them at the existing self-serve lookup page instead of leaving them to contact the
+// seller. The page emails their receipt (including the license key) to the purchase email.
+const LicenseKeyLookupPrompt = () => (
+  <section className="border-t border-border p-6">
+    <Card>
+      <CardContent asChild>
+        <li>
+          <h3 className="grow">Already bought this?</h3>
+          <NavigationButton href={Routes.license_key_lookup_path()}>View your information</NavigationButton>
+        </li>
+      </CardContent>
+    </Card>
+  </section>
+);
 
 export const RatingsHistogramRow = ({ rating, percentage }: { rating: number; percentage: number }) => {
   const formattedPercentage = `${percentage}%`;
