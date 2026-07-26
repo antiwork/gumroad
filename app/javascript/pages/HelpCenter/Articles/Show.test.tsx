@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,6 +40,15 @@ const renderArticle = ({ slug, content }: { slug: string; content: string }) => 
     },
   });
   return render(<HelpCenterArticle />);
+};
+
+// The component scrolls inside requestAnimationFrame, deliberately: Inertia resets the scroll
+// container to the top after a visit and does it after the effect runs, so scrolling in the effect
+// itself gets undone. Tests therefore have to let a frame pass before asserting.
+const flushFrames = async () => {
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
 };
 
 const clickLink = (container: HTMLElement, selector: string) => {
@@ -124,7 +133,7 @@ describe("HelpCenterArticle", () => {
     expect(mocks.routerGet).not.toHaveBeenCalled();
   });
 
-  it("scrolls to the fragment target once the article HTML is in the document", () => {
+  it("scrolls to the fragment target once the article HTML is in the document", async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#${ANCHOR_ID}`;
@@ -134,11 +143,34 @@ describe("HelpCenterArticle", () => {
       content: `<h3 id="${ANCHOR_ID}">Address verification</h3>`,
     });
 
+    await flushFrames();
+
     expect(scrollIntoView).toHaveBeenCalled();
     expect(document.getElementById(ANCHOR_ID)).not.toBeNull();
   });
 
-  it("handles a percent-encoded fragment", () => {
+  it("scrolls after Inertia has reset the scroll position, not before", async () => {
+    // Inertia resets the scroll container to the top once a visit completes, and it does that after
+    // this component's effects have run. Scrolling straight from the effect therefore looked right
+    // for one frame and was then undone — the reader ended up at the top of the article they had
+    // deep-linked into. Pin the ordering: nothing may scroll before the reset, and the target must
+    // be scrolled to after it.
+    const order: string[] = [];
+    Element.prototype.scrollIntoView = vi.fn(() => order.push("scrollIntoView"));
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#${ANCHOR_ID}`;
+
+    renderArticle({ slug: "13-getting-paid", content: `<h3 id="${ANCHOR_ID}">Address verification</h3>` });
+
+    // Stands in for Inertia's post-visit scroll reset.
+    order.push("inertia-scroll-reset");
+    expect(order).toEqual(["inertia-scroll-reset"]);
+
+    await flushFrames();
+
+    expect(order).toEqual(["inertia-scroll-reset", "scrollIntoView"]);
+  });
+
+  it("handles a percent-encoded fragment", async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#Address%20verification`;
@@ -148,10 +180,12 @@ describe("HelpCenterArticle", () => {
       content: `<h3 id="Address verification">Address verification</h3>`,
     });
 
+    await flushFrames();
+
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
-  it("scrolls to the passage a text-fragment link quotes", () => {
+  it("scrolls to the passage a text-fragment link quotes", async () => {
     // "Gumroad Discover" links at a paragraph of "Getting paid" by quoting its wording rather than
     // naming a heading id. getElementById cannot resolve that, so the reader used to stay at the
     // top of the destination article.
@@ -165,21 +199,25 @@ describe("HelpCenterArticle", () => {
                 account to be legitimate in two major ways:</p>`,
     });
 
+    await flushFrames();
+
     expect(scrollIntoView).toHaveBeenCalled();
     expect(container.querySelector("#passage")).not.toBeNull();
   });
 
-  it("ignores a text-fragment whose passage is not in the article", () => {
+  it("ignores a text-fragment whose passage is not in the article", async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#:~:text=wording%20that%20is%20not%20here`;
 
     renderArticle({ slug: "13-getting-paid", content: `<p>For our review, we require your account.</p>` });
 
+    await flushFrames();
+
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("skips the prefix and suffix context terms of a text-fragment", () => {
+  it("skips the prefix and suffix context terms of a text-fragment", async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     window.location.href = `https://gumroad.com${GETTING_PAID_PATH}#:~:text=review-,we%20require%20your%20account,-legitimate`;
@@ -189,11 +227,13 @@ describe("HelpCenterArticle", () => {
       content: `<p>Before review</p><p id="passage">We require your account to be legitimate</p>`,
     });
 
+    await flushFrames();
+
     expect(scrollIntoView).toHaveBeenCalled();
     expect(container.querySelector("#passage")).not.toBeNull();
   });
 
-  it("still navigates client-side to an article linked by a text-fragment, and scrolls to the passage once there", () => {
+  it("still navigates client-side to an article linked by a text-fragment, and scrolls to the passage once there", async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     const { container } = renderArticle({
@@ -217,11 +257,13 @@ describe("HelpCenterArticle", () => {
     });
 
     expect(window.location.hash).toBe("");
+    await flushFrames();
+
     expect(scrollIntoView).toHaveBeenCalled();
     expect(destination.container.querySelector("#passage")).not.toBeNull();
   });
 
-  it("does not scroll a later article to a passage from an abandoned navigation", () => {
+  it("does not scroll a later article to a passage from an abandoned navigation", async () => {
     // If the reader clicks a text-fragment link and then goes somewhere else, the remembered
     // wording must not follow them around.
     const { container } = renderArticle({
@@ -242,10 +284,12 @@ describe("HelpCenterArticle", () => {
       content: `<p>For our review, we require your account.</p>`,
     });
 
+    await flushFrames();
+
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("does not scroll an unrelated article the reader goes to after a cancelled text-fragment visit", () => {
+  it("does not scroll an unrelated article the reader goes to after a cancelled text-fragment visit", async () => {
     // The visit the reader clicked never renders — they navigate somewhere else instead. The
     // remembered wording is for a different article, so the one they do end up reading must be
     // left alone even though its text happens to contain the same words.
@@ -264,10 +308,12 @@ describe("HelpCenterArticle", () => {
       content: `<p>For our review, we require your account.</p>`,
     });
 
+    await flushFrames();
+
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("forgets a text-fragment passage when the visit carrying it is cancelled", () => {
+  it("forgets a text-fragment passage when the visit carrying it is cancelled", async () => {
     // Cancelling means the destination article never renders, so a later visit to that same
     // article — arriving without any fragment — must not inherit the abandoned wording.
     const { container } = renderArticle({
@@ -289,10 +335,12 @@ describe("HelpCenterArticle", () => {
       content: `<p>For our review, we require your account.</p>`,
     });
 
+    await flushFrames();
+
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("keeps the second passage when a new text-fragment click cancels the visit still in flight", () => {
+  it("keeps the second passage when a new text-fragment click cancels the visit still in flight", async () => {
     // Starting a visit cancels any visit still in flight, and Inertia does that synchronously from
     // inside router.get — so the first visit's cancellation callback runs after the second click
     // has already remembered its wording. The reader is heading to the second article, so that is
@@ -320,11 +368,13 @@ describe("HelpCenterArticle", () => {
       content: `<p>A physical address is required.</p><p id="passage">We accept no P.O. boxes here.</p>`,
     });
 
+    await flushFrames();
+
     expect(scrollIntoView).toHaveBeenCalled();
     expect(scrollIntoView.mock.instances[0]).toBe(destination.container.querySelector("#passage"));
   });
 
-  it("does nothing when there is no fragment", () => {
+  it("does nothing when there is no fragment", async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
@@ -333,6 +383,8 @@ describe("HelpCenterArticle", () => {
       slug: "13-getting-paid",
       content: `<h3 id="${ANCHOR_ID}">Address verification</h3>`,
     });
+
+    await flushFrames();
 
     expect(scrollIntoView).not.toHaveBeenCalled();
   });

@@ -165,26 +165,38 @@ export default function HelpCenterArticle() {
     // present in the URL on browsers that do not hide it. Checked before the empty-fragment case
     // below, because a hidden directive leaves the hash empty.
     const passage = takePendingTextDirective(fragment);
-    if (passage !== null) {
-      const container = contentRef.current;
-      if (container) elementContainingText(container, passage)?.scrollIntoView();
-      return;
+
+    let id: string | null = null;
+    if (passage === null) {
+      // Nothing to scroll to. Note that on a direct page load of a text-directive URL in a browser
+      // that hides the directive, this is where we end up and there is nothing we can do: the
+      // wording is unrecoverable from script, so the browser's own text-fragment scrolling is the
+      // only thing that can act on it.
+      if (!fragment) return;
+
+      id = fragment;
+      try {
+        id = decodeURIComponent(fragment);
+      } catch {
+        // A malformed escape sequence means the fragment isn't encoded — use it as-is.
+      }
     }
 
-    // Nothing to scroll to. Note that on a direct page load of a text-directive URL in a browser
-    // that hides the directive, this is where we end up and there is nothing we can do: the
-    // wording is unrecoverable from script, so the browser's own text-fragment scrolling is the
-    // only thing that can act on it.
-    if (!fragment) return;
-
-    let id = fragment;
-    try {
-      id = decodeURIComponent(fragment);
-    } catch {
-      // A malformed escape sequence means the fragment isn't encoded — use it as-is.
-    }
-
-    document.getElementById(id)?.scrollIntoView();
+    // Scroll on the next frame rather than right now. Inertia resets the scroll container to the
+    // top after a visit, and it does that *after* this effect runs, so scrolling here directly
+    // gets undone: the reader sees the right passage for one frame and then the top of the
+    // article. (An element-id fragment survived that reset only because Inertia's own hash
+    // handling scrolled a second time afterwards; a text directive leaves an empty hash, so
+    // nothing came along to repeat it and the reset won.) Waiting a frame puts our scroll last.
+    const scroll = () => {
+      const target =
+        passage === null
+          ? document.getElementById(id ?? "")
+          : contentRef.current && elementContainingText(contentRef.current, passage);
+      target?.scrollIntoView();
+    };
+    const frame = requestAnimationFrame(scroll);
+    return () => cancelAnimationFrame(frame);
   }, [article.slug]);
 
   return (
