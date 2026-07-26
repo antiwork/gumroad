@@ -16,6 +16,29 @@ module StripeMerchantAccountManager
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
 
   BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
+
+  # Stripe rejects bank details for two very different reasons, and sellers need different
+  # advice for each:
+  #
+  # * FORMAT rejections — the bank/routing code cannot be accepted as typed (wrong length,
+  #   lowercase, spaces, a branch suffix the country's format doesn't allow). Nothing changes
+  #   over time, so re-sending the same stored value can never succeed: only the seller
+  #   re-entering the code fixes it.
+  # * DIRECTORY misses — the code looks well-formed but the bank or branch isn't in Stripe's
+  #   records yet (common for newly opened accounts and recently added branches). These can
+  #   genuinely start working on their own, which is what the weekly automated re-check is for.
+  #
+  # Stripe signals format rejections with these error codes, and (on older error shapes that
+  # carry no code) with the messages matched by BANK_DETAILS_FORMAT_REJECTION_MESSAGE. Stripe
+  # sometimes reuses the same codes for a directory miss, so DIRECTORY_MISS_MESSAGE wins:
+  # "we don't know this bank yet" is a waiting problem, not a typo problem.
+  BANK_DETAILS_FORMAT_REJECTION_CODES = %w[routing_number_invalid account_number_invalid].freeze
+  BANK_DETAILS_FORMAT_REJECTION_MESSAGE = /Invalid (routing|account) number/i
+  BANK_DETAILS_DIRECTORY_MISS_MESSAGE = /couldn't find (the bank|that)/i
+
+  # Passed to ContactingCreatorMailer#invalid_bank_account so the email can tell the seller
+  # whether waiting might help (directory miss) or whether they must re-enter the code (format).
+  BANK_REJECTION_KIND_FORMAT = "format_rejected"
   POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
 
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
@@ -452,7 +475,10 @@ module StripeMerchantAccountManager
     # recorded above, so they must not page Sentry. The message-string checks that follow
     # cover older rejection shapes that carry no code or param.
     if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
-      ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
+      if notify
+        rejection_kind = bank_details_format_rejection?(e) ? BANK_REJECTION_KIND_FORMAT : nil
+        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s).deliver_later(queue: "critical")
+      end
       return :invalid_bank_account
     end
 
@@ -460,6 +486,8 @@ module StripeMerchantAccountManager
     :stripe_invalid_request
   rescue Stripe::CardError => e
     record_bank_sync_failure_note(user, e) if notify
+    # A CardError here means the debit card used for payouts was declined by the network, not
+    # that a bank code was mistyped, so this is never a format rejection.
     ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
     :card_not_supported
   rescue Stripe::StripeError => e
@@ -475,6 +503,31 @@ module StripeMerchantAccountManager
   rescue => e
     Rails.logger.error "Failed to record payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
+  end
+
+  # True when Stripe rejected the bank/routing code on FORMAT grounds, i.e. the value as typed
+  # can never be accepted (see BANK_DETAILS_FORMAT_REJECTION_CODES above). Waiting cannot fix
+  # these, so the seller must re-enter the code — the email and the automated retry loop both
+  # behave differently for them.
+  def self.bank_details_format_rejection?(error)
+    code = error.respond_to?(:code) ? error.code : nil
+    format_rejection_signals?(code:, message: error.message.to_s)
+  end
+
+  # Same question as bank_details_format_rejection?, answered from the payout-note breadcrumb
+  # rather than a live Stripe error. The note content is
+  # "Stripe bank sync failed: <error code> — <error message>" (see record_bank_sync_failure_note),
+  # so the code and message we key on are both present in the text.
+  def self.bank_details_format_rejection_note?(note_content)
+    content = note_content.to_s
+    matched_code = BANK_DETAILS_FORMAT_REJECTION_CODES.find { |code| content.include?(code) }
+    format_rejection_signals?(code: matched_code, message: content)
+  end
+
+  def self.format_rejection_signals?(code:, message:)
+    return false if message.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
+
+    code.to_s.in?(BANK_DETAILS_FORMAT_REJECTION_CODES) || message.match?(BANK_DETAILS_FORMAT_REJECTION_MESSAGE)
   end
 
   private_class_method

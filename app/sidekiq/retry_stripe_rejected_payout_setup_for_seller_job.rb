@@ -13,6 +13,10 @@ class RetryStripeRejectedPayoutSetupForSellerJob
   ABANDONED_REASON_CONNECTED_STRIPE = "payout_method_switched_to_connected_stripe"
   ACCOUNT_BLOCKED_NOTE = "Automated Stripe payout-setup retry stopped: payments on the seller's Stripe account are blocked at the platform level."
   ABANDONED_REASON_ACCOUNT_BLOCKED = "stripe_account_blocked_by_platform"
+  BANK_FORMAT_REJECTION_NOTE = "Automated Stripe payout-setup retry stopped: the bank code was rejected on format, " \
+                               "so re-sending the same saved details can never succeed. The seller was emailed and " \
+                               "has to re-enter the code."
+  ABANDONED_REASON_BANK_FORMAT_REJECTION = "bank_details_format_rejected"
 
   def perform(user_id)
     user = User.find_by(id: user_id)
@@ -30,6 +34,17 @@ class RetryStripeRejectedPayoutSetupForSellerJob
 
     note = oldest_outstanding_note(user)
     return if note.nil?
+
+    # A format rejection means Stripe refused the bank code as typed (wrong length, spaces, a
+    # branch suffix the country's format doesn't allow). Remediation would re-send the identical
+    # saved value, so every weekly attempt is guaranteed to fail the same way and the seller ends
+    # up waiting out the whole retry window for nothing. Stop the loop immediately instead: the
+    # seller already got an email telling them to correct the code, and saving corrected details
+    # clears these notes and starts fresh.
+    if bank_note?(note) && StripeMerchantAccountManager.bank_details_format_rejection_note?(note.content)
+      abandon_note!(user, note, reason: ABANDONED_REASON_BANK_FORMAT_REJECTION, note_content: BANK_FORMAT_REJECTION_NOTE)
+      return
+    end
 
     if RetryStripeRejectedPayoutSetupsJob.retry_count(note) >= RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES
       give_up!(user, note)
@@ -79,6 +94,13 @@ class RetryStripeRejectedPayoutSetupForSellerJob
         note.json_data["abandoned_reason"] = reason
         note.save!
       end
+      user.add_payout_note(content: note_content)
+    end
+
+    def abandon_note!(user, note, reason:, note_content:)
+      note.json_data["abandoned_at"] = Time.current.iso8601
+      note.json_data["abandoned_reason"] = reason
+      note.save!
       user.add_payout_note(content: note_content)
     end
 

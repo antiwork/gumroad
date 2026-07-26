@@ -142,9 +142,17 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your last week."
   end
 
-  def invalid_bank_account(user_id)
+  # rejection_kind distinguishes a bank-code FORMAT rejection (the value can never be accepted
+  # as typed, so the seller has to correct it) from a directory miss (the bank or branch may
+  # simply not be in our payment partner's records yet, which waiting can fix). The two cases
+  # need opposite advice, so the template branches on it. stripe_error_message is Stripe's own
+  # message, which for format rejections names the expected format for the seller's country —
+  # the single most actionable thing we can tell them.
+  def invalid_bank_account(user_id, rejection_kind = nil, stripe_error_message = nil)
     @seller = User.find(user_id)
-    @subject = "We couldn't verify your bank account yet."
+    @format_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT
+    @expected_format_hint = expected_bank_code_format_hint(stripe_error_message) if @format_rejected
+    @subject = @format_rejected ? "Your bank details need correcting for payouts." : "We couldn't verify your bank account yet."
   end
 
   def invalid_account_holder_name(user_id)
@@ -569,6 +577,17 @@ class ContactingCreatorMailer < ApplicationMailer
   end
 
   private
+    # Stripe's format-rejection messages end with the format it expects, for example:
+    # "Invalid routing number for PK. The number must contain both the bank code and the branch
+    # code, and should be in the format AAAAPKBB or AAAAPKBBXYZ." Pull out that sentence so the
+    # email can show the seller exactly what shape their code needs, without echoing the raw
+    # error (which starts by naming a "routing number" that most sellers won't recognize).
+    def expected_bank_code_format_hint(stripe_error_message)
+      message = stripe_error_message.to_s
+      sentence = message.split(/(?<=\.)\s+/).find { |part| part.match?(/format/i) }
+      sentence&.strip.presence
+    end
+
     def do_not_send
       @do_not_send = true
     end

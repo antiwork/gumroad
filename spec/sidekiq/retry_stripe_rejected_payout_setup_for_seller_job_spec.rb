@@ -62,6 +62,48 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     end
   end
 
+  describe "bank code rejected on format" do
+    let!(:merchant_account) { create(:merchant_account, user:) }
+
+    def add_format_rejection_note(content)
+      user.add_payout_note(content: "#{bank_prefix}: #{content}")
+    end
+
+    it "stops retrying immediately instead of re-sending the same rejected code" do
+      note = add_format_rejection_note("routing_number_invalid — Invalid routing number for PK. The number must contain both the bank code and the branch code, and should be in the format AAAAPKBB or AAAAPKBBXYZ.")
+      expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["abandoned_at"]).to be_present
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_FORMAT_REJECTION)
+      expect(note.json_data["retry_count"]).to be_nil
+      expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::BANK_FORMAT_REJECTION_NOTE)
+    end
+
+    it "does not email the seller that retries were exhausted" do
+      add_format_rejection_note("account_number_invalid — Invalid account number")
+
+      expect do
+        described_class.new.perform(user.id)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted)
+    end
+
+    it "keeps retrying a directory miss, which waiting can genuinely fix" do
+      note = add_format_rejection_note("routing_number_invalid — We couldn't find the bank for that BIC")
+      # The code alone would classify this as a format rejection, so make sure the retry loop
+      # still runs for the directory-miss message that Stripe sends with the same code.
+      expect(StripeMerchantAccountManager).to receive(:update_bank_account).and_return(:invalid_bank_account)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["abandoned_at"]).to be_blank
+      expect(note.json_data["retry_count"]).to eq(1)
+    end
+  end
+
   describe "bank account remediation when the seller has no Stripe account yet" do
     let!(:note) { add_note(bank_prefix) }
 
