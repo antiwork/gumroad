@@ -60,13 +60,28 @@ class SendWorkflowPostEmailsJob
         created_at = Time.zone.parse(member.details.dig("follower", "created_at"))
         SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, id, nil)
       elsif type == :affiliate
-        affiliates = member.details["affiliates"] || []
+        affiliates = eligible_affiliate_details(member)
         id ||= affiliates.filter_map { _1["id"] }.max
         affiliate = affiliates.find { _1["id"] == id }
         return log_unresolvable_recipient(member:, type:) if affiliate.nil?
         created_at = Time.zone.parse(affiliate["created_at"])
         SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, nil, id)
       end
+    end
+
+    # An audience member has one entry in `details["affiliates"]` per (affiliate relationship,
+    # product) pair, so a person can appear several times with different affiliate ids. When the
+    # workflow is scoped to specific products ("affiliate of these products"), only the entries
+    # for those products are legitimate recipients — picking the highest id across every
+    # relationship would send using an unrelated affiliate's id and its `created_at`, which also
+    # shifts the delayed-delivery schedule. Without a product scope every entry is eligible.
+    def eligible_affiliate_details(member)
+      affiliates = member.details["affiliates"] || []
+      product_ids = @filters[:affiliate_product_ids]
+      return affiliates if product_ids.blank?
+
+      allowed = product_ids.map(&:to_i).to_set
+      affiliates.select { allowed.include?(_1["product_id"].to_i) }
     end
 
     # Skipping a member silently is how the follower/bought-product bug stayed invisible for
