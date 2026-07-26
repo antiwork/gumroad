@@ -232,13 +232,25 @@ class Rack::Attack
   # throttles above document).
   throttle("checkout_orders/product", limit: ->(_req) { CHECKOUT_PER_PRODUCT_HOURLY_LIMIT }, period: 1.hour) do |req|
     if req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
-      # A cart can hold several products; key on the first permalink so a mixed cart can't
-      # dodge the cap by padding itself with other products. Requests with no identifiable
-      # product fall through to the per-IP rules above rather than sharing one global bucket.
-      line_items = req.params["line_items"]
-      line_items = line_items.values if line_items.respond_to?(:values) && !line_items.is_a?(Array)
+      # The checkout frontend posts a JSON body (`utils/request.ts` sets
+      # `Content-Type: application/json` and `JSON.stringify`s the payload), and
+      # `Rack::Request#params` only parses FORM-encoded bodies — it would return nothing
+      # for a real checkout and this cap would never fire. Read `json_params` for JSON
+      # requests, the same way the device-grant throttle above does. Note that specs
+      # posting `params: { ... }` default to form encoding, so a spec exercising only
+      # that path cannot catch this — there is a JSON-content-type example for it.
+      body_params = req.media_type&.include?("json") ? req.json_params : req.POST
+      line_items = body_params.is_a?(Hash) ? body_params["line_items"] : nil
+      # Rails serializes an array of line items as either a JSON array or, form-encoded,
+      # a hash keyed by index — accept both, and ignore anything else rather than raising
+      # (a raise here would take down the middleware for every request on this path).
+      line_items = line_items.values if line_items.is_a?(Hash)
       if line_items.is_a?(Array)
-        line_items.filter_map { |item| item["permalink"].presence if item.respond_to?(:[]) && !item.is_a?(String) }.first
+        # A cart can hold several products; key on the first permalink so a mixed cart
+        # can't dodge the cap by padding itself with other products. Requests with no
+        # identifiable product fall through to the per-IP rules above rather than
+        # sharing one global bucket.
+        line_items.filter_map { |item| item["permalink"].presence if item.is_a?(Hash) }.first
       end
     end
   rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError

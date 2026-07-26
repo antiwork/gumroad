@@ -629,9 +629,23 @@ describe "Rack::Attack throttle", type: :request do
     # The throttle key extractor in isolation, so the pre-existing controller crash above
     # can't hide a regression in it. These are the shapes that reach it in production.
     describe "per-product throttle key extraction" do
-      def product_key_for(params)
-        req = Rack::Attack::Request.new(Rack::MockRequest.env_for("/orders", method: "POST", params:))
-        Rack::Attack.throttles["checkout_orders/product"].block.call(req)
+      def product_key_for(params, json: false)
+        env = if json
+          Rack::MockRequest.env_for("/orders", method: "POST", input: params.to_json,
+                                               "CONTENT_TYPE" => "application/json")
+        else
+          Rack::MockRequest.env_for("/orders", method: "POST", params:)
+        end
+        Rack::Attack.throttles["checkout_orders/product"].block.call(Rack::Attack::Request.new(env))
+      end
+
+      # This is the case that matters most: the real checkout frontend posts a JSON body
+      # (`utils/request.ts`), and `Rack::Request#params` does not parse JSON — so reading
+      # `req.params` here would key every genuine checkout as nil and the cap would never
+      # fire at all. Specs that post form-encoded params (the rspec default) pass either
+      # way, so without this example the throttle could ship dead.
+      it "reads the permalink from a JSON body, as the checkout frontend sends it" do
+        expect(product_key_for({ "line_items" => [{ "permalink" => "abc" }] }, json: true)).to eq("abc")
       end
 
       it "returns the first permalink for a well-formed cart" do
@@ -647,6 +661,26 @@ describe "Rack::Attack throttle", type: :request do
         expect(product_key_for({ "line_items" => ["a string, not a hash"] })).to be_nil
         expect(product_key_for({ "line_items" => [{ "permalink" => "" }] })).to be_nil
         expect(product_key_for({ "email" => "buyer@example.com" })).to be_nil
+        expect(product_key_for({ "line_items" => "not-an-array" }, json: true)).to be_nil
+        expect(product_key_for({ "line_items" => ["a string, not a hash"] }, json: true)).to be_nil
+      end
+
+      it "does not raise on a malformed JSON body" do
+        env = Rack::MockRequest.env_for("/orders", method: "POST", input: "{not json",
+                                                   "CONTENT_TYPE" => "application/json")
+        expect { Rack::Attack.throttles["checkout_orders/product"].block.call(Rack::Attack::Request.new(env)) }
+          .not_to raise_error
+      end
+
+      # json_params reads the request body; if it did not rewind, the app would see an
+      # already-consumed body and checkout would break for every request.
+      it "leaves the request body readable for the app" do
+        body = { "line_items" => [{ "permalink" => "abc" }] }.to_json
+        env = Rack::MockRequest.env_for("/orders", method: "POST", input: body,
+                                                   "CONTENT_TYPE" => "application/json")
+        req = Rack::Attack::Request.new(env)
+        Rack::Attack.throttles["checkout_orders/product"].block.call(req)
+        expect(env["rack.input"].read).to eq(body)
       end
     end
   end
