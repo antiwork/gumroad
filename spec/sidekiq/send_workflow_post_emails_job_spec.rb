@@ -145,6 +145,32 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
       end
 
+      it "when the affiliate id is missing from the join, it falls back to an affiliate entry for one of the post's products" do
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
+
+        member = AudienceMember.find_by!(seller: @seller, email: @affiliates[0].affiliate_user.email)
+        # A member accumulates one `details["affiliates"]` entry per (affiliate relationship,
+        # product) pair, and an entry for a relationship that has since been replaced can still be
+        # sitting in the JSON. Here the leftover entry is for a product this post is not about and
+        # carries a higher id and a different created_at, so a fallback that just takes the newest
+        # entry on the member would pick it.
+        details = member.details.deep_dup
+        details["affiliates"] = [
+          { "id" => @affiliates[0].id, "product_id" => @products[0].id, "created_at" => 4.hours.ago.iso8601 },
+          { "id" => @affiliates[0].id + 1_000, "product_id" => @products[2].id, "created_at" => 1.hour.ago.iso8601 },
+        ]
+        # Reproduce the case Greptile flagged: the member still qualifies, but the aggregate over
+        # the JSON_TABLE join hands back a NULL affiliate id, so the job resolves it itself.
+        allow(member).to receive(:details).and_return(details)
+        allow(member).to receive(:affiliate_id).and_return(nil)
+        allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
+
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
+      end
+
       it "when audience_type? is true, it sends the expected emails at the right times" do
         described_class.new.perform(@post.id)
 
