@@ -52,6 +52,24 @@ const textDirectiveTerm = (fragment: string): string | null => {
   }
 };
 
+// Browsers deliberately hide a text directive from scripts: as soon as a history entry is created
+// for a URL that contains one — an ordinary page load, but also a History API update like the ones
+// Inertia does — Chromium strips the ":~:..." part out of `location.href`/`location.hash` so a page
+// cannot read what wording sent the reader to it. That means we cannot recover the directive after
+// the visit; we have to remember it at the moment we handle the click, which is the last point at
+// which we can see it. This lives outside the component because Inertia may re-mount the page
+// component between the click and the render of the destination article, which would throw away a
+// ref, and it is a single value because only one navigation is ever in flight.
+let textDirectivePendingScroll: string | null = null;
+
+// Firefox and Safari do not implement text directives at all, so nothing strips them and the
+// fragment is still readable after a plain page load. Read whichever source has it.
+const takePendingTextDirective = (fragment: string): string | null => {
+  const pending = textDirectivePendingScroll;
+  textDirectivePendingScroll = null;
+  return pending ?? textDirectiveTerm(fragment);
+};
+
 // Finds the smallest element whose text contains the given wording, so we scroll as close to the
 // passage as possible rather than to the whole article. Whitespace and case are ignored because
 // the wording in a link is written by hand and the HTML wraps and indents freely.
@@ -95,6 +113,9 @@ export default function HelpCenterArticle() {
       if (resolvedUrl.pathname === window.location.pathname && resolvedUrl.hash.length > 0) return;
 
       e.preventDefault();
+      // Remember a text directive before navigating, because the browser will hide it from us
+      // afterwards (see takePendingTextDirective).
+      textDirectivePendingScroll = textDirectiveTerm(resolvedUrl.hash.slice(1));
       // Carry the fragment through the Inertia visit. Articles deep-link into each other's
       // sections (for example the payout settings requirements point at "Address verification" in
       // "Getting paid"), and navigating to the pathname alone silently drops the "#section" part,
@@ -112,14 +133,22 @@ export default function HelpCenterArticle() {
   // reader at the top, so do the scrolling here once the target is actually in the document.
   React.useEffect(() => {
     const fragment = window.location.hash.slice(1);
-    if (!fragment) return;
 
-    const passage = textDirectiveTerm(fragment);
+    // A text directive we captured from the click that brought the reader here, or one still
+    // present in the URL on browsers that do not hide it. Checked before the empty-fragment case
+    // below, because a hidden directive leaves the hash empty.
+    const passage = takePendingTextDirective(fragment);
     if (passage !== null) {
       const container = contentRef.current;
       if (container) elementContainingText(container, passage)?.scrollIntoView();
       return;
     }
+
+    // Nothing to scroll to. Note that on a direct page load of a text-directive URL in a browser
+    // that hides the directive, this is where we end up and there is nothing we can do: the
+    // wording is unrecoverable from script, so the browser's own text-fragment scrolling is the
+    // only thing that can act on it.
+    if (!fragment) return;
 
     let id = fragment;
     try {

@@ -191,7 +191,9 @@ describe("HelpCenterArticle", () => {
     expect(container.querySelector("#passage")).not.toBeNull();
   });
 
-  it("still navigates client-side to an article linked by a text-fragment", () => {
+  it("still navigates client-side to an article linked by a text-fragment, and scrolls to the passage once there", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
     const { container } = renderArticle({
       slug: "79-gumroad-discover",
       content: `<a id="cross" href="${GETTING_PAID_PATH}#:~:text=For%20our%20review">risk review process</a>`,
@@ -201,6 +203,44 @@ describe("HelpCenterArticle", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(mocks.routerGet).toHaveBeenCalledWith(`${GETTING_PAID_PATH}#:~:text=For%20our%20review`);
+
+    // Chromium hides a text directive from scripts once a history entry exists for it, and an
+    // Inertia visit creates one, so the destination article renders with an EMPTY hash. The
+    // directive has to come from what the click handler remembered, not from window.location.
+    cleanup();
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
+    const destination = renderArticle({
+      slug: "13-getting-paid",
+      content: `<p id="passage">For our review, we require your account to be legitimate.</p>`,
+    });
+
+    expect(window.location.hash).toBe("");
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(destination.container.querySelector("#passage")).not.toBeNull();
+  });
+
+  it("does not scroll a later article to a passage from an abandoned navigation", () => {
+    // If the reader clicks a text-fragment link and then goes somewhere else, the remembered
+    // wording must not follow them around.
+    const { container } = renderArticle({
+      slug: "79-gumroad-discover",
+      content: `<a id="cross" href="${GETTING_PAID_PATH}#:~:text=For%20our%20review">risk review process</a>`,
+    });
+    clickLink(container, "#cross");
+
+    cleanup();
+    window.location.href = `https://gumroad.com${GETTING_PAID_PATH}`;
+    renderArticle({ slug: "13-getting-paid", content: `<p>For our review, we require your account.</p>` });
+
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    cleanup();
+    renderArticle({
+      slug: "260-your-payout-settings-page",
+      content: `<p>For our review, we require your account.</p>`,
+    });
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
   it("does nothing when there is no fragment", () => {
