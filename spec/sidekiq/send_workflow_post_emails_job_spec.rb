@@ -145,6 +145,40 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
       end
 
+      it "when affiliate_type? is true and the join supplies no affiliate id, it falls back within the post's product scope" do
+        # A member gets one details["affiliates"] entry per product they are an affiliate for.
+        # Give this person an extra product the post is NOT about, so the fallback has an
+        # out-of-scope entry available to pick.
+        other_product = create(:product, user: @seller, name: "Unrelated product")
+        @affiliates[0].products << other_product
+        member = @seller.audience_members.find_by(email: @affiliates[0].affiliate_user.email)
+        expect(member.details["affiliates"].map { _1["product_id"] }).to include(other_product.id)
+
+        # The aggregate over the JSON_TABLE join can come back NULL for a member who still
+        # qualifies, which is the situation the fallback exists for.
+        allow_any_instance_of(AudienceMember).to receive(:affiliate_id).and_return(nil)
+
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
+      end
+
+      it "when affiliate_type? is true and the member has no in-scope affiliate entry, it skips them instead of sending" do
+        allow_any_instance_of(AudienceMember).to receive(:affiliate_id).and_return(nil)
+        unrelated_product = create(:product, user: @seller, name: "Not an affiliate product")
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
+        # Narrow the resolved scope to a product nobody is an affiliate for, leaving the
+        # fallback with nothing legitimate to choose.
+        allow_any_instance_of(Installment).to receive(:audience_members_filter_params)
+          .and_wrap_original { |original| original.call.merge(affiliate_product_ids: [unrelated_product.id]) }
+
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      end
+
       it "when audience_type? is true, it sends the expected emails at the right times" do
         described_class.new.perform(@post.id)
 
