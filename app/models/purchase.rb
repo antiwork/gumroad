@@ -1482,15 +1482,16 @@ class Purchase < ApplicationRecord
   def tax_label(include_tax_rate: true)
     return unless has_tax_label?
 
-    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
-      label = "VAT"
-      label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
-      label
-    elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      label = "GST"
+    country = zip_tax_rate&.country
+
+    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country) ||
+       Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(country) ||
+       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(country) ||
+       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(country) ||
+       Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(country)
+      # Name the tax the way a buyer in that country knows it (GST in India, CT in Japan, and so
+      # on) instead of calling everything "VAT". Matches what the checkout UI shows them.
+      label = Compliance::Countries.tax_name_for(country)
       label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
       label
     else
@@ -1511,38 +1512,23 @@ class Purchase < ApplicationRecord
   def seller_tax_label
     return unless has_tax_label?
 
-    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "EU VAT"
-      else
-        "EU VAT (included)"
-      end
-    elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(zip_tax_rate&.country) ||
-          Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "VAT"
-      else
-        "VAT (included)"
-      end
-    elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "GST"
-      else
-        "GST (included)"
-      end
-    elsif Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "Norway VAT"
-      else
-        "Norway VAT (included)"
-      end
+    country = zip_tax_rate&.country
+
+    label = if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country)
+      "EU VAT"
+    elsif Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(country)
+      "Norway VAT"
+    elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(country) ||
+          Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(country) ||
+          Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(country)
+      # Same per-country naming as the buyer-facing label, so the seller's sale notification and
+      # the buyer's receipt call the tax the same thing.
+      Compliance::Countries.tax_name_for(country)
     else
-      if was_tax_excluded_from_price
-        "Sales tax"
-      else
-        "Sales tax (included)"
-      end
+      "Sales tax"
     end
+
+    was_tax_excluded_from_price ? label : "#{label} (included)"
   end
 
   def has_tax_label?
