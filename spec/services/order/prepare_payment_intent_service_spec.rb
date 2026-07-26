@@ -1852,6 +1852,16 @@ describe Order::PreparePaymentIntentService, :vcr do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "Brazil") }
 
+        # The seller's buyer-currency flags have to be off for this example to reach the Pix gate
+        # at all. With them on, method_forced_presentment_required? is true and
+        # prepare_unconfirmed_charge fails the order on its own nil-presentment guard several lines
+        # earlier, which produces this same generic error and would let the example pass without
+        # the gate ever running. Flags off is also the only way a Pix token genuinely arrives with
+        # no presentment in production: a stale token confirming after the seller's local-method
+        # rollout was rolled back.
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+
         allow_any_instance_of(Charge::MethodForcedPresentment).to receive(:perform).and_return(nil)
 
         create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_no_presentment")
