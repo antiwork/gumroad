@@ -33,32 +33,40 @@ class Checkout::BuyerCurrencyQuote
   LineItem = Struct.new(:permalink, :product, :price_cents, :tip_cents,
                         :seller_tax_cents, :gumroad_tax_cents, :shipping_cents,
                         keyword_init: true) do
-    # Builds a line from one product's surcharge calculation. The submitted price includes
-    # the buyer's tip share, so the tip is carved back out here; the tax lands in the same
-    # bucket Purchase#calculate_taxes will use at charge time (seller-responsible lookup
-    # rates vs Gumroad-collected VAT / marketplace-facilitator tax).
+    extend CurrencyHelper
+
+    # Builds a line from one product's surcharge calculation. The surcharge endpoint
+    # receives product-priced amounts from the browser, while charge-time verification
+    # compares the signed quote against Purchase#total_transaction_cents, which is always
+    # stored in USD. Normalize every product-priced component here so the token's
+    # "canonical" line totals use the same units the charge path will later verify.
     def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:)
-      price_cents = tax_result.price_cents.to_i
+      product_currency = product.price_currency_type.to_s.downcase
+      listed_price_cents = tax_result.price_cents.to_i
       # The submitted price and tip are buyer-controlled request params. A crafted
       # negative price would make clamp's bounds invalid (min > max) and raise, and a
       # nested/non-scalar tip has no #to_i — sanitize both so a malformed request falls
       # back to canonical USD (no quote) instead of erroring the surcharge endpoint.
-      tip_cents = tip_cents.is_a?(String) || tip_cents.is_a?(Numeric) ? tip_cents.to_i : 0
-      tip_cents = tip_cents.clamp(0, [price_cents, 0].max)
-      tax_cents = tax_result.tax_cents > 0 ? tax_result.tax_cents.round.to_i : 0
+      listed_tip_cents = tip_cents.is_a?(String) || tip_cents.is_a?(Numeric) ? tip_cents.to_i : 0
+      listed_tip_cents = listed_tip_cents.clamp(0, [listed_price_cents, 0].max)
+      listed_tax_cents = tax_result.tax_cents > 0 ? tax_result.tax_cents.round.to_i : 0
       seller_responsible = if tax_result.zip_tax_rate.present?
         tax_result.zip_tax_rate.is_seller_responsible
       else
         tax_result.used_taxjar && !tax_result.gumroad_is_mpf
       end
 
+      canonical_price_cents = get_usd_cents(product_currency, listed_price_cents)
+      canonical_tip_cents = get_usd_cents(product_currency, listed_tip_cents)
+      canonical_tax_cents = get_usd_cents(product_currency, listed_tax_cents)
+
       new(
         permalink:,
         product:,
-        price_cents: price_cents - tip_cents,
-        tip_cents:,
-        seller_tax_cents: seller_responsible ? tax_cents : 0,
-        gumroad_tax_cents: seller_responsible ? 0 : tax_cents,
+        price_cents: canonical_price_cents - canonical_tip_cents,
+        tip_cents: canonical_tip_cents,
+        seller_tax_cents: seller_responsible ? canonical_tax_cents : 0,
+        gumroad_tax_cents: seller_responsible ? 0 : canonical_tax_cents,
         shipping_cents: shipping_usd_cents.round.to_i
       )
     end
