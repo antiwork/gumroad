@@ -23,6 +23,11 @@ export type SaveProductResponse = {
   // would echo pre-save timestamps and be rejected as stale.
   rich_content_updated_at?: Record<string, string>;
   variant_updated_at?: Record<string, string>;
+  // Collections the server could not interpret in this payload and therefore
+  // left untouched ("rich_content", "variants"). The save itself succeeded, so
+  // the editor must not treat its local copy of those collections as saved —
+  // it reloads instead of showing "Changes saved!".
+  skipped_collections?: string[];
 };
 
 // The server's fail-closed answer when a save would delete version-level pages

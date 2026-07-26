@@ -351,6 +351,21 @@ const ProductEditPage = (props: Props) => {
         keepAllFiles: conflictResolution?.choice === "keep_version",
       });
       saved = true;
+      // Part of what this save sent could not be interpreted by the server, so
+      // that collection was left as the server already had it. The editor's
+      // in-memory copy of it is therefore NOT what is stored, and continuing to
+      // edit from it would keep re-sending the same unreadable payload. Reload
+      // so the seller sees the real stored state, and say plainly that this part
+      // did not save — the seller did nothing wrong, so the message must not
+      // ask them to fix anything.
+      if (response.skipped_collections?.length) {
+        showAlert(
+          "Your changes were saved, but this product's content couldn't be read from your browser and was left as it was. Reloading it now.",
+          "warning",
+        );
+        window.location.reload();
+        return true;
+      }
       // The version pages the seller chose to keep were never loaded into this
       // editor session (the shared-content flag hid them), so the in-memory
       // state can't render the outcome. Reload to pick up the kept content.

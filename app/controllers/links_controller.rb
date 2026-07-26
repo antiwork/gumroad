@@ -411,6 +411,16 @@ class LinksController < ApplicationController
         # describe the committed pre-save state.
         deletion_guard_diagnostics
 
+        # Decide up front which of the payload's two collections (content pages,
+        # versions) this save can actually act on. A collection the server can't
+        # interpret is treated as NOT SUBMITTED rather than as an empty one, so
+        # the rest of the save applies and the server's copy of that collection
+        # is left alone. Without this, an unreadable collection reaches the save
+        # looking exactly like "the seller deleted everything" and the deletion
+        # guards stop the whole save with advice to refresh the page — which
+        # can't help, because the payload was never stale, it was invalid.
+        payload_integrity
+
         # Reject a save built from a stale snapshot BEFORE any mutation: a
         # payload that echoes page/variant snapshot timestamps older than the
         # stored rows would silently overwrite content another session saved in
@@ -436,6 +446,12 @@ class LinksController < ApplicationController
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
+          # The shared-content flag decides whether version content is shown or
+          # hidden, so it can only be applied by a save that could actually read
+          # the versions it came with. When they were uninterpretable, applying
+          # it would flip the visibility of content this save is otherwise
+          # leaving untouched.
+          *(payload_integrity.skip_variants? ? [:has_same_rich_content_for_all_variants] : []),
           :cancellation_discount,
           :custom_button_text_option,
           :custom_summary,
@@ -487,7 +503,7 @@ class LinksController < ApplicationController
           end
         end
 
-        if @product.native_type === Link::NATIVE_TYPE_COFFEE
+        if @product.native_type === Link::NATIVE_TYPE_COFFEE && !payload_integrity.skip_variants?
           # Drop suggested amounts whose price was cleared (nil price_difference_cents):
           # an empty amount input reaches the backend as nil, coerces to 0, and would fail
           # the coffee variant's "greater than 0" validation. Ignore them entirely.
@@ -497,9 +513,13 @@ class LinksController < ApplicationController
         end
 
         # TODO clean this up
-        rich_content = product_permitted_params[:rich_content] || []
+        # `rich_content` is the product-level pages this save applies. When the
+        # payload's pages couldn't be interpreted it stays empty AND the delete
+        # step below is skipped, so the stored pages are neither rewritten nor
+        # removed — the save simply doesn't touch them.
+        rich_content = (payload_integrity.skip_pages? ? [] : product_permitted_params[:rich_content]) || []
         rich_content_params = [*rich_content]
-        product_permitted_params[:variants].each { rich_content_params.push(*_1[:rich_content]) } if product_permitted_params[:variants].present?
+        product_permitted_params[:variants].each { rich_content_params.push(*_1[:rich_content]) } if !payload_integrity.skip_variants? && product_permitted_params[:variants].present?
         rich_content_params = rich_content_params.flat_map { _1[:description] = _1.dig(:description, :content) }
         rich_contents_to_keep = []
         SaveFilesService.perform(@product, product_permitted_params, rich_content_params)
@@ -514,20 +534,22 @@ class LinksController < ApplicationController
           # next save addresses this page instead of re-creating it.
           save_id_mappings[:rich_content][product_rich_content[:id]] = rich_content.external_id if product_rich_content[:id].present? && product_rich_content[:id] != rich_content.external_id
         end
-        product_rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
-          .reject { preserved_rich_content_ids.include?(_1.external_id) }
-        Product::RichContentDeletionGuard.ensure_intent!(
-          product: @product,
-          rich_contents_to_delete: product_rich_contents_to_delete,
-          payload_page_ids:,
-          confirmed_removed_ids: confirmed_removed_rich_content_ids,
-          rewrite_budget: page_rewrite_budget,
-          diagnostics: deletion_guard_diagnostics
-        )
-        product_rich_contents_to_delete.each(&:mark_deleted!)
+        unless payload_integrity.skip_pages?
+          product_rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
+            .reject { preserved_rich_content_ids.include?(_1.external_id) }
+          Product::RichContentDeletionGuard.ensure_intent!(
+            product: @product,
+            rich_contents_to_delete: product_rich_contents_to_delete,
+            payload_page_ids:,
+            confirmed_removed_ids: confirmed_removed_rich_content_ids,
+            rewrite_budget: page_rewrite_budget,
+            diagnostics: deletion_guard_diagnostics
+          )
+          product_rich_contents_to_delete.each(&:mark_deleted!)
+        end
 
         Product::SaveIntegrationsService.perform(@product, product_permitted_params[:integrations])
-        update_variants
+        update_variants unless payload_integrity.skip_variants?
         update_removed_file_attributes
         update_custom_domain
         update_availabilities
@@ -926,6 +948,15 @@ class LinksController < ApplicationController
       end
     end
 
+    # Which of the payload's two collections (content pages, versions) this save
+    # can act on. Memoized because the answer has to be identical everywhere in
+    # the save — and because it must be computed from the payload as received,
+    # before any step rewrites it (the coffee path replaces :variants,
+    # SaveFilesService consumes page descriptions).
+    def payload_integrity
+      @_payload_integrity ||= Product::SavePayloadIntegrity.check(product: @product, raw_params: params)
+    end
+
     # External ids of variants the seller explicitly removed in the editor (via
     # the "Remove version/tier/duration" confirmation modal). Used to distinguish
     # an intentional deletion from an outdated or blind payload that simply
@@ -980,7 +1011,7 @@ class LinksController < ApplicationController
     def payload_page_descriptions
       @_payload_page_descriptions ||= begin
         pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
-        (params[:variants].is_a?(Array) ? params[:variants] : []).each do |variant|
+        snapshot_variants_params.each do |variant|
           pages.concat(variant[:rich_content].to_a) if variant[:rich_content].is_a?(Array)
         end
         known_page_ids = (@product.alive_rich_contents.map(&:external_id) +
@@ -1007,7 +1038,9 @@ class LinksController < ApplicationController
     # payload_page_descriptions does, and runs before the save mutates anything.
     def snapshot_pages_params
       pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
-      (params[:variants].is_a?(Array) ? params[:variants] : []).each do |variant|
+      # Only version entries that are records can be asked for their pages;
+      # snapshot_variants_params already drops anything else.
+      snapshot_variants_params.each do |variant|
         pages.concat(variant[:rich_content].to_a) if variant[:rich_content].is_a?(Array)
       end
       pages.filter_map { |page| { id: page[:id], updated_at: page[:updated_at] } if page.is_a?(ActionController::Parameters) || page.is_a?(Hash) }
@@ -1048,7 +1081,11 @@ class LinksController < ApplicationController
 
     def submitted_page_count
       count = params[:rich_content].is_a?(Array) ? params[:rich_content].size : 0
-      count + (params[:variants].is_a?(Array) ? params[:variants].sum { |variant| variant[:rich_content].is_a?(Array) ? variant[:rich_content].size : 0 } : 0)
+      # A version entry that isn't a record can't be asked for its pages —
+      # indexing a string with :rich_content raises. This method runs on every
+      # save, including the malformed ones, so it has to tolerate any entry
+      # shape rather than crash before the save can decide what to do.
+      count + (params[:variants].is_a?(Array) ? params[:variants].sum { |variant| (variant.is_a?(ActionController::Parameters) || variant.is_a?(Hash)) && variant[:rich_content].is_a?(Array) ? variant[:rich_content].size : 0 } : 0)
     end
 
     # Accumulates client id → canonical server id for records this save
@@ -1064,7 +1101,22 @@ class LinksController < ApplicationController
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
         **content_updated_at_response,
+        **skipped_collections_response,
       }
+    end
+
+    # Names the collections this save left alone because it couldn't interpret
+    # them. The save succeeded, but part of what the editor sent was not
+    # applied, and the editor must not present its local state as saved — it
+    # should reload that collection from the server. Omitted entirely on a
+    # normal save so the response shape doesn't change for the common case.
+    def skipped_collections_response
+      skipped = []
+      skipped << "rich_content" if payload_integrity.skip_pages?
+      skipped << "variants" if payload_integrity.skip_variants?
+      return {} if skipped.empty?
+
+      { skipped_collections: skipped }
     end
 
     # Fresh post-save snapshot timestamps for every alive page and variant,

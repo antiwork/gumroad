@@ -1397,6 +1397,129 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_nil context[:submitted_has_same_rich_content_for_all_variants]
   end
 
+  # --- uninterpretable payload collections ------------------------------------
+  # A collection the server can't read arrives at the save looking exactly like
+  # an empty one (strong parameters drops it), so the save used to read it as
+  # "the seller deleted everything" and the deletion guards stopped the whole
+  # save with advice to refresh the page. Refreshing can't fix a payload the
+  # browser built wrong, so the seller had no way out. The save now skips that
+  # collection and applies the rest. gumroad-private#1363.
+
+  test "PUT update leaves the versions alone and still saves the rest when the payload's versions can't be read" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(name: "Renamed product", variants: "not-a-list"), format: :json
+
+    assert_response :success
+    assert_equal "Renamed product", @product.reload.name
+    assert_equal false, @version1.reload.deleted?
+    assert_equal false, @version1_page.reload.deleted?
+    assert_equal false, @category.reload.deleted?
+    assert_equal ["variants"], response.parsed_body["skipped_collections"]
+  end
+
+  test "PUT update leaves the content pages alone and still saves the rest when the payload's pages can't be read" do
+    product_page = create_rich_content(entity: @product, description: guard_content_description, title: "Chapter 1")
+
+    post :update, params: @params.merge(name: "Renamed product", rich_content: "not-a-list"), format: :json
+
+    assert_response :success
+    assert_equal "Renamed product", @product.reload.name
+    assert_equal false, product_page.reload.deleted?
+    assert_equal guard_content_description, product_page.description
+    assert_equal "Chapter 1", product_page.title
+    assert_equal ["rich_content"], response.parsed_body["skipped_collections"]
+  end
+
+  test "PUT update leaves the versions alone when a version's own pages can't be read" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: "Renamed version", rich_content: "not-a-list" }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal false, @version1_page.reload.deleted?
+    assert_equal "Summer Sale", @version1.reload.name
+    assert_equal ["variants"], response.parsed_body["skipped_collections"]
+  end
+
+  test "PUT update leaves the versions alone when a version entry isn't a record" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(variants: ["not-a-record"]), format: :json
+
+    assert_response :success
+    assert_equal false, @version1.reload.deleted?
+    assert_equal false, @version1_page.reload.deleted?
+  end
+
+  test "PUT update does not apply the shared-content flag from a payload whose versions can't be read" do
+    # The flag decides whether version content is visible. Applying it from a
+    # payload that couldn't describe the versions would hide (or reveal)
+    # content this save is otherwise leaving untouched — the exact shape of the
+    # July 21 hidden-content incident.
+    setup_guarded_version!
+    @product.update!(has_same_rich_content_for_all_variants: false)
+
+    post :update, params: @params.merge(
+      variants: "not-a-list",
+      has_same_rich_content_for_all_variants: true
+    ), format: :json
+
+    assert_response :success
+    assert_equal false, @product.reload.has_same_rich_content_for_all_variants?
+  end
+
+  test "PUT update reports an uninterpretable collection to Sentry with its reason" do
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(rich_content: "not-a-list"), format: :json
+
+    _message, context = notified.find { |message, _| message == "Skipped an uninterpretable collection in a product save payload" }
+    assert_not_nil context, "Expected an uninterpretable-payload notification (got: #{notified.inspect})"
+    assert_equal "pages_not_a_list", context[:skipped_pages_reason]
+    assert_nil context[:skipped_variants_reason]
+    assert_equal @product.id, context[:product_id]
+  end
+
+  test "PUT update says nothing about skipped collections on an ordinary save" do
+    post :update, params: @params.merge(
+      rich_content: [{ id: nil, title: "Page", description: { type: "doc", content: guard_content_description } }]
+    ), format: :json
+
+    assert_response :success
+    assert_not response.parsed_body.key?("skipped_collections")
+  end
+
+  test "PUT update still applies an empty versions list through the deletion guards" do
+    # An empty list is a payload the server CAN read — it means "no versions",
+    # which is a real deletion the guards must still judge. Only an
+    # uninterpretable collection is skipped.
+    setup_guarded_version!
+
+    post :update, params: @params.merge(variants: []), format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal false, @version1.reload.deleted?
+  end
+
+  test "PUT update still accepts pages carrying client-generated ids the server has never seen" do
+    # An unrecognised id is NOT an uninterpretable payload: a page the seller
+    # just created is submitted under a client-generated id and the response
+    # maps it to the canonical one. Treating it as unreadable would silently
+    # drop every newly created page (see gumroad-private#1360).
+    post :update, params: @params.merge(
+      rich_content: [{ id: "client-page-guid", title: "New page", description: { type: "doc", content: guard_content_description } }]
+    ), format: :json
+
+    assert_response :success
+    page = @product.reload.alive_rich_contents.sole
+    assert_equal page.external_id, response.parsed_body["rich_content_id_mappings"]["client-page-guid"]
+    assert_not response.parsed_body.key?("skipped_collections")
+  end
+
   test "PUT update blocks deleting a title-only page missing from the payload" do
     # A page can carry nothing but a title (its body is an empty paragraph).
     # That title is seller-authored work and renders in the buyer's page list,
