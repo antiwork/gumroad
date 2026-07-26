@@ -171,7 +171,13 @@ class ContentModeration::ModerateRecordService
     # A spam flag on a product that actually delivers something is downgraded
     # to a note instead of blocking the publish (see
     # `spam_flag_should_not_block?`).
-    if spam_flag_should_not_block?
+    #
+    # Asked only when there is a spam flag to downgrade. Answering it means
+    # walking the product's files and, for files their own row can't answer for,
+    # spending up to a two-second budget on storage lookups — work that changes
+    # nothing when nothing was flagged, and whose "we ran out of time" warning
+    # would otherwise be written during saves that go on to succeed.
+    if reasons.any? { |r| spam_reason?(r) } && spam_flag_should_not_block?
       downgraded, reasons = reasons.partition { |r| spam_reason?(r) }
       audit_reasons += downgraded.map { |r| "#{r} (not blocked: listing has content attached)" }
     end

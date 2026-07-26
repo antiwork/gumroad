@@ -744,6 +744,24 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(result.reasons).to eq([])
         expect(ContentModerationAdminCommentJob.jobs).to be_empty
       end
+
+      # Whether a listing delivers anything only matters for deciding if a spam
+      # flag should stop blocking. With nothing flagged there is no such
+      # decision to make, so the save must not go walking the seller's files:
+      # it costs storage lookups that change no outcome, and running out of
+      # time on them would write a rejection-shaped warning onto a save that
+      # published fine.
+      it "does not check storage or warn about a spent budget when nothing was flagged" do
+        expect_any_instance_of(ProductFile).not_to receive(:s3_object)
+        3.times { product.product_files << create(:product_file, analyze_completed: false) }
+        product.save!
+
+        warnings = []
+        allow(Rails.logger).to receive(:warn) { |message| warnings << message }
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+        expect(warnings.grep(/storage check budget spent/)).to be_empty
+      end
     end
 
     it "propagates errors raised by AI strategies" do
