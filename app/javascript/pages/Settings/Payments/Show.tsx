@@ -1086,8 +1086,12 @@ export default function PaymentsPage() {
           />
         ) : null}
 
+        {/* The banner uses the same padding as every FormSection on this page (see
+            components/ui/FormSection.tsx), so it lines up with the form fields below it and keeps an
+            even gap on all four sides. The old `mb-12 px-8` left it flush against the tabs above and
+            inset further than the content on mobile. */}
         {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
-          <div className="mb-12 px-8">
+          <div className="p-4! md:p-8!">
             <Alert variant="danger" role="status">
               {errors?.base?.[0] ?? clientErrorMessage?.message}
             </Alert>
