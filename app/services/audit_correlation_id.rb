@@ -46,11 +46,20 @@ class AuditCorrelationId
   # back to the request that produced it. A digest that appears nowhere but the
   # database cannot correlate anything, which is the whole point of storing it.
   #
-  # Fails open, and that is load-bearing rather than defensive habit. This is
-  # called from inside the deletion's transaction, so an exception here would
-  # propagate out of `with_lock`, roll the deletion back, and turn a logging
-  # failure into a failed delete and a 500 for the seller. A broken log device, a
-  # full disk, or a misconfigured logger must cost observability only.
+  # Fails open, and that is load-bearing rather than defensive habit — though the
+  # consequence of a raise has changed, so it is worth being precise about what
+  # this rescue now protects against.
+  #
+  # It used to be called from inside the deletion's transaction. An exception then
+  # propagated out of `with_lock` and rolled the deletion back, so a full disk
+  # turned into a delete that silently did not happen. That was the original bug.
+  #
+  # It is now called from inside `after_commit`, after the audit row is written, so
+  # the deletion is already committed and can no longer be undone by anything here.
+  # An unhandled error would instead surface on a request whose work had entirely
+  # succeeded — a 500 on a completed deletion, which is a worse lie than a missing
+  # log line. Either way a broken log device, a full disk, or a misconfigured
+  # logger must cost observability only.
   #
   # Returns true when the pair was logged, false when it was not, so callers can
   # assert on it without parsing log output.

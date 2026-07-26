@@ -5830,10 +5830,14 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_not variant.reload.alive?
   end
 
-  # Correlation logging happens INSIDE the deletion's transaction, so a raising
-  # logger would propagate out, roll the deletion back, and turn a logging failure
-  # into a failed save. Proven empirically before the fix: the deletion was rolled
-  # back and the request would have 500'd.
+  # Correlation logging used to run INSIDE the deletion's transaction, where a
+  # raising logger propagated out, rolled the deletion back, and turned a full disk
+  # into a save that silently did not delete. Proven empirically before the fix.
+  #
+  # It now runs in `after_commit`, after the row is written, so a raise can no
+  # longer undo the deletion — it would instead 500 a request whose work had fully
+  # succeeded. This asserts the weaker-but-still-required property that survives
+  # the move: a broken logger costs the log line and nothing else.
   test "a broken correlation logger cannot stop an editor save" do
     variant = create_variant(variant_category: @category, name: "Plain version")
 

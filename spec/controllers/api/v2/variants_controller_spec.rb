@@ -615,9 +615,11 @@ describe Api::V2::VariantsController do
           # on the instance, since the controller loads its own via the
           # variant_category association.
 
-          # Correlation logging runs inside the deletion's transaction, so a raising
-          # logger would propagate out of with_lock, roll the deletion back, and
-          # return a 500 for a delete that should have succeeded.
+          # Correlation logging used to run inside the deletion's transaction,
+          # where a raising logger propagated out of with_lock and rolled the
+          # deletion back. It now runs in after_commit, after the row is written,
+          # so a raise could only 500 a delete that had already succeeded. Either
+          # way it must cost the log line and nothing more.
           it "is not broken by a failing correlation logger" do
             allow(AuditCorrelationId).to receive(:log_pair).and_raise(IOError, "log device full")
 
