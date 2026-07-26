@@ -624,12 +624,10 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           tier.save!
         end
         membership.reload
-        # The tally covers every list the check walked: the product's own file
-        # list plus one per tier. Everything but the single lookup that burned
-        # the budget went unchecked.
-        walked_files = membership.alive_product_files.count +
-          membership.alive_variants.sum { |tier| tier.alive_product_files.count }
-        unchecked = walked_files - 1
+        # Distinct files, not lookups: a file attached to a tier is also in the
+        # product's own list, so both walks reach it and it must be reported once.
+        # Everything but the single lookup that burned the budget went unchecked.
+        unchecked = membership.alive_product_files.count - 1
 
         warnings = []
         allow(Rails.logger).to receive(:warn) { |message| warnings << message }
@@ -639,6 +637,28 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         budget_warnings = warnings.grep(/storage check budget spent/)
         expect(budget_warnings.size).to eq(1)
         expect(budget_warnings.first).to include("#{unchecked} unverifiable file(s) left unchecked")
+      end
+
+      # Running out of time on the files is only worth reporting if the product
+      # ended up with nothing. A content page delivers on its own, so that save
+      # passes and must not carry a failure-shaped warning about files nobody
+      # needed to look at.
+      it "does not warn about a spent budget when the product passes on its page content" do
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        3.times { product.product_files << create(:product_file, analyze_completed: false) }
+        create(:rich_content, entity: product, description: [
+                 { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Here is the course." }] }
+               ])
+        product.save!
+
+        warnings = []
+        allow(Rails.logger).to receive(:warn) { |message| warnings << message }
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+        expect(warnings.grep(/storage check budget spent/)).to be_empty
       end
 
       # A file that finished analyzing is answered from its own row, so a real
