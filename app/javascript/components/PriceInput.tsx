@@ -1,7 +1,6 @@
 import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
-import { classNames } from "$app/utils/classNames";
 import {
   CurrencyCode,
   formatPriceCentsWithoutCurrencySymbolAndComma,
@@ -67,28 +66,17 @@ export const PriceInput = React.forwardRef<
     return (
       <InputGroup disabled={disabled}>
         {currencyCodeSelector ? (
-          <Pill className={classNames("relative -ml-2 shrink-0", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
+          <Pill className="relative -ml-2 shrink-0 cursor-pointer">
             {getLongCurrencySymbol(currencyCode)}
             <TypeSafeOptionSelect
               name="Currency"
-              // The select is invisible, so without an accessible name the accessibility tree
-              // exposed this combobox with an empty name. `name` alone is a form-submission
-              // attribute, not an accessible name.
-              aria-label="Currency"
               value={currencyCode}
               onChange={currencyCodeSelector.onChange}
               options={currencyCodeSelector.options.map((currencyCode) => ({
                 id: currencyCode,
                 label: getLongCurrencySymbol(currencyCode),
               }))}
-              // The select is invisible and stretched over the pill so the whole pill acts as the
-              // hit area. CSS opacity does not block pointer events, so it needs the real
-              // `disabled` attribute to stop the currency being changed on a disabled field.
-              disabled={disabled ?? false}
-              className={classNames(
-                "absolute inset-0 z-1 m-0! opacity-0",
-                disabled ? "cursor-not-allowed" : "cursor-pointer",
-              )}
+              className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
             />
             <ChevronDown className="ml-auto size-5" />
           </Pill>

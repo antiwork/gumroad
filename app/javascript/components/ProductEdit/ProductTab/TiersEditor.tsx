@@ -21,6 +21,7 @@ import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
+import { pwywMinimumNote } from "$app/components/ProductEdit/ProductTab/PriceEditor";
 import { RecurrencePriceValue, Tier, useProductEditContext } from "$app/components/ProductEdit/state";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -326,17 +327,6 @@ const TierEditor = ({
                     value.enabled ? (
                       <React.Fragment key={recurrence}>
                         <Fieldset>
-                          <Label htmlFor={`${uid}-${recurrence}-minimum-price`}>
-                            Minimum amount {perRecurrenceLabels[recurrence]}
-                          </Label>
-                          <PriceInput
-                            id={`${uid}-${recurrence}-minimum-price`}
-                            currencyCode={currencyType}
-                            cents={value.price_cents}
-                            disabled
-                          />
-                        </Fieldset>
-                        <Fieldset>
                           <Label htmlFor={`${uid}-${recurrence}-suggested-price`}>
                             Suggested amount {perRecurrenceLabels[recurrence]}
                           </Label>
@@ -349,6 +339,9 @@ const TierEditor = ({
                             }
                             placeholder={PLACEHOLDER_VALUES[recurrence]}
                           />
+                          <FieldsetDescription>
+                            {pwywMinimumNote(currencyType, value.price_cents ?? 0)}
+                          </FieldsetDescription>
                         </Fieldset>
                       </React.Fragment>
                     ) : (

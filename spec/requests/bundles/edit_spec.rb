@@ -52,7 +52,7 @@ describe("Bundle edit page", type: :system, js: true) do
     check "Allow customers to pay what they want"
     in_preview { expect(page).to have_field("Name a fair price:", placeholder: "1+") }
     in_preview { expect(page).to have_selector("[itemprop='price']", text: "$2 $1+") }
-    expect(page).to have_field("Minimum amount", with: "1", disabled: true)
+    expect(page).to have_text("Customers must pay at least $1")
 
     find_field("Suggested amount", with: "").fill_in with: "5"
     in_preview { expect(page).to have_field("Name a fair price:", placeholder: "5+") }

@@ -1,6 +1,11 @@
 import * as React from "react";
 
-import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import {
+  CurrencyCode,
+  formatPriceCentsWithCurrencySymbol,
+  formatPriceCentsWithoutCurrencySymbol,
+  getMinPriceCents,
+} from "$app/utils/currency";
 
 import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
@@ -9,9 +14,22 @@ import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/In
 import { OfferCode, ProductEditContext } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
+
+// The floor a pay-what-you-want customer has to meet. It is the Amount field, so there is nothing
+// separate to edit — it is stated as a note rather than rendered as a field. A $0 product is the
+// one case where paying nothing is allowed, but a customer who chooses to pay still has to clear
+// the currency's processing minimum (Purchase#minimum_paid_price_cents and the
+// CONTRIBUTION_TOO_LOW validation in purchase.rb enforce both halves of this).
+export const pwywMinimumNote = (currencyCode: CurrencyCode, priceCents: number) => {
+  const format = (cents: number) => formatPriceCentsWithCurrencySymbol(currencyCode, cents, { symbolFormat: "long" });
+
+  return priceCents === 0
+    ? `Customers can pay nothing, or at least ${format(getMinPriceCents(currencyCode))} if they choose to pay.`
+    : `Customers must pay at least ${format(priceCents)}.`;
+};
 
 export const PriceEditor = ({
   priceCents,
@@ -103,11 +121,7 @@ export const PriceEditor = ({
             }
           />
         </DetailsToggle>
-        <Dropdown className="gap-4 lg:grid-cols-2">
-          <Fieldset>
-            <Label htmlFor={`${uid}-minimum-amount`}>Minimum amount</Label>
-            <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
-          </Fieldset>
+        <Dropdown>
           <Fieldset>
             <Label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</Label>
             <PriceInput
@@ -117,6 +131,7 @@ export const PriceEditor = ({
               cents={suggestedPriceCents}
               onChange={setSuggestedPriceCents}
             />
+            <FieldsetDescription>{pwywMinimumNote(currencyType, priceCents)}</FieldsetDescription>
           </Fieldset>
         </Dropdown>
       </Details>

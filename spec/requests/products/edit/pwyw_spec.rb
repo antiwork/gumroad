@@ -18,12 +18,14 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
     pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
     expect(pwyw_toggle).to be_checked
 
-    expect(page).to have_field("Minimum amount", disabled: true)
     expect(page).to have_field("Suggested amount")
+    # The product's Amount is $0, so paying nothing is allowed but a customer who chooses to pay
+    # still has to clear USD's processing minimum.
+    expect(page).to have_text("Customers can pay nothing, or at least $0.99 if they choose to pay")
     save_change
     wait_for_ajax
     expect(product.reload.customizable_price).to eq(true)
-    expect(page).to have_field("Minimum amount", disabled: true)
+    expect(page).to have_text("Customers can pay nothing, or at least $0.99 if they choose to pay")
   end
 
   it "tests that PWYW is still available" do
@@ -55,6 +57,8 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
     fill_in "Amount", with: "10"
 
     expect(page).not_to have_content("Free products require a pay what they want price.")
+    # The note tracks Amount, so raising it from $0 replaces the pay-nothing wording with the floor.
+    expect(page).to have_text("Customers must pay at least $10")
     pwyw_toggle = find_field("Allow customers to pay what they want")
     expect(pwyw_toggle).to be_checked
     expect(pwyw_toggle).not_to be_disabled

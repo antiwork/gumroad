@@ -27,11 +27,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
           baseInputStyles,
           readOnly && "cursor-default bg-body focus:outline-none",
           isInsideInputGroup ? inputGroupChildStyles : stateBorderStyles[state],
-          // Inside a disabled InputGroup the group itself signals the disabled state (tinted
-          // background, not-allowed cursor), so the input must not fade its own text on top of
-          // that: a faded value in a group that exists to DISPLAY a value reads as an empty
-          // field, which is what made the PWYW "Minimum amount" mirror look unset to sellers.
-          inputGroupDisabled && "disabled:opacity-100",
+          inputGroupDisabled && "opacity-100",
           className,
         )}
         {...props}

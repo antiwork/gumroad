@@ -19,18 +19,7 @@ const inputGroupVariants = cva(
   {
     variants: {
       disabled: {
-        // Don't fade the whole group with `opacity`: CSS opacity applies to the entire subtree,
-        // so a disabled group that exists purely to display a computed value (e.g. the PWYW
-        // "Minimum amount" mirror of the price) renders that value at 30% opacity, which sellers
-        // read as an empty field. Signal "not editable" with a tinted background and the cursor
-        // instead, so the value itself stays at full contrast.
-        //
-        // The background tint is a translucent overlay, and Windows High Contrast mode (and any
-        // other forced-colours mode) replaces author background colours with a system colour, so
-        // the tint disappears there and a disabled group would look identical to an editable one.
-        // A dashed border survives forced colours, so the state stays visible without relying on
-        // colour alone.
-        true: "cursor-not-allowed bg-active-bg forced-colors:border-dashed",
+        true: "cursor-not-allowed opacity-30",
         false: "",
       },
       readOnly: {
@@ -50,10 +39,7 @@ export const InputGroup = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof inputGroupVariants>
 >(({ className, disabled, readOnly, children, ...props }, ref) => {
   const { state } = useFieldset();
-  // Recompute when `disabled` changes — several groups toggle it from form state (for example
-  // the collaborator form enabling a percentage field), and memoizing on anything else leaves
-  // descendants reading a stale disabled flag.
-  const contextValue = React.useMemo(() => ({ isInsideInputGroup: true, disabled: disabled ?? false }), [disabled]);
+  const contextValue = React.useMemo(() => ({ isInsideInputGroup: true, disabled: disabled ?? false }), [state]);
 
   return (
     <InputGroupContext.Provider value={contextValue}>
