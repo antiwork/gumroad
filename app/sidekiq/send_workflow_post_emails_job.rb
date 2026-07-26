@@ -62,8 +62,16 @@ class SendWorkflowPostEmailsJob
       elsif type == :affiliate
         affiliate = resolve_affiliate(member:, id:)
         return log_unresolvable_recipient(member:, type:) if affiliate.nil?
+        # The worker's last positional argument is an affiliate USER id — it does
+        # `User.find_by(id: affiliate_user_id)`. What we have resolved here is a
+        # DirectAffiliate id: that is what `details["affiliates"]` stores and what
+        # `max(jt.affiliate_id)` aggregates. The two id spaces are unrelated, so passing the
+        # affiliate id sent the email to whichever user happened to share that number, or to
+        # nobody at all. Translate it, the same way DirectAffiliate's own enqueue path does.
+        affiliate_user_id = Affiliate.where(id: affiliate["id"]).pick(:affiliate_user_id)
+        return log_unresolvable_recipient(member:, type:) if affiliate_user_id.nil?
         created_at = Time.zone.parse(affiliate["created_at"])
-        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, nil, affiliate["id"])
+        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, nil, affiliate_user_id)
       end
     end
 

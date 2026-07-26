@@ -142,7 +142,18 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+      end
+
+      it "enqueues an affiliate id the worker can actually resolve to a user" do
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
+        described_class.new.perform(@post.id)
+
+        # The worker resolves this argument with User.find_by, so a DirectAffiliate id here
+        # lands on whichever unrelated user happens to share that number, or on nobody.
+        enqueued_id = SendWorkflowInstallmentWorker.jobs.last["args"].last
+        expect(User.find_by(id: enqueued_id)).to eq(@affiliates[0].affiliate_user)
+        expect(enqueued_id).not_to eq(@affiliates[0].id)
       end
 
       it "when the affiliate id is missing from the join, it falls back to an affiliate entry for one of the post's products" do
@@ -168,7 +179,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
       end
 
       it "when the affiliate id is missing and nothing on the member is in scope, it skips them instead of sending" do
@@ -200,7 +211,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil).immediately
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
 
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
 
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, @sales[2].id, nil, nil).immediately
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, @sales[3].id, nil, nil).immediately
