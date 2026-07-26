@@ -905,6 +905,7 @@ class LinksController < ApplicationController
           rewrite_budget: page_rewrite_budget,
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
+          deletion_audit_context:,
         ).perform
       elsif variant_category.present?
         Product::VariantsUpdaterService.new(
@@ -922,8 +923,36 @@ class LinksController < ApplicationController
           rewrite_budget: page_rewrite_budget,
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
+          deletion_audit_context:,
         ).perform
       end
+    end
+
+    # Who and which request is performing this save, for the deletion audit
+    # trail (ProductVariantDeletionAudit). `logged_in_user` rather than
+    # `current_seller`: on a collaborator or admin save those differ, and the
+    # audit wants the person who actually pressed save.
+    #
+    # `correlation_id` is a server-side digest, not the raw request id — Rails
+    # takes `X-Request-Id` from the client, so the raw value is caller-controlled
+    # (see AuditCorrelationId). `revision_token` is always nil today: the
+    # editor-scoped revision token proposed in gumroad-private#1379 does not
+    # exist yet, and the key is here so the audit shape doesn't change when it
+    # ships.
+    #
+    # The digest is computed here but NOT logged here: this context is built for
+    # every save, and most saves delete nothing. Logging at build time would emit
+    # a correlation line for saves that never produce an audit row, which is noise
+    # that makes the log useless for the one thing it exists for — finding the
+    # request behind an audit row. `ProductVariantDeletionAudit` logs the pair
+    # itself, at the point a row is actually scheduled.
+    def deletion_audit_context
+      @_deletion_audit_context ||= {
+        actor_user_id: logged_in_user&.id,
+        correlation_id: AuditCorrelationId.for(request.request_id),
+        request_id: request.request_id,
+        revision_token: nil,
+      }
     end
 
     # External ids of variants the seller explicitly removed in the editor (via
