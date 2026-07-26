@@ -1723,7 +1723,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         perform_with_preview(order, params, preview:, confirmation_token:)
       end
 
-      it "creates the BRL intent with Pix's create-time options, charging the buyer exactly the listed price and pricing the IOF into the seller fee" do
+      it "creates the BRL intent with Pix's create-time options, charging the buyer exactly the listed price and adding no IOF on this direct charge" do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "Brazil") }
 
@@ -1742,11 +1742,20 @@ describe Order::PreparePaymentIntentService, :vcr do
           }
         )
 
-        # The IOF Stripe deducts from settlement is recovered from the seller as a fee component,
-        # which requires the method to be seeded on the purchase before fees are recomputed.
+        # The method must be seeded onto the purchase before fees are recomputed, so that fee logic
+        # can see it is a Pix payment at all. Assert that first, independently of the fee amount.
         purchase = order.purchases.first.reload
         expect(purchase.card_type).to eq(CardType::PIX)
-        expected_variable_fee_cents = (purchase.price_cents * (Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND + Purchase::PIX_IOF_FEE_PER_THOUSAND) / 1000.0).round
+
+        # This seller is a Stripe Connect (direct charge) seller, so Stripe settles into their own
+        # account and deducts Brazil's IOF from that balance itself. Recovering it again through
+        # fee_cents would bill them for the same tax twice, so pix_iof_fee_per_thousand is gated off
+        # here — as is the processor fee, on the identical condition. What is left is the 10% flat
+        # Gumroad fee plus the $0.50 fixed fee. The IOF-charging path is covered on a
+        # Gumroad-managed account in spec/models/purchase/purchase_process_spec.rb ("Pix IOF fee").
+        expect(purchase.charged_using_gumroad_merchant_account?).to eq(false)
+        expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(0)
+        expected_variable_fee_cents = (purchase.price_cents * Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND / 1000.0).round
         expect(purchase.fee_cents).to eq(expected_variable_fee_cents + Purchase::GUMROAD_FIXED_FEE_CENTS)
       end
 
