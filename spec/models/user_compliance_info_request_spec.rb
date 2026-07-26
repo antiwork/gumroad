@@ -281,5 +281,35 @@ describe UserComplianceInfoRequest do
         expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
       end
     end
+
+    context "when the seller wrote their post office box without the words 'PO Box'" do
+      # How a rural seller with no civic street address normally writes it. This is the exact
+      # population the deadlock hits hardest, so the messaging has to recognise the form.
+      before { create(:user_compliance_info_business, user:, business_street_address: "Box 65, RR 2") }
+
+      it "explains the deadlock" do
+        set_error("verification_document_address_mismatch")
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+    end
+
+    context "when many later compliance edits sit on top of the P.O. Box revision" do
+      before do
+        create(:user_compliance_info_business, user:, business_street_address: "PO Box 65")
+        # Compliance revisions are created for edits to any field, not just the address. A seller
+        # who keeps correcting their phone number after replacing the P.O. Box must not lose the
+        # explanation to a recency cutoff.
+        30.times do |index|
+          create(:user_compliance_info_business, user:, business_street_address: "NW-22-34-19-W2", phone: "555-01#{index.to_s.rjust(2, '0')}")
+        end
+      end
+
+      it "still explains the deadlock" do
+        set_error("verification_document_address_mismatch")
+
+        expect(request.reload.verification_error_message).to eq(described_class::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+      end
+    end
   end
 end

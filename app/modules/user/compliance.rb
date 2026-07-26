@@ -170,16 +170,19 @@ module User::Compliance
     user_compliance_infos.alive.last
   end
 
-  # How many of the seller's most recent compliance revisions we scan when asking whether they
-  # ever gave us a P.O. Box. Capped so this stays a cheap two-column read even for a seller with
-  # a long compliance history.
-  PO_BOX_ADDRESS_HISTORY_REVISIONS_CHECKED = 25
-
-  # Whether a P.O. Box appears anywhere in the seller's recent address history, individual or
-  # business. We look at the history rather than only the current record because our payment
-  # partner rejects a P.O. Box on the account, so a seller in that situation has usually already
-  # replaced it — and that replacement is exactly what makes their verification document stop
-  # matching the account. See UserComplianceInfoRequest for the full deadlock.
+  # Whether a P.O. Box appears anywhere in the seller's address history, individual or business.
+  # We look at the whole history rather than only the current record because our payment partner
+  # rejects a P.O. Box on the account, so a seller in that situation has usually already replaced
+  # it — and that replacement is exactly what makes their verification document stop matching the
+  # account. See UserComplianceInfoRequest for the full deadlock.
+  #
+  # Every revision is scanned, with no recency cutoff. An earlier version of this capped the scan
+  # at the most recent revisions, which was wrong: compliance revisions are created for edits to
+  # any field, not just the address, so a seller who changed their phone number or tax ID a few
+  # times after replacing the P.O. Box would silently fall back to the misleading generic copy.
+  # The read stays cheap because it is scoped to one seller by an indexed column, asks for only
+  # the two address columns, and collapses the many revisions that repeat the same pair of
+  # addresses down to the distinct ones.
   #
   # Memoized per instance: the dashboard and settings pages ask this once per outstanding
   # compliance request, and the answer cannot change within a single request.
@@ -187,11 +190,10 @@ module User::Compliance
     return @po_box_in_address_history unless @po_box_in_address_history.nil?
 
     @po_box_in_address_history = user_compliance_infos
-                                   .order(id: :desc)
-                                   .limit(PO_BOX_ADDRESS_HISTORY_REVISIONS_CHECKED)
+                                   .distinct
                                    .pluck(:street_address, :business_street_address)
                                    .flatten
-                                   .any? { |address| PoBoxAddress.match?(address) }
+                                   .any? { |address| PoBoxAddress.possible_match?(address) }
   end
 
   SUPPORTED_COUNTRIES.each do |country|
