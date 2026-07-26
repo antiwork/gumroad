@@ -17,6 +17,7 @@ import {
   streamAgentMessage,
 } from "$app/data/agent";
 import { classNames } from "$app/utils/classNames";
+import { RateLimitError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -699,12 +700,22 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         turnSettled = true;
       }
       if (!recovered) {
-        showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
+        // A rate-limit refusal is not a malfunction: the server already explains which limit was
+        // hit and how long is left, so show that text instead of the generic failure wording. The
+        // generic string is what led sellers to think their account or store was broken and to
+        // spend the wait clearing browser data and re-logging in, none of which helps.
+        const isRateLimited = e instanceof RateLimitError;
+        const message = e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.";
+        showAlert(message, isRateLimited ? "warning" : "error");
         setMessages((prev) => {
           const next = [...prev];
-          // If nothing streamed, drop in a friendly fallback; otherwise keep what arrived.
+          // If nothing streamed, drop in a fallback; otherwise keep what arrived. A rate-limited
+          // turn never streams anything, so its bubble always carries the explanation.
           if (!next[assistantIndex] || next[assistantIndex]?.role !== "assistant") {
-            next[assistantIndex] = { role: "assistant", content: "Sorry, I ran into a problem. Please try again." };
+            next[assistantIndex] = {
+              role: "assistant",
+              content: isRateLimited ? message : "Sorry, I ran into a problem. Please try again.",
+            };
           }
           return next;
         });

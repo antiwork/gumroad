@@ -59,6 +59,56 @@ describe Throttling, type: :request do
       expect(response.headers["Retry-After"]).to be_present
     end
 
+    it "reports the seconds remaining in the body as well as the header" do
+      6.times { get "/test_throttle" }
+
+      expect(response).to have_http_status(:too_many_requests)
+      retry_after = JSON.parse(response.body)["retry_after"]
+      expect(retry_after).to be > 0
+      expect(retry_after).to eq(response.headers["Retry-After"].to_i)
+    end
+
+    it "falls back to the full period when the key's TTL is unavailable" do
+      6.times { get "/test_throttle" }
+      expect(JSON.parse(response.body)["retry_after"]).to be <= 1.hour.to_i
+
+      # A key with no expiry set reports TTL -1; without a fallback the user would be told to wait a
+      # negative number of seconds.
+      allow(redis).to receive(:ttl).with("test_key").and_return(-1)
+      get "/test_throttle"
+
+      expect(JSON.parse(response.body)["retry_after"]).to eq(1.hour.to_i)
+      expect(response.headers["Retry-After"].to_i).to eq(1.hour.to_i)
+    end
+
+    it "renders a caller-supplied message instead of the default wording" do
+      controller_with_message = Class.new(ApplicationController) do
+        include Throttling
+
+        before_action :test_throttle
+
+        def test_action
+          render json: { success: true }
+        end
+
+        private
+          def test_throttle
+            throttle!(
+              key: "test_key",
+              limit: 1,
+              period: 1.hour,
+              message: ->(retry_after) { "Come back in #{retry_after} seconds." }
+            )
+          end
+      end
+      stub_const("AnonymousController", controller_with_message)
+
+      2.times { get "/test_throttle" }
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(JSON.parse(response.body)["error"]).to eq("Come back in #{JSON.parse(response.body)["retry_after"]} seconds.")
+    end
+
     it "sets expiration on first request" do
       get "/test_throttle"
 

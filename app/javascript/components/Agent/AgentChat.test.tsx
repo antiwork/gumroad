@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { RateLimitError } from "$app/utils/request";
+
 vi.mock("$app/data/agent", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$app/data/agent")>();
   return {
@@ -279,6 +281,25 @@ describe("AgentChat streamed reply reconciliation", () => {
     await sendMessage("what does my bio say");
 
     await waitFor(() => expect(showAlert).toHaveBeenCalledWith("Too many requests.", "error"));
+    expect(fetchAgentTurnStatus).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's rate-limit explanation in the chat instead of the generic failure", async () => {
+    // The seller hasn't broken anything — they've spent their hourly agent budget. Both the alert
+    // and the assistant bubble have to say so, since the generic "Sorry, I ran into a problem" sent
+    // sellers clearing browser data and emailing support over a limit that clears itself.
+    const explanation =
+      "You've used all 30 agent requests for this hour (sending a message and confirming a change both count). " +
+      "You can continue in 15 minutes — nothing is wrong with your account or your store.";
+    streamAgentMessage.mockRejectedValue(new RateLimitError(explanation, 900));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("what does my bio say");
+
+    await waitFor(() => expect(screen.getByText(explanation)).toBeTruthy());
+    expect(showAlert).toHaveBeenCalledWith(explanation, "warning");
+    expect(screen.queryByText("Sorry, I ran into a problem. Please try again.")).toBeNull();
+    // A refused request never started a turn server-side, so there is nothing to recover.
     expect(fetchAgentTurnStatus).not.toHaveBeenCalled();
   });
 
