@@ -201,6 +201,7 @@ class Product::VariantCategoryUpdaterService
         confirmed_removed_variant_ids:,
         revision_token: deletion_audit_context[:revision_token],
         correlation_id: deletion_audit_context[:correlation_id],
+        request_id: deletion_audit_context[:request_id],
       )
     end
 

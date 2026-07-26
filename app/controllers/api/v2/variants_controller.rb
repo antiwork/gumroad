@@ -98,15 +98,19 @@ class Api::V2::VariantsController < Api::V2::BaseController
       # Re-read under the lock: `@variant` was loaded before it was taken.
       unless @variant.reload.deleted?
         if @variant.update_attribute(:deleted_at, Time.current)
-          # Scheduled inside the same transaction as the deletion, so the audit and
-          # the deletion commit together or not at all.
+          # Scheduled inside the deletion's transaction, so the audit is only
+          # scheduled if the deletion itself commits — a rolled-back deletion
+          # records nothing. The audit INSERT then runs after the commit and fails
+          # open: if it fails, the deletion still stands and only observability is
+          # lost. The two do not commit atomically, and deliberately so.
           ProductVariantDeletionAudit.record_deletion(
             actor_user_id: current_resource_owner&.id,
             product_id: @product.id,
             route: ProductVariantDeletionAudit::API_V2_VARIANT_DESTROY,
             deleted_variant_external_ids: [@variant.external_id],
             intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
-            correlation_id: AuditCorrelationId.log_for(request.request_id),
+            correlation_id: AuditCorrelationId.for(request.request_id),
+            request_id: request.request_id,
           )
         else
           deletion_failed = true

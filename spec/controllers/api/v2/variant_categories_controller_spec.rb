@@ -251,6 +251,35 @@ describe Api::V2::VariantCategoriesController do
         # atomic, which silently skipped VariantCategory's
         # `after_commit :invalidate_product_cache` and would have left stale
         # product caches.
+
+        # Correlation logging runs inside the deletion's transaction, so a raising
+        # logger would propagate out of with_lock, roll the deletion back, and
+        # return a 500 for a delete that should have succeeded.
+        it "is not broken by a failing correlation logger" do
+          allow(AuditCorrelationId).to receive(:log_pair).and_raise(IOError, "log device full")
+
+          expect { delete @action, params: @params }
+            .to change { ProductVariantDeletionAudit.count }.by(1)
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(@variant_category.reload).to be_deleted
+        end
+
+        # Asserted on the call rather than on Rails.logger output: the write is
+        # deferred to after_commit and lands after the stub's window, and
+        # ActionDispatch::RequestId is middleware that controller specs bypass, so
+        # request_id is nil here. The end-to-end version with a real request id is
+        # in test/integration/product_variant_deletion_audit_request_id_test.rb.
+        it "logs a correlation pair carrying the stored digest" do
+          logged = []
+          allow(AuditCorrelationId).to receive(:log_pair) { |**kwargs| logged << kwargs; true }
+
+          delete @action, params: @params
+
+          expect(logged.size).to eq(1)
+          expect(logged.first[:correlation_id]).to eq(ProductVariantDeletionAudit.last.correlation_id)
+        end
+
         it "still invalidates the product cache" do
           expect_any_instance_of(Link).to receive(:invalidate_cache).at_least(:once)
 

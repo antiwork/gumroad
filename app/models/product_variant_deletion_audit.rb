@@ -111,7 +111,10 @@ class ProductVariantDeletionAudit < ApplicationRecord
     alive_child_variant_count: 0,
     intent_source: nil,
     revision_token: nil,
-    correlation_id: nil
+    correlation_id: nil,
+    # The raw request id, used ONLY to log the request-id -> correlation-id pair.
+    # Never persisted: it is caller-controlled (see AuditCorrelationId).
+    request_id: nil
   )
     deleted_variants = Array(deleted_variant_external_ids).compact.uniq
     deleted_categories = Array(deleted_variant_category_external_ids).compact.uniq
@@ -143,7 +146,31 @@ class ProductVariantDeletionAudit < ApplicationRecord
     # transaction is open, and on commit when one is. Deferring matters twice
     # over: a row must never describe a deletion that rolled back, and the write
     # must not be able to abort the transaction the seller's save depends on.
-    AfterCommitEverywhere.after_commit { safely_create(attributes) }
+    #
+    # Note what this does and does not guarantee: the audit is only SCHEDULED if
+    # the deletion commits, and the INSERT itself then runs afterwards and fails
+    # open. A failed INSERT loses the audit row but leaves the deletion standing.
+    # The two are deliberately not atomic — an observability write must never be
+    # able to undo a seller's deletion.
+    #
+    # The correlation line is emitted inside the same deferred block, AFTER the
+    # row is written, and deliberately not before scheduling: anything that runs
+    # ahead of `after_commit` here is inside the caller's transaction, where a
+    # raising logger would roll the deletion back. Logging last also means the
+    # line only appears for a row that exists, so a correlation id in the log
+    # always leads to an audit row.
+    #
+    # The block body is wrapped in its own rescue rather than relying on the
+    # `rescue` on this method: by the time the block runs, `record_deletion` has
+    # already returned, so its rescue is long out of scope and an exception here
+    # would surface on the request instead. Verified by test — an unwrapped raise
+    # escaped as `IOError` on a save that had already succeeded.
+    AfterCommitEverywhere.after_commit do
+      audit = safely_create(attributes)
+      AuditCorrelationId.log_pair(request_id:, correlation_id:) if audit
+    rescue StandardError => e
+      report_failure(e, "Failed to record a product variant deletion audit")
+    end
   rescue StandardError => e
     report_failure(e, "Failed to schedule a product variant deletion audit")
     nil

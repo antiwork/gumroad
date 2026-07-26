@@ -56,8 +56,11 @@ class Api::V2::VariantCategoriesController < Api::V2::BaseController
         alive_child_variant_count = @variant_category.variants.alive.count
 
         if @variant_category.mark_deleted
-          # Scheduled inside the same transaction as the deletion, so the audit and
-          # the deletion commit together or not at all.
+          # Scheduled inside the deletion's transaction, so the audit is only
+          # scheduled if the deletion itself commits — a rolled-back deletion
+          # records nothing. The audit INSERT then runs after the commit and fails
+          # open: if it fails, the deletion still stands and only observability is
+          # lost. The two do not commit atomically, and deliberately so.
           ProductVariantDeletionAudit.record_deletion(
             actor_user_id: current_resource_owner&.id,
             product_id: @product.id,
@@ -65,7 +68,8 @@ class Api::V2::VariantCategoriesController < Api::V2::BaseController
             deleted_variant_category_external_ids: [@variant_category.external_id],
             intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
             alive_child_variant_count:,
-            correlation_id: AuditCorrelationId.log_for(request.request_id),
+            correlation_id: AuditCorrelationId.for(request.request_id),
+            request_id: request.request_id,
           )
         else
           deletion_failed = true

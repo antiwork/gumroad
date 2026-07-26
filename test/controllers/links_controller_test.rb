@@ -5830,6 +5830,121 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_not variant.reload.alive?
   end
 
+  # Correlation logging happens INSIDE the deletion's transaction, so a raising
+  # logger would propagate out, roll the deletion back, and turn a logging failure
+  # into a failed save. Proven empirically before the fix: the deletion was rolled
+  # back and the request would have 500'd.
+  test "a broken correlation logger cannot stop an editor save" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    AuditCorrelationId.stub(:log_pair, ->(**_args) { raise IOError, "log device full" }) do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :success
+    end
+
+    # The deletion still committed, and the audit row was still written: a missing
+    # log line must not cost the row as well.
+    assert_not variant.reload.alive?
+    assert_equal 1, ProductVariantDeletionAudit.where(product_id: @product.id).count
+  end
+
+  # The real logger object raising, rather than the wrapper being stubbed out —
+  # this exercises the rescue inside AuditCorrelationId.log_pair itself.
+  test "a logger that raises is swallowed by log_pair" do
+    broken = Object.new
+    def broken.info(*) = raise(IOError, "log device full")
+
+    assert_nothing_raised do
+      assert_not AuditCorrelationId.log_pair(
+        request_id: "req-1",
+        correlation_id: AuditCorrelationId.for("req-1"),
+        logger: broken
+      )
+    end
+  end
+
+  # The pair has to reach the log, or a correlation id that exists only in the
+  # database cannot correlate anything.
+  #
+  # Asserted here on the CALL, not on the request id's value: `post` rebuilds the
+  # rack env, so a request id pre-set on @request is wiped, and
+  # ActionDispatch::RequestId is middleware that controller tests bypass entirely.
+  # The end-to-end version with a real request id lives in
+  # test/integration/product_variant_deletion_audit_request_id_test.rb.
+  test "a successful deletion logs a correlation pair exactly once" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    # Capture the pair as it is logged. The write is deferred to after_commit, so a
+    # `Rails.stub(:logger)` block can close before it runs; recording the arguments
+    # is both simpler and not timing-dependent.
+    logged = []
+    AuditCorrelationId.stub(:log_pair, ->(request_id:, correlation_id:, **) { logged << [request_id, correlation_id]; true }) do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :success
+    end
+
+    audit = ProductVariantDeletionAudit.where(product_id: @product.id).sole
+    assert_not variant.reload.alive?
+
+    # Exactly one pair, carrying the digest that was actually stored.
+    assert_equal 1, logged.size
+    assert_equal audit.correlation_id, logged.sole.last
+  end
+
+  # A correlation id in the log must always lead to an audit row. If the INSERT
+  # fails, logging the pair anyway would leave a line pointing at a row that does
+  # not exist — the exact false trail the correlation id is meant to prevent.
+  test "a failed audit write logs no correlation pair" do
+    create_variant(variant_category: @category, name: "Plain version")
+
+    logged = []
+    ProductVariantDeletionAudit.stub(:create!, ->(**_args) { raise ActiveRecord::StatementInvalid, "simulated database failure" }) do
+      AuditCorrelationId.stub(:log_pair, ->(**kwargs) { logged << kwargs; true }) do
+        assert_no_difference -> { ProductVariantDeletionAudit.count } do
+          post :update, params: @params.merge(variants: []), format: :json
+          assert_response :success
+        end
+      end
+    end
+
+    assert_empty logged, "no row was written, so no correlation line should exist"
+  end
+
+  # The real log line, end to end through the real logger, so the format itself is
+  # covered rather than just the call.
+  test "log_pair writes the request id and correlation id to the log" do
+    log = StringIO.new
+
+    assert AuditCorrelationId.log_pair(
+      request_id: "req-abc",
+      correlation_id: "digest-xyz",
+      logger: ActiveSupport::Logger.new(log)
+    )
+
+    assert_match(/\[audit_correlation\] request_id=req-abc correlation_id=digest-xyz/, log.string)
+  end
+
+  # ...and only then. A save that deletes nothing must not emit a correlation
+  # line, or the log fills with entries that lead to no audit row.
+  test "a save that deletes nothing logs no correlation line" do
+    # Submit the variant so the save KEEPS it. Note @params carries no `variants`
+    # key at all, which the save reads as "remove everything" — reusing @params
+    # unchanged would delete, not preserve, which is what made an earlier version
+    # of this test pass for the wrong reason.
+    variant = create_variant(variant_category: @category, name: "Plain version")
+    keep = @params.merge(variants: [{ id: variant.external_id, name: variant.name }])
+
+    logged = []
+    AuditCorrelationId.stub(:log_pair, ->(**kwargs) { logged << kwargs; true }) do
+      post :update, params: keep, format: :json
+      assert_response :success
+    end
+
+    assert variant.reload.alive?, "the variant should have been kept, not deleted"
+    assert_empty logged
+    assert_equal 0, ProductVariantDeletionAudit.where(product_id: @product.id).count
+  end
+
   # The audit is deliberately non-PII and its schema is fixed. If someone adds a
   # column that carries seller or buyer content, this fails.
   test "the audit stores no personal data" do

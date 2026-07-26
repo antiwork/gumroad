@@ -939,10 +939,18 @@ class LinksController < ApplicationController
     # editor-scoped revision token proposed in gumroad-private#1379 does not
     # exist yet, and the key is here so the audit shape doesn't change when it
     # ships.
+    #
+    # The digest is computed here but NOT logged here: this context is built for
+    # every save, and most saves delete nothing. Logging at build time would emit
+    # a correlation line for saves that never produce an audit row, which is noise
+    # that makes the log useless for the one thing it exists for — finding the
+    # request behind an audit row. `ProductVariantDeletionAudit` logs the pair
+    # itself, at the point a row is actually scheduled.
     def deletion_audit_context
       @_deletion_audit_context ||= {
         actor_user_id: logged_in_user&.id,
-        correlation_id: AuditCorrelationId.log_for(request.request_id),
+        correlation_id: AuditCorrelationId.for(request.request_id),
+        request_id: request.request_id,
         revision_token: nil,
       }
     end

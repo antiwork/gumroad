@@ -24,7 +24,7 @@
 #
 # For the digest to be usable it has to appear in the logs too — an audit row
 # whose correlation id exists nowhere else cannot locate the request that wrote
-# it. `log_for` emits the digest alongside the raw request id, which is the one
+# it. `log_pair` emits the digest alongside the raw request id, which is the one
 # place the two are safe to see together: logs already contain the raw header,
 # and the pairing is what lets an investigator go from an audit row to a request.
 class AuditCorrelationId
@@ -42,15 +42,37 @@ class AuditCorrelationId
     ).first(LENGTH)
   end
 
-  # Computes the digest AND writes the mapping to the log, so an audit row can be
-  # traced back to its request. Use this at the point a request is audited.
-  def self.log_for(request_id, logger: Rails.logger)
-    digest = self.for(request_id)
-    return nil if digest.nil?
+  # Emits the request-id -> correlation-id mapping, so an audit row can be traced
+  # back to the request that produced it. A digest that appears nowhere but the
+  # database cannot correlate anything, which is the whole point of storing it.
+  #
+  # Fails open, and that is load-bearing rather than defensive habit. This is
+  # called from inside the deletion's transaction, so an exception here would
+  # propagate out of `with_lock`, roll the deletion back, and turn a logging
+  # failure into a failed delete and a 500 for the seller. A broken log device, a
+  # full disk, or a misconfigured logger must cost observability only.
+  #
+  # Returns true when the pair was logged, false when it was not, so callers can
+  # assert on it without parsing log output.
+  def self.log_pair(request_id:, correlation_id:, logger: Rails.logger)
+    return false if correlation_id.blank?
 
     logger.info(
-      "[audit_correlation] request_id=#{request_id} correlation_id=#{digest}"
+      "[audit_correlation] request_id=#{request_id} correlation_id=#{correlation_id}"
     )
-    digest
+    true
+  rescue StandardError => e
+    # Deliberately swallowed, and reported inline rather than through
+    # ProductVariantDeletionAudit.report_failure — that method is a
+    # private_class_method, so calling it from here would raise NoMethodError and
+    # reintroduce exactly the failure this rescue exists to prevent. The notifier
+    # is wrapped too: a broken notifier must not resurrect the exception it was
+    # called to swallow.
+    begin
+      ErrorNotifier.notify(e, audit_failure: "Failed to log an audit correlation id")
+    rescue StandardError
+      nil
+    end
+    false
   end
 end

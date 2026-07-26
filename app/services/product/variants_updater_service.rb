@@ -111,6 +111,7 @@ class Product::VariantsUpdaterService
         alive_child_variant_count: variant_category.variants.alive.count,
         revision_token: deletion_audit_context[:revision_token],
         correlation_id: deletion_audit_context[:correlation_id],
+        request_id: deletion_audit_context[:request_id],
       )
     end
 
