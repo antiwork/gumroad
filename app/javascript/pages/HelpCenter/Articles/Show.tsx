@@ -34,20 +34,41 @@ export default function HelpCenterArticle() {
       if (!linkElement) return;
 
       const resolvedUrl = new URL(linkElement.href);
+      if (resolvedUrl.origin !== window.location.origin || !resolvedUrl.pathname.startsWith("/help/")) return;
 
-      const isSamePath = resolvedUrl.pathname === usePage().url;
-      const hasAnchor = resolvedUrl.hash.length > 0;
-      if (isSamePath && hasAnchor) return;
+      // A link to a section of the article we're already on needs no navigation at all — let the
+      // browser do its native jump to the anchor.
+      if (resolvedUrl.pathname === window.location.pathname && resolvedUrl.hash.length > 0) return;
 
-      if (resolvedUrl.origin === window.location.origin && resolvedUrl.pathname.startsWith("/help/")) {
-        e.preventDefault();
-        router.get(resolvedUrl.pathname);
-      }
+      e.preventDefault();
+      // Carry the fragment through the Inertia visit. Articles deep-link into each other's
+      // sections (for example the payout settings requirements point at "Address verification" in
+      // "Getting paid"), and navigating to the pathname alone silently drops the "#section" part,
+      // dumping the reader at the top of the destination article instead.
+      router.get(`${resolvedUrl.pathname}${resolvedUrl.hash}`);
     };
 
     container.addEventListener("click", onLinkClick);
     return () => container.removeEventListener("click", onLinkClick);
   }, []);
+
+  // The article body is injected as raw HTML, so the headings a fragment points at don't exist
+  // until this component has rendered. Both the browser (on a fresh page load) and Inertia (on a
+  // client-side visit) try to jump to the fragment before that happens and give up, leaving the
+  // reader at the top, so do the scrolling here once the target is actually in the document.
+  React.useEffect(() => {
+    const fragment = window.location.hash.slice(1);
+    if (!fragment) return;
+
+    let id = fragment;
+    try {
+      id = decodeURIComponent(fragment);
+    } catch {
+      // A malformed escape sequence means the fragment isn't encoded — use it as-is.
+    }
+
+    document.getElementById(id)?.scrollIntoView();
+  }, [article.slug]);
 
   return (
     <HelpCenterLayout showSearchButton>
