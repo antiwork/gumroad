@@ -180,9 +180,14 @@ module User::Compliance
   # at the most recent revisions, which was wrong: compliance revisions are created for edits to
   # any field, not just the address, so a seller who changed their phone number or tax ID a few
   # times after replacing the P.O. Box would silently fall back to the misleading generic copy.
-  # The read stays cheap because it is scoped to one seller by an indexed column, asks for only
-  # the two address columns, and collapses the many revisions that repeat the same pair of
-  # addresses down to the distinct ones.
+  #
+  # Scanning the whole history still costs almost nothing, because the database does the
+  # discarding rather than Ruby. The number of compliance revisions per seller only grows, so
+  # rather than hand every revision's addresses back to Ruby we first ask the database for the
+  # few rows whose address could possibly be a post office box (PoBoxAddress::POSSIBLE_MATCH_SQL_HINT
+  # is a deliberate superset of what the Ruby check matches), then run the real check on those.
+  # For the overwhelming majority of sellers that returns no rows at all, however long their
+  # history is.
   #
   # Memoized per instance: the dashboard and settings pages ask this once per outstanding
   # compliance request, and the answer cannot change within a single request.
@@ -190,6 +195,10 @@ module User::Compliance
     return @po_box_in_address_history unless @po_box_in_address_history.nil?
 
     @po_box_in_address_history = user_compliance_infos
+                                   .where(
+                                     "street_address LIKE :hint OR business_street_address LIKE :hint",
+                                     hint: PoBoxAddress::POSSIBLE_MATCH_SQL_HINT
+                                   )
                                    .distinct
                                    .pluck(:street_address, :business_street_address)
                                    .flatten

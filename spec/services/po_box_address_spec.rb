@@ -47,4 +47,27 @@ describe PoBoxAddress do
       expect(described_class.possible_match?("")).to be(false)
     end
   end
+
+  describe "POSSIBLE_MATCH_SQL_HINT" do
+    # Callers use this pattern to narrow a table in SQL before running the Ruby check on the rows
+    # that come back, so anything the Ruby check would match has to survive the pattern. If it
+    # doesn't, those addresses are dropped before Ruby ever sees them and the check silently
+    # stops working for them. This translates the SQL LIKE pattern into the equivalent Ruby
+    # regexp and runs every address in this file's positive cases through it.
+    let(:hint) do
+      Regexp.new(
+        described_class::POSSIBLE_MATCH_SQL_HINT.split("%", -1).map { Regexp.escape(_1) }.join(".*"),
+        Regexp::IGNORECASE
+      )
+    end
+
+    it "accepts every address the checks match" do
+      [
+        "PO Box 65", "P.O. Box 65", "p o box 65", "PO BOX 65, Rural Route 2", "Unit 3, PO Box 65",
+        "Box 65, RR 2", "Box 65", "box65", "Box #65", "BOX 65 RR 2 Site 4", "Post Office Box 65"
+      ].each do |address|
+        expect(address).to match(hint), "expected #{address.inspect} to survive the SQL pre-filter"
+      end
+    end
+  end
 end

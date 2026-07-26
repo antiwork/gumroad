@@ -34,6 +34,20 @@ module PoBoxAddress
   # digit has to follow "box" itself) or "12 Mailbox Road" ("box" there is not the start of a word).
   BARE_BOX_AND_NUMBER = /\bbox\s*[#.]?\s*\d/i
 
+  # A deliberately loose SQL `LIKE` pattern for callers that need to narrow a table down before
+  # asking `possible_match?` about individual addresses. It matches any address containing the
+  # letters b, o and x in that order, which is a guaranteed superset of everything either method
+  # above can match: the strict one only fires on spellings that reduce to "pobox" once
+  # punctuation is dropped (so the three letters are present and in order even in "P.O.B.O.X"),
+  # and the lenient one needs the literal word "box".
+  #
+  # It also matches plenty of addresses that are no kind of post office box ("Boxwood Lane") —
+  # that is fine and intended. The point is to hand Ruby a couple of candidate rows instead of a
+  # seller's entire compliance history, not to make the decision. `po_box_address_spec.rb` guards
+  # the superset property, so a spelling added to either method later cannot silently start being
+  # filtered out here.
+  POSSIBLE_MATCH_SQL_HINT = "%b%o%x%"
+
   # Only the spellings that unambiguously say "post office box". Safe to block a seller on.
   def self.match?(address)
     return false if address.blank?
