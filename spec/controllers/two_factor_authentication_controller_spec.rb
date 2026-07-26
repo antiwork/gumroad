@@ -91,13 +91,17 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     end
   end
 
-  shared_examples_for "check user in session for html request" do
-    it "raises ActionController::RoutingError when user is not found in session" do
+  # `expected_login_url` is spelled out at each call site rather than derived from the request, so
+  # the expectation cannot silently agree with whatever the controller happened to build.
+  shared_examples_for "check user in session for html request" do |expected_login_url|
+    it "redirects to the login page instead of 404ing when the user is not found in session" do
       controller.reset_two_factor_auth_login_session
 
-      expect do
-        call_action
-      end.to raise_error(ActionController::RoutingError, "Not Found")
+      call_action
+
+      expect(response).to redirect_to(expected_login_url)
+      expect(response).to have_http_status(:see_other)
+      expect(flash[:warning]).to eq "Your login session expired. Please sign in again."
     end
   end
 
@@ -106,7 +110,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       subject(:call_action) { get :show }
     end
 
-    include_examples "check user in session for html request" do
+    include_examples "check user in session for html request", "/login?next=%2Ftwo-factor" do
       subject(:call_action) { get :show }
     end
 
@@ -164,7 +168,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       subject(:call_action) { post :create }
     end
 
-    include_examples "check user in session for html request" do
+    include_examples "check user in session for html request", "/login" do
       subject(:call_action) { post :create }
     end
 
@@ -293,7 +297,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       subject(:call_action) { post :resend_authentication_token }
     end
 
-    include_examples "check user in session for html request" do
+    include_examples "check user in session for html request", "/login" do
       subject(:call_action) { post :resend_authentication_token }
     end
 
@@ -353,7 +357,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
   end
 
   describe "POST switch_to_email" do
-    include_examples "check user in session for html request" do
+    include_examples "check user in session for html request", "/login" do
       subject(:call_action) { post :switch_to_email }
     end
 
@@ -382,7 +386,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
   end
 
   describe "POST switch_to_recovery" do
-    include_examples "check user in session for html request" do
+    include_examples "check user in session for html request", "/login" do
       subject(:call_action) { post :switch_to_recovery }
     end
 
@@ -400,7 +404,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
   end
 
   describe "POST switch_to_authenticator" do
-    include_examples "check user in session for html request" do
+    include_examples "check user in session for html request", "/login" do
       subject(:call_action) { post :switch_to_authenticator }
     end
 
