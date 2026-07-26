@@ -247,9 +247,21 @@ describe Api::V2::VariantCategoriesController do
         # A second DELETE on an already-deleted grouping deletes nothing, so it is
         # not a successful deletion and must not add a row. Otherwise a retrying
         # or looping client inflates the trail with events that never happened.
-        it "does not record a second audit when nothing was left to delete" do
+        # Regression: an earlier version used `update_all` to make the transition
+        # atomic, which silently skipped VariantCategory's
+        # `after_commit :invalidate_product_cache` and would have left stale
+        # product caches.
+        it "still invalidates the product cache" do
+          expect_any_instance_of(Link).to receive(:invalidate_cache).at_least(:once)
+
           delete @action, params: @params
-          expect(ProductVariantDeletionAudit.count).to eq(1)
+
+          expect(@variant_category.reload).to be_deleted
+        end
+
+        it "does not record a second audit when nothing was left to delete" do
+          expect { delete @action, params: @params }
+            .to change { ProductVariantDeletionAudit.count }.by(1)
 
           expect { delete @action, params: @params }
             .not_to change { ProductVariantDeletionAudit.count }

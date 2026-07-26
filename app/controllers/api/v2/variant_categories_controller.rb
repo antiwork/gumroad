@@ -35,38 +35,49 @@ class Api::V2::VariantCategoriesController < Api::V2::BaseController
     # NOT cascade (VariantCategory's `has_many :variants` has no `dependent:`
     # option), so any live versions stay alive under a deleted grouping.
     #
-    # The audit must describe a deletion that this request actually performed.
-    # `mark_deleted` succeeds on a row that was already deleted, so two
-    # overlapping DELETEs would otherwise both record the same deletion. Claiming
-    # the alive -> deleted transition in a single conditional UPDATE makes exactly
-    # one request the winner: `update_all` returns the number of rows it changed,
-    # and the `deleted_at: nil` predicate means only the first request sees 1.
-    alive_child_variant_count = @variant_category.variants.alive.count
+    # The audit must describe a deletion this request actually performed, so a
+    # retry must not add a second row for one deletion. Getting that right without
+    # changing behaviour rules out `update_all`: it would skip
+    # `after_commit :invalidate_product_cache`, leaving stale product caches.
+    #
+    # So take a row lock, re-read `deleted_at` inside it, and go through the
+    # model's own `mark_deleted` exactly as before. The lock serialises concurrent
+    # DELETEs, and re-reading under it means the loser sees the winner's committed
+    # deletion and records nothing.
+    #
+    # `deletion_failed` is carried out of the block rather than returned from
+    # inside it: returning from a transaction block is its own subtle hazard, so
+    # the response is chosen after the transaction closes.
+    deletion_failed = false
 
-    # NOTE: `variant_categories` has no `updated_at` column (see db/schema.rb), so
-    # only `deleted_at` is written here. `base_variants` does have one, which is
-    # why the single-variant destroy sets both.
-    claimed = VariantCategory.where(id: @variant_category.id, deleted_at: nil)
-                             .update_all(deleted_at: Time.current)
+    @variant_category.with_lock do
+      # Re-read under the lock: `@variant_category` was loaded before it.
+      unless @variant_category.reload.deleted?
+        alive_child_variant_count = @variant_category.variants.alive.count
 
-    if claimed.zero?
-      # Either already deleted, or a concurrent request won the race. Reload so
-      # the response reflects committed state, and record nothing: the deletion
-      # this request would have described was not performed by this request.
-      @variant_category.reload
-      return success_with_variant_category
+        if @variant_category.mark_deleted
+          # Scheduled inside the same transaction as the deletion, so the audit and
+          # the deletion commit together or not at all.
+          ProductVariantDeletionAudit.record_deletion(
+            actor_user_id: current_resource_owner&.id,
+            product_id: @product.id,
+            route: ProductVariantDeletionAudit::API_V2_VARIANT_CATEGORY_DESTROY,
+            deleted_variant_category_external_ids: [@variant_category.external_id],
+            intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
+            alive_child_variant_count:,
+            correlation_id: AuditCorrelationId.log_for(request.request_id),
+          )
+        else
+          deletion_failed = true
+        end
+      end
     end
 
-    @variant_category.reload
-    ProductVariantDeletionAudit.record_deletion(
-      actor_user_id: current_resource_owner&.id,
-      product_id: @product.id,
-      route: ProductVariantDeletionAudit::API_V2_VARIANT_CATEGORY_DESTROY,
-      deleted_variant_category_external_ids: [@variant_category.external_id],
-      intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
-      alive_child_variant_count:,
-      correlation_id: AuditCorrelationId.log_for(request.request_id),
-    )
+    return error_with_variant_category(@variant_category) if deletion_failed
+
+    # Already deleted, or a concurrent request won the race: the row is deleted
+    # either way, so report success, but record nothing — this request did not
+    # perform the deletion.
     success_with_variant_category
   end
 

@@ -597,15 +597,30 @@ describe Api::V2::VariantsController do
           end
 
           # A second DELETE deletes nothing, so it is not a deletion this request
-          # performed and must not add a row. The alive -> deleted transition is
-          # claimed with a conditional UPDATE precisely so two overlapping
-          # requests cannot both record the same deletion.
+          # performed and must not add a row. The row is locked and `deleted_at`
+          # re-read under the lock, precisely so two overlapping requests cannot
+          # both record the same deletion.
           it "does not record a second audit when the variant was already deleted" do
-            delete @action, params: @params
-            expect(ProductVariantDeletionAudit.count).to eq(1)
+            expect { delete @action, params: @params }
+              .to change { ProductVariantDeletionAudit.count }.by(1)
 
             expect { delete @action, params: @params }
               .not_to change { ProductVariantDeletionAudit.count }
+          end
+
+          # Regression: an earlier version of this used `update_all` to make the
+          # transition atomic, which silently skipped BaseVariant's after_commit
+          # callbacks and would have left stale product caches and stale search
+          # state. Assert on the observable effects of those callbacks rather than
+          # on the instance, since the controller loads its own via the
+          # variant_category association.
+          it "still invalidates the product cache and updates the search index" do
+            expect_any_instance_of(Link).to receive(:invalidate_cache).at_least(:once)
+            expect_any_instance_of(BaseVariant).to receive(:update_product_search_index).at_least(:once).and_call_original
+
+            delete @action, params: @params
+
+            expect(@variant.reload).to be_deleted
           end
         end
       end

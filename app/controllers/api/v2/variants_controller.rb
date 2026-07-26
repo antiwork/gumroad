@@ -83,30 +83,42 @@ class Api::V2::VariantsController < Api::V2::BaseController
     # Audited for the same reason as the grouping-level destroy: an explicit
     # destructive API call with no confirmation or revision context.
     #
-    # Claim the alive -> deleted transition in one conditional UPDATE rather than
-    # `update_attribute`, so two overlapping DELETEs cannot both record the same
-    # deletion. `update_all` reports how many rows it changed, and the
-    # `deleted_at: nil` predicate means only the first request sees 1.
-    claimed = BaseVariant.where(id: @variant.id, deleted_at: nil)
-                         .update_all(deleted_at: Time.current, updated_at: Time.current)
+    # A retry must not add a second audit row for one deletion, but that must not
+    # be bought by bypassing the model. `update_all` would skip BaseVariant's
+    # `after_commit :invalidate_product_cache` and `:update_product_search_index`,
+    # leaving stale product caches and stale search state.
+    #
+    # So lock the row, re-read `deleted_at` under the lock, and keep the original
+    # `update_attribute(:deleted_at, ...)` call — deliberately not `mark_deleted`,
+    # which additionally enqueues rich-content and archive cleanup workers this
+    # endpoint has never run.
+    deletion_failed = false
 
-    if claimed.zero?
-      # Already deleted, or a concurrent request won the race. Report success —
-      # the row is deleted either way — but record nothing, because this request
-      # did not perform the deletion.
-      @variant.reload
-      return success_with_variant
+    @variant.with_lock do
+      # Re-read under the lock: `@variant` was loaded before it was taken.
+      unless @variant.reload.deleted?
+        if @variant.update_attribute(:deleted_at, Time.current)
+          # Scheduled inside the same transaction as the deletion, so the audit and
+          # the deletion commit together or not at all.
+          ProductVariantDeletionAudit.record_deletion(
+            actor_user_id: current_resource_owner&.id,
+            product_id: @product.id,
+            route: ProductVariantDeletionAudit::API_V2_VARIANT_DESTROY,
+            deleted_variant_external_ids: [@variant.external_id],
+            intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
+            correlation_id: AuditCorrelationId.log_for(request.request_id),
+          )
+        else
+          deletion_failed = true
+        end
+      end
     end
 
-    @variant.reload
-    ProductVariantDeletionAudit.record_deletion(
-      actor_user_id: current_resource_owner&.id,
-      product_id: @product.id,
-      route: ProductVariantDeletionAudit::API_V2_VARIANT_DESTROY,
-      deleted_variant_external_ids: [@variant.external_id],
-      intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
-      correlation_id: AuditCorrelationId.log_for(request.request_id),
-    )
+    return error_with_variant if deletion_failed
+
+    # Already deleted, or a concurrent request won the race: the row is deleted
+    # either way, so report success, but record nothing — this request did not
+    # perform the deletion.
     success_with_variant
   end
 
