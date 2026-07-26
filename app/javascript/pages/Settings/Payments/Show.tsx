@@ -1117,14 +1117,16 @@ export default function PaymentsPage() {
                 <Switch
                   checked={!form.data.disable_buyer_currency_rounding}
                   onChange={(e) => form.setData("disable_buyer_currency_rounding", !e.target.checked)}
-                  aria-label="Keep my price endings in local currency"
+                  aria-label="Keep price endings in local currency"
                   disabled={props.is_form_disabled}
-                  label="Keep my price endings in local currency"
+                  label="Keep price endings in local currency"
                 />
                 <FieldsetDescription>
-                  Buyers charged in their own currency see your price ending rather than the exact converted amount: a
-                  $9.99 product shows €8.99 instead of €8.53, and a $10 product shows €9. Your earnings, taxes and
-                  payouts are unchanged — the difference is absorbed on our side.
+                  Buyers charged in their own currency see the ending of the USD total rather than the exact converted
+                  amount: a $9.99 total shows €8.99 instead of €8.53, and a $10 total shows €9. When tax is added, the
+                  ending mirrored is the taxed total's, so a buyer paying in their own currency sees the same ending a
+                  buyer paying in USD would. Your earnings, taxes and payouts are unchanged — the difference is absorbed
+                  on our side.
                 </FieldsetDescription>
               </Fieldset>
             ) : null}
