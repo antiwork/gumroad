@@ -494,6 +494,25 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(product.reload, :product).passed).to eq(true)
       end
 
+      # A seller who abandoned a run of uploads and then finished a real one must
+      # not be told their listing delivers nothing just because the dead rows
+      # outnumber the lookups we're willing to pay for.
+      it "publishes when a just-uploaded file sits behind more abandoned uploads than the cap" do
+        abandoned = Array.new(described_class::MAX_FILES_CHECKED_FOR_STORAGE + 3) do |index|
+          create(:product_file, analyze_completed: false, position: index)
+        end
+        # Created last and ordered last, so the seller's own `position` ordering
+        # buries it past the cap and only creation order can pick it out.
+        finished = create(:product_file, analyze_completed: false, position: abandoned.size)
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do |file|
+          double("s3_object", exists?: file.id == finished.id)
+        end
+        (abandoned + [finished]).each { product.product_files << _1 }
+        product.save!
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+      end
+
       # The save API takes each file's storage URL from the client, so submitting
       # a long list of never-uploaded rows costs a caller nothing. Attaching many
       # of them must not buy what attaching one doesn't.

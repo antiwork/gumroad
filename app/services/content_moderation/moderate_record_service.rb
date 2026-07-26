@@ -240,6 +240,17 @@ class ContentModeration::ModerateRecordService
     # cannot answer for cost a request to storage, and at most
     # MAX_FILES_CHECKED_FOR_STORAGE of those are made — enough to prove a
     # deliverable exists without turning a save into a long series of lookups.
+    #
+    # Those lookups go newest row first. The only file a row cannot answer for is
+    # one that has never been analyzed, and there are two ways to get there: the
+    # seller uploaded it moments ago and AnalyzeFileWorker hasn't run yet, or the
+    # upload never finished and never will. The first kind is the most recently
+    # created row, so newest-first spends the lookups on the file most likely to
+    # be a real deliverable. Without it, a seller whose genuine new upload sits
+    # behind MAX_FILES_CHECKED_FOR_STORAGE abandoned rows would be told their
+    # listing delivers nothing. Sorting by id is deliberate: alive_product_files
+    # is ordered by the seller's chosen `position`, which says nothing about
+    # which row was created last.
     def has_deliverable_file?(owner)
       unverifiable_from_row = []
 
@@ -251,6 +262,7 @@ class ContentModeration::ModerateRecordService
       end
 
       unverifiable_from_row
+        .sort_by { -_1.id }
         .first(MAX_FILES_CHECKED_FOR_STORAGE)
         .any?(&:stored_file_present?)
     end
