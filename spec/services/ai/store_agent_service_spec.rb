@@ -71,6 +71,57 @@ describe Ai::StoreAgentService do
       expect(captured[:messages].map { |m| m[:role] }).to eq(["user"])
     end
 
+    it "passes the whole of a long pasted request to the model, not just its first 2,000 characters" do
+      # Gumroad hands creators prompts to paste — the landing-page prompt in
+      # ShareTab/LandingPageEditor.tsx is about 4,500 characters. Trimming the CURRENT message to the
+      # history budget silently dropped the second half of our own instructions (the publish and
+      # verify steps), so the model was asked to build a page and never told how to ship it.
+      pasted = "Build and publish a custom landing page. #{"detail " * 700}Then publish it with the CLI."
+      expect(pasted.length).to be > described_class::MAX_MESSAGE_LENGTH
+      captured = nil
+      allow(client).to receive(:messages) do |args|
+        captured = args
+        text_result("ok")
+      end
+
+      service.respond(messages: [{ role: "user", content: pasted }])
+
+      expect(captured[:messages].last[:content]).to eq(pasted)
+      expect(captured[:messages].last[:content]).to end_with("Then publish it with the CLI.")
+    end
+
+    it "still trims EARLIER turns, which are background rather than the request" do
+      long_history_entry = "old context " * 400
+      expect(long_history_entry.length).to be > described_class::MAX_MESSAGE_LENGTH
+      captured = nil
+      allow(client).to receive(:messages) do |args|
+        captured = args
+        text_result("ok")
+      end
+
+      service.respond(messages: [
+                        { role: "user", content: long_history_entry },
+                        { role: "assistant", content: "Got it." },
+                        { role: "user", content: "And now?" },
+                      ])
+
+      expect(captured[:messages].first[:content].length).to eq(described_class::MAX_MESSAGE_LENGTH)
+      expect(captured[:messages].first[:content]).to end_with("...")
+      expect(captured[:messages].last[:content]).to eq("And now?")
+    end
+
+    it "still refuses an unbounded paste" do
+      captured = nil
+      allow(client).to receive(:messages) do |args|
+        captured = args
+        text_result("ok")
+      end
+
+      service.respond(messages: [{ role: "user", content: "x" * (described_class::MAX_CURRENT_MESSAGE_LENGTH * 3) }])
+
+      expect(captured[:messages].last[:content].length).to eq(described_class::MAX_CURRENT_MESSAGE_LENGTH)
+    end
+
     it "passes the system prompt and tools to the model on the first call" do
       captured = nil
       allow(client).to receive(:messages) do |args|

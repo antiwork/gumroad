@@ -38,7 +38,17 @@ class Ai::StoreAgentService
   # rule exists for. 25 turns covers catalogs of roughly 240 items while still bounding the cost
   # of a runaway tool loop; past that the honest cap reply below is the correct outcome.
   MAX_TOOL_ITERATIONS = 25
+  # How much of an OLDER turn we forward to the model. Prior turns are context, not the request, so
+  # trimming them keeps token usage bounded across a long conversation.
   MAX_MESSAGE_LENGTH = 2_000
+  # How much of the message the creator JUST sent we forward. This is the request itself, so
+  # trimming it changes what was asked. It needs its own, much larger budget because Gumroad hands
+  # creators prompts to paste: the landing-page prompt in ShareTab/LandingPageEditor.tsx is ~4,500
+  # characters, so under the 2,000-character history cap the model never saw the second half of our
+  # own instructions — the publish and verify commands were cut off mid-sentence, and the model was
+  # asked to build a page without being told how to ship it. 12,000 covers that prompt several
+  # times over while still refusing an unbounded paste.
+  MAX_CURRENT_MESSAGE_LENGTH = 12_000
   # Anthropic requires max_tokens on every request, so there is always SOME cap — the question is
   # only how big. It has to fit more than a brief chat reply: when the agent authors or edits a
   # page, the model must emit the ENTIRE new value (a whole self-contained HTML page) inside the
@@ -433,22 +443,27 @@ class Ai::StoreAgentService
     # Build the Anthropic message array from the client-supplied history. The system prompt is passed
     # separately (Anthropic's top-level `system` param), so it is NOT included here.
     def build_conversation(messages)
-      history = Array(messages).last(MAX_HISTORY_MESSAGES).filter_map do |msg|
+      entries = Array(messages).last(MAX_HISTORY_MESSAGES).filter_map do |msg|
         role = msg[:role] || msg["role"]
         content = (msg[:content] || msg["content"]).to_s.strip
         next if content.blank?
         next unless %w[user assistant].include?(role)
 
-        { role:, content: content.truncate(MAX_MESSAGE_LENGTH, omission: "...") }
+        { role:, content: }
       end
 
       # Anthropic's Messages API requires the conversation to START with a user message. The web chat
       # always opens with a canned assistant greeting (and a turn could begin with other leading
       # assistant turns), so drop any leading assistant messages before the first user message.
-      history = history.drop_while { |m| m[:role] != "user" }
-      raise Error, "Message is required" if history.empty? || history.last[:role] != "user"
+      entries = entries.drop_while { |m| m[:role] != "user" }
+      raise Error, "Message is required" if entries.empty? || entries.last[:role] != "user"
 
-      history
+      # The last entry is what the creator just asked, so it gets the generous budget; everything
+      # before it is background and gets trimmed harder.
+      entries.each_with_index.map do |entry, index|
+        limit = index == entries.length - 1 ? MAX_CURRENT_MESSAGE_LENGTH : MAX_MESSAGE_LENGTH
+        entry.merge(content: entry[:content].truncate(limit, omission: "..."))
+      end
     end
 
     # Assemble the system prompt with the live read/write endpoint manifests embedded, so the model
