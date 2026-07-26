@@ -8,7 +8,7 @@ describe "License key on the product page", :js, type: :system do
   let(:product) { create(:product, user: seller, is_licensed: true) }
 
   context "when a signed-in buyer already owns the licensed product" do
-    let!(:purchase) { create(:purchase, link: product, purchaser: buyer, email: buyer.email) }
+    let!(:purchase) { create(:free_purchase, link: product, purchaser: buyer, email: buyer.email) }
     let!(:license) { create(:license, link: product, purchase:) }
 
     before { login_as buyer }
