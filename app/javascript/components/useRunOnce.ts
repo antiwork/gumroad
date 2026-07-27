@@ -3,11 +3,13 @@ import * as React from "react";
 // Unlike useEffect, guarantees that the callback will actually only be run once.
 //
 // The callback must not return a cleanup function. This hook cannot honour one: the hasRun guard
-// means the callback never runs a second time, so a cleanup that fired on unmount would tear down
-// something nothing would ever rebuild. TypeScript cannot catch a returned cleanup here, because a
-// function that returns a value is still assignable to a `() => void` parameter, so the mistake is
-// invisible at the callsite — CopyToClipboard returned a ClipboardJS teardown from here for a long
-// time and it simply never ran. Hence the runtime warning below.
+// makes the callback run at most once for the life of the component, so there is no re-setup to
+// pair a teardown with, and under StrictMode's deliberate effect replay the guard would suppress
+// the second setup while a cleanup had already torn the first one down. TypeScript cannot catch a
+// returned cleanup here either, because a function that returns a value is still assignable to a
+// `() => void` parameter, so the mistake is invisible at the callsite — CopyToClipboard returned a
+// ClipboardJS teardown from here for a long time and it simply never ran. Hence the runtime
+// warning below.
 //
 // If you need setup that has to be undone on unmount, use a plain useEffect with a real dependency
 // list instead of this hook.
