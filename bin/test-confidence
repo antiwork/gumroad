@@ -114,7 +114,11 @@ CACHE_FILE="$CACHE_DIR/${DIFF_HASH:0:16}.json"
 # ── All spec files ──
 
 ALL_SPECS=$(find spec -name "*_spec.rb" -type f 2>/dev/null | sort)
-TOTAL_SPECS=$(echo "$ALL_SPECS" | wc -l | tr -d ' ')
+# Colocated Vitest tests. The planner is allowed to pick these for front-end
+# changes, so they have to be part of the inventory it sees and of the runner.
+ALL_JS_TESTS=$(find app/javascript -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) 2>/dev/null | sort)
+ALL_TESTS=$(printf '%s\n%s\n' "$ALL_SPECS" "$ALL_JS_TESTS" | grep -v '^$' | sort -u)
+TOTAL_SPECS=$(echo "$ALL_TESTS" | grep -c . | tr -d ' ')
 
 # ── AI planning (cached if available) ──
 
@@ -128,7 +132,7 @@ else
     NF==1 { print $1 }
   ' | sort -u | head -30)
 
-  SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=$1; for(i=2;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort)
+  SPEC_TREE=$(echo "$ALL_TESTS" | awk -F/ '{dir=$1; for(i=2;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort)
 
   PROMPT="You are a senior Rails engineer planning test execution for a code change.
 
@@ -168,6 +172,9 @@ Return a JSON object with this exact structure:
 Rules:
 - Each milestone's tests are ADDITIONAL, not cumulative.
 - Use exact file paths from the spec tree.
+- The tree contains two kinds of tests: RSpec files under spec/ and colocated
+  Vitest files under app/javascript/ (*.test.ts / *.test.tsx). Both are runnable;
+  pick whichever actually covers the changed code.
 - The last milestone can use \"ALL_REMAINING\" to mean everything else.
 - Confidence values must be strictly increasing.
 - You MUST include a 99 milestone and a 100 milestone.
@@ -242,6 +249,22 @@ pluralize() {
   if [[ $n -eq 1 ]]; then echo "$n $word"; else echo "$n ${word}s"; fi
 }
 
+# Run one test file with the right runner. Front-end tests live next to the
+# component they cover (app/javascript/**/*.test.tsx) and run under Vitest;
+# everything else is RSpec under spec/.
+is_js_test() {
+  [[ "$1" == app/javascript/* ]]
+}
+
+run_test_file() {
+  local file=$1
+  if is_js_test "$file"; then
+    npx vitest run --reporter dot "$file"
+  else
+    bundle exec rspec --format progress --no-color "$file"
+  fi
+}
+
 # Heuristic: returns 0 (true) if this spec failure is likely pre-existing —
 # i.e., neither the spec file nor its source counterpart is in the diff.
 # Returns 1 (false) if the diff plausibly caused it.
@@ -255,6 +278,10 @@ is_likely_preexisting() {
 
   local module="${spec_file#spec/}"
   module="${module%_spec.rb}"
+  # Colocated Vitest tests are named Foo.test.tsx next to Foo.tsx, so strip the
+  # ".test.<ext>" tail to recover the component name we should look for.
+  module="${module%.test.tsx}"
+  module="${module%.test.ts}"
   local basename="${module##*/}"
 
   if echo "$CHANGED_ALL" | grep -qE "(^|/)${basename}\.(rb|ts|tsx|js|jsx)$"; then
@@ -282,8 +309,21 @@ trap cleanup_worktree EXIT INT TERM
 #          2 = couldn't verify (no merge-base, schema/dep drift, parse failure)
 verify_preexisting_on_merge_base() {
   local rspec_output=$1
+  local spec_file=${2:-}
 
   [[ -z "$MERGE_BASE" ]] && return 2
+
+  # Vitest failures can't be replayed here: the merge-base worktree has no
+  # node_modules, and the RSpec id parsing below would find nothing and report
+  # "inconclusive", which the caller treats as pre-existing. That would hide a
+  # real front-end regression. So fall back to the file-level heuristic: if the
+  # test or its component is in the diff, call it a regression.
+  if [[ -n "$spec_file" ]] && is_js_test "$spec_file"; then
+    if is_likely_preexisting "$spec_file"; then
+      return 2
+    fi
+    return 1
+  fi
 
   # Skip when DB schema or bundler state likely diverges from merge-base
   if echo "$CHANGED_ALL" | grep -qE '^db/migrate/.*\.rb$'; then
@@ -342,10 +382,15 @@ for (( m=0; m<MILESTONES; m++ )); do
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
     echo "   ${CONF}%  ←  remaining tests"
   else
-    NAMES=$(echo "$TESTS_JSON" | grep "spec/")
-    N=$(echo "$NAMES" | wc -l | tr -d ' ')
+    # grep -c/. with `|| true`: a milestone can legitimately list only Vitest
+    # paths (or nothing runnable), and under `set -e` a non-matching grep would
+    # otherwise abort the whole script right after the banner.
+    NAMES=$(echo "$TESTS_JSON" | grep -E '^(spec/|app/javascript/)' || true)
+    N=$(echo "$NAMES" | grep -c . | tr -d ' ' || true)
+    [[ -z "$N" ]] && N=0
     echo "   ${CONF}%  ←  $(pluralize $N test)"
     echo "$NAMES" | while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
       echo "          ${name#spec/}"
     done
   fi
@@ -383,7 +428,7 @@ for (( m=0; m<MILESTONES; m++ )); do
   TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
 
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
-    MILESTONE_TESTS=$(echo "$ALL_SPECS" | while IFS= read -r s; do
+    MILESTONE_TESTS=$(echo "$ALL_TESTS" | while IFS= read -r s; do
       grep -qxF "$s" "$SEEN_RUN" 2>/dev/null || echo "$s"
     done)
   else
@@ -392,7 +437,7 @@ for (( m=0; m<MILESTONES; m++ )); do
     done)
   fi
 
-  MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c "spec/" 2>/dev/null || true)
+  MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c . 2>/dev/null || true)
   if [[ -z "$MILESTONE_COUNT" || "$MILESTONE_COUNT" -eq 0 ]]; then
     CURRENT_CONFIDENCE=$CONF
     continue
@@ -412,7 +457,7 @@ for (( m=0; m<MILESTONES; m++ )); do
     [[ -z "$spec" ]] && continue
     echo "$spec" >> "$SEEN_RUN"
 
-    if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
+    if output=$(run_test_file "$spec" 2>&1); then
       PASSED=$((PASSED + 1))
       MILESTONE_PASSED=$((MILESTONE_PASSED + 1))
       elapsed=$(( $(date +%s) - START ))
@@ -428,7 +473,7 @@ for (( m=0; m<MILESTONES; m++ )); do
           "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "${spec#spec/}"
 
         set +e
-        verify_preexisting_on_merge_base "$output"
+        verify_preexisting_on_merge_base "$output" "$spec"
         verify_rc=$?
         set -e
 
