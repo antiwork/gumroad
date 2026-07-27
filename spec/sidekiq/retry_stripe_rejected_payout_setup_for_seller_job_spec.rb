@@ -183,6 +183,38 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect(note.reload.json_data["seller_notified"]).to be(true)
     end
 
+    it "sends on a later pass when a run was killed after claiming the send but before enqueueing" do
+      # A hard kill (Sidekiq shutdown, OOM) between the claim commit and the enqueue leaves the
+      # claim behind with nothing to release it. The claim has to expire, otherwise the seller is
+      # abandoned holding a bank code they were never told to correct.
+      note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
+      note.json_data["seller_notified_claimed_at"] = (described_class::NOTIFICATION_CLAIM_TTL + 1.minute).ago.iso8601
+      note.save!
+
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).once
+
+      note.reload
+      expect(note.json_data["seller_notified"]).to be(true)
+      expect(note.json_data["seller_notified_claimed_at"]).to be_blank
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_FORMAT_REJECTION)
+    end
+
+    it "leaves the note outstanding while another run holds a fresh send claim" do
+      # Two runs overlapping must not both email the seller, and the one that loses the race must
+      # not abandon the note either — the winner may still fail, and abandoning is terminal.
+      note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
+      note.json_data["seller_notified_claimed_at"] = 1.minute.ago.iso8601
+      note.save!
+
+      expect do
+        described_class.new.perform(user.id)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+
+      expect(note.reload.json_data["abandoned_at"]).to be_blank
+    end
+
     it "classifies from the stored Stripe error message rather than the truncated note text" do
       long_directory_miss = "Stripe could not validate the submitted bank details for this connected account. " \
                             "#{'Diagnostic context. ' * 8}We couldn't find the bank for that BIC"
@@ -336,6 +368,36 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
         described_class.new.perform(user.id)
       end.to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted).once
       expect(note.reload.json_data["abandoned_at"]).to be_present
+    end
+
+    it "sends the exhausted notice on a later pass when a run was killed mid-send" do
+      # Same hard-kill window as the format-rejection path: the claim is left behind with nothing
+      # to release it, so it has to expire rather than silence the notice for good.
+      note = add_note(bank_prefix, json: {
+                        retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES,
+                        exhausted_notified_claimed_at: (described_class::NOTIFICATION_CLAIM_TTL + 1.minute).ago.iso8601
+                      })
+
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted).once
+
+      note.reload
+      expect(note.json_data["exhausted_notified"]).to be(true)
+      expect(note.json_data["abandoned_at"]).to be_present
+    end
+
+    it "leaves the note outstanding while another run holds a fresh exhausted-notice claim" do
+      note = add_note(bank_prefix, json: {
+                        retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES,
+                        exhausted_notified_claimed_at: 1.minute.ago.iso8601
+                      })
+
+      expect do
+        described_class.new.perform(user.id)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted)
+
+      expect(note.reload.json_data["abandoned_at"]).to be_blank
     end
   end
 

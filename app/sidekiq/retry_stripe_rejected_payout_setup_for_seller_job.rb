@@ -17,6 +17,10 @@ class RetryStripeRejectedPayoutSetupForSellerJob
                                "so re-sending the same saved details can never succeed. The seller has been emailed " \
                                "and has to re-enter the code."
   ABANDONED_REASON_BANK_FORMAT_REJECTION = "bank_details_format_rejected"
+  # How long one run's "I am sending this email right now" claim holds off other runs. Long
+  # enough that two overlapping runs cannot both send, short enough that a run killed mid-send
+  # does not delay the seller past the next weekly pass.
+  NOTIFICATION_CLAIM_TTL = 1.hour
 
   def perform(user_id)
     user = User.find_by(id: user_id)
@@ -119,13 +123,20 @@ class RetryStripeRejectedPayoutSetupForSellerJob
 
       already_notified = notes.any? { |candidate| StripeMerchantAccountManager.bank_sync_note_seller_notified?(candidate) }
       note_to_notify = already_notified ? nil : notes.first
-      notify_format_rejection!(user, note_to_notify) if note_to_notify
+      if note_to_notify
+        # Abandonment is terminal and this email is the seller's only instruction to re-enter
+        # their bank code, so do not abandon until the email is actually on the queue. A false
+        # return means another run holds the send claim; leave the notes outstanding and let
+        # whichever run does the sending finish the job.
+        return unless notify_format_rejection!(user, note_to_notify)
+      end
 
       # The abandonment and the payout note explaining it are one unit (see abandon_stale_notes!),
       # but the "we told them" marker deliberately is NOT part of it — send_once! already
-      # committed it. If it lived in here, a failure while writing the audit note would roll the
-      # marker back too, and the next weekly pass would re-select these notes and email the
-      # seller the same message all over again, once per pass, for as long as the write failed.
+      # committed it once the email was on the queue. If it lived in here, a failure while
+      # writing the audit note would roll the marker back too, and the next weekly pass would
+      # re-select these notes and email the seller the same message all over again, once per
+      # pass, for as long as the write failed.
       ActiveRecord::Base.transaction do
         notes.each do |candidate|
           candidate.json_data["abandoned_at"] = Time.current.iso8601
@@ -147,39 +158,53 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       end
     end
 
-    # Sends a one-time email about a payout note and records that it went out, in the one order
-    # that cannot both duplicate the email and lose it.
+    # Sends a one-time email about a payout note and records that it went out, without ever
+    # letting a crash decide that the seller has been told when they have not.
     #
-    # The marker is committed BEFORE the email is enqueued (the "claim"), so no later pass can
-    # send a second copy just because a write after the enqueue failed — that write no longer
-    # exists. If the enqueue itself fails, the claim is released again, so the note is still
-    # eligible and the next pass re-sends. Losing the email therefore takes two failures in a
-    # row (the enqueue AND the release), where either ordering of "send then mark" or "mark
-    # inside the terminal transaction" only takes one.
+    # Two separate fields do the bookkeeping:
     #
-    # The marker is also NOT part of the abandonment transaction that follows. Abandonment is
+    #   <marker>_claimed_at — "a run is sending this right now". Written and committed BEFORE
+    #                         the email is enqueued, so a second run overlapping the first does
+    #                         not send a duplicate.
+    #   <marker>            — "the email really was handed to the mail queue". Written only
+    #                         AFTER the enqueue returns.
+    #
+    # Only the second field silences later passes for good. A claim silences them for
+    # NOTIFICATION_CLAIM_TTL and no longer: if the process is killed outright between the claim
+    # commit and the enqueue, nothing runs to release the claim, but it expires and the next
+    # weekly pass sends for real. That is the difference that matters — a hard kill costs a
+    # delay, not a seller who is abandoned without ever being told to fix their bank details.
+    # (The abandonment happens after the enqueue in the same run, so a kill in that window also
+    # leaves the note outstanding for that later pass to find.)
+    #
+    # The price is the usual at-least-once residue in the other direction: if the enqueue
+    # succeeds and the process dies before the confirmation commits, the expired claim lets a
+    # later pass send a second copy. A seller reading the same "correct your bank code" notice
+    # twice is a far smaller harm than one who never reads it at all.
+    #
+    # Neither field is part of the abandonment transaction that follows. Abandonment is
     # terminal, so a rolled-back abandonment leaves the note outstanding and every later weekly
-    # pass arrives here again; if the marker rolled back with it, each of those passes would
-    # email the seller the same notice over again.
-    #
-    # What is left is the ordinary at-least-once residue: if the process is killed outright
-    # between the claim commit and the enqueue, nothing runs to release the claim and the seller
-    # is not told. That window is a hard kill rather than a raised exception, and it is the
-    # narrowest of the three available failure modes — an exhaustive fix needs a transactional
-    # outbox, which is a bigger change than this job.
+    # pass arrives here again; if the confirmation rolled back with it, each of those passes
+    # would email the seller the same notice over again.
     def send_once!(note, marker:)
-      return if note.json_data[marker] == true
+      return true if note.json_data[marker] == true
+      # Another run is mid-send. It will finish (or its claim will expire and a later pass will
+      # retry), but as far as THIS run knows the seller has not been told yet, so it must not
+      # go on to abandon the note.
+      return false if notification_claim_active?(note, marker)
 
-      note.json_data[marker] = true
+      claim_key = "#{marker}_claimed_at"
+      note.json_data[claim_key] = Time.current.iso8601
       note.save!
 
       begin
         yield
       rescue
-        # Best effort: if this release fails too, the claim stands and the seller is not told.
-        # Log it loudly — that combination is the only way this path can go silent.
+        # Best effort: if this release fails too, the claim still expires on its own, so the
+        # next pass re-sends. Log it either way — an unreleased claim means a seller waits a
+        # week longer than they should to hear anything.
         begin
-          note.json_data.delete(marker)
+          note.json_data.delete(claim_key)
           note.save!
         rescue => release_error
           Rails.logger.error(
@@ -190,6 +215,37 @@ class RetryStripeRejectedPayoutSetupForSellerJob
         end
         raise
       end
+
+      begin
+        note.json_data[marker] = true
+        note.json_data.delete(claim_key)
+        note.save!
+      rescue => confirm_error
+        # The email is already queued, so the seller will hear from us and this run should carry
+        # on to the abandonment. Only the record of having sent it is missing; the live claim
+        # holds off duplicates until it expires.
+        Rails.logger.error(
+          "RetryStripeRejectedPayoutSetupForSellerJob sent the #{marker} email for payout note " \
+          "#{note.id} but could not record it: #{confirm_error.class}: #{confirm_error.message}"
+        )
+        ErrorNotifier.notify(confirm_error)
+      end
+
+      # The email is on the queue either way, so the seller will hear from us.
+      true
+    end
+
+    # A claim only holds off other runs while it is fresh. An expired one means the run that
+    # made it never got as far as confirming the send, so the email has to be attempted again.
+    def notification_claim_active?(note, marker)
+      claimed_at = note.json_data["#{marker}_claimed_at"]
+      return false if claimed_at.blank?
+
+      Time.zone.parse(claimed_at.to_s).then { |time| time.present? && time > NOTIFICATION_CLAIM_TTL.ago }
+    rescue ArgumentError
+      # An unparseable timestamp is not a claim anyone can rely on; treat it as expired so the
+      # seller still gets their email.
+      false
     end
 
     def attempt_remediation(user, note)
@@ -244,9 +300,11 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       # terminal — once abandoned_at commits, no later run looks at this note again, and this is
       # the only place the exhausted-retries email is sent — so an enqueue downstream of that
       # commit could fail, be swallowed by the job's rescue, and leave the seller never knowing
-      # the retries stopped. See send_once! for why the marker is claimed before the enqueue and
-      # why it deliberately does not participate in the abandonment transaction.
-      notify_retries_exhausted!(user, note)
+      # the retries stopped. See send_once! for how the send is claimed and recorded, and why
+      # neither field participates in the abandonment transaction.
+      # A false return means another run is mid-send; it will do the abandonment itself, and
+      # abandoning here would strand the seller if that run never got the email out.
+      return unless notify_retries_exhausted!(user, note)
 
       # Same reasoning as abandon_stale_notes!: the terminal state and its explanation are one
       # unit, so support never sees a dead note with no record of why the retries stopped.
