@@ -33,19 +33,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
     render json: {
       success: true,
       user_id: current_resource_owner.external_id,
-      # `product_updates_data` (the creator posts this buyer is entitled to see for each
-      # product) is deliberately left out of this response. Deciding that entitlement
-      # means, for every product on the page, reading the seller's whole published-post
-      # history and re-running the buyer-targeting filters over it. On the slowest
-      # production samples of this endpoint that work was 82% of the request
-      # (gumroad-private#1412), and it is why buyers with large libraries hit
-      # Rack::Timeout here.
-      #
-      # No client reads it from this response: the app fetches a post only when the buyer
-      # opens one, from Api::Mobile::InstallmentsController#show. The two retired native
-      # apps did cache the field for offline use, but they read it from #index and from
-      # UrlRedirectsController#url_redirect_attributes, which both still return it.
-      purchases: purchases_to_json(paginated_purchases, include_product_updates: false),
+      purchases: purchases_to_json(paginated_purchases),
       sellers: sellers_from_purchases(purchases),
       meta: { pagination: PagyPresenter.new(pagination).metadata }
     }
@@ -90,7 +78,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       render json: { success: false, message: "Could not find purchase" }, status: :not_found if @purchase.nil? || (!@purchase.successful_and_not_reversed? && !@purchase.subscription)
     end
 
-    def purchases_to_json(purchases, include_product_updates: true)
+    def purchases_to_json(purchases)
       purchases_array = purchases.to_a
       ActiveRecord::Associations::Preloader.new(
         records: purchases_array,
@@ -105,9 +93,8 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
           { subscription: { true_original_purchase: :product_review } }
         ]
       ).call
-      Purchase.preload_product_updates_data!(purchases_array) if include_product_updates
       UrlRedirect.preload_latest_media_locations!(purchases_array.filter_map(&:url_redirect))
-      purchases_array.map { |purchase| purchase.json_data_for_mobile(include_product_updates:) }
+      purchases_array.map(&:json_data_for_mobile)
     end
 
     def search_purchases

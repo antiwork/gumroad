@@ -293,7 +293,7 @@ class UrlRedirect < ApplicationRecord
     signed_download_url_for_s3_key_and_filename(s3_retrievable.s3_key, s3_retrievable.s3_filename, is_video: true)
   end
 
-  def product_json_data(include_product_updates: true)
+  def product_json_data
     link_data = referenced_link&.as_json(mobile: true) || {}
     result = link_data.merge(url_redirect_external_id: external_id, url_redirect_token: token)
     result[:file_data] = product_file_json_data_for_mobile unless purchase.present? && purchase.subscription.present? && !purchase.subscription.alive?
@@ -302,7 +302,6 @@ class UrlRedirect < ApplicationRecord
       result[:purchase_id] = purchase.external_id
       result[:purchased_at] = purchase.created_at
       result[:user_id] = purchase.purchaser.external_id if purchase.purchaser
-      result[:product_updates_data] = purchase.update_json_data_for_mobile if include_product_updates
       result[:is_archived] = purchase.is_archived
       result[:custom_delivery_url] = nil # Deprecated
     end

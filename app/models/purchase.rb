@@ -2638,22 +2638,14 @@ class Purchase < ApplicationRecord
 
   # Public: Return json information about this purchase for the mobile api.
   def json_data_for_mobile(options = {})
-    # `product_updates_data` is the list of creator posts this buyer is entitled to
-    # see for the product. Working out that entitlement is the most expensive thing
-    # the mobile library endpoints do, so the list and search endpoints opt out of it
-    # (no mobile client reads the field from a list response — see
-    # Api::Mobile::PurchasesController#purchases_to_json for the full reasoning).
-    include_product_updates = options.fetch(:include_product_updates, true)
-
     if url_redirect.present?
-      json_data = url_redirect.product_json_data(include_product_updates:)
+      json_data = url_redirect.product_json_data
     elsif preorder.present?
-      json_data = preorder.mobile_json_data(include_product_updates:)
+      json_data = preorder.mobile_json_data
     else
       json_data = link.as_json(mobile: true)
       json_data[:purchase_id] = external_id
       json_data[:purchased_at] = created_at
-      json_data[:product_updates_data] = update_json_data_for_mobile if include_product_updates
       json_data[:user_id] = purchaser.external_id if purchaser
       json_data[:is_archived] = is_archived
       json_data[:custom_delivery_url] = nil # Deprecated
@@ -2719,138 +2711,6 @@ class Purchase < ApplicationRecord
     end
 
     json_data
-  end
-
-  def update_json_data_for_mobile
-    return @cached_product_updates_data if defined?(@cached_product_updates_data)
-
-    # Delegate to the batched preloader even for a single purchase. The old inline
-    # implementation serialized each post with per-post queries (url_redirects,
-    # product_files, email_infos — one SELECT per installment), which surfaced as an
-    # N+1 on the mobile url_redirect_attributes endpoint. The preloader produces
-    # byte-identical output (covered by specs in purchase_installments_spec.rb) while
-    # batching those lookups into a bounded number of IN queries.
-    self.class.preload_product_updates_data!([self])
-    @cached_product_updates_data
-  end
-
-  def self.preload_product_updates_data!(purchases)
-    purchases_array = purchases.to_a
-    return if purchases_array.empty?
-
-    # Preload subscription -> original_purchase up front. We need it both for the
-    # blocked-subscription guard (subscription.alive?) and to key email_infos on
-    # original_purchase.id below (Installment#action_at_for_purchase uses
-    # original_purchase.id, so renewals would otherwise miss email_info rows).
-    ActiveRecord::Associations::Preloader.new(
-      records: purchases_array,
-      associations: { subscription: :original_purchase }
-    ).call
-
-    grouped = purchases_array.group_by { |p| [p.link_id, p.email] }
-
-    all_installments = []
-    purchase_to_posts = {}
-
-    grouped.each do |(link_id, email), group|
-      blocked = group.all? { |p| p.subscription.present? && !p.subscription.alive? && p.link.block_access_after_membership_cancellation? }
-      if blocked
-        group.each { |p| purchase_to_posts[p.id] = [] }
-        next
-      end
-
-      qualifying_ids = Purchase.where(link_id: link_id)
-                               .all_success_states_including_test
-                               .can_access_content
-                               .not_fully_refunded
-                               .not_chargedback_or_chargedback_reversed
-                               .not_is_gift_sender_purchase
-                               .where(email: email)
-                               .pluck(:id)
-
-      posts = product_installments(purchase_ids: qualifying_ids)
-      all_installments.concat(posts)
-
-      group.each { |p| purchase_to_posts[p.id] = posts }
-    end
-
-    uniq_installments = all_installments.uniq(&:id)
-    if uniq_installments.any?
-      # Preload `ordered_alive_product_files` (scoped `alive.in_order`) so we can
-      # set it as `cached_alive_product_files` on each post — that way the call to
-      # `alive_product_files` inside `installment_mobile_json_data` hits the cache
-      # instead of re-querying, and any downstream caller of `alive_product_files`
-      # on the same post in this request also benefits.
-      ActiveRecord::Associations::Preloader.new(
-        records: uniq_installments,
-        associations: [:seller, :link, :ordered_alive_product_files]
-      ).call
-
-      uniq_installments.each do |post|
-        post.cached_alive_product_files = post.ordered_alive_product_files.to_a
-      end
-    end
-
-    purchase_ids = purchases_array.map(&:id)
-    # filter_map skips purchases whose scoped has_one original_purchase is nil
-    # (e.g. archived). The blocked-subscription guard below catches those before
-    # the email_info lookup, so omitting nils from the WHERE clause is safe.
-    original_purchase_ids = purchases_array.filter_map { |p| p.original_purchase&.id }.uniq
-    installment_ids = uniq_installments.map(&:id)
-    if installment_ids.any?
-      # `.order(:id)` + reverse_each + assignment keeps the lowest-id record per
-      # [purchase_id, installment_id]. Matches the single-purchase path's
-      # `purchase_url_redirect(...).first` (ORDER BY id ASC LIMIT 1) semantics:
-      # when duplicate UrlRedirect rows exist for the same (purchase, installment),
-      # the lowest id wins.
-      existing_redirects = UrlRedirect.where(purchase_id: purchase_ids, installment_id: installment_ids)
-                                      .order(:id)
-                                      .reverse_each
-                                      .index_by { |ur| [ur.purchase_id, ur.installment_id] }
-
-      # Key email_infos on original_purchase.id to match action_at_for_purchase's
-      # behavior — otherwise renewal purchases get post.published_at instead of the
-      # actual sent_at/delivered_at timestamp. action_at_for_purchases uses `.last`
-      # ordering by id, so we mirror that by overwriting earlier ids with later ones.
-      email_infos = CreatorContactingCustomersEmailInfo
-                      .where(installment_id: installment_ids, purchase_id: original_purchase_ids)
-                      .order(:id)
-                      .index_by { |ei| [ei.installment_id, ei.purchase_id] }
-    else
-      existing_redirects = {}
-      email_infos = {}
-    end
-
-    purchases_array.each do |purchase|
-      if purchase.subscription.present? && !purchase.subscription.alive? && purchase.link.block_access_after_membership_cancellation?
-        purchase.instance_variable_set(:@cached_product_updates_data, [])
-        next
-      end
-
-      original_purchase_id = purchase.original_purchase&.id
-      posts = purchase_to_posts[purchase.id] || []
-
-      updates_data = posts.map do |post|
-        # Pre-create the UrlRedirect when missing so the side effect happens in the
-        # preload pass (a dedicated step), not inside installment_mobile_json_data's
-        # serialization. This keeps the create-if-missing semantics from
-        # purchase_url_redirect while isolating the DB write.
-        url_redirect = existing_redirects[[purchase.id, post.id]]
-        url_redirect ||= begin
-          created = UrlRedirect.create!(installment: post, purchase: purchase)
-          existing_redirects[[purchase.id, post.id]] = created
-          created
-        end
-
-        post.installment_mobile_json_data(
-          purchase: purchase,
-          preloaded_purchase_url_redirect: url_redirect,
-          preloaded_purchase_email_info: email_infos[[post.id, original_purchase_id]]
-        )
-      end.compact
-
-      purchase.instance_variable_set(:@cached_product_updates_data, updates_data)
-    end
   end
 
   # Public: Return all installments the customer should see on the content page for a given purchase.

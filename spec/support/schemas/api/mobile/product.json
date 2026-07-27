@@ -16,7 +16,6 @@
     "url_redirect_external_id": { "type": "string" },
     "purchase_id": { "type": "string" },
     "purchased_at": { "type": "string" },
-    "product_updates_data": { "type": "array" },
     "file_data": {
       "type": "array",
       "items": { "$ref": "file:/api/mobile/product_file.json#" }
@@ -37,7 +36,7 @@
     "url_redirect_external_id",
     "purchase_id",
     "purchased_at",
-    "product_updates_data",
     "file_data"
-  ]
+  ],
+  "not": { "required": ["product_updates_data"] }
 }

@@ -273,17 +273,11 @@ class Installment < ApplicationRecord
     seller.presence || link.user
   end
 
-  def installment_mobile_json_data(purchase: nil, subscription: nil, imported_customer: nil, follower: nil,
-                                   preloaded_purchase_url_redirect: :not_preloaded,
-                                   preloaded_purchase_email_info: :not_preloaded)
+  def installment_mobile_json_data(purchase: nil, subscription: nil, imported_customer: nil, follower: nil)
     installment_url_redirect = if subscription.present?
       url_redirect(subscription) || generate_url_redirect_for_subscription(subscription)
     elsif purchase.present?
-      if preloaded_purchase_url_redirect != :not_preloaded
-        preloaded_purchase_url_redirect || generate_url_redirect_for_purchase(purchase)
-      else
-        purchase_url_redirect(purchase) || generate_url_redirect_for_purchase(purchase)
-      end
+      purchase_url_redirect(purchase) || generate_url_redirect_for_purchase(purchase)
     elsif imported_customer.present?
       imported_customer_url_redirect(imported_customer) || generate_url_redirect_for_imported_customer(imported_customer)
     elsif follower.present?
@@ -295,11 +289,7 @@ class Installment < ApplicationRecord
       installment_url_redirect.mobile_product_file_json_data(product_file)
     end
     released_at = if purchase.present?
-      if preloaded_purchase_email_info != :not_preloaded
-        action_at_from_email_info(preloaded_purchase_email_info)
-      else
-        action_at_for_purchase(purchase.original_purchase)
-      end
+      action_at_for_purchase(purchase.original_purchase)
     elsif subscription.present?
       action_at_for_purchase(subscription.original_purchase)
     end

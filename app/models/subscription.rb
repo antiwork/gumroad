@@ -786,12 +786,7 @@ class Subscription < ApplicationRecord
       json_data[:user_id] = purchase.purchaser.external_id if purchase.purchaser
       json_data[:can_contact] = purchase.can_contact
     end
-    json_data[:updates_data] = updates_mobile_json_data
     json_data
-  end
-
-  def updates_mobile_json_data
-    original_purchase.product_installments.map { |installment| installment.installment_mobile_json_data(purchase: original_purchase, subscription: self) }
   end
 
   # Returns true if no new charge is needed else false
