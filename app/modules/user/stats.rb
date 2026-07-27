@@ -141,15 +141,37 @@ module User::Stats
     affiliate_credits.sum(:amount_cents).to_i
   end
 
+  # Sums the affiliate credit a user has actually earned, adding back the part of a
+  # partially refunded credit the affiliate still keeps.
+  #
+  # The add-back is needed because refunding a purchase — even partially — always stamps
+  # a refund or chargeback balance onto the affiliate credit (see
+  # Purchase#process_refund_or_chargeback_for_affiliate_credit_balance), which drops the
+  # row out of the `paid` scope entirely. Without the second term, an affiliate who kept
+  # $15 of a $25 commission on a partially refunded sale would be credited $0.
+  #
+  # The add-back is restricted to credits that have an affiliate_partial_refunds row,
+  # because that row is only created when the affiliate credit was reversed by LESS than
+  # its full value. When the credit is clawed back in full the row is never created, so
+  # adding it back with nothing to subtract would credit the affiliate for money they no
+  # longer have. Measured against production, that was overstating 22 credits by $52.58
+  # across 18 affiliates while the 382 genuinely-partial credits were already exact.
+  #
+  # The restriction uses EXISTS rather than a join because a credit can carry several
+  # affiliate_partial_refunds rows — 56 in the table do, one with four. Joining would sum
+  # amount_cents once per row and credit that affiliate 2-4x their commission. The
+  # subtraction below still joins, because there it is the refund rows' own amounts being
+  # summed and one row per refund is exactly right.
   def affiliate_credit_sum_from_scope(paid_scope, all_scope)
+    partially_refunded = all_scope.joins(:purchase).where("purchases.stripe_partially_refunded": true)
+    with_remaining_value = partially_refunded.where(
+      AffiliatePartialRefund.where("affiliate_partial_refunds.affiliate_credit_id = affiliate_credits.id").arel.exists
+    )
+
     aff_credit_cents = paid_scope.sum("amount_cents").to_i
-    aff_credit_cents += all_scope
-                            .joins(:purchase).where("purchases.stripe_partially_refunded": true)
-                            .sum("amount_cents")
-    aff_credit_cents -= all_scope
-                            .joins(:purchase).where("purchases.stripe_partially_refunded": true)
-                            .joins(:affiliate_partial_refunds)
-                            .sum("affiliate_partial_refunds.amount_cents")
+    aff_credit_cents += with_remaining_value.sum("affiliate_credits.amount_cents")
+    aff_credit_cents -= partially_refunded.joins(:affiliate_partial_refunds)
+                                         .sum("affiliate_partial_refunds.amount_cents")
     aff_credit_cents
   end
 
