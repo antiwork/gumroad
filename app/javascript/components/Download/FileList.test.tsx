@@ -1,11 +1,41 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FileItem, FileList, FolderItem, videoFrameStyle } from "$app/components/Download/FileList";
+import { FileItem, FileList, FileRow, FolderItem, videoFrameStyle } from "$app/components/Download/FileList";
+import {
+  IsMobileAppViewProvider,
+  MediaUrlsProvider,
+  PurchaseInfoProvider,
+} from "$app/components/DownloadPage/WithContent";
 
-afterEach(cleanup);
+// The component chains off createJWPlayer's promise and wires event handlers onto
+// the player it resolves to, so the stub has to look enough like a player for that
+// chain to complete. Every handler registration returns the player, as JW's does.
+const createJWPlayer = vi.hoisted(() =>
+  vi.fn((_containerId: string, _options: Record<string, unknown>) => {
+    const player: Record<string, unknown> = {
+      getDuration: () => 0,
+      getPlaylistIndex: () => 0,
+      play: () => undefined,
+      seek: () => undefined,
+    };
+    player.on = () => player;
+    return Promise.resolve(player);
+  }),
+);
+vi.mock("$app/utils/jwPlayer", () => ({ createJWPlayer }));
+
+// Clicking the play button fires a tracking request, which reaches for the Rails
+// route helpers the real page defines globally. Stub the one route it needs so the
+// click can be exercised without pulling in the routes bundle.
+vi.mock("$app/data/user_action_event", () => ({ trackUserActionEvent: vi.fn() }));
+
+afterEach(() => {
+  cleanup();
+  createJWPlayer.mockReset();
+});
 
 const folder = (overrides: Partial<FolderItem> = {}): FolderItem => ({
   type: "folder",
@@ -36,6 +66,19 @@ const videoFile = (overrides: Partial<FileItem> = {}): FileItem => ({
   thumbnail_url: null,
   ...overrides,
 });
+
+// Renders the embedded-video row the way the content page does, so the tests can
+// check the frame the buyer actually gets rather than only the style helper.
+const renderEmbeddedRow = (file: FileItem, mediaUrls: Record<string, string[]> = {}) =>
+  render(
+    <PurchaseInfoProvider value={{ purchaseId: "purchase-1", redirectId: "redirect-1", token: "token-1" }}>
+      <MediaUrlsProvider value={[mediaUrls, () => undefined]}>
+        <IsMobileAppViewProvider value={false}>
+          <FileRow file={file} playingAudioForId={null} setPlayingAudioForId={() => undefined} isEmbed />
+        </IsMobileAppViewProvider>
+      </MediaUrlsProvider>
+    </PurchaseInfoProvider>,
+  );
 
 describe("FileList", () => {
   it("renders folders collapsed by default when the page has multiple folders", () => {
@@ -88,6 +131,46 @@ describe("FileList", () => {
       expect(videoFrameStyle(videoFile())).toBeUndefined();
       expect(videoFrameStyle(videoFile({ width: 1080, height: null }))).toBeUndefined();
       expect(videoFrameStyle(videoFile({ width: 0, height: 0 }))).toBeUndefined();
+    });
+  });
+
+  describe("the embedded video frame", () => {
+    it("shapes the pre-play frame to a portrait video's own ratio", () => {
+      const { container } = renderEmbeddedRow(videoFile({ width: 1080, height: 1920 }));
+      const frame = container.querySelector<HTMLElement>(".preview");
+
+      expect(frame?.style.aspectRatio).toBe("1080 / 1920");
+      expect(frame?.style.marginInline).toBe("auto");
+    });
+
+    it("leaves the pre-play frame unstyled for a video with no recorded dimensions", () => {
+      const { container } = renderEmbeddedRow(videoFile());
+      const frame = container.querySelector<HTMLElement>(".preview");
+
+      expect(frame).not.toBeNull();
+      expect(frame?.style.aspectRatio).toBe("");
+      expect(frame?.style.width).toBe("");
+    });
+
+    it("tells the player the video's real ratio, and shapes the playing frame to match", async () => {
+      const file = videoFile({ width: 1080, height: 1920 });
+      const { container } = renderEmbeddedRow(file, { [file.id]: ["https://example.test/index.m3u8"] });
+
+      fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+
+      await waitFor(() => expect(createJWPlayer).toHaveBeenCalled());
+      expect(createJWPlayer.mock.calls[0]?.[1]).toMatchObject({ aspectratio: "1080:1920" });
+      expect(container.querySelector<HTMLElement>(".preview")?.style.aspectRatio).toBe("1080 / 1920");
+    });
+
+    it("does not send the player a ratio for a video with no recorded dimensions", async () => {
+      const file = videoFile();
+      renderEmbeddedRow(file, { [file.id]: ["https://example.test/index.m3u8"] });
+
+      fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+
+      await waitFor(() => expect(createJWPlayer).toHaveBeenCalled());
+      expect(createJWPlayer.mock.calls[0]?.[1]).not.toHaveProperty("aspectratio");
     });
   });
 });

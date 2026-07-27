@@ -64,5 +64,53 @@ describe Ffprobe do
         expect { Ffprobe.new(file_path).parse }.to raise_error(ArgumentError, "File not found #{file_path}")
       end
     end
+
+    # A phone films in one fixed sensor orientation and records a rotation rather
+    # than rewriting the pixels, so a clip that looks portrait is often stored
+    # landscape with a quarter-turn attached. Callers want the dimensions the
+    # viewer sees, which is what streamio-ffmpeg already reports for every other
+    # format we accept. See https://github.com/antiwork/gumroad-private/issues/1392
+    context "when the video carries rotation metadata" do
+      def parsed_with(stream_attributes)
+        probe = Ffprobe.new(fixture_file_upload("sample.mov"))
+        allow(probe).to receive(:`).and_return({ streams: [{ width: 1920, height: 1080, r_frame_rate: "30/1" }.merge(stream_attributes)] }.to_json)
+        probe.parse
+      end
+
+      it "reports the displayed dimensions for a quarter turn recorded as a rotate tag" do
+        parsed = parsed_with(tags: { rotate: "90" })
+
+        expect(parsed.width).to eq(1080)
+        expect(parsed.height).to eq(1920)
+      end
+
+      it "reports the displayed dimensions for a quarter turn recorded as display-matrix side data" do
+        parsed = parsed_with(side_data_list: [{ side_data_type: "Display Matrix", rotation: -90 }])
+
+        expect(parsed.width).to eq(1080)
+        expect(parsed.height).to eq(1920)
+      end
+
+      it "reports the displayed dimensions for a three-quarter turn" do
+        parsed = parsed_with(tags: { rotate: "270" })
+
+        expect(parsed.width).to eq(1080)
+        expect(parsed.height).to eq(1920)
+      end
+
+      it "leaves the dimensions alone for a half turn, which does not change the shape" do
+        parsed = parsed_with(tags: { rotate: "180" })
+
+        expect(parsed.width).to eq(1920)
+        expect(parsed.height).to eq(1080)
+      end
+
+      it "leaves the dimensions alone when there is no rotation" do
+        parsed = parsed_with({})
+
+        expect(parsed.width).to eq(1920)
+        expect(parsed.height).to eq(1080)
+      end
+    end
   end
 end
