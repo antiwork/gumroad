@@ -113,6 +113,58 @@ describe Product::VariantCategoryUpdaterService, "version-level save contract" d
     end
   end
 
+  # The controller routes every OTHER alive grouping through the `options: nil`
+  # entry point whenever a save names any deletion, so that a named id living
+  # outside the first grouping can still be reached. A grouping that is already
+  # empty cannot be left standing on the way past — the product would fail
+  # Link#alive_category_variants_presence — but nothing of the seller's is lost
+  # there. See ProductVariantDeletionAudit::EMPTY_GROUPING_CLEANUP for how that
+  # is kept out of the omission-driven deletion count the rollout watches, and
+  # the LinksControllerSaveContractTest case that covers it end to end.
+  context "when an unrelated grouping is visited as a deletion-only entry" do
+    let!(:empty_category) { create(:variant_category, link: product, title: "Formats") }
+
+    before { Feature.activate_user(Product::SaveContract::FEATURE_NAME, seller) }
+    after { Feature.deactivate_user(Product::SaveContract::FEATURE_NAME, seller) }
+
+    def visit_empty_category(deletion_operations)
+      described_class.new(
+        product: product,
+        category_params: { id: empty_category.external_id, options: nil },
+        contract: contract(deletion_operations: deletion_operations)
+      ).perform
+    end
+
+    it "removes nothing of the seller's from a grouping the request never named" do
+      expect do
+        visit_empty_category(variant_deleted_ids: { version.external_id => { integrations: [integration.name] } })
+      end.not_to change { product.reload.alive_variants.count }
+    end
+
+    it "leaves the version named elsewhere alive" do
+      visit_empty_category(deleted_ids: { variants: [version.external_id] })
+
+      expect(version.reload.alive?).to eq(true)
+    end
+  end
+
+  # Judged from the ids alone, so it can be pinned without standing up a whole
+  # save. `affected` empty means the operation authorised removing no versions
+  # at all — the only thing that went was an empty grouping.
+  describe "how an empty-grouping cleanup is classified" do
+    it "is a cleanup, not an omission, when no version's removal was authorised" do
+      expect(
+        ProductVariantDeletionAudit.intent_source_for(affected_external_ids: [], confirmed_external_ids: [])
+      ).to eq(ProductVariantDeletionAudit::EMPTY_GROUPING_CLEANUP)
+    end
+
+    it "still reports an unconfirmed real deletion as an omission" do
+      expect(
+        ProductVariantDeletionAudit.intent_source_for(affected_external_ids: ["abc"], confirmed_external_ids: [])
+      ).to eq(ProductVariantDeletionAudit::PAYLOAD_OMISSION)
+    end
+  end
+
   context "when the flag is off" do
     # Not "the pages are swept": the deletion guard added in #6359 already
     # blocks an unconfirmed sweep of content-bearing pages by raising. The

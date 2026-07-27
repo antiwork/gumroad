@@ -7037,4 +7037,39 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert first.reload.alive?, "the resubmitted version must survive"
     assert second.reload.alive?, "the version merely absent from the payload must survive"
   end
+
+  # Reaching a version in a later grouping means visiting every other alive
+  # grouping, including ones that hold nothing. Such a grouping cannot survive
+  # the visit — an alive grouping with no alive versions makes the product
+  # invalid — but nothing of the seller's goes with it, so it must not be filed
+  # as an omission-driven deletion. That count is the number the save-contract
+  # rollout watches, and a cleanup that removed nothing would inflate it.
+  test "flag on: a pass-through empty grouping is audited as a cleanup, not an omission" do
+    enable_contract!
+    empty_category = create_variant_category(link: @product, title: "Sizes")
+    other_category = create_variant_category(link: @product, title: "Formats")
+    variant = create_variant(variant_category: other_category, name: "Large")
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty variant.reload.active_integrations, "the named integration must still be disconnected"
+    assert variant.reload.alive?, "no version may be removed by the pass-through"
+
+    cleanup = ProductVariantDeletionAudit.where(product_id: @product.id)
+                                         .find { Array(_1.deleted_variant_category_external_ids).include?(empty_category.external_id) }
+    assert_not_nil cleanup, "removing the empty grouping must still be recorded"
+    assert_equal ProductVariantDeletionAudit::EMPTY_GROUPING_CLEANUP, cleanup.intent_source
+    assert_empty cleanup.deleted_variant_external_ids, "the cleanup removed no versions"
+
+    omissions = ProductVariantDeletionAudit.where(product_id: @product.id,
+                                                  intent_source: ProductVariantDeletionAudit::PAYLOAD_OMISSION)
+    assert_empty omissions, "a pass-through must not register as an omission-driven deletion"
+  end
 end

@@ -71,6 +71,15 @@ class ProductVariantDeletionAudit < ApplicationRecord
     MIXED = "mixed",
     # A caller asked for exactly this deletion and nothing else.
     API_EXPLICIT_DESTROY = "api_explicit_destroy",
+    # A grouping that already held no live versions was removed as housekeeping
+    # while the save was passing through it on its way to a deletion the seller
+    # asked for somewhere else. Nothing in the request named this grouping and
+    # nothing of the seller's was lost — an alive grouping with no alive
+    # versions fails Link#alive_category_variants_presence, so the save cannot
+    # leave it standing. Kept distinct from `payload_omission` so the rollout
+    # metric for the save contract ("omission-driven deletions should trend to
+    # zero") is not polluted by cleanups that removed nothing.
+    EMPTY_GROUPING_CLEANUP = "empty_grouping_cleanup",
   ].freeze
 
   belongs_to :product, class_name: "Link", optional: false
@@ -179,6 +188,15 @@ class ProductVariantDeletionAudit < ApplicationRecord
   # Intent is judged against the versions whose removal was AUTHORISED, not the
   # rows that happened to be soft-deleted.
   def self.intent_source_for(affected_external_ids:, confirmed_external_ids:)
+    # Nothing of the seller's was on the line: the only thing removed was a
+    # grouping that already held no live versions. This happens when a save
+    # passes through a grouping it never addressed — the editor reaches a
+    # version in another grouping that way, and a grouping left alive with no
+    # live versions fails Link#alive_category_variants_presence, so the empty
+    # shell cannot stay. Filing that as `payload_omission` would inflate the one
+    # number the save-contract rollout watches with cleanups that deleted
+    # nothing.
+    return EMPTY_GROUPING_CLEANUP if affected_external_ids.empty?
     return PAYLOAD_OMISSION if confirmed_external_ids.empty?
     return CONFIRMED_IDS if confirmed_external_ids.size == affected_external_ids.size
 
