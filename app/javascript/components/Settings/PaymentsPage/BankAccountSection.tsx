@@ -803,19 +803,30 @@ const BankAccountSection = ({
 
   // A handful of countries are not in `country_supports_iban?` (so they get the generic
   // "Account #" box below rather than the dedicated IBAN box), yet their bank-account models
-  // still require an IBAN-shaped value, e.g. MoroccoBankAccount's /^MA[0-9]{20,26}$/. Showing
-  // the generic "1234567890" hint there tells sellers to enter their short local account number,
-  // which is always rejected. Give those countries a real example instead.
-  const ibanShapedNonIbanAccountNumberInputProps: Record<string, AccountNumberInputProps> = {
+  // still require a specific format the generic box does not hint at. Morocco, for example,
+  // wants an IBAN-shaped value (MoroccoBankAccount's /^MA[0-9]{20,26}$/) and Gambia wants a
+  // fixed 18-character number (GambiaBankAccount's /^[0-9A-Za-z]{18}$/). Showing the generic
+  // "1234567890" hint there tells sellers to enter their short local account number, which is
+  // always rejected on save. Give those countries a real example and the matching constraints
+  // so the browser catches a wrong-shaped value before the form is submitted.
+  const countrySpecificAccountNumberInputProps: Record<string, AccountNumberInputProps> = {
     MA: { placeholder: "MA64011519000001205000534921", maxLength: 28, pattern: "MA[0-9]{20,26}" },
     SN: { placeholder: "SN08SN0100152000048500003035", maxLength: 28, pattern: "SN[0-9SN]{20,26}" },
     RS: { placeholder: "RS35260005601001611379", maxLength: 22, pattern: "RS[0-9]{18,20}" },
     MD: { placeholder: "MD24AG000225100013104168", maxLength: 24, pattern: "MD[0-9]{2}[A-Z0-9]{20}" },
+    GM: {
+      placeholder: "000123000456000789",
+      maxLength: 18,
+      pattern: "[0-9A-Za-z]{18}",
+      title: "Enter your 18-character account number",
+    },
   };
 
   const isGibraltar = user.country_code === "GI";
   const isOman = user.country_code === "OM";
-  const ibanShapedProps = user.country_code ? ibanShapedNonIbanAccountNumberInputProps[user.country_code] : undefined;
+  const countrySpecificProps = user.country_code
+    ? countrySpecificAccountNumberInputProps[user.country_code]
+    : undefined;
   const nonIbanAccountNumberInputProps: AccountNumberInputProps = isGibraltar
     ? { placeholder: "01234567", maxLength: 8, pattern: "[0-9]{8}", inputMode: "numeric" }
     : isOman
@@ -826,7 +837,7 @@ const BankAccountSection = ({
           inputMode: "numeric",
           title: "Enter your 6 to 16 digit account number, not your IBAN",
         }
-      : (ibanShapedProps ?? { placeholder: "1234567890" });
+      : (countrySpecificProps ?? { placeholder: "1234567890" });
 
   const getRoutingNumberLabel = (countryCode: string) => {
     switch (true) {
