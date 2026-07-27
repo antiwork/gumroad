@@ -33,6 +33,7 @@ import {
   RotateLicense,
   VerifyLicense,
 } from "$app/components/ApiDocumentation/Endpoints/Licenses";
+import { CreateMedia, DeleteMedia, GetMedia } from "$app/components/ApiDocumentation/Endpoints/Media";
 import {
   CreateOfferCode,
   DeleteOfferCode,
@@ -170,6 +171,12 @@ export default function Api() {
               <ApiResource name="Thumbnails" id="thumbnails">
                 <CreateThumbnail />
                 <DeleteThumbnail />
+              </ApiResource>
+
+              <ApiResource name="Media library" id="media">
+                <GetMedia />
+                <CreateMedia />
+                <DeleteMedia />
               </ApiResource>
 
               <ApiResource name="Variant categories" id="variant-categories">
