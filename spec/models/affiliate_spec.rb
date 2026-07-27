@@ -316,5 +316,12 @@ describe Affiliate do
 
       expect(affiliate.eligible_for_credit_on_renewal?(product:)).to be true
     end
+
+    it "returns false if the seller is using a Brazilian Stripe Connect account" do
+      create(:merchant_account_stripe_connect, user: affiliate.seller, country: "BR")
+      affiliate.seller.update!(check_merchant_account_is_linked: true)
+
+      expect(affiliate.eligible_for_credit_on_renewal?(product:)).to be false
+    end
   end
 end

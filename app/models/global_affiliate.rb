@@ -31,7 +31,7 @@ class GlobalAffiliate < Affiliate
   # referral was made, and re-judging them years later would strip commission the affiliate
   # legitimately earned.
   def eligible_for_credit_on_renewal?(product:)
-    eligible_for_credit? && !product.user.disable_global_affiliate
+    eligible_for_credit? && !product.user.disable_global_affiliate && !product.user.has_brazilian_stripe_connect_account?
   end
 
   private
