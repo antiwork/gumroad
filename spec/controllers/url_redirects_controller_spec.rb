@@ -2444,6 +2444,82 @@ describe UrlRedirectsController, inertia: true do
         expect(response).to redirect_to(url_redirect_membership_inactive_page_path(url_redirect.token))
       end
     end
+
+    # The content itself going away is the other terminal state that used to be answered with a
+    # 404 at the same URL the poll asked for — the exact shape the client drops. A buyer with the
+    # page already open would have kept seeing withdrawn content indefinitely.
+    describe "withdrawn content on a polling request" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller) }
+      let(:installment) { create(:installment, seller:, installment_type: "seller", link: nil) }
+      let(:url_redirect) { create(:url_redirect, installment:, purchase: nil, link: product) }
+
+      before do
+        installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
+        url_redirect
+      end
+
+      def poll_for_media_locations
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+        get :download_page, params: { id: url_redirect.token }
+      end
+
+      it "redirects a poll to the expired page when the installment was deleted" do
+        installment.mark_deleted!
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "redirects a poll to the expired page when the installment's files were removed" do
+        installment.product_files.last.mark_deleted!
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "still 404s a deleted installment on an ordinary page load" do
+        installment.mark_deleted!
+
+        expect { get :download_page, params: { id: url_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+      end
+
+      it "still 404s an installment without files on an ordinary page load" do
+        installment.product_files.last.mark_deleted!
+
+        expect { get :download_page, params: { id: url_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+      end
+
+      # The redirect target runs through the same before_action, and an XHR carries the original
+      # request's headers when it follows a redirect. If the expired page also classified that as
+      # a poll it would redirect to itself forever, so the pages that exist to explain missing
+      # content skip the withdrawn-content check entirely.
+      it "renders the expired page for a request carrying the polling headers" do
+        installment.mark_deleted!
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+
+        get :expired, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+        expect_inertia.to render_component("UrlRedirects/Expired")
+      end
+
+      # Only the content page itself sends these polls. Every other action goes through the same
+      # permission check, so the poll classification is scoped to the action rather than trusting
+      # headers a client could send anywhere.
+      it "still 404s another action that carries the polling headers" do
+        purchase = create(:purchase, link: product, stripe_refunded: true)
+        other_redirect = create(:url_redirect, link: product, purchase:)
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+
+        expect { get :show, params: { id: other_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+      end
+    end
   end
 
   describe "GET 'media_urls" do

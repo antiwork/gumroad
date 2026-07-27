@@ -406,21 +406,46 @@ class UrlRedirectsController < ApplicationController
       @url_redirect.mark_rental_as_viewed!
     end
 
+    # The pages a buyer is sent to when their content is gone. They exist to explain exactly this
+    # situation, so they render rather than 404 when the underlying installment has been deleted
+    # or emptied — otherwise the redirect below would land on a 404.
+    CONTENT_UNAVAILABLE_ACTIONS = %w[expired rental_expired_page membership_inactive_page].freeze
+
+    # Access to this content has ended, or the content itself is gone. Ordinary page loads answer
+    # with the 404 they always did; the buyer content page's background polls get moved to the
+    # expired page instead.
+    #
+    # The reason polls need different treatment: the page deliberately drops a non-Inertia
+    # response that comes back from the URL it polled, because that is what an edge challenge or
+    # proxy error page looks like and reloading would just repeat it (see
+    # app/javascript/utils/inertia_partial_reload.ts). A 404 rendered at the same `/d/:token` URL
+    # is indistinguishable from that, so it would be swallowed and the buyer would keep looking at
+    # content that has been withdrawn. A redirect moves them off the page, which is what every
+    # other termination path here already does.
+    def withdrawn_content_response
+      if @url_redirect.present? && download_page_polling_request?
+        return redirect_to url_redirect_expired_page_path(@url_redirect.token)
+      end
+
+      e404
+    end
+
     def fetch_url_redirect
       @url_redirect = UrlRedirect.find_by(token: params[:id])
       return e404 if @url_redirect.nil?
 
       # 404 if the installment had some files when this url redirect was created but now it does not (i.e. if the installment was deleted, or the creator removed the files).
       return unless @url_redirect.installment.present?
-      return e404 if @url_redirect.installment.deleted?
+      return if CONTENT_UNAVAILABLE_ACTIONS.include?(action_name)
+      return withdrawn_content_response if @url_redirect.installment.deleted?
       return if @url_redirect.referenced_link&.is_recurring_billing
-      return e404 if @url_redirect.with_product_files.nil?
+      return withdrawn_content_response if @url_redirect.with_product_files.nil?
 
       has_files = @url_redirect.with_product_files.has_files?
       can_view_product_download_page_without_files =
         @url_redirect.installment.product_or_variant_type? &&
           @url_redirect.purchase_id.present?
-      e404 if !has_files && !can_view_product_download_page_without_files
+      withdrawn_content_response if !has_files && !can_view_product_download_page_without_files
     end
 
     def check_permissions
@@ -432,15 +457,8 @@ class UrlRedirectsController < ApplicationController
         # Every other way access ends here (rental expiry, revoked access, an inactive
         # membership, a mismatched purchaser) answers with a redirect, and the buyer content
         # page's background polls follow redirects. A refund or chargeback answered with a 404
-        # is the one case that does not move the buyer anywhere: the page deliberately drops a
-        # non-Inertia response that comes back from the URL it polled, because that is what an
-        # edge challenge or proxy error page looks like and reloading would just repeat it
-        # (see app/javascript/utils/inertia_partial_reload.ts). Sending a poll to the expired
-        # page instead keeps the refund/chargeback check effective while the buyer sits on the
-        # page. Ordinary page loads still get the 404 they always did.
-        return redirect_to url_redirect_expired_page_path(@url_redirect.token) if download_page_polling_request?
-
-        return e404
+        # is the one case that does not move the buyer anywhere, so polls get the expired page.
+        return withdrawn_content_response
       end
 
       return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
@@ -514,6 +532,12 @@ class UrlRedirectsController < ApplicationController
     DOWNLOAD_PAGE_POLLING_PROPS = %w[audio_durations latest_media_locations].freeze
 
     def download_page_polling_request?
+      # Only a request to the content page itself can be one of its polls. The action check
+      # matters because an XHR follows a redirect with the original request's headers, so a poll
+      # we send to the expired page arrives there still carrying the partial-reload headers —
+      # without this, the expired page would classify it as a poll and redirect it to itself.
+      return false unless action_name == "download_page"
+
       return false unless request.headers["X-Inertia"] == "true" &&
         request.headers["X-Inertia-Partial-Component"] == "UrlRedirects/DownloadPage" &&
         request.headers["X-Inertia-Partial-Data"].present?
