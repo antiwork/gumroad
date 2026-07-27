@@ -5,7 +5,8 @@ class AddCoveringIndexForCreditSumsToAffiliateCredits < ActiveRecord::Migration[
 
   def change
     # The affiliated products dashboard (Products::AffiliatedController#index)
-    # shows a "total revenue" stat computed by User#affiliate_credits_sum_total:
+    # shows a "total revenue" stat computed by
+    # User#affiliate_credits_total_revenue_cents:
     # SUM(amount_cents) over the user's affiliate credits restricted to "paid"
     # ones — refund/chargeback balance ids NULL, success balance id NOT NULL.
     #
