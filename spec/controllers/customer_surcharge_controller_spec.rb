@@ -74,6 +74,13 @@ describe CustomerSurchargeController, :vcr do
     before do
       Feature.activate_user(:buyer_local_currency, @user)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      # Price-ending rounding is off so the quote props asserted below stay the exact
+      # converted amounts. These examples cover what the surcharge endpoint returns —
+      # the minor-unit scale, and the largest-remainder line allocations that must sum
+      # to the locked total — not how the total is rounded. Rounding would shift both
+      # figures and the examples would be tracking the rounding rule instead.
+      # Checkout::PresentmentRounding has its own spec.
+      @user.update!(disable_buyer_currency_rounding: true)
       MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
         account.update!(charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
       end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)

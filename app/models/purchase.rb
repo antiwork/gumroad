@@ -3214,6 +3214,32 @@ class Purchase < ApplicationRecord
     fee_cents + paypal_fee_usd_cents
   end
 
+  # The slice of fee_cents that is Gumroad's own percentage revenue on this sale.
+  #
+  # fee_cents is a bundle: Gumroad's percentage fee, Gumroad's fixed fee, and — on sales
+  # charged through a Gumroad-owned Stripe account — the processor's percentage and fixed
+  # costs, which Gumroad only collects in order to hand them to Stripe. Anything that will
+  # be paid out to somebody else is not Gumroad's to give away, so a caller that needs to
+  # know how much of a charge Gumroad could absorb has to ask for this rather than reading
+  # fee_cents. Used by the buyer-currency charge path, where a displayed price rounded down
+  # from the exact conversion is taken out of Gumroad's share of the payment and must never
+  # reach the seller's proceeds or Stripe's costs (Charge::PresentmentOrchestrator).
+  #
+  # Returns 0 exactly where Gumroad's percentage fee is zero: a fee-waived sale (Gumroad
+  # Day or the per-seller waiver), a free purchase, and Brazilian Stripe Connect sellers,
+  # for whom calculate_fees zeroes the fee outright. The discover fee and the fixed Gumroad
+  # fee are deliberately left out even though they are Gumroad revenue — this is meant to
+  # be a floor on what is safely disposable, not an accurate total.
+  def gumroad_percentage_fee_cents
+    return 0 if price_cents.to_i.zero?
+    return 0 if merchant_account&.is_a_brazilian_stripe_connect_account?
+
+    fee_per_thousand = (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand).to_i
+    return 0 unless fee_per_thousand.positive?
+
+    [price_cents.to_i * fee_per_thousand / 1000, fee_cents.to_i].min
+  end
+
   # "not_charged" purchases that are free trial purchases should be treated as
   # successful purchases for the purposes of some tasks such as scheduling workflows,
   # while other "not_charged" purchases should not be. This method identifies

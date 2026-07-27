@@ -201,6 +201,8 @@ type PaymentsPageProps = {
   instant_payout_fee_percent: number;
   buyer_local_currency_enabled: boolean;
   disable_buyer_local_currency: boolean;
+  buyer_currency_charging_enabled: boolean;
+  disable_buyer_currency_rounding: boolean;
   can_manage_beneficial_owners: boolean;
   errors?: {
     base?: string[];
@@ -246,6 +248,7 @@ export default function PaymentsPage() {
     payout_threshold_cents: number | null;
     payout_frequency: PayoutFrequency;
     disable_buyer_local_currency: boolean;
+    disable_buyer_currency_rounding: boolean;
     bank_account: Partial<BankAccount> | null;
     payment_address: string | null;
   }>({
@@ -254,6 +257,7 @@ export default function PaymentsPage() {
     payout_threshold_cents: props.payout_threshold_cents,
     payout_frequency: props.payout_frequency,
     disable_buyer_local_currency: props.disable_buyer_local_currency,
+    disable_buyer_currency_rounding: props.disable_buyer_currency_rounding,
     bank_account: props.bank_account_details.bank_account,
     payment_address: props.paypal_address,
   });
@@ -319,6 +323,7 @@ export default function PaymentsPage() {
         payout_threshold_cents: props.payout_threshold_cents,
         payout_frequency: props.payout_frequency,
         disable_buyer_local_currency: props.disable_buyer_local_currency,
+        disable_buyer_currency_rounding: props.disable_buyer_currency_rounding,
         bank_account: props.bank_account_details.bank_account,
         payment_address: props.paypal_address,
       });
@@ -1031,6 +1036,7 @@ export default function PaymentsPage() {
         payout_threshold_cents: data.payout_threshold_cents,
         payout_frequency: data.payout_frequency,
         disable_buyer_local_currency: data.disable_buyer_local_currency,
+        disable_buyer_currency_rounding: data.disable_buyer_currency_rounding,
       };
 
       if (selectedPayoutMethod === "bank") {
@@ -1265,6 +1271,24 @@ export default function PaymentsPage() {
                 USD.
               </FieldsetDescription>
             </Fieldset>
+            {props.buyer_currency_charging_enabled && !form.data.disable_buyer_local_currency ? (
+              <Fieldset>
+                <Switch
+                  checked={!form.data.disable_buyer_currency_rounding}
+                  onChange={(e) => form.setData("disable_buyer_currency_rounding", !e.target.checked)}
+                  aria-label="Keep price endings in local currency"
+                  disabled={props.is_form_disabled}
+                  label="Keep price endings in local currency"
+                />
+                <FieldsetDescription>
+                  Buyers charged in their own currency see the ending of the USD total rather than the exact converted
+                  amount: a $9.99 total shows €8.99 instead of €8.53, and a $10 total shows €9. When tax is added, the
+                  ending mirrored is the taxed total's, so a buyer paying in their own currency sees the same ending a
+                  buyer paying in USD would. Your earnings, taxes and payouts are unchanged — the difference is absorbed
+                  on our side.
+                </FieldsetDescription>
+              </Fieldset>
+            ) : null}
           </FormSection>
         ) : null}
 

@@ -263,6 +263,10 @@ class SettingsPresenter
       instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
       buyer_local_currency_enabled: Feature.active?(:buyer_local_currency, seller),
       disable_buyer_local_currency: seller.disable_buyer_local_currency?,
+      # The rounding toggle only means anything for sellers whose buyers are actually
+      # charged in their own currency, so the UI hides it unless charging is on too.
+      buyer_currency_charging_enabled: Feature.active?(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller),
+      disable_buyer_currency_rounding: seller.disable_buyer_currency_rounding?,
       can_manage_beneficial_owners: payments_policy.update? && StripeBeneficialOwnersManager.eligible?(seller),
     }
   end
