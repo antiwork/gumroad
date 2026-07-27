@@ -781,6 +781,22 @@ describe ReceiptPresenter::PaymentInfo do
           expect(payment_info.send(:credit_card_note)).to be_nil
         end
       end
+
+      context "when the card_type is klarna" do
+        before { purchase.update!(card_type: CardType::KLARNA) }
+
+        it "returns nil" do
+          expect(payment_info.send(:credit_card_note)).to be_nil
+        end
+      end
+
+      context "when the card_type is alipay" do
+        before { purchase.update!(card_type: CardType::ALIPAY) }
+
+        it "returns nil" do
+          expect(payment_info.send(:credit_card_note)).to be_nil
+        end
+      end
     end
 
     context "with a Purchase" do

@@ -580,21 +580,28 @@ describe UrlRedirect do
     end
 
     it "returns the video URL and GUID for the file" do
-      expected_video_url = @multifile_url_redirect.signed_video_url(@file_1)
-      expected_guid = expected_video_url[described_class::GUID_GETTER_FROM_S3_URL_REGEX, 1]
-      expected_video_url.sub!(expected_guid, described_class::FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION)
+      # The URL we compare against is a second signed URL for the same file, and the signature
+      # covers the moment of signing: the credential scope and expiry are both derived from the
+      # current time. Generating the expected URL and the actual one at two different instants
+      # produces two different signatures whenever those instants land on opposite sides of a
+      # second boundary, so both have to be signed at the same frozen time to be comparable.
+      freeze_time do
+        expected_video_url = @multifile_url_redirect.signed_video_url(@file_1)
+        expected_guid = expected_video_url[described_class::GUID_GETTER_FROM_S3_URL_REGEX, 1]
+        expected_video_url.sub!(expected_guid, described_class::FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION)
 
-      video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, @file_1)
-      expect(video_url).to eq(expected_video_url)
-      expect(guid).to eq(expected_guid)
+        video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, @file_1)
+        expect(video_url).to eq(expected_video_url)
+        expect(guid).to eq(expected_guid)
 
-      expected_video_url = @multifile_url_redirect.signed_video_url(@file_2)
-      expected_guid = expected_video_url[described_class::GUID_GETTER_FROM_S3_URL_REGEX, 1]
-      expected_video_url.sub!(expected_guid, described_class::FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION)
+        expected_video_url = @multifile_url_redirect.signed_video_url(@file_2)
+        expected_guid = expected_video_url[described_class::GUID_GETTER_FROM_S3_URL_REGEX, 1]
+        expected_video_url.sub!(expected_guid, described_class::FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION)
 
-      video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, @file_2)
-      expect(video_url).to eq(expected_video_url)
-      expect(guid).to eq(expected_guid)
+        video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, @file_2)
+        expect(video_url).to eq(expected_video_url)
+        expect(guid).to eq(expected_guid)
+      end
     end
   end
 
@@ -746,6 +753,41 @@ describe UrlRedirect do
 
         product_level_rich_content = @product.alive_rich_contents.first
         expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: product_level_rich_content.external_id, page_id: product_level_rich_content.external_id, variant_id: nil, title: "Product-level page", description: { type: "doc", content: product_level_rich_content.description }, updated_at: product_level_rich_content.updated_at }])
+      end
+
+      it "ignores an empty product-level placeholder page and returns the variant's rich content for a variant-less purchase" do
+        # Regression for gumroad-private#1230: an editor bug left an alive but
+        # empty product-level page (a single blank paragraph). For purchases
+        # without variant_attributes, that placeholder made the product look
+        # content-bearing, so buyers saw one blank page instead of the real
+        # variant content.
+        @product.alive_rich_contents.find_each(&:mark_deleted!)
+        create(:product_rich_content, entity: @product, description: [{ "type" => "paragraph" }])
+        variant_rich_content = @variant.alive_rich_contents.first
+        @purchase.variant_attributes = []
+
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: variant_rich_content.external_id, page_id: variant_rich_content.external_id, variant_id: @variant.external_id, title: "Variant-level page", description: { type: "doc", content: variant_rich_content.description }, updated_at: variant_rich_content.updated_at }])
+      end
+
+      it "serves the hidden variant rich content when the shared-content flag is on but the product level is blank" do
+        # The July 21, 2026 state (gumroad-private#1230): support restored the
+        # per-version pages while has_same_rich_content_for_all_variants stayed
+        # on, and the product level held only a blank placeholder. The flag
+        # made the (blank) product level the content provider, so buyers —
+        # like the editor — saw nothing while the real pages sat hidden on the
+        # variants.
+        @product.alive_rich_contents.find_each(&:mark_deleted!)
+        create(:product_rich_content, entity: @product, description: [{ "type" => "paragraph" }])
+        @product.update!(has_same_rich_content_for_all_variants: true)
+        variant_rich_content = @variant.alive_rich_contents.first
+        expected_json = [{ id: variant_rich_content.external_id, page_id: variant_rich_content.external_id, variant_id: @variant.external_id, title: "Variant-level page", description: { type: "doc", content: variant_rich_content.description }, updated_at: variant_rich_content.updated_at }]
+
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq(expected_json)
+
+        # A purchase without variant attribution falls through to the
+        # content-bearing variant the same way.
+        @purchase.variant_attributes = []
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq(expected_json)
       end
     end
 

@@ -52,6 +52,24 @@ describe("Ownership-based offer codes from product page", type: :system, js: tru
       expect_discount_banner(percent: 20, discounted_price: 24)
     end
 
+    it "applies the discount when the buyer's qualifying purchase was a guest checkout under their account email" do
+      create(:offer_code,
+             user: seller,
+             products: [target_product],
+             ownership_products: [ownership_product],
+             existing_customers_only: true,
+             amount_cents: nil,
+             amount_percentage: 20,
+             code: "loyal20")
+      buyer = create(:user)
+      create(:purchase, purchaser: nil, email: buyer.email, link: ownership_product, seller:, price_cents: 0)
+
+      login_as buyer
+      visit "#{target_product.long_url}/loyal20"
+
+      expect_discount_banner(percent: 20, discounted_price: 24)
+    end
+
     it "applies the matching tier percentage when the buyer's ownership duration crosses a threshold" do
       create(:tiered_offer_code, :for_existing_customers,
              user: seller,

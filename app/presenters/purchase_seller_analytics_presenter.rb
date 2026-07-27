@@ -29,10 +29,25 @@ class PurchaseSellerAnalyticsPresenter
         quantity: purchase.quantity,
         tax: Money.new(purchase.seller_taxes_in_purchase_currency, currency_type).format(no_cents_if_whole: true, symbol: false),
         buyer_currency_display: buyer_currency_display_props(product:, price_cents: purchase.displayed_price_cents, ip: purchase.ip_address),
+        **buyer_presentment_event_fields,
       }
     }
   end
 
   private
     attr_reader :purchase
+
+    # What the buyer's card was actually charged, for sales charged in the buyer's own
+    # currency. Additive: `currency` and `value` above keep their canonical meaning, so
+    # existing Google Analytics reports and revenue totals are unaffected. Absent
+    # entirely for canonical-USD sales, which keeps the event payload unchanged for the
+    # majority of sales rather than emitting empty dimensions.
+    def buyer_presentment_event_fields
+      return {} unless purchase.buyer_presentment?
+
+      {
+        buyer_presentment_currency: purchase.buyer_presentment_currency.to_s.upcase,
+        buyer_presentment_value: purchase.buyer_presentment_major_units(purchase.buyer_presentment_total_cents),
+      }
+    end
 end

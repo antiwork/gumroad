@@ -381,6 +381,59 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 2
       expect(blast.reload.completed_at).to be_present
     end
+
+    describe "non-opener checkpoint" do
+      let(:blast) { create(:blast, :just_requested, post:, recipient_filter: "unopened") }
+      let(:checkpoint_key) { RedisKey.blast_non_opener_emails(blast.id) }
+
+      after { $redis.del(checkpoint_key, "#{checkpoint_key}:tmp") }
+
+      it "checkpoints the resolved non-opener emails while the blast is running and clears them on completion" do
+        checkpoint_during_run = nil
+        allow(PostEmailApi).to receive(:process) do |**_kwargs|
+          checkpoint_during_run = $redis.smembers(checkpoint_key)
+        end
+
+        described_class.new.perform(blast.id)
+
+        expect(checkpoint_during_run).to match_array([delivered_sale.email, sent_sale.email])
+        expect($redis.exists?(checkpoint_key)).to eq(false)
+        expect(blast.reload.completed_at).to be_present
+      end
+
+      it "reuses the checkpoint on a later attempt instead of recomputing it" do
+        $redis.sadd(checkpoint_key, [delivered_sale.email])
+
+        expect_any_instance_of(Installment).not_to receive(:unopened_recipient_emails)
+        described_class.new.perform(blast.id)
+
+        expect_sent_count 1
+        expect(PostSendgridApi.mails[delivered_sale.email]).to be_present
+        expect(PostSendgridApi.mails[sent_sale.email]).to be_blank
+      end
+
+      it "keeps the checkpoint when the send fails so the next attempt can reuse it" do
+        expect(PostEmailApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+        expect do
+          described_class.new.perform(blast.id)
+        end.to raise_error(StandardError, "API failure")
+
+        expect($redis.smembers(checkpoint_key)).to match_array([delivered_sale.email, sent_sale.email])
+      end
+
+      it "ignores a partially written checkpoint left behind by a killed attempt" do
+        # A half-finished write lives only at the :tmp key. The real key must stay absent
+        # so the next attempt recomputes rather than sending to a fraction of the
+        # non-openers.
+        $redis.sadd("#{checkpoint_key}:tmp", ["stale@example.com"])
+
+        described_class.new.perform(blast.id)
+
+        expect_sent_count 2
+        expect($redis.exists?("#{checkpoint_key}:tmp")).to eq(false)
+      end
+    end
   end
 
   describe "audience load statement timeout" do
@@ -458,6 +511,36 @@ describe SendPostBlastEmailsJob, :freeze_time do
       described_class.new.perform(blast.id)
 
       expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(snapshot_key)
+    end
+
+    it "revalidates the snapshot in slices small enough to stay on the primary key" do
+      post = basic_post_with_audience
+      create(:active_follower, user: @seller)
+      create(:active_follower, user: @seller)
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      snapshotted_ids = AudienceMember.where(seller_id: post.seller_id).pluck(:id)
+      expect(snapshotted_ids.size).to be >= 3
+      $redis.rpush(snapshot_key, snapshotted_ids)
+
+      # A big `IN (...)` list makes MySQL abandon the primary key and scan the whole
+      # table, so the revalidation must never hand the filter more ids than the slice
+      # size — regardless of how large the audience is.
+      stub_const("#{described_class}::REVALIDATION_SLICE_SIZE", 2)
+      slice_sizes = []
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        slice_sizes << kwargs[:ids].size
+        original.call(**kwargs)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect(slice_sizes.size).to eq((snapshotted_ids.size / 2.0).ceil)
+      expect(slice_sizes).to all(be <= 2)
+      expect(slice_sizes.sum).to eq(snapshotted_ids.size)
       expect(blast.reload.completed_at).to be_present
     ensure
       $redis.del(snapshot_key)

@@ -87,6 +87,11 @@ class Link < ApplicationRecord
 
   DEFAULT_BOOSTED_DISCOVER_FEE_PER_THOUSAND = 300
 
+  # Longest custom permalink a seller can set. Matches the varchar(255) column;
+  # the editor's input uses the same number as its maxLength so the field stops
+  # accepting characters at the point the server would reject the value.
+  CUSTOM_PERMALINK_MAX_LENGTH = 255
+
   belongs_to :user, optional: true
   has_many :prices
   has_many :alive_prices, -> { alive }, class_name: "Price"
@@ -188,7 +193,19 @@ class Link < ApplicationRecord
   validates :support_email, email_format: true, not_reserved_email_domain: true, allow_nil: true
   validates :default_price_cents, presence: true
   validates :unique_permalink, presence: true, uniqueness: { case_sensitive: false }, format: { with: /\A[a-zA-Z_]+\z/ }
-  validates :custom_permalink, format: { with: /\A[a-zA-Z0-9_-]+\z/ }, uniqueness: { scope: :user_id, case_sensitive: false }, allow_nil: true, allow_blank: true
+  # The three sources describing this field to a seller have to agree: the
+  # editor's input constraint (CustomPermalinkInput), the helper text under it,
+  # and these messages. A seller who types a rejected value should be told which
+  # rule they hit, not just that the value "is invalid".
+  #
+  # CUSTOM_PERMALINK_MAX_LENGTH mirrors the column (varchar(255)); without an
+  # explicit validation an over-long value fails at the database instead of
+  # coming back as a field error the editor can show.
+  validates :custom_permalink,
+            format: { with: /\A[a-zA-Z0-9_-]+\z/, message: "can only contain letters, numbers, dashes, and underscores" },
+            length: { maximum: CUSTOM_PERMALINK_MAX_LENGTH, message: "must be #{CUSTOM_PERMALINK_MAX_LENGTH} characters or fewer" },
+            uniqueness: { scope: :user_id, case_sensitive: false, message: "is already used by another one of your products" },
+            allow_nil: true, allow_blank: true
   validate :suggested_price_greater_than_price
   validate :duration_multiple_of_price_options
   validate :custom_and_unique_permalink_uniqueness
@@ -939,6 +956,12 @@ class Link < ApplicationRecord
     eligible_purchases = Purchase.none
     eligible_purchases = requested_user.purchases.where(link: self) if requested_user
 
+    # Whether the purchase we end up returning belongs to the signed-in visitor rather
+    # than merely to whoever is using this browser. Captured before the browser_guid
+    # fallback below replaces the relation, because it decides whether the license key
+    # may travel to the page (see the strip below).
+    matched_signed_in_purchaser = eligible_purchases.present?
+
     # When a gift purchase is made, we set the same browser_guid for the gifter and giftee purchases.
     # When fetching purchases using browser_guid, exclude gift receiver purchases so that we won't show
     # the giftee purchase to gifter on the same browser.
@@ -951,7 +974,15 @@ class Link < ApplicationRecord
     end
 
     bought_purchase = eligible_purchases.not_is_gift_sender_purchase.last
-    bought_purchase&.purchase_info unless bought_purchase&.rental_expired?
+    return nil if bought_purchase.nil? || bought_purchase.rental_expired?
+
+    info = bought_purchase.purchase_info
+    # The license key is a credential, and the product page is public. Keep it only when
+    # we know WHO the visitor is: a signed-in purchaser, or someone presenting the HMAC'd
+    # purchase id + email digest from their own email (handled above). A purchase matched
+    # by the _gumroad_guid cookie alone proves nothing about identity — anyone on a shared
+    # or public browser would otherwise see the previous buyer's key.
+    matched_signed_in_purchaser ? info : info.except(:license_key)
   end
 
   def save_duration!(duration)
@@ -1225,7 +1256,31 @@ class Link < ApplicationRecord
   end
 
   def has_product_level_rich_content?
-    is_physical? || has_same_rich_content_for_all_variants? || alive_variants.empty?
+    is_physical? || alive_variants.empty? || (has_same_rich_content_for_all_variants? && !recoverable_hidden_variant_rich_content?)
+  end
+
+  # Detects a stored state the editor cannot faithfully display: the product
+  # claims every version shares the product-level content
+  # (has_same_rich_content_for_all_variants is on), yet the product level has
+  # no visible content while version-level pages still do. This is the state
+  # that caused the July 21, 2026 content wipe: support restored a product's
+  # per-version pages without turning the flag off, so the editor (and buyers)
+  # resolved to the blank product level, the real content became unreachable,
+  # and the next ordinary save deleted it.
+  #
+  # When the hidden version content is unambiguously the only real content
+  # (the product level is blank), we treat the product as effectively using
+  # per-version content so the editor and buyers see the real pages again —
+  # the seller recovers just by reloading. When BOTH sides have visible
+  # content we cannot pick a winner automatically; saves that would delete the
+  # hidden pages fail closed instead and require an explicit choice (see
+  # Product::RichContentDeletionGuard).
+  def recoverable_hidden_variant_rich_content?
+    return false unless has_same_rich_content_for_all_variants?
+    return false if is_physical?
+    return false if alive_rich_contents.any?(&:has_editor_content?)
+
+    alive_variants.any? { |variant| variant.alive_rich_contents.any?(&:has_editor_content?) }
   end
 
   def has_embedded_license_key?
@@ -1320,7 +1375,7 @@ class Link < ApplicationRecord
 
       other_products_by_user = id.present? ? user.links.where.not(id:) : user.links
       duplicates_unique_permalink = other_products_by_user.where(unique_permalink: custom_permalink).exists?
-      errors.add(:custom_permalink, :taken) if duplicates_unique_permalink
+      errors.add(:custom_permalink, "is already used by another one of your products") if duplicates_unique_permalink
     end
 
     def custom_permalink_of_licensed_product
@@ -1339,7 +1394,13 @@ class Link < ApplicationRecord
                                                      .or(licensed_products_of_other_sellers.where(custom_permalink:))
       return if licensed_product_with_duplicate_permalink.empty?
 
-      errors.add(:custom_permalink, :taken)
+      # This is not "you already used this handle" — the conflict is with a
+      # DIFFERENT seller's licensed product. License keys issued before the
+      # force-product-id cutover are looked up by permalink alone, so two
+      # sellers sharing one permalink would make those keys ambiguous. The
+      # seller can't free the handle themselves, so say who holds it and what
+      # to do instead of reporting a generic invalid/taken value.
+      errors.add(:custom_permalink, "is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.")
     end
 
     def default_offer_code_must_be_valid

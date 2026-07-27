@@ -15,7 +15,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
 
     expect do
       click_on "Create account"
-      expect(page).to have_selector("iframe[title*=recaptcha]", visible: false)
       expect(page).to have_content("Dashboard")
     end.to change(User, :count).by(1)
   end

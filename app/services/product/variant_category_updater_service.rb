@@ -3,7 +3,7 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
-  attr_reader :product, :category_params
+  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context
   attr_accessor :variant_category
 
   delegate :price_currency_type,
@@ -27,9 +27,93 @@ class Product::VariantCategoryUpdaterService
     product_files
   ].freeze
 
-  def initialize(product:, category_params:)
+  # id_mappings: a per-request accumulator ({ variants: {}, rich_content: {} })
+  # the controller passes down and returns to the editor after a successful
+  # save. New variants arrive with a client-generated id (client_id) and new
+  # pages with a client-generated page id; the mappings tell the editor which
+  # canonical server ids they got, so its next save addresses the same records
+  # instead of re-creating them (and tripping the deletion guards).
+  # deletion_audit_context: who and which request is deleting, for the audit
+  # trail (ProductVariantDeletionAudit). Carries :actor_user_id, :request_id and
+  # :revision_token. Passed down the same way as deletion_guard_diagnostics
+  # rather than read from a global, so the services stay usable outside a
+  # request (backfills, console, tests). Defaults to empty: a caller that
+  # doesn't know the actor still deletes normally, it just records less.
+  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {})
     @product = product
     @category_params = category_params
+    @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
+    @payload_page_ids = Array.wrap(payload_page_ids)
+    @confirmed_removed_rich_content_ids = Array.wrap(confirmed_removed_rich_content_ids)
+    @preserved_rich_content_ids = Array.wrap(preserved_rich_content_ids)
+    @rewrite_budget = rewrite_budget
+    @deletion_guard_diagnostics = deletion_guard_diagnostics
+    @id_mappings = id_mappings || { variants: {}, rich_content: {} }
+    @deletion_audit_context = deletion_audit_context || {}
+  end
+
+  # Blocks deleting variants the seller has invested in — ones that carry
+  # content (rich content pages or attached files), have been purchased, or
+  # have non-default configuration (custom price, quantity cap, duration,
+  # pay-what-you-want, integrations, recurring prices, description) — unless
+  # the seller explicitly confirmed each removal in the editor. A save payload
+  # built from outdated or incomplete data (see
+  # Product::RichContentDeletionGuard for the incident history) would otherwise
+  # treat every missing variant as "removed" and soft-delete the seller's
+  # entire version tree. Truly blank rows (no content, no purchases, all
+  # defaults) stay freely deletable so ordinary create-and-discard editor
+  # flows keep working without extra confirmations.
+  def self.ensure_deletion_intent!(product:, variants:, confirmed_removed_variant_ids:, diagnostics: {})
+    unconfirmed = variants.reject do |variant|
+      confirmed_removed_variant_ids.include?(variant.external_id) || !variant_requires_deletion_intent?(variant)
+    end
+    return if unconfirmed.empty?
+
+    ErrorNotifier.notify(
+      "Blocked product save that would delete configured, purchased, or content-bearing variants without confirmation",
+      product_id: product.id,
+      variant_ids: unconfirmed.map(&:id),
+      **diagnostics
+    )
+    message = "This save would remove versions that still have content, settings, or sales, which weren't explicitly removed in the editor. The version list shown may be out of date — please refresh the page and try again."
+    product.errors.add(:base, message)
+    raise Link::LinkInvalid, message
+  end
+
+  def self.variant_requires_deletion_intent?(variant)
+    variant_has_content?(variant) ||
+      variant_has_purchases?(variant) ||
+      variant_has_non_default_configuration?(variant)
+  end
+
+  def self.variant_has_content?(variant)
+    # has_editor_content? (not description.present?) so a variant whose only
+    # page is the editor's blank placeholder paragraph stays freely deletable.
+    variant.alive_rich_contents.any?(&:has_editor_content?) || variant.has_files?
+  end
+
+  # Any successful purchase means buyers rely on this variant existing (their
+  # library and receipts reference it), so deleting it must be an explicit
+  # seller decision. This closes the gap where
+  # VariantCategory#has_alive_grouping_variants_with_purchases? only shielded
+  # the category-deletion path, and only when the variant also had files —
+  # per-variant deletions of purchased, contentless variants were unguarded.
+  def self.variant_has_purchases?(variant)
+    variant.purchases.all_success_states.exists?
+  end
+
+  # A variant with settings that differ from a freshly-added blank row
+  # represents real seller setup (pricing tiers configured before content is
+  # added, for example) and must not be silently deletable by a stale payload.
+  def self.variant_has_non_default_configuration?(variant)
+    variant.price_difference_cents.to_i != 0 ||
+      variant.customizable_price? ||
+      variant.max_purchase_count.present? ||
+      variant.duration_in_minutes.present? ||
+      variant.description.present? ||
+      variant.apply_price_changes_to_existing_memberships? ||
+      variant.active_integrations.exists? ||
+      (variant.respond_to?(:prices) && variant.prices.alive.where("price_cents > 0").exists?)
   end
 
   def perform
@@ -41,8 +125,15 @@ class Product::VariantCategoryUpdaterService
     end
 
     if category_params[:options].nil?
-      batch_delete_variants(variant_category.variants)
-      variant_category.mark_deleted! if variant_category.title.blank?
+      self.class.ensure_deletion_intent!(product:, variants: variant_category.variants.alive.to_a, confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
+      deleted_variant_external_ids = batch_delete_variants(variant_category.variants)
+      category_was_deleted = variant_category.title.blank?
+      variant_category.mark_deleted! if category_was_deleted
+      record_deletion_audit(
+        route: ProductVariantDeletionAudit::EDITOR_CATEGORY_OMITTED,
+        deleted_variant_external_ids:,
+        deleted_variant_category_external_ids: category_was_deleted ? [variant_category.external_id] : [],
+      )
     else
       existing_variants = variant_category.variants.to_a
       keep_variants = []
@@ -68,16 +159,29 @@ class Product::VariantCategoryUpdaterService
           save_rich_content(variant, option)
           variant.product_files = ProductFile.find(variant.alive_rich_contents.flat_map { _1.embedded_product_file_ids_in_order }.uniq)
           save_recurring_prices!(variant, option) if is_tiered_membership && has_variant_recurrences?
+        rescue Product::RichContentDeletionGuard::HiddenVariantContentConflict
+          # Must reach the controller intact — it carries the hidden pages the
+          # editor needs to offer the seller an explicit choice. The generic
+          # re-raise below would flatten it into a plain Link::LinkInvalid.
+          raise
         rescue ActiveRecord::RecordInvalid, Link::LinkInvalid, ArgumentError => e
           error_message = variant.present? ? variant.errors.full_messages.to_sentence : e.message
           errors.add(:base, error_message)
           raise Link::LinkInvalid
         end
         keep_variants << variant if option[:id]
+        # Tell the editor which canonical id a newly created variant got, keyed
+        # by the client-generated id it was submitted under, so subsequent
+        # saves update this variant instead of re-creating it.
+        id_mappings[:variants][option[:client_id]] = variant.external_id if option[:id].blank? && option[:client_id].present?
       end
 
       variants_to_delete = existing_variants - keep_variants
-      batch_delete_variants(variants_to_delete)
+      self.class.ensure_deletion_intent!(product:, variants: variants_to_delete.select(&:alive?), confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
+      record_deletion_audit(
+        route: ProductVariantDeletionAudit::EDITOR_VARIANTS_DIFFED,
+        deleted_variant_external_ids: batch_delete_variants(variants_to_delete),
+      )
     end
 
     variant_category.save!
@@ -85,19 +189,49 @@ class Product::VariantCategoryUpdaterService
   end
 
   private
+    # Records a successful deletion for the audit trail. Never raises: see
+    # ProductVariantDeletionAudit.
+    def record_deletion_audit(route:, deleted_variant_external_ids: [], deleted_variant_category_external_ids: [])
+      ProductVariantDeletionAudit.record_deletion(
+        actor_user_id: deletion_audit_context[:actor_user_id],
+        product_id: product.id,
+        route:,
+        deleted_variant_external_ids:,
+        deleted_variant_category_external_ids:,
+        confirmed_removed_variant_ids:,
+        revision_token: deletion_audit_context[:revision_token],
+        correlation_id: deletion_audit_context[:correlation_id],
+        request_id: deletion_audit_context[:request_id],
+      )
+    end
+
+    # Returns the external ids of the variants this call actually soft-deleted,
+    # which the deletion audit records. That is narrower than `variants`: a
+    # variant an earlier save already deleted stays deleted with its original
+    # timestamp (see below), and attributing it to this request would overstate
+    # what this save removed.
     def batch_delete_variants(variants)
       variant_ids = variants.respond_to?(:pluck) ? variants.pluck(:id) : variants.map(&:id)
-      return if variant_ids.empty?
+      return [] if variant_ids.empty?
 
+      # Only stamp variants that aren't already deleted, so a variant keeps the
+      # timestamp from the save that actually deleted it. Support uses that
+      # timestamp to find which rows a bad save wiped.
       now = Time.current
-      BaseVariant.where(id: variant_ids).update_all(deleted_at: now, updated_at: now)
+      newly_deleted = BaseVariant.where(id: variant_ids).alive.to_a
+      BaseVariant.where(id: newly_deleted.map(&:id)).update_all(deleted_at: now, updated_at: now) if newly_deleted.any?
 
+      # Cleanup runs for every id, including ones deleted earlier: an earlier
+      # delete may not have finished cleaning up, and both workers are safe to
+      # run twice.
       variant_ids.each do |variant_id|
         DeleteProductRichContentWorker.perform_async(product.id, variant_id)
         DeleteProductFilesArchivesWorker.perform_async(product.id, variant_id)
       end
 
       product.invalidate_cache
+
+      newly_deleted.map(&:external_id)
     end
 
     def create_or_update_variant!(external_id, params)
@@ -161,8 +295,22 @@ class Product::VariantCategoryUpdaterService
         ).from_rich_content
         rich_content.update!(title: variant_rich_content[:title].presence, description: variant_rich_content[:description].presence || [], position: index)
         rich_contents_to_keep << rich_content
+        # A page submitted under an id the server didn't know was just created
+        # with a canonical id — report the mapping so the editor's next save
+        # addresses this page instead of re-creating it.
+        id_mappings[:rich_content][variant_rich_content[:id]] = rich_content.external_id if variant_rich_content[:id].present? && variant_rich_content[:id] != rich_content.external_id
       end
-      (existing_rich_contents - rich_contents_to_keep).map(&:mark_deleted!)
+      rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
+        .reject { preserved_rich_content_ids.include?(_1.external_id) }
+      Product::RichContentDeletionGuard.ensure_intent!(
+        product:,
+        rich_contents_to_delete:,
+        payload_page_ids:,
+        confirmed_removed_ids: confirmed_removed_rich_content_ids,
+        rewrite_budget:,
+        diagnostics: deletion_guard_diagnostics
+      )
+      rich_contents_to_delete.map(&:mark_deleted!)
     end
 
     # For tiered memberships that have per-tier pricing, validates that:

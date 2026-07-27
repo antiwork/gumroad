@@ -12,7 +12,6 @@ class AuthPresenter
     {
       email: params[:email] || retrieve_team_invitation_email(params[:next]),
       application_name: application&.name,
-      show_passkey_login: Feature.active?(:passkeys),
     }
   end
 
@@ -20,7 +19,6 @@ class AuthPresenter
     referrer = User.find_by_username(params[:referrer]) if params[:referrer].present?
     number_of_creators, total_made = $redis.mget(RedisKey.number_of_creators, RedisKey.total_made)
     login_props.merge(
-      recaptcha_site_key: Feature.active?(:disable_signup_recaptcha) ? nil : GlobalConfig.get("RECAPTCHA_SIGNUP_SITE_KEY"),
       referrer: referrer ? {
         id: referrer.external_id,
         name: referrer.name_or_username,

@@ -8,6 +8,10 @@ class Order::PreparePaymentIntentService
   # The browser's resolved card country is more trustworthy than a client-supplied field.
   CARD_COUNTRY_SOURCE = "stripe"
   GENERIC_CHARGE_ERROR = "There is a temporary problem, please try again (your card was not charged)."
+  # A Klarna amount-window rejection is deterministic — retrying Klarna on the same cart can
+  # never succeed — so it must not reuse the retry-oriented generic message above. Tell the
+  # buyer the one action that works: pick a different payment method.
+  KLARNA_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Klarna supports. Please choose a different payment method (you have not been charged)."
 
   def initialize(order:, params:, confirmation_token:)
     @order = order
@@ -173,12 +177,28 @@ class Order::PreparePaymentIntentService
     # ConfirmationToken can reach prepare after that decision. Enforce the same lock against the
     # purchase's server-owned GeoIP country before the selected method is appended to the intent.
     def block_region_locked_payment_method_country_mismatch
-      required_country = region_locked_country(@previewed_payment_method_type)
+      required_country = buyer_country_lock(@previewed_payment_method_type)
       return false if required_country.blank? || buyer_country_alpha2 == required_country
 
       Rails.logger.error("Region-locked #{@previewed_payment_method_type} payment blocked for order #{order.id}: buyer country #{buyer_country_alpha2.inspect} does not match #{required_country}")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       true
+    end
+
+    # The buyer-location lock for the method the buyer actually confirmed with. This is a
+    # superset of region_locked_country: Klarna is US-only in v1 (the resolver only offers it
+    # to US buyers) but deliberately lives outside US_LOCKED_PAYMENT_METHOD_TYPES, because that
+    # constant also feeds previewed_country's PPP funding-country fallback and Klarna's funding
+    # country is not verifiable before the charge. The location lock must still be enforced
+    # here: without it, a non-US buyer's Klarna ConfirmationToken would slip past this gate and
+    # the previewed-method append in intent_payment_method_types would put klarna back on a USD
+    # intent the v1 gate never vetted — Stripe would then reject the confirm instead of the
+    # order failing closed before the intent is created. An unknown GeoIP country fails closed,
+    # matching the resolver.
+    def buyer_country_lock(method_type)
+      return Checkout::PaymentMethodResolver::KLARNA_SUPPORTED_BUYER_COUNTRY if method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE
+
+      region_locked_country(method_type)
     end
 
     def region_locked_country(method_type)
@@ -191,6 +211,35 @@ class Order::PreparePaymentIntentService
     def block_purchasing_power_parity_mismatches
       purchases_to_charge.each(&:validate_purchasing_power_parity)
       fail_all_purchases_when_any_errored
+    end
+
+    # Stripe enforces Klarna's transaction limits against the PaymentIntent's FINAL amount —
+    # the charged total with tax, discounts, tips and shipping applied — not the pre-tax item
+    # total both the presenter and the prepare-time resolver gate on (they share that basis so
+    # the Element's method list and the intent's stay equal; see payment_method_resolution).
+    # A cart that mounted Klarna at, say, $3,900 pre-tax can cross $4,000 once tax lands, and
+    # creating an intent that lists klarna above the limit makes Stripe reject the CREATE (or
+    # the confirm) with no recoverable buyer action. When the buyer actually confirmed with
+    # Klarna, fail the order closed here, before any charge or intent exists — the token can
+    # only ever confirm as Klarna, so there is no method list that saves it. (When the buyer
+    # picked another method, klarna is instead silently dropped from the intent's method list —
+    # see intent_payment_method_types — and their card/Link confirm proceeds untouched.)
+    # Runs after resolve_merchant_account_and_fees because amount_cents needs the recomputed fees.
+    def block_klarna_final_amount_outside_window
+      return false unless @previewed_payment_method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE
+      return false if klarna_final_amount_within_window?
+
+      Rails.logger.error("Klarna payment blocked for order #{order.id}: final charged amount #{amount_cents} is outside Stripe's Klarna USD window")
+      fail_purchases_with(KLARNA_AMOUNT_INELIGIBLE_MESSAGE)
+      true
+    end
+
+    # The final charged USD total sits inside Stripe's Klarna window. This is the intent-amount
+    # check (what Stripe validates at create/confirm); the resolver's cart_total_usd_cents gate
+    # is the display-parity check on the pre-tax basis. Both must pass for klarna to ride an intent.
+    def klarna_final_amount_within_window?
+      amount_cents >= Checkout::PaymentMethodResolver::KLARNA_MIN_USD_CHARGE_CENTS &&
+        amount_cents <= Checkout::PaymentMethodResolver::KLARNA_MAX_USD_CHARGE_CENTS
     end
 
     # Server-confirm checkout runs this at charge time; client-confirm combined charges skip it at
@@ -220,6 +269,7 @@ class Order::PreparePaymentIntentService
     def prepare_unconfirmed_charge
       resolve_merchant_account_and_fees
       return if fail_all_purchases_when_any_errored
+      return if block_klarna_final_amount_outside_window
 
       charge = build_charge
       presentment = method_forced_presentment_for(charge)
@@ -433,16 +483,140 @@ class Order::PreparePaymentIntentService
     # append (deduped below) keeps the confirmed method on the intent if the resolver's inputs
     # drift after the Element mounts, including in Stripe test mode.
     def intent_payment_method_types(presentment)
-      return resolved_payment_method_types if presentment.nil?
-
-      method_types = resolved_payment_method_types
+      # The previewed-method append runs on EVERY lane, including the plain USD one (nil
+      # presentment): it is the safety net that keeps the buyer's actual selection on the
+      # intent when the resolver's inputs drift between the Element mounting and prepare
+      # running (a flag flip, a GeoIP re-eval, an amount-basis divergence for Klarna's
+      # window). Without it, a buyer who selected a method the re-run resolver dropped
+      # fails at confirm with no recourse — Stripe rejects a payment_method_types-scoped
+      # ConfirmationToken whose type is missing from the intent. The append runs BEFORE
+      # the currency-compatibility strip below so that strip is final — the confirmed
+      # method must never re-enter an intent whose currency it cannot charge in. For the
+      # same reason the append itself is currency-gated: a forced-currency method (iDEAL,
+      # Bancontact, UPI) is only appended when the intent is being created in its currency —
+      # appending it to a USD intent (e.g. its launch flag rolled back mid-checkout, so no
+      # presentment was built) would make Stripe reject the intent CREATE itself; leaving
+      # it off keeps the flag-off USD lane byte-for-byte and fails the stale token closed
+      # at confirm instead. Klarna gets the equivalent launch-flag gate: it is only
+      # appended while checkout_local_method_klarna is active for this seller, so a stale
+      # or crafted klarna token cannot re-enable the method after a rollback (or before a
+      # rollout ever reached the seller) — it fails closed at confirm, exactly like a
+      # forced-currency token after its flag rolled back. (Klarna's US-only buyer lock is
+      # separately enforced fail-closed, before this method runs, by
+      # block_region_locked_payment_method_country_mismatch.)
+      method_types = (resolved_payment_method_types + [appendable_previewed_payment_method_type(presentment)]).compact.uniq
       # The US-locked methods (Cash App Pay, ACH) are also USD-only: Stripe rejects creating an
       # intent in any other currency that lists them. Dropping them here is about currency
       # compatibility, not the buyer's location — a US-GeoIP buyer keeps them on USD intents.
+      # Klarna is dropped for the same reason: its v1 gate vets carts for USD intents only (the
+      # US amount window and cross-border rule), so it must never ride a forced-currency intent —
+      # this is belt-and-braces, since the resolver already withholds Klarna whenever a
+      # forced-currency method is on the cart (see launched_method_set).
       # The remaining launched methods (card, Link) support every currency we can force today.
-      method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES if presentment.presentment_currency != Currency::USD
+      if presentment.present? && presentment.presentment_currency != Currency::USD
+        method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
+        method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
+        # Alipay is dropped on a forced-currency intent for the same reason as Klarna: the
+        # resolver's Alipay gate vets the canonical-USD lane only, so it must never ride a
+        # EUR/INR intent. Belt-and-braces, since the resolver already withholds Alipay whenever a
+        # forced-currency method is on the cart (see launched_method_set).
+        method_types -= [Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
+      end
 
-      (method_types + [@previewed_payment_method_type]).uniq
+      # Klarna is also amount-locked: Stripe validates its transaction limits against the
+      # intent's FINAL amount at create, while the resolver gates on the pre-tax item basis
+      # (deliberately — the Element and the intent must resolve the same list; see
+      # payment_method_resolution). When tax/discount drift pushes the charged total outside
+      # the window, listing klarna would make Stripe reject the intent CREATE and fail the
+      # whole cart — including a buyer who picked card. Drop it instead; the buyer who
+      # actually confirmed WITH Klarna never reaches here (block_klarna_final_amount_outside_window
+      # already failed the order closed).
+      method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE] unless klarna_final_amount_within_window?
+
+      method_types
+    end
+
+    # The previewed method, or nil when it must not ride this intent: nil when no method
+    # preview was supplied (saved-card charges), and nil unless the method is one this
+    # seller could legitimately have been offered right now — the append is a drift
+    # safety net for methods the resolver COULD list, never a way for a client-supplied
+    # (stale or crafted) token type to enable a method past its rollout gate. Without
+    # this allowlist, a us_bank_account token would re-add ACH for a seller who never
+    # opted in (the intent create succeeds, so the buyer actually pays by a method the
+    # platform withdrew — gumroad-private#1143), and an afterpay/affirm token would make
+    # Stripe reject the whole intent create (gumroad-private#1026). Also nil when the
+    # method forces a currency the intent is not being created in — that token can never
+    # confirm against this intent anyway, and listing the method would make Stripe reject
+    # the intent create outright.
+    def appendable_previewed_payment_method_type(presentment)
+      method_type = @previewed_payment_method_type
+      return nil if method_type.blank?
+
+      # The allowlist mirrors the resolver's sources of offerable methods: always-on
+      # launched methods, the seller's ACH opt-in, Klarna's launch flag + account gate,
+      # Alipay's launch flag + account gate, and the forced-currency local methods (their
+      # currency gate is below). Anything else —
+      # unlaunched, opted-out, or unknown types — must fail closed at confirm rather than
+      # ride the intent. The Klarna clause is load-bearing: it unconditionally re-adds
+      # klarna for flag-on sellers so the final-amount strip in intent_payment_method_types
+      # stays the single authority on Klarna's amount window (see the tips/rounding
+      # divergence notes on the PR). It re-checks the merchant-account gate too, not just
+      # the flag: capability/account drift after the Element mounts must not re-append
+      # klarna onto a non-US connected account's intent, where the incompatible entry
+      # fails the whole intent create (gumroad-private#1026).
+      # Alipay's clause mirrors Klarna's: flag plus the US merchant-account gate — no
+      # buyer-country lock and no amount window, but Stripe's Alipay presentment currencies are
+      # tied to the account's business country and `usd` is United States only, so account drift
+      # after the Element mounts must not re-append alipay onto a non-US connected account's
+      # intent, where the incompatible entry fails the whole intent create
+      # (gumroad-private#1026). See Checkout::PaymentMethodResolver#alipay_methods. The
+      # per-account capability re-check below still applies on top of it.
+      return nil unless method_type.in?(Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES) ||
+        (method_type.in?(Checkout::PaymentMethodResolver::SELLER_OPT_IN_PAYMENT_METHOD_TYPES) && seller.ach_payments_enabled?) ||
+        (method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE &&
+          Feature.active?(Checkout::PaymentMethodResolver::KLARNA_LAUNCH_FEATURE, seller) &&
+          Checkout::PaymentMethodResolver.klarna_supported_merchant_account?(seller)) ||
+        (method_type == Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE &&
+          Feature.active?(Checkout::PaymentMethodResolver::ALIPAY_LAUNCH_FEATURE, seller) &&
+          Checkout::PaymentMethodResolver.alipay_supported_merchant_account?(seller)) ||
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).present?
+
+      # The policy allowlist above is not enough on its own: it mirrors the resolver's
+      # POLICY sources but the resolver's final step is an intersection with what the charged
+      # ACCOUNT can accept (launched & account_supported_methods). For a direct-charge seller
+      # whose capability snapshot dropped a method (link/cashapp/us_bank_account deactivated
+      # after the Element mounted), re-appending the token's type puts an incompatible entry
+      # on the intent and Stripe rejects the ENTIRE intent create — failing the whole cart,
+      # cards included (the gumroad-private#1026 failure mode). Re-check the same gate here so
+      # capability drift fails the stale token closed at confirm instead.
+      return nil unless account_supports_previewed_method?(method_type)
+
+      forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
+      return method_type if forced_currency.blank?
+
+      intent_currency = presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+      forced_currency == intent_currency ? method_type : nil
+    end
+
+    # Mirrors the resolver's account_supported_methods for the single previewed method: the
+    # append must never re-add a method the account the intent is created on cannot accept.
+    # Platform-account (Gumroad-managed) sellers always pass — every launched method is
+    # activated on the platform account. Direct-charge sellers pass only when the cached
+    # capability snapshot says the method's capability is active; card is exempt (the baseline
+    # capability of any chargeable account, same carve-out as the resolver's
+    # ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES). A missing snapshot fails closed — the
+    # resolver already resolved this same checkout to card-only and enqueued the background
+    # refresh, so the Element never offered the method anyway and there is no drift to protect.
+    def account_supports_previewed_method?(method_type)
+      return true unless seller.has_stripe_account_connected?
+      return true if method_type.in?(Checkout::PaymentMethodResolver::ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES)
+
+      connect_account = seller.stripe_connect_account
+      return false if connect_account.nil?
+
+      available = StripeConnectPaymentMethodAvailabilityService.new(connect_account)
+        .available_payment_method_types([method_type])
+      available.present? && available.include?(method_type)
     end
 
     # Recompute eligibility and the method set from server-owned purchases, never a client-supplied
@@ -455,7 +629,15 @@ class Order::PreparePaymentIntentService
       # "setup + charge" product type not flagged as free-trial/preorder, pass setup_for_future here.
       @payment_method_resolution ||= Checkout::PaymentMethodResolver.new(
         sellers: [seller],
-        recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? },
+        # An installment-plan purchase counts as recurring here even though its product is not
+        # a recurring-billing (membership) product: the first installment charges now and the
+        # rest charge off-session later, so it needs the same future-charge card machinery as a
+        # subscription. The presenter already keeps installment carts off the client-confirm
+        # lane entirely (its "setup_or_installment_flow" fallback), so this only matters for a
+        # crafted #prepare request — without it, such a request would resolve the one-time
+        # method set (Klarna included, for a flagged seller) and mint a deferred intent that
+        # cannot fund the later installments.
+        recurring: purchases_to_charge.any? { _1.link.is_recurring_billing? || _1.is_installment_payment? },
         commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION },
         buyer_country: buyer_country_alpha2,
         ppp_discounted: ppp_verification_applies?,
@@ -463,8 +645,43 @@ class Order::PreparePaymentIntentService
         # currency, nil for multi-item carts) so both sides resolve identical method sets —
         # the Element's list and the deferred intent's list must match or Stripe rejects
         # the ConfirmationToken.
-        cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil
+        cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil,
+        # Klarna's amount-window input (see the resolver), on the SAME basis the presenter used
+        # when mounting the Element — nil unless every product is USD-priced, and the pre-tax,
+        # pre-discount, quantity-inclusive item total when they are. Matching the basis matters
+        # because the Element's method list and the deferred intent's must match (Stripe rejects
+        # a payment_method_types-scoped ConfirmationToken against a mismatched intent): passing
+        # the tax-inclusive charged total, or a real USD total for a non-USD-priced cart the
+        # presenter nil'ed out, would make the two sides resolve different Klarna answers near
+        # the window edges and fail carts that never touched Klarna. Stripe validates Klarna's
+        # limits against the intent's FINAL amount though, so the drift between this pre-tax
+        # basis and the charged total is separately fail-closed by
+        # block_klarna_final_amount_outside_window (Klarna tokens) and the final-amount strip
+        # in intent_payment_method_types (other methods). Residual method-list drift (a stale
+        # Element, flag flips mid-checkout) is covered by the previewed-method append in
+        # intent_payment_method_types, which runs on every lane including this USD one.
+        cart_total_usd_cents: purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == Currency::USD } ? purchases_to_charge.sum { klarna_window_price_cents(_1) } : nil
       ).resolve
+    end
+
+    # The Klarna amount-window basis for one purchase: the buyer's chosen pre-discount,
+    # quantity-inclusive amount — the same thing the presenter summed from cart_product.price
+    # when it mounted the Element. This deliberately does NOT use
+    # displayed_price_cents_before_offer_code: for a cached offer code that helper routes
+    # through pre_discount_minimum_price_cents, the PRODUCT FLOOR — which diverges from the
+    # buyer's chosen amount on a pay-what-you-want product priced above floor, making the two
+    # sides resolve different Klarna answers near the window edges (an Element/intent
+    # method-set mismatch that fails the whole cart at confirm). Instead we reconstruct the
+    # chosen pre-discount amount from the purchase's own displayed price by inverting the
+    # offer code, mirroring the presenter's basis. A 100%-off code can't be inverted
+    # (original_price returns nil); fall back to the discounted amount, which is 0 and fails
+    # closed out of Klarna's >= $1 window on both sides anyway.
+    def klarna_window_price_cents(purchase)
+      offer_code = purchase.original_offer_code
+      return purchase.displayed_price_cents if offer_code.blank?
+
+      original_per_unit = offer_code.original_price(purchase.displayed_price_per_unit_cents)
+      original_per_unit.present? ? original_per_unit * purchase.quantity : purchase.displayed_price_cents
     end
 
     # U13: mirrors the presenter's PPP input so the deferred intent's method set equals the Payment

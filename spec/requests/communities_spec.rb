@@ -5,9 +5,6 @@ require "spec_helper"
 describe "Communities", :js, type: :system do
   let(:seller) { create(:user, name: "Bob") }
 
-  before do
-    Feature.activate_user(:communities, seller)
-  end
 
   def find_message(content)
     content_element = find("[aria-label='Message content']", text: content, match: :first)
@@ -571,7 +568,6 @@ describe "Communities", :js, type: :system do
 
     it "allows buyer to switch between communities from different sellers" do
       other_seller = create(:user, name: "Alice")
-      Feature.activate_user(:communities, other_seller)
       other_product = create(:product, name: "The ultimate guide to design systems", user: other_seller, community_chat_enabled: true)
       other_community = create(:community, resource: other_product, seller: other_seller)
       create(:purchase, seller: other_seller, purchaser: buyer, link: other_product)

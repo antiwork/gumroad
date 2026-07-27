@@ -234,8 +234,6 @@ describe("Download Page", type: :system, js: true) do
     let(:url_redirect) { purchase.url_redirect }
 
     before do
-      Feature.activate_user(:communities, seller)
-
       login_as(user)
     end
 

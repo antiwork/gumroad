@@ -15,10 +15,6 @@ describe CommunitiesController, inertia: true do
 
   include_context "with user signed in as admin for seller"
 
-  before do
-    Feature.activate_user(:communities, seller)
-  end
-
   describe "GET index" do
     it_behaves_like "authorize called for action", :get, :index do
       let(:record) { Community }
@@ -48,8 +44,8 @@ describe CommunitiesController, inertia: true do
         end
       end
 
-      it "returns unauthorized response if the :communities feature flag is disabled" do
-        Feature.deactivate_user(:communities, seller)
+      it "returns unauthorized response if community chat is disabled for the product" do
+        product.update!(community_chat_enabled: false)
 
         get :index
 
@@ -148,8 +144,8 @@ describe CommunitiesController, inertia: true do
         end.to raise_error(ActiveRecord::RecordNotFound)
       end
 
-      it "returns unauthorized response if the :communities feature flag is disabled" do
-        Feature.deactivate_user(:communities, seller)
+      it "returns unauthorized response if community chat is disabled for the product" do
+        product.update!(community_chat_enabled: false)
 
         get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
 
@@ -163,7 +159,6 @@ describe CommunitiesController, inertia: true do
       let!(:purchase) { create(:purchase, seller:, purchaser: buyer, link: product) }
 
       before do
-        Feature.activate_user(:communities, buyer)
         sign_in buyer
       end
 
@@ -177,7 +172,6 @@ describe CommunitiesController, inertia: true do
 
       it "returns unauthorized response for communities they don't have access to" do
         other_seller = create(:user)
-        Feature.activate_user(:communities, other_seller)
         other_product = create(:product, user: other_seller, community_chat_enabled: true)
         other_community = create(:community, seller: other_seller, resource: other_product)
 

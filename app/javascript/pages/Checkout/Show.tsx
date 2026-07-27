@@ -558,6 +558,12 @@ const CheckoutIndexPage = () => {
             ...(item.product.buyer_currency_display
               ? { buyer_currency_display: item.product.buyer_currency_display }
               : {}),
+            ...(result.buyer_presentment_currency
+              ? {
+                  buyer_presentment_currency: result.buyer_presentment_currency,
+                  buyer_presentment_value: result.buyer_presentment_value,
+                }
+              : {}),
           });
         }
         if (result.has_third_party_analytics && !redirectTo)
@@ -658,11 +664,21 @@ const CheckoutIndexPage = () => {
       );
       const originalCartItem = originalCartItems[0];
       if (originalCartItem) {
+        // When a replace-type cross-sell offers a bundle, also drop any cart items for products
+        // that are already inside that bundle (e.g. products added by earlier accepted add-on
+        // cross-sells). Those items aren't tagged with this offer's id (their cross_sells were
+        // stripped when they were injected mid-checkout), so the originalCartItems filter alone
+        // would leave the buyer purchasing the bundle plus its own contents.
+        const offeredBundleProductIds = new Set(
+          currentOffer.offered_product.product.bundle_products.map(({ product_id }) => product_id),
+        );
+        const replacedItems = (item: CartItem) =>
+          originalCartItems.includes(item) || offeredBundleProductIds.has(item.product.id);
         return {
           ...cartForm.data.cart,
           items: [
             ...(currentOffer.replace_selected_products
-              ? cartForm.data.cart.items.filter((item) => !originalCartItems.includes(item))
+              ? cartForm.data.cart.items.filter((item) => !replacedItems(item))
               : cartForm.data.cart.items),
             {
               ...currentOffer.offered_product,

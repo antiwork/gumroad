@@ -149,8 +149,7 @@ class AudienceMember < ApplicationRecord
             purchase_price_cents INT PATH '$.price_cents',
             purchase_created_at DATETIME PATH '$.created_at',
             purchase_country CHAR(100) PATH '$.country',
-            purchase_subscription_cancelled INT PATH '$.subscription_cancelled',
-            purchase_license_uses INT PATH '$.license_uses'
+            purchase_subscription_cancelled INT PATH '$.subscription_cancelled'
           ),
           NESTED PATH '$.affiliates[*]' COLUMNS (
             affiliate_id INT PATH '$.id',
@@ -160,6 +159,24 @@ class AudienceMember < ApplicationRecord
         ))
       SQL
       json_filter = json_filter.joins("INNER JOIN #{json_table} AS jt")
+      # MySQL expands sibling JSON_TABLE paths into disjoint rows. A purchase predicate keeps
+      # only purchase rows, and an affiliate-product predicate keeps only affiliate rows; asking
+      # one `jt` row to satisfy both made affiliate posts with purchase filters resolve nobody.
+      # For affiliate posts, keep purchase predicates on `jt` and read affiliate identity from a
+      # second expansion (`affiliate_jt`) that is filtered only by affiliate-specific constraints.
+      if params[:type] == "affiliate"
+        affiliate_json_table = <<~SQL.squish
+          JSON_TABLE(details, '$.affiliates[*]' COLUMNS (
+            affiliate_id INT PATH '$.id',
+            affiliate_product_id INT PATH '$.product_id',
+            affiliate_created_at DATETIME PATH '$.created_at'
+          ))
+        SQL
+        json_filter = json_filter.joins("INNER JOIN #{affiliate_json_table} AS affiliate_jt")
+        json_filter = json_filter.where("affiliate_jt.affiliate_product_id IN (?)", params[:affiliate_product_ids]) if params[:affiliate_product_ids]
+        json_filter = json_filter.where("affiliate_jt.affiliate_created_at > ?", params[:created_after]) if params[:created_after]
+        json_filter = json_filter.where("affiliate_jt.affiliate_created_at < ?", params[:created_before]) if params[:created_before]
+      end
       json_filter = json_filter.where("jt.purchase_price_cents > ?", params[:paid_more_than_cents]) if params[:paid_more_than_cents]
       json_filter = json_filter.where("jt.purchase_price_cents < ?", params[:paid_less_than_cents]) if params[:paid_less_than_cents]
       if params[:active_customers_only]
@@ -170,7 +187,15 @@ class AudienceMember < ApplicationRecord
         json_filter = json_filter.where("jt.purchase_id IS NOT NULL AND COALESCE(jt.purchase_subscription_cancelled, 0) = 0")
       end
       if params[:minimum_license_uses]
-        json_filter = json_filter.where("jt.purchase_license_uses >= ?", params[:minimum_license_uses].to_i)
+        # Read the use count from the licenses table rather than from a copy kept inside
+        # this row's `details` JSON. Keeping a copy meant every license activation had to
+        # rewrite the buyer's audience_members row, and because MySQL takes a row lock for
+        # that write, concurrent activations for the same buyer queued behind each other
+        # and the license-verification endpoint returned 500s once the lock wait timed out.
+        # A license belongs to exactly one purchase, so joining is a direct lookup.
+        json_filter = json_filter
+          .joins("INNER JOIN licenses ON licenses.purchase_id = jt.purchase_id AND licenses.deleted_at IS NULL")
+          .where("licenses.uses >= ?", params[:minimum_license_uses].to_i)
       end
       timestamp_columns = if params[:type] == "customer"
         %w[purchase_created_at]
@@ -181,15 +206,15 @@ class AudienceMember < ApplicationRecord
           %w[follower_created_at]
         end
       elsif params[:type] == "affiliate"
-        %w[affiliate_created_at]
+        []
       else
         %w[purchase_created_at follower_created_at affiliate_created_at]
       end
-      if params[:created_after]
+      if params[:created_after] && timestamp_columns.any?
         where_conditions = timestamp_columns.map { "jt.#{_1} > :date" }.join(" OR ")
         json_filter = json_filter.where(where_conditions, date: params[:created_after])
       end
-      if params[:created_before]
+      if params[:created_before] && timestamp_columns.any?
         where_conditions = timestamp_columns.map { "jt.#{_1} < :date" }.join(" OR ")
         json_filter = json_filter.where(where_conditions, date: params[:created_before])
       end
@@ -199,7 +224,7 @@ class AudienceMember < ApplicationRecord
         json_filter = json_filter.where("jt.purchase_product_id IN (?)", params[:bought_product_ids]) if params[:bought_product_ids]
         json_filter = json_filter.where("jt.purchase_variant_id IN (?)", params[:bought_variant_ids]) if params[:bought_variant_ids]
       end
-      if params[:affiliate_product_ids]
+      if params[:affiliate_product_ids] && params[:type] != "affiliate"
         json_filter = json_filter.where("jt.affiliate_product_id IN (?)", params[:affiliate_product_ids])
       end
       # COLLATE makes this binary-exact like the JSON_CONTAINS country subquery above and the
@@ -213,7 +238,28 @@ class AudienceMember < ApplicationRecord
       # When we don't need the ids, we can just do a distinct (much faster) on all the rows found by the root query.
       if with_ids
         json_filter = json_filter.group(:id)
-        json_filter = json_filter.select("audience_members.*, max(jt.purchase_id) AS purchase_id, jt.follower_id AS follower_id, max(jt.affiliate_id) AS affiliate_id")
+        # MySQL expands SIBLING nested paths ($.follower and $.purchases[*]) into DISJOINT
+        # rows: the follower row has NULL purchase columns and every purchase row has a NULL
+        # follower_id. So as soon as a purchase predicate is applied (e.g. a "bought these
+        # products" filter), the row carrying the follower id is filtered away and
+        # jt.follower_id comes back NULL for everyone — which made follower workflows and
+        # blasts that also filter on a bought product resolve no recipient and silently send
+        # nothing. When the caller is explicitly asking for followers, read the id out of the
+        # details JSON instead; a member has at most one follower, so it is the same value the
+        # join would have produced whenever the follower row survives. Other filter types keep
+        # reading the join, where a NULL follower_id legitimately means "matched as a buyer or
+        # affiliate, not as a follower" and decides which recipient the send uses.
+        follower_id_select = if params[:type] == "follower"
+          "max(CAST(JSON_UNQUOTE(JSON_EXTRACT(audience_members.details, '$.follower.id')) AS UNSIGNED))"
+        else
+          "jt.follower_id"
+        end
+        affiliate_id_select = if params[:type] == "affiliate"
+          "max(affiliate_jt.affiliate_id)"
+        else
+          "max(jt.affiliate_id)"
+        end
+        json_filter = json_filter.select("audience_members.*, max(jt.purchase_id) AS purchase_id, #{follower_id_select} AS follower_id, #{affiliate_id_select} AS affiliate_id")
         json_filter_sql = json_filter.to_sql
       elsif json_filter.where_clause.present?
         json_filter_sql = json_filter.to_sql

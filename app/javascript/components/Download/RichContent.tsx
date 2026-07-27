@@ -43,15 +43,16 @@ export const RichContentView = ({
   license: License | null;
 }) => {
   const { rootDomain } = useDomains();
+  const licenseKey = license?.license_key ?? null;
   const editor = useRichTextEditor({
     ariaLabel: "Product content",
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- to be fixed with product edit refactor
     initialValue: richContent as Content,
     editable: false,
     extensions: [
-      Link.configure({ saleInfo, rootDomain }),
-      TiptapLink.configure({ saleInfo, rootDomain }),
-      TiptapButton.configure({ saleInfo, rootDomain }),
+      Link.configure({ saleInfo, licenseKey, rootDomain }),
+      TiptapLink.configure({ saleInfo, licenseKey, rootDomain }),
+      TiptapButton.configure({ saleInfo, licenseKey, rootDomain }),
       FileEmbed,
       FileEmbedGroup,
       ExternalMediaFileEmbed,
@@ -64,7 +65,7 @@ export const RichContentView = ({
     ],
   });
   const licenseInfo = {
-    licenseKey: license?.license_key ?? null,
+    licenseKey,
     isMultiSeatLicense: license?.is_multiseat_license ?? null,
     seats: license?.seats ?? null,
   };
@@ -78,11 +79,25 @@ export const RichContentView = ({
 
 const SALE_INFO_PLACEHOLDER_QUERY_PARAM = "__sale_info__";
 
+// Sellers can put this token anywhere in a link or button href (query value, path segment, ...) and
+// the buyer's own license key is substituted in when the content page renders. The main use is
+// deep-linking into a native app that activates the licence in one tap, e.g.
+// `myapp://activate?key=__license_key__`. The substitution happens at render time only — the
+// resolved key is never written back into the stored `rich_content`, so the stored document stays
+// the same for every buyer.
+const LICENSE_KEY_PLACEHOLDER = "__license_key__";
+
 const isGumroadPostUrl = (url: URL, rootDomain: string) => {
   const isGumroadDomain = url.host.endsWith(`.${rootDomain}`) || url.host === rootDomain;
   const isPostPath = /^\/([^/]+\/)?p\/[^/]+$/u.test(url.pathname);
   return isGumroadDomain && isPostPath;
 };
+
+// When there is no license key for this purchase (product doesn't generate licenses) the token is
+// left in place rather than blanked out, so a seller testing the link sees plainly that their
+// placeholder wasn't substituted instead of an empty `key=` that looks like a Gumroad bug.
+const substituteLicenseKey = (href: string, licenseKey: string | null) =>
+  licenseKey === null ? href : href.split(LICENSE_KEY_PLACEHOLDER).join(encodeURIComponent(licenseKey));
 
 const addSaleInfoQueryParams = (href: string, saleInfo: SaleInfo | null, rootDomain: string) => {
   if (!saleInfo) return href;
@@ -109,7 +124,14 @@ const addSaleInfoQueryParams = (href: string, saleInfo: SaleInfo | null, rootDom
   }
 };
 
-const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null; rootDomain: string }>({
+type LinkRenderOptions = { saleInfo: SaleInfo | null; licenseKey: string | null; rootDomain: string };
+
+// Every link/button href on the download page goes through this: first the license-key token, then
+// the sale-info query parameters.
+const resolveHref = (href: string, options: LinkRenderOptions) =>
+  addSaleInfoQueryParams(substituteLicenseKey(href, options.licenseKey), options.saleInfo, options.rootDomain);
+
+const Link = Mark.create<BaseLinkOptions & LinkRenderOptions>({
   name: "link",
   addAttributes: () => ({
     href: { default: null },
@@ -122,11 +144,7 @@ const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null; rootDoma
       "a",
       {
         ...HTMLAttributes,
-        href: addSaleInfoQueryParams(
-          typia.assert<string>(HTMLAttributes.href),
-          this.options.saleInfo,
-          this.options.rootDomain,
-        ),
+        href: resolveHref(typia.assert<string>(HTMLAttributes.href), this.options),
         target: "_blank",
       },
       0,
@@ -134,7 +152,7 @@ const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null; rootDoma
   },
 });
 
-const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: string }>({
+const TiptapLink = TiptapNode.create<LinkRenderOptions>({
   name: "tiptap-link",
   group: "inline",
   inline: true,
@@ -147,18 +165,14 @@ const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: st
         ...HTMLAttributes,
         target: "_blank",
         rel: "noopener noreferrer nofollow",
-        href: addSaleInfoQueryParams(
-          typia.assert<string>(HTMLAttributes.href),
-          this.options.saleInfo,
-          this.options.rootDomain,
-        ),
+        href: resolveHref(typia.assert<string>(HTMLAttributes.href), this.options),
       },
       0,
     ];
   },
 });
 
-const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: string }>({
+const TiptapButton = TiptapNode.create<LinkRenderOptions>({
   name: "button",
   group: "block",
   content: "inline+",
@@ -174,11 +188,7 @@ const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: 
           class: buttonVariants({ size: "default", color: "primary" }),
           target: "_blank",
           rel: "noopener noreferrer nofollow",
-          href: addSaleInfoQueryParams(
-            typia.assert<string>(HTMLAttributes.href),
-            this.options.saleInfo,
-            this.options.rootDomain,
-          ),
+          href: resolveHref(typia.assert<string>(HTMLAttributes.href), this.options),
         },
         0,
       ],

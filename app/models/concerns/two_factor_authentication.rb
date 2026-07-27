@@ -55,11 +55,11 @@ module TwoFactorAuthentication
   end
 
   def passkeys_enabled?
-    Feature.active?(:passkeys, self) && webauthn_credentials.exists?
+    webauthn_credentials.exists?
   end
 
   def passkeys_setup_pending?
-    Feature.active?(:passkeys, self) && webauthn_credentials.none?
+    webauthn_credentials.none?
   end
 
   def has_logged_in_from_ip_before?(remote_ip)

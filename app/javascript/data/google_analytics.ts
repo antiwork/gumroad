@@ -118,6 +118,16 @@ export function trackProductEvent(config: AnalyticsConfig | undefined, data: Pro
               display_mode: data.buyer_currency_display.display_mode,
             }
           : {}),
+        // Buyer-currency dimension for sales charged in the buyer's own currency. `currency`
+        // and `value` above remain the canonical amounts, so existing revenue reports keep
+        // working; these are what the buyer's card was actually charged. Omitted for
+        // canonical-USD sales so their event payload is unchanged.
+        ...(data.buyer_presentment_currency
+          ? {
+              buyer_presentment_currency: data.buyer_presentment_currency,
+              buyer_presentment_value: data.buyer_presentment_value,
+            }
+          : {}),
       };
 
       if (config) logSellerEvent(config.id, "page_view", payload);

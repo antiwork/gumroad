@@ -298,8 +298,16 @@ describe Order::ChargeService, :vcr do
                                                                presentment_currency: Currency::CAD,
                                                                presentment_total_cents: 12_50,
                                                                presentment_gumroad_amount_cents: processor_gumroad_amount_cents)
-      expect(charge_responses.fetch("unique-id-0")).to include(buyer_presentment_currency: Currency::CAD,
+      # Currency is UPCASED in this payload on purpose. It feeds the Google Analytics
+      # purchase event from the checkout and mobile paths, while the library/download page
+      # feeds the same GA field via PurchaseSellerAnalyticsPresenter, which upcases. GA
+      # event parameters are case-sensitive, so emitting "cad" here and "CAD" there would
+      # split one dimension into two values depending on where the buyer landed — and GA
+      # data cannot be corrected after collection.
+      expect(charge_responses.fetch("unique-id-0")).to include(buyer_presentment_currency: "CAD",
                                                                buyer_presentment_total_cents: 12_50,
+                                                               # Major units, for the GA event's `value`. 12_50 minor CAD units -> 12.5.
+                                                               buyer_presentment_value: 12.5,
                                                                total_price_including_tax_and_shipping: purchase.formatted_buyer_presentment_total)
     ensure
       Feature.deactivate_user(:buyer_local_currency, seller_1)
@@ -624,8 +632,9 @@ describe Order::ChargeService, :vcr do
                                                                content_url: nil,
                                                                should_show_receipt: false,
                                                                show_view_content_button_on_product_page: false,
-                                                               buyer_presentment_currency: Currency::CAD,
-                                                               buyer_presentment_total_cents: 12_50)
+                                                               buyer_presentment_currency: "CAD",
+                                                               buyer_presentment_total_cents: 12_50,
+                                                               buyer_presentment_value: 12.5)
       expect(FinalizeBuyerPresentmentChargeJob.jobs.size).to eq(1)
       expect(FinalizeBuyerPresentmentChargeJob.jobs.first["args"]).to eq([charge.id])
     ensure

@@ -3061,8 +3061,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
         fill_in("SWIFT / BIC Code", with: "AAAAMAMAXXX")
-        fill_in("Account #", with: "MA64011519000001205000534921")
-        fill_in("Confirm account #", with: "MA64011519000001205000534921")
+        fill_in("IBAN", with: "MA64011519000001205000534921")
+        fill_in("Confirm IBAN", with: "MA64011519000001205000534921")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in MAD.")
@@ -3111,8 +3111,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
         fill_in("SWIFT / BIC Code", with: "TESTSERBXXX")
-        fill_in("Account #", with: "RS35105008123123123173")
-        fill_in("Confirm account #", with: "RS35105008123123123173")
+        fill_in("IBAN", with: "RS35105008123123123173")
+        fill_in("Confirm IBAN", with: "RS35105008123123123173")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in RSD.")
@@ -4694,8 +4694,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "Moldova Creator")
         fill_in("SWIFT / BIC Code", with: "AAAAMDMDXXX")
-        fill_in("Account #", with: "MD07AG123456789012345678")
-        fill_in("Confirm account #", with: "MD07AG123456789012345678")
+        fill_in("IBAN", with: "MD07AG123456789012345678")
+        fill_in("Confirm IBAN", with: "MD07AG123456789012345678")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in MDL.")
@@ -5753,8 +5753,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Senegal Creator")
-        fill_in("Account #", with: "SN08SN0100152000048500003035")
-        fill_in("Confirm account #", with: "SN08SN0100152000048500003035")
+        fill_in("IBAN", with: "SN08SN0100152000048500003035")
+        fill_in("Confirm IBAN", with: "SN08SN0100152000048500003035")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in XOF.")

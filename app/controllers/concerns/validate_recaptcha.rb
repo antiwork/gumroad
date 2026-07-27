@@ -18,7 +18,6 @@ module ValidateRecaptcha
     checkout_score: true,
     checkout_score_trusted: true,
     login: false,
-    signup: false,
   }.freeze
   # Default score thresholds used when the per-surface Redis key is unset.
   # Surfaces not listed here default to nil (no score gating — token validity

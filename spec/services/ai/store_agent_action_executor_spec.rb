@@ -98,6 +98,7 @@ describe Ai::StoreAgentActionExecutor do
 
         expect(result[:success]).to be(false)
         expect(result[:message]).to be_present
+        expect(result[:failure_reason]).to eq("unsupported_action")
       end
 
       it "rejects an unknown endpoint id" do
@@ -105,6 +106,7 @@ describe Ai::StoreAgentActionExecutor do
 
         expect(result[:success]).to be(false)
         expect(result[:message]).to be_present
+        expect(result[:failure_reason]).to eq("unsupported_action")
       end
 
       it "rejects a READ endpoint sent as a write (reads never mutate, so never execute here)" do
@@ -118,6 +120,7 @@ describe Ai::StoreAgentActionExecutor do
 
         expect(result[:success]).to be(false)
         expect(result[:message]).to match(/missing path parameter/i)
+        expect(result[:failure_reason]).to eq("invalid_path_parameters")
       end
 
       it "rejects a body key the endpoint does not declare before dispatching (no product is created)" do
@@ -134,7 +137,25 @@ describe Ai::StoreAgentActionExecutor do
           expect(result[:success]).to be(false)
           expect(result[:message]).to include("price_cents")
           expect(result[:message]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
+          expect(result[:failure_reason]).to eq("unknown_parameters")
         end.not_to change { seller.links.count }
+      end
+
+      it "classifies a reflected API validation message without losing the seller-facing detail" do
+        secret = "seller-secret-token"
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(
+            endpoint: "create_resource_subscription",
+            params: { "resource_name" => "sale", "post_url" => "not-a-url?token=#{secret}" },
+          ),
+        )
+
+        expect(result[:success]).to be(false)
+        expect(result[:message]).to include(secret)
+        expect(result[:failure_reason]).to eq("api_failure")
+        # The public v2 endpoint reports validation failure in a 200 envelope with success: false.
+        expect(result[:failure_status]).to eq(200)
       end
     end
 
@@ -167,6 +188,7 @@ describe Ai::StoreAgentActionExecutor do
 
         expect(result[:success]).to be(false)
         expect(result[:message]).to match(/permission/i)
+        expect(result[:failure_reason]).to eq("permission_denied")
       end
 
       it "refuses resend_receipt for a marketing member (edit_sales, which marketing lacks)" do
