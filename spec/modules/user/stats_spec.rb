@@ -391,6 +391,46 @@ describe User::Stats, :vcr do
         affiliate_credits_balances = @user.affiliate_credit_cents_for_balances(balance_ids)
         expect(affiliate_credits_balances).to eq 98
       end
+
+      # gumroad-private#1432. A partial refund leaves the affiliate credit alive — it sets neither
+      # a refund nor a chargeback balance id — so the credit stays inside the `paid`/
+      # `not_refunded_or_chargebacked` scopes these sums are built from. The old implementation
+      # then ADDED every partially refunded credit a second time on top of the scope's own sum,
+      # so the affiliate appeared to earn roughly double on each such sale. The right figure is
+      # the live credits minus only the refunded slice.
+      def partially_refund_affiliate_credit!(purchase, amount_cents:)
+        credit = purchase.affiliate_credit
+        AffiliatePartialRefund.create!(
+          purchase:,
+          affiliate_credit: credit,
+          affiliate: credit.affiliate,
+          seller: purchase.seller,
+          affiliate_user: credit.affiliate_user,
+          balance: credit.affiliate_credit_success_balance,
+          amount_cents:,
+          total_credit_cents: credit.amount_cents
+        )
+        purchase.update!(stripe_partially_refunded: true)
+      end
+
+      it "counts a partially refunded sale once, net of the refunded slice" do
+        purchase = Purchase.last
+        expect(purchase.affiliate_credit).to be_present
+
+        partially_refund_affiliate_credit!(purchase, amount_cents: 20)
+
+        balance_ids = @user.unpaid_balances.map(&:id)
+
+        # Six sales at 49 cents of affiliate credit each = 294 (the baseline example above),
+        # less the 20-cent partial refund on one of them.
+        expect(@user.affiliate_credit_cents_for_balances(balance_ids)).to eq(294 - 20)
+      end
+
+      it "counts a partially refunded sale once in the lifetime total too" do
+        partially_refund_affiliate_credit!(Purchase.last, amount_cents: 20)
+
+        expect(@user.affiliate_credits_sum_total).to eq(294 - 20)
+      end
     end
 
     describe "affiliate_fee_cents_for_balances" do

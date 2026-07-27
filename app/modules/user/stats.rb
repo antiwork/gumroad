@@ -102,27 +102,34 @@ module User::Stats
   end
 
   def affiliate_credits_sum_for_credits_created_between(start_time, end_time)
-    paid_scope = affiliate_credits.paid.where("affiliate_credits.created_at > ? AND affiliate_credits.created_at <= ? ", start_time, end_time)
-    all_scope = affiliate_credits.where("affiliate_credits.created_at > ? AND affiliate_credits.created_at <= ? ", start_time, end_time)
-    affiliate_credit_sum_from_scope(paid_scope, all_scope)
+    affiliate_credit_sum_from_scope(
+      affiliate_credits.paid.where("affiliate_credits.created_at > ? AND affiliate_credits.created_at <= ? ", start_time, end_time)
+    )
   end
 
   def affiliate_credits_sum_total
-    paid_scope = affiliate_credits.paid
-    all_scope = affiliate_credits
-    affiliate_credit_sum_from_scope(paid_scope, all_scope)
+    affiliate_credit_sum_from_scope(affiliate_credits.paid)
   end
 
-  def affiliate_credit_sum_from_scope(paid_scope, all_scope)
-    aff_credit_cents = paid_scope.sum("amount_cents").to_i
-    aff_credit_cents += all_scope
-                            .joins(:purchase).where("purchases.stripe_partially_refunded": true)
-                            .sum("amount_cents")
-    aff_credit_cents -= all_scope
-                            .joins(:purchase).where("purchases.stripe_partially_refunded": true)
-                            .joins(:affiliate_partial_refunds)
-                            .sum("affiliate_partial_refunds.amount_cents")
-    aff_credit_cents
+  # Sums what an affiliate actually earned across a set of credits, net of partial refunds.
+  #
+  # A partially refunded purchase keeps its affiliate credit alive: only the refunded slice is
+  # recorded, as an AffiliatePartialRefund row, and the credit's own amount_cents still holds the
+  # original full amount. So the earned figure is "every live credit, minus the partial refunds
+  # taken against them".
+  #
+  # This used to add a second `stripe_partially_refunded` term on top of the scope's own sum. The
+  # scopes callers pass here already exclude only credits that were FULLY refunded or charged back
+  # (those carry a refund/chargeback balance id), and a partial refund sets neither — so a
+  # partially refunded credit was inside the scope AND added again, roughly doubling what the
+  # affiliate appeared to earn on every partially refunded sale (gumroad-private#1432).
+  #
+  # The subtraction is scoped to the credits being summed. Deducting refunds recorded against
+  # fully refunded or charged-back credits would take money off a total those credits never
+  # contributed to.
+  def affiliate_credit_sum_from_scope(scope)
+    scope.sum("amount_cents").to_i -
+      scope.joins(:affiliate_partial_refunds).sum("affiliate_partial_refunds.amount_cents")
   end
 
   def last_weeks_followers
@@ -282,8 +289,7 @@ module User::Stats
                          .where("affiliate_credit_refund_balance_id IN (?) OR affiliate_credit_chargeback_balance_id IN (?)",
                                 balance_ids, balance_ids)
                          .where.not(affiliate_credit_success_balance_id: balance_ids).sum(:amount_cents)
-    all_scope = affiliate_credits.where(affiliate_credit_success_balance_id: balance_ids)
-    affiliate_credit_sum_from_scope(paid_scope, all_scope) - refunded_cents
+    affiliate_credit_sum_from_scope(paid_scope) - refunded_cents
   end
 
   def affiliate_fee_cents_for_balances(balance_ids)
