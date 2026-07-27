@@ -1540,7 +1540,7 @@ const LicenseSection = ({
           <pre className="grow break-all whitespace-pre-wrap">
             <code>{license.key}</code>
           </pre>
-          {/* Creators hand license keys to buyers by hand as part of routine support, so make the
+          {/* Creators pass license keys to buyers manually as part of routine support, so make the
               key copyable in one tap instead of requiring them to select the text — which is
               especially awkward on a phone. */}
           <CopyToClipboard text={license.key} copyTooltip="Copy license key">
