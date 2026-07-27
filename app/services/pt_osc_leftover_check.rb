@@ -24,8 +24,7 @@
 # pre-existing triggers untouched, so it fails in seconds and leaves NO trace in the
 # database — and the error text ("Trigger already exists") describes the symptom
 # without saying anything about what to do. In production this once cost a hung
-# deploy and a migration recorded as applied that had never run; see
-# gumroad-private#1417.
+# deploy and a migration recorded as applied that had never run.
 #
 # This check turns that into an up-front, actionable refusal: it names the leftover
 # artifacts and says what has to happen before the migration can be retried. It is
@@ -124,7 +123,7 @@ class PtOscLeftoverCheck
         table, and confirm the shadow table is not part of a schema change somebody is
         actually still running.
 
-        Background and a worked example: gumroad-private#1417.
+        Background and a worked example are on the internal migrations tracker.
       TEXT
 
       message

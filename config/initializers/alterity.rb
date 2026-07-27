@@ -40,8 +40,7 @@ Alterity.configure do |config|
     # later run on that table fail on "Trigger already exists" — in seconds, and
     # without leaving any trace in the database. Failing here instead names the
     # leftover artifacts and says what has to be cleared, rather than surfacing a
-    # bare MySQL error that describes the symptom. See PtOscLeftoverCheck and
-    # gumroad-private#1417.
+    # bare MySQL error that describes the symptom. See PtOscLeftoverCheck.
     #
     # The table name is recovered from the command Alterity built, which is the only
     # place the hook can see it. It has to be matched as the whole `D=<db>,t=<table>`
