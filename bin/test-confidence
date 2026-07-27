@@ -479,7 +479,15 @@ for (( m=0; m<MILESTONES; m++ )); do
 
         case $verify_rc in
           0) verdict="confirmed pre-existing" ;;
-          1) verdict="cross-file regression" ;;
+          1)
+            # JS verdicts come from the file-level heuristic, not a merge-base
+            # replay, so don't claim evidence we didn't gather.
+            if is_js_test "$spec"; then
+              verdict="regression"
+            else
+              verdict="cross-file regression"
+            fi
+            ;;
           2)
             # Merge-base verification couldn't run (e.g. pending migration).
             # Fall back to heuristic — if the source file isn't in the diff,
