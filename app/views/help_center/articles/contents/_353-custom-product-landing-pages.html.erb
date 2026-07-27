@@ -21,19 +21,21 @@
   </ul>
   <p>Only the latest version of the page is stored, and there is no version history, so keep the source file with your own work if you want to be able to go back to an earlier design.</p>
   <h3 id="Keep-the-page-buyable-Lw2kS">Keep the page buyable</h3>
-  <p>Because the page replaces Gumroad's own buy button, your HTML has to include a buy element or your product cannot be bought. The prompt in the Share tab covers this, and both the command line tool and the Agent tab warn you when a page has no buy element, but it is worth checking yourself after publishing.</p>
+  <p>Because the page replaces Gumroad's own buy button, your HTML has to give buyers a way into checkout or your product cannot be bought. The prompt in the Share tab covers this, and both the command line tool and the Agent tab warn you when a page has no way to buy, but it is worth checking yourself after publishing.</p>
   <p>Mark an element with <code>data-gumroad-action="buy"</code> to open Gumroad's checkout, on any tag:</p>
   <ul>
     <li><code>&lt;a data-gumroad-action="buy"&gt;Buy now&lt;/a&gt;</code></li>
   </ul>
+  <p>For a pay-what-you-want product where you want buyers to name their own price on the page itself, the page can instead send Gumroad a <code>gumroad:checkout</code> message with the chosen amount. That also counts as a way to buy. The prompt in the Share tab includes a working example.</p>
   <p>You can also have Gumroad fill in live product values, so the page never shows a stale price. Mark an element with <code>data-gumroad-field="name"</code>, <code>"price"</code>, or <code>"description"</code> and its contents are replaced with the product's current value every time the page is served.</p>
   <p>For products with something to choose, set the choice on the buy element and the checkout opens with it already selected: <code>data-gumroad-option</code> for a variant, version, or tier name, <code>data-gumroad-quantity</code> for a quantity, <code>data-gumroad-price</code> for a pay-what-you-want amount, and <code>data-gumroad-recurrence</code> for a membership's billing period. An invalid value falls back to the product's defaults rather than breaking the page.</p>
   <p>The full list of attributes, along with the exact request format, is in the <a href="https://gumroad.com/api#custom-html" target="_blank">developer documentation</a>.</p>
   <p>Always open the live page and click through to checkout once after publishing. That is the only way to be sure the buy flow works.</p>
   <h3 id="What-the-page-can-and-cant-do-Nx6qB">What the page can and can't do</h3>
-  <p>Your HTML is cleaned up before it is saved, and the page is then served in a sandbox, so a page you publish can't reach your Gumroad account or send information to another site.</p>
+  <p>Your HTML is cleaned up before it is saved, and the page is then served in a sandbox, so a page you publish can't read your Gumroad account or make network requests of its own.</p>
   <p>It can run inline JavaScript for animations, scroll effects, sticky headers, and modals; load scripts from the Tailwind, jsDelivr, and unpkg content delivery networks; load fonts from Google Fonts and Bunny Fonts; load images and media from Gumroad, such as your product's own cover and thumbnail; and embed videos from YouTube or Vimeo.</p>
-  <p>It can't read your Gumroad session, load images or media from any other site, make network requests of its own, submit a form to an outside address, or affect the page around it. Anything not allowed is removed when the page is saved, and the report you get back from a preview or a publish tells you what was removed. If the report shows something your page needed, fix the HTML and preview it again before publishing.</p>
+  <p>It can't read your Gumroad session, load images or media from any other site, make requests of its own with JavaScript, submit a form to an outside address, or affect the page around it.</p>
+  <p>Two different things enforce that, which matters when a page doesn't look right. Disallowed tags and attributes are stripped when the page is saved, and the report you get back from a preview or a publish lists what was stripped. Other things, like an image pointing at a host outside Gumroad, are saved as written but blocked by the browser when the page is served, so they won't appear in that report. If your page is missing something, check the report first, then load the live page and look at your browser's console.</p>
   <p>A page can be up to 500,000 characters long.</p>
   <p>While a product is unpublished, its landing page is visible only to you, your collaborators, and Gumroad staff, so you can look at it before anyone else can.</p>
   <h3 id="Update-or-remove-the-page-Jp5vH">Update or remove the page</h3>
