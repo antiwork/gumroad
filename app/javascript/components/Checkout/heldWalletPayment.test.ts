@@ -20,6 +20,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
+    buyer_currency_presentment: false,
     payment_method_types: ["card"],
     payment_method_creation: "manual",
     stripe_link_enabled: false,
@@ -209,6 +210,91 @@ describe("resolveHeldWalletPayment", () => {
           state({ checkoutPayment: methodForcedConfig, surcharges: loadedSurcharges(180) }),
           methodForcedHeld,
         ),
+      ).toEqual({ type: "re-confirm" });
+    });
+  });
+
+  // The buyer-currency (FX-quoted) presentment lane. Here the element mounts in the buyer's
+  // currency at the quote's locked total, so `approvedAmount` — which getStripePaymentElementAmount
+  // resolves from the quote — is the presentment number the wallet sheet displayed. That makes the
+  // existing comparison already correct for this lane; these cases pin it, because nothing else
+  // covers it and the safety property is invisible: a regression here would not fail any other
+  // test, it would charge a buyer a total they never approved.
+  describe("buyer-currency presentment lane (FX-quoted element mount)", () => {
+    const fxConfig: CheckoutPaymentConfig = {
+      ...paymentElementConfig,
+      elements_options: {
+        ...paymentElementConfig.elements_options,
+        buyer_currency_presentment: true,
+      },
+    };
+
+    // A loaded surcharge response carrying an FX quote, with the presentment total tracking the
+    // canonical total at rate 1.25 so the quote stays internally consistent (the display helper
+    // rejects a quote whose line allocations do not reconcile to its total).
+    const loadedWithQuote = (taxCents: number): State["surcharges"] => {
+      const canonicalTotal = 1_000 + taxCents;
+      const presentmentTotal = Math.round(canonicalTotal * 1.25);
+      const presentmentTax = Math.round(taxCents * 1.25);
+      return {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: taxCents,
+          tax_included_cents: 0,
+          subtotal: 1_000,
+          buyer_currency_quote: {
+            token: "quote-token",
+            currency: "cad",
+            canonical_total_cents: canonicalTotal,
+            presentment_total_cents: presentmentTotal,
+            rate: 1.25,
+            subunit_to_unit: 100,
+            expires_at: "2099-01-01T00:00:00Z",
+            line_allocations: [
+              {
+                permalink: "product-a",
+                price_cents: presentmentTotal - presentmentTax,
+                tip_cents: 0,
+                tax_cents: presentmentTax,
+                shipping_cents: 0,
+                total_cents: presentmentTotal,
+              },
+            ],
+          },
+        },
+      };
+    };
+
+    // Approved at zero tax: the sheet showed the locked CA$12.50 (1250 minor units) while
+    // checkout's own canonical total was US$10.00.
+    const fxHeld = {
+      paymentMethod: serverConfirmPaymentMethod,
+      approvedAmount: 1_250,
+      approvedTotal: 1_000,
+    };
+
+    it("continues when the reloaded quote still matches the approved presentment total", () => {
+      expect(
+        resolveHeldWalletPayment(state({ checkoutPayment: fxConfig, surcharges: loadedWithQuote(0) }), fxHeld),
+      ).toEqual({ type: "continue", paymentMethod: serverConfirmPaymentMethod });
+    });
+
+    it("requires re-confirmation when the adopted address changes the tax", () => {
+      expect(
+        resolveHeldWalletPayment(state({ checkoutPayment: fxConfig, surcharges: loadedWithQuote(200) }), fxHeld),
+      ).toEqual({ type: "re-confirm" });
+    });
+
+    // The quote can disappear on reload (expired, or Stripe rejected the re-quote). The element
+    // amount then falls back to the canonical USD total, which no longer equals the presentment
+    // amount the buyer approved — so this must never continue, or a wallet sheet showing CA$12.50
+    // would be charged US$10.00.
+    it("requires re-confirmation when the quote is gone from the reloaded surcharges", () => {
+      expect(
+        resolveHeldWalletPayment(state({ checkoutPayment: fxConfig, surcharges: loadedSurcharges(0) }), fxHeld),
       ).toEqual({ type: "re-confirm" });
     });
   });
