@@ -103,11 +103,15 @@ describe("DownloadPage media position polling", () => {
     mediaLocationsPoll()?.start.mockClear();
     mediaLocationsPoll()?.stop.mockClear();
 
-    act(() => dispatchMediaPlaybackState(true));
+    act(() => {
+      dispatchMediaPlaybackState(true);
+    });
     expect(mediaLocationsPoll()?.stop).toHaveBeenCalled();
     expect(mediaLocationsPoll()?.start).not.toHaveBeenCalled();
 
-    act(() => dispatchMediaPlaybackState(false));
+    act(() => {
+      dispatchMediaPlaybackState(false);
+    });
     expect(mediaLocationsPoll()?.start).toHaveBeenCalled();
   });
 });
