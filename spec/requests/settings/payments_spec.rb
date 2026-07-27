@@ -1024,6 +1024,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         within_modal do
           expect(page).to have_content "Confirm country change"
+          expect(page).to have_content "Your payout and identity details are tied to your country, so changing it clears your bank account, name, date of birth and address."
           expect(page).to have_content "You are about to change your country. Please click \"Confirm\" to continue."
           expect(page).to have_button "Cancel"
           expect(page).to have_button "Confirm"
@@ -1031,6 +1032,28 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         end
         wait_for_ajax
         expect(page).to have_alert(text: "Your country has been updated!")
+      end
+
+      # The reported bug: the page is one form with one save button, so a seller who corrects
+      # their country and enters their bank details in the same pass gets only the country
+      # change. That used to be reported as a plain success, leaving the seller to conclude the
+      # bank account had saved when no BankAccount row was ever created (issue #1411).
+      it "says the bank details were not saved when they were entered in the same save" do
+        visit settings_payments_path
+        click_on "Add bank account" if has_button?("Add bank account", wait: 0)
+        click_on "Change account" if has_button?("Change account", wait: 0)
+        fill_in("Pay to the order of", with: "barnabas ngagy")
+        fill_in("Routing number", with: "110000000")
+        fill_in("Account number", with: "000123456789")
+        fill_in("Confirm account number", with: "000123456789")
+        select(@update_country, from: "Country")
+
+        within_modal { click_on "Confirm" }
+        wait_for_ajax
+
+        expect(page).to have_alert(text: "Your country has been updated to United Kingdom")
+        expect(page).to have_alert(text: "please re-enter your bank account and personal details")
+        expect(@user.reload.active_bank_account).to be_nil
       end
 
       context "when creator has balance" do
