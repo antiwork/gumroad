@@ -268,6 +268,11 @@ export type FileEntry = {
   is_streamable: boolean;
   stream_only: boolean;
   is_transcoding_in_progress: boolean;
+  // Pixel dimensions of the video, when we know them, so the editor's preview
+  // frame can match the file's real shape instead of assuming 16:9. Null for
+  // non-video files and for older uploads whose dimensions were never recorded.
+  width?: number | null;
+  height?: number | null;
   id: string; // id is either server ID or, in case of unsaved dropbox files, `drop_[external_id]`
   url: string | null;
   isbn?: string | null;

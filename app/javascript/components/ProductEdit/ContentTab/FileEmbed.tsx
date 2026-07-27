@@ -14,6 +14,7 @@ import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { getMimeType } from "$app/utils/mimetypes";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
+import { videoFrameIsPortrait, videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
@@ -87,6 +88,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   React.useEffect(() => {
     if (!downloadUrl || !showingVideoPlayer) return;
     void createJWPlayer(`${uid}-video`, {
+      ...videoPlayerAspectRatio(file),
       playlist: [
         {
           sources: [{ file: downloadUrl, type: file.extension?.toLowerCase() }],
@@ -112,6 +114,11 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
         });
     });
   }, [showingVideoPlayer, JSON.stringify(uploadedSubtitleFiles.map((subtitle) => subtitle.url))]);
+
+  // Shapes every preview box below to the video's own ratio, so a portrait video
+  // the seller filmed on a phone looks the same here as it will for their buyers.
+  // Undefined when we have no dimensions, leaving the default 16:9 box.
+  const frameStyle = file ? videoFrameStyle(file) : undefined;
 
   const generateThumbnail = () => {
     if (!downloadUrl || file.thumbnail) return;
@@ -391,24 +398,30 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           {file.is_streamable && !node.attrs.collapsed ? (
             <RowDetails asChild>
               {loadingVideo ? (
-                <figure className="preview">
+                <figure className="preview" style={frameStyle}>
                   <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
                     <LoadingSpinner className="size-16" />
                   </div>
                 </figure>
               ) : file.thumbnail ? (
                 showingVideoPlayer ? (
-                  <div className="preview">
+                  <div className="preview" style={frameStyle}>
                     <div id={`${uid}-video`}></div>
                   </div>
                 ) : (
-                  <figure className="preview">
+                  <figure className="preview" style={frameStyle}>
                     <img
                       src={file.thumbnail.url}
                       style={{
                         position: "absolute",
                         height: "100%",
-                        objectFit: "cover",
+                        // Constrain the still in both axes and show the whole
+                        // frame once the box matches the video's own ratio;
+                        // "cover" would crop the top and bottom off a portrait
+                        // still. Files with unknown dimensions keep the 16:9 box,
+                        // where cropping to fill still looks better than bars.
+                        width: "100%",
+                        objectFit: videoFrameIsPortrait(file) ? "contain" : "cover",
                         borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
                       }}
                     />
@@ -439,7 +452,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   </figure>
                 )
               ) : (
-                <div className="preview">
+                <div className="preview" style={frameStyle}>
                   <Placeholder>
                     <label className={buttonVariants({ size: "default", color: "primary" })}>
                       {thumbnailInput}
