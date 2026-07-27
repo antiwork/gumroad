@@ -167,7 +167,11 @@ describe AffiliatedProductsPresenter do
     it "returns affiliated products details, stats, and global affiliates data" do
       props = described_class.new(affiliate_user).affiliated_products_page_props
       stats = {
-        total_revenue: successful_not_reversed_purchases.sum(&:affiliate_credit_cents),
+        # total_revenue is a gross figure: it sums every affiliate credit the
+        # user has, including the ones for the refunded and chargedback
+        # purchases, so it lines up with total_sales below (which counts the
+        # same rows). See User#affiliate_credits_total_revenue_cents.
+        total_revenue: (successful_not_reversed_purchases + [refunded_purchase, chargedback_purchase]).sum(&:affiliate_credit_cents),
         total_sales: 10,
         total_products: 7,
         total_affiliated_creators: 3,
