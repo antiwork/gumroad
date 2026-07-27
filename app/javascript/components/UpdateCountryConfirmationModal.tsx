@@ -31,6 +31,14 @@ export const UpdateCountryConfirmationModal = ({ country, balance, open, onClose
           </>
         }
       >
+        {/* Changing the country starts a fresh payout account on our payments provider, so the
+            saved bank account and identity details cannot carry over. Saying this up front
+            matters because the page is a single form: a seller can fill in their bank details
+            and change their country in one go, and only the country change is applied. */}
+        <h4 className="mb-4">
+          Your payout and identity details are tied to your country, so changing it clears your bank account, name, date
+          of birth and address. You will need to enter them again after the change, in a separate save.
+        </h4>
         <h4>
           {balance ? (
             <>

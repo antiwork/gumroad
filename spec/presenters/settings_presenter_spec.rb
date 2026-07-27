@@ -489,6 +489,8 @@ describe SettingsPresenter do
         should_show_country_modal: true,
         buyer_local_currency_enabled: false,
         disable_buyer_local_currency: false,
+        buyer_currency_charging_enabled: false,
+        disable_buyer_currency_rounding: false,
         aus_backtax_details: {
           show_au_backtax_prompt: false,
           total_amount_to_au: "$0.00",

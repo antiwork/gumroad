@@ -180,6 +180,7 @@ payouts_cross_border_stripe:
       - "EthiopiaBankAccount"
       - "ElSalvadorBankAccount"
       - "GabonBankAccount"
+      - "GambiaBankAccount"
       - "GhanaBankAccount"
       - "GuatemalaBankAccount"
       - "GuyanaBankAccount"

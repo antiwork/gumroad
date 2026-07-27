@@ -65,6 +65,38 @@ describe Thumbnail do
     end
   end
 
+  describe "touching the product" do
+    # Caches such as the seller's profile payload key on the product's updated_at, so every
+    # thumbnail write has to move it. See the comment on Thumbnail#product.
+    def attached_thumbnail
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail
+    end
+
+    it "bumps the product's updated_at when a thumbnail is created" do
+      @product.update_columns(updated_at: 1.week.ago)
+      original_updated_at = @product.reload.updated_at
+
+      attached_thumbnail.save!
+
+      expect(@product.reload.updated_at).to be > original_updated_at
+    end
+
+    it "bumps the product's updated_at when a thumbnail is soft-deleted" do
+      thumbnail = attached_thumbnail
+      thumbnail.save!
+      @product.update_columns(updated_at: 1.week.ago)
+      original_updated_at = @product.reload.updated_at
+
+      thumbnail.mark_deleted!
+
+      expect(@product.reload.updated_at).to be > original_updated_at
+    end
+  end
+
   describe "#alive" do
     it "returns nil if deleted" do
       thumbnail = Thumbnail.new(product: @product)

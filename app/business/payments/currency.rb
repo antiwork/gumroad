@@ -80,4 +80,5 @@ module Currency
   XAF = "xaf"
   DZD = "dzd"
   MOP = "mop"
+  GMD = "gmd"
 end
