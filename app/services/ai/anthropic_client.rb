@@ -96,7 +96,17 @@ class Ai::AnthropicClient
   # embedded equivalents of the retryable statuses above.
   RETRYABLE_STREAM_ERROR_TYPES = %w[overloaded_error api_error rate_limit_error timeout_error].freeze
 
-  Result = Struct.new(:text, :tool_uses, :stop_reason, keyword_init: true)
+  # `output_tokens` is how much the model actually generated for this turn. Callers that make
+  # several calls on one client (the store agent's tool loop) need it to bound what a single
+  # request can generate in total: the per-call `max_tokens` cap only bounds ONE turn, so without
+  # a running total a loop can pay that cap over and over. It is always a number, never nil — see
+  # #output_tokens_for for what happens when the provider doesn't report usage.
+  Result = Struct.new(:text, :tool_uses, :stop_reason, :output_tokens, keyword_init: true)
+
+  # Roughly how many characters of generated output make up one token. Only used to estimate a
+  # turn's size when the provider didn't report usage; four is the usual English-text ballpark and
+  # good enough for budgeting, since the numbers it feeds are safety bounds rather than billing.
+  CHARACTERS_PER_TOKEN_ESTIMATE = 4
 
   # `timeout` is the READ timeout: how long a single read from Anthropic may block before we give
   # up. For a streaming request that means "seconds of silence between chunks", not the total
@@ -173,6 +183,7 @@ class Ai::AnthropicClient
         # we parse when the block closes.
         blocks = {}
         stop_reason = nil
+        reported_output_tokens = nil
 
         response = http.post(api_url, json: body)
         raise_for_status!(response, kind: "stream")
@@ -206,12 +217,20 @@ class Ai::AnthropicClient
             end
           when "message_delta"
             stop_reason = data.dig("delta", "stop_reason") || stop_reason
+            # A stream reports its token usage here, at the end, rather than up front.
+            reported_output_tokens = data.dig("usage", "output_tokens") || reported_output_tokens
           when "error"
             raise embedded_error(data, kind: "stream")
           end
         end
 
-        Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
+        tool_uses = assemble_tool_uses(blocks, stop_reason:)
+        Result.new(
+          text:,
+          tool_uses:,
+          stop_reason:,
+          output_tokens: output_tokens_for(reported: reported_output_tokens, text:, tool_uses:),
+        )
       rescue HTTP::Error => e
         raise TransientError, "Anthropic network error: #{e.message}"
       end
@@ -520,7 +539,7 @@ class Ai::AnthropicClient
     # the agent would render a blank reply; classifying it through the same transient-vs-real logic
     # as mid-stream errors lets the retry loop recover from the transient ones.
     def parse_message(body)
-      return Result.new(text: "", tool_uses: [], stop_reason: nil) unless body.is_a?(Hash)
+      return Result.new(text: "", tool_uses: [], stop_reason: nil, output_tokens: 0) unless body.is_a?(Hash)
       raise embedded_error(body, kind: "response") if body["error"].is_a?(Hash)
 
       log_served_model(body["model"])
@@ -532,7 +551,25 @@ class Ai::AnthropicClient
 
         { id: b["id"], name: b["name"], input: b["input"].is_a?(Hash) ? b["input"] : {} }
       end
-      Result.new(text:, tool_uses:, stop_reason: body["stop_reason"])
+      Result.new(
+        text:,
+        tool_uses:,
+        stop_reason: body["stop_reason"],
+        output_tokens: output_tokens_for(reported: body.dig("usage", "output_tokens"), text:, tool_uses:),
+      )
+    end
+
+    # How many output tokens a turn cost. Prefer what the provider reported; when that is missing,
+    # estimate from what actually came back rather than returning nothing, because the caller uses
+    # this to enforce a spending bound — a nil would read as "this turn was free" and quietly
+    # disable the bound for the whole request. The estimate counts the tool-call arguments as well
+    # as the text: when the agent authors a page, essentially all of the output is inside the tool
+    # call's JSON, so text alone would undercount the largest turns by orders of magnitude.
+    def output_tokens_for(reported:, text:, tool_uses:)
+      return reported if reported.is_a?(Numeric) && reported >= 0
+
+      generated_characters = text.to_s.length + Array(tool_uses).sum { |tool_use| tool_use[:input].to_json.length }
+      (generated_characters / CHARACTERS_PER_TOKEN_ESTIMATE.to_f).ceil
     end
 
     # Turn the accumulated streamed blocks into the same tool_use shape #parse_message returns. A

@@ -33,6 +33,38 @@ describe Ai::AnthropicClient do
       expect(result.stop_reason).to eq("end_turn")
     end
 
+    it "reports how many output tokens the turn cost, so a caller can bound a whole request" do
+      # The store agent's tool loop makes up to 25 calls on one client. Per-call max_tokens bounds
+      # one turn; the running total this exposes is what bounds the request as a whole.
+      body = {
+        "content" => [{ "type" => "text", "text" => "You have 3 products." }],
+        "stop_reason" => "end_turn",
+        "usage" => { "input_tokens" => 900, "output_tokens" => 1_234 },
+      }
+      stub_request(:post, url).to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "be helpful", messages: [{ role: "user", content: "how many products" }])
+
+      expect(result.output_tokens).to eq(1_234)
+    end
+
+    it "estimates the turn's size when the provider reports no usage, rather than reporting nothing" do
+      # A nil here would read as "this turn was free" and silently disable the caller's spending
+      # bound for the rest of the request, so an approximate number is the safer answer. Most of a
+      # page-authoring turn lives inside the tool call's arguments, so those count too.
+      page_html = "<html>#{"x" * 4_000}</html>"
+      body = {
+        "content" => [{ "type" => "tool_use", "id" => "toolu_1", "name" => "api_write", "input" => { "html" => page_html } }],
+        "stop_reason" => "tool_use",
+      }
+      stub_request(:post, url).to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "be helpful", messages: [{ role: "user", content: "build my page" }])
+
+      expect(result.output_tokens).to be > 900
+      expect(result.output_tokens).to be < 2_000
+    end
+
     it "marks the system prompt and the last tool as cacheable so Anthropic can reuse the shared prefix" do
       captured = nil
       stub_request(:post, url)
@@ -387,6 +419,22 @@ describe Ai::AnthropicClient do
       expect(result.text).to eq("You have 3 products.")
       expect(result.stop_reason).to eq("end_turn")
       expect(result.tool_uses).to eq([])
+    end
+
+    it "reports the stream's output token usage, which arrives on the final message_delta" do
+      # A stream reports usage at the end rather than up front, so the store agent can only add a
+      # streamed turn to its request-wide budget once the turn is complete.
+      stream = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "done" } }],
+        ["message_delta", { delta: { stop_reason: "end_turn" }, usage: { output_tokens: 5_678 } }],
+        ["message_stop", { type: "message_stop" }],
+      )
+      stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "products" }]) { |_text| }
+
+      expect(result.output_tokens).to eq(5_678)
     end
 
     it "assembles a streamed tool_use block from its input_json_delta fragments" do

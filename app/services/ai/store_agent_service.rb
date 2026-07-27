@@ -74,6 +74,19 @@ class Ai::StoreAgentService
   # streams fine there. Anything still on a buffered endpoint trades page-sized replies for a
   # reply that is guaranteed to arrive.
   MAX_BUFFERED_REPLY_TOKENS = 8_192
+  # Ceiling on everything the model generates across ONE seller request. The two caps above bound a
+  # single model turn, but a reply can take up to MAX_TOOL_ITERATIONS turns, and each of those turns
+  # gets the full per-turn allowance — so per-turn caps alone leave the worst case at 25 × 32,000
+  # tokens for one message. The seller-facing throttle only limits how many requests per hour a
+  # seller may make, not how much any one of them generates, so this is the bound on the size of a
+  # single request.
+  #
+  # 96,000 is three full page-sized turns. Page authoring is the expensive case this PR exists for
+  # and it is a single big turn surrounded by cheap ones (reads return data, they don't generate
+  # it), so three of them is generous headroom for a real request — a page, a revision, and a
+  # closing summary — while cutting the worst case by roughly 8x. A request that blows through it
+  # is looping, and the honest cap reply below is the right outcome.
+  MAX_REQUEST_OUTPUT_TOKENS = 96_000
   # What the seller sees when a model turn still hits the token cap (stop_reason "max_tokens").
   # A truncated turn is unusable — a cut-off tool call has unparseable arguments, and a cut-off
   # text reply would silently present half an answer as if it were complete — so we replace it
@@ -231,6 +244,7 @@ class Ai::StoreAgentService
     proposed_action = nil
     # Display objects collected from the read calls this turn, rendered inline as cards in the chat.
     @objects = []
+    @output_tokens_used = 0
 
     MAX_TOOL_ITERATIONS.times do
       result = client.messages(
@@ -239,6 +253,7 @@ class Ai::StoreAgentService
         tools: tool_schemas,
         max_tokens: MAX_BUFFERED_REPLY_TOKENS,
       )
+      @output_tokens_used += result.output_tokens.to_i
 
       # The model hit the token cap mid-turn. Whatever came back is incomplete — a cut-off tool
       # call has unusable arguments, and a cut-off text answer would read as a complete reply when
@@ -252,6 +267,7 @@ class Ai::StoreAgentService
       end
 
       proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
+      break if output_budget_spent?
     end
 
     { reply: tool_cap_reply(proposed_action), proposed_action: proposed_action&.as_json, objects: deduped_objects }
@@ -278,6 +294,7 @@ class Ai::StoreAgentService
     last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
     proposed_action = nil
     @objects = []
+    @output_tokens_used = 0
 
     MAX_TOOL_ITERATIONS.times do
       # Stream this turn's text deltas live. We don't yet know if the turn is final (text-only) or an
@@ -310,6 +327,7 @@ class Ai::StoreAgentService
         streamed_any = true
         emit.call(:token, { text: })
       end
+      @output_tokens_used += result.output_tokens.to_i
 
       # Same truncation handling as #respond. Anything this turn streamed is incomplete, so tell
       # the UI to discard it and stream the honest fallback instead of leaving half an answer (or
@@ -329,9 +347,11 @@ class Ai::StoreAgentService
       # clear it so the seller never sees an interim claim that gets replaced by the real reply.
       emit.call(:reset, {}) if streamed_any
       proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
+      break if output_budget_spent?
     end
 
-    # Hit the tool-iteration cap. Stream the fallback line as a single token so the UI still renders a
+    # The loop ended without a final answer — either it used up its model turns or it used up the
+    # request's output budget. Stream the fallback line as a single token so the UI still renders a
     # reply, then close out with the same objects/action/suggestions as a normal turn.
     reply = tool_cap_reply(proposed_action)
     emit.call(:token, { text: reply })
@@ -372,6 +392,14 @@ class Ai::StoreAgentService
       conversation << { role: "user", content: tool_results }
 
       proposed_action
+    end
+
+    # Has this request generated everything it is allowed to? Checked after each tool-use turn, so a
+    # loop that keeps producing large turns stops paying for them instead of getting the full
+    # per-turn allowance MAX_TOOL_ITERATIONS times over. Stopping here lands on the same cap reply
+    # as running out of turns, which is the honest outcome either way: the request didn't finish.
+    def output_budget_spent?
+      @output_tokens_used >= MAX_REQUEST_OUTPUT_TOKENS
     end
 
     # The model kept calling tools past our cap. Return a message that matches reality: only mention

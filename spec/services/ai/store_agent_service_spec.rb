@@ -658,6 +658,68 @@ describe Ai::StoreAgentService do
       end
     end
 
+    context "when one request keeps generating large turns" do
+      # The per-turn caps bound a single model turn, but a reply can take MAX_TOOL_ITERATIONS turns
+      # and each gets the full per-turn allowance, so without a running total one looping request
+      # could generate the per-turn cap over and over. The seller-facing throttle limits requests
+      # per hour, not the size of any one request, so the budget below is what bounds it.
+      let(:expensive_turn) do
+        Ai::AnthropicClient::Result.new(
+          text: "",
+          tool_uses: [{ id: "toolu_1", name: "api_read", input: { "endpoint" => "list_products" } }],
+          stop_reason: "tool_use",
+          output_tokens: described_class::MAX_REPLY_TOKENS,
+        )
+      end
+      # The budget is spent after ceil(96_000 / 32_000) = 3 turns, well short of the 25-turn cap.
+      let(:expected_turns) { (described_class::MAX_REQUEST_OUTPUT_TOKENS.to_f / described_class::MAX_REPLY_TOKENS).ceil }
+
+      before do
+        allow(api_client).to receive(:get).and_return({ "success" => true, "http_status" => 200, "products" => [] })
+      end
+
+      it "stops the tool loop once the request has spent its whole output budget" do
+        allow(client).to receive(:messages).and_return(expensive_turn)
+
+        result = service.respond(messages: [{ role: "user", content: "walk my whole catalog" }])
+
+        expect(client).to have_received(:messages).exactly(expected_turns).times
+        expect(expected_turns).to be < described_class::MAX_TOOL_ITERATIONS
+        expect(result[:reply]).to eq("I gathered the details but couldn't finish in one go. Please rephrase or ask again.")
+      end
+
+      it "stops the streaming tool loop on the same budget" do
+        allow(client).to receive(:stream_messages).and_return(expensive_turn)
+        allow(client).to receive(:messages).and_return(text_result("[]"))
+
+        service.respond_streaming(messages: [{ role: "user", content: "build me ten pages" }]) { |_event, _payload| }
+
+        expect(client).to have_received(:stream_messages).exactly(expected_turns).times
+      end
+
+      it "leaves room for a real page-authoring request rather than cutting it off" do
+        # Page authoring is one big turn surrounded by cheap read turns, so the budget has to hold
+        # several page-sized turns or the fix this PR ships would hit the new bound instead.
+        expect(described_class::MAX_REQUEST_OUTPUT_TOKENS).to be >= described_class::MAX_REPLY_TOKENS * 3
+        # And it still has to be far below what per-turn caps alone would allow.
+        expect(described_class::MAX_REQUEST_OUTPUT_TOKENS).to be < described_class::MAX_REPLY_TOKENS * described_class::MAX_TOOL_ITERATIONS
+      end
+
+      it "does not cut short a request whose turns are ordinary chat replies" do
+        cheap_turn = Ai::AnthropicClient::Result.new(
+          text: "",
+          tool_uses: [{ id: "toolu_1", name: "api_read", input: { "endpoint" => "list_products" } }],
+          stop_reason: "tool_use",
+          output_tokens: 200,
+        )
+        allow(client).to receive(:messages).and_return(cheap_turn, cheap_turn, text_result("You have 3 products."))
+
+        result = service.respond(messages: [{ role: "user", content: "how many products?" }])
+
+        expect(result[:reply]).to eq("You have 3 products.")
+      end
+    end
+
     context "when the model emits a non-hash tool input" do
       # Anthropic normally delivers tool input as a JSON object, but our client coerces a malformed
       # input to {}; the tool then falls through to its normal "endpoint is required" handling rather
