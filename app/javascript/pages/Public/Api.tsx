@@ -41,6 +41,7 @@ import {
   UpdateOfferCode,
 } from "$app/components/ApiDocumentation/Endpoints/OfferCodes";
 import { GetPayout, GetPayouts, GetUpcomingPayouts } from "$app/components/ApiDocumentation/Endpoints/Payouts";
+import { GetProductReviews } from "$app/components/ApiDocumentation/Endpoints/ProductReviews";
 import {
   CreateProduct,
   DeleteProduct,
@@ -148,6 +149,10 @@ export default function Api() {
 
               <ApiResource name="Public product page" id="public-product-page">
                 <GetPublicProductPage />
+              </ApiResource>
+
+              <ApiResource name="Reviews" id="reviews">
+                <GetProductReviews />
               </ApiResource>
 
               <ApiResource name="Categories" id="categories">
