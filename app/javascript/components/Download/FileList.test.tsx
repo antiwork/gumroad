@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { videoFrameStyle } from "$app/utils/videoFrame";
+import { videoFrameIsPortrait, videoFrameStyle } from "$app/utils/videoFrame";
 
 import { FileItem, FileList, FileRow, FolderItem } from "$app/components/Download/FileList";
 import {
@@ -133,6 +133,17 @@ describe("FileList", () => {
       expect(videoFrameStyle(videoFile())).toBeUndefined();
       expect(videoFrameStyle(videoFile({ width: 1080, height: null }))).toBeUndefined();
       expect(videoFrameStyle(videoFile({ width: 0, height: 0 }))).toBeUndefined();
+    });
+
+    // Only a portrait box is narrower than the 16:9 thumbnails are sized for, so
+    // only it should letterbox the still. Landscape rows must keep cropping to
+    // fill, or a seller thumbnail that doesn't match the video's ratio would
+    // gain bands it doesn't have today.
+    it("only letterboxes the still for a portrait video", () => {
+      expect(videoFrameIsPortrait(videoFile({ width: 1080, height: 1920 }))).toBe(true);
+      expect(videoFrameIsPortrait(videoFile({ width: 1920, height: 1080 }))).toBe(false);
+      expect(videoFrameIsPortrait(videoFile({ width: 1080, height: 1080 }))).toBe(false);
+      expect(videoFrameIsPortrait(videoFile())).toBe(false);
     });
   });
 

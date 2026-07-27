@@ -11,6 +11,12 @@
 // would be taller than the browser window and push everything else on the page
 // out of view. We cap the height and let the box narrow to keep the aspect
 // ratio, then centre it in the row.
+//
+// `svh` deliberately has no fallback: a browser that cannot parse it would drop
+// the whole width declaration and collapse the box. Its support matches `dvh`,
+// which every Inertia page already depends on for its full-height layout, and
+// it matches `aspect-ratio` itself — so any browser that can shape the frame at
+// all can also read this.
 import type * as React from "react";
 
 const MAX_PORTRAIT_PLAYER_HEIGHT = "80svh";
@@ -43,5 +49,16 @@ export const videoFrameStyle = ({ width, height }: VideoDimensions): React.CSSPr
  * ratio. Spread into the player's setup options; empty when dimensions are
  * unknown, leaving the player's own default in place.
  */
+/**
+ * Whether the frame has been made narrower than the 16:9 the thumbnails are
+ * sized for — i.e. portrait. Only then should a still be letterboxed rather
+ * than cropped to fill: on a 9:16 box "cover" would slice the top and bottom
+ * off the subject. A landscape box keeps the original crop-to-fill, so a
+ * seller thumbnail that does not match the video's ratio looks exactly as it
+ * does today instead of gaining bands.
+ */
+export const videoFrameIsPortrait = ({ width, height }: VideoDimensions): boolean =>
+  width != null && height != null && width > 0 && height > 0 && height > width;
+
 export const videoPlayerAspectRatio = ({ width, height }: VideoDimensions): { aspectratio?: string } =>
   width != null && height != null && width > 0 && height > 0 ? { aspectratio: `${width}:${height}` } : {};

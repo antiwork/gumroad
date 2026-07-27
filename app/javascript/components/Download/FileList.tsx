@@ -21,7 +21,7 @@ import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
-import { videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
+import { videoFrameIsPortrait, videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { AudioPlayerContainer } from "$app/components/DownloadPage/AudioPlayerContainer";
@@ -730,11 +730,11 @@ const VideoEmbedPreview = ({
           // portrait frame is narrower than a landscape still, which would then
           // spill out past the row's edges.
           width: "100%",
-          // When the box has been reshaped to the video's own ratio, show the
-          // whole still ("cover" would crop the top and bottom off a 9:16
-          // frame). Files with unknown dimensions keep the old 16:9 box, where
-          // cropping to fill still looks better than bars around the thumbnail.
-          objectFit: frameStyle ? "contain" : "cover",
+          // Only a portrait box needs the whole still shown: "cover" there
+          // would crop the top and bottom off the subject. Landscape and
+          // unknown-dimension boxes keep cropping to fill, so a thumbnail that
+          // does not match the video's ratio looks exactly as it does today.
+          objectFit: videoFrameIsPortrait(file) ? "contain" : "cover",
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />

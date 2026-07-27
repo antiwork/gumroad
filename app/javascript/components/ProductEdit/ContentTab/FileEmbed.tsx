@@ -14,7 +14,7 @@ import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { getMimeType } from "$app/utils/mimetypes";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
-import { videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
+import { videoFrameIsPortrait, videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
@@ -421,7 +421,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         // still. Files with unknown dimensions keep the 16:9 box,
                         // where cropping to fill still looks better than bars.
                         width: "100%",
-                        objectFit: frameStyle ? "contain" : "cover",
+                        objectFit: videoFrameIsPortrait(file) ? "contain" : "cover",
                         borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
                       }}
                     />
