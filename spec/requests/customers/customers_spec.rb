@@ -894,6 +894,23 @@ describe "Sales page", type: :system, js: true do
           expect(page).to have_text("3")
         end
       end
+
+      it "offers a copy button for the license key" do
+        visit customer_sale_path(purchase2.external_id)
+
+        within_section "License key", section_element: :section do
+          expect(page).to have_text(purchase2.license.serial)
+
+          # The clipboard contents themselves cannot be read back here (`navigator.clipboard` is not
+          # available to the test driver), so we assert the button is present and its tooltip flips
+          # to the copied state, which only happens on a successful ClipboardJS copy.
+          copy_button = find_button("Copy license key")
+          copy_button.hover
+          expect(copy_button).to have_tooltip(text: "Copy license key")
+          copy_button.click
+          expect(copy_button).to have_tooltip(text: "Copied")
+        end
+      end
     end
 
     describe "shipping" do
