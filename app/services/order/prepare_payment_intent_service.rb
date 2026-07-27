@@ -354,6 +354,7 @@ class Order::PreparePaymentIntentService
       return nil if method_type.blank?
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type) || element_mount_forced_currency
       return nil if forced_currency.blank?
+      return nil unless free_and_test_lines_share_currency?(forced_currency)
 
       Charge::MethodForcedPresentment.new(
         charge:,
@@ -385,6 +386,22 @@ class Order::PreparePaymentIntentService
       end
 
       product_currency
+    end
+
+    # The Payment Element's currency basis is every cart line the buyer saw, and prepare mirrors
+    # that in #charge_purchases — paid lines plus this seller's free/test lines. The presentment
+    # snapshot, though, is built from the PAID lines only, because a free line contributes no
+    # money to the charge. That asymmetry is safe only while the free/test lines are priced in
+    # the same currency as the paid ones: a free line priced in a different currency makes the
+    # cart non-uniform, so the Element mounted in canonical USD, and building a forced-currency
+    # presentment from the paid subset alone would create an intent the ConfirmationToken can
+    # never confirm. Returning false here leaves the checkout on the canonical USD intent, and
+    # for a token minted on a forced-currency element #method_forced_presentment_required? turns
+    # that into a clean synchronous failure instead of an unconfirmable intent.
+    def free_and_test_lines_share_currency?(forced_currency)
+      (charge_purchases - purchases_to_charge).all? do |purchase|
+        purchase.link.price_currency_type.to_s.downcase == forced_currency
+      end
     end
 
     # Once the buyer confirmed on a forced-currency Payment Element — with a forced-currency

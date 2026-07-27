@@ -1448,6 +1448,52 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(charge_presentment.presentment_gumroad_amount_cents).to be <= charge_presentment.presentment_total_cents
         end
 
+        # The currency basis includes this seller's free/test lines (charge_purchases), but the
+        # presentment snapshot is built from the paid lines only. A free line priced in a different
+        # currency therefore makes the cart non-uniform for the Element while still looking uniform
+        # to the presentment call. iDEAL forces EUR by itself, so without a guard prepare would
+        # build an EUR presentment for a cart whose Element mounted in USD and create an intent the
+        # token can never confirm. It must fail the purchases cleanly instead.
+        it "fails cleanly rather than building a forced-currency presentment when a free line is priced differently" do
+          expect(StripeFxQuote).not_to receive(:create)
+          free_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_free_line_currency")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.charges.last&.charge_presentment).to be_nil
+          expect(order.purchases.find { _1.link_id == product.id }.reload).to be_failed
+        end
+
+        # The same shape with the free line priced in the forced currency stays on the
+        # forced-currency path — the guard must not reject a genuinely uniform cart.
+        it "still prepares the forced-currency intent when the free line shares the forced currency" do
+          expect(StripeFxQuote).not_to receive(:create)
+          free_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_free_line_eur")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(15_00)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment.presentment_total_cents).to eq(15_00)
+        end
+
         it "keys the intent on the charge external id and currency (no quote), scoped to the confirmation token" do
           order, params = build_order
           create_args, = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_direct")
