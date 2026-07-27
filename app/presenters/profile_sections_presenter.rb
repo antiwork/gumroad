@@ -204,8 +204,16 @@ class ProfileSectionsPresenter
     end
 
     def visible_posts(section: nil)
+      # Posts published on the same day (bulk imports, or anything that sets
+      # published_at to a date rather than a timestamp) tie on published_at, and
+      # a bare ORDER BY published_at leaves MySQL free to break that tie however
+      # the chosen access path happens to return rows. That makes the profile
+      # editor's saved shown_posts order depend on which index the planner picks,
+      # which is not something callers should have to think about. Tie-break on
+      # id so the order is stable regardless of the plan, matching what
+      # CustomerPresenter#missed_posts already does for the same reason.
       query = seller.installments.visible_on_profile
-                                 .order(published_at: :desc)
+                                 .order(published_at: :desc, id: :asc)
                                  .page_with_kaminari(0)
                                  .per(999)
       query = query.where(id: section.shown_posts) if section
