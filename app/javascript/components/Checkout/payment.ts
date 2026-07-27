@@ -682,6 +682,18 @@ export const paymentElementCollectsFullBillingDetails = (state: State) =>
   !hasShipping(state) &&
   (canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state));
 
+// Whether the currently selected Payment Element method needs `billing_details.name` from
+// checkout's own Full name field. Mirrors paymentElementRequiresBillingName in
+// card_payment_method_data.ts for the same module-cycle reason as above. Bancontact is the case
+// this exists for: Stripe rejects its authorization without a name, but unlike UPI it stays in
+// "form" collection mode, so paymentElementCollectsFullBillingDetails is false for it and the
+// name would otherwise never be required on a digital cart (gumroad-private#1306). Guarded on
+// the card/element lane for the same reason: switching to PayPal must not keep the requirement.
+export const paymentElementRequiresBillingNameForSelection = (state: State) =>
+  state.paymentMethod === "card" &&
+  (state.paymentElementType === "upi" || state.paymentElementType === "bancontact") &&
+  (canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state));
+
 export const getErrors = (state: State) => (state.status.type === "input" ? state.status.errors : new Set());
 
 export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
@@ -746,10 +758,17 @@ function validatePaymentMethodIndependentFields(state: State) {
     errors.add("zipCode");
   // Stripe requires billing_details.name to confirm a UPI payment, and on the element-full
   // mode the pane's own name field is pinned to "never" — checkout's Full name field is the
-  // only source (see paymentElementBillingDetailsOverride). Without this gate a blank name
-  // reaches Stripe's confirm and fails server-side with parameter_missing and no
-  // last_payment_error — the un-actionable failure shape of gumroad-private#933.
-  if (requiresPayment(state) && paymentElementCollectsFullBillingDetails(state) && !state.fullName)
+  // only source (see paymentElementBillingDetailsOverride). Bancontact needs the name too
+  // (Stripe: "your customer's name is required for the Bancontact authorization to succeed"),
+  // but stays in "form" collection mode, so it isn't covered by the element-full check —
+  // gumroad-private#1306. Without this gate a blank name reaches Stripe's confirm and fails
+  // server-side with parameter_missing and no last_payment_error — the un-actionable failure
+  // shape of gumroad-private#933.
+  if (
+    requiresPayment(state) &&
+    (paymentElementCollectsFullBillingDetails(state) || paymentElementRequiresBillingNameForSelection(state)) &&
+    !state.fullName
+  )
     errors.add("fullName");
   if (state.gift?.type === "normal" && !isValidEmail(state.gift.email)) errors.add("gift");
   return errors;

@@ -104,6 +104,19 @@ export const paymentElementBillingDetailsCollection = (
   return "form";
 };
 
+// Payment methods whose authorization Stripe rejects without `billing_details.name`. A digital
+// (non-shipping) cart hides checkout's Full name field — nothing else on that checkout needs a
+// name — so selecting one of these has to require it, or the confirm fails with
+// `parameter_missing` and the buyer sees an error they cannot act on. This is what made UPI
+// unusable in July 2026 (gumroad-private#933) and Bancontact in the same way
+// (gumroad-private#1306): Stripe's Bancontact docs state the customer's name is required for the
+// authorization to succeed. UPI additionally needs a full street address, which is why it also
+// switches the element into "element-full" collection above; Bancontact needs only the name, so
+// it stays in "form" mode and checkout's own field supplies it.
+const PAYMENT_ELEMENT_TYPES_REQUIRING_BILLING_NAME = ["upi", "bancontact"];
+export const paymentElementRequiresBillingName = (type: string | null | undefined) =>
+  type != null && PAYMENT_ELEMENT_TYPES_REQUIRING_BILLING_NAME.includes(type);
+
 // Client-side details about the wallet that paid through the Payment Element, read off the
 // tokenized PaymentMethod (or ConfirmationToken preview). The billing address feeds the
 // tax-location logic in checkout (the wallet sheet is the buyer's source of truth for wallet
