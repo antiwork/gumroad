@@ -51,6 +51,15 @@ module PtOscLeftoverCheck
 
       message = PtOscLeftovers.failure_message(leftovers)
 
+      # Only leftover TRIGGERS break the migration -- pt-osc renames around a stray
+      # shadow table but cannot create triggers that already exist. Refusing to deploy
+      # over a shadow table alone would block a migration nothing was blocking.
+      unless PtOscLeftovers.blocking?(leftovers)
+        Rails.logger.warn("[pt-osc leftovers] #{message}")
+        warn("[pt-osc leftovers] #{message}")
+        return
+      end
+
       if alterity_disabled?
         # A plain ALTER is not blocked by the leftover triggers, so this is not a
         # reason to stop the migration -- but the leftovers are still duplicating

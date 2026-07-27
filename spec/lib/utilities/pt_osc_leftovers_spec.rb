@@ -139,6 +139,27 @@ describe PtOscLeftovers do
     end
   end
 
+  describe ".blocking?" do
+    it "is true when triggers were left behind, since those are what pt-osc trips over" do
+      create_pt_osc_triggers("pt_osc_spec_targets")
+
+      expect(described_class.blocking?(described_class.all)).to be(true)
+    end
+
+    it "is false for a shadow table with no triggers, which pt-osc renames around" do
+      create_shadow_table("pt_osc_spec_targets")
+
+      expect(described_class.blocking?(described_class.all)).to be(false)
+    end
+
+    it "is true when any table has triggers, even if another has only a shadow table" do
+      create_pt_osc_triggers("pt_osc_spec_targets")
+      connection.execute("CREATE TABLE `_pt_osc_spec_others_new` LIKE `pt_osc_spec_others`")
+
+      expect(described_class.blocking?(described_class.all)).to be(true)
+    end
+  end
+
   describe ".failure_message" do
     it "names the tables, the artifacts, and the cleanup order" do
       create_pt_osc_triggers("pt_osc_spec_targets")
@@ -173,10 +194,30 @@ describe PtOscLeftovers do
       message = described_class.failure_message(described_class.all)
 
       expect(message).to include("no leftover triggers")
-      expect(message).to include("drop the leftover shadow table")
+      expect(message).to include("Drop the leftover shadow table")
       expect(message).not_to include("cannot create triggers that already exist")
       expect(message).not_to include("drop the triggers FIRST")
       expect(message).not_to include("duplicating every write")
+    end
+
+    it "does not say it is refusing to migrate when nothing is blocking the migration" do
+      # pt-osc renames around a stray shadow table -- Ershad's reproduction on
+      # gumroad-private#1417 shows it creating and altering `__purchases_new` with
+      # `_purchases_new` already present, failing only at trigger creation. So a
+      # shadow table alone is not a reason to refuse a deploy.
+      create_shadow_table("pt_osc_spec_targets")
+
+      message = described_class.failure_message(described_class.all)
+
+      expect(message).to start_with("Found:")
+      expect(message).not_to include("Refusing to migrate")
+      expect(message).to include("schema changes are not blocked")
+    end
+
+    it "says it is refusing to migrate when triggers are present" do
+      create_pt_osc_triggers("pt_osc_spec_targets")
+
+      expect(described_class.failure_message(described_class.all)).to start_with("Refusing to migrate")
     end
 
     it "explains each table on its own terms when one has triggers and another does not" do

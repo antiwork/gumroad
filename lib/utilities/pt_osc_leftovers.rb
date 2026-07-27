@@ -87,6 +87,20 @@ class PtOscLeftovers
       all(connection:).find { |leftover| leftover.table == table.to_s }
     end
 
+    # Whether these leftovers will actually break the migration about to run.
+    #
+    # Only leftover TRIGGERS block. pt-osc fails because it cannot create triggers
+    # that already exist -- not because of the shadow table, which it simply renames
+    # around: Ershad's reproduction on antiwork/gumroad-private#1417 shows it creating
+    # `__purchases_new` and altering it successfully with `_purchases_new` already
+    # present, then failing at "Creating triggers...".
+    #
+    # So a shadow table on its own is dead storage worth reporting, not a reason to
+    # refuse a deploy that would have worked.
+    def blocking?(leftovers)
+      leftovers.any? { |leftover| leftover.triggers.any? }
+    end
+
     # The operator-facing explanation. Kept next to the detection so the message a
     # deploy prints and the message a console prints cannot drift apart.
     #
@@ -99,7 +113,7 @@ class PtOscLeftovers
       shadow_only = leftovers.reject { |leftover| leftover.triggers.any? }
 
       paragraphs = [
-        "Refusing to migrate: #{leftovers.size} table#{'s' if leftovers.size > 1} still #{leftovers.size > 1 ? 'carry' : 'carries'} pt-online-schema-change artifacts from a run that never cleaned up.",
+        "#{blocking?(leftovers) ? 'Refusing to migrate' : 'Found'}: #{leftovers.size} table#{'s' if leftovers.size > 1} still #{leftovers.size > 1 ? 'carry' : 'carries'} pt-online-schema-change artifacts from a run that never cleaned up.",
         leftovers.map { |leftover| "  - #{leftover.description}" }.join("\n"),
       ]
 
@@ -108,7 +122,7 @@ class PtOscLeftovers
       end
 
       if shadow_only.any?
-        paragraphs << "#{table_list(shadow_only)} #{shadow_only.size > 1 ? 'carry' : 'carries'} a leftover shadow table but no leftover triggers, so writes are not being duplicated there. A schema change still cannot run: pt-online-schema-change creates its shadow copy under that same name and will not reuse a table it did not just create. Until it is dropped, the copy also occupies storage on the writer and on every replica that nothing reads."
+        paragraphs << "#{table_list(shadow_only)} #{shadow_only.size > 1 ? 'carry' : 'carries'} a leftover shadow table but no leftover triggers, so writes are not being duplicated there and schema changes are not blocked: pt-online-schema-change picks the next free name (`__<table>_new`) when its usual one is taken. What is left is storage on the writer and on every replica that nothing reads, from a run that copied rows and then died. Worth confirming no run is still in flight before dropping it."
       end
 
       paragraphs << cleanup_instruction(with_triggers:, shadow_only:)
@@ -134,7 +148,7 @@ class PtOscLeftovers
         elsif with_triggers.any?
           "Clean the artifacts up before deploying this migration: drop the triggers FIRST, then the shadow table, one table at a time and off-peak. #{shadow_warning}"
         else
-          "Clean the artifacts up before deploying this migration: drop the leftover shadow table#{'s' if shadow_only.size > 1}, one table at a time and off-peak. #{shadow_warning}"
+          "Drop the leftover shadow table#{'s' if shadow_only.size > 1} when convenient, one table at a time and off-peak -- this does not block the migration. #{shadow_warning}"
         end
       end
 

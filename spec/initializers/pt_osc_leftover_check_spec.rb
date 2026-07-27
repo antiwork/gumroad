@@ -63,6 +63,27 @@ describe PtOscLeftoverCheck do
       )
     end
 
+    it "warns but does not block on a shadow table with no triggers" do
+      # pt-osc renames around a stray shadow table, so refusing to deploy over one
+      # would block a migration that would have succeeded.
+      shadow_only = PtOscLeftovers::Leftover.new(
+        table: "purchases", triggers: [], shadow_tables: %w[_purchases_new]
+      )
+      allow(PtOscLeftovers).to receive(:all).and_return([shadow_only])
+
+      expect(described_class).to receive(:warn).with(/no leftover triggers/)
+      expect { described_class.run! }.not_to raise_error
+    end
+
+    it "still blocks when one table has triggers and another has only a shadow table" do
+      shadow_only = PtOscLeftovers::Leftover.new(
+        table: "users", triggers: [], shadow_tables: %w[_users_new]
+      )
+      allow(PtOscLeftovers).to receive(:all).and_return([leftover, shadow_only])
+
+      expect { described_class.run! }.to raise_error(PtOscLeftoverCheck::LeftoversPresent)
+    end
+
     it "can be bypassed for a deploy that knowingly runs alongside a live pt-osc" do
       allow(PtOscLeftovers).to receive(:all).and_return([leftover])
 
