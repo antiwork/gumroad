@@ -98,6 +98,30 @@ describe Ffprobe do
         expect(parsed.height).to eq(1920)
       end
 
+      # Some phones and editors leave a "rotate: 0" tag behind next to a real
+      # quarter turn in the display matrix. The turn still happens on playback,
+      # so the leftover tag must not win just because it is present.
+      it "reports the displayed dimensions when a leftover zero rotate tag sits next to a quarter turn in the display matrix" do
+        parsed = parsed_with(tags: { rotate: "0" }, side_data_list: [{ side_data_type: "Display Matrix", rotation: -90 }])
+
+        expect(parsed.width).to eq(1080)
+        expect(parsed.height).to eq(1920)
+      end
+
+      it "reports the displayed dimensions when a leftover zero rotate tag sits next to a three-quarter turn in the display matrix" do
+        parsed = parsed_with(tags: { rotate: "0" }, side_data_list: [{ side_data_type: "Display Matrix", rotation: -270 }])
+
+        expect(parsed.width).to eq(1080)
+        expect(parsed.height).to eq(1920)
+      end
+
+      it "prefers the rotate tag when it describes a turn and the display matrix does not" do
+        parsed = parsed_with(tags: { rotate: "90" }, side_data_list: [{ side_data_type: "Display Matrix", rotation: 0 }])
+
+        expect(parsed.width).to eq(1080)
+        expect(parsed.height).to eq(1920)
+      end
+
       it "leaves the dimensions alone for a half turn, which does not change the shape" do
         parsed = parsed_with(tags: { rotate: "180" })
 

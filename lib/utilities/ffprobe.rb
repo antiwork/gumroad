@@ -29,6 +29,12 @@ class Ffprobe
     # negative for the same clockwise turn. We only care about the turn itself,
     # so the sign is dropped and the angle normalized to 0/90/180/270.
     #
+    # A file can carry both, and they can disagree: some phones and editors write
+    # a leftover "rotate: 0" tag next to a real quarter turn in the display
+    # matrix. Treating the tag as authoritative just because it is present would
+    # leave exactly those videos unrotated, so we take the first source that
+    # actually describes a turn rather than the first source that exists.
+    #
     # This mirrors what the streamio-ffmpeg gem already does for every other
     # video format we accept (FFMPEG::Movie#width/#height swap themselves when a
     # rotation is present) — only the .mov path reads ffprobe directly and so had
@@ -36,8 +42,13 @@ class Ffprobe
     def rotation(stream)
       tagged = stream.dig("tags", "rotate")
       matrix = stream["side_data_list"]&.find { |data| data["rotation"].present? }&.fetch("rotation", nil)
-      degrees = (tagged || matrix).to_i.abs % 360
-      degrees % 90 == 0 ? degrees : 0
+
+      [tagged, matrix].filter_map do |angle|
+        next if angle.nil?
+
+        degrees = angle.to_i.abs % 360
+        degrees if degrees % 90 == 0
+      end.find(&:nonzero?) || 0
     end
 
     # Swap the stored dimensions for a quarter-turned video so callers get the
