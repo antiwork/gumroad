@@ -4871,8 +4871,15 @@ class Purchase < ApplicationRecord
         # names may have been sent by someone else entirely — two people can independently gift the
         # same product to the same person — and the receipt for it goes to whoever started it. So
         # never promise this reader an email: they may not be the one who gets it.
-        errors.add :base, if is_gift_sender_purchase
+        #
+        # A sender can also be blocked by something that is not a gift at all. This lookup finds
+        # anything settling under the recipient's address, and the recipient buying the product
+        # for themselves is stored under exactly that address, so their own purchase matches. Tell
+        # the sender what is actually in flight rather than describing every match as a gift.
+        errors.add :base, if is_gift_sender_purchase && settling.any?(&:is_gift_sender_purchase)
           "A gift of this product to #{giftee_email} is still being paid for. Wait for that to finish before sending it again."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} is in the middle of buying this product themselves. Wait for that to finish before gifting it to them."
         elsif settling.any?(&:is_gift_sender_purchase)
           "Someone is in the middle of gifting you this product. Give that a moment to complete before paying for it yourself."
         else
@@ -4902,17 +4909,26 @@ class Purchase < ApplicationRecord
     # belong to a different sender, and its receipt goes to them rather than to whoever is reading
     # this. Describe the gift and what to do about it; never promise this reader an email.
     def add_errors_for_existing_purchase(purchases)
-      if purchases.any?(&:successful?)
-        errors.add :base, if is_gift_sender_purchase
+      # A gift sender can be blocked by something that is not a gift. The lookup that produced
+      # these keys on the recipient's address, and the recipient buying the product for themselves
+      # is stored under exactly that address, so their own purchase matches. Only call it a gift
+      # when the purchase actually being reported is one — checked per state, because a recipient
+      # can have both a settled direct purchase and someone's in-flight gift at the same time.
+      if (successful = purchases.select(&:successful?)).any?
+        errors.add :base, if is_gift_sender_purchase && successful.any?(&:is_gift_sender_purchase)
           "This product was just sent as a gift to #{giftee_email}. Check with them before sending it again."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} just bought this product themselves. Check with them before sending it as a gift."
         else
           "You have already paid for this product. It has been emailed to you."
         end
       elsif purchases.any?(&:preorder_authorization_successful?)
         errors.add :base, "You have already pre-ordered this product. A confirmation has been emailed to you."
-      elsif purchases.any?(&:in_progress?)
-        errors.add :base, if is_gift_sender_purchase
+      elsif (in_progress = purchases.select(&:in_progress?)).any?
+        errors.add :base, if is_gift_sender_purchase && in_progress.any?(&:is_gift_sender_purchase)
           "A gift of this product to #{giftee_email} is already going through. Wait for it to finish before sending another."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} is in the middle of buying this product themselves. Wait for that to finish before gifting it to them."
         else
           "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
         end
