@@ -48,6 +48,12 @@ const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=L
 // out instead of coming back as a generic server-side save failure.
 const GAMBIA_ACCOUNT_NUMBER_REGEX = /^[0-9A-Za-z]{18}$/u;
 
+// GambiaBankAccount's bank code is a SWIFT/BIC of 8 to 11 letters or digits
+// (/^[0-9A-Za-z]{8,11}$/), e.g. AGIXGMGM. Same story as the account number above: the input's
+// `pattern` never runs because the page posts through Inertia instead of submitting the form, so
+// a malformed code would only surface as a generic "The bank code is invalid." from the server.
+const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
+
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
@@ -681,8 +687,13 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "MacaoBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (form.data.bank_account.type === "GambiaBankAccount" && !form.data.bank_account.bank_code) {
-      markFieldInvalid("bank_code");
+    if (form.data.bank_account.type === "GambiaBankAccount") {
+      if (!form.data.bank_account.bank_code) {
+        markFieldInvalid("bank_code");
+      } else if (!GAMBIA_SWIFT_BIC_REGEX.test(form.data.bank_account.bank_code)) {
+        markFieldInvalid("bank_code");
+        setClientErrorMessage({ message: "SWIFT / BIC code must be 8 to 11 letters or digits." });
+      }
     }
     if (!form.data.bank_account.account_number) {
       markFieldInvalid("account_number");
