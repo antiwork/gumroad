@@ -19,6 +19,7 @@ import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
+import { dispatchMediaPlaybackState } from "$app/utils/media_playback";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -662,6 +663,10 @@ const VideoEmbedPreview = ({
       player
         .on("ready", () => player.play())
         .on("play", () => {
+          // Tells the page a video is playing so it can pause its own position poll — the
+          // player already reports the position below. See utils/media_playback.ts.
+          dispatchMediaPlaybackState(true);
+
           if (initialSeekDone) return;
 
           void createConsumptionEvent({
@@ -674,14 +679,23 @@ const VideoEmbedPreview = ({
           player.seek(resumeLocation);
           initialSeekDone = true;
         })
+        .on("pause", () => dispatchMediaPlaybackState(false))
+        .on("error", () => dispatchMediaPlaybackState(false))
         .on("seek", (event) => trackMediaLocation(event.offset))
         .on("time", (event) => throttledTrackMediaLocation(event.position))
         .on("complete", () => {
           throttledTrackMediaLocation.cancel();
           trackMediaLocation(file.content_length ?? duration);
+          dispatchMediaPlaybackState(false);
           setIsVideoPlayerShowing(false);
         });
     });
+
+    // The player is torn down whenever this embed stops being shown (and on unmount), so make
+    // sure the page never stays in the "video playing" state with no player around.
+    return () => {
+      dispatchMediaPlaybackState(false);
+    };
   }, [isVideoPlayerShowing]);
 
   const startPlaying = async () => {

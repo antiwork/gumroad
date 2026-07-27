@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
+import { isPartialReloadResponse } from "../utils/inertia_partial_reload";
 import { defaults as requestDefaults } from "../utils/request";
 
 // Keep the `request()` util's CSRF token current for Inertia pages. `base_page.ts` only
@@ -80,6 +81,12 @@ router.on("invalid", (event) => {
   event.preventDefault();
 
   const response = event.detail.response;
+
+  // Never let a background partial reload navigate the browser. Those requests happen on a
+  // timer while the buyer is using the page, so reloading on one bad response destroys
+  // whatever they were doing (see utils/inertia_partial_reload.ts). Dropping the response is
+  // safe: the poll keeps running and the next successful one refreshes the props.
+  if (isPartialReloadResponse(response)) return;
 
   const redirectedUrl = response.request.responseURL;
   if (redirectedUrl) {

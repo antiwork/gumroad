@@ -4,6 +4,7 @@ import typia from "typia";
 
 import { useDropbox } from "$app/hooks/useDropbox";
 import FileUtils from "$app/utils/file";
+import { MEDIA_PLAYBACK_EVENT, isMediaPlaybackEvent } from "$app/utils/media_playback";
 
 import { FileItem } from "$app/components/Download/FileList";
 import { LayoutProps } from "$app/components/DownloadPage/Layout";
@@ -32,6 +33,17 @@ function DownloadPage() {
 
   const hasMediaFiles = hasRichContent && contentFiles.length > 0;
 
+  // Set while a video on this page is playing. See app/javascript/utils/media_playback.ts for
+  // why playback pauses the position poll.
+  const [isMediaPlaying, setIsMediaPlaying] = React.useState(false);
+  React.useEffect(() => {
+    const handlePlaybackChange = (event: Event) => {
+      if (isMediaPlaybackEvent(event)) setIsMediaPlaying(event.detail.isPlaying);
+    };
+    window.addEventListener(MEDIA_PLAYBACK_EVENT, handlePlaybackChange);
+    return () => window.removeEventListener(MEDIA_PLAYBACK_EVENT, handlePlaybackChange);
+  }, []);
+
   const audioDurationsPoll = usePoll(5_000, { only: ["audio_durations"] }, { autoStart: false });
   const mediaLocationsPoll = usePoll(10_000, { only: ["latest_media_locations"] }, { autoStart: false });
 
@@ -41,9 +53,9 @@ function DownloadPage() {
   }, [hasUnprocessedAudio]);
 
   React.useEffect(() => {
-    if (hasMediaFiles) mediaLocationsPoll.start();
+    if (hasMediaFiles && !isMediaPlaying) mediaLocationsPoll.start();
     else mediaLocationsPoll.stop();
-  }, [hasMediaFiles]);
+  }, [hasMediaFiles, isMediaPlaying]);
 
   return (
     <div className="flex min-h-screen flex-col">
