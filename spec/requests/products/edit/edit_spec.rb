@@ -378,7 +378,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
   # never see. The server rejects these with a structured conflict; the editor
   # shows a reload modal. Each spec here simulates the second session by
   # updating the row server-side after this session's editor loaded.
+  #
+  # The rejection is OFF in production (it blocked hundreds of legitimate
+  # saves — see Product::StaleContentWriteGuard's class comment), so these
+  # specs turn the flag on to exercise the modal. The flag-off behavior is
+  # covered in test/controllers/links_controller_test.rb.
   describe "two-session stale-save conflicts" do
+    before { Feature.activate(Product::StaleContentWriteGuard::BLOCK_FEATURE_NAME) }
+
     it "blocks a save that would overwrite a content page another session updated, and offers a reload" do
       product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
       product_page = create(:rich_content, entity: product, title: "Guide", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Original content" }] }])

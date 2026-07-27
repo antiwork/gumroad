@@ -783,6 +783,62 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       expect(find_link("Button with custom query parameters", href: "https://example.com/?test=123&#{sale_info_query_params}", target: "_blank")[:rel]).to eq("noopener noreferrer nofollow")
     end
 
+    it "replaces the `__license_key__` placeholder in link and button hrefs with the buyer's license key" do
+      @product.update!(is_licensed: true)
+      license = create(:license, link: @product, purchase: @purchase)
+
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     { "type" => "paragraph",
+                                       "content" =>
+                                        [{ "text" => "Activate link",
+                                           "type" => "text",
+                                           "marks" =>
+                                            [{ "type" => "link",
+                                               "attrs" =>
+                                              { "rel" => "noopener noreferrer nofollow",
+                                                "href" => "https://example.com/activate?key=__license_key__",
+                                                "class" => nil,
+                                                "target" => "_blank" } }] }] },
+                                     { "type" => "button",
+                                       "attrs" => { "href" => "goodsnooze://activate?key=__license_key__" },
+                                       "content" => [{ "text" => "Activate in app", "type" => "text" }] },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      escaped_key = CGI.escape(license.serial)
+      expect(page).to have_link("Activate link", href: "https://example.com/activate?key=#{escaped_key}")
+      expect(page).to have_link("Activate in app", href: "goodsnooze://activate?key=#{escaped_key}")
+    end
+
+    it "resolves both the license key and the `__sale_info__` placeholder in the same href" do
+      @product.update!(is_licensed: true)
+      license = create(:license, link: @product, purchase: @purchase)
+
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     { "type" => "button",
+                                       "attrs" => { "href" => "https://example.com/activate?key=__license_key__&__sale_info__" },
+                                       "content" => [{ "text" => "Activate", "type" => "text" }] },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      sale_info_query_params = "sale_id=#{CGI.escape(@purchase.external_id)}&product_id=#{CGI.escape(@product.external_id)}&product_permalink=#{CGI.escape(@product.unique_permalink)}"
+      expect(page).to have_link("Activate", href: "https://example.com/activate?key=#{CGI.escape(license.serial)}&#{sale_info_query_params}")
+    end
+
+    it "leaves the `__license_key__` placeholder untouched when the purchase has no license" do
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     { "type" => "button",
+                                       "attrs" => { "href" => "https://example.com/activate?key=__license_key__" },
+                                       "content" => [{ "text" => "Activate", "type" => "text" }] },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      expect(page).to have_link("Activate", href: "https://example.com/activate?key=__license_key__")
+    end
+
     it "appends purchase_id to Gumroad post URLs in links and buttons" do
       post_url = "#{PROTOCOL}://#{@user.username}.#{ROOT_DOMAIN}/p/test-post"
       product_rich_content = @product.alive_rich_contents.first

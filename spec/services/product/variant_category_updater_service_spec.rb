@@ -233,6 +233,25 @@ describe Product::VariantCategoryUpdaterService do
 
         expect { perform_deletion }.to change { variant.reload.deleted_at }.from(nil)
       end
+
+      it "leaves an already-deleted variant's deleted_at where it was" do
+        variant = create(:variant, variant_category: @variant_category)
+        original_deleted_at = 3.days.ago.change(usec: 0)
+        variant.update_columns(deleted_at: original_deleted_at)
+
+        expect { perform_deletion }.not_to change { variant.reload.deleted_at }
+        expect(variant.reload.deleted_at).to eq(original_deleted_at)
+      end
+
+      it "deletes a live variant in the same batch as an already-deleted one" do
+        already_deleted = create(:variant, variant_category: @variant_category)
+        original_deleted_at = 3.days.ago.change(usec: 0)
+        already_deleted.update_columns(deleted_at: original_deleted_at)
+        live = create(:variant, variant_category: @variant_category)
+
+        expect { perform_deletion }.to change { live.reload.deleted_at }.from(nil)
+        expect(already_deleted.reload.deleted_at).to eq(original_deleted_at)
+      end
     end
 
     context "when deleting multiple obsolete variants" do

@@ -12124,6 +12124,36 @@ describe StripeMerchantAccountManager, :vcr do
           end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
         end
 
+        it "emails the P.O. Box explanation instead of Stripe's unactionable address mismatch reason" do
+          create(:user_compliance_info, user:, street_address: "PO Box 65")
+          stripe_event["data"]["object"]["requirements"]["errors"] = [
+            {
+              "code" => "verification_document_address_mismatch",
+              "reason" => "Address on the account doesn't match the verification document.",
+              "requirement" => "individual.verification.document"
+            }]
+
+          expect do
+            described_class.handle_stripe_event(stripe_event)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :stripe_document_verification_failed)
+            .with(user.id, UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+        end
+
+        it "still emails Stripe's reason for an address mismatch when no P.O. Box is involved" do
+          create(:user_compliance_info, user:, street_address: "123 Main Street")
+          stripe_error_reason = "Address on the account doesn't match the verification document."
+          stripe_event["data"]["object"]["requirements"]["errors"] = [
+            {
+              "code" => "verification_document_address_mismatch",
+              "reason" => stripe_error_reason,
+              "requirement" => "individual.verification.document"
+            }]
+
+          expect do
+            described_class.handle_stripe_event(stripe_event)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :stripe_document_verification_failed).with(user.id, stripe_error_reason)
+        end
+
         it "does not send an email when the user account is suspended" do
           admin = create(:admin_user)
           user.flag_for_fraud!(author_id: admin.id)
