@@ -6171,6 +6171,82 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert kept.reload.alive?
   end
 
+  test "flag on: a named variant in a grouping the editor does not address is still deleted" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    # A product can own more than one grouping — older editors and the v2 API
+    # both create them — but the current editor only ever shows and submits the
+    # FIRST one. A deletion naming a version in any other grouping must still
+    # happen, otherwise the save reports success and the version reappears.
+    other_category = create_variant_category(link: @product, title: "Formats")
+    removed = create_variant(variant_category: other_category, name: "Removed elsewhere")
+    sibling = create_variant(variant_category: other_category, name: "Sibling elsewhere")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    # Visiting the second grouping must not turn into a sweep of it.
+    assert sibling.reload.alive?
+    assert other_category.reload.alive?
+    assert kept.reload.alive?
+  end
+
+  test "flag on: a second grouping is left alone when the save names no deletions" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    other_category = create_variant_category(link: @product, title: "Formats")
+    untouched = create_variant(variant_category: other_category, name: "Untouched")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+    ), format: :json
+    assert_response :success
+
+    assert untouched.reload.alive?
+    assert other_category.reload.alive?
+    assert_equal "Formats", other_category.reload.title
+  end
+
+  test "flag on: deleting the last version of a grouping through deleted_ids removes the grouping" do
+    enable_contract!
+    only_version = create_variant(variant_category: @category, name: "Only version")
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [only_version.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not only_version.reload.alive?
+    assert_not @category.reload.alive?
+  end
+
+  test "flag on: a partial deletion keeps the grouping and its name" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    # `variants` omitted entirely, so the save reaches the "grouping wasn't
+    # submitted" route with no name in hand. It must not blank the seller's
+    # grouping title as a side effect of deleting one version.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert kept.reload.alive?
+    assert @category.reload.alive?
+    assert_equal "Versions", @category.reload.title
+  end
+
   test "flag on: deleted_ids plus a fresh revision deletes exactly the named page" do
     enable_contract!
     create_variant(variant_category: @category, name: "Plain version")

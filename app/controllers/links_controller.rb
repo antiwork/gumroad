@@ -1002,7 +1002,8 @@ class LinksController < ApplicationController
     end
 
     def update_variants
-      variant_category = @product.variant_categories_alive.first
+      alive_categories = @product.variant_categories_alive.to_a
+      variant_category = alive_categories.first
       variants = product_permitted_params[:variants] || []
       if variants.any? || @product.is_tiered_membership?
         variant_category_params = variant_category.present? ?
@@ -1017,7 +1018,8 @@ class LinksController < ApplicationController
             {
               **variant_category_params,
               options: variants,
-            }
+            },
+            *deletion_only_category_params(alive_categories, except: variant_category),
           ],
           confirmed_removed_variant_ids:,
           payload_page_ids:,
@@ -1036,7 +1038,8 @@ class LinksController < ApplicationController
             {
               id: variant_category.external_id,
               options: nil,
-            }
+            },
+            *deletion_only_category_params(alive_categories, except: variant_category),
           ],
           confirmed_removed_variant_ids:,
           payload_page_ids:,
@@ -1049,6 +1052,40 @@ class LinksController < ApplicationController
           contract: product_save_contract,
         ).perform
       end
+    end
+
+    # The editor only ever addresses the product's FIRST alive variant grouping
+    # — that is what the UI shows and what the payload's `variants` list means.
+    # Everything else the product owns (a second grouping left over from the
+    # older multi-category editor, or from the API) is simply not part of the
+    # request, so the save never visits it.
+    #
+    # That is fine while deletion is inferred from the payload, because a
+    # grouping nobody submitted has nothing to infer from. Under the save
+    # contract it stops being fine: the client can now name a specific variant
+    # id to delete, and if that variant lives in a grouping the save never
+    # visits, the deletion is silently dropped — the save returns success and
+    # the version is still there after a reload.
+    #
+    # So when (and only when) the contract is enforced and the request names ids
+    # or asks for a clear-all, the other alive groupings are appended as
+    # deletion-only entries (`options: nil`). Under the contract that route
+    # deletes exactly the named ids and nothing else
+    # (VariantCategoryUpdaterService#contract_scoped_category_deletions), so a
+    # grouping with no named ids is visited and left completely alone.
+    #
+    # Returns [] whenever the contract is off, which keeps the legacy single-
+    # grouping call byte-identical.
+    def deletion_only_category_params(alive_categories, except:)
+      contract = product_save_contract
+      return [] unless contract.enforced?
+
+      names_deletions = contract.cleared?(:variants) || contract.deleted_ids(:variants).any?
+      return [] unless names_deletions
+
+      alive_categories
+        .reject { _1.id == except&.id }
+        .map { { id: _1.external_id, options: nil } }
     end
 
     # Who and which request is performing this save, for the deletion audit

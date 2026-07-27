@@ -123,6 +123,13 @@ class Product::VariantCategoryUpdaterService
   def perform
     if category_params[:id].present?
       self.variant_category = variant_categories.find_by_external_id(category_params[:id])
+      # Remembered before the update below blanks it. The "grouping wasn't
+      # submitted" call carries no name, because historically it only ever ran
+      # as a prelude to sweeping the whole grouping — blanking the title was
+      # how that route marked the grouping gone. Under the contract the same
+      # call can now be a partial deletion that leaves the grouping alive, and
+      # the name has to survive that. See the restore below.
+      original_title = variant_category.title
       variant_category.update(title: category_params[:title])
     else
       self.variant_category = variant_categories.build(title: category_params[:title])
@@ -145,6 +152,10 @@ class Product::VariantCategoryUpdaterService
       # must leave the category standing for the versions that survive.
       category_was_deleted = variant_category.title.blank? && !variant_category.variants.alive.exists?
       variant_category.mark_deleted! if category_was_deleted
+      # The grouping survived a route that assumed it would not, so give the
+      # seller their name back. Unreachable with the contract off: there the
+      # sweep always empties the grouping, so it is always deleted here.
+      variant_category.update(title: original_title) if !category_was_deleted && variant_category.title.blank? && original_title.present?
       record_deletion_audit(
         route: ProductVariantDeletionAudit::EDITOR_CATEGORY_OMITTED,
         deleted_variant_external_ids:,
