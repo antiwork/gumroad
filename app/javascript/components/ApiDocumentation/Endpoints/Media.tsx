@@ -7,20 +7,29 @@ import { ApiParameter, ApiParameters } from "../ApiParameters";
 import { ApiResponseFields, renderFields } from "../ApiResponseFields";
 
 // The creator's media library: images hosted on Gumroad's public storage so they render on custom
-// pages, whose Content-Security-Policy only permits media from Gumroad's own CDN hosts. Endpoints
+// pages, whose Content-Security-Policy blocks images loaded from other sites. Endpoints
 // have been live for a while but were never documented, so creators were harvesting URLs out of
 // the product description editor instead.
 const MEDIA_FIELDS = [
   { name: "id", type: "string", description: "The file's unique ID; pass to DELETE /media/:id" },
   { name: "name", type: "string", description: "The file's display name" },
-  { name: "extension", type: "string", description: "The uppercased file extension, e.g. PNG" },
-  { name: "file_size", type: "number", description: "Size in bytes" },
+  {
+    name: "extension",
+    type: "string | null",
+    description: "The uppercased file extension, e.g. PNG; null when the uploaded filename had none",
+  },
+  { name: "file_size", type: "number | null", description: "Size in bytes; null if no file is attached" },
   {
     name: "url",
-    type: "string",
+    type: "string | null",
     description: "Public CDN URL for the file — this is what you embed in a custom page",
   },
-  { name: "file_group", type: "string", description: "Broad file category, currently always 'image'" },
+  {
+    name: "file_group",
+    type: "string | null",
+    description:
+      "Broad file category derived from the filename extension, e.g. 'image'; null when the extension is missing or unrecognized",
+  },
   { name: "status", type: "object", description: 'Upload status; always { "type": "saved" } for a stored file' },
   { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the file was uploaded" },
 ];
@@ -37,10 +46,11 @@ export const GetMedia = () => (
         </p>
         <p>
           The media library hosts images on Gumroad's own storage so they can be displayed on your public pages. Custom
-          product and profile pages render under a Content Security Policy that only permits images from Gumroad's CDN,
-          so an image hosted elsewhere will not load there — upload it here first and embed the returned{" "}
-          <code className="inline-code">url</code>. Files belong to your account rather than to a single product, so the
-          same image can be used across as many pages as you like.
+          product and profile pages render under a Content Security Policy that blocks images loaded from other sites —
+          only inline <code className="inline-code">data:</code>/<code className="inline-code">blob:</code> images and
+          Gumroad's own public asset hosts are allowed — so an image hosted elsewhere will not load there. Upload it
+          here first and embed the returned <code className="inline-code">url</code>. Files belong to your account
+          rather than to a single product, so the same image can be used across as many pages as you like.
         </p>
       </>
     }
@@ -61,7 +71,7 @@ export const GetMedia = () => (
   "success": true,
   "media": [
     {
-      "id": "9f1c2b7a4d",
+      "id": "k7m2q9x4tb1zn6dw",
       "name": "logo",
       "extension": "PNG",
       "file_size": 18422,
@@ -92,6 +102,17 @@ export const CreateMedia = () => (
           file extension. SVG is not accepted, because these files are served from a Gumroad domain and SVG can carry
           script. An account may hold up to 500 files at a time.
         </p>
+        <p>
+          Uploads are rate limited to 20 per 10 minutes. Accounts that are suspended or closed cannot upload, and a
+          token holding only the broad <code className="inline-code">account</code> scope is rejected — this endpoint
+          requires <code className="inline-code">edit_profile</code> specifically.
+        </p>
+        <p>
+          To use <code className="inline-code">signed_blob_id</code>, first reserve a direct upload with{" "}
+          <code className="inline-code">POST /v2/direct_uploads</code> passing{" "}
+          <code className="inline-code">purpose=media</code>, upload the bytes to the URL it returns, then pass the
+          returned signed ID here.
+        </p>
       </>
     }
   >
@@ -102,11 +123,11 @@ export const CreateMedia = () => (
       />
       <ApiParameter
         name="signed_blob_id"
-        description="(required unless url is provided) - A signed blob ID from a direct upload."
+        description="(required unless url is provided) - A signed blob ID from a POST /v2/direct_uploads reservation made with purpose=media."
       />
       <ApiParameter
         name="name"
-        description="(optional) - Display name for the file. Defaults to the uploaded filename."
+        description="(optional) - Display name for the file. Defaults to the filename with its extension stripped."
       />
     </ApiParameters>
     <ApiResponseFields>
@@ -132,7 +153,7 @@ export const CreateMedia = () => (
       {`{
   "success": true,
   "media": {
-    "id": "9f1c2b7a4d",
+    "id": "k7m2q9x4tb1zn6dw",
     "name": "logo",
     "extension": "PNG",
     "file_size": 18422,
@@ -152,8 +173,9 @@ export const DeleteMedia = () => (
     path="/media/:id"
     description={
       <>
-        Deletes a file from the media library. Requires the <code className="inline-code">edit_profile</code> scope.
-        Deletion is immediate, so any page still embedding the file's URL will show a broken image.
+        Deletes a file from the media library. Requires the <code className="inline-code">edit_profile</code> scope. The
+        file leaves your library immediately and the hosted copy is queued for removal, so any page still embedding its
+        URL will show a broken image once the purge runs.
       </>
     }
   >
@@ -164,7 +186,7 @@ export const DeleteMedia = () => (
       ])}
     </ApiResponseFields>
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/media/9f1c2b7a4d \\
+      {`curl https://api.gumroad.com/v2/media/k7m2q9x4tb1zn6dw \\
   -d "access_token=ACCESS_TOKEN" \\
   -X DELETE`}
     </CodeSnippet>
