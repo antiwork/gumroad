@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "shared_examples/explained_agent_rate_limit"
 
 describe Api::Mobile::AgentStreamsController do
   before do
@@ -198,6 +199,13 @@ describe Api::Mobile::AgentStreamsController do
 
       expect(response).to have_http_status(:too_many_requests)
       expect(response.headers["Retry-After"]).to be_present
+    end
+
+    it_behaves_like "an explained agent rate limit" do
+      subject do
+        exhaust_agent_request_throttle(@seller)
+        post :create, params: valid_params
+      end
     end
 
     it "returns a forbidden error when the seller can't use the agent" do

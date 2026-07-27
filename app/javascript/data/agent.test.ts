@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ResponseError } from "$app/utils/request";
+import { RateLimitError, ResponseError } from "$app/utils/request";
 
 vi.mock("$app/utils/request", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$app/utils/request")>();
@@ -231,6 +231,19 @@ describe("streamAgentMessage", () => {
     expect(error).toBeInstanceOf(ResponseError);
     expect(error).not.toBeInstanceOf(AgentStreamInterruptedError);
     expect(error).toMatchObject({ message: "Too many requests." });
+  });
+
+  it("passes a rate-limit refusal through unchanged so the chat can explain the limit", async () => {
+    // request() rejects before any stream exists when the server answers 429. That rejection must
+    // reach the caller as-is: turning it into an interruption would send the chat into turn recovery
+    // for a turn the server never started, and flattening it into a plain ResponseError would lose
+    // the server's explanation and countdown, which is what made the limit look like a malfunction.
+    request.mockRejectedValue(new RateLimitError("You've used all 30 agent requests for this hour.", 900));
+
+    const error = await streamAgentMessage(MESSAGES).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect(error).not.toBeInstanceOf(AgentStreamInterruptedError);
+    expect(error).toMatchObject({ message: "You've used all 30 agent requests for this hour.", retryAfter: 900 });
   });
 
   it("sends the client turn id with the stream request so the turn is recoverable by id", async () => {
