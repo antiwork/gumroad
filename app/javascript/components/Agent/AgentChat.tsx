@@ -22,6 +22,7 @@ import { RateLimitError } from "$app/utils/request";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { DefinitionList } from "$app/components/ui/DefinitionList";
 import { Textarea } from "$app/components/ui/Textarea";
@@ -117,6 +118,9 @@ type DisplayMessage = ChatMessage & {
   // outcome so the confirmation card collapses into a status line and can't be triggered twice.
   proposedAction?: ProposedAction;
   actionStatus?: "applied" | "dismissed";
+  // A rate-limited confirmation leaves the proposal pending. Keep the reason next to the action so
+  // it remains clear after the global toast disappears.
+  actionWarning?: string | null;
   // Objects the agent looked up or changed this turn, rendered inline as cards beneath the message.
   objects?: DisplayObject[];
 };
@@ -315,6 +319,7 @@ const CustomHtmlProposalPreview = ({ state }: { state: CustomHtmlPreviewState })
 const ProposedActionCard = ({
   action,
   status,
+  warning,
   isPending,
   isApplying,
   onConfirm,
@@ -322,6 +327,7 @@ const ProposedActionCard = ({
 }: {
   action: ProposedAction;
   status?: "applied" | "dismissed";
+  warning: string | null;
   isPending: boolean;
   isApplying: boolean;
   onConfirm: () => void;
@@ -415,6 +421,13 @@ const ProposedActionCard = ({
           fieldRows
         )}
       </CardContent>
+      {warning ? (
+        <CardContent>
+          <Alert role="status" variant="warning" className="w-full">
+            {warning}
+          </Alert>
+        </CardContent>
+      ) : null}
       <CardContent className="justify-end gap-2">
         <Button disabled={isPending} onClick={onDismiss}>
           Dismiss
@@ -735,6 +748,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
 
   const confirmAction = async (index: number, action: ProposedAction) => {
     setPendingActionIndex(index);
+    setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionWarning: null } : msg)));
     try {
       const { message, object } = await executeAgentAction(action, conversationIdRef.current);
       showAlert(message, "success");
@@ -751,6 +765,9 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       const isRateLimited = e instanceof RateLimitError;
       const message = e instanceof Error && e.message ? e.message : "That change couldn't be applied.";
       showAlert(message, isRateLimited ? "warning" : "error");
+      if (isRateLimited) {
+        setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionWarning: message } : msg)));
+      }
     } finally {
       setPendingActionIndex(null);
     }
@@ -805,6 +822,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                     <ProposedActionCard
                       action={message.proposedAction}
                       status={message.actionStatus}
+                      warning={message.actionWarning ?? null}
                       // Also treat an in-flight turn as pending: while streaming, the proposal card
                       // can render before the terminal `done` event persists the turn server-side.
                       // Confirming in that window would apply the change before the stored proposal

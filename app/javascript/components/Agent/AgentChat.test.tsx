@@ -459,7 +459,9 @@ describe("AgentChat custom-html proposal cards", () => {
     const explanation =
       "You've used all 30 agent requests for this hour (sending a message and confirming a change both count). " +
       "You can continue in 15 minutes — nothing is wrong with your account or your store.";
-    executeAgentAction.mockRejectedValue(new RateLimitError(explanation, 900));
+    executeAgentAction
+      .mockRejectedValueOnce(new RateLimitError(explanation, 900))
+      .mockResolvedValueOnce({ message: "Done.", object: null });
 
     render(<AgentChat greeting="Hi" suggestions={[]} />);
     await sendMessage("change my headline");
@@ -468,9 +470,15 @@ describe("AgentChat custom-html proposal cards", () => {
     fireEvent.click(screen.getByText("Confirm"));
 
     await waitFor(() => expect(showAlert).toHaveBeenCalledWith(explanation, "warning"));
-    // The proposal is still there to confirm once the window clears.
+    // The proposal and its explanation remain together after the global toast disappears.
+    expect(screen.getByText(explanation)).toBeTruthy();
     expect(screen.getByText("Confirm")).toBeTruthy();
     expect(screen.queryByText("Applied")).toBeNull();
+
+    // Retrying clears the stale warning; a successful retry collapses the proposal as applied.
+    fireEvent.click(screen.getByText("Confirm"));
+    await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+    expect(screen.queryByText(explanation)).toBeNull();
   });
 
   it("still shows a genuinely failed confirmation as an error", async () => {

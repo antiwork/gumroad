@@ -31,8 +31,10 @@ module Throttling
     end
 
     # Turns Redis' TTL answer into the number of seconds we can honestly tell the user to wait.
-    # Redis has two non-positive answers and they mean opposite things for the caller:
+    # Redis has three non-positive answers and they mean different things for the caller:
     #
+    #    0  the key has less than a second left. Treat the window as effectively over instead of
+    #       resetting its expiry for a full new period.
     #   -2  the key is gone — it expired in the moment between the INCR above and this read. The
     #       window is already over: the next request creates a fresh key and is allowed straight
     #       through, so the wait is zero. Reporting a full period here would tell a seller to come
@@ -44,7 +46,7 @@ module Throttling
     def ttl_to_retry_after(redis:, key:, period:)
       ttl = redis.ttl(key)
       return ttl if ttl.present? && ttl.positive?
-      return 0 if ttl == -2
+      return 0 if [0, -2].include?(ttl)
 
       redis.expire(key, period.to_i)
       period.to_i

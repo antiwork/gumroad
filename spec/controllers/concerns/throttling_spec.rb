@@ -105,6 +105,21 @@ describe Throttling, type: :request do
       expect(JSON.parse(response.body)["error"]).to eq("Rate limit exceeded. Please try again.")
     end
 
+    it "does not restart the window when less than a second remains" do
+      6.times { get "/test_throttle" }
+
+      # TTL rounds the remaining lifetime to whole seconds, so an existing key near expiry can
+      # report zero. Resetting that key to the full period would turn the final fraction of a second
+      # into another hour of throttling.
+      allow(redis).to receive(:ttl).with("test_key").and_return(0)
+      expect(redis).not_to receive(:expire)
+      get "/test_throttle"
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(JSON.parse(response.body)["retry_after"]).to eq(0)
+      expect(response.headers["Retry-After"].to_i).to eq(0)
+    end
+
     it "renders a caller-supplied message instead of the default wording" do
       controller_with_message = Class.new(ApplicationController) do
         include Throttling
