@@ -6,7 +6,6 @@ import { classNames } from "$app/utils/classNames";
 
 import { Alert } from "$app/components/ui/Alert";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
-import { useRunOnce } from "$app/components/useRunOnce";
 
 const ALERT_KEY = "alert";
 
@@ -47,9 +46,15 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
       if (!isHoveringRef.current) startTimer();
     }
   });
-  useRunOnce(() => {
+
+  // Deliberately a plain useEffect rather than useRunOnce: the initial dismiss timeout has to be
+  // cleared on unmount, and useRunOnce cannot honour a returned cleanup. The same cleanup also
+  // covers timers started later via the postMessage path above.
+  React.useEffect(() => {
     if (initial) startTimer();
-  });
+    return clearTimer;
+    // Mount-once for the initial payload, matching the previous useRunOnce contract.
+  }, []);
 
   return (
     <div
