@@ -87,6 +87,13 @@ class Ai::StoreAgentService
   # closing summary — while cutting the worst case by roughly 8x. A request that blows through it
   # is looping, and the honest cap reply below is the right outcome.
   MAX_REQUEST_OUTPUT_TOKENS = 96_000
+  # Smallest allowance worth spending a model turn on. Each turn's allowance is trimmed to what the
+  # request has left (see #turn_output_allowance), so late in a big request the remainder can be a
+  # few hundred tokens — and a turn that small is certain to stop at "max_tokens" and hand back an
+  # unusable half-turn. Rather than pay for a turn guaranteed to be thrown away, the loop stops once
+  # the remainder falls below this and gives the seller the cap reply. 1,024 is roughly a short
+  # paragraph plus a small tool call: enough to be a real turn, small enough not to waste budget.
+  MIN_TURN_OUTPUT_TOKENS = 1_024
   # What the seller sees when a model turn still hits the token cap (stop_reason "max_tokens").
   # A truncated turn is unusable — a cut-off tool call has unparseable arguments, and a cut-off
   # text reply would silently present half an answer as if it were complete — so we replace it
@@ -247,11 +254,15 @@ class Ai::StoreAgentService
     @output_tokens_used = 0
 
     MAX_TOOL_ITERATIONS.times do
+      # Checked before the call, not after it: the allowance below is what this turn may generate,
+      # so once too little budget remains to take a useful turn the request is done.
+      break if output_budget_spent?
+
       result = client.messages(
         system: system_prompt,
         messages: conversation,
         tools: tool_schemas,
-        max_tokens: MAX_BUFFERED_REPLY_TOKENS,
+        max_tokens: turn_output_allowance(MAX_BUFFERED_REPLY_TOKENS),
       )
       @output_tokens_used += result.output_tokens.to_i
 
@@ -267,7 +278,6 @@ class Ai::StoreAgentService
       end
 
       proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
-      break if output_budget_spent?
     end
 
     { reply: tool_cap_reply(proposed_action), proposed_action: proposed_action&.as_json, objects: deduped_objects }
@@ -297,6 +307,10 @@ class Ai::StoreAgentService
     @output_tokens_used = 0
 
     MAX_TOOL_ITERATIONS.times do
+      # Same pre-call check as #respond: the allowance handed to this turn is bounded by what the
+      # request has left, so stop before making a call there is no useful budget for.
+      break if output_budget_spent?
+
       # Stream this turn's text deltas live. We don't yet know if the turn is final (text-only) or an
       # intermediate tool-use turn that happens to include preamble text, so track whether anything
       # was streamed: if the turn turns out to be a tool-use turn, we emit :reset to discard its
@@ -306,13 +320,14 @@ class Ai::StoreAgentService
         system: system_prompt,
         messages: conversation,
         tools: tool_schemas,
-        max_tokens: MAX_REPLY_TOKENS,
+        max_tokens: turn_output_allowance(MAX_REPLY_TOKENS),
         # If a streamed tool call arrives corrupted, the client recovers by replaying the turn
         # WITHOUT streaming — and that replay is a buffered generation on this request thread, so it
         # needs the buffered budget, not the streaming one. Handing it MAX_REPLY_TOKENS would put a
         # page-sized generation back under the request timeout and turn the recovery into the
-        # timeout error it exists to avoid.
-        buffered_max_tokens: MAX_BUFFERED_REPLY_TOKENS,
+        # timeout error it exists to avoid. It is trimmed to the remaining request budget for the
+        # same reason the streaming allowance is: the replay generates a whole turn of its own.
+        buffered_max_tokens: turn_output_allowance(MAX_BUFFERED_REPLY_TOKENS),
         # A corrupted tool call is recovered by replaying the turn without streaming, which
         # regenerates the reply from the start. Tool-use turns usually stream a sentence of
         # preamble first, so without a way to clear it that recovery could never run — the client
@@ -347,7 +362,6 @@ class Ai::StoreAgentService
       # clear it so the seller never sees an interim claim that gets replaced by the real reply.
       emit.call(:reset, {}) if streamed_any
       proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
-      break if output_budget_spent?
     end
 
     # The loop ended without a final answer — either it used up its model turns or it used up the
@@ -394,12 +408,32 @@ class Ai::StoreAgentService
       proposed_action
     end
 
-    # Has this request generated everything it is allowed to? Checked after each tool-use turn, so a
+    # How much of this request's output budget is still unspent.
+    def remaining_output_budget
+      MAX_REQUEST_OUTPUT_TOKENS - @output_tokens_used
+    end
+
+    # What this turn is allowed to generate: its path's per-turn cap, but never more than the
+    # request has left. Without the second half of that sentence the cumulative ceiling is only
+    # checked AFTER a turn completes, so a request sitting at 95,999 tokens would still be handed a
+    # full per-turn allowance and could finish ~32,000 tokens past the ceiling — the bound would
+    # describe a limit the code doesn't actually hold to. Shrinking the allowance makes
+    # MAX_REQUEST_OUTPUT_TOKENS a real ceiling on everything one request generates.
+    def turn_output_allowance(per_turn_cap)
+      [per_turn_cap, remaining_output_budget].min
+    end
+
+    # Has this request generated everything it is allowed to? Checked before each model turn, so a
     # loop that keeps producing large turns stops paying for them instead of getting the full
     # per-turn allowance MAX_TOOL_ITERATIONS times over. Stopping here lands on the same cap reply
     # as running out of turns, which is the honest outcome either way: the request didn't finish.
+    #
+    # The floor is why this isn't just `remaining <= 0`: a turn given a few hundred tokens is
+    # certain to stop at "max_tokens" and produce an unusable half-turn, which would replace the
+    # cap reply with the truncation one and bill the model call for nothing. Below the floor there
+    # is no useful turn left to take, so we stop and say so.
     def output_budget_spent?
-      @output_tokens_used >= MAX_REQUEST_OUTPUT_TOKENS
+      remaining_output_budget < MIN_TURN_OUTPUT_TOKENS
     end
 
     # The model kept calling tools past our cap. Return a message that matches reality: only mention

@@ -697,6 +697,64 @@ describe Ai::StoreAgentService do
         expect(client).to have_received(:stream_messages).exactly(expected_turns).times
       end
 
+      it "never lets a turn's allowance exceed what the request has left" do
+        # The turns here do NOT divide the budget evenly, which is the case that exposed the bug:
+        # with a fixed per-turn allowance the loop only noticed the ceiling AFTER a turn finished, so
+        # a request sitting just under it could still be handed a full page-sized allowance and end
+        # up ~32,000 tokens past the documented cap. The invariant is per turn: what a turn is
+        # allowed to generate, plus everything already generated, can never exceed the ceiling.
+        uneven = described_class::MAX_REPLY_TOKENS - 5_000
+        # A turn generates as much as it wants but never more than it was allowed — modelling the
+        # allowance is the whole point, so a stub that ignored it would prove nothing.
+        turn_for = lambda do |allowance|
+          Ai::AnthropicClient::Result.new(
+            text: "",
+            tool_uses: [{ id: "toolu_1", name: "api_read", input: { "endpoint" => "list_products" } }],
+            stop_reason: "tool_use",
+            output_tokens: [uneven, allowance].min,
+          )
+        end
+        generated = 0
+        # Each entry is [what this turn was allowed, what the request had already generated].
+        turns = []
+        allow(client).to receive(:stream_messages) do |args, &blk|
+          allowance = args[:max_tokens]
+          turns << [allowance, generated]
+          blk&.call("")
+          turn_for.call(allowance).tap { generated += _1.output_tokens }
+        end
+        allow(client).to receive(:messages).and_return(text_result("[]"))
+
+        service.respond_streaming(messages: [{ role: "user", content: "keep going" }]) { |_event, _payload| }
+
+        expect(turns.size).to be > 1
+        turns.each do |allowance, spent_before|
+          expect(allowance).to be <= described_class::MAX_REPLY_TOKENS
+          expect(spent_before + allowance).to be <= described_class::MAX_REQUEST_OUTPUT_TOKENS
+        end
+        # The final turn is the one that has to be trimmed: a full allowance there would overshoot.
+        expect(turns.last.first).to be < described_class::MAX_REPLY_TOKENS
+        expect(generated).to be <= described_class::MAX_REQUEST_OUTPUT_TOKENS
+      end
+
+      it "does not spend a turn on an allowance too small to produce a usable reply" do
+        # Once the remainder falls under MIN_TURN_OUTPUT_TOKENS any turn we take is certain to stop
+        # at "max_tokens" and be discarded, so the loop stops rather than paying for a dead turn.
+        nearly_all = described_class::MAX_REQUEST_OUTPUT_TOKENS - (described_class::MIN_TURN_OUTPUT_TOKENS - 1)
+        turn = Ai::AnthropicClient::Result.new(
+          text: "",
+          tool_uses: [{ id: "toolu_1", name: "api_read", input: { "endpoint" => "list_products" } }],
+          stop_reason: "tool_use",
+          output_tokens: nearly_all,
+        )
+        allow(client).to receive(:messages).and_return(turn)
+
+        result = service.respond(messages: [{ role: "user", content: "walk my whole catalog" }])
+
+        expect(client).to have_received(:messages).once
+        expect(result[:reply]).to eq("I gathered the details but couldn't finish in one go. Please rephrase or ask again.")
+      end
+
       it "leaves room for a real page-authoring request rather than cutting it off" do
         # Page authoring is one big turn surrounded by cheap read turns, so the budget has to hold
         # several page-sized turns or the fix this PR ships would hit the new bound instead.
