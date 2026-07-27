@@ -381,24 +381,29 @@ class Order::ChargeService
     purchase.update!(purchase_success_balance: seller_balance_transaction.balance)
   end
 
-  # The India e-mandate registered with this charge caps EVERY future off-session charge made
-  # against the saved card (RBI rules; see Purchase#mandate_options_for_stripe). One cart is one
-  # PaymentIntent and therefore one mandate, so when a cart holds several subscriptions the cap
-  # has to cover the largest amount that single mandate will ever be asked to authorize — which
-  # is the SUM of what those subscriptions can each renew for, not the biggest one of them.
+  # The India e-mandate registered with this charge caps every future off-session charge made
+  # against the saved card (RBI rules; see Purchase#mandate_options_for_stripe). The cap is a
+  # PER-CHARGE ceiling, not a total budget: Stripe authorizes each off-session charge whose
+  # amount is at or under `amount`, and anything above it needs the buyer to authenticate again.
   #
-  # Sizing it to the biggest line under-sizes the cap for every multi-subscription cart: a cart
-  # with two $10/month subscriptions registers a $10 cap, and the first renewal that bills both
-  # ($20) exceeds it and is declined at the card network — a failure the buyer can only clear by
-  # coming back to re-authorize.
+  # Renewals are charged one subscription at a time — `Subscription#schedule_charge` enqueues
+  # RecurringChargeWorker per subscription id, and each run charges exactly one purchase — so
+  # even when one cart creates several subscriptions sharing this mandate, no single future
+  # charge is ever the cart's combined total. The cap therefore has to cover the LARGEST
+  # individual renewal, and sizing it to the sum of the cart would authorize any one renewal to
+  # silently grow to the whole cart's worth before re-authentication kicks in.
   #
-  # Each purchase contributes its own `mandate_maximum_amount_cents` rather than its charged
-  # total, so per-subscription headroom for temporary discounts (a discount whose billing cycles
-  # run out renews at the undiscounted price) is preserved inside the sum.
+  # What each purchase contributes is its own `mandate_maximum_amount_cents` rather than the
+  # amount charged today, which is the part a multi-item cart was missing: when a subscription
+  # is bought with a limited-duration discount, its renewals bill the undiscounted price once
+  # the discount's billing cycles run out. Taking the max over charged totals (what this used
+  # to do) sizes the cap below that later, higher renewal and the buyer gets an unrecoverable
+  # decline. Single-purchase carts already get this headroom from
+  # Purchase#mandate_options_for_stripe; this gives multi-item carts the same treatment.
   def mandate_options_for_stripe(purchases:, with_currency: false)
     return purchases.first.mandate_options_for_stripe(with_currency:) if purchases.count == 1
 
-    mandate_amount = purchases.sum(&:mandate_maximum_amount_cents)
+    mandate_amount = purchases.map(&:mandate_maximum_amount_cents).max
 
     mandate_options = {
       payment_method_options: {
