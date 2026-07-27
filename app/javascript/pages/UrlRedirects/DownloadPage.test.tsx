@@ -85,7 +85,8 @@ describe("DownloadPage media position polling", () => {
       pollsByInterval.set(interval, poll);
       return poll;
     });
-    // The page asserts its props with typia; bypass that by asserting a loose object.
+    // typia.assert runs for real against this fixture, so it doubles as a check that the
+    // fixture still satisfies the page's prop contract.
     mocks.usePage.mockReturnValue({ props: pageProps() });
     DownloadPage = (await import("$app/pages/UrlRedirects/DownloadPage")).default;
   });

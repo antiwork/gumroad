@@ -12,6 +12,11 @@
 // the page listens for it. Each event carries the id of the player it came from, because a
 // content page can embed several videos: the page tracks which players are playing rather than
 // a single page-wide flag, so one player pausing doesn't cancel out another that's still going.
+//
+// Note the pause applies to the whole poll, not just the playing file: while a video plays,
+// the progress bars for the OTHER files stop picking up positions synced from another device
+// until playback stops. That is the intended trade — the buyer is watching the player, not the
+// other rows' meters, and the poll is the long-lived request stream this change exists to stop.
 export const MEDIA_PLAYBACK_EVENT = "gumroad:media_playback";
 
 export type MediaPlaybackEventDetail = { playerId: string; isPlaying: boolean };
