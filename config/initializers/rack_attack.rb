@@ -225,39 +225,70 @@ class Rack::Attack
   # seller can be exempted.
   ORDERS_PER_PRODUCT_PER_MINUTE = 300
 
-  # Pull the product identifier out of an /orders POST. The modern cart sends
-  # line_items[][permalink]; the single-product path sends a bare permalink. Returns nil
-  # (skip the throttle) when neither is present or params are malformed — a request we
-  # cannot attribute to a product is handled by the other rules, and raising here would
-  # 500 the middleware.
-  ORDERS_PRODUCT_KEY = proc do |req|
-    begin
-      line_items = req.params["line_items"]
-      permalink =
-        if line_items.is_a?(Array)
-          first = line_items.first
-          first["permalink"] if first.is_a?(Hash)
-        elsif line_items.is_a?(Hash)
-          first = line_items.values.first
-          first["permalink"] if first.is_a?(Hash)
-        end
-      (permalink.presence || req.params["permalink"].presence)
-    rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
-      nil
-    end
+  # The order-creation endpoint. Rails `resources :orders, only: [:create]` accepts any
+  # format suffix, so /orders.json and /orders.xml reach the same controller action as
+  # /orders. Match by regex (like the OAuth and help-center rules below) so no suffix
+  # variant slips past either of the two rules that follow.
+  ORDERS_CREATE_PATH = %r{\A/orders(?:\.[^/]+)?\z}
+
+  # Every product in the submitted cart, deduplicated. The modern cart sends
+  # line_items[][permalink] (an array, or a hash of indexes when form-encoded); the
+  # single-product path sends a bare permalink.
+  #
+  # ALL items matter, not just the first one: order creation charges every line item and
+  # therefore sends a receipt for every line item. If we only counted the first item, an
+  # attacker could park the abused product second in the cart behind a first item whose
+  # permalink changes every request, and the abused product would never accumulate a count.
+  #
+  # Returns [] (skip the throttle) when no product can be identified or the params are
+  # malformed — such a request is covered by the other rules, and raising here would 500
+  # the middleware.
+  ORDERS_PRODUCT_PERMALINKS = proc do |req|
+    line_items = req.params["line_items"]
+    items =
+      case line_items
+      when Array then line_items
+      when Hash  then line_items.values
+      else []
+      end
+
+    permalinks = items.filter_map { |item| item["permalink"].presence if item.is_a?(Hash) }
+    permalinks << req.params["permalink"] if permalinks.empty? && req.params["permalink"].presence
+    permalinks.uniq
+  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+    []
   end
 
-  throttle("/params:/orders:POST", limit: ORDERS_PER_PRODUCT_PER_MINUTE, period: 60.seconds) do |req|
-    if req.post? && req.path.match?(%r{\A/orders(?:\.[^/]+)?\z})
-      permalink = ORDERS_PRODUCT_KEY.call(req)
-      "orders_product:#{permalink}" if permalink
+  # Counter namespace for the per-product tally. It is deliberately separate from the
+  # throttle rule's own Rack::Attack counter (which is namespaced by rule name), because
+  # this rule has to tally SEVERAL products per request while a Rack::Attack rule can only
+  # return one discriminator. So we do the counting ourselves here, and then use the rule
+  # below purely as the "is this request throttled?" switch: `limit: 0` means "throttle as
+  # soon as the block returns anything", and the block returns the offending permalink only
+  # once that product has crossed its own ceiling.
+  ORDERS_PRODUCT_COUNTER = proc do |permalink|
+    Rack::Attack.cache.count("orders_product:#{permalink}", 60)
+  end
+
+  throttle("/params:/orders:POST", limit: 0, period: 60.seconds) do |req|
+    if req.post? && req.path.match?(ORDERS_CREATE_PATH)
+      # Count every product in the cart, then throttle if ANY of them is over the ceiling.
+      ORDERS_PRODUCT_PERMALINKS.call(req)
+        .map { |permalink| [permalink, ORDERS_PRODUCT_COUNTER.call(permalink)] }
+        .find { |_permalink, count| count > ORDERS_PER_PRODUCT_PER_MINUTE }
+        &.first
     end
   end
 
   # The /orders path had no IP-keyed ceiling either. This does not stop a proxy-rotating
   # attacker on its own (see above), but it is the cheap first line against a single
   # scripted host and matches the /purchases limit so the two checkout paths behave alike.
-  throttle_by_ip path: "/orders", requests: 40, period: 60.seconds
+  # Keyed on the IP alone (rather than via `throttle_by_ip`, which prefixes a regex path
+  # match with the request path) so /orders and /orders.json share one counter instead of
+  # each getting its own 40-per-minute budget.
+  throttle_with_exponential_backoff(name: "orders/ip", requests: 40, period: 60.seconds) do |req|
+    req.remote_ip if req.post? && req.path.match?(ORDERS_CREATE_PATH)
+  end
 
   # Help Center contact form. Each submission sends an email into the support
   # inbox, so without a limit a single IP could flood support (and burn email

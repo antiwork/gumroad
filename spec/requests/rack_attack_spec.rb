@@ -507,12 +507,14 @@ describe "Rack::Attack throttle", type: :request do
   # checkout throttle at the time keyed on IP, and /orders had no throttle at all, so
   # nothing stopped it.
   describe "POST /orders per-product throttle" do
-    def order_request(permalink:, ip:)
+    def order_request(permalinks:, ip:, path: "/orders")
+      line_items = Array(permalinks).map { |permalink| { "permalink" => permalink, "perceived_price_cents" => "0" } }
+
       Rack::Attack::Request.new(
         Rack::MockRequest.env_for(
-          "/orders",
+          path,
           method: "POST",
-          params: { "line_items" => [{ "permalink" => permalink, "perceived_price_cents" => "0" }] },
+          params: { "line_items" => line_items },
           "HTTP_CF_CONNECTING_IP" => ip
         )
       )
@@ -525,12 +527,30 @@ describe "Rack::Attack throttle", type: :request do
         # Rotate the IP on every request, exactly as the residential-proxy run did. The
         # IP-keyed rules must never fire here; only the per-product rule should.
         Rack::Attack::ORDERS_PER_PRODUCT_PER_MINUTE.times do |i|
-          request = order_request(permalink: "spamprod", ip: "198.51.100.#{i % 254 + 1}")
+          request = order_request(permalinks: "spamprod", ip: "198.51.100.#{i % 254 + 1}")
           expect(Rack::Attack.configuration.throttled?(request)).to be(false),
                                                                     "request #{i + 1} unexpectedly throttled"
         end
 
-        over_limit = order_request(permalink: "spamprod", ip: "198.51.100.200")
+        over_limit = order_request(permalinks: "spamprod", ip: "198.51.100.200")
+        expect(Rack::Attack.configuration.throttled?(over_limit)).to be(true)
+      end
+    end
+
+    it "counts the abused product even when it is NOT the first item in the cart" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        # Hiding the abused product behind a first item whose permalink changes on every
+        # request must not reset its tally — order creation charges (and mails a receipt
+        # for) every line item, so every line item has to count.
+        Rack::Attack::ORDERS_PER_PRODUCT_PER_MINUTE.times do |i|
+          request = order_request(permalinks: ["decoy#{i}", "spamprod"], ip: "198.51.100.#{i % 254 + 1}")
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false),
+                                                                    "request #{i + 1} unexpectedly throttled"
+        end
+
+        over_limit = order_request(permalinks: ["decoyfinal", "spamprod"], ip: "198.51.100.201")
         expect(Rack::Attack.configuration.throttled?(over_limit)).to be(true)
       end
     end
@@ -540,11 +560,28 @@ describe "Rack::Attack throttle", type: :request do
 
       travel_to(Time.current) do
         (Rack::Attack::ORDERS_PER_PRODUCT_PER_MINUTE + 1).times do |i|
-          Rack::Attack.configuration.throttled?(order_request(permalink: "spamprod", ip: "198.51.100.#{i % 254 + 1}"))
+          Rack::Attack.configuration.throttled?(order_request(permalinks: "spamprod", ip: "198.51.100.#{i % 254 + 1}"))
         end
 
-        innocent = order_request(permalink: "goodprod", ip: "198.51.100.7")
+        innocent = order_request(permalinks: "goodprod", ip: "198.51.100.7")
         expect(Rack::Attack.configuration.throttled?(innocent)).to be(false)
+      end
+    end
+
+    it "applies the per-IP ceiling to format-suffixed order routes too" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        # /orders.json hits the same controller action as /orders. One shared counter, so
+        # switching suffix mid-run cannot buy a fresh 40-request budget.
+        40.times do |i|
+          request = order_request(permalinks: "prod#{i}", ip: "198.51.100.10")
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false),
+                                                                    "request #{i + 1} unexpectedly throttled"
+        end
+
+        suffixed = order_request(permalinks: "prodlast", ip: "198.51.100.10", path: "/orders.json")
+        expect(Rack::Attack.configuration.throttled?(suffixed)).to be(true)
       end
     end
 
