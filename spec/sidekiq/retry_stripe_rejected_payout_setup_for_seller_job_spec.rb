@@ -160,6 +160,29 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
     end
 
+    it "re-sends on a later pass when the notification enqueue itself fails" do
+      # The marker is claimed before the email is enqueued, so a failed enqueue must release it
+      # again — otherwise the note carries a claim for a message that was never sent and the
+      # seller is abandoned in silence.
+      note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
+      mail = double("mail")
+      allow(mail).to receive(:deliver_later).and_raise(Redis::CannotConnectError)
+      allow(ContactingCreatorMailer).to receive(:invalid_bank_account).and_return(mail)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["seller_notified"]).to be_blank
+      expect(note.json_data["abandoned_at"]).to be_blank
+
+      # The next pass finds the note untouched and sends for real.
+      allow(ContactingCreatorMailer).to receive(:invalid_bank_account).and_call_original
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).once
+      expect(note.reload.json_data["seller_notified"]).to be(true)
+    end
+
     it "classifies from the stored Stripe error message rather than the truncated note text" do
       long_directory_miss = "Stripe could not validate the submitted bank details for this connected account. " \
                             "#{'Diagnostic context. ' * 8}We couldn't find the bank for that BIC"
@@ -291,6 +314,28 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect do
         described_class.new.perform(user.id)
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted)
+    end
+
+    it "re-sends the exhausted notice on a later pass when the enqueue itself fails" do
+      # The marker is claimed before the enqueue, so a failed enqueue has to release it — a note
+      # left claiming "we told them" for a message that never went out would be abandoned in
+      # silence, which is the failure this notice exists to prevent.
+      note = add_note(bank_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES })
+      mail = double("mail")
+      allow(mail).to receive(:deliver_later).and_raise(Redis::CannotConnectError)
+      allow(ContactingCreatorMailer).to receive(:payout_setup_retry_exhausted).and_return(mail)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["exhausted_notified"]).to be_blank
+      expect(note.json_data["abandoned_at"]).to be_blank
+
+      allow(ContactingCreatorMailer).to receive(:payout_setup_retry_exhausted).and_call_original
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted).once
+      expect(note.reload.json_data["abandoned_at"]).to be_present
     end
   end
 
