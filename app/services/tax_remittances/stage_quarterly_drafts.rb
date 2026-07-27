@@ -136,34 +136,53 @@ class TaxRemittances::StageQuarterlyDrafts
     # freshly computed liability, and leave anything a human has already
     # started on alone.
     def refresh_or_skip(existing, liability)
-      unless existing.status == "draft"
+      new_notes = draft_notes(liability)
+      outcome = nil
+
+      # The status check and the write have to be one indivisible step. Reading
+      # the status off the in-memory row and then updating it is a race a human
+      # can lose money to: a reviewer who submits the draft for approval in the
+      # moment between our read and our write still looks like a `draft` to
+      # this object, so the refresh would overwrite the amount they are in the
+      # middle of approving and report it as a clean refresh. `with_lock`
+      # re-reads the row with SELECT ... FOR UPDATE inside a transaction, so
+      # the status decided on below is the committed one and no one else can
+      # change it until this block commits. A reviewer's own transition either
+      # commits first (we see it and leave the row alone) or waits for us and
+      # then applies on top of a refreshed draft — never silently on top of a
+      # discarded amount.
+      existing.with_lock do
+        if existing.status != "draft"
+          outcome = [:skip_live, stale_amount_for(existing, liability)]
+        elsif existing.usd_amount_cents == liability.tax_collected_cents && existing.notes == new_notes
+          outcome = [:already_matches]
+        else
+          previous_amount_cents = existing.usd_amount_cents
+          existing.update!(usd_amount_cents: liability.tax_collected_cents, notes: new_notes)
+          outcome = [:refreshed, previous_amount_cents]
+        end
+      end
+
+      case outcome
+      in [:skip_live, stale_amount]
         @skipped << {
           authority: liability.authority,
           reason: "live attempt #{existing.attempt} in status #{existing.status}",
-          stale_amount: stale_amount_for(existing, liability),
+          stale_amount:,
         }.compact
-        return
-      end
-
-      new_notes = draft_notes(liability)
-      if existing.usd_amount_cents == liability.tax_collected_cents && existing.notes == new_notes
+      in [:already_matches]
         @skipped << { authority: liability.authority, reason: "draft attempt #{existing.attempt} already matches the computed liability" }
-        return
+      in [:refreshed, previous_amount_cents]
+        @refreshed << {
+          remittance: existing,
+          authority: liability.authority,
+          from_cents: previous_amount_cents,
+          to_cents: liability.tax_collected_cents,
+        }
       end
-
-      previous_amount_cents = existing.usd_amount_cents
-      existing.update!(usd_amount_cents: liability.tax_collected_cents, notes: new_notes)
-
-      @refreshed << {
-        remittance: existing,
-        authority: liability.authority,
-        from_cents: previous_amount_cents,
-        to_cents: liability.tax_collected_cents,
-      }
-    rescue ActiveRecord::RecordInvalid => e
-      # The row moved out of `draft` between the read and the write (a human
-      # submitted it for approval, most likely), so its amount is now theirs
-      # to own. Report it instead of failing the whole quarter's staging.
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
+      # Either the row was deleted under us, or a validation on it now refuses
+      # the write. Report it instead of failing the whole quarter's staging.
       @skipped << { authority: liability.authority, reason: "could not refresh draft attempt #{existing.attempt} (#{e.class.name})" }
     end
 
