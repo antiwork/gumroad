@@ -57,6 +57,13 @@ describe "Purchase tax labels" do
       purchase = purchase_taxed_in("US", rate: 0.01, tax_excluded_from_price: false)
       expect(purchase.tax_label).to eq("Sales tax (included)")
     end
+
+    it "falls back to sales tax when there is no rate row to read a country from" do
+      # has_tax_label? is also satisfied by gumroad_tax_cents alone, so the label has to cope
+      # with a taxable purchase that has no zip_tax_rate rather than blowing up on nil.
+      purchase = build(:purchase, zip_tax_rate: nil, was_purchase_taxable: true, gumroad_tax_cents: 180)
+      expect(purchase.tax_label).to eq("Sales tax (included)")
+    end
   end
 
   describe "#seller_tax_label" do
@@ -73,6 +80,12 @@ describe "Purchase tax labels" do
 
     it "marks the tax as included when it was not added on top of the price" do
       purchase = purchase_taxed_in("IN", tax_excluded_from_price: false)
+      expect(purchase.seller_tax_label).to eq("GST (included)")
+    end
+
+    it "treats a purchase that never recorded the flag as tax-included" do
+      # was_tax_excluded_from_price is nil on older rows, which has always meant "included".
+      purchase = purchase_taxed_in("IN", tax_excluded_from_price: nil)
       expect(purchase.seller_tax_label).to eq("GST (included)")
     end
   end
