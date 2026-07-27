@@ -86,11 +86,18 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     end
 
     it "does not email the seller that retries were exhausted" do
-      add_format_rejection_note("account_number_invalid — Invalid account number")
+      # Seeded at the retry ceiling so that WITHOUT the early exit this note would fall through
+      # to give_up!, which does send the exhausted email — otherwise the assertion passes for
+      # the wrong reason (a fresh note can't reach give_up! anyway).
+      note = add_format_rejection_note("account_number_invalid — Invalid account number")
+      note.json_data["retry_count"] = RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES
+      note.save!
 
       expect do
         described_class.new.perform(user.id)
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted)
+
+      expect(note.reload.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_FORMAT_REJECTION)
     end
 
     it "keeps retrying a directory miss, which waiting can genuinely fix" do

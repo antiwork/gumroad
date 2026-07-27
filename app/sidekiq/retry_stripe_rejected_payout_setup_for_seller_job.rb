@@ -44,8 +44,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     # nobody has told them their code needs correcting. Abandoning silently in that case would
     # strand them worse than the retry loop did.
     if bank_note?(note) && StripeMerchantAccountManager.bank_details_format_rejection_note?(note)
-      notify_seller_of_format_rejection(user, note) unless StripeMerchantAccountManager.bank_sync_note_seller_notified?(note)
-      abandon_note!(user, note, reason: ABANDONED_REASON_BANK_FORMAT_REJECTION, note_content: BANK_FORMAT_REJECTION_NOTE)
+      abandon_format_rejected_notes!(user)
       return
     end
 
@@ -100,6 +99,41 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       user.add_payout_note(content: note_content)
     end
 
+    # Abandons EVERY outstanding format-rejected bank note in one pass, with a single audit note.
+    # A failing account creation retries (CreateStripeMerchantAccountWorker has retry: 5) and
+    # records a note each time, so a seller can accumulate several identical format notes; doing
+    # them one per weekly run would append a duplicate audit note on each pass.
+    def abandon_format_rejected_notes!(user)
+      notes = payout_setup_failure_notes(user).select do |candidate|
+        candidate.json_data["abandoned_at"].blank? &&
+          bank_note?(candidate) &&
+          StripeMerchantAccountManager.bank_details_format_rejection_note?(candidate)
+      end
+      return if notes.empty?
+
+      unless notes.any? { |candidate| StripeMerchantAccountManager.bank_sync_note_seller_notified?(candidate) }
+        notify_seller_of_format_rejection(user, notes.first)
+      end
+
+      ActiveRecord::Base.transaction do
+        notes.each do |candidate|
+          candidate.json_data["abandoned_at"] = Time.current.iso8601
+          candidate.json_data["abandoned_reason"] = ABANDONED_REASON_BANK_FORMAT_REJECTION
+          candidate.save!
+        end
+        user.add_payout_note(content: BANK_FORMAT_REJECTION_NOTE)
+      end
+    end
+
+    # The email is enqueued BEFORE the note is marked as notified, and that order is deliberate.
+    # "seller_notified" is not a delivery ledger; the abandonment branch reads it as "has anyone
+    # told this seller their code needs correcting?", because a note recorded during account
+    # creation (that path re-raises instead of emailing) has no notification behind it. Marking
+    # first would mean a crash between the two writes leaves a note claiming the seller was told
+    # when no email was ever enqueued — the next pass would then abandon the retries and the
+    # seller hears nothing at all, which is the exact failure this job is here to prevent.
+    # Enqueuing first fails the other way instead: at worst a duplicate copy of an email asking
+    # them to re-enter their bank details, which is harmless and self-consistent.
     def notify_seller_of_format_rejection(user, note)
       _code, message = StripeMerchantAccountManager.bank_sync_note_error_details(note)
       ContactingCreatorMailer.invalid_bank_account(

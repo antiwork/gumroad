@@ -1,12 +1,12 @@
 <% if @format_rejected %>
   <%= header_section("Your bank details need correcting for payouts.") %>
   <div>
-    <p>Hi there. You recently added a bank account for Gumroad payouts, and our payment partner couldn't accept the bank or routing code you entered — it doesn't match the format banks in your country use. Until it's corrected, we can't send you payouts.</p>
+    <p>Hi there. You recently added a bank account for Gumroad payouts, and our payment partner couldn't accept the details you entered — they don't match the format banks in your country use. Until they're corrected, we can't send you payouts.</p>
     <% if @expected_format_hint.present? %>
       <p>Here's the format your bank expects: <%= @expected_format_hint %></p>
-      <p>Please re-enter your bank code in <%= link_to "your payout settings", settings_payments_url %>, matching that format exactly and without extra spaces. Waiting won't clear this one: we'll keep getting the same answer until the code itself is updated, so it needs your edit.</p>
+      <p>Please re-enter your bank details in <%= link_to "your payout settings", settings_payments_url %>, matching that format exactly and without extra spaces. Waiting won't clear this one: we'll keep getting the same answer until the details themselves are updated, so it needs your edit.</p>
     <% else %>
-      <p>Please check the code against what your bank shows and re-enter it in <%= link_to "your payout settings", settings_payments_url %>, without extra spaces. Waiting won't clear this one: we'll keep getting the same answer until the code itself is updated, so it needs your edit.</p>
+      <p>Please check your account and bank code against what your bank shows and re-enter them in <%= link_to "your payout settings", settings_payments_url %>, without extra spaces. Waiting won't clear this one: we'll keep getting the same answer until the details themselves are updated, so it needs your edit.</p>
     <% end %>
   </div>
 <% else %>

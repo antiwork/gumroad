@@ -2040,7 +2040,7 @@ describe ContactingCreatorMailer do
       it "tells the seller to correct the code and shows the expected format" do
         expect(mail.to).to eq([seller.email])
         expect(mail.subject).to eq("Your bank details need correcting for payouts.")
-        expect(mail.body.encoded).to include("doesn't match the format banks in your country use")
+        expect(mail.body.encoded).to include("don't match the format banks in your country use")
         expect(mail.body.encoded).to include("should be in the format AAAAPKBB or AAAAPKBBXYZ")
         expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
       end
@@ -2062,6 +2062,17 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).not_to include("Here's the format your bank expects")
       end
 
+      it "does not mistake Stripe's generic \"check the information provided\" line for a format hint" do
+        mail = ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+          "Invalid account number. Please double-check the information provided and try again."
+        )
+
+        expect(mail.body.encoded).not_to include("Here's the format your bank expects")
+        expect(mail.body.encoded).not_to include("double-check the information provided")
+      end
+
       it "drops an implausibly long format sentence instead of pasting it into the email" do
         mail = ContactingCreatorMailer.invalid_bank_account(
           seller.id,
@@ -2070,7 +2081,7 @@ describe ContactingCreatorMailer do
         )
 
         expect(mail.body.encoded).not_to include("Here's the format your bank expects")
-        expect(mail.body.encoded).to include("check the code against what your bank shows")
+        expect(mail.body.encoded).to include("check your account and bank code against what your bank shows")
       end
     end
 
