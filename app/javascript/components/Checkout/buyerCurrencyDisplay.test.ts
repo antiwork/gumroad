@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
+import type { CurrencyCode } from "$app/utils/currency";
 
 import {
   formatCheckoutPrice,
+  formatPresentmentCents,
   getCheckoutBuyerCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
+  getCheckoutListedCurrencyAmounts,
+  getCheckoutListedCurrencyDisplay,
   getCheckoutPresentmentAmounts,
   toBuyerCurrencyCents,
   toCanonicalCents,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
+import type { CheckoutPaymentConfig } from "$app/components/Checkout/payment";
 
 const surcharges = (overrides: Partial<SurchargesResponse> = {}): SurchargesResponse => ({
   vat_id_valid: false,
@@ -229,5 +234,184 @@ describe("formatCheckoutPrice", () => {
 
   it("formats canonical USD when no buyer-currency display exists", () => {
     expect(formatCheckoutPrice(1_000, null)).toBe("US$10");
+  });
+});
+
+describe("getCheckoutListedCurrencyDisplay", () => {
+  // A BRL product paid with Pix: the element mounts in BRL, the charge bills the listed
+  // R$49.90 directly, and there is no FX quote anywhere in the flow.
+  const listedCurrencyPayment = (
+    listedCurrencyDisplay: { currency: string; subunit_to_unit: number } | null = {
+      currency: "brl",
+      subunit_to_unit: 100,
+    },
+  ): CheckoutPaymentConfig => ({
+    integration: "payment_element_client_confirm",
+    fallback_reason: null,
+    disable_wallets: true,
+    request_apple_pay_merchant_tokens: false,
+    payment_element_wallets: false,
+    flat_payment_methods: true,
+    elements_options: {
+      stripe_elements_mode: "payment",
+      currency: "brl",
+      presentment_amount_cents: 4_990,
+      listed_currency_display: listedCurrencyDisplay,
+      payment_method_types: ["card", "pix"],
+      stripe_link_enabled: false,
+      stripe_connect_account_id: null,
+    },
+  });
+
+  const brlCartItems = (overrides: { currencyCode?: CurrencyCode; exchangeRate?: number } = {}) => [
+    {
+      product: {
+        currency_code: overrides.currencyCode ?? "brl",
+        exchange_rate: overrides.exchangeRate ?? 5.45,
+      },
+    },
+  ];
+
+  it("renders the listed currency for a method-forced cart priced in that currency", () => {
+    const listed = getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems());
+
+    expect(listed).toEqual({ currencyCode: "brl", rate: 5.45, subunitToUnit: 100 });
+  });
+
+  it("stays in canonical USD when the server did not choose the listed-currency lane", () => {
+    expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(null), brlCartItems())).toBeNull();
+  });
+
+  it("stays in canonical USD when the cart no longer has the lane's single-item shape", () => {
+    // The cart can be edited after the page rendered; a second item means the server would no
+    // longer mount a forced-currency element, so displaying the listed currency would lie.
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [...brlCartItems(), ...brlCartItems()]),
+    ).toBeNull();
+    expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [])).toBeNull();
+  });
+
+  it("stays in canonical USD when the cart's product is not priced in the element's currency", () => {
+    expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems({ currencyCode: "usd" }))).toBeNull();
+  });
+
+  it("stays in canonical USD when the product has no usable exchange rate", () => {
+    // A zero rate would convert every USD-side row (tax, shipping) to zero.
+    expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems({ exchangeRate: 0 }))).toBeNull();
+  });
+
+  // Only a new card confirmed through the Payment Element reaches Charge::MethodForcedPresentment.
+  // Every other selection charges canonical USD, so the summary must keep showing USD for it.
+  it("stays in canonical USD while the buyer pays with a card already on file", () => {
+    // This is the DEFAULT for any returning buyer, so getting it wrong would mis-display the
+    // common case rather than an edge case.
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems(), { usingSavedCard: true }),
+    ).toBeNull();
+  });
+
+  it("stays in canonical USD while a non-card payment method is selected", () => {
+    // PayPal charges USD or the merchant-account currency at its own rate, never the listed price.
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems(), { paymentMethod: "paypal" }),
+    ).toBeNull();
+  });
+
+  it("stays in canonical USD for installment and subscription carts", () => {
+    // Both are shapes the client-confirm Element rejects, and both are toggleable after render
+    // while `checkoutPayment` stays frozen — so the client has to re-check them itself.
+    const brlItem = { product: { currency_code: "brl" as const, exchange_rate: 5.45 } };
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, pay_in_installments: true }]),
+    ).toBeNull();
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, recurrence: "monthly" }]),
+    ).toBeNull();
+  });
+});
+
+describe("getCheckoutListedCurrencyAmounts", () => {
+  const brl = { currencyCode: "brl" as const, rate: 5.45, subunitToUnit: 100 };
+
+  it("shows listed prices verbatim and converts the USD-side tax and shipping at the stored rate", () => {
+    // R$49.90 listed. The surcharge endpoint returns tax and shipping in USD (109 and 545
+    // cents), which the charge converts back with this same stored rate — 109 * 5.45 = 594.05
+    // and 545 * 5.45 = 2,970.25 — so the visible total equals the intent amount.
+    const amounts = getCheckoutListedCurrencyAmounts(brl, {
+      lines: [{ priceCents: 4_990, discountCents: 0 }],
+      tipCents: 0,
+      usdTaxCents: 109,
+      usdTaxIncludedCents: 0,
+      usdShippingCents: 545,
+    });
+
+    if (!amounts) throw new Error("Expected listed-currency amounts");
+    expect(amounts.linePriceCents).toEqual([4_990]);
+    expect(amounts.taxCents).toBe(594);
+    expect(amounts.shippingCents).toBe(2_970);
+    expect(amounts.subtotalCents).toBe(4_990);
+    expect(amounts.totalCents).toBe(4_990 + 594 + 2_970);
+  });
+
+  it("keeps the listed price out of the USD round trip that produced the reported bug", () => {
+    // The old rendering divided the listed price by the exchange rate, so a R$49.90 product
+    // showed about US$9.15 next to a Stripe sheet charging R$49.90. The listed amount must
+    // come through untouched.
+    const amounts = getCheckoutListedCurrencyAmounts(brl, {
+      lines: [{ priceCents: 4_990, discountCents: 0 }],
+      tipCents: 0,
+      usdTaxCents: 0,
+      usdTaxIncludedCents: 0,
+      usdShippingCents: 0,
+    });
+
+    if (!amounts) throw new Error("Expected listed-currency amounts");
+    expect(amounts.totalCents).toBe(4_990);
+    expect(formatPresentmentCents(amounts.totalCents, brl)).toBe("R$49.90");
+    expect(Math.floor(4_990 / brl.rate)).toBe(915);
+  });
+
+  it("itemizes the discount and adds the tip in the listed currency", () => {
+    const amounts = getCheckoutListedCurrencyAmounts(brl, {
+      lines: [{ priceCents: 4_990, discountCents: 1_000 }],
+      tipCents: 500,
+      usdTaxCents: 0,
+      usdTaxIncludedCents: 0,
+      usdShippingCents: 0,
+    });
+
+    if (!amounts) throw new Error("Expected listed-currency amounts");
+    expect(amounts.discountCents).toBe(1_000);
+    expect(amounts.tipCents).toBe(500);
+    expect(amounts.subtotalCents).toBe(5_490);
+    expect(amounts.totalCents).toBe(4_490);
+  });
+
+  it("displays included tax without adding it to the total", () => {
+    // Tax included in the price is already inside the line price, exactly as the canonical
+    // USD total treats it — double-counting it would overstate what the buyer pays.
+    const amounts = getCheckoutListedCurrencyAmounts(brl, {
+      lines: [{ priceCents: 4_990, discountCents: 0 }],
+      tipCents: 0,
+      usdTaxCents: 0,
+      usdTaxIncludedCents: 100,
+      usdShippingCents: 0,
+    });
+
+    if (!amounts) throw new Error("Expected listed-currency amounts");
+    expect(amounts.taxIncludedCents).toBe(545);
+    expect(amounts.totalCents).toBe(4_990);
+  });
+
+  it("returns nothing when there is no listed-currency lane", () => {
+    expect(
+      getCheckoutListedCurrencyAmounts(null, {
+        lines: [{ priceCents: 4_990, discountCents: 0 }],
+        tipCents: 0,
+        usdTaxCents: 0,
+        usdTaxIncludedCents: 0,
+        usdShippingCents: 0,
+      }),
+    ).toBeNull();
   });
 });

@@ -52,10 +52,12 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
-  type CheckoutBuyerCurrencyDisplay,
+  type CheckoutLocalCurrencyFormat,
   formatCheckoutPrice,
   formatPresentmentCents,
   getCheckoutBuyerCurrencyDisplay,
+  getCheckoutListedCurrencyAmounts,
+  getCheckoutListedCurrencyDisplay,
   getCheckoutPresentmentAmounts,
   toBuyerCurrencyCents,
   toCanonicalCents,
@@ -69,7 +71,9 @@ import {
   findCartItem,
 } from "./cartState";
 import {
+  canUseStripePaymentElementClientConfirm,
   computeTip,
+  computeTipForListedLines,
   computeTipForPrice,
   getErrors,
   getFutureInstallmentsTotal,
@@ -243,6 +247,62 @@ export const Checkout = ({
       ),
     })),
   );
+  // The method-forced local-method lane (a BRL product paid with Pix, an EUR product with iDEAL,
+  // an INR product with UPI): the buyer is charged the listed price as-is, so the summary shows
+  // the listed currency rather than dividing that price by our USD exchange rate. Null on every
+  // other checkout, which keeps the canonical USD rendering below.
+  //
+  // Suppressed while the FX-quoted lane is displaying, so that exactly one lane is ever in effect
+  // and `localCurrency` below cannot silently prefer one while the tip is computed for the other.
+  //
+  // Also gated on the same dynamic eligibility PaymentForm uses to mount the element: a discount
+  // or surcharge reload can drop the loaded canonical total below Stripe's Payment Element
+  // minimum after render, at which point PaymentForm falls back to the CardElement and the charge
+  // is canonical USD — so the summary must fall back with it.
+  const listedCurrency =
+    buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state)
+      ? null
+      : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
+          usingSavedCard: state.usingSavedCard,
+          paymentMethod: state.paymentMethod,
+        });
+  // The per-line bases the ORDER submits its tip from: Show.tsx hands computeTipsForLines each
+  // line's `getDiscountedPrice(...)`, in the product's own minor units. Passing the same bases to
+  // computeTipForListedLines below makes the displayed tip the submitted tip by construction.
+  const listedTipLines = cart.items.map((item) => ({
+    price: hasFreeTrial(item, isGift) ? 0 : getDiscountedPrice(cart, item).price,
+    permalink: item.product.permalink,
+  }));
+  const listedAmounts = getCheckoutListedCurrencyAmounts(listedCurrency, {
+    lines: cart.items.map((item) => ({
+      priceCents: hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity,
+      discountCents: hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity - getDiscountedPrice(cart, item).price,
+    })),
+    // The tip is canonical USD cents in checkout state on every lane, so it has to be expressed in
+    // listed minor units here. Both tip types go through the submission's own allocation rather than
+    // a conversion of their own, because any separate arithmetic drifts from what gets charged by a
+    // minor unit — see computeTipForListedLines.
+    tipCents: computeTipForListedLines(state, listedTipLines),
+    usdTaxCents: state.surcharges.type === "loaded" ? state.surcharges.result.tax_cents : 0,
+    usdTaxIncludedCents: state.surcharges.type === "loaded" ? state.surcharges.result.tax_included_cents : 0,
+    usdShippingCents: state.surcharges.type === "loaded" ? state.surcharges.result.shipping_rate_cents : 0,
+  });
+  // The one currency the whole summary is formatted in: the FX-quoted buyer currency when a quote
+  // is being displayed, else the listed currency on the method-forced lane, else canonical USD
+  // (null). At most one of the two lanes is ever active — a quote is only minted for USD-priced
+  // carts, and the listed lane only exists for carts priced in a payment method's forced currency.
+  const localCurrency: CheckoutLocalCurrencyFormat | null = buyerCurrencyDisplay ?? listedCurrency;
+  // Whichever lane's amounts apply, in the shape the summary rows consume. Both lanes produce
+  // amounts already in `localCurrency`'s minor units, so rows render them verbatim.
+  const localAmounts: {
+    linePriceCents: number[];
+    discountCents: number;
+    tipCents: number;
+    taxCents: number;
+    shippingCents: number;
+    subtotalCents: number;
+    totalCents: number;
+  } | null = presentmentAmounts ?? listedAmounts;
 
   return (
     <div className="@container mx-auto w-full max-w-400">
@@ -267,8 +327,8 @@ export const Checkout = ({
                     item={item}
                     cart={cart}
                     isGift={isGift}
-                    buyerCurrencyDisplay={buyerCurrencyDisplay}
-                    presentmentPriceCents={presentmentAmounts?.linePriceCents[index] ?? null}
+                    buyerCurrencyDisplay={localCurrency}
+                    presentmentPriceCents={localAmounts?.linePriceCents[index] ?? null}
                     updateCart={updateCart}
                   />
                 ))}
@@ -282,8 +342,9 @@ export const Checkout = ({
                 {displayTipSelector ? (
                   <div className="p-4 sm:p-5">
                     <TipSelector
-                      buyerCurrencyDisplay={buyerCurrencyDisplay}
-                      presentmentTipCents={presentmentAmounts?.tipCents ?? null}
+                      buyerCurrencyDisplay={localCurrency}
+                      presentmentTipCents={localAmounts?.tipCents ?? null}
+                      isListedCurrency={listedCurrency != null}
                     />
                   </div>
                 ) : null}
@@ -293,24 +354,28 @@ export const Checkout = ({
                       <CartPriceItem
                         title="Subtotal"
                         price={
-                          presentmentAmounts && buyerCurrencyDisplay
-                            ? formatPresentmentCents(presentmentAmounts.subtotalCents, buyerCurrencyDisplay)
-                            : formatCheckoutPrice(subtotal, buyerCurrencyDisplay)
+                          localAmounts && localCurrency
+                            ? formatPresentmentCents(localAmounts.subtotalCents, localCurrency)
+                            : formatCheckoutPrice(subtotal, localCurrency)
                         }
                       />
                       {state.surcharges.result.tax_included_cents ? (
                         <CartPriceItem
                           title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
-                          price={formatCheckoutPrice(state.surcharges.result.tax_included_cents, buyerCurrencyDisplay)}
+                          price={
+                            listedAmounts && listedCurrency
+                              ? formatPresentmentCents(listedAmounts.taxIncludedCents, listedCurrency)
+                              : formatCheckoutPrice(state.surcharges.result.tax_included_cents, localCurrency)
+                          }
                         />
                       ) : null}
                       {state.surcharges.result.tax_cents ? (
                         <CartPriceItem
                           title={nameOfSalesTaxForCountry(state.country)}
                           price={
-                            presentmentAmounts && buyerCurrencyDisplay
-                              ? formatPresentmentCents(presentmentAmounts.taxCents, buyerCurrencyDisplay)
-                              : formatCheckoutPrice(state.surcharges.result.tax_cents, buyerCurrencyDisplay)
+                            localAmounts && localCurrency
+                              ? formatPresentmentCents(localAmounts.taxCents, localCurrency)
+                              : formatCheckoutPrice(state.surcharges.result.tax_cents, localCurrency)
                           }
                         />
                       ) : null}
@@ -318,9 +383,9 @@ export const Checkout = ({
                         <CartPriceItem
                           title="Shipping rate"
                           price={
-                            presentmentAmounts && buyerCurrencyDisplay
-                              ? formatPresentmentCents(presentmentAmounts.shippingCents, buyerCurrencyDisplay)
-                              : formatCheckoutPrice(state.surcharges.result.shipping_rate_cents, buyerCurrencyDisplay)
+                            localAmounts && localCurrency
+                              ? formatPresentmentCents(localAmounts.shippingCents, localCurrency)
+                              : formatCheckoutPrice(state.surcharges.result.shipping_rate_cents, localCurrency)
                           }
                         />
                       ) : null}
@@ -364,9 +429,9 @@ export const Checkout = ({
                       </h4>
                       {discount > 0 ? (
                         <div>
-                          {presentmentAmounts && buyerCurrencyDisplay
-                            ? formatPresentmentCents(-presentmentAmounts.discountCents, buyerCurrencyDisplay)
-                            : formatCheckoutPrice(-discount, buyerCurrencyDisplay)}
+                          {localAmounts && localCurrency
+                            ? formatPresentmentCents(-localAmounts.discountCents, localCurrency)
+                            : formatCheckoutPrice(-discount, localCurrency)}
                         </div>
                       ) : null}
                     </div>
@@ -398,32 +463,36 @@ export const Checkout = ({
                       <CartPriceItem
                         title="Total"
                         price={
-                          presentmentAmounts && buyerCurrencyDisplay
-                            ? formatPresentmentCents(presentmentAmounts.totalCents, buyerCurrencyDisplay)
-                            : formatCheckoutPrice(total, buyerCurrencyDisplay)
+                          localAmounts && localCurrency
+                            ? formatPresentmentCents(localAmounts.totalCents, localCurrency)
+                            : formatCheckoutPrice(total, localCurrency)
                         }
                         variant="large"
                       />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
                       <div className="grid gap-4 border-t border-border p-4">
+                        {/* Commissions and installment plans never reach the listed-currency lane
+                            (the payment-method resolver keeps both off the client-confirm Payment
+                            Element), so these rows only ever see canonical USD amounts — which
+                            formatCheckoutPrice converts with the display's rate as usual. */}
                         <CartPriceItem
                           title="Payment today"
                           price={formatCheckoutPrice(
                             total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal,
-                            buyerCurrencyDisplay,
+                            localCurrency,
                           )}
                         />
                         {commissionCompletionTotal > 0 ? (
                           <CartPriceItem
                             title="Payment after completion"
-                            price={formatCheckoutPrice(commissionCompletionTotal, buyerCurrencyDisplay)}
+                            price={formatCheckoutPrice(commissionCompletionTotal, localCurrency)}
                           />
                         ) : null}
                         {futureInstallmentsWithoutTipsTotal > 0 ? (
                           <CartPriceItem
                             title="Future installments"
-                            price={formatCheckoutPrice(futureInstallmentsWithoutTipsTotal, buyerCurrencyDisplay)}
+                            price={formatCheckoutPrice(futureInstallmentsWithoutTipsTotal, localCurrency)}
                           />
                         ) : null}
                       </div>
@@ -468,9 +537,13 @@ export const Checkout = ({
 const TipSelector = ({
   buyerCurrencyDisplay,
   presentmentTipCents,
+  isListedCurrency = false,
 }: {
-  buyerCurrencyDisplay?: CheckoutBuyerCurrencyDisplay | null;
+  buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   presentmentTipCents?: number | null;
+  // True only on the method-forced listed-currency lane, where the charge bills the listed amount
+  // directly and so a typed tip must be preserved exactly as typed (see `Tip.listedAmount`).
+  isListedCurrency?: boolean;
 }) => {
   const [state, dispatch] = useState();
   const errors = getErrors(state);
@@ -482,12 +555,24 @@ const TipSelector = ({
   }, [showPercentageOptions]);
 
   const tipPercentages = [0, 15, 20, 25];
+  // The tip is canonical USD cents in state on every lane, so a tip typed into the box has to be
+  // converted back into whichever currency the summary displays before it can be shown again.
+  //
+  // Show the SAME figure the row below and the charge use (`presentmentTipCents`, which comes from
+  // the submission's own per-line allocation) rather than converting the stored canonical cents at
+  // the exchange rate. The two disagree: on a R$49.90 product whose canonical price rounded to 915
+  // cents, the allocation divides by 4990/915 while the stored rate is 5.45, so typing R$10.00
+  // stores 183 canonical cents and the rate conversion renders R$9.97 in the box while the summary
+  // and the charge are R$9.98. Two different amounts on one screen is exactly what this lane
+  // exists to remove, and the box is the number the buyer typed into, so it must be the charged one.
   const fixedTipCents =
-    buyerCurrencyDisplay && state.tip.type === "fixed" && state.tip.amount != null
-      ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
-      : state.tip.type === "fixed"
-        ? state.tip.amount
-        : null;
+    state.tip.type !== "fixed" || state.tip.amount == null
+      ? null
+      : buyerCurrencyDisplay && presentmentTipCents != null
+        ? presentmentTipCents
+        : buyerCurrencyDisplay
+          ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
+          : state.tip.amount;
 
   return (
     <div className="@container flex flex-col gap-2 sm:gap-3">
@@ -549,6 +634,11 @@ const TipSelector = ({
                     buyerCurrencyDisplay && newAmount != null
                       ? toCanonicalCents(newAmount, buyerCurrencyDisplay)
                       : newAmount,
+                  // Keep the amount exactly as typed, in the currency it was typed in, so the
+                  // method-forced lane can bill that figure rather than a canonical rounding of
+                  // it. `amount` above stays the canonical USD source of truth every other
+                  // consumer reads; this is only consulted on that one lane.
+                  listedAmount: isListedCurrency ? newAmount : null,
                 },
               });
             }}
@@ -601,7 +691,7 @@ const CartItemComponent = ({
   cart: CartState;
   updateCart: (update: Partial<CartState>) => void;
   isGift: boolean;
-  buyerCurrencyDisplay?: CheckoutBuyerCurrencyDisplay | null;
+  buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   // This line's share of the locked buyer-currency total, allocated by the server. When
   // present it is displayed verbatim so the line matches both the checkout total and the
   // amount later persisted for the receipt; converting the USD price here instead can be a
@@ -795,6 +885,9 @@ const CartItemComponent = ({
             </span>
             {item.recurrence ? (
               <span className="text-sm">
+                {/* Free-trial memberships are recurring, which the client-confirm Payment Element
+                    (and so the listed-currency lane) never accepts, so this renewal price is
+                    always a canonical USD amount. */}
                 {formatAmountPerRecurrence(
                   item.recurrence,
                   formatCheckoutPrice(convertToUSD(item, discount.price), buyerCurrencyDisplay),

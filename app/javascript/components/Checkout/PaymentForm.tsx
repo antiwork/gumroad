@@ -665,6 +665,12 @@ const CreditCardContent = ({
     dispatch({ type: "set-value", willSaveCard });
   }, [dispatch, willSaveCard]);
 
+  // Same reason, for the other direction: paying with a card on file stays on the server-confirm
+  // path, which charges canonical USD even on a forced-currency cart, so the summary needs to know.
+  React.useEffect(() => {
+    dispatch({ type: "set-value", usingSavedCard: useSavedCard });
+  }, [dispatch, useSavedCard]);
+
   const [cardError, setCardError] = React.useState(false);
 
   // The in-flight elements.submit() started synchronously by the pay-button click for a wallet

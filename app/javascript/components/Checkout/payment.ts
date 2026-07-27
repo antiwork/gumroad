@@ -58,17 +58,26 @@ export type PaymentElementConfig = {
 // the browser never widens it — card and Link everywhere (stripe_link_enabled reflects the
 // resolved set; Link auto-enables with the Payment Element, dropped only by the PPP gate), plus
 // the US-locked methods (cashapp, us_bank_account) for US buyers.
-// Currency is "usd" everywhere except the method-forced local-method surface (iDEAL/Bancontact),
+// Currency is "usd" everywhere except the method-forced local-method surface (iDEAL/Bancontact/UPI),
 // where the server mounts the element in the payment method's forced currency (e.g. "eur") and
 // supplies presentment_amount_cents — the whole cart's listed subtotal in that currency,
 // quantities included (a cart is only eligible when every line is priced in the same forced
 // currency) — so Stripe shows the EUR-only method tabs (it hides methods that can't charge in the
 // element's currency). When presentment_amount_cents is null the amount derives from the USD
 // total below.
+// listed_currency_display is non-null on that same surface and tells the checkout summary to
+// render the cart in the listed currency, matching what the element and the charge use.
+export type ListedCurrencyDisplayConfig = {
+  currency: string;
+  // The backend's authoritative minor-unit scale for the currency, so formatting never relies on
+  // the currencies.json single_unit heuristic.
+  subunit_to_unit: number;
+};
 export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: string;
   presentment_amount_cents: number | null;
+  listed_currency_display: ListedCurrencyDisplayConfig | null;
   payment_method_types: string[];
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
@@ -160,7 +169,25 @@ export type Gift =
   | { type: "normal"; email: string; note: string }
   | { type: "anonymous"; id: string; name: string; note: string };
 
-export type Tip = { type: "percentage"; percentage: number } | { type: "fixed"; amount: number | null };
+export type Tip =
+  | { type: "percentage"; percentage: number }
+  | {
+      type: "fixed";
+      // Canonical USD cents. Every USD-side consumer reads this — the surcharge quote's tax basis,
+      // the large-tip threshold, the canonical totals — so it is always populated.
+      amount: number | null;
+      // The exact amount the buyer typed, in the listed currency's minor units, on the
+      // method-forced listed-currency lane (a BRL product paid with Pix, an EUR product with
+      // iDEAL, an INR product with UPI). That lane bills the listed amount directly, so the tip
+      // the buyer chose has to survive to the charge unchanged; deriving it from `amount` cannot
+      // do that, because converting a typed R$10.00 to canonical cents throws away roughly a
+      // fifth of a centavo of precision at a 5.45 rate and no canonical figure converts back to
+      // exactly R$10.00 (183 canonical cents bills R$9.96, 184 bills R$10.02).
+      //
+      // Null on every other checkout and whenever the buyer picked a percentage instead, in
+      // which case the listed lane takes its percentage of the listed price — already exact.
+      listedAmount?: number | null;
+    };
 
 export type State = {
   products: Product[];
@@ -202,6 +229,13 @@ export type State = {
   // Card checkouts that save the card charge canonically in PR 1 (no buyer-presentment), so
   // buyer-currency display and the quote token are suppressed while this is set.
   willSaveCard: boolean;
+  // True while the buyer is paying with a card already on file. Saved cards stay on the
+  // server-confirm path, which never mints a ConfirmationToken and so never reaches
+  // Charge::MethodForcedPresentment — the charge is canonical USD. Mirrored into state (rather than
+  // staying local to PaymentForm) because the cart summary has to know: it is the default selection
+  // for any returning buyer, and showing listed-currency totals for a canonical-USD charge is the
+  // display/charge mismatch we are fixing (gumroad-private#1371).
+  usingSavedCard: boolean;
   savedCreditCard: SavedCreditCard | null;
   checkoutPayment: CheckoutPaymentConfig;
   status:
@@ -245,6 +279,7 @@ type SimpleValue =
   | "paymentMethod"
   | "paymentElementType"
   | "willSaveCard"
+  | "usingSavedCard"
   | "gift"
   | "payLabel"
   | "warning"
@@ -508,17 +543,45 @@ export function computeTipForPrice(state: State, price: number, permalink: strin
 export function computeTipsForLines(
   state: State,
   lines: { price: number; permalink: string | undefined }[],
+  // Which currency the caller's line prices — and therefore the tips it wants back — are in.
+  // "canonical" (the default) is USD, as `state.products` holds. "listed" means the caller is on
+  // the method-forced lane and passed the products' own minor units, in which case a fixed tip is
+  // allocated from the amount the buyer literally typed rather than from its canonical rounding,
+  // so the tip charged is the tip chosen. See the `listedAmount` note on `Tip`.
+  { basis = "canonical" }: { basis?: "canonical" | "listed" } = {},
 ): (number | null)[] {
   if (!isTippingEnabled(state)) return lines.map(() => null);
   if (state.tip.type === "fixed") {
-    const totalPriceCents = getTotalPriceFromProducts(state);
+    const listedAmount = basis === "listed" ? state.tip.listedAmount : null;
+    const totalPriceCents =
+      listedAmount != null ? lines.reduce((sum, line) => sum + line.price, 0) : getTotalPriceFromProducts(state);
     if (totalPriceCents === 0) {
       return lines.map((line) => computeTipForFreeCart(state, line.permalink));
     }
-    return allocateFixedTipCents(state.tip.amount ?? 0, lines, totalPriceCents);
+    return allocateFixedTipCents(listedAmount ?? state.tip.amount ?? 0, lines, totalPriceCents);
   }
   const percentage = state.tip.percentage;
   return lines.map((line) => Math.round((percentage / 100) * line.price));
+}
+
+// The tip to DISPLAY on the method-forced listed-currency lane, in the listed currency's minor
+// units: the exact figure the order will submit, obtained by running the submission's own
+// allocation over the same per-line bases.
+//
+// The tip lives in checkout state as canonical USD cents on every lane (`computeTip` takes its
+// percentage of `getTotalPriceFromProducts`, and those prices are built with `convertToUSD`), so
+// something has to turn it into listed units for display. Doing that arithmetic separately is what
+// went wrong twice on this lane: a percentage tip re-derived from the canonical figure rounds twice
+// and lands a minor unit low, and a fixed tip converted at the exchange rate disagrees with
+// `allocateFixedTipCents`, which floors each line's exact share and then hands out the leftover
+// minor units. Both were display/charge mismatches of exactly the kind this lane exists to remove.
+//
+// Rather than keep a parallel conversion in step with the allocator, ask the allocator. Callers pass
+// the same per-line prices they will submit — each line's `getDiscountedPrice(...)`, in the
+// product's own minor units — so display and charge agree by construction, for both tip types and
+// for any future change to how tips are split.
+export function computeTipForListedLines(state: State, lines: { price: number; permalink: string | undefined }[]) {
+  return computeTipsForLines(state, lines, { basis: "listed" }).reduce<number>((sum, tip) => sum + (tip ?? 0), 0);
 }
 
 function allocateFixedTipCents(tipAmountCents: number, lines: { price: number }[], totalPriceCents: number): number[] {
@@ -957,6 +1020,9 @@ export function createReducer(initial: {
       paymentMethod: "card",
       paymentElementType: "card",
       willSaveCard: false,
+      // Matches PaymentForm's own default (`useState(!!state.savedCreditCard)`), so the summary is
+      // correct on the very first render rather than only after PaymentForm mounts and syncs.
+      usingSavedCard: !!initial.savedCreditCard,
       tip: { type: "percentage", percentage: initial.defaultTipOption },
       status: { type: "input", errors: new Set() },
       availablePaymentMethods: [],
