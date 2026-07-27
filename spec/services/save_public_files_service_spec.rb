@@ -125,5 +125,130 @@ describe SavePublicFilesService do
       expect(public_file1.reload.scheduled_for_deletion_at).to be_nil
       expect(public_file2.reload.scheduled_for_deletion_at).to be_nil
     end
+
+    describe "save contract (Product::SaveContract)" do
+      # A REAL token for the product's current state, not a placeholder: an
+      # invented string is never fresh, so under the contract it authorises no
+      # deletions at all — a spec built on one passes while proving nothing.
+      def current_revision
+        Product::EditorRevision.current(product.reload)
+      end
+
+      def contract_for(contract_params)
+        # Mirrors the controller wiring (LinksController#product_save_contract):
+        # the contract is handed plain, deeply-symbolized hashes.
+        Product::SaveContract.new(params: contract_params.deep_symbolize_keys, product:)
+      end
+
+      def process(files_params:, contract:)
+        described_class.new(resource: product, files_params:, content:, contract:).process
+      end
+
+      context "when the :product_editor_save_contract flag is off" do
+        it "preserves today's behaviour: absent public_files still schedules everything and strips embeds" do
+          contract = contract_for({ editor_revision: current_revision })
+          expect(contract.enforced?).to eq(false)
+
+          result = process(files_params: nil, contract:)
+
+          expect(public_file1.reload.scheduled_for_deletion_at).to be_present
+          expect(public_file2.reload.scheduled_for_deletion_at).to be_present
+          expect(result).not_to include("public-file-embed")
+        end
+      end
+
+      context "when the :product_editor_save_contract flag is on" do
+        # Scoped deactivation, NOT `Feature.deactivate(...)`. Flipper is backed by
+        # Redis with no per-worker namespace (config/initializers/feature_toggle.rb),
+        # so a global deactivate in an after-hook clears the flag for every other
+        # spec process sharing that Redis — which made a sibling run fail with
+        # unrelated errors while this suite was green in isolation.
+        before { Feature.activate_user(:product_editor_save_contract, seller) }
+        after { Feature.deactivate_user(:product_editor_save_contract, seller) }
+
+        it "does not schedule anything or strip embeds when public_files is absent" do
+          contract = contract_for({ editor_revision: current_revision })
+
+          result = process(files_params: nil, contract:)
+
+          expect(public_file1.reload.scheduled_for_deletion_at).to be_nil
+          expect(public_file2.reload.scheduled_for_deletion_at).to be_nil
+          expect(result).to eq(content)
+        end
+
+        it "does not schedule anything or strip embeds when public_files is []" do
+          contract = contract_for({ public_files: [], editor_revision: current_revision })
+
+          result = process(files_params: [], contract:)
+
+          expect(public_file1.reload.scheduled_for_deletion_at).to be_nil
+          expect(public_file2.reload.scheduled_for_deletion_at).to be_nil
+          expect(result).to eq(content)
+        end
+
+        it "schedules exactly the explicitly deleted ids and strips only their embeds" do
+          files_params = [
+            { "id" => public_file1.public_id, "name" => "Audio 1", "status" => { "type" => "saved" } }
+          ]
+          contract = contract_for(
+            {
+              public_files: files_params,
+              editor_revision: current_revision,
+              deletion_operations: { deleted_ids: { public_files: [public_file2.public_id] } },
+            }
+          )
+
+          result = process(files_params:, contract:)
+
+          expect(public_file1.reload.scheduled_for_deletion_at).to be_nil
+          expect(public_file2.reload.scheduled_for_deletion_at).to be_within(5.seconds).of(10.days.from_now)
+          expect(result).to include(public_file1.public_id)
+          expect(result).not_to include(public_file2.public_id)
+        end
+
+        it "does not schedule a file that was merely omitted from a submitted payload" do
+          # The exact bug the contract removes: file2 is not in files_params,
+          # but nothing explicitly asked to delete it.
+          files_params = [
+            { "id" => public_file1.public_id, "name" => "Audio 1", "status" => { "type" => "saved" } }
+          ]
+          contract = contract_for({ public_files: files_params, editor_revision: current_revision })
+
+          result = process(files_params:, contract:)
+
+          expect(public_file1.reload.scheduled_for_deletion_at).to be_nil
+          expect(public_file2.reload.scheduled_for_deletion_at).to be_nil
+          expect(result).to include(public_file1.public_id)
+          expect(result).to include(public_file2.public_id)
+        end
+
+        it "ignores deleted_ids when the save carries no editor_revision (write-only save)" do
+          contract = contract_for(
+            { deletion_operations: { deleted_ids: { public_files: [public_file2.public_id] } } }
+          )
+
+          result = process(files_params: nil, contract:)
+
+          expect(public_file1.reload.scheduled_for_deletion_at).to be_nil
+          expect(public_file2.reload.scheduled_for_deletion_at).to be_nil
+          expect(result).to eq(content)
+        end
+
+        it "schedules everything on an explicit clear-all" do
+          contract = contract_for(
+            {
+              editor_revision: current_revision,
+              deletion_operations: { cleared_collections: ["public_files"] },
+            }
+          )
+
+          result = process(files_params: nil, contract:)
+
+          expect(public_file1.reload.scheduled_for_deletion_at).to be_present
+          expect(public_file2.reload.scheduled_for_deletion_at).to be_present
+          expect(result).not_to include("public-file-embed")
+        end
+      end
+    end
   end
 end

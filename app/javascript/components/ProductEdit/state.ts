@@ -38,6 +38,12 @@ export type Variant = {
   updated_at?: string;
   max_purchase_count: number | null;
   integrations: Record<keyof Product["integrations"], boolean>;
+  // Which of this variant's integrations were connected as of the last
+  // committed state — the version-scoped twin of Product["loaded_integrations"].
+  // Set by the server on load and refreshed after each successful save, so
+  // switching one off is recognised as a removal rather than inferred from the
+  // checkbox map. Unset for variants created in this session.
+  loaded_integrations?: Record<string, boolean>;
   newlyAdded?: boolean;
   rich_content: Page[];
   // Whether the variant has files attached directly (legacy products predating
@@ -174,19 +180,61 @@ export type Product = {
   // outdated or blind payload that would otherwise silently wipe content.
   confirmed_removed_variant_ids?: string[];
   confirmed_removed_rich_content_ids?: string[];
+  // Server-issued snapshot of which integrations were connected when this
+  // editing session loaded. Used to tell "seller unchecked this" apart from
+  // "was never on" — see buildDeletionOperations.
+  loaded_integrations?: Record<string, boolean>;
   // External ids of version-level pages the seller chose to KEEP in the
   // hidden-content conflict dialog ("Keep version content"). They're hidden
   // from this editor session by the shared-content flag, so they can't appear
   // in the payload — this tells the server their absence is not a deletion.
   preserved_rich_content_ids?: string[];
+  // The save contract (gumroad-private#1379).
+  //
+  // `editor_revision` is the snapshot token the server issued when this editor
+  // session loaded. The server compares it per record and refuses to act on a
+  // *deletion* built from a snapshot that has moved on — a second tab, or this
+  // tab left open while someone else saved. Writes are not gated on it: a stale
+  // tab overwriting a title is recoverable, a stale tab deleting a page is not.
+  //
+  // `deletion_operations` is the ONLY way this client can remove anything.
+  // Under the contract an absent or empty collection means "no changes", so
+  // omitting a record no longer deletes it — the seller's removals have to be
+  // stated explicitly, which is what makes an accidental wipe impossible rather
+  // than merely unlikely.
+  editor_revision?: string | null;
+  deletion_operations?: DeletionOperations;
 } & (
   | { native_type: "call"; variants: Duration[] }
   | { native_type: "membership"; variants: Tier[] }
   | { native_type: Exclude<ProductNativeType, "call" | "membership">; variants: Version[] }
 );
 
-export type ProfileSection = { id: string; header: string | null; product_names: string[]; default: boolean };
+// The five collections the editor save can destroy, and the only two ways to
+// ask for a removal (gumroad-private#1379).
+//
+//   deleted_ids         — remove exactly these records, nothing else
+//   cleared_collections — remove everything the collection held when this
+//                         editor session loaded
+//
+// Neither can be produced by accident: omitting a record, sending `[]`, or
+// sending a malformed value all mean "no changes" now. Emptying a collection is
+// something the seller has to actually ask for.
+export type SaveContractCollection = "rich_content" | "variants" | "files" | "public_files" | "integrations";
 
+export type DeletionOperations = {
+  deleted_ids: Partial<Record<SaveContractCollection, string[]>>;
+  cleared_collections: SaveContractCollection[];
+  // Deletions scoped to ONE version/tier rather than to the product, keyed by
+  // that version's id. Version-level integrations live on a join between the
+  // version and the integration, so "disconnect Discord from this tier" cannot
+  // be expressed as a product-level id: the same integration may legitimately
+  // stay connected on a sibling tier. Absent means "no version-scoped
+  // deletions", exactly like the product-level lists.
+  variant_deleted_ids?: Record<string, Partial<Record<SaveContractCollection, string[]>>>;
+};
+
+export type ProfileSection = { id: string; header: string | null; product_names: string[]; default: boolean };
 export type ShippingCountry = { code: string; name: string };
 
 export type ContentUpdates = {

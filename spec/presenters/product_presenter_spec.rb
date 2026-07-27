@@ -308,6 +308,13 @@ describe ProductPresenter do
           product: {
             name: "Product",
             description: "I am a product!",
+            # The editor snapshot props (gumroad-private#1379). `editor_revision`
+            # identifies the state this session loaded; `loaded_integrations` is the
+            # baseline that lets the client tell "the seller just disconnected this"
+            # from "it was never connected", which decides whether an irreversible
+            # disconnect is requested on save.
+            editor_revision: Product::EditorRevision.current(product),
+            loaded_integrations: Integration::ALL_NAMES.index_with { product.find_integration_by_name(_1).present? },
             custom_permalink: "custom",
             price_cents: 100,
             **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
@@ -396,6 +403,12 @@ describe ProductPresenter do
                   "zoom" => false,
                   "google_calendar" => false,
                 },
+                loaded_integrations: {
+                  "circle" => false,
+                  "discord" => false,
+                  "zoom" => false,
+                  "google_calendar" => false,
+                },
                 rich_content: [],
                 has_files: false,
                 sales_count_for_inventory: 0,
@@ -409,6 +422,12 @@ describe ProductPresenter do
                 price_difference_cents: 100,
                 max_purchase_count: 100,
                 integrations: {
+                  "circle" => false,
+                  "discord" => false,
+                  "zoom" => false,
+                  "google_calendar" => false,
+                },
+                loaded_integrations: {
                   "circle" => false,
                   "discord" => false,
                   "zoom" => false,
@@ -623,6 +642,8 @@ describe ProductPresenter do
             product: {
               name: "Membership",
               description: "Join now",
+              editor_revision: Product::EditorRevision.current(membership),
+              loaded_integrations: Integration::ALL_NAMES.index_with { membership.find_integration_by_name(_1).present? },
               custom_permalink: nil,
               price_cents: 0,
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
@@ -704,6 +725,12 @@ describe ProductPresenter do
                     "every_two_years" => { enabled: false },
                   },
                   integrations: {
+                    "circle" => false,
+                    "discord" => true,
+                    "zoom" => false,
+                    "google_calendar" => false,
+                  },
+                  loaded_integrations: {
                     "circle" => false,
                     "discord" => true,
                     "zoom" => false,
@@ -833,6 +860,12 @@ describe ProductPresenter do
                 "zoom" => false,
                 "google_calendar" => false,
               },
+              loaded_integrations: {
+                "circle" => false,
+                "discord" => false,
+                "zoom" => false,
+                "google_calendar" => false,
+              },
               rich_content: [],
               has_files: false,
               sales_count_for_inventory: 0,
@@ -847,6 +880,12 @@ describe ProductPresenter do
               duration_in_minutes: 60,
               max_purchase_count: nil,
               integrations: {
+                "circle" => false,
+                "discord" => false,
+                "zoom" => false,
+                "google_calendar" => false,
+              },
+              loaded_integrations: {
                 "circle" => false,
                 "discord" => false,
                 "zoom" => false,
@@ -890,6 +929,8 @@ describe ProductPresenter do
             product: {
               name: "Product",
               description: "Boring",
+              editor_revision: Product::EditorRevision.current(new_product),
+              loaded_integrations: Integration::ALL_NAMES.index_with { new_product.find_integration_by_name(_1).present? },
               custom_permalink: nil,
               price_cents: 100,
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
