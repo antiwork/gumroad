@@ -193,6 +193,13 @@ describe Product::SaveIntegrationsService do
         integration
       end
 
+      # A REAL token for the product's current state, not a placeholder: an
+      # invented string is never fresh, so under the contract it authorises no
+      # deletions at all — a spec built on one passes while proving nothing.
+      def current_revision
+        Product::EditorRevision.current(product.reload)
+      end
+
       def contract_for(contract_params)
         # Mirrors the controller wiring (LinksController#product_save_contract):
         # the contract is handed plain, deeply-symbolized hashes.
@@ -201,7 +208,7 @@ describe Product::SaveIntegrationsService do
 
       context "when the :product_editor_save_contract flag is off" do
         it "preserves today's behaviour: absent integrations still disconnects everything" do
-          contract = contract_for({ editor_revision: "rev-1" })
+          contract = contract_for({ editor_revision: current_revision })
           expect(contract.enforced?).to eq(false)
 
           expect_any_instance_of(DiscordIntegration).to receive(:disconnect!).and_return(true)
@@ -221,7 +228,7 @@ describe Product::SaveIntegrationsService do
         after { Feature.deactivate_user(:product_editor_save_contract, seller) }
 
         it "does not disconnect anything when integrations is absent" do
-          contract = contract_for({ editor_revision: "rev-1" })
+          contract = contract_for({ editor_revision: current_revision })
 
           expect_any_instance_of(DiscordIntegration).not_to receive(:disconnect!)
           expect do
@@ -231,7 +238,7 @@ describe Product::SaveIntegrationsService do
         end
 
         it "does not disconnect anything when integrations is an empty hash" do
-          contract = contract_for({ integrations: {}, editor_revision: "rev-1" })
+          contract = contract_for({ integrations: {}, editor_revision: current_revision })
 
           expect_any_instance_of(DiscordIntegration).not_to receive(:disconnect!)
           expect do
@@ -244,7 +251,7 @@ describe Product::SaveIntegrationsService do
           # circle is submitted, discord is omitted — under the contract that
           # omission is not a deletion.
           circle_params = { "circle" => { "api_key" => "key", "community_id" => "0", "space_group_id" => "0" } }
-          contract = contract_for({ integrations: circle_params, editor_revision: "rev-1" })
+          contract = contract_for({ integrations: circle_params, editor_revision: current_revision })
 
           expect_any_instance_of(DiscordIntegration).not_to receive(:disconnect!)
           expect do
@@ -260,7 +267,7 @@ describe Product::SaveIntegrationsService do
 
           contract = contract_for(
             {
-              editor_revision: "rev-1",
+              editor_revision: current_revision,
               deletion_operations: { deleted_ids: { integrations: ["discord"] } },
             }
           )
@@ -291,7 +298,7 @@ describe Product::SaveIntegrationsService do
 
           contract = contract_for(
             {
-              editor_revision: "rev-1",
+              editor_revision: current_revision,
               deletion_operations: { cleared_collections: ["integrations"] },
             }
           )

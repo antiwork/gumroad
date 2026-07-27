@@ -52,6 +52,19 @@
 # collection asks the same question — "did this request submit you?" — and
 # gets an answer that does not depend on the caller remembering to check.
 class Product::SaveContract
+  # A destructive save arrived without a current snapshot token.
+  #
+  # Distinct from StaleContentWriteGuard's conflict: that one is about
+  # overwriting an edit, this one is about removing rows the session may never
+  # have seen. They are reported separately so the editor can say something
+  # accurate, and so the two can be measured independently during rollout.
+  class StaleDeletionConflict < StandardError
+    def message
+      "This page is out of date, so the items you removed were not deleted. " \
+        "Reload to see the current version and try again."
+    end
+  end
+
   # The five collections the editor save can destroy. Named here rather than
   # inferred so that adding a sixth is a deliberate act with a test attached.
   COLLECTIONS = %i[rich_content variants files public_files integrations].freeze
@@ -90,13 +103,18 @@ class Product::SaveContract
   def initialize(params:, product:)
     @params = params || ActionController::Parameters.new
     @product = product
-    # Answer the freshness question eagerly, at construction, rather than
-    # lazily on first use. The save mutates rows as it runs, so by the time a
-    # deletion step asks "may I delete?", the product's fingerprint has already
-    # moved and a lazy check would compare the client's token against state the
-    # request itself changed — silently dropping a legitimate deletion that was
-    # submitted alongside a new page. Callers construct this before any write.
-    may_delete?
+    # Do no revision work at all when the contract is disabled. Computing the
+    # fingerprint means five COUNT/ordering queries against the product's
+    # children, and with the flag off nothing can consume the answer — so on the
+    # default path this must cost nothing beyond one flag lookup.
+    #
+    # When enabled, answer the freshness question eagerly rather than lazily.
+    # The save mutates rows as it runs, so by the time a deletion step asks "may
+    # I delete?", the product's fingerprint has already moved and a lazy check
+    # would compare the client's token against state the request itself changed
+    # — silently dropping a legitimate deletion submitted alongside a new page.
+    # Callers construct this before any write.
+    may_delete? if enforced?
   end
 
   # Is the contract enforced for this save?
@@ -104,10 +122,30 @@ class Product::SaveContract
   # Read once per save and passed down rather than re-checked at each call
   # site, so a flag flipped mid-request cannot make one collection follow the
   # new rules and another the old ones.
+  #
+  # The flag store is Redis-backed (config/initializers/feature_toggle.rb) and
+  # this runs while the product row is locked, so a Redis outage must not raise
+  # through the seller's save. It fails CLOSED — treated as disabled — which is
+  # the safe direction here: with the contract off, deletion still requires the
+  # pre-existing confirmation guards from #6359, whereas failing "enabled" would
+  # start rejecting legitimate deletions from clients that never sent a token.
+  #
+  # Note what this deliberately does NOT do: it never falls back to implicit
+  # deletion. Disabled means "behave exactly as main does today", which is the
+  # state every seller is in until the rollout reaches them.
   def enforced?
     return @enforced if defined?(@enforced)
 
-    @enforced = product.present? && Feature.active?(FEATURE_NAME, product.user)
+    @enforced =
+      begin
+        product.present? && Feature.active?(FEATURE_NAME, product.user)
+      rescue StandardError => e
+        # Report it rather than swallowing it: a Redis outage that quietly
+        # disables the contract for every save is exactly the kind of silent
+        # regression this PR exists to stop.
+        ErrorNotifier.notify(e, product_id: product&.id, context: "Product::SaveContract flag lookup")
+        false
+      end
   end
 
   # Did this request actually submit this collection?
@@ -131,6 +169,17 @@ class Product::SaveContract
     params[collection].present?
   end
 
+  # Did this save ask to remove anything at all, in any collection?
+  #
+  # Deliberately independent of whether the removal is ALLOWED: this answers
+  # "was destruction requested", so the caller can tell a stale destructive
+  # save (refuse, loudly) from a stale write-only save (let it through).
+  def requested_deletion?
+    return false unless enforced?
+
+    COLLECTIONS.any? { |collection| raw_cleared?(collection) || raw_deleted_ids(collection).any? }
+  end
+
   # Ids the client explicitly asked to delete from this collection.
   #
   # Empty unless the client sent them. Never inferred from a diff — that
@@ -143,10 +192,26 @@ class Product::SaveContract
   # `{deleted_ids: "not-a-hash"}` — the last of which raised TypeError from
   # `dig` until this was hardened, because `String#dig` does not exist.
   def deleted_ids(collection)
-    assert_known!(collection)
     return [] unless enforced?
     return [] unless may_delete?
 
+    raw_deleted_ids(collection)
+  rescue StandardError
+    []
+  end
+
+  # What the client ASKED to delete, before the freshness question is applied.
+  #
+  # Kept separate from `deleted_ids` so the two questions never get conflated:
+  # this one is "what was requested" (used to detect a destructive save that
+  # must be refused outright), while `deleted_ids` is "what may actually be
+  # deleted". Reading requested intent through the allowed-ids accessor would
+  # make a stale destructive save look identical to a save with no deletions in
+  # it, which is exactly the silent-success bug.
+  def raw_deleted_ids(collection)
+    return [] unless enforced?
+
+    assert_known!(collection)
     ids = deletion_operations[:deleted_ids]
     return [] unless ids.respond_to?(:dig)
 
@@ -165,10 +230,19 @@ class Product::SaveContract
   # and turn a malformed payload into an instruction to empty the collection,
   # which is precisely the class of accident this contract exists to prevent.
   def cleared?(collection)
-    assert_known!(collection)
     return false unless enforced?
     return false unless may_delete?
 
+    raw_cleared?(collection)
+  rescue StandardError
+    false
+  end
+
+  # As `cleared?`, but ignoring freshness — see `raw_deleted_ids`.
+  def raw_cleared?(collection)
+    return false unless enforced?
+
+    assert_known!(collection)
     cleared = deletion_operations[:cleared_collections]
     return false unless cleared.is_a?(Array)
 

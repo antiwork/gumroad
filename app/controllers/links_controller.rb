@@ -421,6 +421,20 @@ class LinksController < ApplicationController
         # version of the question that has a stable answer.
         product_save_contract
 
+        # Reject a DESTRUCTIVE save built from a stale (or absent) snapshot
+        # before anything is written. Skipping the deletion silently, as an
+        # earlier revision of this branch did, is the worst available outcome:
+        # the seller is told "Changes saved", the editor clears the pending
+        # removals, and the versions they deleted are still there — so the
+        # interface now disagrees with the database and the next save has lost
+        # the intent entirely.
+        #
+        # Only destructive saves are refused. A stale tab fixing a typo still
+        # saves normally, because a stale write is recoverable and a stale
+        # delete is not — rejecting every stale save is what forced #6245 to be
+        # switched off.
+        ensure_contract_deletions_are_fresh!
+
         # Reject a save built from a stale snapshot BEFORE any mutation: a
         # payload that echoes page/variant snapshot timestamps older than the
         # stored rows would silently overwrite content another session saved in
@@ -575,6 +589,19 @@ class LinksController < ApplicationController
         error_message: e.message,
         error_code: "stale_content_conflict",
         stale_records: e.stale_records,
+      }, status: :conflict
+    rescue Product::SaveContract::StaleDeletionConflict => e
+      # Raised before any mutation, so the transaction rolls back with nothing
+      # written and the removals are still pending in the database. The editor
+      # must NOT clear its pending-removal state on this response — the whole
+      # point is that the seller's deletion has not happened yet.
+      #
+      # A fresh token rides along so the editor can reconcile and retry after
+      # showing the seller what changed, rather than forcing a full page reload.
+      return render json: {
+        error_message: e.message,
+        error_code: "stale_deletion_conflict",
+        editor_revision: Product::EditorRevision.current(@product.reload),
       }, status: :conflict
     rescue Product::RichContentDeletionGuard::HiddenVariantContentConflict => e
       # The fail-closed inconsistent-content case: hidden version-level pages
@@ -860,6 +887,21 @@ class LinksController < ApplicationController
         .reject { preserved_rich_content_ids.include?(_1.external_id) }
     end
 
+    # Refuses a destructive save whose snapshot token is missing or stale.
+    #
+    # Raised (rather than returned) so it unwinds inside the transaction that
+    # wraps the save: nothing has been written at this point, the rollback
+    # releases the product lock, and the rescue renders a 409 the editor can act
+    # on. A write-only save is never refused here.
+    def ensure_contract_deletions_are_fresh!
+      contract = product_save_contract
+      return unless contract.enforced?
+      return unless contract.requested_deletion?
+      return if contract.may_delete?
+
+      raise Product::SaveContract::StaleDeletionConflict
+    end
+
     def check_banned
       e404 if @product.banned?
     end
@@ -962,20 +1004,6 @@ class LinksController < ApplicationController
     def update_variants
       variant_category = @product.variant_categories_alive.first
       variants = product_permitted_params[:variants] || []
-      # Product::SaveContract, Rule 1. The `elsif` below submits
-      # `options: nil`, which VariantCategoryUpdaterService reads as "remove
-      # this whole grouping" — so an absent or malformed `variants` key (strong
-      # parameters drops a malformed value, making it absent) currently asks to
-      # delete every version on the product. That is the single widest wipe path
-      # in the editor. Under the contract an unsubmitted collection is not a
-      # statement about deletion, so there is nothing to do here at all: the
-      # explicit-deletion routes below carry any removals the client asked for.
-      contract = product_save_contract
-      if contract.enforced? && !contract.submitted?(:variants)
-        return unless contract.may_delete? &&
-          (contract.cleared?(:variants) || contract.deleted_ids(:variants).any?)
-      end
-
       if variants.any? || @product.is_tiered_membership?
         variant_category_params = variant_category.present? ?
           {
@@ -1046,7 +1074,12 @@ class LinksController < ApplicationController
         actor_user_id: logged_in_user&.id,
         correlation_id: AuditCorrelationId.for(request.request_id),
         request_id: request.request_id,
-        revision_token: nil,
+        # The snapshot token the client submitted, recorded so an audit row can
+        # be tied back to the editor session that asked for the deletion.
+        # Read straight from the params rather than from the contract: the audit
+        # must describe what the client actually sent even when the contract is
+        # disabled, and reading it here cannot start any revision work.
+        revision_token: params[:editor_revision].presence,
       }
     end
 
@@ -1196,8 +1229,27 @@ class LinksController < ApplicationController
         # a version in the same session has the deletion silently refused as
         # stale, and the row reappears on reload. The editor adopts this value
         # and echoes it on the next save.
-        editor_revision: Product::EditorRevision.current(@product.reload),
+        #
+        # Emitted only while the contract is enforced: with the flag off the
+        # token is meaningless and computing it would cost the fingerprint
+        # queries on every save for no benefit.
+        **editor_revision_response,
       }
+    end
+
+    # The snapshot token for the state this save just produced, so the editor's
+    # NEXT save can still delete. Every save moves the fingerprint (it writes
+    # rows, and the token now covers child updated_at as well as ids), so a
+    # session that kept its original token would find itself stale the moment it
+    # saved once — the second deletion in a session would be silently refused.
+    #
+    # Only emitted when the contract is enforced: with the flag off the client
+    # has no use for it, and computing it would put the fingerprint queries back
+    # on the default path that must stay free of them.
+    def editor_revision_response
+      return {} unless product_save_contract.enforced?
+
+      { editor_revision: Product::EditorRevision.current(@product.reload) }
     end
 
     # Fresh post-save snapshot timestamps for every alive page and variant,

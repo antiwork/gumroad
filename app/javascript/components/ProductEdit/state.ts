@@ -174,6 +174,10 @@ export type Product = {
   // outdated or blind payload that would otherwise silently wipe content.
   confirmed_removed_variant_ids?: string[];
   confirmed_removed_rich_content_ids?: string[];
+  // Server-issued snapshot of which integrations were connected when this
+  // editing session loaded. Used to tell "seller unchecked this" apart from
+  // "was never on" — see buildDeletionOperations.
+  loaded_integrations?: Record<string, boolean>;
   // External ids of version-level pages the seller chose to KEEP in the
   // hidden-content conflict dialog ("Keep version content"). They're hidden
   // from this editor session by the shared-content flag, so they can't appear

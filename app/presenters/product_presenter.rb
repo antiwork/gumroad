@@ -126,6 +126,15 @@ class ProductPresenter
         # save, because rejecting those is what made an earlier attempt at this
         # (product-wide optimistic concurrency) block legitimate work.
         editor_revision: Product::EditorRevision.current(product),
+        # Which integrations were connected when this editing session loaded.
+        #
+        # The editor's live `integrations` prop is current state, so "off" there
+        # cannot distinguish "the seller just unchecked this" from "it was never
+        # on". Under the save contract that difference decides whether we ask
+        # the server to disconnect an integration, and disconnecting is
+        # irreversible — so the baseline is issued by the server with the rest
+        # of the snapshot rather than reconstructed on the client.
+        loaded_integrations: Integration::ALL_NAMES.index_with { |name| product.find_integration_by_name(name).present? },
         custom_permalink: product.custom_permalink,
         description: product.description || "",
         price_cents: product.price_cents,

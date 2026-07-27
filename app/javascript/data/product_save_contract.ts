@@ -29,9 +29,25 @@ import { DeletionOperations, SaveContractCollection } from "$app/components/Prod
 // narrow parameter type rather than the whole Product keeps the contract honest
 // (nothing else can influence what gets deleted) and lets tests construct real
 // inputs instead of casting a stub.
+//
+// Files, public files and integrations are read from the editor's own removal
+// state rather than from a parallel `confirmed_removed_*` list, because that IS
+// where those removals are already recorded: a file the seller removed carries
+// `status.type === "removed"`, and an integration they unchecked is simply
+// false. Introducing a second source of truth for the same fact would let the
+// two disagree.
 export type DeletionSources = {
   confirmed_removed_variant_ids?: string[];
   confirmed_removed_rich_content_ids?: string[];
+  files?: { id: string; status: { type: string } }[];
+  public_files?: { id: string; status?: { type: string } }[];
+  integrations?: Record<string, boolean>;
+  // What the integrations looked like when this editing session loaded, so an
+  // integration that was ON and is now OFF can be told apart from one that was
+  // never on. Without this the client cannot distinguish "seller unchecked it"
+  // from "it was already off", and would ask to disconnect things that were
+  // never connected.
+  loaded_integrations?: Record<string, boolean>;
 };
 
 // `clear_all` is deliberately not derived either. An empty collection in state
@@ -52,6 +68,29 @@ export const buildDeletionOperations = (
   // Content pages removed via the page-deletion modal.
   const removedPages = product.confirmed_removed_rich_content_ids ?? [];
   if (removedPages.length > 0) deletedIds.rich_content = [...new Set(removedPages)];
+
+  // Product files the seller removed. Unsaved files (dropbox drops that were
+  // never persisted) carry a synthetic `drop_` id and have no server row to
+  // delete, so naming them would ask the server to remove something that does
+  // not exist.
+  const removedFiles = (product.files ?? [])
+    .filter((file) => file.status.type === "removed" && !file.id.startsWith("drop_"))
+    .map((file) => file.id);
+  if (removedFiles.length > 0) deletedIds.files = [...new Set(removedFiles)];
+
+  const removedPublicFiles = (product.public_files ?? [])
+    .filter((file) => file.status?.type === "removed")
+    .map((file) => file.id);
+  if (removedPublicFiles.length > 0) deletedIds.public_files = [...new Set(removedPublicFiles)];
+
+  // An integration counts as removed only if it was actually on when this
+  // session loaded and the seller has since turned it off.
+  const loadedIntegrations = product.loaded_integrations;
+  if (loadedIntegrations) {
+    const current = product.integrations ?? {};
+    const disconnected = Object.keys(loadedIntegrations).filter((name) => loadedIntegrations[name] && !current[name]);
+    if (disconnected.length > 0) deletedIds.integrations = [...new Set(disconnected)];
+  }
 
   return {
     deleted_ids: deletedIds,

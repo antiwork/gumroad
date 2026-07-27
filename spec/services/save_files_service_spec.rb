@@ -203,6 +203,13 @@ describe SaveFilesService do
       let!(:file_1) { create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png") }
       let!(:file_2) { create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf") }
 
+      # A REAL token for the product's current state, not a placeholder: an
+      # invented string is never fresh, so under the contract it authorises no
+      # deletions at all — a spec built on one passes while proving nothing.
+      def current_revision
+        Product::EditorRevision.current(@product.reload)
+      end
+
       def contract_for(params)
         # Mirrors the controller wiring (LinksController#product_save_contract):
         # the contract is handed plain, deeply-symbolized hashes because
@@ -213,7 +220,7 @@ describe SaveFilesService do
 
       context "when the flag is OFF" do
         it "preserves old behaviour: [] wipes all alive files even with a contract present" do
-          contract = contract_for(files: [], editor_revision: "rev-1")
+          contract = contract_for(files: [], editor_revision: current_revision)
           expect(contract.enforced?).to eq(false)
 
           service.perform(@product, { files: [] }, contract:)
@@ -238,13 +245,13 @@ describe SaveFilesService do
         after { Feature.deactivate_user(:product_editor_save_contract, @product.user) }
 
         it "does not delete anything when the files key is absent" do
-          service.perform(@product, {}, contract: contract_for(editor_revision: "rev-1"))
+          service.perform(@product, {}, contract: contract_for(editor_revision: current_revision))
 
           expect(@product.product_files.alive.count).to eq(2)
         end
 
         it "does not delete anything when files is []" do
-          service.perform(@product, { files: [] }, contract: contract_for(files: [], editor_revision: "rev-1"))
+          service.perform(@product, { files: [] }, contract: contract_for(files: [], editor_revision: current_revision))
 
           expect(@product.product_files.alive.count).to eq(2)
         end
@@ -255,7 +262,7 @@ describe SaveFilesService do
             { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/book.pdf", display_name: "new book" },
           ]
           # file_2 is omitted — under the contract that is "no statement", not "delete me".
-          service.perform(@product, { files: files_params }, contract: contract_for(files: files_params, editor_revision: "rev-1"))
+          service.perform(@product, { files: files_params }, contract: contract_for(files: files_params, editor_revision: current_revision))
 
           expect(@product.product_files.alive.count).to eq(3)
           expect(file_1.reload.display_name).to eq("renamed pencil")
@@ -266,7 +273,7 @@ describe SaveFilesService do
         it "deletes exactly the explicit deleted_ids" do
           contract = contract_for(
             files: [],
-            editor_revision: "rev-1",
+            editor_revision: current_revision,
             deletion_operations: { deleted_ids: { files: [file_1.external_id] } }
           )
 
@@ -279,7 +286,7 @@ describe SaveFilesService do
         it "deletes everything on an explicit clear-all" do
           contract = contract_for(
             files: [],
-            editor_revision: "rev-1",
+            editor_revision: current_revision,
             deletion_operations: { cleared_collections: ["files"] }
           )
 
@@ -303,7 +310,7 @@ describe SaveFilesService do
           new_file_params = [{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/book.pdf", display_name: "new book" }]
           contract = contract_for(
             files: new_file_params,
-            editor_revision: "rev-1",
+            editor_revision: current_revision,
             deletion_operations: { cleared_collections: ["files"] }
           )
 

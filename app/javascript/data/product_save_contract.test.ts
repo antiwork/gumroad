@@ -82,6 +82,99 @@ describe("buildDeletionOperations", () => {
 
     expect(operations.cleared_collections).toEqual(["variants", "files"]);
   });
+
+  // Files, public files and integrations: the three collections the client
+  // could previously only delete by omission.
+  describe("files", () => {
+    it("names exactly the files the seller removed", () => {
+      const operations = buildDeletionOperations(
+        productWith({
+          files: [
+            { id: "f1", status: { type: "removed" } },
+            { id: "f2", status: { type: "saved" } },
+          ],
+        }),
+      );
+
+      expect(operations.deleted_ids.files).toEqual(["f1"]);
+    });
+
+    // A file the seller dropped in and then removed in the same session was
+    // never persisted, so there is no server row to delete. Naming it would ask
+    // the server to remove something that does not exist.
+    it("ignores unsaved dropbox files that were removed before saving", () => {
+      const operations = buildDeletionOperations(
+        productWith({ files: [{ id: "drop_abc", status: { type: "removed" } }] }),
+      );
+
+      expect(operations.deleted_ids.files).toBeUndefined();
+      expect(hasDeletions(operations)).toBe(false);
+    });
+
+    it("asks for nothing when the seller removed no files", () => {
+      const operations = buildDeletionOperations(productWith({ files: [{ id: "f1", status: { type: "saved" } }] }));
+
+      expect(operations.deleted_ids.files).toBeUndefined();
+    });
+  });
+
+  describe("public files", () => {
+    it("names exactly the public files the seller removed", () => {
+      const operations = buildDeletionOperations(
+        productWith({
+          public_files: [
+            { id: "p1", status: { type: "removed" } },
+            { id: "p2", status: { type: "saved" } },
+            { id: "p3" },
+          ],
+        }),
+      );
+
+      expect(operations.deleted_ids.public_files).toEqual(["p1"]);
+    });
+  });
+
+  describe("integrations", () => {
+    it("names an integration that was connected and the seller turned off", () => {
+      const operations = buildDeletionOperations(
+        productWith({
+          loaded_integrations: { circle: true, discord: true },
+          integrations: { circle: false, discord: true },
+        }),
+      );
+
+      expect(operations.deleted_ids.integrations).toEqual(["circle"]);
+    });
+
+    // The reason the server issues a loaded_integrations baseline at all: an
+    // integration that is off now and was off then is not a removal, and
+    // disconnecting is irreversible.
+    it("does not name an integration that was already off", () => {
+      const operations = buildDeletionOperations(
+        productWith({ loaded_integrations: { circle: false }, integrations: { circle: false } }),
+      );
+
+      expect(operations.deleted_ids.integrations).toBeUndefined();
+      expect(hasDeletions(operations)).toBe(false);
+    });
+
+    it("does not name an integration the seller just turned on", () => {
+      const operations = buildDeletionOperations(
+        productWith({ loaded_integrations: { circle: false }, integrations: { circle: true } }),
+      );
+
+      expect(operations.deleted_ids.integrations).toBeUndefined();
+    });
+
+    // Without a baseline the client cannot tell removal from never-connected,
+    // so it must not guess — the safe answer is to ask for no disconnections.
+    it("asks for no disconnections when the server sent no baseline", () => {
+      const operations = buildDeletionOperations(productWith({ integrations: { circle: false } }));
+
+      expect(operations.deleted_ids.integrations).toBeUndefined();
+      expect(hasDeletions(operations)).toBe(false);
+    });
+  });
 });
 
 describe("hasDeletions", () => {

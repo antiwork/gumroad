@@ -127,6 +127,13 @@ describe SavePublicFilesService do
     end
 
     describe "save contract (Product::SaveContract)" do
+      # A REAL token for the product's current state, not a placeholder: an
+      # invented string is never fresh, so under the contract it authorises no
+      # deletions at all — a spec built on one passes while proving nothing.
+      def current_revision
+        Product::EditorRevision.current(product.reload)
+      end
+
       def contract_for(contract_params)
         # Mirrors the controller wiring (LinksController#product_save_contract):
         # the contract is handed plain, deeply-symbolized hashes.
@@ -139,7 +146,7 @@ describe SavePublicFilesService do
 
       context "when the :product_editor_save_contract flag is off" do
         it "preserves today's behaviour: absent public_files still schedules everything and strips embeds" do
-          contract = contract_for({ editor_revision: "rev-1" })
+          contract = contract_for({ editor_revision: current_revision })
           expect(contract.enforced?).to eq(false)
 
           result = process(files_params: nil, contract:)
@@ -160,7 +167,7 @@ describe SavePublicFilesService do
         after { Feature.deactivate_user(:product_editor_save_contract, seller) }
 
         it "does not schedule anything or strip embeds when public_files is absent" do
-          contract = contract_for({ editor_revision: "rev-1" })
+          contract = contract_for({ editor_revision: current_revision })
 
           result = process(files_params: nil, contract:)
 
@@ -170,7 +177,7 @@ describe SavePublicFilesService do
         end
 
         it "does not schedule anything or strip embeds when public_files is []" do
-          contract = contract_for({ public_files: [], editor_revision: "rev-1" })
+          contract = contract_for({ public_files: [], editor_revision: current_revision })
 
           result = process(files_params: [], contract:)
 
@@ -186,7 +193,7 @@ describe SavePublicFilesService do
           contract = contract_for(
             {
               public_files: files_params,
-              editor_revision: "rev-1",
+              editor_revision: current_revision,
               deletion_operations: { deleted_ids: { public_files: [public_file2.public_id] } },
             }
           )
@@ -205,7 +212,7 @@ describe SavePublicFilesService do
           files_params = [
             { "id" => public_file1.public_id, "name" => "Audio 1", "status" => { "type" => "saved" } }
           ]
-          contract = contract_for({ public_files: files_params, editor_revision: "rev-1" })
+          contract = contract_for({ public_files: files_params, editor_revision: current_revision })
 
           result = process(files_params:, contract:)
 
@@ -230,7 +237,7 @@ describe SavePublicFilesService do
         it "schedules everything on an explicit clear-all" do
           contract = contract_for(
             {
-              editor_revision: "rev-1",
+              editor_revision: current_revision,
               deletion_operations: { cleared_collections: ["public_files"] },
             }
           )

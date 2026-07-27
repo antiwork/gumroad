@@ -46,7 +46,10 @@ class Product::EditorRevision
   # Bumping this invalidates every outstanding token. Do that when the set of
   # things the digest covers changes, so an old token cannot be read as current
   # against a new definition.
-  VERSION = "v1"
+  #
+  # v2: each collection now contributes updated_at as well as id, so edits to
+  # existing children move the token and not just additions and removals.
+  VERSION = "v2"
 
   class << self
     # The token for the product's current committed state.
@@ -71,29 +74,78 @@ class Product::EditorRevision
       # a different sequence between calls, which would make the digest differ
       # for identical state and reject saves at random — a failure mode that
       # would look exactly like the #6245 regression.
+      #
+      # Each collection contributes both id AND updated_at. Identity alone is
+      # not enough: if tab B renames a version and tab A then deletes it, an
+      # id-only digest is unchanged, so tab A's token still looks current and
+      # the deletion proceeds against a row the seller has since edited — the
+      # edit is destroyed with no warning. Including updated_at makes any edit
+      # to a deletable child move the token, so the stale tab is told to reload.
+      #
+      # This deliberately does not extend to non-deletable state (a price, a
+      # tag): those still must not invalidate an in-flight deletion, which is
+      # the false-conflict problem that killed #6245.
       def fingerprint(product)
         {
           version: VERSION,
           product: product.id,
           updated_at: product.updated_at&.to_fs(:usec),
-          rich_content: product.alive_rich_contents.order(:id).pluck(:id),
-          variants: alive_variant_ids(product),
-          variant_categories: product.variant_categories.alive.order(:id).pluck(:id),
-          files: product.product_files.alive.order(:id).pluck(:id),
-          public_files: product.alive_public_files.order(:id).pluck(:id),
-          integrations: product.active_integrations.order(:id).pluck(:id),
+          rich_content: stamped(product.alive_rich_contents),
+          variants: alive_variant_stamps(product),
+          variant_categories: stamped(product.variant_categories.alive),
+          files: stamped(product.product_files.alive),
+          public_files: stamped(product.alive_public_files),
+          integrations: stamped(product.active_integrations),
         }
+      end
+
+      # [id, stamp] pairs in a stable order, where the stamp changes whenever
+      # the row is edited.
+      #
+      # `updated_at` alone is not sufficient everywhere. Probed against the real
+      # schema: `rich_contents` and `product_files` store datetime(6), but
+      # `base_variants` stores plain `datetime` at SECOND precision, so renaming
+      # a version in the same second it was created leaves updated_at
+      # unchanged — and "tab B edits, tab A deletes" is exactly a same-second
+      # race. `variant_categories` has no timestamp columns at all.
+      #
+      # So: use updated_at where it is precise enough to be a witness, and fall
+      # back to digesting the row's own columns where it is not. The fallback is
+      # only reached for small collections (a product's versions and their
+      # categories), and it is the honest option — the alternative is a token
+      # that silently fails to notice the edit it exists to notice.
+      def stamped(relation)
+        columns = relation.klass.column_names
+        return row_digests(relation, columns) unless precise_timestamp?(relation, columns)
+
+        relation.order(:id).pluck(:id, :updated_at).map { |id, at| [id, at&.to_fs(:usec)] }
+      end
+
+      def precise_timestamp?(relation, columns)
+        return false unless columns.include?("updated_at")
+
+        column = relation.klass.columns_hash["updated_at"]
+        column.precision.to_i.positive?
+      end
+
+      # A digest per row over everything except the timestamps themselves, so
+      # any edit to any field moves the token regardless of clock granularity.
+      def row_digests(relation, columns)
+        meaningful = columns - %w[updated_at created_at]
+        relation.order(:id).pluck(*meaningful).map do |values|
+          row = Array(values)
+          [row.first, Digest::SHA256.hexdigest(row.map(&:to_s).join("\x1f")).first(16)]
+        end
       end
 
       # `variant_category` is declared on Variant, not on BaseVariant (Sku and
       # other subtypes don't carry it), so join through the categories table by
       # column rather than by association name — that covers every subtype the
       # editor can delete.
-      def alive_variant_ids(product)
-        BaseVariant.alive
-                   .where(variant_category_id: product.variant_categories.alive.select(:id))
-                   .order(:id)
-                   .pluck(:id)
+      def alive_variant_stamps(product)
+        stamped(
+          BaseVariant.alive.where(variant_category_id: product.variant_categories.alive.select(:id))
+        )
       end
 
       def digest(fingerprint)

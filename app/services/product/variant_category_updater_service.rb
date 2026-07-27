@@ -327,15 +327,43 @@ class Product::VariantCategoryUpdaterService
       end
     end
 
+    # Integrations enabled on a VERSION, as opposed to on the product.
+    #
+    # The checkbox model here is genuinely different from the product-level
+    # integrations collection: the payload states the full enabled set for the
+    # version, so "absent from the set" is how the editor has always expressed
+    # "unchecked". That is a real statement, not an omission — but only when the
+    # version actually submitted its integrations. When it did not, the
+    # subtraction below reads "no integrations submitted" as "uncheck them all"
+    # and silently tears down every version-level integration on the product.
+    #
+    # Scoped rather than excluded: the reviewer was right that leaving variant
+    # integrations outside the contract needs a human ruling, so this brings
+    # them in on the conservative reading — an unsubmitted `integrations` key
+    # means no change, and an explicitly submitted set still behaves exactly as
+    # it does today.
     def save_integrations(variant, option)
       enabled_integrations = []
 
       Integration::ALL_NAMES.each do |name|
         integration = product.find_integration_by_name(name)
+        # `option[:integrations]` is client-controlled and may be any shape at
+        # all. `dig` on a String raises TypeError (String has no #dig), which
+        # inside the seller's save turns a malformed payload into a failed save
+        # — so establish the shape before reading it rather than rescuing after.
+        submitted = option[:integrations]
+        enabled = submitted.respond_to?(:dig) ? submitted.dig(name) : nil
         # TODO: :product_edit_react cleanup
-        if (option.dig(:integrations, name) == "1" || option.dig(:integrations, name) == true) && integration.present?
+        if (enabled == "1" || enabled == true) && integration.present?
           enabled_integrations << integration
         end
+      end
+
+      if contract&.enforced? && !variant_submitted_integrations?(option)
+        # Nothing was stated about this version's integrations, so add whatever
+        # was newly enabled (there will be none) and remove nothing.
+        variant.active_integrations << enabled_integrations - variant.active_integrations
+        return
       end
 
       deleted_integrations = variant.active_integrations - enabled_integrations
@@ -343,8 +371,73 @@ class Product::VariantCategoryUpdaterService
       variant.active_integrations << enabled_integrations - variant.active_integrations
     end
 
+    # Did this version's payload actually carry an integrations statement?
+    #
+    # A present-but-empty hash is a real statement ("nothing is checked"); an
+    # absent or malformed key is not. Strong parameters drops malformed values,
+    # so those arrive as absent and are treated as "no statement" — the same
+    # rule the top-level contract applies.
+    def variant_submitted_integrations?(option)
+      value = option[:integrations]
+      value.is_a?(Hash) || value.is_a?(ActionController::Parameters)
+    end
+
+    # Did this version's payload actually carry a rich_content statement?
+    #
+    # Mirrors `variant_submitted_integrations?`. An empty array IS a statement
+    # in the same sense the top-level contract means it — and, exactly as
+    # there, it does not authorise deletion on its own: emptying a version's
+    # pages requires naming them or clearing the collection.
+    #
+    # A String is accepted only when it actually parses as a JSON array: the
+    # editor legitimately sends this collection pre-serialized, but unparseable
+    # junk is a malformed payload, and treating it as a statement means
+    # `JSON.parse` raises mid-save and fails the seller's whole save.
+    def variant_submitted_rich_content?(option)
+      value = option[:rich_content]
+      return true if value.is_a?(Array)
+      return false unless value.is_a?(String) && value.present?
+
+      parsed_variant_rich_content(value).is_a?(Array)
+    end
+
+    # Parses the pre-serialized form, returning nil rather than raising when the
+    # payload is not valid JSON.
+    def parsed_variant_rich_content(value)
+      JSON.parse(value, symbolize_names: true)
+    rescue JSON::ParserError
+      nil
+    end
+
+    # Narrows a diff-derived page deletion set to what the contract authorises.
+    # Returns the diff untouched when no contract is supplied or the flag is
+    # off, so behaviour is unchanged until the rollout reaches a seller.
+    def contract_scoped_rich_content_deletions(diff_deletions, existing_rich_contents)
+      return diff_deletions unless contract&.enforced?
+      return existing_rich_contents if contract.cleared?(:rich_content)
+
+      ids = contract.deleted_ids(:rich_content)
+      return [] if ids.empty?
+
+      existing_rich_contents.select { ids.include?(_1.external_id) }
+    end
+
     def save_rich_content(variant, option)
-      variant_rich_contents = option[:rich_content].is_a?(Array) ? option[:rich_content] : JSON.parse(option[:rich_content].presence || "[]", symbolize_names: true) || []
+      # Product::SaveContract, Rule 1, applied to VERSION-level pages.
+      #
+      # The parse below turns an absent or malformed `rich_content` key into
+      # `[]`, and the diff further down then reads that as "delete every page on
+      # this version". Version-level pages are the product's actual content, so
+      # this is the same wipe-by-omission as the product-level collection and
+      # has to answer to the same rule.
+      submitted = variant_submitted_rich_content?(option)
+      return if contract&.enforced? && !submitted
+
+      variant_rich_contents = if option[:rich_content].is_a?(Array)
+        option[:rich_content]
+      else
+        parsed_variant_rich_content(option[:rich_content].presence || "[]") || []
+      end
       rich_contents_to_keep = []
       existing_rich_contents = variant.alive_rich_contents.to_a
       variant_rich_contents.each.with_index do |variant_rich_content, index|
@@ -363,6 +456,9 @@ class Product::VariantCategoryUpdaterService
       end
       rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
         .reject { preserved_rich_content_ids.include?(_1.external_id) }
+      # Under the contract the diff stops being deletion authority: a page goes
+      # only when the client named it, or asked to clear the collection.
+      rich_contents_to_delete = contract_scoped_rich_content_deletions(rich_contents_to_delete, existing_rich_contents)
       Product::RichContentDeletionGuard.ensure_intent!(
         product:,
         rich_contents_to_delete:,
