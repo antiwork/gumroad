@@ -597,7 +597,9 @@ describe Api::Mobile::PurchasesController do
         # to exhaust the request timeout. Passing concrete ids lets the
         # optimizer start from the buyer's own purchases instead.
         seller = create(:named_user)
+        other_seller = create(:named_user)
         create(:free_purchase, purchaser: @purchaser, seller:, link: create(:product, user: seller, price_cents: 0))
+        create(:free_purchase, purchaser: @purchaser, seller: other_seller, link: create(:product, user: other_seller, price_cents: 0))
 
         queries = []
         subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*args|
