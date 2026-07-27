@@ -2022,6 +2022,80 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "#invalid_bank_account" do
+    let(:seller) { create(:user) }
+    let(:format_rejection_message) do
+      "Invalid routing number for PK. The number must contain both the bank code and the branch code, and should be in the format AAAAPKBB or AAAAPKBBXYZ."
+    end
+
+    context "when the bank code was rejected on format" do
+      let(:mail) do
+        ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+          format_rejection_message
+        )
+      end
+
+      it "tells the seller to correct the code and shows the expected format" do
+        expect(mail.to).to eq([seller.email])
+        expect(mail.subject).to eq("Your bank details need correcting for payouts.")
+        expect(mail.body.encoded).to include("don't match the format banks in your country use")
+        expect(mail.body.encoded).to include("should be in the format AAAAPKBB or AAAAPKBBXYZ")
+        expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+
+      it "does not promise an automatic re-check that cannot succeed" do
+        expect(mail.body.encoded).not_to include("you don't need to do anything")
+        expect(mail.body.encoded).not_to include("automatically re-check")
+        expect(mail.body.encoded).to include("Waiting won't clear this one")
+      end
+
+      it "omits the format hint when Stripe's message doesn't carry one" do
+        mail = ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+          "Invalid account number"
+        )
+
+        expect(mail.subject).to eq("Your bank details need correcting for payouts.")
+        expect(mail.body.encoded).not_to include("Here's the format your bank expects")
+      end
+
+      it "does not mistake Stripe's generic \"check the information provided\" line for a format hint" do
+        mail = ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+          "Invalid account number. Please double-check the information provided and try again."
+        )
+
+        expect(mail.body.encoded).not_to include("Here's the format your bank expects")
+        expect(mail.body.encoded).not_to include("double-check the information provided")
+      end
+
+      it "drops an implausibly long format sentence instead of pasting it into the email" do
+        mail = ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+          "Invalid routing number. The expected format is described as follows: #{'a very long explanation ' * 20}."
+        )
+
+        expect(mail.body.encoded).not_to include("Here's the format your bank expects")
+        expect(mail.body.encoded).to include("check your account and bank code against what your bank shows")
+      end
+    end
+
+    context "when the bank simply isn't in the partner's records yet" do
+      it "keeps the wait-and-we-will-re-check wording" do
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id)
+
+        expect(mail.subject).to eq("We couldn't verify your bank account yet.")
+        expect(mail.body.encoded).to include("automatically re-check")
+        expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+    end
+  end
+
   describe "#payout_setup_retry_exhausted" do
     let(:seller) { create(:user) }
 
