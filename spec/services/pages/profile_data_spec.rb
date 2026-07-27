@@ -45,6 +45,30 @@ describe Pages::ProfileData do
       expect(products.pluck(:name)).not_to include(draft_product.name)
     end
 
+    it "changes the cache key when a thumbnail is added or removed" do
+      # Each of these reads mimics a fresh request: reload so the seller's products association
+      # re-reads its cache version from the database instead of reusing the memoized one.
+      product = create(:product, user: seller)
+      seller_profile = SellerProfile.find_by(seller_id: seller.id)
+      key_without_thumbnail = Pages::ProfileData.cache_key(seller.reload, seller_profile)
+      expect(Pages::ProfileData.build(seller.reload)[:products].first[:thumbnail_url]).to be_nil
+
+      thumbnail = Thumbnail.new(product:)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail.save!
+
+      key_with_thumbnail = Pages::ProfileData.cache_key(seller.reload, seller_profile)
+      expect(key_with_thumbnail).not_to eq(key_without_thumbnail)
+      expect(Pages::ProfileData.build(seller.reload)[:products].first[:thumbnail_url]).to be_present
+
+      thumbnail.mark_deleted!
+
+      expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_with_thumbnail)
+      expect(Pages::ProfileData.build(seller.reload)[:products].first[:thumbnail_url]).to be_nil
+    end
+
     context "when the seller changes their username" do
       it "invalidates the cache so product URLs use the new subdomain" do
         create(:product, user: seller, name: "My product")
