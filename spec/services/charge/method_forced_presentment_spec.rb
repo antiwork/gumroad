@@ -175,6 +175,41 @@ describe Charge::MethodForcedPresentment do
       expect(result.idempotency_key).to eq("buyer-currency-intent-#{charge.external_id}-#{Currency::EUR}")
     end
 
+    it "persists direct listed-amount allocations for a multi-item forced-currency cart" do
+      other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+      other_purchase = create(:purchase,
+                              link: other_product,
+                              seller:,
+                              merchant_account:,
+                              displayed_price_cents: 7_00,
+                              displayed_price_currency_type: Currency::EUR,
+                              rate_converted_to_usd: "0.8",
+                              price_cents: 8_75,
+                              total_transaction_cents: 8_75)
+      charge.update!(amount_cents: 27_50, gumroad_amount_cents: purchase.total_transaction_amount_for_gumroad_cents + other_purchase.total_transaction_amount_for_gumroad_cents)
+
+      expect(StripeFxQuote).not_to receive(:create)
+
+      multi_result = described_class.new(charge:,
+                                         order:,
+                                         seller:,
+                                         merchant_account:,
+                                         purchases: [purchase, other_purchase],
+                                         amount_cents: 27_50,
+                                         gumroad_amount_cents: charge.gumroad_amount_cents,
+                                         payment_method_type:,
+                                         params: {}).perform
+
+      expect(multi_result).to have_attributes(presentment_total_cents: 22_00,
+                                              presentment_currency: Currency::EUR,
+                                              stripe_fx_quote_id: nil)
+      expect(charge.reload.charge_presentment).to have_attributes(presentment_currency: Currency::EUR,
+                                                                  presentment_total_cents: 22_00,
+                                                                  stripe_fx_quote_id: nil)
+      expect(purchase.reload.purchase_presentment).to have_attributes(presentment_total_cents: 15_00)
+      expect(other_purchase.reload.purchase_presentment).to have_attributes(presentment_total_cents: 7_00)
+    end
+
     it "falls back to the canonical USD path when the purchase has no stored conversion rate" do
       purchase.update!(rate_converted_to_usd: nil)
 

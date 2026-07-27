@@ -547,11 +547,43 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(off_session_decision.fallback_reason).to eq(:off_session)
     end
 
-    it "withholds the method for multi-item checkouts" do
+    it "allows the direct listed-amount path for multi-item carts uniformly priced in the forced currency" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
+      purchases << create(:purchase,
+                          link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300),
+                          seller:,
+                          merchant_account:,
+                          purchase_state: "in_progress")
+
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision).to be_eligible
+      expect(upi_decision.currency).to eq(Currency::INR)
+      expect(upi_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "withholds the method for multi-item carts that need the per-line quote basis" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
       purchases << create(:purchase, link: product, seller:, merchant_account:, purchase_state: "in_progress")
 
-      expect(forced_decision).not_to be_eligible
-      expect(forced_decision.fallback_reason).to eq(:multi_item_checkout)
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision).not_to be_eligible
+      expect(upi_decision.fallback_reason).to eq(:unsupported_product_currency)
     end
 
     it "withholds the method for installment payments" do

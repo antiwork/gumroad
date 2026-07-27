@@ -80,6 +80,14 @@ class Order::PreparePaymentIntentService
       end
     end
 
+    # The client-confirmed charge includes this seller's free/test purchases for receipts even
+    # though they do not contribute to its amount. Keep them in the currency/method-set basis too:
+    # the Payment Element saw every cart item, so omitting a free item here could create an intent
+    # in a different currency from the Element that minted the ConfirmationToken.
+    def charge_purchases
+      @charge_purchases ||= purchases_to_charge + free_or_test_purchases.select { _1.seller_id == seller.id }
+    end
+
     # One ConfirmationToken funds one PaymentIntent, so re-check the single-seller constraint
     # server-side before charging a crafted cart.
     def block_multiple_sellers
@@ -318,7 +326,6 @@ class Order::PreparePaymentIntentService
       # finalize's send_charge_receipts covers them (Order::ChargeService assigns every purchase in
       # a seller group to its charge). Scoped to this charge's seller so a free item from another
       # seller in a mixed cart isn't misattributed. The charge amount stays paid-only.
-      charge_purchases = purchases_to_charge + free_or_test_purchases.select { _1.seller_id == seller.id }
       charge_purchases.each do |purchase|
         purchase.charge = charge
         purchase.save!
@@ -347,6 +354,7 @@ class Order::PreparePaymentIntentService
       return nil if method_type.blank?
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type) || element_mount_forced_currency
       return nil if forced_currency.blank?
+      return nil unless free_and_test_lines_share_currency?(forced_currency)
 
       Charge::MethodForcedPresentment.new(
         charge:,
@@ -364,21 +372,36 @@ class Order::PreparePaymentIntentService
 
     # The currency the Payment Element was mounted in when it differs from USD, derived
     # from the same basis as Checkout::StripePaymentPresenter#method_forced_shape?
-    # (seller flags + a resolver result that exposes a capability-eligible local method + a
-    # single purchase whose product is priced in a currency some payment method forces). Nil
-    # everywhere else — flags off, no launched method for the currency in live mode, USD-priced
-    # or multi-item carts — which keeps every other checkout on the canonical USD intent.
+    # (seller flags + a resolver result that exposes a capability-eligible local method +
+    # purchases all priced in the same currency some payment method forces). Nil everywhere else —
+    # flags off, no launched method for the currency in live mode, USD-priced or mixed-currency
+    # carts — which keeps every other checkout on the canonical USD intent.
     def element_mount_forced_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-      return nil unless purchases_to_charge.one?
 
-      product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
+      product_currency = uniform_method_forced_purchase_currency
       return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
       return nil unless payment_method_resolution.payment_method_types.any? do |payment_method_type|
         Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == product_currency
       end
 
       product_currency
+    end
+
+    # The Payment Element's currency basis is every cart line the buyer saw, and prepare mirrors
+    # that in #charge_purchases — paid lines plus this seller's free/test lines. The presentment
+    # snapshot, though, is built from the PAID lines only, because a free line contributes no
+    # money to the charge. That asymmetry is safe only while the free/test lines are priced in
+    # the same currency as the paid ones: a free line priced in a different currency makes the
+    # cart non-uniform, so the Element mounted in canonical USD, and building a forced-currency
+    # presentment from the paid subset alone would create an intent the ConfirmationToken can
+    # never confirm. Returning false here leaves the checkout on the canonical USD intent, and
+    # for a token minted on a forced-currency element #method_forced_presentment_required? turns
+    # that into a clean synchronous failure instead of an unconfirmable intent.
+    def free_and_test_lines_share_currency?(forced_currency)
+      (charge_purchases - purchases_to_charge).all? do |purchase|
+        purchase.link.price_currency_type.to_s.downcase == forced_currency
+      end
     end
 
     # Once the buyer confirmed on a forced-currency Payment Element — with a forced-currency
@@ -406,9 +429,8 @@ class Order::PreparePaymentIntentService
     # this shape check still prevents us from creating a USD intent that Stripe will reject.
     def client_reported_mount_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-      return nil unless purchases_to_charge.one?
 
-      product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
+      product_currency = uniform_method_forced_purchase_currency
       return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
       return nil unless params[:payment_element_mount_currency].to_s.downcase == product_currency
 
@@ -641,11 +663,11 @@ class Order::PreparePaymentIntentService
         commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION },
         buyer_country: buyer_country_alpha2,
         ppp_discounted: ppp_verification_applies?,
-        # Same basis as the presenter's cart_product_currency (the single item's pricing
-        # currency, nil for multi-item carts) so both sides resolve identical method sets —
-        # the Element's list and the deferred intent's list must match or Stripe rejects
-        # the ConfirmationToken.
-        cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil,
+        # Same basis as the presenter's cart_product_currency (a uniform forced pricing currency,
+        # nil for mixed-currency/non-forced carts) so both sides resolve identical method sets —
+        # the Element's list and the deferred intent's list must match or Stripe rejects the
+        # ConfirmationToken.
+        cart_product_currency: uniform_method_forced_purchase_currency,
         # Klarna's amount-window input (see the resolver), on the SAME basis the presenter used
         # when mounting the Element — nil unless every product is USD-priced, and the pre-tax,
         # pre-discount, quantity-inclusive item total when they are. Matching the basis matters
@@ -682,6 +704,24 @@ class Order::PreparePaymentIntentService
 
       original_per_unit = offer_code.original_price(purchase.displayed_price_per_unit_cents)
       original_per_unit.present? ? original_per_unit * purchase.quantity : purchase.displayed_price_cents
+    end
+
+    # The cart's uniform forced pricing currency, or nil. Mirrors the presenter's
+    # #uniform_method_forced_currency: a forced-currency method (iDEAL/Bancontact/UPI) is only
+    # resolvable when EVERY purchase in the charge is priced in the one currency that method
+    # forces, because that is the only shape where a single PaymentIntent can be created in that
+    # currency. Mixed-currency charges and USD charges return nil so the resolver falls back to
+    # the canonical USD method set — the same answer the presenter gave when the Element mounted.
+    def uniform_method_forced_purchase_currency
+      return nil if purchases_to_charge.empty?
+
+      currencies = charge_purchases.map { _1.link.price_currency_type.to_s.downcase }.uniq
+      return nil unless currencies.one?
+
+      currency = currencies.first
+      return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+
+      currency
     end
 
     # U13: mirrors the presenter's PPP input so the deferred intent's method set equals the Payment

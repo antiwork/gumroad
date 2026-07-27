@@ -174,12 +174,12 @@ class Checkout::PaymentMethodResolver
     seller.stripe_connect_account&.country == US_ALPHA2
   end
 
-  # cart_product_currency: the ISO code (lowercase, e.g. "eur") the cart's single item is priced
-  # in, or nil for multi-item carts / unknown. Only consulted by the forced-currency
-  # gate below: a forced-currency method (iDEAL/Bancontact) is offered only when the cart is
-  # priced in exactly the currency that method forces, because that is the only shape where the
-  # Payment Element mounts in that currency (StripePaymentPresenter#method_forced_shape?) and
-  # the deferred intent can be created in it. Offering the methods on any other cart puts EUR-only
+  # cart_product_currency: the ISO code (lowercase, e.g. "eur") every cart item is priced in,
+  # or nil for mixed-currency / unknown carts. Only consulted by the forced-currency gate below:
+  # a forced-currency method (iDEAL/Bancontact/UPI) is offered only when the whole cart is priced
+  # in exactly the currency that method forces, because that is the only shape where the Payment
+  # Element mounts in that currency (StripePaymentPresenter#method_forced_shape?) and the deferred
+  # intent can be created in it. Offering the methods on any other cart puts forced-currency
   # entries on a USD element/intent, which Stripe rejects outright (no element mounts at all).
   #
   # cart_total_usd_cents: the cart's total in USD cents, or nil when unknown. Only consulted by
@@ -438,10 +438,10 @@ class Checkout::PaymentMethodResolver
       Rails.logger.error("Failed to enqueue payment method availability refresh for merchant account #{connect_account.id}: #{e.class} => #{e.message}")
     end
 
-    # The EUR forced-currency methods (iDEAL/Bancontact) surface in two situations:
+    # The forced-currency methods (iDEAL/Bancontact/UPI) surface in two situations:
     #
     #   QA (Stripe test mode): the seller has the internal buyer-currency flags on and the
-    #   cart's single item is priced in the currency the method forces. This is the
+    #   whole cart is priced in the currency the method forces. This is the
     #   pre-launch manual QA surface on preview apps/staging.
     #
     #   Production (live mode): additionally, the method's own per-method launch flag
@@ -450,7 +450,7 @@ class Checkout::PaymentMethodResolver
     #   ramp and roll back independently of the rest of the cohort.
     #
     # In both modes the cart-shape condition mirrors the presenter's method_forced_shape?
-    # gate: only a single item priced in the forced currency mounts the Payment Element in
+    # gate: only a cart priced uniformly in the forced currency mounts the Payment Element in
     # that currency, and a forced-currency method listed on a USD element/intent makes
     # Stripe reject the whole element session (no payment form renders at all — this broke
     # flag-on sellers' plain USD checkouts before the gate was added).
@@ -465,7 +465,7 @@ class Checkout::PaymentMethodResolver
       # The prepare-time eligibility check rejects a forced-currency intent when the
       # account doesn't HOLD USD (stored-currency check). Mirror only that half here.
       # Deliberately NOT the marker-aware usd_settling_merchant_account?: the methods
-      # this resolver offers are always the direct-listed-amount shape (single item
+      # this resolver offers are always the direct-listed-amount shape (the whole cart
       # priced in the forced currency — the select above), which charges the listed
       # price with no FX quote, so the learned mismatch marker is irrelevant to them.
       # Gating on the marker here is what made iDEAL disappear platform-wide on
