@@ -7,10 +7,15 @@
 
   <p>
     In the previous hour this product recorded <strong><%= number_with_delimiter(@sales_count) %></strong> free sales
-    against <strong><%= number_with_delimiter(@views_count) %></strong> product page views. Sales running that far
-    ahead of views means the checkouts did not come through the product page, which is what
-    scripted checkouts look like. Every one of them sends a receipt from our transactional
-    sending domain to whatever address the script supplied.
+    against <strong><%= number_with_delimiter(@views_count) %></strong> product page views, from only
+    <strong><%= number_with_delimiter(@distinct_clients) %></strong> distinct browsers.
+  </p>
+
+  <p>
+    Sales running that far ahead of views means the checkouts did not come through the product
+    page. Sales running that far ahead of distinct browsers means they did not come from
+    separate people. Together that is what scripted checkouts look like, and every one of them
+    sends a receipt from our transactional sending domain to whatever address the script supplied.
   </p>
 
   <p>

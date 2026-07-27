@@ -85,7 +85,7 @@ describe AdminMailer do
 
   describe "#inverted_sales_to_views_notify" do
     let(:product) { create(:product, name: "The Freebie") }
-    let(:mail) { described_class.inverted_sales_to_views_notify(product.id, 4_200, 37) }
+    let(:mail) { described_class.inverted_sales_to_views_notify(product.id, 4_200, 37, 3) }
 
     it "goes to risk" do
       expect(mail.to).to eq([ApplicationMailer::RISK_EMAIL])
@@ -95,10 +95,11 @@ describe AdminMailer do
       expect(mail.subject).to eq "[test] Auto-unpublished for inverted sales-to-views - The Freebie (4,200 sales / 37 views)"
     end
 
-    it "links the product and says the product is already down" do
+    it "links the product, shows all three counts, and says the product is already down" do
       expect(mail.body.encoded).to include(admin_product_url(product.unique_permalink))
       expect(mail.body.encoded).to include("4,200")
       expect(mail.body.encoded).to include("37")
+      expect(mail.body.encoded).to include("3</strong> distinct browsers")
       expect(mail.body.encoded).to include("already been unpublished")
     end
 
@@ -109,7 +110,7 @@ describe AdminMailer do
     end
 
     it "includes the seller's details" do
-      expect(mail.body).to include(product.user.id)
+      expect(mail.body).to include(product.user.id.to_s)
     end
   end
 end

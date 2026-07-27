@@ -6,6 +6,6 @@ class AdminMailerPreview < ActionMailer::Preview
   end
 
   def inverted_sales_to_views_notify
-    AdminMailer.inverted_sales_to_views_notify(Link.last.id, 4_200, 37)
+    AdminMailer.inverted_sales_to_views_notify(Link.last.id, 4_200, 37, 3)
   end
 end
