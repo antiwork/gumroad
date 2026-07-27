@@ -180,6 +180,30 @@ class Checkout::BuyerCurrencyQuote
     # the quote locked) means the whole cart falls back to canonical USD. The buyer's
     # currency is known by this point because one of the product gates depends on it.
     return unless products.all? { |product| quotable_product?(product, buyer_currency:) }
+    # A tip on a product listed in something other than USD is not yet safe to quote.
+    #
+    # The checkout allocates the buyer's tip twice, in two different units. The surcharge
+    # request that mints this quote splits the tip over each line's canonical USD price
+    # (`state.products[].price` is already run through `convertToUSD`), whereas the order
+    # submitted later splits it over each line's *listed* price, and the server then runs
+    # that figure back through `get_usd_cents` using the product's own currency
+    # (Purchase::CreateService, where the tip is built). For a USD listing the two are the
+    # same number, which is why this never mattered before — this PR is what first lets a
+    # non-USD listing reach the quote at all. For any other listing currency the two
+    # roundings sit on either side of a division by the same rate, so they disagree by a
+    # cent often enough to matter, `verify!` rejects the token on "total mismatch", and the
+    # buyer's payment fails outright.
+    #
+    # Note this needs only ONE non-USD listing to go wrong, not a mixed-currency cart:
+    # a single-line EUR cart with a tip reproduces it.
+    #
+    # Withholding the quote is the conservative answer: the cart simply falls back to the
+    # canonical USD checkout, exactly as it does on main today, so nothing regresses and no
+    # payment can fail verification. The real fix is to make both sides allocate the tip
+    # from the same figures, which is a checkout-wide change to `computeTipsForLines` and
+    # its two call sites; it ships separately so this gate can be lifted deliberately,
+    # with a regression that completes exactly this payment.
+    return if line_items.any? { |line| line.tip_cents.to_i.positive? && line.product.price_currency_type.to_s != Currency::USD }
     # Checked last because the marker is scoped to the presentment currency: a mismatch
     # learned for EUR must not suppress quoting for GBP buyers of the same seller.
     return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)

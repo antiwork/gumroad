@@ -208,6 +208,67 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 25_00)
     end
 
+    it "withholds the quote when a tip rides on a non-USD listing, because the two tip splits disagree" do
+      # REGRESSION for rmarescu's review finding on #6350.
+      #
+      # The tip is allocated twice in different units: the surcharge request that mints the
+      # quote splits it over each line's canonical USD price, while the submitted order
+      # splits it over each line's listed price and the server converts that back through
+      # get_usd_cents. For a USD listing the two agree; for any other listing currency they
+      # sit on either side of a division by the same rate and disagree by a cent, so verify!
+      # rejects the token and the buyer's payment fails. Until both sides split from the same
+      # figures, such a cart must fall back to the canonical USD checkout rather than be
+      # quoted into a payment that cannot complete.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      tipped_eur_line = described_class::LineItem.new(
+        permalink: eur_product.unique_permalink, product: eur_product,
+        price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+        gumroad_tax_cents: 0, shipping_cents: 0
+      )
+
+      expect(described_class.create(line_items: [tipped_eur_line], canonical_total_cents: 11_00, ip: "24.48.0.1")).to be_nil
+    end
+
+    it "still quotes a non-USD listing when there is no tip on it" do
+      # The gate above must be scoped to the tip, not to the listing currency — withholding
+      # every non-USD cart would revert the whole point of this PR.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+
+      result = described_class.create(line_items: line_items_for(eur_product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 12_50)
+    end
+
+    it "still quotes a tip that rides on a USD listing" do
+      # A tip is only unsafe in combination with a non-USD listing. USD-listed tipping is the
+      # behaviour that already ships and must not regress.
+      tipped_usd_line = described_class::LineItem.new(
+        permalink: product.unique_permalink, product:,
+        price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+        gumroad_tax_cents: 0, shipping_cents: 0
+      )
+
+      result = described_class.create(line_items: [tipped_usd_line], canonical_total_cents: 11_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 13_75)
+    end
+
+    it "withholds the quote for the whole cart when only one line pairs a tip with a non-USD listing" do
+      # A mixed cart is not a special case, it is the same defect: one offending line is
+      # enough, because the quote locks a single total for the entire cart.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      lines = [
+        described_class::LineItem.new(permalink: product.unique_permalink, product:,
+                                      price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+        described_class::LineItem.new(permalink: eur_product.unique_permalink, product: eur_product,
+                                      price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+      ]
+
+      expect(described_class.create(line_items: lines, canonical_total_cents: 21_00, ip: "24.48.0.1")).to be_nil
+    end
+
     it "treats a non-USD line's submitted price as already-canonical USD, matching the purchase total" do
       # LOAD-BEARING UNITS INVARIANT. The browser converts before it posts — getProducts in
       # pages/Checkout/Show.tsx sends `price: convertToUSD(item, price)` — so the surcharge
