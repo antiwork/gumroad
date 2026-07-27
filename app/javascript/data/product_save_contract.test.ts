@@ -24,10 +24,6 @@ describe("buildDeletionOperations", () => {
 
   // The important one. An editor session that loaded no variants looks
   // identical, in state, to a session where the seller deleted them all — which
-  // is exactly the ambiguity that emptied live products. Empty state must
-  // therefore mean "nothing to delete", never "delete everything".
-  // The important one. An editor session that loaded no variants looks
-  // identical, in state, to a session where the seller deleted them all — which
   // is exactly the ambiguity that emptied live products. The builder cannot even
   // see the collections (its parameter type only carries the confirmed-removal
   // lists), so an empty editor state has no route to becoming a deletion.

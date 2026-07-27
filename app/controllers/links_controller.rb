@@ -1188,6 +1188,15 @@ class LinksController < ApplicationController
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
         **content_updated_at_response,
+        # The revision token for the state this save just committed
+        # (gumroad-private#1379). Every successful save moves the product's
+        # fingerprint, so the token the editor is holding — issued when the page
+        # loaded — is stale the moment the first save returns. Without handing
+        # back a fresh one, a seller who saves an ordinary edit and then deletes
+        # a version in the same session has the deletion silently refused as
+        # stale, and the row reappears on reload. The editor adopts this value
+        # and echoes it on the next save.
+        editor_revision: Product::EditorRevision.current(@product.reload),
       }
     end
 

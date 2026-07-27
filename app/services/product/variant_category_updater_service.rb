@@ -129,9 +129,21 @@ class Product::VariantCategoryUpdaterService
     end
 
     if category_params[:options].nil?
-      self.class.ensure_deletion_intent!(product:, variants: variant_category.variants.alive.to_a, confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
-      deleted_variant_external_ids = batch_delete_variants(variant_category.variants)
-      category_was_deleted = variant_category.title.blank?
+      # Product::SaveContract, Rule 2, applied to the widest deletion route in
+      # the editor. `options: nil` means "this grouping wasn't submitted", and
+      # historically that swept every version in it. Under the contract a save
+      # that names specific ids must remove only those, and a save that names
+      # none must remove nothing at all — otherwise an explicit one-version
+      # deletion arriving with an empty `variants` collection would take the
+      # whole grouping with it.
+      variants_to_delete = contract_scoped_category_deletions(variant_category.variants)
+      self.class.ensure_deletion_intent!(product:, variants: variants_to_delete.select(&:alive?), confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
+      deleted_variant_external_ids = batch_delete_variants(variants_to_delete)
+      # The grouping itself only goes away when nothing is left in it. With the
+      # contract off this is the same condition as before (the sweep deletes
+      # everything, so nothing is alive), but a contract-scoped partial deletion
+      # must leave the category standing for the versions that survive.
+      category_was_deleted = variant_category.title.blank? && !variant_category.variants.alive.exists?
       variant_category.mark_deleted! if category_was_deleted
       record_deletion_audit(
         route: ProductVariantDeletionAudit::EDITOR_CATEGORY_OMITTED,
@@ -199,6 +211,28 @@ class Product::VariantCategoryUpdaterService
   end
 
   private
+    # The `options: nil` route — "this grouping wasn't submitted at all" —
+    # scoped to what the contract authorises.
+    #
+    # With no contract, or with the flag off, this returns the whole grouping,
+    # which is the legacy sweep unchanged. With the contract enforced the sweep
+    # is only reachable through an explicit clear-all; a request naming specific
+    # ids removes exactly those, and a request naming nothing removes nothing.
+    # Without this the controller's explicit-deletion path would fall into the
+    # branch below and delete every version in the first category while the
+    # seller had asked for one.
+    def contract_scoped_category_deletions(variants)
+      return variants unless contract&.enforced?
+
+      existing_variants = variants.to_a
+      return existing_variants if contract.cleared?(:variants)
+
+      ids = contract.deleted_ids(:variants)
+      return [] if ids.empty?
+
+      existing_variants.select { ids.include?(_1.external_id) }
+    end
+
     # Narrows a diff-derived deletion set to what the contract authorises.
     # Returns the diff untouched when no contract is supplied or the flag is
     # off, so non-editor callers and the disabled path are byte-identical.

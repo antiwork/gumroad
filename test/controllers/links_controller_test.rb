@@ -6252,4 +6252,87 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert_equal "Renamed under the contract", @product.reload.name
     assert variant.reload.alive?
   end
+
+  # --- flag ON: an explicit deletion must not widen into a sweep --------------
+
+  test "flag on: naming one variant while the collection is omitted deletes only that variant" do
+    enable_contract!
+    removed = create_variant(variant_category: @category, name: "Removed")
+    sibling = create_variant(variant_category: @category, name: "Sibling")
+
+    # No `variants` key at all, but an explicit id to delete. The save reaches
+    # the "this grouping wasn't submitted" route, which historically swept every
+    # version in the category — turning a one-version deletion into a wipe of
+    # the whole grouping. The contract has to scope it to the named id.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert sibling.reload.alive?
+    # The grouping still holds a live version, so it must survive too.
+    assert @category.reload.alive?
+  end
+
+  test "flag on: a clear-all with the collection omitted still empties the grouping" do
+    enable_contract!
+    first = create_variant(variant_category: @category, name: "First version")
+    second = create_variant(variant_category: @category, name: "Second version")
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { cleared_collections: ["variants"] },
+    ), format: :json
+    assert_response :success
+
+    assert_not first.reload.alive?
+    assert_not second.reload.alive?
+  end
+
+  # --- flag ON: the revision must survive the session ------------------------
+
+  test "flag on: the save response returns the revision for the state it committed" do
+    enable_contract!
+    create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params.merge(editor_revision: current_revision), format: :json
+    assert_response :success
+
+    returned = response.parsed_body["editor_revision"]
+    assert returned.present?
+    # It describes the post-save state, which is what the editor must echo next.
+    assert_equal Product::EditorRevision.current(@product.reload), returned
+  end
+
+  test "flag on: a deletion after an ordinary save in the same session still deletes" do
+    enable_contract!
+    removed = create_variant(variant_category: @category, name: "Removed")
+    kept = create_variant(variant_category: @category, name: "Kept")
+
+    # First save: an ordinary edit, no deletions. It moves the product's
+    # fingerprint, so the token the editor loaded with is now stale.
+    post :update, params: @params.merge(
+      name: "Renamed",
+      editor_revision: current_revision,
+    ), format: :json
+    assert_response :success
+    refreshed = response.parsed_body["editor_revision"]
+
+    # Second save: the seller deletes a version without reloading the page. The
+    # editor echoes the token the FIRST save handed back. Before the response
+    # carried one, this deletion was silently refused as stale and the version
+    # reappeared on reload.
+    @controller = LinksController.new
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: refreshed,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert kept.reload.alive?
+  end
 end

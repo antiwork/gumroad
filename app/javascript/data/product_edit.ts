@@ -24,6 +24,11 @@ export type SaveProductResponse = {
   // would echo pre-save timestamps and be rejected as stale.
   rich_content_updated_at?: Record<string, string>;
   variant_updated_at?: Record<string, string>;
+  // The revision token for the state this save committed. Every successful
+  // save moves the product's fingerprint, so the token the editor loaded with
+  // is stale as soon as the first save returns; the editor adopts this one so a
+  // deletion later in the same session isn't refused as stale.
+  editor_revision?: string | null;
 };
 
 // The server's fail-closed answer when a save would delete version-level pages
