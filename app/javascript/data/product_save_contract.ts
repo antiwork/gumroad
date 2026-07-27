@@ -1,8 +1,4 @@
-import {
-  DeletionOperations,
-  Product,
-  SaveContractCollection,
-} from "$app/components/ProductEdit/state";
+import { DeletionOperations, SaveContractCollection } from "$app/components/ProductEdit/state";
 
 // Builds the explicit deletion operations for a save (gumroad-private#1379).
 //
@@ -29,12 +25,21 @@ import {
 // So: the seller's confirmed removals ARE the deletion operations. Anything
 // else missing from the payload is, by definition, not a deletion.
 
+// The seller's confirmed removals are the only input this needs. Taking a
+// narrow parameter type rather than the whole Product keeps the contract honest
+// (nothing else can influence what gets deleted) and lets tests construct real
+// inputs instead of casting a stub.
+export type DeletionSources = {
+  confirmed_removed_variant_ids?: string[];
+  confirmed_removed_rich_content_ids?: string[];
+};
+
 // `clear_all` is deliberately not derived either. An empty collection in state
 // means "this session has none loaded", which is not the same as "the seller
 // emptied it" — that distinction is the whole point. A caller that genuinely
 // wants to empty a collection passes it here explicitly.
 export const buildDeletionOperations = (
-  product: Product,
+  product: DeletionSources,
   clearedCollections: SaveContractCollection[] = [],
 ): DeletionOperations => {
   const deletedIds: Partial<Record<SaveContractCollection, string[]>> = {};
@@ -58,6 +63,10 @@ export const buildDeletionOperations = (
 // whether the revision token is required: a save that deletes nothing does not
 // need to prove which snapshot it came from, so a stale tab can still fix a
 // typo without being told to reload.
+//
+// The Array.isArray check is not just a type narrowing: `deleted_ids` is a
+// Partial record, so a caller can legitimately hand us a key whose value is
+// undefined, and reading `.length` off that would throw during a save.
 export const hasDeletions = (operations: DeletionOperations): boolean =>
   operations.cleared_collections.length > 0 ||
-  Object.values(operations.deleted_ids).some((ids) => (ids?.length ?? 0) > 0);
+  Object.values(operations.deleted_ids).some((ids: unknown) => Array.isArray(ids) && ids.length > 0);

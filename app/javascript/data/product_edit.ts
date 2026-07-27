@@ -1,13 +1,13 @@
 import { Editor, findChildren } from "@tiptap/core";
 import typia from "typia";
 
+import { buildDeletionOperations } from "$app/data/product_save_contract";
 import { CurrencyCode } from "$app/utils/currency";
 import { ResponseError, request } from "$app/utils/request";
 
 import { extensions } from "$app/components/ProductEdit/ContentTab";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Product } from "$app/components/ProductEdit/state";
-import { buildDeletionOperations } from "$app/data/product_save_contract";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export type SaveProductResponse = {
