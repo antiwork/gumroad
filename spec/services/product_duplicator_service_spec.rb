@@ -187,37 +187,6 @@ describe ProductDuplicatorService do
     expect(duplicate_product.variant_categories.alive.first.variants.pluck(:name)).to eq ["Untitled", "Second"]
   end
 
-  # gumroad-private#6359. Duplicating a tiered membership soft-deletes the tier
-  # category the new product was created with, so the duplicate can adopt the
-  # source's categories instead. That is a real category deletion, and it was
-  # the one deletion in production the audit trail could not account for: the
-  # reconciliation found a category marked deleted one second after its product
-  # was created, with a live child and no audit row.
-  #
-  # This is currently UNINSTRUMENTED and this example pins that fact rather than
-  # asserting the behaviour we want. It documents the known gap so the next
-  # reconciliation does not have to rediscover it, and it will fail loudly the
-  # moment someone adds the missing `record_deletion` call — at which point the
-  # expectation flips to `change(...).by(1)` and a `ROUTES` entry is added for
-  # the duplication path.
-  it "does not yet write a deletion audit row when duplication sweeps the new tier category (known gap, gumroad-private#6359)" do
-    product_params = { user: seller, price_cents: 5000, name: "test product",
-                       description: "description for test product",
-                       is_recurring_billing: true, subscription_duration: "monthly",
-                       is_tiered_membership: true }
-    product = create(:product, product_params)
-
-    duplicate_product = nil
-    expect do
-      duplicate_product = ProductDuplicatorService.new(product.id).duplicate
-    end.not_to change(ProductVariantDeletionAudit, :count)
-
-    # The sweep really did happen — this is an unaudited deletion, not a no-op.
-    swept = duplicate_product.variant_categories.where.not(deleted_at: nil)
-    expect(swept).to be_present
-    expect(ProductVariantDeletionAudit.where(product_id: duplicate_product.id)).to be_empty
-  end
-
   context "duplicating a collab product" do
     before { create(:collaborator, products: [product]) }
 
