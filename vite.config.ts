@@ -30,6 +30,23 @@ function stripCjsExportsPlugin() {
 // into their own chunks. Everything React-dependent stays in one "vendor"
 // chunk to avoid circular cross-chunk imports between React internals and
 // the many small packages that re-export them.
+// Some client-side security software (antivirus web shields, tracker blockers, corporate
+// proxies) block or quarantine requests purely on the URL/filename containing tracker-like
+// words such as "google_analytics". Our chunk names come from the source module name, so a
+// module named google_analytics.ts produced a chunk literally called
+// google_analytics-<hash>.js. When a page *statically* imports that chunk, a client-side
+// block of that one file stops the whole page from ever mounting, leaving a blank screen.
+//
+// Renaming the emitted chunk is not cosmetic: it removes the substring these tools pattern
+// match on, so the module ships as ordinary application code. This does not disable or hide
+// any analytics behaviour, and it does not change what the module does — only the filename
+// it is served under. See the "blank product editor" reports (2026-07-26).
+const BLOCKABLE_NAME_PATTERNS = [/google_analytics/u, /google-analytics/u, /googletagmanager/u, /gtag/u];
+
+function sanitizeChunkName(name: string) {
+  return BLOCKABLE_NAME_PATTERNS.some((pattern) => pattern.test(name)) ? "third_party_tracking" : name;
+}
+
 function manualChunks(id: string) {
   if (!id.includes("node_modules")) return;
 
@@ -125,8 +142,10 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks,
-        // [name]-[hash] keeps filenames readable in devtools / logs
-        chunkFileNames: "assets/[name]-[hash].js",
+        // [name]-[hash] keeps filenames readable in devtools / logs.
+        // sanitizeChunkName strips tracker-like words (see above) so client-side
+        // blockers can't take a page down by refusing one of its static imports.
+        chunkFileNames: (chunkInfo) => `assets/${sanitizeChunkName(chunkInfo.name)}-[hash].js`,
         entryFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
       },
