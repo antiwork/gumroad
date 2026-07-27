@@ -822,11 +822,17 @@ const BankAccountSection = ({
     },
   };
 
+  // Of the countries above, these are the ones whose expected value really is an IBAN, so the
+  // field should be labelled "IBAN" rather than "Account #". Gambia is deliberately excluded:
+  // it has a country-specific format but it is an 18-character local account number, not an IBAN.
+  const IBAN_SHAPED_COUNTRY_CODES = ["MA", "SN", "RS", "MD"];
+
   const isGibraltar = user.country_code === "GI";
   const isOman = user.country_code === "OM";
   const countrySpecificProps = user.country_code
     ? countrySpecificAccountNumberInputProps[user.country_code]
     : undefined;
+  const usesIbanShapedAccountNumber = !!user.country_code && IBAN_SHAPED_COUNTRY_CODES.includes(user.country_code);
   const nonIbanAccountNumberInputProps: AccountNumberInputProps = isGibraltar
     ? { placeholder: "01234567", maxLength: 8, pattern: "[0-9]{8}", inputMode: "numeric" }
     : isOman
@@ -2510,7 +2516,7 @@ const BankAccountSection = ({
                   <Fieldset state={errorFieldNames.has("account_number") ? "danger" : undefined}>
                     <FieldsetTitle>
                       <Label htmlFor={`${uid}-account-number`}>
-                        {ibanShapedProps
+                        {usesIbanShapedAccountNumber
                           ? "IBAN"
                           : user.country_code && ["US", "MX", "AR", "PE", "SV"].includes(user.country_code)
                             ? "Account number"
@@ -2530,7 +2536,7 @@ const BankAccountSection = ({
                   <Fieldset state={errorFieldNames.has("account_number_confirmation") ? "danger" : undefined}>
                     <FieldsetTitle>
                       <Label htmlFor={`${uid}-confirm-account-number`}>
-                        {ibanShapedProps
+                        {usesIbanShapedAccountNumber
                           ? "Confirm IBAN"
                           : user.country_code && ["US", "MX", "AR", "PE", "SV"].includes(user.country_code)
                             ? "Confirm account number"
