@@ -12,6 +12,30 @@ type SearchProps = {
   placeholder?: string;
 };
 
+// Copying an email address from a mail client (notably "Copy" on an email link in iOS Mail) puts
+// the whole link on the clipboard — "mailto:someone@example.com" — instead of the bare address.
+// Pasted as-is, that never matches a stored purchase email, so the search silently returns nothing
+// and it looks to the seller like we lost their customer. A leading "mailto:" is never something
+// anyone means to search for, so drop it. Also handles the "mailto://" variant some apps produce
+// and the "?subject=..." parameters a mailto link can carry.
+const MAILTO_PREFIX = /^\s*mailto:(?:\/\/)?/iu;
+
+export const normalizeSearchQuery = (raw: string): string => {
+  if (!MAILTO_PREFIX.test(raw)) return raw;
+
+  const withoutPrefix = raw.replace(MAILTO_PREFIX, "").split("?")[0] ?? "";
+  // mailto links are URLs, so the address may be percent-encoded ("foo%40example.com"). Decoding
+  // can throw on a malformed sequence (a bare "%" the seller typed), in which case we keep the
+  // undecoded text rather than losing what they pasted.
+  let decoded = withoutPrefix;
+  try {
+    decoded = decodeURIComponent(withoutPrefix);
+  } catch {
+    /* keep the raw text */
+  }
+  return decoded.trim();
+};
+
 export const Search = ({ onSearch, value, placeholder = "Search" }: SearchProps) => {
   const [searchQuery, setSearchQuery] = React.useState(value);
 
@@ -36,8 +60,11 @@ export const Search = ({ onSearch, value, placeholder = "Search" }: SearchProps)
             type="text"
             placeholder={placeholder}
             onChange={(e) => {
-              setSearchQuery(e.target.value);
-              onSearch(e.target.value);
+              // Normalize the visible text too, not just what we send to the server, so the field
+              // shows the seller exactly what is being searched for.
+              const query = normalizeSearchQuery(e.target.value);
+              setSearchQuery(query);
+              onSearch(query);
             }}
           />
         </InputGroup>
