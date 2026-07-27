@@ -86,6 +86,10 @@ import {
 
 import placeholder from "$assets/images/placeholders/checkout.png";
 
+// The name a buyer in this country knows the consumption tax by. The same mapping lives in Ruby as
+// Compliance::Countries::TAX_NAME_BY_COUNTRY_CODE (lib/utilities/compliance/countries.rb), which is
+// what receipts and invoices use — keep the two in sync so the checkout page and the receipt do not
+// name the same tax differently.
 const nameOfSalesTaxForCountry = (countryCode: string) => {
   switch (countryCode) {
     case "US":

@@ -287,6 +287,23 @@ describe ReceiptPresenter::ItemInfo do
                 )
               end
             end
+
+            # A receipt is stated in one currency for the whole document, and that decision
+            # is made once by ReceiptPresenter and handed to each line. When the receipt as
+            # a whole falls back to canonical USD — because a sibling purchase on the same
+            # charge has no buyer-currency amounts — this line follows it rather than
+            # printing CAD under a USD total.
+            context "when the receipt as a whole fell back to canonical USD" do
+              let(:item_info) { described_class.new(purchase, presentment_currency: nil) }
+
+              it "states the item line in canonical USD" do
+                expect(props[:general_attributes]).to eq(
+                  [
+                    { label: "Product price", value: "$14.99" },
+                  ]
+                )
+              end
+            end
           end
         end
 
@@ -592,6 +609,47 @@ describe ReceiptPresenter::ItemInfo do
               { label: "30-day money back guarantee", value: "Bundle fine print." },
             ]
           )
+        end
+      end
+
+      # A bundle receipt lists the bundle's contents as item lines while the buyer was
+      # charged once for the bundle itself. The child rows exist only to name what was
+      # included: they are created with zero price, zero shipping and no tip, and carry
+      # no presentment snapshot of their own. So a bundle child line prints no monetary
+      # amount in any currency, and cannot disagree with the buyer-currency totals below
+      # it. This pins that, because the item line's currency check reads the child's own
+      # snapshot and would otherwise be a plausible source of a mixed-currency receipt.
+      context "when the receipt is stated in the buyer's currency and contains a bundle" do
+        let(:bundle) { create(:product, user: seller, is_bundle: true, name: "Bundle product") }
+        let(:bundle_purchase) { create(:purchase, link: bundle, seller:, merchant_account:, price_cents: 2_000) }
+        let!(:product) { create(:product, user: seller, name: "Product") }
+        let!(:bundle_product) { create(:bundle_product, bundle:, product:) }
+
+        before do
+          charge = create(:charge, seller:, purchases: [bundle_purchase])
+          charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 26_00)
+          create(:purchase_presentment,
+                 purchase: bundle_purchase,
+                 charge_presentment:,
+                 presentment_price_cents: 26_00,
+                 presentment_tip_cents: 0,
+                 presentment_seller_tax_cents: 0,
+                 presentment_gumroad_tax_cents: 0,
+                 presentment_shipping_cents: 0,
+                 presentment_total_cents: 26_00)
+          bundle_purchase.create_artifacts_and_send_receipt!
+        end
+
+        it "prints no monetary amount on the bundle's child item lines" do
+          child_purchase = bundle_purchase.product_purchases.last
+          expect(child_purchase.buyer_presentment?).to be(false)
+          expect(child_purchase.free_purchase?).to be(true)
+
+          presenter = described_class.new(child_purchase, presentment_currency: bundle_purchase.buyer_presentment_currency)
+          labels = presenter.props[:general_attributes].map { _1[:label] }
+          expect(labels).to include("Bundle")
+          expect(labels).not_to include("Product price")
+          expect(labels).not_to include("Tip")
         end
       end
 

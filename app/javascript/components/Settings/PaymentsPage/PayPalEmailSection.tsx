@@ -71,6 +71,14 @@ const PayPalEmailSection = ({
           directed to a PayPal account outside of Ukraine.
         </Alert>
       ) : null}
+      {user.country_code === "ZM" ? (
+        <Alert variant="warning">
+          PayPal does not let accounts registered in Zambia receive money, so a payout to a Zambian PayPal account will
+          fail. Bank payouts are not available in Zambia either, so there is currently no way for us to pay you out
+          unless you use a PayPal account registered outside Zambia. Your balance stays in your Gumroad account in the
+          meantime.
+        </Alert>
+      ) : null}
     </section>
   );
 };

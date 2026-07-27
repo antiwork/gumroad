@@ -60,9 +60,11 @@ export type PaymentElementConfig = {
 // the US-locked methods (cashapp, us_bank_account) for US buyers.
 // Currency is "usd" everywhere except the method-forced local-method surface (iDEAL/Bancontact/UPI),
 // where the server mounts the element in the payment method's forced currency (e.g. "eur") and
-// supplies presentment_amount_cents — the single product's listed price in that currency — so
-// Stripe shows the EUR-only method tabs (it hides methods that can't charge in the element's
-// currency). When presentment_amount_cents is null the amount derives from the USD total below.
+// supplies presentment_amount_cents — the whole cart's listed subtotal in that currency,
+// quantities included (a cart is only eligible when every line is priced in the same forced
+// currency) — so Stripe shows the EUR-only method tabs (it hides methods that can't charge in the
+// element's currency). When presentment_amount_cents is null the amount derives from the USD
+// total below.
 // listed_currency_display is non-null on that same surface and tells the checkout summary to
 // render the cart in the listed currency, matching what the element and the charge use.
 export type ListedCurrencyDisplayConfig = {
