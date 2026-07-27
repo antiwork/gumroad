@@ -273,6 +273,42 @@ describe CreatorHomePresenter do
       expect(presenter.creator_home_props[:stripe_verification_message]).to be_nil
     end
 
+    describe "email_confirmation" do
+      it "is nil when the seller's email is confirmed" do
+        expect(presenter.creator_home_props[:email_confirmation]).to be_nil
+      end
+
+      context "when the seller has never confirmed their email" do
+        before do
+          seller.update_columns(confirmed_at: nil)
+        end
+
+        it "includes the email needing confirmation" do
+          expect(presenter.creator_home_props[:email_confirmation][:email]).to eq(seller.email)
+        end
+
+        it "allows resending for the account owner" do
+          owner_pundit_user = SellerContext.new(user: seller, seller:)
+          props = described_class.new(owner_pundit_user).creator_home_props
+          expect(props[:email_confirmation][:can_resend]).to eq(true)
+        end
+
+        it "doesn't allow resending for non-owner team members" do
+          expect(presenter.creator_home_props[:email_confirmation][:can_resend]).to eq(false)
+        end
+      end
+
+      context "when the seller has a pending email change" do
+        before do
+          seller.update_columns(unconfirmed_email: "new-address@example.com")
+        end
+
+        it "includes the pending email" do
+          expect(presenter.creator_home_props[:email_confirmation][:email]).to eq("new-address@example.com")
+        end
+      end
+    end
+
     describe "balances" do
       before do
         allow_any_instance_of(UserBalanceStatsService).to receive(:fetch).and_return(

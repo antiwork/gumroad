@@ -199,16 +199,18 @@ module StripeMerchantAccountManager
   rescue => e
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
-      # Bank-account rejections (unknown bank/routing code, invalid account number) and
-      # tax-ID rejections (placeholder values like 123456789 that Stripe disallows),
-      # phone-number rejections, and Japanese address rejections (town/postal-code
-      # mismatches Stripe validates against its JP postal directory) are expected
-      # seller-input errors: the seller sees Stripe's message inline on the payments
-      # settings page and can correct the input themselves (a payout note is also recorded
-      # below for bank rejections), and the sync path (update_bank_account) already treats
-      # bank rejections as expected without alerting. Don't page Sentry for them — only
-      # unexpected failures should alert.
-      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e)
+      # Bank-account rejections (unknown bank/routing code, invalid account number,
+      # "Stripe is unable to support this bank"), tax-ID rejections (placeholder values
+      # like 123456789 that Stripe disallows), phone-number rejections, Japanese
+      # address/kanji rejections (validated against Stripe's JP postal directory), and
+      # postal-code rejections are expected seller-input errors: the seller sees Stripe's
+      # message inline on the payments settings page and can correct the input themselves
+      # (a payout note breadcrumb is also recorded below for bank and postal-code
+      # rejections, and rejected postal codes are auto-retried weekly by
+      # RetryStripeRejectedPayoutSetupsJob), and the sync path (update_bank_account)
+      # already treats bank rejections as expected without alerting. Don't page Sentry
+      # for them — only unexpected failures should alert.
+      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e) || postal_code_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
@@ -587,7 +589,15 @@ module StripeMerchantAccountManager
     return true if %w[routing_number_invalid account_number_invalid].include?(code)
 
     param = error.respond_to?(:param) ? error.param.to_s : ""
-    param.start_with?("bank_account", "external_account")
+    return true if param.start_with?("bank_account", "external_account")
+
+    # Stripe rejects some bank accounts with "Stripe is unable to support this bank at this
+    # time." and populates neither `code` nor `param` on the error, so the checks above miss
+    # it. It is still a rejection of the seller's bank details (a bank outside Stripe's payout
+    # coverage), which the seller sees inline on the payments settings page and can only fix
+    # by entering a different bank account — so treat it like the other bank rejections
+    # (payout-note breadcrumb, no Sentry alert) instead of paging on every attempt.
+    error.message.to_s.match?(/unable to support this bank/i)
   end
 
   private_class_method
@@ -1358,9 +1368,9 @@ module StripeMerchantAccountManager
     document_verification_error = verification_errors.select { |_field, error| error[:code].starts_with?("verification_document") }.first
     skip_more_kyc_email = requirements_only_soft_future?(requirements, new_requests, all_fields_needed, requirements_due_at)
     email_sent = if document_verification_error.present?
-      ContactingCreatorMailer.stripe_document_verification_failed(user.id, document_verification_error[1][:reason]).deliver_later(queue: "critical")
+      ContactingCreatorMailer.stripe_document_verification_failed(user.id, seller_facing_verification_reason(user, document_verification_error[1])).deliver_later(queue: "critical")
     elsif verification_errors.present?
-      ContactingCreatorMailer.stripe_identity_verification_failed(user.id, verification_errors.first[1][:reason]).deliver_later(queue: "critical")
+      ContactingCreatorMailer.stripe_identity_verification_failed(user.id, seller_facing_verification_reason(user, verification_errors.first[1])).deliver_later(queue: "critical")
     elsif skip_more_kyc_email
       nil
     else
@@ -1375,6 +1385,19 @@ module StripeMerchantAccountManager
 
   def self.prefecture_kana(kanji)
     Compliance::Countries.japan_prefecture_kana(kanji)
+  end
+
+  # Stripe's own rejection reason is what we normally forward to the seller, but for an
+  # address-mismatch rejection on a seller whose registered address is a P.O. Box that reason is
+  # actively wrong: it asks them to fix the address or upload a matching document, and neither is
+  # possible (see UserComplianceInfoRequest for the full explanation of the deadlock). Send those
+  # sellers to support instead of into another round of the same rejected upload.
+  def self.seller_facing_verification_reason(user, verification_error)
+    if UserComplianceInfoRequest.po_box_address_deadlock?(user:, error_code: verification_error[:code])
+      return UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE
+    end
+
+    verification_error[:reason]
   end
 
   # Stripe has nothing further the seller could submit: no currently-due or

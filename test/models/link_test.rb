@@ -1164,18 +1164,72 @@ class LinkTest < ActiveSupport::TestCase
     assert_not build_product(custom_permalink: "asdf!213").valid?
   end
 
+  # --- custom_permalink error copy --------------------------------------------
+  # Each rejection has to name the rule the seller hit. A generic "is invalid"
+  # or "has already been taken" doesn't tell them what to change, and for the
+  # cross-account licensed-product conflict "taken" is actively misleading —
+  # the handle belongs to a different Gumroad account, not to them.
+  # gumroad-private#1363.
+
+  test "custom_permalink format error lists the characters allowed" do
+    product = build_product(custom_permalink: "asdf&asdf")
+
+    assert_not product.valid?
+    assert_equal ["Custom permalink can only contain letters, numbers, dashes, and underscores"],
+                 product.errors.full_messages
+  end
+
+  test "custom_permalink is invalid beyond the length the column can store" do
+    product = build_product(custom_permalink: "a" * (Link::CUSTOM_PERMALINK_MAX_LENGTH + 1))
+
+    assert_not product.valid?
+    assert_equal ["Custom permalink must be #{Link::CUSTOM_PERMALINK_MAX_LENGTH} characters or fewer"],
+                 product.errors.full_messages
+  end
+
+  test "custom_permalink at the maximum length is valid" do
+    assert build_product(custom_permalink: "a" * Link::CUSTOM_PERMALINK_MAX_LENGTH).valid?
+  end
+
+  test "custom_permalink duplicate error says it's the seller's own other product" do
+    user = create_user
+    create_product(user:, custom_permalink: "custom")
+    product = build_product(user:, custom_permalink: "custom")
+
+    assert_not product.valid?
+    assert_equal ["Custom permalink is already used by another one of your products"], product.errors.full_messages
+  end
+
+  test "custom_permalink colliding with the seller's own unique permalink says the same thing" do
+    user = create_user
+    create_product(user:, unique_permalink: "abc")
+    product = build_product(user:, custom_permalink: "abc")
+
+    assert_not product.valid?
+    assert_equal ["Custom permalink is already used by another one of your products"], product.errors.full_messages
+  end
+
+  test "custom_permalink held by another account's licensed product says so instead of taken" do
+    timestamp = seed_licensed_permalink_conflict
+    product = create_product(is_licensed: true, created_at: timestamp - 1.day)
+
+    assert_equal false, product.update(custom_permalink: "abc")
+    assert_equal "Custom permalink is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.",
+                 product.errors.full_messages.to_sentence
+  end
+
   test "a licensed product created before force_product_id_timestamp is invalid when its custom permalink overlaps another seller's licensed product" do
     timestamp = seed_licensed_permalink_conflict
     product = create_product(is_licensed: true, created_at: timestamp - 1.day)
     assert_equal false, product.update(custom_permalink: "abc")
-    assert_equal "Custom permalink has already been taken", product.errors.full_messages.to_sentence
+    assert_equal "Custom permalink is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.", product.errors.full_messages.to_sentence
   end
 
   test "switching a pre-timestamp product to licensed is invalid when its custom permalink overlaps another seller's licensed product" do
     timestamp = seed_licensed_permalink_conflict
     product = create_product(custom_permalink: "abc", created_at: timestamp - 1.day)
     assert_equal false, product.update(is_licensed: true)
-    assert_equal "Custom permalink has already been taken", product.errors.full_messages.to_sentence
+    assert_equal "Custom permalink is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.", product.errors.full_messages.to_sentence
   end
 
   # The overlap validation must be correctly scoped — it should NOT fire in these
@@ -2924,6 +2978,41 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil product.purchase_info_for_product_page(nil, nil)
   end
 
+  # --- #purchase_info_for_product_page (license keys) -------------------------
+  #
+  # The product page is public, so the license key only travels to it when the
+  # visitor is identified: a signed-in purchaser, or someone presenting the HMAC'd
+  # purchase id + email digest from their own email. A _gumroad_guid cookie match
+  # identifies a browser, not a person.
+
+  test "purchase_info_for_product_page includes the license key for a signed-in purchaser" do
+    product = create_product(is_in_preorder_state: false, is_licensed: true)
+    user = create_user
+    purchase = create_purchase(link: product, purchaser: user)
+    license = create_license(link: product, purchase:)
+
+    assert_equal license.serial, product.purchase_info_for_product_page(user, nil)[:license_key]
+  end
+
+  test "purchase_info_for_product_page omits the license key when only the browser guid matches" do
+    product = create_product(is_in_preorder_state: false, is_licensed: true)
+    purchase = create_purchase(link: product, browser_guid: "a-browser-guid")
+    create_license(link: product, purchase:)
+
+    info = product.purchase_info_for_product_page(nil, "a-browser-guid")
+    assert_equal purchase.external_id, info[:id]
+    assert_nil info[:license_key]
+  end
+
+  test "purchase_info_for_product_page includes the license key for a matching email digest" do
+    product = create_product(is_in_preorder_state: false, is_licensed: true)
+    purchase = create_purchase(link: product)
+    license = create_license(link: product, purchase:)
+
+    info = product.purchase_info_for_product_page(nil, nil, purchase_id: purchase.external_id, purchase_email_digest: purchase.email_digest)
+    assert_equal license.serial, info[:license_key]
+  end
+
   # --- service product validation --------------------------------------------
 
   test "a service product is invalid for a seller not yet eligible" do
@@ -3041,6 +3130,47 @@ class LinkTest < ActiveSupport::TestCase
 
     assert [product, physical_product, shared].all?(&:has_product_level_rich_content?)
     assert_equal false, not_shared.has_product_level_rich_content?
+  end
+
+  # --- #recoverable_hidden_variant_rich_content? ------------------------------
+  # The July 21, 2026 incident state: shared-content flag on, blank (or no)
+  # product-level pages, real content stored on variant-level pages. See the
+  # method's comment in link.rb for the full story.
+
+  test "recoverable_hidden_variant_rich_content? detects the hidden-content state and makes it count as per-variant content" do
+    product = create_product(has_same_rich_content_for_all_variants: true)
+    variant = create_variant(variant_category: create_variant_category(link: product), name: "V1")
+    create_rich_content(entity: product, description: [{ "type" => "paragraph" }])
+    variant_page = create_rich_content(entity: variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Restored" }] }])
+
+    assert_equal true, product.recoverable_hidden_variant_rich_content?
+    # The flag is effectively off in this state: content resolution must look
+    # at the variants, where the real pages live.
+    assert_equal false, product.has_product_level_rich_content?
+    # And the variant serves its pages even though the flag is on.
+    assert_equal [variant_page.external_id], variant.rich_content_json.map { _1[:id] }
+  end
+
+  test "recoverable_hidden_variant_rich_content? is false when the product level has real content (the conflicting state) or the flag is off" do
+    conflicting = create_product(has_same_rich_content_for_all_variants: true)
+    conflicting_variant = create_variant(variant_category: create_variant_category(link: conflicting), name: "V1")
+    create_rich_content(entity: conflicting, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product content" }] }])
+    create_rich_content(entity: conflicting_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Variant content" }] }])
+
+    flag_off = create_product
+    flag_off_variant = create_variant(variant_category: create_variant_category(link: flag_off), name: "V1")
+    create_rich_content(entity: flag_off_variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Variant content" }] }])
+
+    no_variant_content = create_product(has_same_rich_content_for_all_variants: true)
+    create_variant(variant_category: create_variant_category(link: no_variant_content), name: "V1")
+
+    assert_equal false, conflicting.recoverable_hidden_variant_rich_content?
+    # Fail-closed: both sides have content, so the flag keeps ruling and the
+    # save-time guard demands an explicit choice instead.
+    assert_equal true, conflicting.has_product_level_rich_content?
+    assert_equal [], conflicting_variant.rich_content_json
+    assert_equal false, flag_off.recoverable_hidden_variant_rich_content?
+    assert_equal false, no_variant_content.recoverable_hidden_variant_rich_content?
   end
 
   # --- #percentage_revenue_cut_for_user --------------------------------------

@@ -166,7 +166,7 @@ describe StripeChargeIntent, :vcr do
 
     context "when next action type is unsupported" do
       before do
-        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "boleto_display_details"
       end
 
       it "notifies error tracker" do
@@ -187,6 +187,96 @@ describe StripeChargeIntent, :vcr do
 
       it "does not report the action as supported by the server-driven flow" do
         expect(described_class.new(payment_intent: processor_payment_intent).requires_action?).to eq(false)
+      end
+    end
+
+    context "when next action type is a browser-handled redirect (iDEAL/Klarna abandoned on the provider's site)" do
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna]
+        # The attempted method — not just the offered menu — is what keys the suppression:
+        # the buyer picked Klarna and Stripe.js owns the provider redirect.
+        allow(processor_payment_intent).to receive(:payment_method).and_return Stripe::StripeObject.construct_from(type: "klarna")
+      end
+
+      it "does not notify error tracker" do
+        expect(ErrorNotifier).not_to receive(:notify)
+        described_class.new(payment_intent: processor_payment_intent)
+      end
+
+      it "does not report the action as supported by the server-driven flow" do
+        expect(described_class.new(payment_intent: processor_payment_intent).requires_action?).to eq(false)
+      end
+    end
+
+    context "when next action type is redirect_to_url on an intent without a client-redirect method (no browser owns the redirect)" do
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        # The intent carries only the payment method's ID (a plain retrieve doesn't expand
+        # it), so the validation resolves the attempted method — the SCA helper's card —
+        # with a real (recorded) targeted PaymentMethod retrieve.
+      end
+
+      it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
+        described_class.new(payment_intent: processor_payment_intent)
+      end
+    end
+
+    context "when next action type is redirect_to_url and the attempted method (resolved via a PaymentMethod retrieve) is card, even though the offered menu includes a client-redirect method" do
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna]
+        # payment_method stays the unexpanded ID string a plain retrieve returns; the
+        # validation resolves the real attempted type — the SCA helper's card — via a real
+        # (recorded) PaymentMethod retrieve instead of silently falling back to the offered
+        # menu (which would wrongly swallow a stray redirect on the card path).
+      end
+
+      it "still notifies error tracker — a stray redirect on the card path must keep alerting" do
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
+        described_class.new(payment_intent: processor_payment_intent)
+      end
+    end
+
+    context "when next action type is redirect_to_url and the attempted-method lookup fails" do
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        # The menu offers a client-redirect method (as nearly every US intent does via
+        # cashapp), so the OLD nil-and-fall-back behavior would have swallowed the alert.
+        allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna cashapp]
+        allow(Stripe::PaymentMethod).to receive(:retrieve)
+          .and_raise(Stripe::APIConnectionError.new("stripe is down"))
+      end
+
+      it "still notifies error tracker — a lookup failure must not degrade to the menu fallback and silence the alert during a Stripe outage" do
+        # Two notifies: the lookup failure itself, then the unsupported-action alert.
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIConnectionError), anything)
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
+        described_class.new(payment_intent: processor_payment_intent)
+      end
+    end
+
+    context "when next action type is redirect_to_url on a direct-Connect merchant's intent" do
+      let(:connect_merchant_account) do
+        create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_connect_klarna")
+      end
+
+      before do
+        allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
+        allow(processor_payment_intent).to receive(:payment_method_types).and_return %w[card klarna]
+      end
+
+      it "scopes the attempted-method retrieve to the connected account — payment methods created there are invisible from the platform" do
+        # Pin the derivation itself: StripeChargeIntent must pass the connected account's ID
+        # through to the lookup, or direct-Connect Klarna sellers' abandoned redirects would
+        # fail the lookup (and page) every time.
+        expect(Stripe::PaymentMethod).to receive(:retrieve)
+          .with(processor_payment_intent.payment_method, { stripe_account: "acct_connect_klarna" })
+          .and_return(Stripe::StripeObject.construct_from(id: processor_payment_intent.payment_method, type: "klarna"))
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        described_class.new(payment_intent: processor_payment_intent, merchant_account: connect_merchant_account)
       end
     end
   end

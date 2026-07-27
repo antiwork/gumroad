@@ -19,4 +19,12 @@ class CardType
   # the database instead of requiring a walk of Stripe's API to classify them.
   UPI = "upi"
   IDEAL = "ideal"
+  # Buy-now-pay-later method offered through the same Payment Element. Not a card network
+  # either: Klarna bills the buyer through their own Klarna account, so the purchase's
+  # payment method has to be recorded here to stay queryable.
+  KLARNA = "klarna"
+  # Chinese digital wallet offered through the same Payment Element. Alipay bills the buyer
+  # through their own Alipay balance or linked funding source, so — like the methods above — it
+  # produces no credit card statement line and has to be recorded here to stay queryable.
+  ALIPAY = "alipay"
 end

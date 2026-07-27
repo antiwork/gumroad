@@ -306,6 +306,46 @@ describe AccountingMailer, :vcr do
     end
   end
 
+  describe "#payout_batch_slice_failed" do
+    let(:mail) do
+      AccountingMailer.payout_batch_slice_failed(
+        "STRIPE", "AchAccount", 1000, "ActiveRecord::StatementTimeout", "maximum statement execution time exceeded"
+      )
+    end
+
+    it "sends to the payments notification email" do
+      expect(mail.to).to eq([PAYMENTS_NOTIFICATION_EMAIL])
+    end
+
+    it "says slice in the subject so it is not mistaken for a whole-batch failure" do
+      expect(mail.subject).to include("Weekly payout batch slice failed - AchAccount")
+    end
+
+    it "falls back to the processor type in the subject on the Friday run" do
+      friday_mail = AccountingMailer.payout_batch_slice_failed("PAYPAL", nil, 1000, "ActiveRecord::StatementTimeout", "timeout")
+      expect(friday_mail.subject).to include("Weekly payout batch slice failed - PAYPAL")
+    end
+
+    it "scopes the impact to the slice and points at the dead job rather than a cohort re-run" do
+      body = mail.body.encoded
+      expect(body).to include("PerformPayoutsForUserSliceWorker")
+      expect(body).to include("1000")
+      expect(body).to include("The rest of the batch is unaffected")
+      expect(body).to include("Sidekiq dead set")
+      # Re-running the orchestrator would re-walk the whole bucket and duplicate payout
+      # notes for every ineligible seller, so the email must warn against it.
+      expect(body).to include("Do NOT re-run")
+    end
+
+    it "includes the failure context" do
+      body = mail.body.encoded
+      expect(body).to include("STRIPE")
+      expect(body).to include("AchAccount")
+      expect(body).to include("ActiveRecord::StatementTimeout")
+      expect(body).to include("maximum statement execution time exceeded")
+    end
+  end
+
   describe "#global_sales_tax_summary_report_failed" do
     let(:mail) do
       AccountingMailer.global_sales_tax_summary_report_failed(

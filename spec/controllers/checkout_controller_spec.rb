@@ -32,6 +32,7 @@ describe CheckoutController, type: :controller, inertia: true do
                                                  disable_wallets: false,
                                                  request_apple_pay_merchant_tokens: false,
                                                  payment_element_wallets: false,
+                                                 flat_payment_methods: false,
                                                  elements_options: nil,
                                                },
                                                clear_cart: false,

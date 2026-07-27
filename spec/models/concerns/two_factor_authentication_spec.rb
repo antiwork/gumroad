@@ -172,30 +172,14 @@ describe TwoFactorAuthentication do
   end
 
   describe "#passkeys_enabled?" do
-    context "when the passkeys feature is inactive" do
-      before do
-        create(:webauthn_credential, user: @user)
-        Feature.deactivate_user(:passkeys, @user)
-      end
-
+    context "when the user has no passkeys" do
       it "returns false" do
         expect(@user.passkeys_enabled?).to be false
       end
     end
 
-    context "when the passkeys feature is active and the user has no passkeys" do
-      before { Feature.activate_user(:passkeys, @user) }
-
-      it "returns false" do
-        expect(@user.passkeys_enabled?).to be false
-      end
-    end
-
-    context "when the passkeys feature is active and the user has a passkey" do
-      before do
-        create(:webauthn_credential, user: @user)
-        Feature.activate_user(:passkeys, @user)
-      end
+    context "when the user has a passkey" do
+      before { create(:webauthn_credential, user: @user) }
 
       it "returns true" do
         expect(@user.passkeys_enabled?).to be true
@@ -204,27 +188,14 @@ describe TwoFactorAuthentication do
   end
 
   describe "#passkeys_setup_pending?" do
-    context "when the passkeys feature is inactive" do
-      before { Feature.deactivate_user(:passkeys, @user) }
-
-      it "returns false" do
-        expect(@user.passkeys_setup_pending?).to be false
-      end
-    end
-
-    context "when the passkeys feature is active and the user has no passkeys" do
-      before { Feature.activate_user(:passkeys, @user) }
-
+    context "when the user has no passkeys" do
       it "returns true" do
         expect(@user.passkeys_setup_pending?).to be true
       end
     end
 
-    context "when the passkeys feature is active and the user has a passkey" do
-      before do
-        create(:webauthn_credential, user: @user)
-        Feature.activate_user(:passkeys, @user)
-      end
+    context "when the user has a passkey" do
+      before { create(:webauthn_credential, user: @user) }
 
       it "returns false" do
         expect(@user.passkeys_setup_pending?).to be false

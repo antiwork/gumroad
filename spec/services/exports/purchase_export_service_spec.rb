@@ -406,6 +406,12 @@ describe Exports::PurchaseExportService do
       @purchase.update!(card_type: "ideal")
       expect(field_value(last_data_row, "Payment Type")).to eq("iDEAL")
 
+      @purchase.update!(card_type: "klarna")
+      expect(field_value(last_data_row, "Payment Type")).to eq("Klarna")
+
+      @purchase.update!(card_type: "alipay")
+      expect(field_value(last_data_row, "Payment Type")).to eq("Alipay")
+
       @purchase.update!(card_type: nil)
       expect(field_value(last_data_row, "Payment Type")).to eq(nil)
     end
@@ -716,6 +722,114 @@ describe Exports::PurchaseExportService do
       expect(api_json[:shipping_cents]).to eq(cents_from_csv_dollars(field_value(row, "Shipping ($)")))
       expect(api_json[:processor_fee_cents]).to eq(cents_from_csv_dollars(field_value(row, "Stripe Fee Amount")))
       expect(api_json[:variants_price_cents]).to eq(cents_from_csv_dollars(field_value(row, "Variants Price ($)")))
+    end
+    describe "buyer-currency columns" do
+      # The charge factory's default merchant account collides with the shared Gumroad
+      # managed-account uniqueness validation, so give each presentment its own charge.
+      def build_charge_presentment
+        create(:charge_presentment,
+               charge: create(:charge, merchant_account: create(:merchant_account, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")))
+      end
+
+      it "leaves them blank for a canonical USD sale" do
+        row = last_data_row
+
+        expect(field_value(row, "Buyer Currency")).to be_nil
+        expect(field_value(row, "Buyer Total")).to be_nil
+        expect(field_value(row, "Buyer Refunded Total")).to be_nil
+      end
+
+      it "reports the buyer currency and charged total for a presentment sale" do
+        create(:purchase_presentment, purchase: @purchase, charge_presentment: build_charge_presentment,
+                                      presentment_currency: Currency::CAD,
+                                      presentment_price_cents: 12_00,
+                                      presentment_tip_cents: 0,
+                                      presentment_seller_tax_cents: 0,
+                                      presentment_gumroad_tax_cents: 1_50,
+                                      presentment_shipping_cents: 0,
+                                      presentment_total_cents: 13_50)
+
+        row = last_data_row
+
+        expect(field_value(row, "Buyer Currency")).to eq("CAD")
+        expect(field_value(row, "Buyer Total")).to eq("13.5")
+        expect(field_value(row, "Buyer Refunded Total")).to eq("0.0")
+      end
+
+      it "sums the refunds carrying a buyer-currency snapshot" do
+        create(:purchase_presentment, purchase: @purchase, charge_presentment: build_charge_presentment, presentment_currency: Currency::CAD)
+        create(:refund, purchase: @purchase, amount_cents: 5_00).update!(
+          json_data: { presentment_currency: Currency::CAD, presentment_amount_cents: 7_00 }
+        )
+        create(:refund, purchase: @purchase, amount_cents: 3_00).update!(
+          json_data: { presentment_currency: Currency::CAD, presentment_amount_cents: 4_25 }
+        )
+
+        expect(field_value(last_data_row, "Buyer Refunded Total")).to eq("11.25")
+      end
+
+      it "leaves the buyer refunded total blank when a refund predates buyer-currency snapshots" do
+        create(:purchase_presentment, purchase: @purchase, charge_presentment: build_charge_presentment, presentment_currency: Currency::CAD)
+        create(:refund, purchase: @purchase, amount_cents: 5_00).update!(
+          json_data: { presentment_currency: Currency::CAD, presentment_amount_cents: 7_00 }
+        )
+        # No snapshot: this refund happened before the feature shipped, so its buyer-currency
+        # amount is genuinely unknown. Publishing "7.0" would understate what the buyer got
+        # back and a seller reconciling against their statement could not tell. An empty cell
+        # says "unknown" honestly.
+        create(:refund, purchase: @purchase, amount_cents: 1_00)
+
+        expect(field_value(last_data_row, "Buyer Refunded Total")).to be_nil
+      end
+
+      it "does not divide zero-decimal currencies by 100" do
+        create(:purchase_presentment, purchase: @purchase, charge_presentment: build_charge_presentment,
+                                      presentment_currency: Currency::JPY,
+                                      presentment_price_cents: 1_500,
+                                      presentment_tip_cents: 0,
+                                      presentment_seller_tax_cents: 0,
+                                      presentment_gumroad_tax_cents: 0,
+                                      presentment_shipping_cents: 0,
+                                      presentment_total_cents: 1_500)
+
+        row = last_data_row
+
+        expect(field_value(row, "Buyer Currency")).to eq("JPY")
+        expect(field_value(row, "Buyer Total")).to eq("1500")
+      end
+
+      it "keeps the canonical USD columns and the totals row unchanged" do
+        create(:purchase_presentment, purchase: @purchase, charge_presentment: build_charge_presentment, presentment_currency: Currency::CAD)
+
+        row = last_data_row
+
+        expect(field_value(row, "Sale Price ($)")).to eq("100.0")
+        expect(field_value(totals_row, "Sale Price ($)")).to eq("100.0")
+        # Buyer amounts are excluded from the totals row on purpose: adding up amounts
+        # across different buyer currencies would produce a meaningless number.
+        expect(field_value(totals_row, "Buyer Total")).to be_nil
+        expect(field_value(totals_row, "Buyer Refunded Total")).to be_nil
+      end
+
+      it "does not issue per-purchase presentment or refund queries" do
+        create(:purchase_presentment, purchase: @purchase, charge_presentment: build_charge_presentment, presentment_currency: Currency::CAD)
+        create(:purchase, link: @product).tap { create(:purchase_presentment, purchase: _1, charge_presentment: build_charge_presentment) }
+
+        per_row_queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          sql = payload[:sql].to_s
+          if sql.include?("purchase_presentments") || sql.include?("FROM `refunds`")
+            # IN-lists are the batched preload; equality probes are the N+1 shape.
+            per_row_queries << sql if sql.match?(/purchase_id`? = /)
+          end
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          generate_csv
+        end
+
+        expect(per_row_queries).to be_empty
+      end
     end
   end
 

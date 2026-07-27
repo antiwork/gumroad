@@ -37,7 +37,15 @@ const tabVariants = cva("", {
     {
       variant: "buttons",
       active: true,
-      className: "shadow -translate-1 hover:-translate-2!",
+      // The selected card gets an accent-colored outline (border + 1px ring, so ~2px total
+      // without any layout shift). The outline replaces the old lift + drop shadow, which
+      // was too subtle on some seller themes for buyers to tell which tier/version they
+      // picked — and the dark shadow clashed with bright accent colors anyway.
+      // `border-accent!` needs the important modifier because when Tab wraps a Button via
+      // asChild, both components' class strings are joined and Button's own `border-border`
+      // can otherwise win the CSS-order fight. `accent` is a seller theme token, so this
+      // follows each storefront's configured accent color in light and dark mode.
+      className: "border-accent! ring-1 ring-accent",
     },
   ],
   defaultVariants: {

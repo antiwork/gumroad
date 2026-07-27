@@ -100,6 +100,12 @@ describe License do
     let!(:license) { purchase.license }
 
     it "enqueues a purchase re-index when uses changes via increment!" do
+      # A uses change also syncs the buyer's AudienceMember document (its license_uses
+      # detail feeds the "minimum license uses" audience filter), and that sync enqueues
+      # its own indexer jobs now that audience-member indexing is unconditional
+      # (index_audience_members flag removal, gp#1208 / #6232). Allow those calls and
+      # assert only on the purchase re-index.
+      allow(ElasticsearchIndexerWorker).to receive(:perform_in)
       expect(ElasticsearchIndexerWorker).to receive(:perform_in).with(
         2.seconds,
         "update",

@@ -119,6 +119,16 @@ class LinkPolicy < ApplicationPolicy
       end,
       variants: [
         :id,
+        # The editor's own id for a variant created in the current session
+        # (submitted alongside id: null). The save response maps it to the
+        # canonical server id so the next save updates the created variant
+        # instead of re-creating it.
+        :client_id,
+        # The variant's snapshot timestamp as served to the editor, echoed
+        # back so the stale-write guard can reject a save built from an
+        # outdated snapshot (see Product::StaleContentWriteGuard). Never
+        # written to the record.
+        :updated_at,
         :name,
         :description,
         :price_difference_cents,
@@ -146,6 +156,14 @@ class LinkPolicy < ApplicationPolicy
       section_ids: [],
       tags: [],
       rich_content:,
+      confirmed_removed_variant_ids: [],
+      confirmed_removed_rich_content_ids: [],
+      # External ids of version-level pages the seller chose to KEEP in the
+      # hidden-content conflict dialog ("Keep version content"). They are
+      # hidden from the editor by the shared-content flag, so they can't
+      # appear in the payload — this list tells the server their absence is
+      # not a deletion.
+      preserved_rich_content_ids: [],
       files: [:id, :display_name, :description, :folder_id, :size, :position, :url, :isbn,
               :extension, :stream_only, :pdf_stamp_enabled, :hide_kindle_and_read_buttons, :modified, subtitle_files: [:url, :language], thumbnail: [:signed_id]],
       call_limitation_info: [:minimum_notice_in_minutes, :maximum_calls_per_day],

@@ -4,8 +4,7 @@ class TwoFactorAuthenticationController < ApplicationController
   skip_before_action :check_suspended
   before_action :redirect_to_signed_in_path, if: -> { user_signed_in? && skip_two_factor_authentication?(logged_in_user) }
   before_action :fetch_user
-  before_action :check_presence_of_user, except: :verify
-  before_action :redirect_to_login_path, only: :verify, if: -> { @user.blank? }
+  before_action :redirect_to_login_path, if: -> { @user.blank? }
   before_action :validate_user_id_from_params, except: :show
 
   layout "inertia", only: [:show]
@@ -63,8 +62,17 @@ class TwoFactorAuthenticationController < ApplicationController
   end
 
   private
+    # There is no pending two-factor login in the session. That happens whenever the login that
+    # started the challenge is no longer around: the session expired, the cookie was dropped, the
+    # person hit back, reopened a bookmarked /two-factor URL, opened a second tab, or the login was
+    # abandoned halfway. None of that is an error worth a 404 page — the two-factor screen is the
+    # step someone is supposed to be recovering at, so a dead end here strands them mid-login. Send
+    # them back to the login form instead, and carry the page they wanted along as `next` when the
+    # request was a plain page load (a POST path is not something we can send them back to).
     def redirect_to_login_path
-      redirect_to login_path(next: request.fullpath)
+      redirect_to login_path(next: (request.fullpath if request.get?)),
+                  warning: "Your login session expired. Please sign in again.",
+                  status: :see_other
     end
 
     def verify_auth_token_and_redirect(token)
@@ -105,10 +113,6 @@ class TwoFactorAuthenticationController < ApplicationController
 
     def fetch_user
       @user = user_for_two_factor_authentication
-    end
-
-    def check_presence_of_user
-      e404 if @user.blank?
     end
 
     def sign_in_with_two_factor_authentication(user)

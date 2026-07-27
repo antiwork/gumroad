@@ -2,6 +2,7 @@
 
 class CreateGlobalSalesTaxSummaryReportJob
   include Sidekiq::Job
+  include LongRunningJobTracking
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
 
   sidekiq_retries_exhausted do |job, exception|

@@ -44,5 +44,31 @@ describe Pages::ProfileData do
       expect(products.pluck(:name)).to include(published_product.name)
       expect(products.pluck(:name)).not_to include(draft_product.name)
     end
+
+    context "when the seller changes their username" do
+      it "invalidates the cache so product URLs use the new subdomain" do
+        create(:product, user: seller, name: "My product")
+
+        original_urls = Pages::ProfileData.build(seller)[:products].pluck(:url)
+        expect(original_urls).to all(include(seller.username))
+
+        old_username = seller.username
+        new_username = "renamed#{SecureRandom.hex(4)}"
+        seller.update!(username: new_username)
+
+        refreshed_urls = Pages::ProfileData.build(seller.reload)[:products].pluck(:url)
+        expect(refreshed_urls).to all(include(new_username))
+        expect(refreshed_urls.join).not_to include(old_username)
+      end
+
+      it "changes the cache key when the username changes" do
+        seller_profile = SellerProfile.find_by(seller_id: seller.id)
+        old_key = Pages::ProfileData.cache_key(seller, seller_profile)
+
+        seller.update!(username: "renamed#{SecureRandom.hex(4)}")
+
+        expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(old_key)
+      end
+    end
   end
 end

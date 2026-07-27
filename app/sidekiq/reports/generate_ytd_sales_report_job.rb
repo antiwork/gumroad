@@ -3,6 +3,7 @@
 module Reports
   class GenerateYtdSalesReportJob
     include Sidekiq::Worker
+    include LongRunningJobTracking
     sidekiq_options queue: "low", retry: 3
 
     def perform

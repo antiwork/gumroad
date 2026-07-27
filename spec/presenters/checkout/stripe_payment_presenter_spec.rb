@@ -42,19 +42,20 @@ describe Checkout::StripePaymentPresenter do
   end
 
   def card_element_fallback(reason, request_apple_pay_merchant_tokens: false)
-    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, payment_element_wallets: false, elements_options: nil }
+    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, payment_element_wallets: false, flat_payment_methods: false, elements_options: nil }
   end
 
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
       payment_element_wallets:,
+      flat_payment_methods:,
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency:,
@@ -66,13 +67,14 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
       payment_element_wallets:,
+      flat_payment_methods:,
       elements_options: {
         stripe_elements_mode:,
         currency: "usd",
@@ -200,6 +202,7 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -234,6 +237,7 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -266,6 +270,7 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -301,6 +306,7 @@ describe Checkout::StripePaymentPresenter do
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -370,6 +376,7 @@ describe Checkout::StripePaymentPresenter do
       # CardElement fallbacks never mount a Payment Element, so the wallets-in-the-element
       # rollout flag can't apply — this branch's presenter reports the surface as off.
       payment_element_wallets: false,
+      flat_payment_methods: false,
       elements_options: nil,
     )
   ensure
@@ -619,6 +626,115 @@ describe Checkout::StripePaymentPresenter do
 
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "0.0.0.0"))
         .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link]))
+    end
+
+    describe "Klarna launch flag (checkout_local_method_klarna)" do
+      def klarna_flagged_seller_item(**overrides)
+        item = confirm_flagged_seller_product(**overrides)
+        seller = User.find_by(external_id: item[:product][:creator][:id])
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        item
+      end
+
+      it "mounts the element with Klarna for a US buyer of a flagged seller when the cart is inside the USD window" do
+        stub_geoip_country("104.28.0.1", "United States")
+
+        expect(stripe_payment_props(add_products: [klarna_flagged_seller_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp klarna]))
+      end
+
+      it "keeps Klarna off for a non-US buyer even with the flag on" do
+        stub_geoip_country("2.2.2.2", "United Kingdom")
+
+        expect(stripe_payment_props(add_products: [klarna_flagged_seller_item], ip: "2.2.2.2"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link]))
+      end
+
+      it "keeps Klarna off a cart above Stripe's USD transaction ceiling — eligibility fails closed instead of erroring at confirm" do
+        stub_geoip_country("104.28.0.1", "United States")
+        item = klarna_flagged_seller_item
+        item[:price] = 5_000_00
+
+        expect(stripe_payment_props(add_products: [item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      it "counts quantities toward the window — price is per-unit, so 100 × $50 is a $5,000 cart, not a $50 one" do
+        stub_geoip_country("104.28.0.1", "United States")
+        item = klarna_flagged_seller_item
+        item[:price] = 50_00
+        item[:quantity] = 100
+
+        expect(stripe_payment_props(add_products: [item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      # The example above covers the buy-now/upsell path, which carries quantity in the
+      # add_products hash. The shopping-cart path reads it from the CartProduct row instead, so
+      # it needs its own pin: without it, dropping quantity from the cart branch would price a
+      # 100 × $50 cart as $50 and render Klarna on a $5,000 cart while every other spec passed.
+      it "counts CartProduct quantities toward the window on the shopping-cart path" do
+        stub_geoip_country("104.28.0.1", "United States")
+        seller = create(:user)
+        product = create(:product, user: seller, price_cents: 50_00)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        cart = create(:cart, :guest)
+        create(:cart_product, cart:, product:, price: 50_00, quantity: 100)
+
+        expect(stripe_payment_props(cart:, ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      # Multi-item single-seller carts are Klarna-eligible (the gate is sellers.one?, not
+      # items.one?) and the window input must be the SUM across items — these branches decide
+      # real eligibility, so pin them rather than leaving the derivation to the resolver
+      # spec's injected totals.
+      it "offers Klarna on a multi-item single-seller USD cart whose summed total is inside the window" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        second_product = create(:product, user: seller, price_cents: 20_00)
+        second_item = checkout_product_for(second_product)
+
+        expect(stripe_payment_props(add_products: [first_item, second_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp klarna]))
+      end
+
+      it "keeps Klarna off a multi-item single-seller cart whose SUMMED total crosses the ceiling, even though each item alone is inside the window" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        first_item[:price] = 3_000_00
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        second_product = create(:product, user: seller, price_cents: 3_000_00)
+        second_item = checkout_product_for(second_product)
+
+        expect(stripe_payment_props(add_products: [first_item, second_item], ip: "104.28.0.1"))
+          .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
+      end
+
+      # A cart containing any non-USD-priced item nils the window input, which fails closed
+      # for Klarna — Stripe's Klarna window is defined on USD amounts, so a total we cannot
+      # express in USD must never render the method.
+      it "keeps Klarna off a cart with a non-USD-priced item — the window input is nil and fails closed" do
+        stub_geoip_country("104.28.0.1", "United States")
+        first_item = klarna_flagged_seller_item
+        seller = User.find_by(external_id: first_item[:product][:creator][:id])
+        eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: "eur")
+        eur_item = checkout_product_for(eur_product)
+
+        props = stripe_payment_props(add_products: [first_item, eur_item], ip: "104.28.0.1")
+
+        expect(props[:elements_options][:payment_method_types]).not_to include("klarna")
+      end
+    end
+
+    it "keeps Klarna off without its launch flag — the flag defaults to 0% everywhere" do
+      stub_geoip_country("104.28.0.1", "United States")
+
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product], ip: "104.28.0.1"))
+        .to eq(payment_element_client_confirm_props(payment_method_types: %w[card link cashapp]))
     end
 
     describe "PPP method matrix (U13)" do
@@ -1019,6 +1135,7 @@ describe Checkout::StripePaymentPresenter do
         disable_wallets: true,
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
+        flat_payment_methods: false,
         elements_options: nil,
       )
     ensure
@@ -1047,6 +1164,7 @@ describe Checkout::StripePaymentPresenter do
         disable_wallets: true,
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
+        flat_payment_methods: false,
         elements_options: nil,
       )
     ensure
@@ -1174,6 +1292,9 @@ describe Checkout::StripePaymentPresenter do
       expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
       expect(props[:disable_wallets]).to be(true)
       expect(props[:payment_element_wallets]).to be(false)
+      # The flat list is decoupled from the wallet flag: this wallet-suppressed cart still
+      # renders the accordion payment-method list, just without wallet rows.
+      expect(props[:flat_payment_methods]).to be(true)
     ensure
       if seller
         Feature.deactivate_user(:buyer_local_currency, seller)
@@ -1182,8 +1303,11 @@ describe Checkout::StripePaymentPresenter do
     end
 
     it "does not enable wallets when the seller is not flagged" do
+      # flat_payment_methods false is asserted explicitly: with the wallet flag off on a
+      # wallet-capable cart, the kill-switch invariant requires the legacy layout (where the
+      # Payment Request Button renders) to come back, not a flat list without wallets.
       expect(stripe_payment_props(add_products: [flagged_seller_product]))
-        .to eq(payment_element_props(payment_element_wallets: false))
+        .to eq(payment_element_props(payment_element_wallets: false, flat_payment_methods: false))
     end
 
     it "does not enable wallets when any seller in the cart is not flagged" do
@@ -1198,7 +1322,7 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, unflagged_seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(flagged), checkout_product_for(unflagged)]))
-        .to eq(payment_element_props(payment_element_wallets: false))
+        .to eq(payment_element_props(payment_element_wallets: false, flat_payment_methods: false))
     end
   end
 end

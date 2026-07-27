@@ -77,13 +77,10 @@ describe AudienceMember::Searchable, :freeze_time do
   end
 
   describe "indexing callbacks" do
-    it "enqueues indexing jobs on create, update, and destroy when the seller's indexing flag is on" do
-      seller = create(:user)
-      Feature.activate_user(:index_audience_members, seller)
-
+    it "enqueues indexing jobs on create, update, and destroy" do
       member = nil
       expect do
-        member = create(:audience_member, seller:, purchases: [{ "id" => 1 }])
+        member = create(:audience_member, purchases: [{ "id" => 1 }])
       end.to change { ElasticsearchIndexerWorker.jobs.size }.by(2)
       expect(ElasticsearchIndexerWorker.jobs.last["args"]).to eq(["index", { "record_id" => member.id, "class_name" => "AudienceMember" }])
 
@@ -101,50 +98,21 @@ describe AudienceMember::Searchable, :freeze_time do
       end.to change { ElasticsearchIndexerWorker.jobs.size }.by(1)
       expect(ElasticsearchIndexerWorker.jobs.last["args"]).to eq(["delete", { "record_id" => member.id, "class_name" => "AudienceMember" }])
     end
-
-    it "enqueues indexing jobs when only the count flag is on" do
-      seller = create(:user)
-      Feature.activate_user(:audience_count_from_elasticsearch, seller)
-
-      expect do
-        create(:audience_member, seller:, purchases: [{ "id" => 1 }])
-      end.to change { ElasticsearchIndexerWorker.jobs.size }.by(2)
-    end
-
-    it "enqueues nothing when the seller's flags are off" do
-      member = nil
-      expect do
-        member = create(:audience_member, purchases: [{ "id" => 1 }])
-        member.details["purchases"] << { "id" => 2, "product_id" => 2, "price_cents" => 200, "created_at" => 1.day.ago.iso8601 }
-        member.save!
-        member.destroy!
-      end.not_to change { ElasticsearchIndexerWorker.jobs.size }
-    end
   end
 
-  describe ".count_for_seller" do
+  describe ".count_for_seller", :sidekiq_inline, :elasticsearch_wait_for_refresh do
     let(:seller) { create(:user) }
 
-    it "counts from MySQL when the seller's flag is off" do
-      create_list(:audience_member, 2, seller:)
-
-      expect(AudienceMember).not_to receive(:filter_count)
-      expect(AudienceMember.count_for_seller(seller)).to eq(2)
+    before do
+      recreate_model_index(AudienceMember)
     end
 
-    context "when the seller's flag is on", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-      before do
-        recreate_model_index(AudienceMember)
-        Feature.activate_user(:audience_count_from_elasticsearch, seller)
-      end
+    it "counts the seller's members from Elasticsearch" do
+      create_list(:audience_member, 2, seller:)
+      create(:audience_member)
 
-      it "counts from Elasticsearch" do
-        create_list(:audience_member, 2, seller:)
-        create(:audience_member)
-
-        expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
-        expect(AudienceMember.count_for_seller(seller)).to eq(2)
-      end
+      expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
+      expect(AudienceMember.count_for_seller(seller)).to eq(2)
     end
   end
 
@@ -154,7 +122,6 @@ describe AudienceMember::Searchable, :freeze_time do
 
     before do
       recreate_model_index(AudienceMember)
-      Feature.activate_user(:audience_count_from_elasticsearch, seller)
     end
 
     it "counts all members of the seller with no params" do
@@ -323,20 +290,23 @@ describe AudienceMember::Searchable, :freeze_time do
     end
 
     it "counts by minimum license uses, matching combined filters within a single purchase" do
-      create_member(purchases: [{ "product_id" => 1, "license_uses" => 0 }])
-      create_member(purchases: [{ "product_id" => 1, "license_uses" => 3 }])
-      create_member(purchases: [
-                      { "product_id" => 1, "license_uses" => 1 },
-                      { "product_id" => 2, "license_uses" => 5 }
-                    ])
-      create_member(purchases: [{ "product_id" => 1 }])
+      # The use count is read from the licenses table now, not from a copy inside the
+      # member's details JSON, so these members need real purchases with real licenses.
+      # filter_count routes this filter through the SQL twin for the same reason:
+      # Elasticsearch cannot join, so an indexed copy would drift the moment a buyer
+      # activated a license and the count would stop matching the recipients.
+      create_member_with_licenses([{ uses: 0 }])
+      create_member_with_licenses([{ uses: 3 }])
+      two_products = create_member_with_licenses([{ uses: 1 }, { uses: 5 }])
+      create_member_with_licenses([{ uses: nil }])
       create_member(follower: {})
+
+      second_product_id = two_products.details["purchases"].last["product_id"]
 
       expect_filter_count(2, minimum_license_uses: 1)
       expect_filter_count(2, minimum_license_uses: 3)
       expect_filter_count(1, minimum_license_uses: 5)
-      expect_filter_count(0, minimum_license_uses: 5, bought_product_ids: [1])
-      expect_filter_count(1, minimum_license_uses: 5, bought_product_ids: [2])
+      expect_filter_count(1, minimum_license_uses: 5, bought_product_ids: [second_product_id])
     end
 
     it "matches countries exactly, not case-insensitively" do
@@ -429,6 +399,30 @@ describe AudienceMember::Searchable, :freeze_time do
 
     def create_member(details = {})
       create(:audience_member, seller:, **details.with_indifferent_access.slice(:purchases, :follower, :affiliates))
+    end
+
+    # Builds a real buyer: one product per spec, a successful purchase, and (when uses is
+    # given) a license carrying that count. The license filter joins the licenses table, so
+    # a details-JSON-only member can never match it.
+    def create_member_with_licenses(specs)
+      email = generate(:email)
+      purchases = specs.map do |spec|
+        product = create(:product, user: seller, is_licensed: true)
+        purchase = create(:purchase, :from_seller, link: product, seller:, email:)
+        create(:license, purchase:, link: product, uses: spec[:uses]) unless spec[:uses].nil?
+        purchase
+      end
+      AudienceMember.find_by!(email:, seller:).tap do |member|
+        member.details["purchases"] = purchases.map do |purchase|
+          {
+            "id" => purchase.id,
+            "product_id" => purchase.link_id,
+            "price_cents" => purchase.price_cents,
+            "created_at" => purchase.created_at.iso8601
+          }
+        end
+        member.save!
+      end
     end
   end
 end

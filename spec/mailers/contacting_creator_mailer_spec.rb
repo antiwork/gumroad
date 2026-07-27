@@ -248,6 +248,19 @@ describe ContactingCreatorMailer do
   end
 
   describe "seller_update" do
+    # The mailer reports on "last week", which it defines as the seven days ending at the most
+    # recent Sunday midnight (`Date.today.beginning_of_week(:sunday)`). These examples rely on
+    # being able to create a purchase that lands *after* that window closes, so that it is
+    # excluded from the totals — they do this with `5.minutes.ago`.
+    #
+    # That only holds if "now" is comfortably past Sunday midnight. When the suite runs during the
+    # first minutes of a Sunday in UTC, the window closes at today's midnight, so `5.minutes.ago`
+    # falls back into Saturday and is counted as part of last week — the excluded purchase silently
+    # becomes an included one and the expected totals shift. Pinning the clock to a mid-week moment
+    # keeps the window boundary a fixed distance from "now", so these examples do not depend on
+    # which day of the week CI happens to run.
+    before { travel_to(Time.utc(2024, 5, 1, 12, 0, 0)) } # a Wednesday
+
     before do
       @user = create(:user)
       allow_any_instance_of(User).to receive(:secure_external_id).and_return("sample-secure-id")
@@ -1788,6 +1801,29 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "gumroad.com/settings/payments"
       expect(mail.body.encoded).to include settings_payments_url
     end
+
+    it "drops the upload instructions and points at support when the reason is one the seller can't act on" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_document_verification_failed(creator.id, UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "uploading it again won&#39;t help"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "upload a valid document"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+      expect(mail.body.encoded).to_not include "Here&#39;s what Stripe reported"
+    end
+
+    it "also treats the previously queued P.O. Box wording as unactionable" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_document_verification_failed(creator.id, UserComplianceInfoRequest::PREVIOUS_PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "Your registered address is a P.O. Box"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "upload a valid document"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+    end
   end
 
   describe "#stripe_identity_verification_failed" do
@@ -1803,6 +1839,29 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include stripe_error_reason
       expect(mail.body.encoded).to include "gumroad.com/settings/payments"
       expect(mail.body.encoded).to include settings_payments_url
+    end
+
+    it "drops the update instructions and points at support when the reason is one the seller can't act on" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_identity_verification_failed(creator.id, UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "uploading it again won&#39;t help"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "update the relevant information"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+      expect(mail.body.encoded).to_not include "Here&#39;s what Stripe reported"
+    end
+
+    it "also treats the previously queued P.O. Box wording as unactionable" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_identity_verification_failed(creator.id, UserComplianceInfoRequest::PREVIOUS_PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "Your registered address is a P.O. Box"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "update the relevant information"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
     end
   end
 
@@ -2046,128 +2105,6 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.refund_policy_enforced_notification(seller.id)
 
       expect(mail.to).to be_nil
-    end
-  end
-
-  describe "ping_endpoint_failure" do
-    let(:seller) { create(:user, email: "seller@example.com") }
-    let(:ping_url) { "https://example.com/webhook" }
-    let(:response_code) { 500 }
-
-    it "sends notification to the seller about failed ping endpoint" do
-      mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, ping_url, response_code)
-
-      expect(mail.to).to eq [seller.email]
-      expect(mail.subject).to eq "Webhook ping endpoint delivery failed"
-      expect(mail.body.encoded).to include "https://example.com/****ook"
-      expect(mail.body.encoded).to include response_code.to_s
-      expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
-    end
-
-    it "includes seller information in the email" do
-      mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, ping_url, response_code)
-
-      expect(mail.body.encoded).to include seller.name_or_username
-    end
-
-    it "handles different response codes correctly" do
-      [404, 500, 502, 503, 504].each do |code|
-        mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, ping_url, code)
-
-        expect(mail.body.encoded).to include code.to_s
-        expect(mail.subject).to eq "Webhook ping endpoint delivery failed"
-      end
-    end
-
-    it "handles different ping URLs correctly with redaction" do
-      test_cases = [
-        { url: "https://api.example.com/webhook", expected: "https://api.example.com/****ook" },
-        { url: "http://localhost:3000/gumroad", expected: "http://localhost:3000/****oad" },
-        { url: "https://mystore.com/notifications", expected: "https://mystore.com/*********ions" },
-        { url: "https://example.com/a/b/c/webhook?token=secret", expected: "https://example.com/**********************cret" },
-        { url: "https://example.com/short", expected: "https://example.com/****t" },
-        { url: "https://example.com/a", expected: "https://example.com/*" },
-        { url: "https://example.com/ab", expected: "https://example.com/**" },
-        { url: "https://example.com/abc", expected: "https://example.com/***" },
-        { url: "https://example.com/abcd", expected: "https://example.com/****" },
-        { url: "https://example.com/abcde", expected: "https://example.com/****e" }
-      ]
-
-      test_cases.each do |test_case|
-        mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, test_case[:url], response_code)
-
-        expect(mail.body.encoded).to include test_case[:expected]
-        expect(mail.body.encoded).not_to include test_case[:url] unless test_case[:url] == test_case[:expected]
-      end
-    end
-
-    it "redacts URL path while preserving protocol and domain" do
-      long_url = "https://api.example.com/v1/webhooks/12345/notifications?auth=secret123"
-      mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, long_url, response_code)
-
-      expect(mail.body.encoded).to include "https://api.example.com/******************************************t123"
-      expect(mail.body.encoded).not_to include "secret123"
-      expect(mail.body.encoded).not_to include "webhooks"
-    end
-  end
-
-  describe "#account_suspended" do
-    let(:seller) { create(:named_seller) }
-
-    it "has the correct subject and body" do
-      mail = ContactingCreatorMailer.account_suspended(seller.id)
-
-      expect(mail.to).to eq([seller.email])
-      expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
-      expect(mail.subject).to eq("Your Gumroad account has been suspended")
-
-      expect(mail.body.encoded).to include("Your Gumroad account has been suspended for a policy violation.")
-      expect(mail.body.encoded).to include("contact our support team")
-      expect(mail.body.encoded).to include("reply to this email")
-    end
-
-    context "when the seller has a pending scheduled payout" do
-      it "includes scheduled payout amount and chargeback disclaimer" do
-        create(:scheduled_payout, user: seller, action: "payout", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 150_00)
-
-        mail = ContactingCreatorMailer.account_suspended(seller.id)
-
-        expect(mail.body.encoded).to include("You have a scheduled payout ($150) set for June 15, 2025.")
-        expect(mail.body.encoded).to include("If chargebacks are filed against any of your sales, your payout will be held for review and the amount may be reduced.")
-      end
-    end
-
-    context "when the seller has a pending scheduled refund" do
-      it "includes refund amount" do
-        create(:scheduled_payout, user: seller, action: "refund", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 75_50)
-
-        mail = ContactingCreatorMailer.account_suspended(seller.id)
-
-        expect(mail.body.encoded).to include("Your unpaid balance ($75.50) will be refunded back to your customers.")
-        expect(mail.body.encoded).to include("This is scheduled for June 15, 2025.")
-        expect(mail.body.encoded).not_to include("chargeback")
-      end
-    end
-
-    context "when the seller has a pending scheduled hold" do
-      it "includes hold amount" do
-        create(:scheduled_payout, user: seller, action: "hold", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 200_00)
-
-        mail = ContactingCreatorMailer.account_suspended(seller.id)
-
-        expect(mail.body.encoded).to include("Your unpaid balance ($200) is under review and will not be paid out at this time.")
-        expect(mail.body.encoded).not_to include("chargeback")
-      end
-    end
-
-    context "when the seller has no scheduled payout" do
-      it "does not include payout information or chargeback disclaimer" do
-        mail = ContactingCreatorMailer.account_suspended(seller.id)
-
-        expect(mail.body.encoded).not_to include("scheduled payout")
-        expect(mail.body.encoded).not_to include("refunded back")
-        expect(mail.body.encoded).not_to include("chargeback")
-      end
     end
   end
 

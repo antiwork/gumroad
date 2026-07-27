@@ -15,7 +15,8 @@ export type CreateAccountPayload = {
   cardParams?: AnyPaymentMethodParams | StripeErrorParams | null;
   next?: string | null;
   referrerId?: string | null;
-} & ({ buyerSignup: true } | { recaptchaResponse: string | null });
+  buyerSignup?: true;
+};
 type CreateAccountResult = { redirectLocation: string };
 
 export const createAccount = async (data: CreateAccountPayload): Promise<CreateAccountResult> => {
@@ -27,14 +28,13 @@ export const createAccount = async (data: CreateAccountPayload): Promise<CreateA
       user: {
         email: data.email,
         purchase_id: data.purchaseId,
-        buyer_signup: "buyerSignup" in data,
+        buyer_signup: data.buyerSignup ?? false,
         password: data.password,
         terms_accepted: data.termsAccepted,
         ...(data.cardParams != null ? serializeCardParamsIntoQueryParamsObject(data.cardParams) : {}),
       },
       next: data.next,
       referral: data.referrerId,
-      ...("recaptchaResponse" in data ? { "g-recaptcha-response": data.recaptchaResponse } : {}),
     },
   });
   const responseData = typia.assert<

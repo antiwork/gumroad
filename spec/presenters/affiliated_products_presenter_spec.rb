@@ -639,7 +639,7 @@ describe AffiliatedProductsPresenter do
     it "caches the raw global affiliate earnings but formats them fresh on every request" do
       # Only the expensive cents sum is cached; the currency formatting runs
       # each time so a changed display preference is reflected immediately.
-      expect_any_instance_of(GlobalAffiliate).to receive(:total_cents_earned).once.and_return(1234)
+      expect_any_instance_of(GlobalAffiliate).to receive(:total_cents_earned).once.with(timeout_ms: anything).and_return(1234)
 
       expect(described_class.new(user).affiliated_products_page_props[:global_affiliates_data][:global_affiliate_sales]).to eq "$12.34"
       expect(described_class.new(user).affiliated_products_page_props[:global_affiliates_data][:global_affiliate_sales]).to eq "$12.34"
@@ -648,6 +648,31 @@ describe AffiliatedProductsPresenter do
       # cached cents to expire.
       allow_any_instance_of(User).to receive(:should_be_shown_currencies_always?).and_return(true)
       expect(described_class.new(user).affiliated_products_page_props[:global_affiliates_data][:global_affiliate_sales]).to eq "$12.34 USD"
+    end
+
+    it "never runs the unbounded lifetime earnings sum inside the request" do
+      # The whole point of the background path: an in-request computation must
+      # always carry a statement timeout so a heavy affiliate cannot stall the
+      # page until the request ceiling kills it. The argument constraint is what
+      # enforces that: a call without the timeout would fail this expectation as
+      # an unexpected-arguments error rather than satisfying it.
+      expect_any_instance_of(GlobalAffiliate).to receive(:total_cents_earned).with(timeout_ms: AffiliateEarningsCache::REQUEST_TIMEOUT_MS).and_return(0)
+
+      described_class.new(user).affiliated_products_page_props
+    end
+
+    it "reports the earnings as not yet available, instead of zero, when the sum times out" do
+      # MySQL raises error 3024 for a MAX_EXECUTION_TIME abort, which Rails
+      # surfaces as StatementTimeout.
+      allow_any_instance_of(GlobalAffiliate).to receive(:total_cents_earned).with(timeout_ms: anything)
+        .and_raise(ActiveRecord::StatementTimeout.new("maximum statement execution time exceeded"))
+
+      props = nil
+      expect do
+        props = described_class.new(user).affiliated_products_page_props
+      end.to change { RefreshAffiliateEarningsJob.jobs.size }.by(1)
+
+      expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
     end
 
     it "does not share cached revenue between users" do

@@ -1,10 +1,17 @@
 // Helpers for the "projected end-of-day total" overlay on the analytics sales chart.
 //
 // When the selected date range ends today, we extrapolate today's sales total to the
-// end of the day using the simple run rate so far: if a seller has earned $7,200 by
-// 6pm (75% of the day elapsed), the projection is $7,200 / 0.75 = $9,600.
-// The projection is intentionally naive — no hourly seasonality — and is presented
-// as a lighter, dashed overlay so it reads as an estimate rather than real revenue.
+// end of the day. Preferred path: divide by the fraction of a typical day's revenue
+// the seller has historically booked by this time of day (the backend computes it
+// from the trailing weeks of sales). This corrects the
+// systematic low bias of a uniform run rate for sellers whose buyers cluster in
+// specific hours — e.g. a seller whose overnight hours produce almost nothing would
+// otherwise see a projection that reads far too low until late in the day.
+// Fallback path (no curve, or the curve says ~nothing should have sold yet): the
+// simple run rate so far — if a seller has earned $7,200 by 6pm (75% of the day
+// elapsed), the projection is $7,200 / 0.75 = $9,600.
+// Either way the projection is presented as a faint overlay so it reads as an
+// estimate rather than real revenue.
 
 // Don't project during the first hour of the day: dividing by a tiny elapsed
 // fraction produces wild, meaningless numbers (one $10 sale at 12:05am would
@@ -74,11 +81,30 @@ export const fractionOfDayElapsed = (timeZone: string, now: Date = new Date()): 
   }
 };
 
-// Extrapolates today's sales total (in cents) to an end-of-day total using the run
-// rate so far. Returns null when a projection wouldn't be meaningful: no sales yet,
-// too little of the day elapsed, or the day is already over.
-export const projectedEndOfDayTotal = (totalSoFarCents: number, elapsedFraction: number | null): number | null => {
+// Extrapolates today's sales total (in cents) to an end-of-day total. Returns null
+// when a projection wouldn't be meaningful: no sales yet, too little of the day
+// elapsed, or the day is already over.
+//
+// `expectedFraction` — the share of a typical day's revenue this seller has
+// historically booked by now, computed by the backend from the trailing weeks of
+// sales — is used as the divisor when available, weighting the projection by the
+// seller's own hourly sales pattern. When it's null (thin history) or too small to
+// divide by safely (a near-zero expected fraction would explode the estimate exactly
+// like a tiny elapsed fraction does), we fall back to the uniform run rate. The
+// MINIMUM_ELAPSED_DAY_FRACTION gate always applies to the clock fraction, keeping
+// early-morning projections suppressed regardless of which divisor is used. The
+// result is clamped to never fall below what's already booked.
+export const projectedEndOfDayTotal = (
+  totalSoFarCents: number,
+  elapsedFraction: number | null,
+  expectedFraction: number | null = null,
+): number | null => {
   if (elapsedFraction === null || elapsedFraction < MINIMUM_ELAPSED_DAY_FRACTION || elapsedFraction >= 1) return null;
   if (totalSoFarCents <= 0) return null;
-  return Math.round(totalSoFarCents / elapsedFraction);
+  // An expected fraction of 1 means the seller's sales for a typical day are already
+  // fully booked — capping the divisor at 1 makes the projection equal today's total.
+  const useExpected =
+    expectedFraction !== null && Number.isFinite(expectedFraction) && expectedFraction >= MINIMUM_ELAPSED_DAY_FRACTION;
+  const divisor = useExpected ? Math.min(expectedFraction, 1) : elapsedFraction;
+  return Math.max(Math.round(totalSoFarCents / divisor), totalSoFarCents);
 };

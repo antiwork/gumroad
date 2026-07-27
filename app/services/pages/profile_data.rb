@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Pages::ProfileData
-  CACHE_VERSION = "v2"
+  CACHE_VERSION = "v3"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
 
@@ -23,6 +23,12 @@ class Pages::ProfileData
     [
       "profile_data",
       CACHE_VERSION,
+      # The cached payload embeds full product URLs built from the seller's subdomain
+      # (Link#long_url -> User#subdomain_with_protocol), so the key must change when the
+      # username does — otherwise a renamed seller keeps serving links to their old
+      # subdomain, which 404s. Keying on the username itself (rather than the whole user
+      # record) avoids rebuilding the cache on unrelated user-row updates.
+      seller.username,
       seller.products.cache_key_with_version,
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,

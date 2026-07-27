@@ -362,11 +362,6 @@ class Purchase < ApplicationRecord
   before_save :assign_default_rental_expired
   before_save :truncate_referrer
 
-  after_commit :attach_credit_card_to_purchaser,
-               on: :update,
-               if: -> (purchase) { Feature.active?(:attach_credit_card_to_purchaser) && purchase.previous_changes[:purchaser_id].present? && purchase.purchaser &&
-                                   purchase.subscription }
-
   after_commit :enqueue_update_sales_related_products_infos_job, if: -> (purchase) {
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
@@ -1374,8 +1369,19 @@ class Purchase < ApplicationRecord
       json[:has_sales_tax_or_shipping_to_show] = (purchase.was_purchase_taxable && purchase.price_cents > 0) || purchase.shipping_cents > 0
       json[:total_price_including_tax_and_shipping] = purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_total : purchase.formatted_total_transaction_amount
       if purchase.buyer_presentment?
-        json[:buyer_presentment_currency] = purchase.buyer_presentment_currency
+        # Upcased deliberately. presentment_currency is stored lowercase ("cad"), but the
+        # analytics event this feeds is also produced by PurchaseSellerAnalyticsPresenter,
+        # which upcases — and Google Analytics event parameters are case-sensitive strings.
+        # Emitting "cad" here and "CAD" there would split one dimension into two values
+        # depending on which page the buyer landed on, and GA data can't be repaired after
+        # collection. The adjacent canonical `currency` param is upcased on every path too.
+        json[:buyer_presentment_currency] = purchase.buyer_presentment_currency.to_s.upcase
         json[:buyer_presentment_total_cents] = purchase.buyer_presentment_total_cents
+        # Major-unit form of the charged total, for the analytics `purchased` event. Done
+        # server-side because zero-decimal handling depends on Gumroad's currency specs,
+        # and the buyer's presentment currency is not guaranteed to be one of the
+        # sellable currencies the frontend currency helpers know about.
+        json[:buyer_presentment_value] = purchase.buyer_presentment_major_units(purchase.buyer_presentment_total_cents)
       end
       json[:quantity] = purchase.quantity
       json[:show_quantity] = purchase.quantity > 1
@@ -1594,6 +1600,50 @@ class Purchase < ApplicationRecord
 
   def buyer_presentment_total_cents
     purchase_presentment&.presentment_total_cents
+  end
+
+  # Sum of the buyer-currency amounts actually returned to the buyer across this
+  # purchase's effective refunds, in buyer-currency minor units.
+  #
+  # Presentment refund amounts intentionally live as snapshots in refunds.json_data
+  # rather than a database column (see gumroad#5419: aggregate refunded-presentment
+  # reporting has to be derived deliberately, never SUM()ed in SQL), so this walks the
+  # refunds association in memory. Uses the same effective?/loaded? pattern as
+  # amount_refunded_cents so callers that preload :refunds — the Sales API and the CSV
+  # export both do — issue no extra queries per purchase.
+  def buyer_presentment_refunded_cents
+    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
+    effective_refunds.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
+  end
+
+  # True when this purchase has an effective refund that carries NO buyer-currency
+  # snapshot, which makes buyer_presentment_refunded_cents an incomplete total.
+  #
+  # Refunds issued before #6167 shipped have no presentment snapshot, so they contribute
+  # zero to the sum above. That is the right behaviour for the Sales API (it reports only
+  # what it can attest to), but a seller reading a CSV cannot tell an incomplete total from
+  # a real one — a plausible-looking low number next to a populated USD refund column is
+  # worse than an empty cell. Callers rendering the total for a human use this to blank the
+  # cell instead of publishing a number they'd have to caveat.
+  def buyer_presentment_refunded_cents_incomplete?
+    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
+    effective_refunds.any? { |refund| !refund.presentment_snapshot? }
+  end
+
+  # Buyer-currency minor units expressed as a plain major-unit number (12.34, not "$12.34"),
+  # for consumers that need to do arithmetic on the amount rather than display it:
+  # spreadsheet columns in the sales CSV and the `value` field on analytics events.
+  # Zero-decimal currencies (JPY, KRW) have no subunit, so their minor unit already IS the
+  # major unit and must not be divided by 100 — unit_scaling_factor handles that, and
+  # falls back to USD's factor for a currency Gumroad doesn't have a spec for.
+  # Returns nil for canonical-USD sales, which have no buyer-currency amount at all.
+  def buyer_presentment_major_units(amount_cents)
+    return if buyer_presentment_currency.blank? || amount_cents.nil?
+
+    scaling_factor = unit_scaling_factor(buyer_presentment_currency)
+    return amount_cents if scaling_factor == 1
+
+    (amount_cents.to_f / scaling_factor).round(2)
   end
 
   def formatted_buyer_presentment_price
@@ -3740,20 +3790,8 @@ class Purchase < ApplicationRecord
         total_cents: presentment.presentment_total_cents,
         # String to survive JSON round-trips without float precision loss.
         fx_rate: presentment.charge_presentment&.fx_rate&.to_s,
-        refunded_cents: presentment_refunded_cents_for_api
+        refunded_cents: buyer_presentment_refunded_cents
       }
-    end
-
-    # Sum of the buyer-currency amounts actually returned to the buyer across this
-    # purchase's effective refunds. Presentment refund amounts intentionally live as
-    # snapshots in refunds.json_data (not a SQL-summable column — see gumroad#5419:
-    # aggregate refunded-presentment reporting must derive it intentionally), so this
-    # walks the refunds association in memory. Uses the same effective?/loaded? pattern
-    # as amount_refunded_cents so API serialization with preloaded refunds issues no
-    # extra queries.
-    def presentment_refunded_cents_for_api
-      effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
-      effective_refunds.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
     end
 
     def web_csv_payment_processor
@@ -4952,18 +4990,6 @@ class Purchase < ApplicationRecord
 
     def subscription_duration
       price_for_recurrence&.recurrence
-    end
-
-    def attach_credit_card_to_purchaser
-      return if purchaser.credit_card
-
-      latest_successful_purchase =
-        purchaser.purchases.successful.with_credit_card_id.order(created_at: :desc).first
-
-      return unless latest_successful_purchase
-
-      purchaser.credit_card_id = latest_successful_purchase.credit_card_id
-      purchaser.save!
     end
 
     def assign_default_rental_expired

@@ -270,6 +270,17 @@ describe User, :vcr do
         variant = @user.avatar.variant(resize_to_limit: [256, 256]).processed.key
         expect(@user.resized_avatar_url(size: 256)).to match("https://public-files.gumroad.com/#{variant}")
       end
+
+      it "regenerates the resized avatar when its file is gone from storage" do
+        orphaned_key = @user.avatar.variant(resize_to_limit: [256, 256]).processed.key
+        @user.avatar.blob.service.delete(orphaned_key)
+
+        url = @user.reload.resized_avatar_url(size: 256)
+
+        expect(url).not_to include(orphaned_key)
+        expect(url).to start_with("https://public-files.gumroad.com/")
+        expect(@user.avatar.blob.service.exist?(url.split("/").last)).to be(true)
+      end
     end
 
     describe "#avatar_url" do
@@ -282,13 +293,155 @@ describe User, :vcr do
       end
 
       it "caches the variant URL under a versioned key so previously cached 128px URLs are not reused" do
-        # The old, unversioned cache key holds URLs for the smaller 128x128
-        # variants we used to serve. A stale value there must not leak into
-        # what we serve now — only the "_v2" key should be read.
+        # The older cache keys hold URLs for the smaller 128x128 variants we
+        # used to serve, and for variants written before we checked that the
+        # resized file still existed. A stale value there must not leak into
+        # what we serve now — only the newest key should be read.
         Rails.cache.write("attachment_#{@user.avatar.id}_variant_url", "https://example.com/stale-128px-url")
+        Rails.cache.write("attachment_#{@user.avatar.id}_variant_url_v2", "https://example.com/stale-unchecked-url")
 
         expect(@user.avatar_url).not_to include("stale-128px-url")
-        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v2")).to eq(@user.avatar_variant.url)
+        expect(@user.avatar_url).not_to include("stale-unchecked-url")
+        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v3")).to eq(
+          { url: @user.avatar_variant.url, key: @user.avatar_variant.key }
+        )
+      end
+
+      it "regenerates the avatar when the file behind an already cached URL disappears" do
+        # The cached URL is served for a day, so a variant that vanishes after
+        # the entry is written must not keep being handed out for the rest of
+        # that day. The variant's storage key is cached next to the URL so
+        # every cache hit can confirm the file is still there.
+        stale_url = @user.avatar_url
+        stale_key = @user.reload.avatar_variant.key
+        expect(stale_url).to include(stale_key)
+
+        @user.avatar.blob.service.delete(stale_key)
+        # Clear only the presence shortcut: the URL entry stays, which is
+        # exactly the situation being tested.
+        Rails.cache.delete("active_storage_variant_present_#{stale_key}")
+
+        url = @user.reload.avatar_url
+
+        expect(url).not_to include(stale_key)
+        rebuilt_key = @user.reload.avatar_variant.key
+        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+      end
+
+      it "regenerates the resized avatar and serves a working URL when its file is gone from storage" do
+        # Active Storage treats a variant as processed as soon as its database
+        # row exists, so without the storage check this would serve a URL for a
+        # file that is no longer there — a 403 for the seller, forever.
+        orphaned = @user.avatar.variant(resize_to_limit: [400, 400]).processed
+        orphaned_key = orphaned.key
+        orphaned_record_id = orphaned.image.record.id
+        @user.avatar.blob.service.delete(orphaned_key)
+
+        url = @user.reload.avatar_url
+
+        expect(ActiveStorage::VariantRecord.where(id: orphaned_record_id)).not_to exist
+        expect(url).not_to include(orphaned_key)
+        rebuilt_key = @user.reload.avatar_variant.key
+        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+      end
+
+      it "does not cache a blank URL" do
+        # A blank URL means we could not work out where the variant lives right
+        # now. Caching it would leave the seller with no picture until the entry
+        # expired, so we fall back to the original upload and try again later.
+        allow(@user).to receive(:avatar_variant).and_return(nil)
+
+        expect(@user.avatar_url).to eq(@user.avatar.url)
+        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v3")).to be_nil
+      end
+
+      it "keeps serving the existing URL when the storage lookup itself fails" do
+        # A failed lookup is not evidence the file is gone, and regenerating
+        # every avatar because storage was briefly unreachable would be worse
+        # than serving the URL we already have.
+        variant_key = @user.avatar_variant.key
+        Rails.cache.clear
+        allow_any_instance_of(ActiveStorage::Service::S3Service).to receive(:exist?).and_raise(Aws::S3::Errors::ServiceError.new(nil, "boom"))
+
+        expect(@user.reload.avatar_url).to eq("https://public-files.gumroad.com/#{variant_key}")
+      end
+
+      it "regenerates the avatar even when the missing file was confirmed present earlier" do
+        # The presence cache only exists to spare repeated storage lookups. It
+        # must never be what a freshly cached URL is based on, or a variant that
+        # disappears just after being confirmed would be served for the presence
+        # lifetime and then get a fresh URL entry on top of it.
+        orphaned = @user.avatar.variant(resize_to_limit: [400, 400]).processed
+        orphaned_key = orphaned.key
+        Rails.cache.write("active_storage_variant_present_#{orphaned_key}", true)
+        @user.avatar.blob.service.delete(orphaned_key)
+
+        url = @user.reload.avatar_url
+
+        expect(url).not_to include(orphaned_key)
+        expect(Rails.cache.read("active_storage_variant_present_#{orphaned_key}")).to be_nil
+        rebuilt_key = @user.reload.avatar_variant.key
+        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+      end
+
+      it "heals a variant that disappeared while it was cached as present, once that entry expires" do
+        # Checking storage on every read is not affordable on pages that show
+        # many sellers, so a confirmation is remembered for a few minutes and a
+        # variant that vanishes inside that window keeps being served. This
+        # pins how long that can last: once the confirmation expires the next
+        # read notices the file is gone and rebuilds the avatar, without having
+        # to wait for the much longer URL entry to expire.
+        stale_url = @user.avatar_url
+        stale_key = @user.reload.avatar_variant.key
+        expect(stale_url).to include(stale_key)
+
+        @user.avatar.blob.service.delete(stale_key)
+
+        # Still inside the confirmation window: the dead URL is served.
+        expect(@user.reload.avatar_url).to eq(stale_url)
+
+        travel_to(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL.from_now + 1.second) do
+          url = @user.reload.avatar_url
+
+          expect(url).not_to include(stale_key)
+          rebuilt_key = @user.reload.avatar_variant.key
+          expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+          expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+        end
+      end
+
+      it "bounds how long a broken avatar is served to minutes, not the URL cache lifetime" do
+        # The confirmation window is the worst case for a seller whose variant
+        # disappears, so it must stay far below the day-long URL cache. If
+        # someone lengthens it, this fails rather than quietly restoring the
+        # hours-long outage the storage check was added to remove.
+        expect(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL).to be <= 5.minutes
+        expect(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL).to be < User::AVATAR_VARIANT_URL_CACHE_TTL
+      end
+
+      it "does not extend the cached URL's lifetime when serving it" do
+        # The bound above only holds because a cache hit returns without
+        # rewriting the URL entry. If a hit rewrote it, the day-long expiry
+        # would be pushed back on every read, so a frequently viewed seller's
+        # entry would never expire and the storage key cached beside it would
+        # be the only thing left catching a variant that had gone missing.
+        @user.avatar_url
+        url_cache_key = "attachment_#{@user.avatar.id}_variant_url_v3"
+        cached_entry = Rails.cache.read(url_cache_key)
+        expect(cached_entry[:url]).to be_present
+
+        url_cache_writes = 0
+        allow(Rails.cache).to receive(:write).and_wrap_original do |original, *args, **kwargs|
+          url_cache_writes += 1 if args.first == url_cache_key
+          original.call(*args, **kwargs)
+        end
+
+        # The cache holds the raw storage URL; avatar_url serves it through the CDN.
+        expect(@user.reload.avatar_url).to include(cached_entry[:key])
+        expect(url_cache_writes).to eq(0)
       end
     end
 
@@ -3839,26 +3992,17 @@ describe User, :vcr do
       let!(:community) { create(:community, seller: user, resource: product) }
 
       it "includes communities owned by the seller" do
-        Feature.activate_user(:communities, user)
         product.update!(community_chat_enabled: true)
         expect(user.accessible_communities_ids).to eq([community.id])
       end
 
       it "excludes communities where the resource is deleted" do
-        Feature.activate_user(:communities, user)
         product.update!(community_chat_enabled: true)
         product.mark_deleted!
         expect(user.accessible_communities_ids).to eq([])
       end
 
-      it "excludes communities when feature flag is disabled" do
-        Feature.deactivate_user(:communities, user)
-        product.update!(community_chat_enabled: true)
-        expect(user.accessible_communities_ids).to eq([])
-      end
-
       it "excludes communities when community chat is disabled" do
-        Feature.activate_user(:communities, user)
         product.update!(community_chat_enabled: false)
         expect(user.accessible_communities_ids).to eq([])
       end
@@ -3869,26 +4013,17 @@ describe User, :vcr do
       let!(:purchase) { create(:purchase, purchaser: user, link: other_product) }
 
       it "includes communities of purchased products" do
-        Feature.activate_user(:communities, other_product.user)
         other_product.update!(community_chat_enabled: true)
         expect(user.accessible_communities_ids).to eq([other_community.id])
       end
 
       it "excludes communities where the resource is deleted" do
-        Feature.activate_user(:communities, other_product.user)
         other_product.update!(community_chat_enabled: true)
         other_product.mark_deleted!
         expect(user.accessible_communities_ids).to eq([])
       end
 
-      it "excludes communities when feature flag is disabled" do
-        Feature.deactivate_user(:communities, other_product.user)
-        other_product.update!(community_chat_enabled: true)
-        expect(user.accessible_communities_ids).to eq([])
-      end
-
       it "excludes communities when community chat is disabled" do
-        Feature.activate_user(:communities, other_product.user)
         other_product.update!(community_chat_enabled: false)
         expect(user.accessible_communities_ids).to eq([])
       end
@@ -3897,7 +4032,6 @@ describe User, :vcr do
         let!(:purchase) { create(:purchase, purchaser: nil, email: user.email, link: other_product) }
 
         it "includes communities of purchased products" do
-          Feature.activate_user(:communities, other_product.user)
           other_product.update!(community_chat_enabled: true)
           expect(user.accessible_communities_ids).to eq([other_community.id])
         end
@@ -3910,24 +4044,12 @@ describe User, :vcr do
       let!(:purchase) { create(:purchase, purchaser: user, link: other_product) }
 
       it "includes both seller and buyer communities" do
-        Feature.activate_user(:communities, user)
-        Feature.activate_user(:communities, other_product.user)
         product.update!(community_chat_enabled: true)
         other_product.update!(community_chat_enabled: true)
         expect(user.accessible_communities_ids.uniq).to match_array([community.id, other_community.id])
       end
 
-      it "excludes communities where feature flag is disabled" do
-        Feature.deactivate_user(:communities, user)
-        Feature.deactivate_user(:communities, other_product.user)
-        product.update!(community_chat_enabled: true)
-        other_product.update!(community_chat_enabled: true)
-        expect(user.accessible_communities_ids).to eq([])
-      end
-
       it "excludes communities where community chat is disabled" do
-        Feature.activate_user(:communities, user)
-        Feature.activate_user(:communities, other_product.user)
         product.update!(community_chat_enabled: false)
         other_product.update!(community_chat_enabled: false)
         expect(user.accessible_communities_ids).to eq([])

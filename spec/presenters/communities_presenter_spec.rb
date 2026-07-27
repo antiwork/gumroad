@@ -29,7 +29,6 @@ RSpec.describe CommunitiesPresenter do
       let!(:notification_setting) { create(:community_notification_setting, user: buyer, seller:) }
 
       before do
-        Feature.activate_user(:communities, seller)
         product.update!(community_chat_enabled: true)
       end
 
@@ -88,7 +87,6 @@ RSpec.describe CommunitiesPresenter do
         let!(:other_notification_setting) { create(:community_notification_setting, user: buyer, seller: other_seller) }
 
         before do
-          Feature.activate_user(:communities, other_seller)
           other_product.update!(community_chat_enabled: true)
         end
 
