@@ -4,8 +4,10 @@
     <p>Hi there. You recently added a bank account for Gumroad payouts, and our payment partner couldn't accept the bank or routing code you entered — it doesn't match the format banks in your country use. Until it's corrected, we can't send you payouts.</p>
     <% if @expected_format_hint.present? %>
       <p>Here's the format your bank expects: <%= @expected_format_hint %></p>
+      <p>Please re-enter your bank code in <%= link_to "your payout settings", settings_payments_url %>, matching that format exactly and without extra spaces. Waiting won't clear this one: we'll keep getting the same answer until the code itself is updated, so it needs your edit.</p>
+    <% else %>
+      <p>Please check the code against what your bank shows and re-enter it in <%= link_to "your payout settings", settings_payments_url %>, without extra spaces. Waiting won't clear this one: we'll keep getting the same answer until the code itself is updated, so it needs your edit.</p>
     <% end %>
-    <p>Please re-enter your bank code in <%= link_to "your payout settings", settings_payments_url %>, typing it in capital letters with no spaces. Waiting won't clear this one: we'll keep getting the same answer until the code itself is updated, so it needs your edit.</p>
   </div>
 <% else %>
   <%= header_section("We couldn't verify your bank account yet.") %>

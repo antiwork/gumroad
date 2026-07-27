@@ -14,8 +14,8 @@ class RetryStripeRejectedPayoutSetupForSellerJob
   ACCOUNT_BLOCKED_NOTE = "Automated Stripe payout-setup retry stopped: payments on the seller's Stripe account are blocked at the platform level."
   ABANDONED_REASON_ACCOUNT_BLOCKED = "stripe_account_blocked_by_platform"
   BANK_FORMAT_REJECTION_NOTE = "Automated Stripe payout-setup retry stopped: the bank code was rejected on format, " \
-                               "so re-sending the same saved details can never succeed. The seller was emailed and " \
-                               "has to re-enter the code."
+                               "so re-sending the same saved details can never succeed. The seller has been emailed " \
+                               "and has to re-enter the code."
   ABANDONED_REASON_BANK_FORMAT_REJECTION = "bank_details_format_rejected"
 
   def perform(user_id)
@@ -38,10 +38,13 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     # A format rejection means Stripe refused the bank code as typed (wrong length, spaces, a
     # branch suffix the country's format doesn't allow). Remediation would re-send the identical
     # saved value, so every weekly attempt is guaranteed to fail the same way and the seller ends
-    # up waiting out the whole retry window for nothing. Stop the loop immediately instead: the
-    # seller already got an email telling them to correct the code, and saving corrected details
-    # clears these notes and starts fresh.
-    if bank_note?(note) && StripeMerchantAccountManager.bank_details_format_rejection_note?(note.content)
+    # up waiting out the whole retry window for nothing. Stop the loop immediately instead — but
+    # only after making sure the seller has actually been told, because a note recorded during
+    # account creation (which re-raises rather than emailing) or before this field existed means
+    # nobody has told them their code needs correcting. Abandoning silently in that case would
+    # strand them worse than the retry loop did.
+    if bank_note?(note) && StripeMerchantAccountManager.bank_details_format_rejection_note?(note)
+      notify_seller_of_format_rejection(user, note) unless StripeMerchantAccountManager.bank_sync_note_seller_notified?(note)
       abandon_note!(user, note, reason: ABANDONED_REASON_BANK_FORMAT_REJECTION, note_content: BANK_FORMAT_REJECTION_NOTE)
       return
     end
@@ -95,6 +98,16 @@ class RetryStripeRejectedPayoutSetupForSellerJob
         note.save!
       end
       user.add_payout_note(content: note_content)
+    end
+
+    def notify_seller_of_format_rejection(user, note)
+      _code, message = StripeMerchantAccountManager.bank_sync_note_error_details(note)
+      ContactingCreatorMailer.invalid_bank_account(
+        user.id,
+        StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+        message
+      ).deliver_later(queue: "critical")
+      StripeMerchantAccountManager.mark_bank_sync_note_seller_notified!(note)
     end
 
     def abandon_note!(user, note, reason:, note_content:)

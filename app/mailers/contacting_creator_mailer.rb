@@ -582,10 +582,16 @@ class ContactingCreatorMailer < ApplicationMailer
     # code, and should be in the format AAAAPKBB or AAAAPKBBXYZ." Pull out that sentence so the
     # email can show the seller exactly what shape their code needs, without echoing the raw
     # error (which starts by naming a "routing number" that most sellers won't recognize).
+    # Anything implausibly long isn't the terse format sentence we're after, so drop it rather
+    # than pasting a wall of text into the email.
+    MAX_FORMAT_HINT_LENGTH = 200
+
     def expected_bank_code_format_hint(stripe_error_message)
       message = stripe_error_message.to_s
-      sentence = message.split(/(?<=\.)\s+/).find { |part| part.match?(/format/i) }
-      sentence&.strip.presence
+      sentence = message.split(/(?<=\.)\s+/).find { |part| part.match?(/format/i) }&.strip
+      return if sentence.blank? || sentence.length > MAX_FORMAT_HINT_LENGTH
+
+      sentence
     end
 
     def do_not_send

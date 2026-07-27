@@ -66,7 +66,10 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     let!(:merchant_account) { create(:merchant_account, user:) }
 
     def add_format_rejection_note(content)
-      user.add_payout_note(content: "#{bank_prefix}: #{content}")
+      note = user.add_payout_note(content: "#{bank_prefix}: #{content}")
+      note.json_data["seller_notified"] = true
+      note.save!
+      note
     end
 
     it "stops retrying immediately instead of re-sending the same rejected code" do
@@ -101,6 +104,46 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       note.reload
       expect(note.json_data["abandoned_at"]).to be_blank
       expect(note.json_data["retry_count"]).to eq(1)
+    end
+
+    it "emails the seller before abandoning a note recorded without notifying them" do
+      # Account creation records a bank-sync note and re-raises rather than emailing, so a note
+      # can reach the retry loop with the seller never having been told.
+      note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. The number must contain both the bank code and the branch code, and should be in the format AAAAPKBB or AAAAPKBBXYZ.")
+
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, note.content)
+
+      note.reload
+      expect(note.json_data["seller_notified"]).to be(true)
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_FORMAT_REJECTION)
+    end
+
+    it "does not re-email a seller who was already notified at rejection time" do
+      add_format_rejection_note("routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
+
+      expect do
+        described_class.new.perform(user.id)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+    end
+
+    it "classifies from the stored Stripe error message rather than the truncated note text" do
+      long_directory_miss = "Stripe could not validate the submitted bank details for this connected account. " \
+                            "#{'Diagnostic context. ' * 8}We couldn't find the bank for that BIC"
+      note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — #{long_directory_miss.truncate(200)}")
+      note.json_data["stripe_error_code"] = "routing_number_invalid"
+      note.json_data["stripe_error_message"] = long_directory_miss
+      note.json_data["seller_notified"] = true
+      note.save!
+      # The directory-miss phrase sits past the note's 200-char truncation, so a text sniffer
+      # would misread this as a format rejection and kill a retry that can still succeed.
+      expect(StripeMerchantAccountManager).to receive(:update_bank_account).and_return(:invalid_bank_account)
+
+      described_class.new.perform(user.id)
+
+      expect(note.reload.json_data["abandoned_at"]).to be_blank
     end
   end
 

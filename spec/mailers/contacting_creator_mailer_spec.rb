@@ -2061,6 +2061,17 @@ describe ContactingCreatorMailer do
         expect(mail.subject).to eq("Your bank details need correcting for payouts.")
         expect(mail.body.encoded).not_to include("Here's the format your bank expects")
       end
+
+      it "drops an implausibly long format sentence instead of pasting it into the email" do
+        mail = ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+          "Invalid routing number. The expected format is described as follows: #{'a very long explanation ' * 20}."
+        )
+
+        expect(mail.body.encoded).not_to include("Here's the format your bank expects")
+        expect(mail.body.encoded).to include("check the code against what your bank shows")
+      end
     end
 
     context "when the bank simply isn't in the partner's records yet" do

@@ -411,6 +411,15 @@ describe StripeMerchantAccountManager do
 
       expect(result).to eq(:invalid_bank_account)
     end
+
+    it "records the error details and marks the note so the retry loop knows the seller was told" do
+      described_class.update_bank_account(user, passphrase:)
+
+      note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+      expect(note.json_data["stripe_error_code"]).to eq("routing_number_invalid")
+      expect(note.json_data["stripe_error_message"]).to eq(error_message)
+      expect(note.json_data["seller_notified"]).to be(true)
+    end
   end
 
   describe "account holder name rejection stays out of the retry loop" do
