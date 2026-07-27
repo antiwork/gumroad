@@ -136,6 +136,24 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
     end
 
+    it "commits the notification marker together with the abandonment, so a replay cannot re-email" do
+      # Without the marker being part of the abandonment transaction, a run that dies partway
+      # leaves the note unabandoned AND unmarked, so the next run re-selects it and emails the
+      # seller a second time. Simulate the crash by failing the audit note inside the transaction.
+      note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
+      allow(user).to receive(:add_payout_note).and_call_original
+      allow(User).to receive(:find_by).with(id: user.id).and_return(user)
+      allow(user).to receive(:add_payout_note).with(content: described_class::BANK_FORMAT_REJECTION_NOTE).and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["abandoned_at"]).to be_blank
+      # The marker rolled back with the abandonment rather than being stranded as a lone write,
+      # so the state is self-consistent: nothing was concluded about this note in that pass.
+      expect(note.json_data["seller_notified"]).to be_blank
+    end
+
     it "classifies from the stored Stripe error message rather than the truncated note text" do
       long_directory_miss = "Stripe could not validate the submitted bank details for this connected account. " \
                             "#{'Diagnostic context. ' * 8}We couldn't find the bank for that BIC"
