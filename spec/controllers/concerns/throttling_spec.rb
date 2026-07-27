@@ -81,6 +81,30 @@ describe Throttling, type: :request do
       expect(response.headers["Retry-After"].to_i).to eq(1.hour.to_i)
     end
 
+    it "sets the missing expiry when the counter has none, so the window really ends" do
+      6.times { get "/test_throttle" }
+
+      allow(redis).to receive(:ttl).with("test_key").and_return(-1)
+      expect(redis).to receive(:expire).with("test_key", 1.hour.to_i).at_least(:once).and_call_original
+
+      get "/test_throttle"
+    end
+
+    it "reports no wait when the counter expired while the request was being counted" do
+      6.times { get "/test_throttle" }
+
+      # Redis answers -2 when the key is gone: it expired between the INCR that counted this request
+      # and the TTL read. The window is over, so the next request starts a fresh counter and is
+      # allowed — telling the user to wait an hour would be wrong.
+      allow(redis).to receive(:ttl).with("test_key").and_return(-2)
+      get "/test_throttle"
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(JSON.parse(response.body)["retry_after"]).to eq(0)
+      expect(response.headers["Retry-After"].to_i).to eq(0)
+      expect(JSON.parse(response.body)["error"]).to eq("Rate limit exceeded. Please try again.")
+    end
+
     it "renders a caller-supplied message instead of the default wording" do
       controller_with_message = Class.new(ApplicationController) do
         include Throttling

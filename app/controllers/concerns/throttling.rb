@@ -18,18 +18,41 @@ module Throttling
       redis.expire(key, period.to_i) if count == 1
 
       if count > limit
-        retry_after = redis.ttl(key)
-        # A missing or already-expired TTL (-1 = no expiry set, -2 = key gone between the incr and
-        # this read) would otherwise be reported to the user as a negative wait.
-        retry_after = period.to_i if retry_after.nil? || retry_after.negative?
+        retry_after = ttl_to_retry_after(redis:, key:, period:)
         response.set_header("Retry-After", retry_after)
         render json: {
-          error: message&.call(retry_after) || "Rate limit exceeded. Try again in #{retry_after} seconds.",
+          error: message&.call(retry_after) || default_throttle_message(retry_after),
           retry_after:
         }, status: :too_many_requests
         return false
       end
 
       true
+    end
+
+    # Turns Redis' TTL answer into the number of seconds we can honestly tell the user to wait.
+    # Redis has two non-positive answers and they mean opposite things for the caller:
+    #
+    #   -2  the key is gone — it expired in the moment between the INCR above and this read. The
+    #       window is already over: the next request creates a fresh key and is allowed straight
+    #       through, so the wait is zero. Reporting a full period here would tell a seller to come
+    #       back in an hour when they could retry immediately.
+    #   -1  the key exists with no expiry, which should never happen (the INCR that created it also
+    #       set one) but would mean the counter never resets and the seller is locked out forever.
+    #       Set the missing expiry so the window really does end, and report the full period, which
+    #       is now accurate because we just started the clock.
+    def ttl_to_retry_after(redis:, key:, period:)
+      ttl = redis.ttl(key)
+      return ttl if ttl.present? && ttl.positive?
+      return 0 if ttl == -2
+
+      redis.expire(key, period.to_i)
+      period.to_i
+    end
+
+    def default_throttle_message(retry_after)
+      return "Rate limit exceeded. Please try again." if retry_after <= 0
+
+      "Rate limit exceeded. Try again in #{retry_after} seconds."
     end
 end

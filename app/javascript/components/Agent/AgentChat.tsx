@@ -745,7 +745,12 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         ),
       );
     } catch (e) {
-      showAlert(e instanceof Error && e.message ? e.message : "That change couldn't be applied.", "error");
+      // Same reasoning as the send path: confirming a change spends the same agent budget, so a
+      // refusal here is a limit the seller waits out, not a change that failed to apply. Showing it
+      // as an error (and with our own wording) is what sent sellers looking for a broken store.
+      const isRateLimited = e instanceof RateLimitError;
+      const message = e instanceof Error && e.message ? e.message : "That change couldn't be applied.";
+      showAlert(message, isRateLimited ? "warning" : "error");
     } finally {
       setPendingActionIndex(null);
     }

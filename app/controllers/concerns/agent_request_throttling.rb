@@ -32,9 +32,17 @@ module AgentRequestThrottling
     # generic "something went wrong" it replaces sent sellers hunting for a broken account: name the
     # actual limit, say how long is left, and rule out the account/store being at fault.
     def agent_throttle_message(retry_after)
-      minutes = [(retry_after.to_f / 60).ceil, 1].max
+      # retry_after is 0 when the hour's counter expired in the moment this request was being
+      # counted, so the seller can simply send again — telling them to wait would be wrong.
+      timing = if retry_after <= 0
+        "You can continue now"
+      else
+        minutes = [(retry_after.to_f / 60).ceil, 1].max
+        "You can continue in #{minutes} #{"minute".pluralize(minutes)}"
+      end
+
       "You've used all #{AGENT_REQUESTS_PER_PERIOD} agent requests for this hour (sending a message " \
-        "and confirming a change both count). You can continue in #{minutes} " \
-        "#{"minute".pluralize(minutes)} — nothing is wrong with your account or your store."
+        "and confirming a change both count). #{timing} — nothing is wrong with your account or " \
+        "your store."
     end
 end

@@ -450,6 +450,43 @@ describe("AgentChat custom-html proposal cards", () => {
     expect(screen.queryByTitle("Preview of your page after this change")).toBeNull();
   });
 
+  it("shows a rate-limited confirmation as a warning rather than a failed change", async () => {
+    // Confirming spends the same hourly budget as sending, so a 429 here is also a wait-it-out
+    // limit. Presenting it as an error (red) would tell the seller their change failed, when it
+    // simply hasn't been attempted yet.
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    const explanation =
+      "You've used all 30 agent requests for this hour (sending a message and confirming a change both count). " +
+      "You can continue in 15 minutes — nothing is wrong with your account or your store.";
+    executeAgentAction.mockRejectedValue(new RateLimitError(explanation, 900));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(showAlert).toHaveBeenCalledWith(explanation, "warning"));
+    // The proposal is still there to confirm once the window clears.
+    expect(screen.getByText("Confirm")).toBeTruthy();
+    expect(screen.queryByText("Applied")).toBeNull();
+  });
+
+  it("still shows a genuinely failed confirmation as an error", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new Error("That change couldn't be applied."));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(showAlert).toHaveBeenCalledWith("That change couldn't be applied.", "error"));
+  });
+
   it("refetches a dismissed page proposal's preview on Review when no snapshot is loaded", async () => {
     // Hydrate a conversation whose custom-HTML proposal was already dismissed in a previous
     // session — the card mounts compact, so no preview was ever fetched in this session.
