@@ -139,6 +139,9 @@ describe("CopyToClipboard", () => {
 
     const liveRegion = screen.getByRole("status");
     expect(liveRegion.getAttribute("aria-live")).toBe("polite");
+    // Must stay visually hidden: without sr-only this span becomes a real second child of every
+    // tooltip wrapper in the app, so "Copied!" would render visibly next to every copy affordance.
+    expect(liveRegion.className).toContain("sr-only");
     // Empty on render, or every copy affordance on the page announces itself on load.
     expect(liveRegion.textContent).toBe("");
 

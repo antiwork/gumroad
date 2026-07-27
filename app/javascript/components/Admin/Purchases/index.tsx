@@ -472,7 +472,11 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
                 icon-only form renders no focusable control, so the copy action is unreachable by
                 keyboard and invisible to a screen reader. This matches the license copy control
                 shipped on the sale detail page in #6418. */}
-            <CopyToClipboard text={purchase.license.serial} copyTooltip="Copy license key">
+            <CopyToClipboard
+              text={purchase.license.serial}
+              copyTooltip="Copy license key"
+              copiedTooltip="License key copied"
+            >
               <Button outline aria-label="Copy license key">
                 <Copy className="size-5" />
               </Button>
