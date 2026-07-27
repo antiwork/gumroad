@@ -107,7 +107,19 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       end
 
       if params[:seller].present?
-        purchases = purchases.where(seller_id: User.where(external_id: Array.wrap(params[:seller])).select(:id))
+        # Resolve the seller filter to concrete ids with a separate query rather
+        # than nesting `User.where(...).select(:id)` as a subquery. With the
+        # subquery MySQL plans the join seller-first: it walks each seller's
+        # sales through index_purchases_on_seller_id_and_chargeback_date and
+        # filters for this buyer afterwards, which means a buyer who filters by
+        # a large seller pays for a scan of that seller's entire sales history.
+        # With literal ids the optimizer can use index_purchases_on_purchaser_id
+        # and read only the buyer's own rows. Measured on production: a buyer
+        # filtering by a seller with ~311K sales took 1.6s-78s on the subquery
+        # plan and 4-11ms with literal ids, and this query shape was what
+        # exhausted the 120s request budget in the timeouts on this endpoint.
+        seller_ids = User.where(external_id: Array.wrap(params[:seller])).pluck(:id)
+        purchases = purchases.where(seller_id: seller_ids)
       end
 
       if params[:archived].present?

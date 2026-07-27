@@ -576,6 +576,47 @@ describe Api::Mobile::PurchasesController do
         expect(response).to match_json_schema("api/mobile/purchases")
         expect(response.parsed_body[:purchases].size).to eq(3)
       end
+
+      it "returns no purchases when the seller external id does not match a user" do
+        seller = create(:named_user)
+        create(:free_purchase, purchaser: @purchaser, seller:, link: create(:product, user: seller, price_cents: 0))
+
+        get :search, params: @params.merge(seller: "does-not-exist")
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body).to include(success: true)
+        expect(response.parsed_body[:purchases]).to be_empty
+        expect(response.parsed_body[:sellers]).to be_empty
+      end
+
+      it "filters on concrete seller ids instead of nesting a users subquery" do
+        # The seller filter has to resolve external ids in its own query. When
+        # the ids are nested as a subquery, MySQL plans the purchases lookup
+        # seller-first and reads the seller's whole sales history before
+        # filtering down to this buyer, which is slow enough on a large seller
+        # to exhaust the request timeout. Passing concrete ids lets the
+        # optimizer start from the buyer's own purchases instead.
+        seller = create(:named_user)
+        other_seller = create(:named_user)
+        create(:free_purchase, purchaser: @purchaser, seller:, link: create(:product, user: seller, price_cents: 0))
+        create(:free_purchase, purchaser: @purchaser, seller: other_seller, link: create(:product, user: other_seller, price_cents: 0))
+
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*args|
+          payload = ActiveSupport::Notifications::Event.new(*args).payload
+          queries << payload[:sql].to_s if payload[:sql].to_s.include?("`purchases`")
+        end
+        begin
+          get :search, params: @params.merge(seller: seller.external_id)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        expect(response.parsed_body[:purchases].size).to eq(1)
+        purchase_queries = queries.select { |sql| sql.include?("seller_id") }
+        expect(purchase_queries).to be_present
+        expect(purchase_queries.none? { |sql| sql.include?("SELECT `users`.`id` FROM `users`") }).to be(true)
+      end
     end
 
     describe "filter by archived" do
