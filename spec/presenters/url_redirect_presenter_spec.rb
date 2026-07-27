@@ -265,6 +265,34 @@ describe UrlRedirectPresenter do
         expect(instance.download_page_with_content_props[:purchase][:has_invoice])
           .to eq(@purchase.has_invoice?)
       end
+
+      # A bundle gives the buyer one $0 access purchase per product in it, and the money sits on
+      # the bundle purchase. The page sends both the receipt and the invoice links to that paid
+      # parent, so the flag has to be answered from the parent too — reading the free child would
+      # hide the link from every paid bundle buyer.
+      it "is true for bundle content when the bundle purchase itself was paid" do
+        bundle_purchase = create(:purchase, link: @product, seller: @user)
+        child_purchase = create(:free_purchase, link: @product, is_bundle_product_purchase: true)
+        create(:bundle_product_purchase, product_purchase: child_purchase, bundle_purchase:)
+        url_redirect = create(:url_redirect, purchase: child_purchase, link: @product)
+
+        instance = described_class.new(url_redirect:, logged_in_user: nil)
+        props = instance.download_page_with_content_props[:purchase]
+
+        expect(child_purchase.has_invoice?).to be(false)
+        expect(props[:bundle_purchase_id]).to eq(bundle_purchase.external_id)
+        expect(props[:has_invoice]).to be(true)
+      end
+
+      it "is false for bundle content when the bundle purchase was free" do
+        bundle_purchase = create(:free_purchase, link: @product)
+        child_purchase = create(:free_purchase, link: @product, is_bundle_product_purchase: true)
+        create(:bundle_product_purchase, product_purchase: child_purchase, bundle_purchase:)
+        url_redirect = create(:url_redirect, purchase: child_purchase, link: @product)
+
+        instance = described_class.new(url_redirect:, logged_in_user: nil)
+        expect(instance.download_page_with_content_props[:purchase][:has_invoice]).to be(false)
+      end
     end
 
     it "does not include a creator byline in props" do

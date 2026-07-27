@@ -90,6 +90,15 @@ class UrlRedirectPresenter
       review = purchase&.original_product_review
       call = purchase&.call
 
+      # When a buyer opens content they got inside a bundle, `purchase` is the per-product access
+      # record the bundle created for them, which is always priced at $0 — the money was paid on
+      # the bundle purchase itself. Receipts and invoices therefore belong to that parent purchase,
+      # which is why the page routes both links at `bundle_purchase_id` below. The invoice
+      # eligibility flag has to describe the same purchase those links point at; asking the free
+      # child would answer "no invoice" for every paid bundle and hide the link from the buyers who
+      # do have one.
+      receipt_purchase = purchase&.is_bundle_product_purchase? ? purchase.bundle_purchase : purchase
+
       {
         terms_page_url: HomePageLinkService.terms,
         token: url_redirect.token,
@@ -101,14 +110,15 @@ class UrlRedirectPresenter
           email_digest: purchase.email_digest,
           created_at: purchase.created_at,
           is_archived: purchase.is_archived,
-          # Whether this purchase can produce an invoice at all. The download page shows a
-          # "Generate invoice" link only when this is true, matching the gate the receipt
-          # already applies (Purchase#has_invoice? — false for free purchases and for
-          # memberships still in their free trial, neither of which has an amount to invoice).
-          # Sent as a plain boolean rather than the URL itself because the invoice URL embeds
-          # the buyer's email, which must not reach the page when email confirmation is still
-          # pending; the frontend builds the URL from the id it already has.
-          has_invoice: purchase.has_invoice?,
+          # Whether an invoice can be produced at all for the purchase the receipt/invoice links
+          # point at (the bundle parent when this is bundle content, otherwise this purchase).
+          # The download page shows its "Generate invoice" link only when this is true, matching
+          # the gate the receipt already applies (Purchase#has_invoice? — false for free purchases
+          # and for memberships still in their free trial, neither of which has an amount to
+          # invoice). Sent as a plain boolean rather than the URL itself because the invoice URL
+          # embeds the buyer's email, which must not reach the page when email confirmation is
+          # still pending; the frontend builds the URL from the id it already has.
+          has_invoice: receipt_purchase.present? && receipt_purchase.has_invoice?,
           product_permalink: purchase.link&.unique_permalink,
           product_id: purchase.link&.external_id,
           product_name: purchase.link&.name,
