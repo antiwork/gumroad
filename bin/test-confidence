@@ -329,6 +329,36 @@ cleanup_worktree() {
 }
 trap cleanup_worktree EXIT INT TERM
 
+# Did this Vitest run actually execute test cases?
+#
+# Vitest exits nonzero for two very different reasons, and the gate has to tell
+# them apart. A run that executed tests and had some fail reports a per-test
+# tally:
+#
+#     Tests  1 failed | 1 passed (2)
+#
+# A run that never got that far — a config that failed to load, a plugin that
+# threw during setup, a missing test environment, an import error while
+# collecting the file — reports no tally at all, or reports "Tests  no tests".
+# Its nonzero exit says nothing about whether the test would pass, so it must
+# not be read as "this test was already failing".
+#
+# Vitest colours its summary even when stdout is a pipe, so the tally line
+# really arrives as $'\033[2m      Tests\033[22m ...'. Strip the escapes before
+# matching or an anchored pattern silently never matches.
+vitest_executed_tests() {
+  local output=$1
+  local plain tally
+  plain=$(echo "$output" | sed $'s/\033\\[[0-9;]*[A-Za-z]//g')
+  # The summary line is "  Tests  <...>"; grab whatever follows.
+  tally=$(echo "$plain" | grep -E '^[[:space:]]*Tests[[:space:]]' | tail -1)
+  [[ -z "$tally" ]] && return 1
+  # "no tests" means the file was found but nothing in it ran.
+  echo "$tally" | grep -qE '(^|[[:space:]])no tests([[:space:]]|$)' && return 1
+  # Anything with a real count (failed/passed/skipped/todo) means it ran.
+  echo "$tally" | grep -qE '[0-9]+[[:space:]]+(failed|passed|skipped|todo)'
+}
+
 # Replay a failing Vitest file on merge-base to decide pre-existing vs regression.
 #
 # The merge-base worktree has no node_modules of its own and installing one
@@ -341,6 +371,7 @@ trap cleanup_worktree EXIT INT TERM
 #          2 = couldn't verify
 verify_js_preexisting_on_merge_base() {
   local test_file=$1
+  local head_output=${2:-}
   JS_REGRESSION_KIND=""
 
   # Dependency drift would make the borrowed node_modules the wrong answer.
@@ -373,15 +404,27 @@ verify_js_preexisting_on_merge_base() {
       local rerun_output=""
       rerun_output=$( cd "$WORKTREE_DIR" && npx vitest run --reporter dot "$test_file" 2>&1 ) || rerun_rc=$?
 
-      # "no test files found" / zero tests collected means the replay proved
-      # nothing, not that the file passed.
-      if echo "$rerun_output" | grep -qiE 'No test files found|No tests found'; then
-        rc=2
-      elif [[ $rerun_rc -eq 0 ]]; then
+      if [[ $rerun_rc -eq 0 ]]; then
         rc=1   # green on merge-base, red on HEAD → this branch broke it
         JS_REGRESSION_KIND="replayed"
+      elif vitest_executed_tests "$rerun_output"; then
+        rc=0   # red on both, and we know tests really ran → pre-existing
+      elif vitest_executed_tests "$head_output"; then
+        # The same file, with the same borrowed node_modules, executed tests on
+        # HEAD but couldn't even start on merge-base. Merge-base is main, and
+        # main's Vitest setup is green in CI, so this is anomalous rather than
+        # informative — and it is exactly the shape a broken-config replay takes.
+        # Refusing to decide would hand the failure to the filename heuristic,
+        # which waves through the shared-dependency case this replay exists to
+        # catch. Fail loudly instead and let a human look.
+        rc=1
+        JS_REGRESSION_KIND="unreplayable"
       else
-        rc=0   # red on both → pre-existing
+        # Neither side executed anything — the replay is simply uninformative
+        # (a bad config, a plugin that failed to initialise, a missing
+        # environment, an import that blew up during collection). That is not
+        # evidence about the test, so it must not license "pre-existing".
+        rc=2
       fi
     fi
   fi
@@ -419,7 +462,7 @@ verify_preexisting_on_merge_base() {
   # basename comparison cannot see that: Input.tsx and InputGroup.test.tsx
   # share no name.
   if [[ -n "$spec_file" ]] && is_js_test "$spec_file"; then
-    verify_js_preexisting_on_merge_base "$spec_file"
+    verify_js_preexisting_on_merge_base "$spec_file" "$rspec_output"
     local js_rc=$?
     # If the replay itself couldn't run (no node_modules, dependency drift),
     # fall back to the file-level heuristic rather than defaulting to
@@ -647,6 +690,8 @@ for (( m=0; m<MILESTONES; m++ )); do
             # a cross-file regression — it's simply failing on this branch.
             if is_js_test "$spec" && [[ "${JS_REGRESSION_KIND:-}" == "new" || "${JS_REGRESSION_KIND:-}" == "heuristic" ]]; then
               verdict="regression"
+            elif is_js_test "$spec" && [[ "${JS_REGRESSION_KIND:-}" == "unreplayable" ]]; then
+              verdict="unverifiable regression"
             else
               verdict="cross-file regression"
             fi
@@ -661,7 +706,7 @@ for (( m=0; m<MILESTONES; m++ )); do
         esac
       fi
 
-      if [[ "$verdict" == "regression" || "$verdict" == "cross-file regression" ]]; then
+      if [[ "$verdict" == "regression" || "$verdict" == "cross-file regression" || "$verdict" == "unverifiable regression" ]]; then
         FAILED=$((FAILED + 1))
         echo ""
         echo ""
@@ -670,6 +715,12 @@ for (( m=0; m<MILESTONES; m++ )); do
           echo "    ❌ FAILED (cross-file regression) — $spec"
           echo "  ───────────────────────────────────────────────────"
           echo "    These examples pass on merge-base but fail on your branch."
+        elif [[ "$verdict" == "unverifiable regression" ]]; then
+          echo "    ❌ FAILED (could not verify against merge-base) — $spec"
+          echo "  ───────────────────────────────────────────────────"
+          echo "    This test ran on your branch but Vitest could not start at"
+          echo "    all on merge-base, so there is no evidence the failure is"
+          echo "    pre-existing. Check your Vitest config and setup files."
         else
           echo "    ❌ FAILED — $spec"
         fi

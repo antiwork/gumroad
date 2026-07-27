@@ -248,3 +248,95 @@ MILESTONE_COUNT.
 
 All round-3 fixtures removed (tmp/test-confidence deleted, Input.tsx reverted);
 `git status` shows only bin/test-confidence.
+
+
+═══════════════════════════════════════════════════════════════════════
+ROUND 4 — replay startup errors must not count as "pre-existing"
+═══════════════════════════════════════════════════════════════════════
+
+Greptile P1: when the merge-base Vitest replay exits nonzero during config
+load, plugin init, environment setup, or module collection, the branch read
+that as proof the test failed on merge-base and labelled the failure
+"confirmed pre-existing" — gate prints "Safe to commit", exit 0, without ever
+establishing that the test ran.
+
+Confirmed against the real Vitest in this repo that a nonzero exit has three
+distinct shapes, and only one of them is evidence:
+
+  1. Executed, some failed     →  "Tests  1 failed | 1 passed (2)"   rc=1
+  2. Collected nothing         →  "Tests  no tests"                  rc=1
+     (import error / assertion outside a test)
+  3. Never started             →  no "Tests" line at all             rc=1
+     (broken vitest.config.ts → "failed to load config from ...")
+
+Cases 2 and 3 are indistinguishable from case 1 by exit code alone, which is
+exactly the bug.
+
+REPRO (git fixture, /tmp/vfix):
+  merge-base: vitest.config.ts is syntactically broken (Vitest cannot start),
+              thing.test.ts asserts label() === "ok" and would PASS
+  branch:     config repaired, shared dep thing.ts changed to return "BROKEN"
+              → the test genuinely regresses on this branch
+
+Driving the real verify_js_preexisting_on_merge_base() from the script:
+
+  BEFORE (db7a2aa2, the reviewed commit)
+    merge-base=30483cf
+    changed:   app/javascript/utils/thing.ts vitest.config.ts
+    VERDICT: rc=0 confirmed pre-existing -> gate prints 'Safe to commit'
+             ** real regression waved through **
+
+  AFTER
+    merge-base=30483cf
+    changed:   app/javascript/utils/thing.ts vitest.config.ts
+    HEAD executed tests: yes
+    VERDICT: rc=1 regression (kind=unreplayable) -> gate HALTS
+
+The fix adds vitest_executed_tests(), which requires a real per-test tally
+before a nonzero replay may be called pre-existing. Unit-checked against the
+captured shapes:
+
+  PASS  real failure (1 failed | 1 passed)   ran
+  PASS  all passing                          ran
+  PASS  collection/import error (no tests)   notran
+  PASS  startup error, no summary at all     notran
+  PASS  no test files found                  notran
+  PASS  skipped only                         ran
+  PASS  empty output                         notran
+  PASS  the word tests in prose only         notran
+
+One trap worth recording: Vitest colours the summary even when stdout is a
+pipe, so the tally really arrives as $'\033[2m      Tests\033[22m ...'. The
+first version of the helper anchored on '^[[:space:]]*Tests' and therefore
+never matched — it silently reported "HEAD executed tests: no" on a run that
+plainly had executed tests. The helper now strips ANSI before matching.
+
+Ran-on-HEAD-but-not-on-merge-base is resolved to a REGRESSION rather than to
+inconclusive. Inconclusive falls back to the filename heuristic, which is blind
+to the shared-dependency case (Input.tsx vs InputGroup.test.tsx share no
+basename) — the exact hole round 3 closed. Since merge-base is main and main's
+Vitest setup is green in CI, a merge-base that cannot start is anomalous, so
+the gate fails loudly with its own verdict rather than guessing.
+
+CONTROL — a genuinely pre-existing failure must still be skipped, or the gate
+blocks everything (/tmp/vfix2: test already red on merge-base, branch changes
+an unrelated file):
+
+    HEAD executed tests: yes
+    VERDICT: rc=0 confirmed pre-existing -> skipped, gate proceeds
+
+CONTROL — round 3's shared-dependency regression still caught, in the real
+repo (wrap Input.tsx's <input> in an extra <div>, leave InputGroup.test.tsx
+untouched):
+
+    broke:     app/javascript/components/ui/Input.tsx
+    test:      app/javascript/components/ui/InputGroup.test.tsx (unchanged)
+    HEAD tally: Tests  2 failed | 1 passed (3)
+    VERDICT: rc=1 regression (kind=replayed) -> gate HALTS  (correct)
+
+  $ bash -n bin/test-confidence                 # clean
+  $ shellcheck -S error bin/test-confidence     # clean
+  $ shellcheck -S warning bin/test-confidence   # clean
+
+All round-4 fixtures removed (/tmp/vfix, /tmp/vfix2 are outside the repo;
+Input.tsx reverted); `git status` shows only bin/test-confidence.
