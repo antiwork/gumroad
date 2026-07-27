@@ -460,6 +460,23 @@ describe User::Stats, :vcr do
         expect(affiliate_user.affiliate_credits_sum_total).to eq 120
       end
 
+      it "keeps a fully clawed-back credit at zero even when the affiliate has other refunded credits" do
+        retained = affiliate_credit_for_new_purchase
+        retained.purchase.update!(stripe_partially_refunded: true)
+        retained.update!(affiliate_credit_refund_balance: create(:balance, user: affiliate_user))
+        create(:affiliate_partial_refund, affiliate_credit: retained, amount_cents: 75)
+
+        reversed = affiliate_credit_for_new_purchase
+        reversed.purchase.update!(stripe_partially_refunded: true)
+        reversed.update!(affiliate_credit_refund_balance: create(:balance, user: affiliate_user))
+
+        # 125 retained on the first credit, nothing on the second. The add-back has to decide
+        # per credit whether an affiliate_partial_refunds row exists for THAT credit, so this
+        # is what pins the subquery to the outer row: if it merely asked whether any refund row
+        # exists at all, the fully reversed credit would be added back too and this would be 325.
+        expect(affiliate_user.affiliate_credits_sum_total).to eq 125
+      end
+
       it "combines an untouched credit with a fully clawed-back one" do
         affiliate_credit_for_new_purchase
         reversed = affiliate_credit_for_new_purchase
