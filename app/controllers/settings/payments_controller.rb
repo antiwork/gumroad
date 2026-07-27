@@ -40,9 +40,25 @@ class Settings::PaymentsController < Settings::BaseController
     updated_country_code = params.dig(:user, :updated_country_code)
     if updated_country_code.present? && updated_country_code != compliance_info.legal_entity_country_code
       begin
+        # A country change cannot be combined with the rest of the form. Changing the country
+        # deletes the seller's Stripe account, bank account and compliance record and starts a
+        # fresh one (see UpdateUserCountry), so any bank or identity details submitted in the
+        # same request belong to the old country and would be written to a record that is about
+        # to be thrown away — or validated against the wrong country's rules. We therefore
+        # process the country change on its own and return here. What we must not do is stay
+        # silent about it: the page is a single form with one save button, so a seller who
+        # corrects their country and fills in their bank details at the same time (the natural
+        # flow) used to get a plain "Your country has been updated!" and no hint that everything
+        # else they typed was dropped. See issue gumroad-private#1411.
+        details_discarded = newly_submitted_details_discarded_by_country_change?(compliance_info)
         UpdateUserCountry.new(new_country_code: updated_country_code, user: current_seller).process
         log_payout_settings_update_by_non_owner
-        flash[:notice] = "Your country has been updated!"
+        flash[:notice] = if details_discarded
+          new_country = Compliance::Countries.mapping[updated_country_code] || updated_country_code
+          "Your country has been updated to #{new_country}. Payout and identity details have to be entered again for the new country, so nothing else on this page was saved — please re-enter your bank account and personal details, then save again."
+        else
+          "Your country has been updated!"
+        end
         return redirect_to settings_payments_path, status: :see_other
       rescue UpdateUserCountry::PayoutInProcessingError
         return redirect_with_error("You have a payout in progress. You can change your country once it has been processed.")
@@ -278,6 +294,51 @@ class Settings::PaymentsController < Settings::BaseController
   end
 
   private
+    # Identity fields the Payments form submits for the seller, paired with nothing special:
+    # each one is compared against the stored compliance record below. The form loads every
+    # stored value and posts it all back on save, so a field being *present* does not mean the
+    # seller just typed it — only a value that DIFFERS from what is stored is new input that the
+    # country change is about to throw away.
+    IDENTITY_FIELDS_CLEARED_BY_COUNTRY_CHANGE = %i[
+      first_name last_name business_name
+      street_address city state zip_code
+      business_street_address business_city business_state business_zip_code
+      phone business_phone
+    ].freeze
+
+    # True when this request carries payout or identity details the seller entered by hand, all of
+    # which a country change discards (it deletes the bank account and starts an empty compliance
+    # record). Used only to decide how much to say in the success message.
+    def newly_submitted_details_discarded_by_country_change?(compliance_info)
+      # A card and a bank account number are never echoed back into the form — the page only ever
+      # shows a masked visual — so their presence always means the seller typed them now.
+      return true if params[:card].present?
+      return true if params.dig(:bank_account, :account_number).present?
+
+      # The PayPal address IS echoed back, so only a changed one counts.
+      return true if params[:payment_address].present? && params[:payment_address] != current_seller.payment_address
+
+      user_params = params[:user]
+      return false if user_params.blank?
+
+      return true if IDENTITY_FIELDS_CLEARED_BY_COUNTRY_CHANGE.any? do |field|
+        user_params[field].present? && user_params[field].to_s != compliance_info.public_send(field).to_s
+      end
+
+      submitted_birthday_differs?(user_params, compliance_info)
+    end
+
+    def submitted_birthday_differs?(user_params, compliance_info)
+      return false if user_params[:dob_year].blank? || user_params[:dob_year].to_i.zero?
+
+      submitted = Date.new(user_params[:dob_year].to_i, user_params[:dob_month].to_i, user_params[:dob_day].to_i)
+      submitted != compliance_info.birthday
+    rescue Date::Error
+      # An unparseable date is not something the seller can have had stored, so treat it as new
+      # input rather than blowing up the country change over a message-wording detail.
+      true
+    end
+
     def update_payout_method
       result = UpdatePayoutMethod.new(user_params: params, seller: current_seller).process
 
