@@ -168,7 +168,15 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dd>
             {purchase.seller.support_email}{" "}
             <CopyToClipboard text={purchase.seller.support_email}>
-              <Copy className="size-5" />
+              {/*
+                The child has to be a real button: ClipboardJS copies on a click event that bubbles
+                up to CopyToClipboard's wrapper, and only a focusable control turns a keyboard
+                Enter/Space into that click. A bare icon would leave the action unreachable without
+                a mouse and unnamed to a screen reader, hence the aria-label.
+              */}
+              <button type="button" className="cursor-pointer all-unset" aria-label="Copy seller support email">
+                <Copy className="size-5" />
+              </button>
             </CopyToClipboard>
           </dd>
         </>
@@ -178,7 +186,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {purchase.seller.email}{" "}
         <CopyToClipboard text={purchase.seller.email}>
-          <Copy className="size-5" />
+          <button type="button" className="cursor-pointer all-unset" aria-label="Copy seller email">
+            <Copy className="size-5" />
+          </button>
         </CopyToClipboard>
       </dd>
 
@@ -469,7 +479,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dd>
             {purchase.license.serial}{" "}
             <CopyToClipboard text={purchase.license.serial} copyTooltip="Copy license key">
-              <Copy className="size-5" />
+              <button type="button" className="cursor-pointer all-unset" aria-label="Copy license key">
+                <Copy className="size-5" />
+              </button>
             </CopyToClipboard>
           </dd>
         </>
