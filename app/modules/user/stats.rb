@@ -108,21 +108,33 @@ module User::Stats
   end
 
   # Lifetime affiliate revenue shown on the affiliated products dashboard: the
-  # sum of the affiliate's paid credits, matching the revenue column of the
-  # per-product table on that page (both exclude credits whose sale was fully
-  # refunded or charged back).
+  # sum of the affiliate's paid credits.
   #
   # Deliberately does NOT adjust for partial refunds, unlike
-  # #affiliate_credit_sum_from_scope below. That adjustment joins every one of
-  # the affiliate's credit rows to purchases just to read the
-  # purchases.stripe_partially_refunded boolean, and no index can serve that
-  # check after the join, so MySQL fetches each joined purchase row from the
-  # clustered index. The cost is proportional to the affiliate's entire credit
-  # history even though partial refunds are rare, which made it roughly 70% of
-  # this page's request time (Sentry GUMROAD-H8). The dashboard is a headline
-  # figure, so it takes the plain paid sum instead — that one is served
-  # entirely from idx_affiliate_credits_on_user_and_balances_and_amount and
-  # runs in single-digit milliseconds.
+  # #affiliate_credit_sum_from_scope below. Two reasons, and the second one is
+  # the more important:
+  #
+  # 1. That adjustment joins every one of the affiliate's credit rows to
+  #    purchases just to read the purchases.stripe_partially_refunded boolean.
+  #    No index can serve that check after the join, so MySQL fetches each
+  #    joined purchase row from the clustered index, and the cost grows with the
+  #    affiliate's entire credit history even though partial refunds are rare.
+  #    It was roughly 70% of this page's request time (Sentry GUMROAD-H8).
+  # 2. The adjustment also double-counted. A partial refund leaves the credit in
+  #    the `paid` scope (its refund balance id stays NULL), so the first term of
+  #    that sum already counts the credit in full; the second term then adds the
+  #    same amount_cents again and the third subtracts only the recorded
+  #    affiliate_partial_refunds amount. The page therefore reported MORE than
+  #    the affiliate earned, and more than the per-product table below it.
+  #
+  # What is left is the gross figure, which lines up with the per-product
+  # Revenue column on the same page (that column is an unadjusted
+  # SUM(affiliate_credits.amount_cents) over credits with no refund or
+  # chargeback balance). The two are not identical in every edge case: this sum
+  # additionally requires a success balance, so a credit still waiting for its
+  # balance row appears in the table before it appears here. Nothing about money
+  # movement reads this method — payouts go through
+  # #affiliate_credit_cents_for_balances.
   def affiliate_credits_total_revenue_cents
     affiliate_credits.paid.sum(:amount_cents).to_i
   end
