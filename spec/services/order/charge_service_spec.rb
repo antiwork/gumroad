@@ -2043,7 +2043,11 @@ describe Order::ChargeService, :vcr do
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount_type]).to eq("maximum")
     end
 
-    it "returns mandate options with sporadic interval and amount as maximum of the price of included purchases" do
+    it "returns mandate options with sporadic interval and amount as the SUM of the included purchases' maxima" do
+      # One cart is one PaymentIntent and therefore one e-mandate, so the cap has to cover every
+      # subscription the mandate can be asked to renew together. Sizing it to the largest single
+      # purchase (10_00 here) meant the first renewal billing both subscriptions (13_00) exceeded
+      # the cap and was declined at the card network — gumroad-private#1298.
       order = create(:order)
       purchase = create(:purchase_in_progress, link: membership_product, is_original_subscription_purchase: true,
                                                total_transaction_cents: 3_00, card_country: "IN", charge_processor_id: StripeChargeProcessor.charge_processor_id)
@@ -2059,8 +2063,29 @@ describe Order::ChargeService, :vcr do
 
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:interval]).to eq("sporadic")
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:interval_count]).to be nil
-      expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(10_00)
+      expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(13_00)
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount_type]).to eq("maximum")
+    end
+
+    it "keeps each subscription's temporary-discount headroom inside the sum" do
+      # Each line contributes its own mandate_maximum_amount_cents (the undiscounted equivalent
+      # when a discount is temporary), so a cart mixing a discounted and an undiscounted
+      # subscription is capped for what BOTH will renew at once the discount lapses.
+      order = create(:order)
+      discounted = create(:purchase_in_progress, link: membership_product, is_original_subscription_purchase: true,
+                                                 total_transaction_cents: 3_00, card_country: "IN", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      plain = create(:purchase_in_progress, link: membership_product_2, is_original_subscription_purchase: true,
+                                            total_transaction_cents: 10_00, card_country: "IN", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      order.purchases << discounted
+      order.purchases << plain
+
+      allow(discounted).to receive(:mandate_maximum_amount_cents).and_return(12_00)
+      allow(plain).to receive(:mandate_maximum_amount_cents).and_return(10_00)
+
+      charge_service = Order::ChargeService.new(order:, params: nil)
+      mandate_options = charge_service.mandate_options_for_stripe(purchases: [discounted, plain])
+
+      expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(22_00)
     end
   end
 

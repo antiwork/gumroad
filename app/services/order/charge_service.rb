@@ -381,10 +381,24 @@ class Order::ChargeService
     purchase.update!(purchase_success_balance: seller_balance_transaction.balance)
   end
 
+  # The India e-mandate registered with this charge caps EVERY future off-session charge made
+  # against the saved card (RBI rules; see Purchase#mandate_options_for_stripe). One cart is one
+  # PaymentIntent and therefore one mandate, so when a cart holds several subscriptions the cap
+  # has to cover the largest amount that single mandate will ever be asked to authorize — which
+  # is the SUM of what those subscriptions can each renew for, not the biggest one of them.
+  #
+  # Sizing it to the biggest line under-sizes the cap for every multi-subscription cart: a cart
+  # with two $10/month subscriptions registers a $10 cap, and the first renewal that bills both
+  # ($20) exceeds it and is declined at the card network — a failure the buyer can only clear by
+  # coming back to re-authorize.
+  #
+  # Each purchase contributes its own `mandate_maximum_amount_cents` rather than its charged
+  # total, so per-subscription headroom for temporary discounts (a discount whose billing cycles
+  # run out renews at the undiscounted price) is preserved inside the sum.
   def mandate_options_for_stripe(purchases:, with_currency: false)
     return purchases.first.mandate_options_for_stripe(with_currency:) if purchases.count == 1
 
-    mandate_amount = purchases.max_by(&:total_transaction_cents).total_transaction_cents
+    mandate_amount = purchases.sum(&:mandate_maximum_amount_cents)
 
     mandate_options = {
       payment_method_options: {
