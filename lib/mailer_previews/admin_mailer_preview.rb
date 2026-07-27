@@ -4,4 +4,8 @@ class AdminMailerPreview < ActionMailer::Preview
   def chargeback_notify
     AdminMailer.chargeback_notify(Purchase.last.id)
   end
+
+  def inverted_sales_to_views_notify
+    AdminMailer.inverted_sales_to_views_notify(Link.last.id, 4_200, 37)
+  end
 end

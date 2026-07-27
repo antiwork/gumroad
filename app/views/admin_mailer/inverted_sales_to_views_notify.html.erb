@@ -1,0 +1,24 @@
+<%= header_section("Auto-flagged: sales far exceeding page views") %>
+<div>
+  <p>
+    Product:
+    <%= link_to @product.name, admin_product_url(@product.unique_permalink) %>
+  </p>
+
+  <p>
+    In the previous hour this product recorded <strong><%= number_with_delimiter(@sales_count) %></strong> free sales
+    against <strong><%= number_with_delimiter(@views_count) %></strong> product page views. Sales running that far
+    ahead of views means the checkouts did not come through the product page, which is what
+    scripted checkouts look like. Every one of them sends a receipt from our transactional
+    sending domain to whatever address the script supplied.
+  </p>
+
+  <p>
+    The product has already been unpublished, so no further checkouts can go through it. The
+    seller has been flagged for review. No action is needed to stop the sends — the decision
+    here is whether to suspend the account or clear it and republish the product.
+  </p>
+
+  <p>Creator:</p>
+  <%= render("admin_mailer/internal_user_info", user: @user) %>
+</div>
