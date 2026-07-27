@@ -393,6 +393,83 @@ describe User::Stats, :vcr do
       end
     end
 
+    describe "affiliate_credit_sum_from_scope" do
+      # A refund always stamps a refund/chargeback balance onto the affiliate credit, which
+      # drops it out of the `paid` scope, so the sum adds back the part of a partially
+      # refunded credit the affiliate still keeps. These cover the three shapes that add-back
+      # has to distinguish: an untouched credit, one reversed in part, and one clawed back in
+      # full (which must contribute nothing — gumroad-private#1432).
+      before do
+        # The purchase factory reaches for MerchantAccount.gumroad, which is only seeded by
+        # the specs that need it, and without it the purchase fails card validation.
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+      end
+
+      let(:seller) { create(:user) }
+      let(:affiliate_user) { create(:user) }
+      let(:product) { create(:product, user: seller, price_cents: 10_00) }
+      let(:direct_affiliate) do
+        create(:direct_affiliate, seller:, affiliate_user:, apply_to_all_products: true)
+      end
+
+      def affiliate_credit_for_new_purchase
+        purchase = create(:purchase, link: product, seller:, affiliate: direct_affiliate,
+                                     affiliate_credit_cents: 200)
+        create(:affiliate_credit, affiliate_user:, seller:, purchase:,
+                                  affiliate: direct_affiliate, amount_cents: 200,
+                                  affiliate_credit_success_balance: create(:balance, user: affiliate_user))
+      end
+
+      it "counts an untouched credit at its full value" do
+        affiliate_credit_for_new_purchase
+
+        expect(affiliate_user.affiliate_credits_sum_total).to eq 200
+      end
+
+      it "counts only the retained remainder of a partially reversed credit" do
+        credit = affiliate_credit_for_new_purchase
+        credit.purchase.update!(stripe_partially_refunded: true)
+        credit.update!(affiliate_credit_refund_balance: create(:balance, user: affiliate_user))
+        create(:affiliate_partial_refund, affiliate_credit: credit, amount_cents: 75)
+
+        # 200 earned, 75 clawed back, 125 retained. The credit is out of `paid` because the
+        # refund balance is set, so this figure comes entirely from the add-back.
+        expect(affiliate_user.affiliate_credits_sum_total).to eq 125
+      end
+
+      it "counts nothing for a credit that was clawed back in full" do
+        credit = affiliate_credit_for_new_purchase
+        credit.purchase.update!(stripe_partially_refunded: true)
+        credit.update!(affiliate_credit_refund_balance: create(:balance, user: affiliate_user))
+        # No affiliate_partial_refund row: Purchase only creates one when the affiliate credit
+        # was reversed by less than its full value, so its absence means a full claw-back.
+
+        expect(affiliate_user.affiliate_credits_sum_total).to eq 0
+      end
+
+      it "counts a credit reversed over several partial refunds only once" do
+        credit = affiliate_credit_for_new_purchase
+        credit.purchase.update!(stripe_partially_refunded: true)
+        credit.update!(affiliate_credit_refund_balance: create(:balance, user: affiliate_user))
+        create(:affiliate_partial_refund, affiliate_credit: credit, amount_cents: 50)
+        create(:affiliate_partial_refund, affiliate_credit: credit, amount_cents: 30)
+
+        # 200 earned, 80 clawed back over two refunds, 120 retained. Guards against restricting
+        # the add-back with a join, which would add the 200 once per refund row.
+        expect(affiliate_user.affiliate_credits_sum_total).to eq 120
+      end
+
+      it "combines an untouched credit with a fully clawed-back one" do
+        affiliate_credit_for_new_purchase
+        reversed = affiliate_credit_for_new_purchase
+        reversed.purchase.update!(stripe_partially_refunded: true)
+        reversed.update!(affiliate_credit_refund_balance: create(:balance, user: affiliate_user))
+
+        expect(affiliate_user.affiliate_credits_sum_total).to eq 200
+      end
+    end
+
     describe "affiliate_fee_cents_for_balances" do
       before do
         @user = create(:user)
