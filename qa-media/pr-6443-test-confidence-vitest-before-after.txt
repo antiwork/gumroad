@@ -34,3 +34,100 @@ EXIT=1
   Re-run with --strict to halt on these.
   1761 tests more for 100%. Run with --full to continue.
 EXIT=0
+
+
+================================================================================
+REVIEW ROUND 2 — verifying the Vitest merge-base replay
+================================================================================
+
+Greptile raised two findings against the first version of this change. Both were
+real. The fix replaces the basename heuristic with an actual Vitest replay on
+merge-base, and enforces test-file suffixes before dispatching to a runner. The
+three transcripts below are real runs of bin/test-confidence, using a cached plan
+fixture to pin which test the gate selects.
+
+
+--------------------------------------------------------------------------------
+CASE 1 — shared-dependency regression (Greptile P1)
+--------------------------------------------------------------------------------
+Fixture: app/javascript/components/ui/Input.tsx is modified (wrap the <input> in
+an extra <div>). app/javascript/components/ui/InputGroup.test.tsx is UNCHANGED
+but imports Input, so it breaks. The names share no basename, which is exactly
+what the old heuristic could not see.
+
+  $ npx vitest run app/javascript/components/ui/InputGroup.test.tsx
+   Test Files  1 failed (1)
+        Tests  2 failed | 1 passed (3)
+
+BEFORE (commit e20d7b327) — regression waved through:
+
+  99% confidence — 0 tests passed in 1s
+     (1 failure pre-existing, skipped — see list below)
+     Safe to commit.
+  Pre-existing failures (skipped):
+    app/javascript/components/ui/InputGroup.test.tsx — likely pre-existing (unverified)
+  EXIT_BEFORE=0
+
+AFTER — replayed on merge-base, halts:
+
+    verifying app/javascript/components/ui/InputGroup.test.tsx on merge-base...
+  ═══════════════════════════════════════════════════
+    FAILED (cross-file regression) — app/javascript/components/ui/InputGroup.test.tsx
+  ───────────────────────────────────────────────────
+    These examples pass on merge-base but fail on your branch.
+  ═══════════════════════════════════════════════════
+    AssertionError: expected 'regression-fixture-wrapper' to contain 'forced-colors:border-dashed'
+  Fix this before committing.
+  EXIT=1
+
+
+--------------------------------------------------------------------------------
+CASE 2 — genuinely pre-existing failure still skipped (no over-blocking)
+--------------------------------------------------------------------------------
+Fixture: app/javascript/components/Search.test.tsx is red on merge-base already
+(verified by running the full Vitest suite in a detached merge-base worktree:
+"Test Files 3 failed | 53 passed"). Nothing about it is touched by the branch.
+
+AFTER — replay confirms it, gate proceeds:
+
+    99% confidence — 0 tests passed in 13s
+     (1 failure pre-existing, skipped — see list below)
+     Safe to commit.
+  Pre-existing failures (skipped):
+    app/javascript/components/Search.test.tsx — confirmed pre-existing
+  EXIT=0
+
+Note the verdict wording: "confirmed pre-existing", not "likely pre-existing
+(unverified)". The replay actually ran.
+
+
+--------------------------------------------------------------------------------
+CASE 3 — non-test frontend path in the plan (Greptile P2)
+--------------------------------------------------------------------------------
+Fixture: cached plan lists a source file alongside a real test:
+  "tests": ["app/javascript/components/ui/Input.tsx",
+            "app/javascript/components/ui/InputGroup.test.tsx"]
+
+BEFORE (commit e20d7b327) — counts the source file as a test:
+
+   99%  ←  2 tests
+          app/javascript/components/ui/Input.tsx
+          app/javascript/components/ui/InputGroup.test.tsx
+
+AFTER — source file dropped, count is honest:
+
+   99%  ←  1 test
+          app/javascript/components/ui/InputGroup.test.tsx
+
+
+--------------------------------------------------------------------------------
+CASE 4 — clean tree still green
+--------------------------------------------------------------------------------
+  99% confidence — 1 test passed in 1s
+     Safe to commit.
+  EXIT=0
+
+  $ bash -n bin/test-confidence      # clean
+  $ shellcheck -S error bin/test-confidence   # clean
+
+All fixtures reverted afterwards; `git status` shows only bin/test-confidence.

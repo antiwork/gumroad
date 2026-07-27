@@ -43,6 +43,9 @@ fi
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 MERGE_BASE=""
+# Absolute path to the checkout we're running in. Needed so the merge-base
+# worktree can borrow this checkout's node_modules (it has none of its own).
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
 LOCAL_CHANGED_CODE=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
   | sort -u | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
@@ -252,16 +255,45 @@ pluralize() {
 # Run one test file with the right runner. Front-end tests live next to the
 # component they cover (app/javascript/**/*.test.tsx) and run under Vitest;
 # everything else is RSpec under spec/.
+#
+# The suffix check matters: a plan (or a stale cached plan) can name a plain
+# source file like app/javascript/components/Input.tsx. Vitest would collect no
+# tests from it and exit 0, which the gate would read as a passing test. So a
+# path only counts as a front-end test if it really is one.
 is_js_test() {
-  [[ "$1" == app/javascript/* ]]
+  case "$1" in
+    app/javascript/*.test.ts | app/javascript/*.test.tsx) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_rspec_test() {
+  case "$1" in
+    spec/*_spec.rb) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# A planned path is only runnable if it exists AND we know which runner owns it.
+# Anything else (a source file, a fixture, a renamed spec) is dropped from the
+# milestone rather than handed to a runner that would quietly find no tests.
+is_runnable_test() {
+  local file=$1
+  [[ -f "$file" ]] || return 1
+  is_js_test "$file" || is_rspec_test "$file"
 }
 
 run_test_file() {
   local file=$1
   if is_js_test "$file"; then
     npx vitest run --reporter dot "$file"
-  else
+  elif is_rspec_test "$file"; then
     bundle exec rspec --format progress --no-color "$file"
+  else
+    # Unreachable via the milestone filter; loud rather than silently "passing"
+    # if some future caller skips that filter.
+    echo "not a recognized test file: $file" >&2
+    return 1
   fi
 }
 
@@ -278,10 +310,6 @@ is_likely_preexisting() {
 
   local module="${spec_file#spec/}"
   module="${module%_spec.rb}"
-  # Colocated Vitest tests are named Foo.test.tsx next to Foo.tsx, so strip the
-  # ".test.<ext>" tail to recover the component name we should look for.
-  module="${module%.test.tsx}"
-  module="${module%.test.ts}"
   local basename="${module##*/}"
 
   if echo "$CHANGED_ALL" | grep -qE "(^|/)${basename}\.(rb|ts|tsx|js|jsx)$"; then
@@ -301,6 +329,72 @@ cleanup_worktree() {
 }
 trap cleanup_worktree EXIT INT TERM
 
+# Replay a failing Vitest file on merge-base to decide pre-existing vs regression.
+#
+# The merge-base worktree has no node_modules of its own and installing one
+# would cost minutes, so we symlink this checkout's. That's sound as long as
+# the dependency set is the same on both sides, which is why a changed
+# package-lock.json bails out as inconclusive instead.
+#
+# Returns: 0 = confirmed pre-existing (red on merge-base too)
+#          1 = real regression (green on merge-base, red on HEAD)
+#          2 = couldn't verify
+verify_js_preexisting_on_merge_base() {
+  local test_file=$1
+  JS_REGRESSION_KIND=""
+
+  # Dependency drift would make the borrowed node_modules the wrong answer.
+  if echo "$CHANGED_ALL" | grep -qxF 'package-lock.json' || echo "$CHANGED_ALL" | grep -qxF 'package.json'; then
+    return 2
+  fi
+
+  [[ -d "$REPO_ROOT/node_modules" ]] || return 2
+
+  WORKTREE_DIR=$(mktemp -d -t test-confidence-base-js.XXXXXX)
+  if ! git worktree add -q --detach "$WORKTREE_DIR" "$MERGE_BASE" 2>/dev/null; then
+    rm -rf "$WORKTREE_DIR"
+    WORKTREE_DIR=""
+    return 2
+  fi
+
+  local rc=2
+  # The test file may not exist on merge-base at all (it's new on this branch).
+  # A test that didn't exist before can't be pre-existing — if it's failing now
+  # that's on this branch.
+  if [[ ! -f "$WORKTREE_DIR/$test_file" ]]; then
+    rc=1
+    JS_REGRESSION_KIND="new"
+  else
+    ln -s "$REPO_ROOT/node_modules" "$WORKTREE_DIR/node_modules" 2>/dev/null || true
+    if [[ ! -e "$WORKTREE_DIR/node_modules" ]]; then
+      rc=2
+    else
+      local rerun_rc=0
+      local rerun_output=""
+      rerun_output=$( cd "$WORKTREE_DIR" && npx vitest run --reporter dot "$test_file" 2>&1 ) || rerun_rc=$?
+
+      # "no test files found" / zero tests collected means the replay proved
+      # nothing, not that the file passed.
+      if echo "$rerun_output" | grep -qiE 'No test files found|No tests found'; then
+        rc=2
+      elif [[ $rerun_rc -eq 0 ]]; then
+        rc=1   # green on merge-base, red on HEAD → this branch broke it
+        JS_REGRESSION_KIND="replayed"
+      else
+        rc=0   # red on both → pre-existing
+      fi
+    fi
+  fi
+
+  # Remove the symlink before the worktree goes away so nothing can follow it
+  # into the real node_modules.
+  rm -f "$WORKTREE_DIR/node_modules" 2>/dev/null || true
+  git worktree remove --force "$WORKTREE_DIR" >/dev/null 2>&1 || rm -rf "$WORKTREE_DIR"
+  WORKTREE_DIR=""
+
+  return $rc
+}
+
 # Verify a heuristic "pre-existing" verdict by re-running the failing examples
 # on merge-base in a temporary worktree.
 #
@@ -313,16 +407,29 @@ verify_preexisting_on_merge_base() {
 
   [[ -z "$MERGE_BASE" ]] && return 2
 
-  # Vitest failures can't be replayed here: the merge-base worktree has no
-  # node_modules, and the RSpec id parsing below would find nothing and report
-  # "inconclusive", which the caller treats as pre-existing. That would hide a
-  # real front-end regression. So fall back to the file-level heuristic: if the
-  # test or its component is in the diff, call it a regression.
+  # Front-end tests get a real replay too, just a different one: re-run the
+  # whole test file on merge-base under Vitest. The reason this needs its own
+  # branch is that the RSpec failure-id parsing below finds nothing in Vitest
+  # output and would return "inconclusive", which the caller treats as
+  # pre-existing — silently waving through a front-end regression.
+  #
+  # Replaying is what distinguishes "this test was already red" from "my diff
+  # broke it", and it is the only way to catch the case where the test file
+  # itself is unchanged but a shared dependency it imports was changed. A
+  # basename comparison cannot see that: Input.tsx and InputGroup.test.tsx
+  # share no name.
   if [[ -n "$spec_file" ]] && is_js_test "$spec_file"; then
-    if is_likely_preexisting "$spec_file"; then
-      return 2
+    verify_js_preexisting_on_merge_base "$spec_file"
+    local js_rc=$?
+    # If the replay itself couldn't run (no node_modules, dependency drift),
+    # fall back to the file-level heuristic rather than defaulting to
+    # "pre-existing": a failing test whose own file or same-named source is in
+    # the diff should still halt the gate.
+    if [[ $js_rc -eq 2 ]] && ! is_likely_preexisting "$spec_file"; then
+      JS_REGRESSION_KIND="heuristic"
+      return 1
     fi
-    return 1
+    return $js_rc
   fi
 
   # Skip when DB schema or bundler state likely diverges from merge-base
@@ -382,10 +489,17 @@ for (( m=0; m<MILESTONES; m++ )); do
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
     echo "   ${CONF}%  ←  remaining tests"
   else
-    # grep -c/. with `|| true`: a milestone can legitimately list only Vitest
-    # paths (or nothing runnable), and under `set -e` a non-matching grep would
-    # otherwise abort the whole script right after the banner.
-    NAMES=$(echo "$TESTS_JSON" | grep -E '^(spec/|app/javascript/)' || true)
+    # The header must show what will actually RUN, so it applies the same
+    # runnability filter as the run loop below. A plan naming a source file or a
+    # spec that no longer exists would otherwise be counted and displayed as a
+    # test, overstating what the gate verified.
+    #
+    # `|| true` on grep -c: a milestone can legitimately end up with nothing
+    # runnable, and under `set -e` a non-matching grep would abort the whole
+    # script right after the banner.
+    NAMES=$(echo "$TESTS_JSON" | while IFS= read -r t; do
+      is_runnable_test "$t" && echo "$t"
+    done)
     N=$(echo "$NAMES" | grep -c . | tr -d ' ' || true)
     [[ -z "$N" ]] && N=0
     echo "   ${CONF}%  ←  $(pluralize $N test)"
@@ -433,7 +547,7 @@ for (( m=0; m<MILESTONES; m++ )); do
     done)
   else
     MILESTONE_TESTS=$(echo "$TESTS_JSON" | while IFS= read -r s; do
-      [[ -f "$s" ]] && ! grep -qxF "$s" "$SEEN_RUN" 2>/dev/null && echo "$s"
+      is_runnable_test "$s" && ! grep -qxF "$s" "$SEEN_RUN" 2>/dev/null && echo "$s"
     done)
   fi
 
@@ -480,9 +594,9 @@ for (( m=0; m<MILESTONES; m++ )); do
         case $verify_rc in
           0) verdict="confirmed pre-existing" ;;
           1)
-            # JS verdicts come from the file-level heuristic, not a merge-base
-            # replay, so don't claim evidence we didn't gather.
-            if is_js_test "$spec"; then
+            # A front-end test that never existed on merge-base can't be called
+            # a cross-file regression — it's simply failing on this branch.
+            if is_js_test "$spec" && [[ "${JS_REGRESSION_KIND:-}" == "new" || "${JS_REGRESSION_KIND:-}" == "heuristic" ]]; then
               verdict="regression"
             else
               verdict="cross-file regression"
