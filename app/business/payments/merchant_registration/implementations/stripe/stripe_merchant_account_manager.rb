@@ -504,7 +504,10 @@ module StripeMerchantAccountManager
   def self.record_bank_sync_failure_note(user, error)
     code = error.respond_to?(:code) ? error.code : nil
     message = error.message.to_s
-    note = user.add_payout_note(content: "#{BANK_SYNC_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{message.truncate(200)}")
+    note = user.add_payout_note(
+      content: "#{BANK_SYNC_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{message.truncate(200)}",
+      seller_visible: false
+    )
     note.json_data["stripe_error_code"] = code
     note.json_data["stripe_error_message"] = message
     note.save!
@@ -700,7 +703,10 @@ module StripeMerchantAccountManager
   private_class_method
   def self.record_postal_code_failure_note(user, error)
     code = error.respond_to?(:code) ? error.code : nil
-    user.add_payout_note(content: "#{POSTAL_CODE_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
+    user.add_payout_note(
+      content: "#{POSTAL_CODE_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}",
+      seller_visible: false
+    )
   rescue => e
     Rails.logger.error "Failed to record postal-code payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)

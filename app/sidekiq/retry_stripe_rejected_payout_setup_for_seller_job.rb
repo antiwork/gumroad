@@ -4,6 +4,11 @@ class RetryStripeRejectedPayoutSetupForSellerJob
   include Sidekiq::Job
   sidekiq_options queue: :low, lock: :until_executed
 
+  # Every note this job writes is an internal breadcrumb: it explains to support (and to the
+  # job's own later runs) what the automated retry loop did. All of them talk about the seller
+  # in the third person, so they are recorded with seller_visible: false and never appear in
+  # the banner on the seller's Payouts page. Anything the SELLER needs to know is sent as an
+  # email instead (see notify_format_rejection! / notify_retries_exhausted!).
   RESOLVED_NOTE = "Stripe accepted the previously rejected postal code / bank account on automated retry."
   GAVE_UP_NOTE = "Automated retries to fix the rejected postal code / bank account were exhausted. " \
                  "Manual follow-up is needed."
@@ -105,7 +110,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
           note.json_data["abandoned_reason"] = reason
           note.save!
         end
-        user.add_payout_note(content: note_content)
+        user.add_payout_note(content: note_content, seller_visible: false)
       end
     end
 
@@ -143,7 +148,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
           candidate.json_data["abandoned_reason"] = ABANDONED_REASON_BANK_FORMAT_REJECTION
           candidate.save!
         end
-        user.add_payout_note(content: BANK_FORMAT_REJECTION_NOTE)
+        user.add_payout_note(content: BANK_FORMAT_REJECTION_NOTE, seller_visible: false)
       end
     end
 
@@ -286,7 +291,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
 
     def resolve!(user, note)
       note.mark_deleted! if note.reload.alive?
-      user.add_payout_note(content: RESOLVED_NOTE)
+      user.add_payout_note(content: RESOLVED_NOTE, seller_visible: false)
     end
 
     def record_attempt!(note)
@@ -311,7 +316,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       ActiveRecord::Base.transaction do
         note.json_data["abandoned_at"] = Time.current.iso8601
         note.save!
-        user.add_payout_note(content: GAVE_UP_NOTE)
+        user.add_payout_note(content: GAVE_UP_NOTE, seller_visible: false)
       end
     end
 
