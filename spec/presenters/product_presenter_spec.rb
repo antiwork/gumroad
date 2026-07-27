@@ -308,6 +308,13 @@ describe ProductPresenter do
           product: {
             name: "Product",
             description: "I am a product!",
+            # The editor snapshot props (gumroad-private#1379). `editor_revision`
+            # identifies the state this session loaded; `loaded_integrations` is the
+            # baseline that lets the client tell "the seller just disconnected this"
+            # from "it was never connected", which decides whether an irreversible
+            # disconnect is requested on save.
+            editor_revision: Product::EditorRevision.current(product),
+            loaded_integrations: Integration::ALL_NAMES.index_with { product.find_integration_by_name(_1).present? },
             custom_permalink: "custom",
             price_cents: 100,
             **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
@@ -623,6 +630,8 @@ describe ProductPresenter do
             product: {
               name: "Membership",
               description: "Join now",
+              editor_revision: Product::EditorRevision.current(membership),
+              loaded_integrations: Integration::ALL_NAMES.index_with { membership.find_integration_by_name(_1).present? },
               custom_permalink: nil,
               price_cents: 0,
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
@@ -890,6 +899,8 @@ describe ProductPresenter do
             product: {
               name: "Product",
               description: "Boring",
+              editor_revision: Product::EditorRevision.current(new_product),
+              loaded_integrations: Integration::ALL_NAMES.index_with { new_product.find_integration_by_name(_1).present? },
               custom_permalink: nil,
               price_cents: 100,
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,

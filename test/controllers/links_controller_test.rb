@@ -6204,22 +6204,33 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert_not second.reload.alive?
   end
 
-  test "flag on: deleted_ids without an editor_revision deletes nothing" do
+  test "flag on: deleted_ids without an editor_revision is refused with a 409 and deletes nothing" do
     enable_contract!
     named = create_variant(variant_category: @category, name: "Named for deletion")
     sibling = create_variant(variant_category: @category, name: "Sibling")
 
     # The ids are supplied, but the client never says which snapshot it was
-    # editing. A save that can't vouch for its snapshot may write, but it may
-    # not delete — this is what keeps a contract-unaware or stale client from
-    # deleting on the strength of a payload it can't back up.
+    # editing. A destructive save that can't vouch for its snapshot is refused
+    # outright — silently skipping the deletion would tell the seller "saved"
+    # while the rows quietly survive, so the save is rejected before any
+    # mutation and the editor is handed a fresh token to retry with.
+    original_name = @product.name
     post :update, params: @params.merge(
       deletion_operations: { deleted_ids: { variants: [named.external_id] } },
     ), format: :json
-    assert_response :success
+    assert_response :conflict
 
+    body = response.parsed_body
+    assert_equal "stale_deletion_conflict", body["error_code"]
+    # The response carries the token for the CURRENT state, so the editor can
+    # reconcile and retry without a full reload.
+    assert_equal Product::EditorRevision.current(@product.reload), body["editor_revision"]
+
+    # Nothing was written: the deletion did not happen AND the ordinary field
+    # updates in the same payload were rolled back with it.
     assert named.reload.alive?
     assert sibling.reload.alive?
+    assert_equal original_name, @product.reload.name
   end
 
   # --- flag ON: the malformed-value case the contract exists for -------------
@@ -6334,5 +6345,199 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_not removed.reload.alive?
     assert kept.reload.alive?
+  end
+
+  # --- flag ON: explicit deletion across the remaining collections -----------
+
+  test "flag on: deleted_ids plus a fresh revision deletes exactly the named file" do
+    enable_contract!
+    kept = @product.product_files.alive.first
+    removed = create_product_file(link: @product, display_name: "Removed file")
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { files: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert removed.reload.deleted?
+    assert_not kept.reload.deleted?
+  end
+
+  test "flag on: deleted_ids plus a fresh revision schedules exactly the named public file" do
+    enable_contract!
+    removed = create_public_file(resource: @product, display_name: "Removed audio")
+    kept = create_public_file(resource: @product, display_name: "Kept audio")
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { public_files: [removed.public_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert removed.reload.scheduled_for_deletion?
+    assert_not kept.reload.scheduled_for_deletion?
+  end
+
+  test "flag on: deleted_ids plus a fresh revision disconnects exactly the named integration" do
+    enable_contract!
+    removed = create_circle_integration
+    kept = create_zoom_integration
+    @product.active_integrations << [removed, kept]
+    @product.reload
+
+    # Integrations carry no external id in the editor payload — the collection
+    # is keyed by provider name, so the "ids" here are provider names.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { integrations: ["circle"] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not @product.reload.active_integrations.include?(removed)
+    assert @product.active_integrations.include?(kept)
+  end
+
+  # --- flag ON, Rule 1 for the files collection --------------------------------
+
+  test "flag on: a payload with no files key deletes no files" do
+    enable_contract!
+    file = @product.product_files.alive.first
+
+    post :update, params: @params.except(:files), format: :json
+    assert_response :success
+
+    assert_not file.reload.deleted?
+  end
+
+  test "flag on: files sent as an empty list deletes no files" do
+    enable_contract!
+    file = @product.product_files.alive.first
+
+    post :update, params: @params.merge(files: []), format: :json
+    assert_response :success
+
+    assert_not file.reload.deleted?
+  end
+
+  # --- flag ON: malformed deletion_operations degrade to "no deletions" -------
+
+  test "flag on: a malformed deletion_operations value deletes nothing and does not 500" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+    page = create_blank_page
+    file = @product.product_files.alive.first
+
+    # Every malformed shape has to read as "no explicit deletions were
+    # legible" (Rule 1): a bare String, an Integer, and a deletion_operations
+    # whose deleted_ids is not a hash. A fresh token rides along each time so
+    # nothing but the contract's hardening stands between these payloads and
+    # a wipe — a raise here would turn a client bug into a failed save, and a
+    # lenient parse would turn it into data loss.
+    [
+      "just-a-string",
+      12345,
+      { deleted_ids: "not-a-hash" },
+    ].each do |malformed|
+      post :update, params: @params.merge(
+        editor_revision: current_revision,
+        deletion_operations: malformed,
+      ), format: :json
+      assert_response :success, "deletion_operations=#{malformed.inspect} must not fail the save"
+
+      assert variant.reload.alive?, "deletion_operations=#{malformed.inspect} must not delete variants"
+      assert page.reload.alive?, "deletion_operations=#{malformed.inspect} must not delete pages"
+      assert_not file.reload.deleted?, "deletion_operations=#{malformed.inspect} must not delete files"
+    end
+  end
+
+  # --- flag ON: staleness gates deletions, and only deletions -----------------
+
+  test "flag on: a destructive save with a stale token is refused with a 409 and deletes nothing" do
+    enable_contract!
+    named = create_variant(variant_category: @category, name: "Named for deletion")
+    sibling = create_variant(variant_category: @category, name: "Sibling")
+
+    stale_token = current_revision
+    # Another session edits the product after this session captured its token:
+    # any edit to a deletable child moves the fingerprint.
+    named.update!(name: "Renamed by another session")
+    assert_not Product::EditorRevision.fresh?(product: @product.reload, token: stale_token)
+
+    original_name = @product.name
+    post :update, params: @params.merge(
+      editor_revision: stale_token,
+      deletion_operations: { deleted_ids: { variants: [named.external_id] } },
+    ), format: :json
+    assert_response :conflict
+
+    body = response.parsed_body
+    assert_equal "stale_deletion_conflict", body["error_code"]
+    # The 409 carries a token for the state as it stands NOW, so the editor
+    # can reconcile and retry without forcing a full reload.
+    assert_equal Product::EditorRevision.current(@product.reload), body["editor_revision"]
+
+    # Refused BEFORE any mutation: the rows survive and the ordinary field
+    # updates in the same payload were rolled back with the transaction.
+    assert named.reload.alive?
+    assert sibling.reload.alive?
+    assert_equal original_name, @product.reload.name
+  end
+
+  test "flag on: a stale clear-all is refused with a 409 and deletes nothing" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    stale_token = current_revision
+    variant.update!(name: "Renamed by another session")
+
+    post :update, params: @params.merge(
+      editor_revision: stale_token,
+      deletion_operations: { cleared_collections: ["variants"] },
+    ), format: :json
+    assert_response :conflict
+
+    assert_equal "stale_deletion_conflict", response.parsed_body["error_code"]
+    assert variant.reload.alive?
+  end
+
+  test "flag on: a write-only save from a stale tab still succeeds" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    stale_token = current_revision
+    variant.update!(name: "Renamed by another session")
+    assert_not Product::EditorRevision.fresh?(product: @product.reload, token: stale_token)
+
+    # No deletions requested, so staleness must not block the save: a stale
+    # tab fixing a typo is recoverable and has to keep working — rejecting
+    # every stale save is what forced product-wide optimistic concurrency off.
+    post :update, params: @params.merge(
+      name: "Renamed from a stale tab",
+      editor_revision: stale_token,
+    ), format: :json
+    assert_response :success
+
+    assert_equal "Renamed from a stale tab", @product.reload.name
+    assert variant.reload.alive?
+  end
+
+  # --- flag ON: clear-all for files --------------------------------------------
+
+  test "flag on: an explicit clear-all plus a fresh revision empties the files collection" do
+    enable_contract!
+    second_file = create_product_file(link: @product, display_name: "Second file")
+    @product.reload
+
+    post :update, params: @params.except(:files).merge(
+      editor_revision: current_revision,
+      deletion_operations: { cleared_collections: ["files"] },
+    ), format: :json
+    assert_response :success
+
+    assert_empty @product.reload.alive_product_files
+    assert second_file.reload.deleted?
   end
 end
