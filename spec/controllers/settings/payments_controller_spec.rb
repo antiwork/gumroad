@@ -1705,8 +1705,10 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(flash[:notice]).to include("nothing else on this page was saved")
         end
 
+        # `params` also carries a tax ID, which trips its own branch — exclude it so this case can
+        # only pass through the identity-field comparison it is named for.
         it "tells the seller the identity details were not saved" do
-          put :update, params: { user: params.merge(updated_country_code: "GB") }
+          put :update, params: { user: params.except(:ssn_last_four).merge(updated_country_code: "GB") }
 
           expect(user.reload.alive_user_compliance_info.first_name).to be_nil
           expect(flash[:notice]).to include("please re-enter your bank account and personal details")
@@ -1793,6 +1795,44 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           create(:user_compliance_info_business, user:, country: "United States", business_country: "United States")
 
           put :update, params: { user: { updated_country_code: "GB", is_business: "on", country: "US", business_country: "US" } }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
+        # Payout preferences are saved on the seller lower down the same action, so the country
+        # change discards them along with everything else on the page.
+        it "tells the seller a new payout schedule was not saved" do
+          put :update, params: { user: { updated_country_code: "GB" }, payout_frequency: User::PayoutSchedule::MONTHLY }
+
+          expect(user.reload.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a new payout threshold was not saved" do
+          put :update, params: { user: { updated_country_code: "GB" }, payout_threshold_cents: 20_000 }
+
+          expect(user.reload.payout_threshold_cents).not_to eq(20_000)
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a paused-payouts switch was not saved" do
+          put :update, params: { user: { updated_country_code: "GB" }, payouts_paused_by_user: true }
+
+          expect(user.reload.payouts_paused_by_user?).to eq(false)
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        # The page posts every payout preference back on each save, so the stored values coming
+        # back unchanged are not something the seller just typed.
+        it "keeps the plain message when the payout preferences only echo what is already stored" do
+          put :update, params: {
+            user: { updated_country_code: "GB" },
+            payouts_paused_by_user: user.payouts_paused_by_user?,
+            payout_frequency: user.payout_frequency,
+            payout_threshold_cents: user.payout_threshold_cents,
+            disable_buyer_local_currency: user.disable_buyer_local_currency,
+            disable_buyer_currency_rounding: user.disable_buyer_currency_rounding,
+          }
 
           expect(flash[:notice]).to eq("Your country has been updated!")
         end

@@ -308,6 +308,14 @@ class Settings::PaymentsController < Settings::BaseController
     # so a masked value is the stored one coming back and anything else is freshly typed.
     TAX_ID_FIELDS_CLEARED_BY_COUNTRY_CHANGE = %i[individual_tax_id ssn_last_four business_tax_id].freeze
 
+    # Payout preferences (pause switch, schedule, threshold, buyer-currency toggles) are saved on
+    # the seller further down this same action, so the country-change early return drops them too.
+    # The page loads the stored values and posts them back on every save, so — as with the identity
+    # fields — only a value that differs from the stored one is something the seller just changed.
+    BOOLEAN_PAYOUT_PREFERENCES_CLEARED_BY_COUNTRY_CHANGE = %i[
+      payouts_paused_by_user disable_buyer_local_currency disable_buyer_currency_rounding
+    ].freeze
+
     # True when this request carries payout or identity details the seller entered by hand, all of
     # which a country change discards (it deletes the bank account and starts an empty compliance
     # record). Used only to decide how much to say in the success message.
@@ -327,6 +335,8 @@ class Settings::PaymentsController < Settings::BaseController
       # The PayPal address IS echoed back, so only a changed one counts.
       return true if params[:payment_address].present? && params[:payment_address] != current_seller.payment_address
 
+      return true if submitted_payout_preferences_differ?
+
       user_params = params[:user]
       return false if user_params.blank?
 
@@ -343,6 +353,29 @@ class Settings::PaymentsController < Settings::BaseController
       return true if submitted_business_country_differs?(user_params, compliance_info)
 
       submitted_birthday_differs?(user_params, compliance_info)
+    end
+
+    # Payout preferences live on the seller, not the compliance record, and are written further
+    # down this action — after the country-change early return. Compare each against the stored
+    # value so the echoed form state does not count as new input. The booleans arrive as JSON
+    # true/false and are stored as booleans; the schedule is a string; the threshold is an integer
+    # submitted as a string.
+    def submitted_payout_preferences_differ?
+      boolean_caster = ActiveModel::Type::Boolean.new
+      changed_boolean = BOOLEAN_PAYOUT_PREFERENCES_CLEARED_BY_COUNTRY_CHANGE.any? do |preference|
+        submitted = params[preference]
+        next false if submitted.nil?
+
+        boolean_caster.cast(submitted) != boolean_caster.cast(current_seller.public_send(preference))
+      end
+      return true if changed_boolean
+
+      if params[:payout_frequency].present? && params[:payout_frequency].to_s != current_seller.payout_frequency.to_s
+        return true
+      end
+
+      params[:payout_threshold_cents].present? &&
+        params[:payout_threshold_cents].to_i != current_seller.payout_threshold_cents.to_i
     end
 
     # The individual/business toggle is saved by an ordinary settings update, so flipping it in the
