@@ -9,22 +9,14 @@ import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import {
-  RECAPTCHA_UNAVAILABLE_MESSAGE,
-  RecaptchaCancelledError,
-  RecaptchaUnavailableError,
-  useRecaptcha,
-} from "$app/components/useRecaptcha";
 
 type PageProps = {
   email: string | null;
   application_name: string | null;
-  recaptcha_site_key: string | null;
   referrer: {
     id: string;
     name: string;
@@ -36,12 +28,11 @@ type PageProps = {
 };
 
 function SignupPage() {
-  const { email: initialEmail, application_name, recaptcha_site_key, referrer, stats } = usePage<PageProps>().props;
+  const { email: initialEmail, application_name, referrer, stats } = usePage<PageProps>().props;
   const { number_of_creators, total_made } = stats;
 
   const url = new URL(useOriginalLocation());
   const next = url.searchParams.get("next");
-  const recaptcha = useRecaptcha({ siteKey: recaptcha_site_key });
   const uid = React.useId();
 
   const form = useForm<{
@@ -52,7 +43,6 @@ function SignupPage() {
     };
     next: string | null;
     referral: string | null;
-    "g-recaptcha-response": string | null;
   }>({
     user: {
       email: initialEmail ?? "",
@@ -61,28 +51,11 @@ function SignupPage() {
     },
     next,
     referral: referrer?.id ?? null,
-    "g-recaptcha-response": null,
   });
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      const recaptchaResponse = recaptcha_site_key !== null ? await recaptcha.execute() : null;
-      form.transform((data) => ({
-        ...data,
-        "g-recaptcha-response": recaptchaResponse,
-      }));
-      form.post(Routes.signup_path());
-    } catch (e) {
-      if (e instanceof RecaptchaCancelledError) return;
-      // The reCAPTCHA script being blocked (ad blocker / privacy extension) is fixable by the
-      // user — tell them how instead of failing silently (see gumroad-private#927).
-      if (e instanceof RecaptchaUnavailableError) {
-        showAlert(RECAPTCHA_UNAVAILABLE_MESSAGE, "error");
-        return;
-      }
-      throw e;
-    }
+    form.post(Routes.signup_path());
   };
 
   const headerText = referrer
@@ -93,7 +66,7 @@ function SignupPage() {
 
   return (
     <Layout header={<h1>{headerText}</h1>} headerActions={<Link href={Routes.login_path({ next })}>Log in</Link>}>
-      <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={handleSubmit}>
         <SocialAuth />
         <Separator>
           <span>or</span>
@@ -132,7 +105,6 @@ function SignupPage() {
           </p>
         </section>
       </form>
-      {recaptcha.container}
     </Layout>
   );
 }

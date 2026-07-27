@@ -17,6 +17,12 @@ export type SaveProductResponse = {
   // server's content deletion guard and duplicates variants).
   variant_id_mappings?: Record<string, string>;
   rich_content_id_mappings?: Record<string, string>;
+  // Canonical external id → fresh post-save snapshot timestamp for every
+  // alive page/variant. The editor adopts these so its next save echoes the
+  // timestamps this save produced — otherwise the second save of a session
+  // would echo pre-save timestamps and be rejected as stale.
+  rich_content_updated_at?: Record<string, string>;
+  variant_updated_at?: Record<string, string>;
 };
 
 // The server's fail-closed answer when a save would delete version-level pages
@@ -28,6 +34,22 @@ export class HiddenVariantContentConflictError extends Error {
   constructor(
     message: string,
     public hiddenPages: { id: string; title: string | null; variant_name: string | null }[],
+  ) {
+    super(message);
+  }
+}
+
+// The server's rejection of a save built from a stale snapshot: pages or
+// variants in the payload echoed snapshot timestamps older than the stored
+// rows, meaning another session saved after this session loaded. Saving would
+// silently overwrite that newer content, so the server refuses before any
+// mutation (see the server's Product::StaleContentWriteGuard). Carries the
+// conflicting records so the editor can show the seller what changed and
+// offer a reload.
+export class StaleContentConflictError extends Error {
+  constructor(
+    message: string,
+    public staleRecords: { type: "page" | "variant"; id: string; name: string | null }[],
   ) {
     super(message);
   }
@@ -101,9 +123,12 @@ export const saveProduct = async (
       error_message: string;
       error_code?: string;
       hidden_variant_pages?: { id: string; title: string | null; variant_name: string | null }[];
+      stale_records?: { type: "page" | "variant"; id: string; name: string | null }[];
     }>(await response.json());
     if (error.error_code === "hidden_variant_content_conflict")
       throw new HiddenVariantContentConflictError(error.error_message, error.hidden_variant_pages ?? []);
+    if (error.error_code === "stale_content_conflict")
+      throw new StaleContentConflictError(error.error_message, error.stale_records ?? []);
     throw new ResponseError(error.error_message);
   }
   if (response.status === 204) return {};

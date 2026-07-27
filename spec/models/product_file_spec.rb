@@ -838,6 +838,178 @@ describe ProductFile do
     end
   end
 
+  describe "#stored_file_present?" do
+    it "returns true without asking storage when the file has been analyzed" do
+      product_file = create(:product_file, analyze_completed: true)
+      expect(product_file).not_to receive(:s3_object)
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    # `size` is accepted from the client by the product-save API, so it must not
+    # be what lets a file skip the storage check.
+    it "still asks storage for a never-analyzed file that claims a size" do
+      product_file = create(:product_file, size: 1_024, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    it "returns true for an external link, which has no storage object" do
+      product_file = create(:external_link)
+      expect(product_file).not_to receive(:s3_object)
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    it "asks storage when the file has never been analyzed" do
+      product_file = create(:product_file, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: true))
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    it "returns false when the upload never finished, so nothing was written" do
+      product_file = create(:product_file, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    it "returns false when the object has been purged from storage" do
+      product_file = create(:product_file, analyze_completed: true, deleted_from_cdn_at: Time.current)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    it "returns true when storage can't be reached, since an outage isn't evidence the file is gone" do
+      product_file = create(:product_file, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
+
+      expect(product_file.stored_file_present?).to eq(true)
+    end
+
+    # Proving the object is absent is the only moment we learn this row's upload
+    # never finished, so the finding is handed to a job that records it on the row
+    # — otherwise the next caller pays the same lookup for the same answer.
+    it "asks for the row to be retired when the object is proved absent" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect do
+        expect(product_file.stored_file_present?).to eq(false)
+      end.to change { RecordProductFileMissingFromStorageJob.jobs.size }.by(1)
+      expect(RecordProductFileMissingFromStorageJob.jobs.last["args"]).to eq([product_file.id])
+    end
+
+    # The row is still within the window where a large upload could be in
+    # progress, so its absence proves nothing durable yet.
+    it "does not ask for a row to be retired while its upload could still be in flight" do
+      product_file = create(:product_file, analyze_completed: false)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+
+      expect do
+        expect(product_file.stored_file_present?).to eq(false)
+      end.not_to change { RecordProductFileMissingFromStorageJob.jobs.size }
+    end
+
+    it "does not ask for a row to be retired when the file is really there" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: true))
+
+      expect do
+        expect(product_file.stored_file_present?).to eq(true)
+      end.not_to change { RecordProductFileMissingFromStorageJob.jobs.size }
+    end
+
+    # An outage is not evidence the file is gone, so it must not retire the row
+    # either.
+    it "does not ask for a row to be retired when storage can't be reached" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_raise(Aws::S3::Errors::ServiceUnavailable.new(nil, "unavailable"))
+
+      expect do
+        expect(product_file.stored_file_present?).to eq(true)
+      end.not_to change { RecordProductFileMissingFromStorageJob.jobs.size }
+    end
+
+    # This runs inside a product validation, so a queueing problem must not turn
+    # into a failed save for the seller.
+    it "still answers the caller when the row can't be queued for retirement" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    # Redis being down is the expected reason to end up here and resolves on its
+    # own, so it stays a log line. Alerting on it would page us for an outage we
+    # already know about.
+    it "does not report an unreachable queue" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    # Anything that isn't the queue being unreachable is a bug in how we enqueue.
+    # It must still not fail the seller's save, but it has to be reported instead
+    # of silently skipping retirement forever.
+    it "reports an unexpected queueing failure without failing the caller" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      error = ArgumentError.new("Job arguments to RecordProductFileMissingFromStorageJob must be native JSON types")
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, product_file_id: product_file.id)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+
+    # Reporting is best-effort too: Sentry goes over the network and can fail on
+    # its own, and this path runs inside a seller's save, so a failure to report
+    # must not fail that save.
+    it "still answers the caller when the queueing failure can't be reported" do
+      product_file = create(:product_file, analyze_completed: false)
+      product_file.update_column(:created_at, RecordProductFileMissingFromStorageJob::UPLOAD_GRACE_PERIOD.ago - 1.day)
+      allow(product_file).to receive(:s3_object).and_return(double("s3_object", exists?: false))
+      allow(RecordProductFileMissingFromStorageJob).to receive(:perform_async).and_raise(ArgumentError.new("bad argument"))
+      allow(ErrorNotifier).to receive(:notify).and_raise(Errno::ECONNREFUSED)
+
+      expect(product_file.stored_file_present?).to eq(false)
+    end
+  end
+
+  describe "#stored_file_presence_known_from_row" do
+    it "returns true for an analyzed file" do
+      expect(create(:product_file, analyze_completed: true).stored_file_presence_known_from_row).to eq(true)
+    end
+
+    it "returns true for an external link" do
+      expect(create(:external_link).stored_file_presence_known_from_row).to eq(true)
+    end
+
+    it "returns false for a file purged from storage" do
+      product_file = create(:product_file, analyze_completed: true, deleted_from_cdn_at: Time.current)
+
+      expect(product_file.stored_file_presence_known_from_row).to eq(false)
+    end
+
+    # This is the row a never-finished upload leaves behind: only storage can say
+    # whether anything was written.
+    it "returns nil for a never-analyzed file, which only storage can answer for" do
+      expect(create(:product_file, analyze_completed: false).stored_file_presence_known_from_row).to be_nil
+    end
+  end
+
   describe "#display_extension" do
     it "returns URL for files which are external links" do
       product_file = create(:product_file, filetype: "link", url: "http://gumroad.com")

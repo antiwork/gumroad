@@ -364,6 +364,7 @@ class ContactingCreatorMailer < ApplicationMailer
     return do_not_send unless @seller.account_active?
     @subject = "[Action Required] Stripe needs an updated document"
     @error_message = error_message
+    @error_message_is_unactionable = UserComplianceInfoRequest.unactionable_verification_message?(error_message)
   end
 
   def stripe_identity_verification_failed(user_id, error_message)
@@ -371,6 +372,7 @@ class ContactingCreatorMailer < ApplicationMailer
     return do_not_send unless @seller.account_active?
     @subject = "[Action Required] Stripe needs updated identity information"
     @error_message = error_message
+    @error_message_is_unactionable = UserComplianceInfoRequest.unactionable_verification_message?(error_message)
   end
 
   def singapore_identity_verification_reminder(user_id, deadline)

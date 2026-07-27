@@ -383,7 +383,7 @@ class Bundles::ProductControllerTest < ActionController::TestCase
     end
 
     assert_redirected_to edit_bundle_product_path(@bundle.external_id)
-    assert_equal "Custom permalink is invalid", flash[:alert]
+    assert_equal "Custom permalink can only contain letters, numbers, dashes, and underscores", flash[:alert]
   end
 
   test "redirects with an error message when price_cents exceeds integer limit" do

@@ -87,7 +87,7 @@ class PostResendApi
 
       email = {
         from: "#{from_email_address_name(@post.seller.name)} <#{creators_from_email_address(@post.seller.username)}>",
-        reply_to: @post.seller.support_or_form_email,
+        reply_to: @post.reply_to_email,
         to: [recipient[:email]],
         subject: @post.subject,
         html: personalize_content(@cache[@post][:template][:html], recipient),

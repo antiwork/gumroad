@@ -23,7 +23,15 @@ SecureHeaders::Configuration.default do |config|
   config.x_xss_protection = "1; mode=block"
 
   config.csp = {
-    default_src: ["https", "'self'"],
+    # NOTE: this must be "https:" WITH the colon. In the CSP grammar a bare token
+    # without a colon is a *host*-source, not a *scheme*-source, so "https" asks the
+    # browser to allow a host literally named "https" — which matches nothing. That
+    # made default-src effectively "'self'" only, so any resource fetched from a
+    # different origin (e.g. our asset host, assets.gumroad.com) was blocked by
+    # default-src unless some other directive happened to cover it. Directives listed
+    # explicitly below (script_src, style_src, ...) have their own allowlists and were
+    # unaffected; the fallback-only fetch types were the ones that silently broke.
+    default_src: ["https:", "'self'"],
 
     frame_src: ["*", "data:", "blob:"],
     worker_src: ["*", "data:", "blob:"],

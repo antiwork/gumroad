@@ -577,6 +577,83 @@ describe Api::V2::VariantsController do
             message: "The variant was deleted successfully."
           }.as_json(api_scopes: ["edit_products"]))
         end
+
+        # This endpoint deletes a single version outside the product editor's
+        # deletion guards, so it is audited (ProductVariantDeletionAudit,
+        # gumroad-private#1379). It is easy to miss when auditing deletion paths
+        # because it sets `deleted_at` directly rather than via `mark_deleted`.
+        describe "deletion audit" do
+          it "records the deletion with an explicit-destroy intent" do
+            expect { delete @action, params: @params }
+              .to change { ProductVariantDeletionAudit.count }.by(1)
+
+            audit = ProductVariantDeletionAudit.last
+            expect(audit.route).to eq(ProductVariantDeletionAudit::API_V2_VARIANT_DESTROY)
+            expect(audit.intent_source).to eq(ProductVariantDeletionAudit::API_EXPLICIT_DESTROY)
+            expect(audit.product_id).to eq(@product.id)
+            expect(audit.actor_user_id).to eq(@user.id)
+            expect(audit.deleted_variant_external_ids).to eq([@variant.external_id])
+            expect(audit.deleted_variant_count).to eq(1)
+          end
+
+          # A second DELETE deletes nothing, so it is not a deletion this request
+          # performed and must not add a row. The row is locked and `deleted_at`
+          # re-read under the lock, precisely so two overlapping requests cannot
+          # both record the same deletion.
+          it "does not record a second audit when the variant was already deleted" do
+            expect { delete @action, params: @params }
+              .to change { ProductVariantDeletionAudit.count }.by(1)
+
+            expect { delete @action, params: @params }
+              .not_to change { ProductVariantDeletionAudit.count }
+          end
+
+          # Regression: an earlier version of this used `update_all` to make the
+          # transition atomic, which silently skipped BaseVariant's after_commit
+          # callbacks and would have left stale product caches and stale search
+          # state. Assert on the observable effects of those callbacks rather than
+          # on the instance, since the controller loads its own via the
+          # variant_category association.
+
+          # Correlation logging used to run inside the deletion's transaction,
+          # where a raising logger propagated out of with_lock and rolled the
+          # deletion back. It now runs in after_commit, after the row is written,
+          # so a raise could only 500 a delete that had already succeeded. Either
+          # way it must cost the log line and nothing more.
+          it "is not broken by a failing correlation logger" do
+            allow(AuditCorrelationId).to receive(:log_pair).and_raise(IOError, "log device full")
+
+            expect { delete @action, params: @params }
+              .to change { ProductVariantDeletionAudit.count }.by(1)
+
+            expect(response.parsed_body["success"]).to be(true)
+            expect(@variant.reload).to be_deleted
+          end
+
+          # Asserted on the call rather than on Rails.logger output: the write is
+          # deferred to after_commit and lands after the stub's window, and
+          # ActionDispatch::RequestId is middleware that controller specs bypass, so
+          # request_id is nil here. The end-to-end version with a real request id is
+          # in test/integration/product_variant_deletion_audit_request_id_test.rb.
+          it "logs a correlation pair carrying the stored digest" do
+            logged = []
+            allow(AuditCorrelationId).to receive(:log_pair) { |**kwargs| logged << kwargs; true }
+
+            delete @action, params: @params
+
+            expect(logged.size).to eq(1)
+            expect(logged.first[:correlation_id]).to eq(ProductVariantDeletionAudit.last.correlation_id)
+          end
+
+          it "still invalidates the product cache and updates the search index" do
+            expect_any_instance_of(Link).to receive(:invalidate_cache).at_least(:once)
+            expect_any_instance_of(BaseVariant).to receive(:update_product_search_index).at_least(:once).and_call_original
+
+            delete @action, params: @params
+
+            expect(@variant.reload).to be_deleted
+          end
+        end
       end
     end
   end

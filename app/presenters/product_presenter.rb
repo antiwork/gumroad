@@ -159,6 +159,13 @@ class ProductPresenter
             id: variant.external_id,
             name: variant.name || "",
             description: variant.description || "",
+            # The variant's snapshot timestamp. The editor echoes it back with
+            # each save so the server can reject writes built from a stale
+            # snapshot (see Product::StaleContentWriteGuard). For a membership
+            # tier this is the newest of the tier row and its price rows, since
+            # tier prices live in a separate table — the guard compares against
+            # the same value.
+            updated_at: Product::StaleContentWriteGuard.snapshot_at(variant),
             max_purchase_count: variant.max_purchase_count,
             integrations: Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? },
             rich_content: variant.rich_content_json,

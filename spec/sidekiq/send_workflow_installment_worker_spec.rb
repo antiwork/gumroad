@@ -174,4 +174,16 @@ describe SendWorkflowInstallmentWorker do
     expect(PostSendgridApi.mails[@purchase_1.email]).to be_present
     expect(PostSendgridApi.mails[@purchase_2.email]).to be_present
   end
+
+  it "logs instead of silently doing nothing when no recipient id is given" do
+    @workflow = create(:workflow, seller: @product.user, link: @product, created_at: Time.current)
+    @installment = create(:installment, link: @product, workflow: @workflow, published_at: Time.current)
+    @installment_rule = create(:installment_rule, installment: @installment, delayed_delivery_time: 1.day)
+
+    expect(Rails.logger).to receive(:error).with(/could not|unusable recipient combination/)
+
+    SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, nil, nil, nil)
+
+    expect(PostSendgridApi.mails).to be_empty
+  end
 end

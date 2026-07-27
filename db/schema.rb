@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000006) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000010) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1769,6 +1769,28 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000006) do
     t.index ["tag_id"], name: "index_product_taggings_on_tag_id"
   end
 
+  create_table "product_variant_deletion_audits", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "actor_user_id", null: false
+    t.bigint "product_id", null: false
+    t.string "route", null: false
+    t.string "intent_source", null: false
+    t.json "deleted_variant_external_ids"
+    t.json "deleted_variant_category_external_ids"
+    t.json "affected_variant_external_ids"
+    t.json "confirmed_affected_variant_external_ids"
+    t.integer "deleted_variant_count", default: 0, null: false
+    t.integer "affected_variant_count", default: 0, null: false
+    t.integer "confirmed_affected_variant_count", default: 0, null: false
+    t.integer "unconfirmed_affected_variant_count", default: 0, null: false
+    t.integer "alive_child_variant_count", default: 0, null: false
+    t.string "revision_token"
+    t.string "correlation_id", limit: 64
+    t.datetime "created_at", null: false
+    t.index ["actor_user_id", "created_at"], name: "idx_on_actor_user_id_created_at_0b984cfaae"
+    t.index ["intent_source", "created_at"], name: "idx_on_intent_source_created_at_69e15c2c5d"
+    t.index ["product_id", "created_at"], name: "idx_on_product_id_created_at_cea2c3e72d"
+  end
+
   create_table "public_files", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id"
     t.string "resource_type", null: false
@@ -2487,7 +2509,29 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000006) do
     t.datetime "updated_at", precision: nil
     t.string "humanized_name", limit: 191
     t.datetime "flagged_at", precision: nil
-    t.index ["name"], name: "index_tags_on_name"
+    t.integer "taggings_count", default: 0, null: false
+    t.index ["name", "taggings_count"], name: "index_tags_on_name_and_taggings_count"
+  end
+
+  create_table "tax_remittances", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "authority", null: false
+    t.string "jurisdiction", null: false
+    t.string "period", null: false
+    t.string "currency", limit: 3, null: false
+    t.bigint "target_amount_cents"
+    t.bigint "usd_amount_cents", null: false
+    t.string "rail", default: "wise", null: false
+    t.string "transfer_id"
+    t.string "status", default: "draft", null: false
+    t.integer "attempt", default: 1, null: false
+    t.datetime "paid_at"
+    t.string "qbo_journal_entry_ref"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["authority", "period", "attempt"], name: "index_tax_remittances_on_authority_and_period_and_attempt", unique: true
+    t.index ["rail", "transfer_id"], name: "index_tax_remittances_on_rail_and_transfer_id", unique: true
+    t.index ["status", "period"], name: "index_tax_remittances_on_status_and_period"
   end
 
   create_table "taxonomies", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2514,27 +2558,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000006) do
     t.datetime "updated_at", null: false
     t.integer "recent_sales_count", default: 0
     t.index ["taxonomy_id"], name: "index_taxonomy_stats_on_taxonomy_id"
-  end
-
-  create_table "tax_remittances", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.string "authority", null: false
-    t.string "jurisdiction", null: false
-    t.string "period", null: false
-    t.string "currency", limit: 3, null: false
-    t.bigint "target_amount_cents"
-    t.bigint "usd_amount_cents", null: false
-    t.string "rail", default: "wise", null: false
-    t.string "transfer_id"
-    t.string "status", default: "draft", null: false
-    t.integer "attempt", default: 1, null: false
-    t.datetime "paid_at"
-    t.string "qbo_journal_entry_ref"
-    t.text "notes"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["authority", "period", "attempt"], name: "index_tax_remittances_on_authority_and_period_and_attempt", unique: true
-    t.index ["rail", "transfer_id"], name: "index_tax_remittances_on_rail_and_transfer_id", unique: true
-    t.index ["status", "period"], name: "index_tax_remittances_on_status_and_period"
   end
 
   create_table "team_invitations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
