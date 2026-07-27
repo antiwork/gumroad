@@ -294,17 +294,19 @@ class Settings::PaymentsController < Settings::BaseController
   end
 
   private
-    # Identity fields the Payments form submits for the seller, paired with nothing special:
-    # each one is compared against the stored compliance record below. The form loads every
-    # stored value and posts it all back on save, so a field being *present* does not mean the
-    # seller just typed it — only a value that DIFFERS from what is stored is new input that the
-    # country change is about to throw away.
-    IDENTITY_FIELDS_CLEARED_BY_COUNTRY_CHANGE = %i[
-      first_name last_name business_name
-      street_address city state zip_code
-      business_street_address business_city business_state business_zip_code
-      phone business_phone
-    ].freeze
+    # Identity fields the Payments form submits for the seller. Rather than keeping a second,
+    # hand-written list that silently goes stale whenever the form gains a field (nationality,
+    # job title, business type, the Japanese kana/kanji name and address fields, ...), reuse the
+    # exact set that UpdateUserComplianceInfo saves — if a field can be saved from this form, a
+    # country change can discard it, so it belongs here. Each one is compared against the stored
+    # compliance record below: the form loads every stored value and posts it all back on save,
+    # so a field being *present* does not mean the seller just typed it — only a value that
+    # DIFFERS from what is stored is new input that the country change is about to throw away.
+    IDENTITY_FIELDS_CLEARED_BY_COUNTRY_CHANGE = UpdateUserComplianceInfo::SIMPLE_COMPLIANCE_INFO_FIELDS
+
+    # Tax IDs are stored encrypted and echoed back to the form as a masked placeholder (bullets),
+    # so a masked value is the stored one coming back and anything else is freshly typed.
+    TAX_ID_FIELDS_CLEARED_BY_COUNTRY_CHANGE = %i[individual_tax_id ssn_last_four business_tax_id].freeze
 
     # True when this request carries payout or identity details the seller entered by hand, all of
     # which a country change discards (it deletes the bank account and starts an empty compliance
@@ -315,6 +317,13 @@ class Settings::PaymentsController < Settings::BaseController
       return true if params[:card].present?
       return true if params.dig(:bank_account, :account_number).present?
 
+      # The account holder name IS echoed back from the saved bank account, so only a changed one
+      # counts. With no bank account on file there is nothing to echo, so any name is new input.
+      submitted_holder_name = params.dig(:bank_account, :account_holder_full_name)
+      if submitted_holder_name.present?
+        return true if submitted_holder_name.to_s != current_seller.active_bank_account&.account_holder_full_name.to_s
+      end
+
       # The PayPal address IS echoed back, so only a changed one counts.
       return true if params[:payment_address].present? && params[:payment_address] != current_seller.payment_address
 
@@ -323,6 +332,11 @@ class Settings::PaymentsController < Settings::BaseController
 
       return true if IDENTITY_FIELDS_CLEARED_BY_COUNTRY_CHANGE.any? do |field|
         user_params[field].present? && user_params[field].to_s != compliance_info.public_send(field).to_s
+      end
+
+      return true if TAX_ID_FIELDS_CLEARED_BY_COUNTRY_CHANGE.any? do |field|
+        value = user_params[field]
+        value.present? && !value.to_s.match?(UpdateUserComplianceInfo::MASKED_TAX_ID_PATTERN)
       end
 
       submitted_birthday_differs?(user_params, compliance_info)

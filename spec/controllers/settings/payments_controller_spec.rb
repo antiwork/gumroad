@@ -1719,6 +1719,48 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(flash[:notice]).to include("nothing else on this page was saved")
         end
 
+        it "tells the seller a renamed bank account holder was not saved" do
+          create(:ach_account, user:, account_holder_full_name: "barnabas barnabastein")
+
+          put :update, params: {
+            user: { updated_country_code: "GB" },
+            bank_account: { type: AchAccount.name, account_holder_full_name: "barnabas barnabastein jr" },
+          }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a compliance field outside the common set was not saved" do
+          put :update, params: { user: { updated_country_code: "GB", nationality: "GB", job_title: "Director" } }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a newly typed tax ID was not saved" do
+          put :update, params: { user: { updated_country_code: "GB", individual_tax_id: "123456789" } }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        # The form renders a stored tax ID as bullets, and those bullets come back on save. That
+        # is the stored value echoing, not the seller retyping their tax ID.
+        it "keeps the plain message when the tax ID comes back masked" do
+          put :update, params: { user: { updated_country_code: "GB", individual_tax_id: "•••••6789" } }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
+        it "keeps the plain message when the bank account holder name is echoed unchanged" do
+          create(:ach_account, user:, account_holder_full_name: "barnabas barnabastein")
+
+          put :update, params: {
+            user: { updated_country_code: "GB" },
+            bank_account: { type: AchAccount.name, account_holder_full_name: "barnabas barnabastein" },
+          }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
         it "keeps the plain message when only the country was submitted" do
           put :update, params: { user: { updated_country_code: "GB", is_business: "off" } }
 
