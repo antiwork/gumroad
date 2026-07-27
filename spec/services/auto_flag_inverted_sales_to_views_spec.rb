@@ -35,15 +35,24 @@ describe AutoFlagInvertedSalesToViews, :elasticsearch_wait_for_refresh do
         expect(product.reload.is_unpublished_by_admin).to be(true)
       end
 
-      it "flags the seller for a policy violation with the numbers on the comment" do
+      it "records the numbers as a note on the product" do
         described_class.new.process
 
-        seller.reload
-        expect(seller.flagged_for_tos_violation?).to be(true)
-        expect(seller.tos_violation_reason).to eq(described_class::TOS_VIOLATION_REASON)
-        comment = seller.comments.with_type_flagged.last
-        expect(comment.author_name).to eq(described_class::FLAG_AUTHOR_NAME)
-        expect(comment.content).to include("20 free sales against 0 product page views")
+        note = product.comments.where(author_name: described_class::NOTE_AUTHOR_NAME).last
+        expect(note.comment_type).to eq(Comment::COMMENT_TYPE_FLAG_NOTE)
+        expect(note.content).to include("20 free sales against 0 product page views")
+      end
+
+      # Anyone on the internet can put free checkouts through a public product, so the same
+      # rows appear whether the seller ran the script or was the target of it. Acting on the
+      # account off this signal alone would let an attacker get a competitor flagged.
+      it "leaves the seller's account state alone, because buyers can generate this signal" do
+        expect do
+          described_class.new.process
+        end.not_to change { seller.reload.user_risk_state }
+
+        expect(seller.reload.tos_violation_reason).to be_nil
+        expect(seller.comments.with_type_flagged).to be_empty
       end
 
       it "emails risk with the counts, since the release decision is a human's" do
@@ -67,8 +76,6 @@ describe AutoFlagInvertedSalesToViews, :elasticsearch_wait_for_refresh do
         expect do
           described_class.new.process
         end.not_to change { product.reload.alive? }
-
-        expect(seller.reload.flagged_for_tos_violation?).to be(false)
       end
     end
 
@@ -151,43 +158,22 @@ describe AutoFlagInvertedSalesToViews, :elasticsearch_wait_for_refresh do
       end
     end
 
-    context "when the seller is already flagged, so the flag transition is unavailable" do
+    context "when the seller was already flagged by someone else" do
       before do
         create_free_sales(20)
         seller.update!(tos_violation_reason: "something earlier")
         seller.flag_for_tos_violation!(author_name: "admin", product_id: product.id, content: "Earlier flag")
       end
 
-      it "still unpublishes the product and records why on the product" do
+      it "takes the product down without touching the existing account state" do
         expect do
           described_class.new.process
         end.to change { product.reload.alive? }.from(true).to(false)
 
-        note = product.comments.where(author_name: described_class::FLAG_AUTHOR_NAME).last
-        expect(note.comment_type).to eq(Comment::COMMENT_TYPE_FLAG_NOTE)
+        expect(seller.reload.user_risk_state).to eq("flagged_for_tos_violation")
+        expect(seller.tos_violation_reason).to eq("something earlier")
+        note = product.comments.where(author_name: described_class::NOTE_AUTHOR_NAME).last
         expect(note.content).to include("20 free sales against 0 product page views")
-      end
-    end
-
-    context "when the seller is marked verified, which the risk state machine refuses to flag" do
-      let(:seller) { create(:user, verified: true) }
-
-      before { create_free_sales(20) }
-
-      it "still takes the product down and records why on it" do
-        expect do
-          described_class.new.process
-        end.to change { product.reload.alive? }.from(true).to(false)
-
-        expect(seller.reload.flagged_for_tos_violation?).to be(false)
-        note = product.comments.where(author_name: described_class::FLAG_AUTHOR_NAME).last
-        expect(note.comment_type).to eq(Comment::COMMENT_TYPE_FLAG_NOTE)
-      end
-
-      it "still emails risk, so the account decision reaches a human" do
-        expect do
-          described_class.new.process
-        end.to have_enqueued_mail(AdminMailer, :inverted_sales_to_views_notify).with(product.id, 20, 0)
       end
     end
 
@@ -197,10 +183,10 @@ describe AutoFlagInvertedSalesToViews, :elasticsearch_wait_for_refresh do
         product.unpublish!
       end
 
-      it "does nothing, so a re-run doesn't re-flag the same seller" do
+      it "does nothing, so a re-run doesn't pile up notes and emails on the same product" do
         expect do
           described_class.new.process
-        end.not_to change { seller.reload.user_risk_state }
+        end.not_to change { product.comments.count }
       end
     end
 

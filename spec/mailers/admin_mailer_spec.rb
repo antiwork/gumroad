@@ -92,7 +92,7 @@ describe AdminMailer do
     end
 
     it "puts the product and both counts in the subject" do
-      expect(mail.subject).to eq "[test] Auto-flagged for inverted sales-to-views - The Freebie (4,200 sales / 37 views)"
+      expect(mail.subject).to eq "[test] Auto-unpublished for inverted sales-to-views - The Freebie (4,200 sales / 37 views)"
     end
 
     it "links the product and says the product is already down" do
@@ -100,6 +100,12 @@ describe AdminMailer do
       expect(mail.body.encoded).to include("4,200")
       expect(mail.body.encoded).to include("37")
       expect(mail.body.encoded).to include("already been unpublished")
+    end
+
+    it "is explicit that the account was left alone, so risk doesn't assume it is queued for review" do
+      expect(mail.body.encoded).to include("Nothing has been done to the seller")
+      expect(mail.body.encoded).to include("does not establish")
+      expect(mail.body.encoded).not_to include("flagged for review")
     end
 
     it "includes the seller's details" do

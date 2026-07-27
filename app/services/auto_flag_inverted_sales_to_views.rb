@@ -19,11 +19,17 @@
 #   1. Unpublishes the product, which is what actually stops an in-flight blast. Suspending
 #      the seller does not: in the July incident 800 more receipts went out in the ten
 #      minutes after the ban, because checkout stays open on a live product.
-#   2. Flags the seller for a policy violation so the account lands in the admin review
-#      queue with the numbers recorded on it.
+#   2. Records the counts as a note on the product and emails risk, so a human can decide
+#      what, if anything, should happen to the account.
 #
-# Flag, not suspend, is deliberate. Detection needs no human; releasing does. An admin
-# reviews the flagged account and either suspends it or marks it compliant and republishes.
+# It deliberately does NOT touch the seller's risk state. The signal it reads — free
+# checkouts on a public product — is one that anybody on the internet can generate, so a
+# script pointed at somebody else's free product produces exactly the same rows as a seller
+# abusing their own. Taking the product down is safe under both readings and reversible in
+# one click: either way the receipts stop going out under our sending domain, which is the
+# harm being prevented. Deciding that the SELLER did it is not safe under both readings, so
+# that judgement stays with the admin who reads the email. Detection needs no human;
+# attributing blame does.
 class AutoFlagInvertedSalesToViews
   # How far back each run looks. The job runs hourly, so the window matches the cadence.
   WINDOW = 1.hour
@@ -39,8 +45,9 @@ class AutoFlagInvertedSalesToViews
   # views leaves room for that. The July incident ran at roughly 22x.
   INVERSION_MULTIPLIER = 5
 
-  FLAG_AUTHOR_NAME = "auto_flag_inverted_sales_to_views"
-  TOS_VIOLATION_REASON = "Automated checkout abuse: sales far exceeding product page views"
+  # Recorded as the author of the note left on the product, so an admin reading the product
+  # can tell the takedown came from this detector rather than from a person.
+  NOTE_AUTHOR_NAME = "auto_flag_inverted_sales_to_views"
 
   # Kill switch. Flipper features are off unless enabled, so this is phrased as a disable
   # so the detector is on by default and can be turned off without a deploy.
@@ -138,43 +145,20 @@ class AutoFlagInvertedSalesToViews
     end
 
     def act_on(product:, sales_count:, views_count:)
-      content = comment_content(product:, sales_count:, views_count:)
-
-      # Deliberately NOT wrapped in one transaction with the flag below. The unpublish is
-      # the part that stops the sends, and the flag can legitimately fail — a seller who is
-      # already flagged, or one marked `verified` (the risk state machine refuses to flag
-      # verified accounts), both reject the transition. Sharing a transaction would roll the
-      # unpublish back on that failure and leave the blast running, which is the one outcome
-      # this detector exists to prevent.
+      # The unpublish is the part that stops the sends, so it goes first and stands on its
+      # own: nothing after it is allowed to undo it. Note and email are bookkeeping that
+      # tell a human what happened and hand them the account decision.
       product.unpublish!(is_unpublished_by_admin: true)
 
-      flag_seller(product:, content:)
+      record_note_on_product(product:, content: comment_content(product:, sales_count:, views_count:))
 
       AdminMailer.inverted_sales_to_views_notify(product.id, sales_count, views_count).deliver_later(queue: "default")
     end
 
-    def flag_seller(product:, content:)
-      seller = product.user
-
-      if seller.can_flag_for_tos_violation?
-        seller.flag_for_tos_violation!(author_name: FLAG_AUTHOR_NAME, product_id: product.id, content:)
-        # After the transition, not before: a halted transition would otherwise leave a
-        # violation reason on an account that was never flagged.
-        seller.update!(tos_violation_reason: TOS_VIOLATION_REASON)
-      else
-        record_note_on_product(product:, content:)
-      end
-    rescue StateMachines::InvalidTransition
-      # can_flag_for_tos_violation? only checks the state graph; it doesn't run the
-      # transition guards, so a `verified` account passes the check and then halts here.
-      record_note_on_product(product:, content:)
-    end
-
-    # Used when the seller can't be flagged. The product is already down either way; without
-    # this an admin would find an unpublished product with no explanation on it.
+    # Without this an admin would find an unpublished product with no explanation on it.
     def record_note_on_product(product:, content:)
       product.comments.create!(
-        author_name: FLAG_AUTHOR_NAME,
+        author_name: NOTE_AUTHOR_NAME,
         comment_type: Comment::COMMENT_TYPE_FLAG_NOTE,
         content:
       )
@@ -185,6 +169,8 @@ class AutoFlagInvertedSalesToViews
         "#{ActiveSupport::NumberHelper.number_to_delimited(sales_count)} free sales against " \
         "#{ActiveSupport::NumberHelper.number_to_delimited(views_count)} product page views in the previous hour. " \
         "Sales far exceeding views means the checkouts did not come through the product page, " \
-        "which is the signature of scripted checkouts using the receipt email as a mailer."
+        "which is the signature of scripted checkouts using the receipt email as a mailer. " \
+        "Who ran the script is not established by this signal — anyone can check out a public " \
+        "free product — so no account action was taken. Risk has been emailed to review it."
     end
 end

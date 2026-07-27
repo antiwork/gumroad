@@ -29,17 +29,18 @@ class AdminMailer < ApplicationMailer
          to: RISK_EMAIL
   end
 
-  # Sent when AutoFlagInvertedSalesToViews unpublishes a product because its free sales
-  # ran far ahead of its page views. Nobody has to act for the abuse to stop — the product
-  # is already down by the time this sends — but a human decides whether the seller stays
-  # suspended or gets released.
+  # Sent when AutoFlagInvertedSalesToViews unpublishes a product because its free sales ran
+  # far ahead of its page views. Nobody has to act for the sends to stop — the product is
+  # already down by the time this arrives. The detector deliberately leaves the account
+  # alone, because anybody can check out a public free product, so this email is how a human
+  # gets to decide whether the seller was behind it or the target of it.
   def inverted_sales_to_views_notify(product_id, sales_count, views_count)
     @product = Link.find(product_id)
     @user = @product.user
     @sales_count = sales_count
     @views_count = views_count
 
-    mail subject: "#{SUBJECT_PREFIX}Auto-flagged for inverted sales-to-views - #{@product.name} (#{ActiveSupport::NumberHelper.number_to_delimited(sales_count)} sales / #{ActiveSupport::NumberHelper.number_to_delimited(views_count)} views)",
+    mail subject: "#{SUBJECT_PREFIX}Auto-unpublished for inverted sales-to-views - #{@product.name} (#{ActiveSupport::NumberHelper.number_to_delimited(sales_count)} sales / #{ActiveSupport::NumberHelper.number_to_delimited(views_count)} views)",
          to: RISK_EMAIL
   end
 end
