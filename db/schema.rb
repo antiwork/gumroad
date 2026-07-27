@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000011) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000012) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1135,6 +1135,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000011) do
     t.index ["base_variant_id"], name: "index_installments_on_base_variant_id"
     t.index ["created_at"], name: "index_installments_on_created_at"
     t.index ["link_id"], name: "index_installments_on_link_id"
+    t.index ["seller_id", "installment_type", "published_at"], name: "index_installments_on_seller_id_and_type_and_published_at"
     t.index ["seller_id", "link_id"], name: "index_installments_on_seller_id_and_link_id"
     t.index ["slug"], name: "index_installments_on_slug", unique: true
     t.index ["workflow_id"], name: "index_installments_on_workflow_id"
