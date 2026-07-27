@@ -207,15 +207,23 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     end
 
     def give_up!(user, note)
+      # The email is enqueued BEFORE the abandonment commits, for the same reason as the format
+      # rejection path: abandonment is terminal, so once it is committed no later run will ever
+      # look at this note again. If the enqueue then failed, the outer rescue would swallow it
+      # and the seller would never learn that the retries stopped — this is the only place that
+      # email is sent, so there is no second chance. Enqueuing first fails the other way: if the
+      # transaction below rolls back, the seller has been told retries are over slightly early,
+      # the note stays outstanding, and the next weekly run reaches the ceiling again and
+      # re-sends the same message. A duplicate or early notice is recoverable; silence is not.
+      marker_type = bank_note?(note) ? "bank" : "postal"
+      ContactingCreatorMailer.payout_setup_retry_exhausted(user.id, marker_type).deliver_later(queue: "critical")
+
       # Same reasoning as abandon_stale_notes!: the terminal state and its explanation are one
-      # unit. The email is enqueued after the transaction so a rolled-back abandonment can
-      # never tell the seller that retries are over while the note says they are still running.
+      # unit, so support never sees a dead note with no record of why the retries stopped.
       ActiveRecord::Base.transaction do
         note.json_data["abandoned_at"] = Time.current.iso8601
         note.save!
         user.add_payout_note(content: GAVE_UP_NOTE)
       end
-      marker_type = bank_note?(note) ? "bank" : "postal"
-      ContactingCreatorMailer.payout_setup_retry_exhausted(user.id, marker_type).deliver_later(queue: "critical")
     end
 end

@@ -247,6 +247,27 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
         described_class.new.perform(user.id)
       end.to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted).with(user.id, "postal")
     end
+
+    it "sends the exhausted notice even when recording the abandonment fails" do
+      # Abandonment is terminal — an abandoned note is skipped by every later run — and this is
+      # the only place the exhausted email is sent. So the email must not be downstream of a
+      # write that can fail: if it were, a failure here would silently cost the seller the one
+      # message telling them the automated retries stopped. Simulate that failure by making the
+      # audit note inside the transaction raise.
+      note = add_note(bank_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES })
+      allow(User).to receive(:find_by).with(id: user.id).and_return(user)
+      allow(user).to receive(:add_payout_note).and_call_original
+      allow(user).to receive(:add_payout_note).with(content: described_class::GAVE_UP_NOTE)
+                                              .and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
+
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted).with(user.id, "bank")
+
+      # The abandonment rolled back with its audit note, so the note is still outstanding and the
+      # next run retries the whole terminal step rather than leaving a dead record behind.
+      expect(note.reload.json_data["abandoned_at"]).to be_blank
+    end
   end
 
   describe "when the seller has switched to a non-Stripe payout method" do
