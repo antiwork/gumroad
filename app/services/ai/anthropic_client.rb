@@ -113,6 +113,16 @@ class Ai::AnthropicClient
   # good enough for budgeting, since the numbers it feeds are safety bounds rather than billing.
   CHARACTERS_PER_TOKEN_ESTIMATE = 4
 
+  # Smallest allowance worth spending a recovery generation on. #stream_messages can generate a
+  # turn several times over (a retry after a corrupted tool call, then the buffered replay), and
+  # every one of those generations is charged against the SAME `max_tokens` the caller passed —
+  # see #remaining_call_allowance. Once what's left falls below this, another attempt would be
+  # certain to stop at `max_tokens` mid-answer and be thrown away, so the failure surfaces instead
+  # of paying for output nobody can use. Deliberately small: the caller's own budget floor (the
+  # store agent's MIN_TURN_OUTPUT_TOKENS) is what decides whether a turn is worth taking at all,
+  # and this only stops a recovery that is already underway from being pointless.
+  MIN_RECOVERY_OUTPUT_TOKENS = 512
+
   # `timeout` is the READ timeout: how long a single read from Anthropic may block before we give
   # up. For a streaming request that means "seconds of silence between chunks", not the total
   # duration of the response — a healthy stream that takes minutes to finish is fine as long as
@@ -174,11 +184,18 @@ class Ai::AnthropicClient
   # whatever request timeout sits above it), not by silence between chunks. Replaying a very large
   # streaming budget buffered is how a clear "that was too long" reply turns into a timeout.
   #
+  # `max_tokens` bounds the CALL, not each attempt inside it. One call can generate the turn
+  # several times over — a retry after a corrupted tool call, then the buffered replay — and every
+  # one of those generations is billed. Each attempt is therefore capped at what the call has left
+  # (`max_tokens` minus what the discarded attempts already generated), and the recovery stops
+  # once too little is left to produce a usable reply, surfacing the original error instead. So a
+  # caller can treat `max_tokens` as the most this call will ever generate, which is what makes a
+  # cumulative budget above it (the store agent's per-request ceiling) actually hold.
+  #
   # @param on_discard_streamed_text [#call, nil] erases text already streamed to the seller
   # @yieldparam text [String] a chunk of assistant text
   # @return [Result]
   def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, buffered_max_tokens: nil, on_discard_streamed_text: nil, &on_text)
-    body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
     yielded_any = false
     # Output the model generated on streamed attempts we ended up throwing away — a corrupted tool
     # call, a connection that dropped mid-stream — and that a retry or the buffered replay then
@@ -189,7 +206,7 @@ class Ai::AnthropicClient
     discarded_output_tokens = 0
 
     begin
-      with_retries(retryable: -> { !yielded_any }) do
+      with_retries(retryable: -> { !yielded_any && remaining_call_allowance(max_tokens, discarded_output_tokens) >= MIN_RECOVERY_OUTPUT_TOKENS }) do
         text = +""
         # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
         # we parse when the block closes.
@@ -197,6 +214,12 @@ class Ai::AnthropicClient
         stop_reason = nil
         reported_output_tokens = nil
 
+        # Built per attempt rather than once, because each attempt's cap is what the CALL has left:
+        # a discarded attempt already generated (and was billed for) output, and the caller's
+        # `max_tokens` bounds the whole call, not each attempt within it. Rebuilding here is what
+        # keeps three corrupted page-sized attempts plus a replay from generating several times the
+        # allowance the caller handed us.
+        body = request_body(system:, messages:, tools:, max_tokens: remaining_call_allowance(max_tokens, discarded_output_tokens), stream: true)
         response = http.post(api_url, json: body)
         raise_for_status!(response, kind: "stream")
 
@@ -270,12 +293,31 @@ class Ai::AnthropicClient
         yielded_any = false
       end
 
-      buffered_fallback(system:, messages:, tools:, max_tokens: buffered_max_tokens || max_tokens, original_error: e, already_generated_output_tokens: discarded_output_tokens, &on_text)
+      # The replay is another whole generation charged to the same call, so it gets what the call
+      # has left rather than a fresh cap. When the discarded attempts have already spent the
+      # allowance, there is nothing left to replay with: a replay squeezed into a few hundred
+      # tokens would stop at `max_tokens` mid-answer and be discarded in turn, so the original
+      # unreadable-tool-call error surfaces instead of paying for output nobody can use.
+      replay_allowance = [buffered_max_tokens || max_tokens, remaining_call_allowance(max_tokens, discarded_output_tokens)].min
+      raise if replay_allowance < MIN_RECOVERY_OUTPUT_TOKENS
+
+      buffered_fallback(system:, messages:, tools:, max_tokens: replay_allowance, original_error: e, already_generated_output_tokens: discarded_output_tokens, &on_text)
     end
   end
 
   private
     attr_reader :timeout, :model
+
+    # What is left of the caller's per-call output allowance after the attempts we generated and
+    # then threw away. `max_tokens` bounds ONE call as far as the caller is concerned, but a single
+    # #stream_messages call can generate the turn several times (retries after a corrupted tool
+    # call, then the buffered replay) — so without subtracting what was already generated, a call
+    # handed a 32,000-token cap could generate 32,000 tokens four times over and hand the caller a
+    # bill four times the ceiling it thought it had set. Never negative: a cap of zero or less is
+    # not a legal request, and callers compare this against MIN_RECOVERY_OUTPUT_TOKENS anyway.
+    def remaining_call_allowance(max_tokens, already_generated)
+      [max_tokens - already_generated, 0].max
+    end
 
     # Last-resort recovery for a streamed turn whose tool-call JSON kept arriving corrupted: replay
     # the request once with stream: false. A buffered response is delivered as a single body, so

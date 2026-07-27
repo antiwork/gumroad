@@ -536,24 +536,107 @@ describe Ai::AnthropicClient do
       expect(buffered).to have_been_requested.once
     end
 
-    it "replays with the streaming budget when the caller draws no distinction" do
+    it "replays with what the call has left when the caller draws no distinction" do
       allow(client).to receive(:sleep)
       corrupted = sse(
         ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
         ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{broken" } }],
-        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1_000 } }],
       )
       stub_request(:post, url)
         .with(body: hash_including("stream" => true))
         .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      # No buffered cap was passed, so the replay falls back to the streaming one — less the 3,000
+      # tokens the three discarded attempts already generated against the same call.
       buffered = stub_request(:post, url)
-        .with(body: hash_including("stream" => false, "max_tokens" => 40_000))
+        .with(body: hash_including("stream" => false, "max_tokens" => 37_000))
         .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "done" }], "stop_reason" => "end_turn" }.to_json,
                    headers: { "Content-Type" => "application/json" })
 
       client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 40_000)
 
       expect(buffered).to have_been_requested.once
+    end
+
+    it "never generates more than the caller's allowance across its retries and its replay" do
+      # One call can generate the turn four times over: three streamed attempts whose tool call
+      # arrives corrupted, then the buffered replay. If each of those got a fresh `max_tokens`, a
+      # caller that thought it had authorized 32,000 tokens would be billed for up to 128,000 —
+      # and a cumulative budget built on top of this cap (the store agent's per-request ceiling)
+      # would be nominal rather than real. Each attempt is capped at what the call has left.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_user_custom_html","params":{"custom_html":"<div>cut off' } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 10_000 } }],
+      )
+      streamed = stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered_body = {
+        "content" => [{ "type" => "tool_use", "id" => "toolu_y", "name" => "api_write", "input" => { "endpoint" => "update_user_custom_html" } }],
+        "stop_reason" => "tool_use",
+        "usage" => { "output_tokens" => 1_500 },
+      }
+      buffered = stub_request(:post, url)
+        .with(body: hash_including("stream" => false, "max_tokens" => 2_000))
+        .to_return(status: 200, body: buffered_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 32_000)
+
+      expect(streamed).to have_been_requested.times(3)
+      expect(buffered).to have_been_requested.once
+      # Every generation is charged to the call, and the total stays inside what the caller allowed.
+      expect(result.output_tokens).to eq(31_500)
+      expect(result.output_tokens).to be <= 32_000
+    end
+
+    it "asks each streamed retry only for what the call has left" do
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{broken" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 10_000 } }],
+      )
+      requested_caps = []
+      stub_request(:post, url).to_return do |request|
+        body = JSON.parse(request.body)
+        requested_caps << body["max_tokens"] if body["stream"]
+        if body["stream"]
+          { status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" } }
+        else
+          { status: 200, body: { "content" => [{ "type" => "text", "text" => "done" }], "stop_reason" => "end_turn", "usage" => { "output_tokens" => 100 } }.to_json,
+            headers: { "Content-Type" => "application/json" } }
+        end
+      end
+
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 32_000)
+
+      expect(requested_caps).to eq([32_000, 22_000, 12_000])
+    end
+
+    it "surfaces the original failure instead of replaying once the discarded attempts have spent the allowance" do
+      # A replay squeezed into what's left of an exhausted allowance would stop at max_tokens
+      # mid-answer and be thrown away in turn, so it would cost the seller another billed
+      # generation and still fail. Fail with the honest error instead.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{broken" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 7_900 } }],
+      )
+      streamed = stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered = stub_request(:post, url).with(body: hash_including("stream" => false))
+
+      expect do
+        client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 8_000)
+      end.to raise_error(Ai::AnthropicClient::UnreadableToolCallError)
+
+      # The first attempt spent all but 100 tokens, so neither a retry nor a replay is worth making.
+      expect(streamed).to have_been_requested.once
+      expect(buffered).not_to have_been_made
     end
 
     it "counts what the discarded streamed attempts generated on top of the replay's own usage" do
@@ -566,7 +649,7 @@ describe Ai::AnthropicClient do
       corrupted = sse(
         ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
         ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_user_custom_html","params":{"custom_html":"<div>cut off' } }],
-        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 30_000 } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 6_000 } }],
       )
       stub_request(:post, url)
         .with(body: hash_including("stream" => true))
@@ -580,10 +663,10 @@ describe Ai::AnthropicClient do
         .with(body: hash_including("stream" => false))
         .to_return(status: 200, body: buffered_body.to_json, headers: { "Content-Type" => "application/json" })
 
-      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 32_000)
 
-      # Three streamed attempts at 30,000 each, then the 8,000-token replay.
-      expect(result.output_tokens).to eq(98_000)
+      # Three streamed attempts at 6,000 each, then the 8,000-token replay.
+      expect(result.output_tokens).to eq(26_000)
     end
 
     it "counts what a retried streamed attempt generated on top of the attempt that succeeded" do
@@ -604,7 +687,7 @@ describe Ai::AnthropicClient do
         .to_return({ status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" } },
                    { status: 200, body: complete, headers: { "Content-Type" => "text/event-stream" } })
 
-      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 32_000)
 
       expect(result.tool_uses).to eq([{ id: "toolu_x", name: "api_write", input: { "endpoint" => "update_product" } }])
       expect(result.output_tokens).to eq(12_900)
@@ -630,7 +713,7 @@ describe Ai::AnthropicClient do
                    body: { "content" => [{ "type" => "text", "text" => "done" }], "stop_reason" => "end_turn", "usage" => { "output_tokens" => 10 } }.to_json,
                    headers: { "Content-Type" => "application/json" })
 
-      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 32_000)
 
       # Three discarded attempts, each estimated from the half-written JSON's own length.
       expect(result.output_tokens).to eq(10 + (3 * (half_written.length / 4.0).ceil))

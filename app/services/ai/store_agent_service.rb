@@ -419,6 +419,11 @@ class Ai::StoreAgentService
     # full per-turn allowance and could finish ~32,000 tokens past the ceiling — the bound would
     # describe a limit the code doesn't actually hold to. Shrinking the allowance makes
     # MAX_REQUEST_OUTPUT_TOKENS a real ceiling on everything one request generates.
+    #
+    # This relies on the client treating the allowance as a bound on the whole CALL rather than on
+    # each attempt inside it: one streaming call can generate the turn several times over (retries
+    # after a corrupted tool call, then the buffered replay), and Ai::AnthropicClient charges each
+    # of those against the same number so the ceiling here still holds.
     def turn_output_allowance(per_turn_cap)
       [per_turn_cap, remaining_output_budget].min
     end
