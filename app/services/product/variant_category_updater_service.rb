@@ -183,6 +183,7 @@ class Product::VariantCategoryUpdaterService
                                               subscription_price_change_effective_date: option[:subscription_price_change_effective_date],
                                               subscription_price_change_message: option[:subscription_price_change_message])
           save_integrations(variant, option)
+          visited_variant_external_ids << variant.external_id
           save_rich_content(variant, option)
           variant.product_files = ProductFile.find(variant.alive_rich_contents.flat_map { _1.embedded_product_file_ids_in_order }.uniq)
           save_recurring_prices!(variant, option) if is_tiered_membership && has_variant_recurrences?
@@ -217,11 +218,44 @@ class Product::VariantCategoryUpdaterService
       )
     end
 
+    apply_unvisited_variant_scoped_deletions
+
     variant_category.save!
     variant_category
   end
 
   private
+    # Version-scoped deletions (today: a version's integrations) name their
+    # owner directly, so the payload can ask to disconnect an integration from
+    # a version the `variants` list never mentions — a version the seller
+    # didn't re-submit, or one living in a grouping the editor doesn't render
+    # at all. Those versions are never visited by the loop above, which is
+    # where `save_integrations` runs, so the request used to return success
+    # while the integration stayed connected.
+    #
+    # This sweeps up exactly those: alive versions of THIS grouping that the
+    # contract names as deletion owners and that the save has not already
+    # visited. Nothing here can delete anything the payload didn't name — the
+    # ids come from `variant_deleted_ids`, which is already freshness-gated.
+    def apply_unvisited_variant_scoped_deletions
+      return unless contract&.enforced?
+
+      owner_ids = contract.variant_deletion_owner_ids - visited_variant_external_ids
+      return if owner_ids.empty?
+
+      variant_category.variants.alive.each do |variant|
+        next unless owner_ids.include?(variant.external_id)
+
+        apply_variant_scoped_integration_deletions(variant)
+      end
+    end
+
+    # External ids of the versions the save actually walked through this run.
+    # Only those had `save_integrations` applied to them.
+    def visited_variant_external_ids
+      @_visited_variant_external_ids ||= []
+    end
+
     # The `options: nil` route — "this grouping wasn't submitted at all" —
     # scoped to what the contract authorises.
     #
@@ -379,9 +413,7 @@ class Product::VariantCategoryUpdaterService
         # let a stale tab silently disconnect an integration another tab had
         # just enabled — the join is not something the old flat contract or the
         # revision token could see.
-        names_to_delete = contract.variant_deleted_ids(variant.external_id, :integrations)
-        deleted_integrations = variant.active_integrations.select { _1.name.in?(names_to_delete) }
-        variant.live_base_variant_integrations.where(integration: deleted_integrations).map(&:mark_deleted!)
+        apply_variant_scoped_integration_deletions(variant)
         variant.active_integrations << enabled_integrations - variant.active_integrations
         return
       end
@@ -389,6 +421,18 @@ class Product::VariantCategoryUpdaterService
       deleted_integrations = variant.active_integrations - enabled_integrations
       variant.live_base_variant_integrations.where(integration: deleted_integrations).map(&:mark_deleted!)
       variant.active_integrations << enabled_integrations - variant.active_integrations
+    end
+
+    # Disconnects exactly the integrations the payload named for this version.
+    # Split out of save_integrations because it also has to run for versions
+    # the save never walked through — see
+    # apply_unvisited_variant_scoped_deletions.
+    def apply_variant_scoped_integration_deletions(variant)
+      names_to_delete = contract.variant_deleted_ids(variant.external_id, :integrations)
+      return if names_to_delete.empty?
+
+      deleted_integrations = variant.active_integrations.select { _1.name.in?(names_to_delete) }
+      variant.live_base_variant_integrations.where(integration: deleted_integrations).map(&:mark_deleted!)
     end
 
     # Did this version's payload actually carry a rich_content statement?

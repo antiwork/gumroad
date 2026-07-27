@@ -1107,13 +1107,22 @@ class LinksController < ApplicationController
     # (VariantCategoryUpdaterService#contract_scoped_category_deletions), so a
     # grouping with no named ids is visited and left completely alone.
     #
+    # Version-scoped deletions (a version's integrations) count as "names ids"
+    # for exactly the same reason: they name a version by its external id, and
+    # that version can live in any grouping. Without them in this condition a
+    # fresh, explicitly authorised request to disconnect an integration from a
+    # version outside the first grouping would return 200 with the integration
+    # still connected.
+    #
     # Returns [] whenever the contract is off, which keeps the legacy single-
     # grouping call byte-identical.
     def deletion_only_category_params(alive_categories, except:)
       contract = product_save_contract
       return [] unless contract.enforced?
 
-      names_deletions = contract.cleared?(:variants) || contract.deleted_ids(:variants).any?
+      names_deletions = contract.cleared?(:variants) ||
+        contract.deleted_ids(:variants).any? ||
+        contract.variant_deletion_owner_ids.any?
       return [] unless names_deletions
 
       alive_categories

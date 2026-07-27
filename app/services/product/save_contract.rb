@@ -300,6 +300,30 @@ class Product::SaveContract
     []
   end
 
+  # External ids of the versions this save is allowed to remove something from.
+  #
+  # The save has to know which versions are named BEFORE it decides which
+  # variant groupings to visit: a version-scoped deletion names its owner
+  # directly, so it can point at a version in a grouping the editor never
+  # renders. Without this list the save would skip that grouping entirely,
+  # return success, and leave the integration connected.
+  #
+  # Freshness-gated like every other allowed-deletion accessor, so a stale tab
+  # cannot make the save visit a grouping it has no right to touch.
+  def variant_deletion_owner_ids
+    return [] unless enforced?
+    return [] unless may_delete?
+
+    by_owner = deletion_operations[:variant_deleted_ids]
+    return [] unless by_owner.respond_to?(:each_pair)
+
+    by_owner.each_pair.filter_map do |owner_id, _scoped|
+      owner_id.to_s if COLLECTIONS.any? { |collection| raw_variant_deleted_ids(owner_id, collection).any? }
+    end
+  rescue StandardError
+    []
+  end
+
   # Did the client ask to remove anything from any version-scoped collection?
   # Folded into requested_deletion? so a version-scoped removal is treated as a
   # destructive save for staleness purposes, exactly like a product-level one.

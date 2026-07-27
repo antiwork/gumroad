@@ -6873,6 +6873,72 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert_equal 1, variant.reload.active_integrations.count
   end
 
+  test "flag on: an explicitly named integration on a version in a later grouping is disconnected" do
+    enable_contract!
+    # A legacy product with two alive variant groupings. The editor only ever
+    # renders and submits the first one, so a version in the second is never
+    # visited by the save — but the payload can still name it for deletion.
+    other_category = create_variant_category(link: @product, title: "Sizes")
+    variant = create_variant(variant_category: other_category, name: "Large")
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty variant.reload.active_integrations,
+                 "a named integration on a version outside the first grouping must actually be disconnected"
+  end
+
+  test "flag on: a version-scoped deletion in a later grouping leaves everything else in that grouping alone" do
+    enable_contract!
+    other_category = create_variant_category(link: @product, title: "Sizes")
+    named = create_variant(variant_category: other_category, name: "Large")
+    untouched = create_variant(variant_category: other_category, name: "Small")
+    integration = create_discord_integration
+    named.active_integrations << integration
+    untouched.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { variant_deleted_ids: { named.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty named.reload.active_integrations
+    assert_equal 1, untouched.reload.active_integrations.count,
+                 "the unnamed sibling's join must survive"
+    assert untouched.reload.alive?, "visiting the grouping must not delete versions nobody named"
+    assert_equal "Sizes", other_category.reload.title, "the grouping's name must survive"
+    assert other_category.alive?, "the grouping itself must survive"
+  end
+
+  test "flag on: a stale tab cannot disconnect an integration on a version in a later grouping" do
+    enable_contract!
+    other_category = create_variant_category(link: @product, title: "Sizes")
+    variant = create_variant(variant_category: other_category, name: "Large")
+    @product.reload
+    stale_token = current_revision
+
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: stale_token,
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal 1, variant.reload.active_integrations.count,
+                 "a stale save must not reach a version in another grouping either"
+  end
+
   test "flag on: malformed version-scoped deletion operations delete nothing and do not 500" do
     enable_contract!
     variant, _integration = variant_with_integration
