@@ -37,11 +37,16 @@
 # ## What the token is
 #
 # A digest over the identity and liveness of everything the editor can delete:
-# the alive ids of all five collections, plus the product's own updated_at.
-# Deliberately NOT a timestamp — a digest changes only when something the
-# contract cares about changes, so an unrelated write (a price edit, a tag) does
-# not invalidate a seller's in-flight deletion and produce the false conflicts
-# that killed #6245.
+# the alive ids of all five collections, plus the few product attributes that
+# change what a save is allowed to delete (DELETION_RELEVANT_ATTRIBUTES).
+#
+# Deliberately NOT a timestamp. A digest changes only when something the
+# contract cares about changes, so an unrelated write — a price edit, a tag —
+# does not invalidate a seller's in-flight deletion. That matters because an
+# earlier attempt at this DID reject saves whenever anything on the product had
+# changed, which refused so much legitimate work that its seller-visible
+# rejection had to be turned off again (#6245). A token that cries stale too
+# often ends up switched off and protecting nothing.
 class Product::EditorRevision
   # Bumping this invalidates every outstanding token. Do that when the set of
   # things the digest covers changes, so an old token cannot be read as current
@@ -49,7 +54,61 @@ class Product::EditorRevision
   #
   # v2: each collection now contributes updated_at as well as id, so edits to
   # existing children move the token and not just additions and removals.
-  VERSION = "v2"
+  # v3: the product's own updated_at is no longer part of the digest. Every
+  # write to a product bumps updated_at, so including it meant a co-editor
+  # renaming or retagging the product invalidated another tab's outstanding
+  # deletion — the too-many-false-conflicts behaviour described above, which
+  # this class exists to avoid. Replaced by the named attributes in
+  # DELETION_RELEVANT_ATTRIBUTES.
+  # v4: is_physical joined that list — it decides whether the product-level or
+  # the per-version content pages are authoritative, so it changes which pages a
+  # deletion can remove.
+  VERSION = "v4"
+
+  # Product attributes that change WHAT A SAVE MAY DELETE, and therefore have
+  # to be witnessed by the token. This is deliberately a short allowlist rather
+  # than `updated_at`: everything absent from it (price, name, tags,
+  # description, visibility, …) can be edited by a co-editor without
+  # invalidating a stale tab's in-flight deletion, because none of it changes
+  # which rows that deletion would remove.
+  #
+  # - has_same_rich_content_for_all_variants: when this is on, the product has
+  #   one shared set of content pages instead of a separate set per version, and
+  #   the editor is not shown the per-version pages at all. So an editor session
+  #   that loaded while it was off built its payload from a different set of
+  #   pages than one that loads while it is on, and a deletion computed against
+  #   the first set means something different against the second. A real product
+  #   lost its content this way (three times in nine days, July 2026): the
+  #   stored state left the editor with no version content to submit, so an
+  #   ordinary save looked like "the seller deleted every version page".
+  #   Product::RichContentDeletionGuard reads the persisted value for the same
+  #   reason.
+  # - is_tiered_membership: memberships and ordinary products delete versions by
+  #   different routes, and only the membership route also sweeps the version's
+  #   recurring prices. A token issued while the product was one kind describes
+  #   a deletion that would do something different now it is the other.
+  # - is_physical: physical products always resolve to the product-level content
+  #   pages, ignoring per-version pages entirely (Link#has_product_level_rich_content?
+  #   short-circuits on it, and the editor's own presenter does the same). So
+  #   flipping it changes which set of pages the editor loads and therefore which
+  #   pages a deletion computed from that load would remove.
+  #
+  # Deliberately NOT here: skus_enabled. Product::SkusUpdaterService is the only
+  # thing that deletes SKU rows, VariantsUpdaterService is its only caller and
+  # guards it with `if skus_enabled` — and LinksController#update assigns
+  # `skus_enabled = false` before that runs, on every editor save. So this save
+  # path can never delete a SKU, whatever the column said when the page loaded.
+  # Fingerprinting it (or the SKU rows) would only invalidate tokens over state
+  # no deletion here can act on, which is the false-conflict problem this class
+  # exists to avoid. Verified by driving the real endpoint: with skus_enabled
+  # persisted true and a live SKU, the flag reads false inside the updater,
+  # SkusUpdaterService is never constructed, and the SKU is still alive after.
+  DELETION_RELEVANT_ATTRIBUTES = %w[
+    has_same_rich_content_for_all_variants
+    is_tiered_membership
+    is_physical
+  ].freeze
+
 
   class << self
     # The token for the product's current committed state.
@@ -83,13 +142,15 @@ class Product::EditorRevision
       # to a deletable child move the token, so the stale tab is told to reload.
       #
       # This deliberately does not extend to non-deletable state (a price, a
-      # tag): those still must not invalidate an in-flight deletion, which is
-      # the false-conflict problem that killed #6245.
+      # tag): those still must not invalidate an in-flight deletion, because
+      # rejecting saves on unrelated edits is what got the earlier attempt
+      # switched off (#6245). That is why the product contributes only
+      # DELETION_RELEVANT_ATTRIBUTES and not its own updated_at.
       def fingerprint(product)
         {
           version: VERSION,
           product: product.id,
-          updated_at: product.updated_at&.to_fs(:usec),
+          product_state: product_state(product),
           rich_content: stamped(product.alive_rich_contents),
           variants: alive_variant_stamps(product),
           variant_categories: stamped(product.variant_categories.alive),
@@ -104,6 +165,30 @@ class Product::EditorRevision
           # co-editor had just enabled, and the deletion would look fresh.
           variant_integrations: variant_integration_stamps(product),
         }
+      end
+
+      # The deletion-relevant product attributes, read straight off the record.
+      #
+      # These are not database columns: Link packs many booleans into a single
+      # `flags` integer via the flag_shih_tzu gem, which defines a reader per
+      # bit. So they are absent from `column_names` and the existence check has
+      # to ask `respond_to?` instead — checking column_names here would reject
+      # every one of them.
+      #
+      # Raises if an attribute stops existing rather than skipping it. Silently
+      # dropping one would leave the token blind to a change that alters what a
+      # deletion removes, which is exactly what this class exists to prevent, so
+      # a loud failure is the safer default.
+      def product_state(product)
+        DELETION_RELEVANT_ATTRIBUTES.index_with do |attribute|
+          unless product.respond_to?(attribute)
+            raise ArgumentError, "Product::EditorRevision: no such attribute #{attribute.inspect}"
+          end
+
+          # Normalise to a boolean: flag_shih_tzu readers return nil for unset
+          # bits and true once set, and nil vs false must not move the digest.
+          !!product.public_send(attribute)
+        end
       end
 
       # [variant_id, integration_id] pairs for every live version-level join, in
@@ -162,6 +247,10 @@ class Product::EditorRevision
       # other subtypes don't carry it), so join through the categories table by
       # column rather than by association name — that covers every subtype the
       # editor can delete.
+      #
+      # Skus fall outside this scope (they hang off the product and leave
+      # variant_category_id null) and are deliberately not covered: the editor
+      # save cannot delete them. See DELETION_RELEVANT_ATTRIBUTES.
       def alive_variant_stamps(product)
         stamped(
           BaseVariant.alive.where(variant_category_id: product.variant_categories.alive.select(:id))
