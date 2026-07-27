@@ -181,6 +181,9 @@ module Payment::FailureReason
       return unless solution.present?
 
       content = "Payout via #{processor.capitalize} on #{created_at} failed because #{solution[:reason]}. Solution: #{solution[:solution]}."
-      user.add_payout_note(content:)
+      # Stripe failures are explained to the seller in the banner on their Payouts page (the page
+      # strips the "via Stripe " out of the sentence). PayPal failures have always been excluded
+      # from that banner, so they stay support-only.
+      user.add_payout_note(content:, seller_visible: processor != PayoutProcessorType::PAYPAL)
     end
 end

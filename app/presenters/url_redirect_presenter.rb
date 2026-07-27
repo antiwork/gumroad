@@ -268,7 +268,15 @@ class UrlRedirectPresenter
         end,
         pdf_stamp_enabled: file.pdf_stamp_enabled?,
         processing: file.pdf_stamp_enabled? && url_redirect.alive_stamped_pdfs.find_by(product_file_id: file.id).blank?,
-        thumbnail_url: file.thumbnail_url
+        thumbnail_url: file.thumbnail_url,
+        # Pixel dimensions of the uploaded video, so the download page can shape the
+        # player frame to the real aspect ratio instead of assuming 16:9 landscape.
+        # Portrait video (phone-filmed courses etc.) is otherwise pillarboxed into a
+        # landscape box. Nil for non-video files and for videos uploaded before we
+        # started recording dimensions; the page falls back to 16:9 in that case.
+        # See https://github.com/antiwork/gumroad-private/issues/1392
+        width: file.streamable? ? file.try(:width) : nil,
+        height: file.streamable? ? file.try(:height) : nil
       }
     end
 
@@ -305,6 +313,8 @@ class UrlRedirectPresenter
         pdf_stamp_enabled: false,
         processing: false,
         thumbnail_url: nil,
+        width: nil,
+        height: nil,
       }
     end
 

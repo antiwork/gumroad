@@ -12,7 +12,7 @@ class HandleNewBankAccountWorker
     content = "Stripe bank sync failed and exhausted Sidekiq retries for bank_account_id=" \
               "#{bank_account_id}. See Sentry for the underlying Stripe error."
     begin
-      bank_account.user.add_payout_note(content:)
+      bank_account.user.add_payout_note(content:, seller_visible: false)
     rescue => e
       Rails.logger.error "Failed to record payout-note breadcrumb for user #{bank_account.user_id}: #{e.class}: #{e.message}"
       ErrorNotifier.notify(e)

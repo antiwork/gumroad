@@ -2415,15 +2415,43 @@ describe Purchase::CreateService, :vcr do
     end
 
     context "but current user is the creator" do
-      it "returns an error message" do
+      it "returns an error message naming self-gifting and the discount-code alternative" do
         expect do
           _, error = Purchase::CreateService.new(
             product:,
             params: gift_params,
             buyer: product.user
           ).perform
-          expect(error).to eq "Test gift purchases have not been enabled yet."
+          expect(error).to eq "You can't gift your own product. To give it away for free, create a 100% off discount code under Checkout > Discounts and share the checkout link."
         end.to_not change(Purchase, :count)
+      end
+
+      it "does not mention test purchases, which sellers read as a flag we can enable for them" do
+        _, error = Purchase::CreateService.new(
+          product:,
+          params: gift_params,
+          buyer: product.user
+        ).perform
+
+        expect(error).to be_present
+        expect(error).to_not match(/test/i)
+        expect(error).to_not match(/enabled/i)
+      end
+
+      # Purchase error messages reach the buyer through Receipt.tsx, which renders them with
+      # dangerouslySetInnerHTML, so anything in this string is interpreted as markup rather than
+      # text. The current wording contains "Checkout > Discounts"; a bare ">" is inert, but a "<"
+      # or a bare "&" would be swallowed or mis-rendered. This pins that constraint so a future
+      # rewording of the message cannot silently start emitting markup.
+      it "returns a message that is safe to render as HTML" do
+        _, error = Purchase::CreateService.new(
+          product:,
+          params: gift_params,
+          buyer: product.user
+        ).perform
+
+        expect(error).to_not include("<")
+        expect(error).to_not match(/&(?!amp;|lt;|gt;|quot;|#)/)
       end
     end
 

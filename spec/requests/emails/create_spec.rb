@@ -860,6 +860,10 @@ describe("Email Creation Flow", :js, type: :system) do
     uncheck "Allow comments"
     fill_in "Title", with: "Hello"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
+    # The editor pushes its content into the form state through a 500ms debounce
+    # (see handleMessageChange in EmailForm.tsx), so publishing sooner than that
+    # submits an empty message and trips the "Please include a message" validation.
+    sleep 1 # wait for the message editor to update
     # Allows attaching files to the email
     upload_attachment("thing.mov")
     select_disclosure "Publish" do

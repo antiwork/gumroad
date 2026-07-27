@@ -4,6 +4,7 @@ import {
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
+  computeTipForListedLines,
   computeTipsForLines,
   getChargeTodayPrice,
   getFutureInstallmentsTotal,
@@ -95,6 +96,7 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
     presentment_amount_cents: null,
+    listed_currency_display: null,
     payment_method_types: ["card"],
     stripe_link_enabled: false,
     stripe_connect_account_id: null,
@@ -155,6 +157,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   },
   availablePaymentMethods: [],
   paymentMethod: "card",
+  paymentElementType: "card",
   willSaveCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
@@ -1179,6 +1182,53 @@ describe("reduceCheckoutState", () => {
       expect(next.status).toEqual({ type: "offering" });
     });
   });
+
+  // On the element-full mode (UPI on digital carts) the pane collects the postal code and
+  // checkout's own Full name field is the only name source Stripe's confirm can use — the two
+  // validation rules below keep the buyer from being blocked on a hidden ZIP field, and from
+  // reaching Stripe's confirm with a blank billing name (the parameter_missing failure shape
+  // of gumroad-private#933).
+  describe("element-full billing validation (UPI pane collects the address)", () => {
+    const elementFullState = (overrides: Partial<State> = {}) =>
+      state({
+        checkoutPayment: paymentElementClientConfirmConfig,
+        paymentElementType: "upi",
+        ...overrides,
+      });
+
+    it("requires a full name when the pane collects the billing details", () => {
+      const next = reduceCheckoutState(elementFullState({ fullName: "" }), { type: "offer" });
+      expect(next.status).toEqual({ type: "input", errors: new Set(["fullName"]) });
+    });
+
+    it("offers normally once the full name is present", () => {
+      const next = reduceCheckoutState(elementFullState({ fullName: "Priya Sharma", zipCode: "" }), {
+        type: "offer",
+      });
+      expect(next.status).toEqual({ type: "offering" });
+    });
+
+    it("waives the US ZIP requirement — the pane collects the postal code and checkout's field is hidden", () => {
+      const next = reduceCheckoutState(elementFullState({ zipCode: "" }), { type: "offer" });
+      expect(next.status).toEqual({ type: "offering" });
+    });
+
+    it("still requires the US ZIP when the element shows a card pane", () => {
+      const next = reduceCheckoutState(elementFullState({ paymentElementType: "card", zipCode: "" }), {
+        type: "offer",
+      });
+      expect(next.status).toEqual({ type: "input", errors: new Set(["zipCode"]) });
+    });
+
+    it("does not require the full name once the buyer switches to a method whose flow collects it", () => {
+      // With PayPal selected the element-full mode is off: the fullName gate releases, and the
+      // US ZIP requirement comes back (checkout's own field is visible again).
+      const next = reduceCheckoutState(elementFullState({ fullName: "", zipCode: "", paymentMethod: "paypal" }), {
+        type: "offer",
+      });
+      expect(next.status).toEqual({ type: "input", errors: new Set(["zipCode"]) });
+    });
+  });
 });
 
 const loadedSurcharges = (
@@ -1325,6 +1375,105 @@ describe("getFutureInstallmentsTotal", () => {
         }),
       ),
     ).toBe(0);
+  });
+});
+
+describe("computeTipForListedLines", () => {
+  const sumTips = (sum: number, tip: number | null) => sum + (tip ?? 0);
+
+  // The method-forced listed-currency lane displays the tip by running the SUBMISSION's own
+  // allocation over the same per-line bases the order sends, so the figure on screen is the figure
+  // charged. Deriving it separately — a percentage re-taken from the canonical total, or a fixed tip
+  // converted at the exchange rate — drifts by a minor unit, which is the mismatch this lane exists
+  // to remove.
+  it("gives a percentage tip in listed units, matching what the order submits", () => {
+    // R$49.90 listed at a 5.45 rate is ~916 canonical USD cents.
+    const s = state({
+      products: [product({ permalink: "prod", price: 916, hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 15 },
+    });
+    const lines = [{ price: 4_990, permalink: "prod" }];
+
+    expect(computeTipForListedLines(s, lines)).toBe(749);
+    expect(computeTipForListedLines(s, lines)).toBe(computeTipsForLines(s, lines).reduce(sumTips, 0));
+    // Converting the canonical figure back up instead lands two centavos low.
+    expect(computeTip(s)).toBe(137);
+  });
+
+  // Greptile P1 (2026-07-26): a fixed tip was displayed as round(canonicalTip * rate) while
+  // submission allocates it from the listed/canonical price ratio and floors the result. Typing
+  // R$10.00 on a R$49.90 product at 5.45 stores 183 canonical cents; the display showed 183 * 5.45
+  // = R$9.97 while allocateFixedTipCents submits floor(183 * 4990 / 916) = R$9.96.
+  //
+  // The fix for that drift is to keep what the buyer typed: `listedAmount` carries R$10.00 through
+  // to the charge, so both figures are 1 000 and neither is a rounding of the other.
+  it("gives a fixed tip as the amount the buyer typed, in listed units", () => {
+    const s = state({
+      products: [product({ permalink: "prod", price: 916, hasTippingEnabled: true })],
+      tip: { type: "fixed", amount: 183, listedAmount: 1_000 },
+    });
+    const lines = [{ price: 4_990, permalink: "prod" }];
+
+    expect(computeTipForListedLines(s, lines)).toBe(1_000);
+    expect(computeTipForListedLines(s, lines)).toBe(
+      computeTipsForLines(s, lines, { basis: "listed" }).reduce(sumTips, 0),
+    );
+    // Both of the arithmetic paths that were tried before land short of what the buyer chose:
+    // the rate conversion by three centavos, the canonical allocation by four.
+    expect(Math.round(computeTip(s) * 5.45)).toBe(997);
+    expect(computeTipsForLines(s, lines).reduce(sumTips, 0)).toBe(996);
+  });
+
+  // A tip carried over from a canonical-USD render (the buyer typed it before switching to the
+  // local payment method, so it was only ever stored canonically) still has to produce something.
+  it("falls back to the canonical allocation when no typed listed amount was recorded", () => {
+    const s = state({
+      products: [product({ permalink: "prod", price: 916, hasTippingEnabled: true })],
+      tip: { type: "fixed", amount: 183 },
+    });
+    const lines = [{ price: 4_990, permalink: "prod" }];
+
+    expect(computeTipForListedLines(s, lines)).toBe(996);
+    expect(computeTipForListedLines(s, lines)).toBe(computeTipsForLines(s, lines).reduce(sumTips, 0));
+  });
+
+  it("splits a typed listed tip across a multi-line cart without inventing minor units", () => {
+    const s = state({
+      products: [
+        product({ permalink: "a", price: 916, hasTippingEnabled: true }),
+        product({ permalink: "b", price: 916, hasTippingEnabled: true }),
+      ],
+      tip: { type: "fixed", amount: 183, listedAmount: 1_001 },
+    });
+    const lines = [
+      { price: 4_990, permalink: "a" },
+      { price: 4_990, permalink: "b" },
+    ];
+
+    const perLine = computeTipsForLines(s, lines, { basis: "listed" });
+    expect(perLine).toEqual([501, 500]);
+    expect(computeTipForListedLines(s, lines)).toBe(1_001);
+  });
+
+  it("sums the per-line allocation across a multi-line cart", () => {
+    const s = state({
+      products: [
+        product({ permalink: "a", price: 916, hasTippingEnabled: true }),
+        product({ permalink: "b", price: 916, hasTippingEnabled: true }),
+      ],
+      tip: { type: "fixed", amount: 183 },
+    });
+    const lines = [
+      { price: 4_990, permalink: "a" },
+      { price: 4_990, permalink: "b" },
+    ];
+
+    expect(computeTipForListedLines(s, lines)).toBe(computeTipsForLines(s, lines).reduce(sumTips, 0));
+  });
+
+  it("is zero when tipping is disabled", () => {
+    const s = state({ products: [product({ price: 916 })], tip: { type: "percentage", percentage: 15 } });
+    expect(computeTipForListedLines(s, [{ price: 4_990, permalink: "product-a" }])).toBe(0);
   });
 });
 

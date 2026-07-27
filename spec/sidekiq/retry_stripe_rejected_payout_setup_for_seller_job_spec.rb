@@ -144,7 +144,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
       allow(User).to receive(:find_by).with(id: user.id).and_return(user)
       allow(user).to receive(:add_payout_note).and_call_original
-      allow(user).to receive(:add_payout_note).with(content: described_class::BANK_FORMAT_REJECTION_NOTE).and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
+      allow(user).to receive(:add_payout_note).with(content: described_class::BANK_FORMAT_REJECTION_NOTE, seller_visible: false).and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
 
       expect do
         described_class.new.perform(user.id)
@@ -318,7 +318,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       note = add_note(bank_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES })
       allow(User).to receive(:find_by).with(id: user.id).and_return(user)
       allow(user).to receive(:add_payout_note).and_call_original
-      allow(user).to receive(:add_payout_note).with(content: described_class::GAVE_UP_NOTE)
+      allow(user).to receive(:add_payout_note).with(content: described_class::GAVE_UP_NOTE, seller_visible: false)
                                               .and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
 
       expect do
@@ -337,7 +337,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       note = add_note(bank_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES })
       allow(User).to receive(:find_by).with(id: user.id).and_return(user)
       allow(user).to receive(:add_payout_note).and_call_original
-      allow(user).to receive(:add_payout_note).with(content: described_class::GAVE_UP_NOTE)
+      allow(user).to receive(:add_payout_note).with(content: described_class::GAVE_UP_NOTE, seller_visible: false)
                                               .and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
 
       described_class.new.perform(user.id)
