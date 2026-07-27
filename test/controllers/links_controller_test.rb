@@ -7072,4 +7072,61 @@ class LinksControllerSaveContractTest < ActionController::TestCase
                                                   intent_source: ProductVariantDeletionAudit::PAYLOAD_OMISSION)
     assert_empty omissions, "a pass-through must not register as an omission-driven deletion"
   end
+
+  # Pins WHY Product::EditorRevision does not fingerprint skus_enabled or SKU
+  # rows. Product::SkusUpdaterService is the only code that deletes SKUs;
+  # VariantsUpdaterService is its only caller and guards it with
+  # `if skus_enabled`; and #update assigns skus_enabled = false before that
+  # point. So this endpoint cannot delete a SKU, and the revision token
+  # deliberately ignores SKU state rather than invalidating over something no
+  # deletion here can act on.
+  #
+  # If a future change makes SKUs reachable from the editor save, this test goes
+  # red and the revision token needs to cover them again.
+  test "the editor save cannot delete a SKU, even with skus_enabled persisted true" do
+    @product.update_attribute(:skus_enabled, true)
+    sku = Sku.create!(link: @product, name: "SKU reachability probe", price_difference_cents: 0)
+    variant = create_variant(variant_category: @category, name: "Alpha")
+
+    assert @product.reload.skus_enabled?, "precondition: the column really is true before the save"
+    assert sku.reload.alive?, "precondition: the SKU is alive before the save"
+
+    observed_flag = []
+    Product::VariantsUpdaterService.class_eval do
+      alias_method :__orig_perform_sku_probe, :perform
+      define_method(:perform) do
+        observed_flag << product.skus_enabled?
+        __orig_perform_sku_probe
+      end
+    end
+
+    Thread.current[:__sku_updater_ran] = false
+    Product::SkusUpdaterService.singleton_class.class_eval do
+      alias_method :__orig_new_sku_probe, :new
+      define_method(:new) do |**kwargs|
+        Thread.current[:__sku_updater_ran] = true
+        __orig_new_sku_probe(**kwargs)
+      end
+    end
+
+    begin
+      put :update, params: @params.merge(variants: [{ id: variant.external_id, name: "Alpha" }]), as: :json
+      assert_response :success
+
+      assert_equal [false], observed_flag,
+                   "the save must zero skus_enabled before VariantsUpdaterService runs"
+      assert_not Thread.current[:__sku_updater_ran],
+                 "SkusUpdaterService must never be constructed from the editor save"
+      assert sku.reload.alive?, "the editor save must not delete a SKU"
+    ensure
+      Product::VariantsUpdaterService.class_eval do
+        alias_method :perform, :__orig_perform_sku_probe
+        remove_method :__orig_perform_sku_probe
+      end
+      Product::SkusUpdaterService.singleton_class.class_eval do
+        alias_method :new, :__orig_new_sku_probe
+        remove_method :__orig_new_sku_probe
+      end
+    end
+  end
 end
