@@ -1761,6 +1761,42 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(flash[:notice]).to eq("Your country has been updated!")
         end
 
+        it "tells the seller a switch to a business account was not saved" do
+          put :update, params: { user: { updated_country_code: "GB", is_business: "on" } }
+
+          expect(user.reload.alive_user_compliance_info.is_business?).to eq(false)
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a switch back to an individual account was not saved" do
+          user.alive_user_compliance_info.mark_deleted!
+          create(:user_compliance_info_business, user:)
+
+          put :update, params: { user: { updated_country_code: "GB", is_business: "off" } }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        # A business account changes its country through the `country` param rather than
+        # `updated_country_code`, and that param is only persisted while the account is a business.
+        it "tells the seller a business country change alongside the country change was not saved" do
+          user.alive_user_compliance_info.mark_deleted!
+          create(:user_compliance_info_business, user:, country: "United States", business_country: "United States")
+
+          put :update, params: { user: { updated_country_code: "GB", is_business: "on", business_country: "CA" } }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "keeps the plain message when the business country is echoed unchanged" do
+          user.alive_user_compliance_info.mark_deleted!
+          create(:user_compliance_info_business, user:, country: "United States", business_country: "United States")
+
+          put :update, params: { user: { updated_country_code: "GB", is_business: "on", country: "US", business_country: "US" } }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
         it "keeps the plain message when only the country was submitted" do
           put :update, params: { user: { updated_country_code: "GB", is_business: "off" } }
 

@@ -339,7 +339,42 @@ class Settings::PaymentsController < Settings::BaseController
         value.present? && !value.to_s.match?(UpdateUserComplianceInfo::MASKED_TAX_ID_PATTERN)
       end
 
+      return true if submitted_business_status_differs?(user_params, compliance_info)
+      return true if submitted_business_country_differs?(user_params, compliance_info)
+
       submitted_birthday_differs?(user_params, compliance_info)
+    end
+
+    # The individual/business toggle is saved by an ordinary settings update, so flipping it in the
+    # same request as a country change loses it too: the country change builds a fresh compliance
+    # record and the toggle is never read. The form posts the stored value back on every save, so
+    # only a value that differs from what is stored counts as something the seller just changed.
+    def submitted_business_status_differs?(user_params, compliance_info)
+      submitted = user_params[:is_business]
+      return false if submitted.nil?
+
+      ActiveModel::Type::Boolean.new.cast(submitted) != compliance_info.is_business?
+    end
+
+    # When the account is a business, the Country dropdown writes the `country` param (and the
+    # separate business address block writes `business_country`) instead of `updated_country_code`.
+    # UpdateUserComplianceInfo only persists those two while the account is a business, so mirror
+    # that condition here rather than flagging the individual case, where the country change is
+    # already the thing being processed. The stored values are country NAMES, so compare against
+    # the same mapping the service writes.
+    def submitted_business_country_differs?(user_params, compliance_info)
+      submitting_as_business = if user_params[:is_business].nil?
+        compliance_info.is_business?
+      else
+        ActiveModel::Type::Boolean.new.cast(user_params[:is_business])
+      end
+      return false unless submitting_as_business
+
+      %i[country business_country].any? do |field|
+        submitted = user_params[field]
+        submitted.present? &&
+          Compliance::Countries.mapping[submitted] != compliance_info.public_send(field)
+      end
     end
 
     def submitted_birthday_differs?(user_params, compliance_info)
