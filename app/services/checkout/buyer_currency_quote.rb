@@ -201,13 +201,23 @@ class Checkout::BuyerCurrencyQuote
     # Note this needs only ONE non-USD listing to go wrong, not a mixed-currency cart:
     # a single-line EUR cart with a tip reproduces it.
     #
+    # The gate is cart-level (any tip anywhere + any non-USD listing anywhere), not
+    # per-line, because the two allocations can also move the tip BETWEEN lines: the
+    # largest-remainder split hands leftover cents to different lines depending on the
+    # price basis, so a cent that lands on a USD line at quote time can land on the
+    # non-USD line at submit. A per-line check (tip on a non-USD line) would mint a
+    # token for that cart and the changed per-line totals would then fail verification.
+    #
     # Withholding the quote is the conservative answer: the cart simply falls back to the
     # canonical USD checkout, exactly as it does on main today, so nothing regresses and no
     # payment can fail verification. The real fix is to make both sides allocate the tip
     # from the same figures, which is a checkout-wide change to `computeTipsForLines` and
     # its two call sites; it ships separately so this gate can be lifted deliberately,
     # with a regression that completes exactly this payment.
-    return if line_items.any? { |line| line.tip_cents.to_i.positive? && line.product.price_currency_type.to_s != Currency::USD }
+    if line_items.any? { |line| line.tip_cents.to_i.positive? } &&
+       products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD }
+      return
+    end
     # Checked last because the marker is scoped to the presentment currency: a mismatch
     # learned for EUR must not suppress quoting for GBP buyers of the same seller.
     return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)

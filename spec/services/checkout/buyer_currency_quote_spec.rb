@@ -316,6 +316,27 @@ describe Checkout::BuyerCurrencyQuote do
       expect(described_class.create(line_items: lines, canonical_total_cents: 21_00, ip: "24.48.0.1")).to be_nil
     end
 
+    it "withholds the quote when the tip landed on a USD line but the cart carries a non-USD listing" do
+      # The surcharge request and the submitted order split the tip with the same
+      # largest-remainder code but over different price bases (canonical USD vs listed),
+      # so a cent that lands on the USD line at quote time can land on the EUR line at
+      # submit. The gate must therefore key off the cart (any tip + any non-USD listing),
+      # not off which line the quote-time split happened to put the tip on: a token minted
+      # for this cart would fail per-line verification whenever the submit-time split
+      # moves the cent.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      lines = [
+        described_class::LineItem.new(permalink: product.unique_permalink, product:,
+                                      price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+        described_class::LineItem.new(permalink: eur_product.unique_permalink, product: eur_product,
+                                      price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+      ]
+
+      expect(described_class.create(line_items: lines, canonical_total_cents: 21_00, ip: "24.48.0.1")).to be_nil
+    end
+
     it "treats a non-USD line's submitted price as already-canonical USD, matching the purchase total" do
       # LOAD-BEARING UNITS INVARIANT. The browser converts before it posts — getProducts in
       # pages/Checkout/Show.tsx sends `price: convertToUSD(item, price)` — so the surcharge
