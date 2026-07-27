@@ -2415,15 +2415,27 @@ describe Purchase::CreateService, :vcr do
     end
 
     context "but current user is the creator" do
-      it "returns an error message" do
+      it "returns an error message naming self-gifting and the discount-code alternative" do
         expect do
           _, error = Purchase::CreateService.new(
             product:,
             params: gift_params,
             buyer: product.user
           ).perform
-          expect(error).to eq "Test gift purchases have not been enabled yet."
+          expect(error).to eq "You can't gift your own product. To give it away for free, create a 100% off discount code under Checkout > Discounts and share the checkout link."
         end.to_not change(Purchase, :count)
+      end
+
+      it "does not mention test purchases, which sellers read as a flag we can enable for them" do
+        _, error = Purchase::CreateService.new(
+          product:,
+          params: gift_params,
+          buyer: product.user
+        ).perform
+
+        expect(error).to be_present
+        expect(error).to_not match(/test/i)
+        expect(error).to_not match(/enabled/i)
       end
     end
 
