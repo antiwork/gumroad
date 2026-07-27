@@ -183,4 +183,92 @@ describe CurrencyHelper do
       expect(props[:display_mode]).to eq("default")
     end
   end
+
+  describe "settleable-currencies-only display gate" do
+    # Only offer a local currency the checkout could actually be settled in: a shown local
+    # price the charge path refuses becomes a USD charge with no explanation of why the
+    # number changed between the product page and the total.
+    let(:seller) { create(:user, disable_buyer_local_currency: false) }
+    let(:product) { create(:product, user: seller, price_cents: 1000, price_currency_type: "usd") }
+    # A Gumroad-managed Stripe account for the seller: this is the account the charge path
+    # resolves (Purchase#prepare_merchant_account), so it is the one whose settlement
+    # capabilities decide whether a shown local price can be honoured.
+    let!(:merchant_account) { create(:merchant_account_stripe_connect, user: seller, currency: Currency::USD) }
+
+    before do
+      # A Stripe Connect account only becomes the seller's charging account once merchant
+      # migration is on for them (User#merchant_account), which is what the charge path
+      # resolves — so the display gate must read the same account.
+      seller.update!(check_merchant_account_is_linked: true)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("eur")
+      allow(helper).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+    end
+
+    after do
+      Feature.deactivate_user(:buyer_local_currency, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    end
+
+    it "shows the buyer currency when the seller's account can settle it" do
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
+    end
+
+    it "hides the buyer currency when the account settles that currency in itself rather than USD" do
+      merchant_account.record_settlement_currency_mismatch!("eur")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+    end
+
+    it "keeps showing another currency the same account can still settle" do
+      merchant_account.record_settlement_currency_mismatch!("eur")
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("gbp")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "gbp")
+    end
+
+    it "hides the buyer currency when Gumroad and Stripe disagree on its minor units" do
+      # HUF is charged by Stripe only in amounts divisible by 100, so the charge path
+      # refuses it — see StripeChargeProcessor.charge_minor_units_compatible?.
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("huf")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: "usd")
+    end
+
+    it "hides the buyer currency for a product not priced in USD, which the charge path never presents" do
+      product.alive_prices.update_all(currency: "gbp")
+      product.update!(price_currency_type: "gbp")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: "gbp", rate: nil)
+    end
+
+    it "still shows the preview while charging in the buyer's currency is not enabled for the seller" do
+      # Display and charging are separate rollouts. With charging off every buyer is charged
+      # canonical USD anyway, so the display is an approximate preview rather than a promise —
+      # applying the settlement gate there would switch the display feature off wholesale.
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      merchant_account.record_settlement_currency_mismatch!("eur")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
+    end
+
+    it "resolves the seller's charging account once per request when many cards are rendered" do
+      expect(seller).to receive(:merchant_account).once.and_call_original
+
+      3.times { helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4") }
+    end
+  end
 end
