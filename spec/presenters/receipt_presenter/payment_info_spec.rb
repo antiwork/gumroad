@@ -474,6 +474,59 @@ describe ReceiptPresenter::PaymentInfo do
                   ]
                 )
               end
+
+              context "when the tax was refunded on its own" do
+                before do
+                  create(:refund,
+                         purchase:,
+                         amount_cents: 0,
+                         gumroad_tax_cents: 254,
+                         total_transaction_cents: 254,
+                         presentment_currency: Currency::CAD,
+                         presentment_amount_cents: 3_18,
+                         presentment_gumroad_tax_cents: 3_18)
+                  purchase.reload
+                end
+
+                # The tax line is what a tax authority reads, so it has to be net of tax we
+                # returned. "Amount paid" stays at the amount charged today, exactly as the
+                # canonical USD receipt does (it nets tax but not the total).
+                it "nets the refunded tax out of the buyer-presentment tax line" do
+                  expect(today_payment_attributes).to eq(
+                    [
+                      { label: "Digital product", value: "CAD$21.80" },
+                      { label: "Sales tax (included)", value: "CAD$0" },
+                      { label: "Amount paid", value: "CAD$24.98" },
+                      { label: nil, value: link_to("Generate invoice", invoice_url) },
+                    ]
+                  )
+                end
+              end
+
+              context "when a refund carries no buyer-currency snapshot" do
+                before do
+                  create(:refund,
+                         purchase:,
+                         amount_cents: 0,
+                         gumroad_tax_cents: 254,
+                         total_transaction_cents: 254)
+                  purchase.reload
+                end
+
+                # Such a refund consumed canonical cents while recording zero buyer-currency
+                # cents, so no honest buyer-currency figure can be derived — fall back to the
+                # canonical USD amounts rather than overstate what the buyer is still out.
+                it "falls back to canonical USD amounts" do
+                  expect(today_payment_attributes).to eq(
+                    [
+                      { label: "Digital product", value: "$17.44" },
+                      { label: "Sales tax (included)", value: "$2.54" },
+                      { label: "Amount paid", value: "$19.98" },
+                      { label: nil, value: link_to("Generate invoice", invoice_url) },
+                    ]
+                  )
+                end
+              end
             end
           end
 
@@ -631,6 +684,49 @@ describe ReceiptPresenter::PaymentInfo do
 
       it_behaves_like "payment attributes for single purchase"
 
+      context "when a free purchase shares the charge with a buyer-currency purchase" do
+        let(:free_purchase) do
+          create(
+            :free_purchase,
+            link: create(:product, name: "Free product", user: seller, price_cents: 0),
+            seller:
+          )
+        end
+
+        before do
+          charge.purchases << free_purchase
+          charge.order.purchases << free_purchase
+          charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 21_80)
+          create(:purchase_presentment,
+                 purchase:,
+                 charge_presentment:,
+                 presentment_price_cents: 21_80,
+                 presentment_tip_cents: 0,
+                 presentment_seller_tax_cents: 0,
+                 presentment_gumroad_tax_cents: 0,
+                 presentment_shipping_cents: 0,
+                 presentment_total_cents: 21_80)
+        end
+
+        # A free line — a $0 product, or a line made free by a 100%-off discount — is
+        # attached to the same charge as its paid siblings but moved no money and has no
+        # presentment row. It prints no amounts of its own, so it must not force a
+        # receipt for a charge genuinely processed in the buyer's currency back to USD.
+        it "keeps the receipt in the buyer's currency" do
+          expect(today_payment_attributes).to eq(
+            [
+              { label: "Digital product", value: "CAD$21.80" },
+              { label: "Amount paid", value: "CAD$21.80" },
+              { label: nil, value: link_to("Generate invoice", invoice_url) },
+            ]
+          )
+        end
+
+        it "omits the note claiming the charge was processed in USD" do
+          expect(payment_info.notes.join).not_to include("United States Dollars")
+        end
+      end
+
       context "with multiple purchases" do
         let(:purchase_two) do
           create(
@@ -666,6 +762,37 @@ describe ReceiptPresenter::PaymentInfo do
               { label: nil, value: link_to("Generate invoice", invoice_url) },
             ]
           )
+        end
+
+        context "when only one purchase on the charge was charged in the buyer's currency" do
+          before do
+            charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 21_80)
+            create(:purchase_presentment,
+                   purchase: purchase_two,
+                   charge_presentment:,
+                   presentment_price_cents: 21_80,
+                   presentment_tip_cents: 0,
+                   presentment_seller_tax_cents: 0,
+                   presentment_gumroad_tax_cents: 0,
+                   presentment_shipping_cents: 0,
+                   presentment_total_cents: 21_80)
+          end
+
+          # One receipt must be readable as one currency. Adding buyer-currency cents from
+          # one purchase to USD cents from another would yield a total that is wrong in
+          # both currencies, so a charge that cannot be stated wholly in the buyer's
+          # currency is stated wholly in USD instead.
+          it "states the whole receipt in canonical USD rather than mixing currencies" do
+            expect(today_payment_attributes).to eq(
+              [
+                { label: "Digital product", value: "$14.99" },
+                { label: "Product Two", value: "$9.99" },
+                { label: "Product Three", value: "$4.99" },
+                { label: "Amount paid", value: "$29.97" },
+                { label: nil, value: link_to("Generate invoice", invoice_url) },
+              ]
+            )
+          end
         end
 
         context "when purchases have shipping and tax" do
