@@ -2924,8 +2924,28 @@ class Purchase < ApplicationRecord
                                            .not_fully_refunded
                                            .not_chargedback_or_chargedback_reversed
                                            .pluck(:id)
-    emailed_seller_posts = Installment.seller_with_sent_emails_for_purchases(purchase_ids + purchase_ids_with_same_email)
-                                      .select("installments.*, email_infos.sent_at, email_infos.delivered_at, email_infos.opened_at")
+    # Same slim-then-reload split as the profile-only seller posts below, for
+    # the same reason. This scope joins `email_infos` (one row per email the
+    # buyer was sent) and MySQL discards roughly 95% of what the join touches
+    # afterwards, on the `installment_type` and flag predicates — so
+    # `installments.*` drags each post's LONGTEXT `message` body through the
+    # join just for the Ruby-side buyer filters to read `json_data`. On
+    # production this shape was 27% of the time in the slowest mobile library
+    # search requests (gumroad-private#1412). Run the filter pass on slim rows,
+    # then reload full rows for the few posts the buyer can actually see.
+    emailed_seller_posts_scope = Installment.seller_with_sent_emails_for_purchases(purchase_ids + purchase_ids_with_same_email)
+    slim_emailed_seller_posts = emailed_seller_posts_scope
+                                  .select(:id, :seller_id, :installment_type, :link_id, :base_variant_id, :flags, :published_at, :json_data)
+    candidate_emailed_seller_post_ids = check_filters.call(slim_emailed_seller_posts).map(&:id).uniq
+    # Reload through the same scope (join included, so the `email_infos`
+    # timestamps the final sort reads come back with the row) restricted to the
+    # candidates. A post mutated between the two queries — unpublished, flipped
+    # to profile-only — drops out here rather than reaching the sort with a nil
+    # published_at, matching the profile-only path's behavior.
+    emailed_seller_posts = candidate_emailed_seller_post_ids.any? ?
+      emailed_seller_posts_scope.where(installments: { id: candidate_emailed_seller_post_ids })
+                                .select("installments.*, email_infos.sent_at, email_infos.delivered_at, email_infos.opened_at").to_a :
+      []
     # `profile_only_for_sellers` matches every profile-only seller post the
     # seller has ever published — for prolific sellers that's thousands of
     # rows, and `installments.*` drags in each post's LONGTEXT `message` body
@@ -4786,11 +4806,21 @@ class Purchase < ApplicationRecord
       already = already.where("purchases.id != ?", id) if id
       already = already.not_is_gift_sender_purchase unless is_gift_sender_purchase
 
-      already += self.class.joins(:gift_given).where(
-        gifts: { giftee_email: recipient_email },
-        link:,
-        purchase_state: limiting_purchase_states
-      ) unless is_recurring_subscription_charge
+      # A gift purchase is stored under the *sender's* email, so the lookup above can't see an
+      # earlier gift of this product to the same recipient — it has to go through the gift record.
+      # This uses the same time window as the lookup above on purpose: the point is to stop one
+      # checkout being submitted twice, not to cap a recipient at one gift of a product for life.
+      # Without the window, a single successful gift permanently blocked every later gift of that
+      # product to that address, from any sender.
+      unless is_recurring_subscription_charge
+        already_gifted = self.class.joins(:gift_given).where(
+          gifts: { giftee_email: recipient_email },
+          link:,
+          purchase_state: limiting_purchase_states
+        ).where("purchases.created_at > ?", last_allowed_purchase_at)
+        already_gifted = already_gifted.where("purchases.id != ?", id) if id
+        already += already_gifted
+      end
 
       if variant_attributes.present?
         already = already.select do |purchase|
@@ -4824,11 +4854,24 @@ class Purchase < ApplicationRecord
       settling = settling.where("purchases.id != ?", id) if id
       settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase
 
-      # No gift join is needed here, even though gift purchases are stored under the sender's
-      # email rather than the giftee's. The gift lookup in `not_double_charged` above
-      # (`joins(:gift_given).where(gifts: { giftee_email: ... })`) has no created_at window,
-      # so an in_progress gift — including one settling over a bank debit for days — already
-      # blocks repeat gifts to the same giftee until it resolves.
+      # Gift purchases are stored under the sender's email, so they only turn up via the gift
+      # record. The time-boxed check above deliberately ignores gifts older than a few minutes,
+      # which means an unresolved gift paid by bank debit would otherwise be invisible here — so
+      # look it up explicitly, with no window, exactly like the non-gift settling lookup.
+      #
+      # `payment_settling` requires a stripe_status, so a gift stuck `in_progress` with no status
+      # at all, older than the window above, is caught by neither check. That gap is inherited
+      # rather than introduced: direct purchases of the same products have always behaved this way,
+      # because the window above is what bounds them too. Widening it here would only re-create the
+      # lifetime block this change exists to remove.
+      unless is_recurring_subscription_charge
+        settling_gifts = self.class.payment_settling.joins(:gift_given).where(
+          gifts: { giftee_email: recipient_email },
+          link:
+        )
+        settling_gifts = settling_gifts.where("purchases.id != ?", id) if id
+        settling += settling_gifts
+      end
 
       if variant_attributes.present?
         settling = settling.select do |purchase|
@@ -4837,7 +4880,31 @@ class Purchase < ApplicationRecord
       end
 
       if settling.any?
-        errors.add :base, "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+        # Same two-reader problem as add_errors_for_existing_purchase below, and it reaches this
+        # site for the first time now that the gift lookup above is windowed: a gift settling over
+        # a bank debit for days is no longer caught up there, so it lands here instead. "Your
+        # previous payment" is wrong for both readers this can face — a *different* sender gifting
+        # the same product has made no previous payment, and a giftee buying it directly has not
+        # either. Telling either of them "do not pay again" abandons a legitimate purchase.
+        #
+        # The gift wording also has to stay neutral about *who owns* the blocking gift. The gift it
+        # names may have been sent by someone else entirely — two people can independently gift the
+        # same product to the same person — and the receipt for it goes to whoever started it. So
+        # never promise this reader an email: they may not be the one who gets it.
+        #
+        # A sender can also be blocked by something that is not a gift at all. This lookup finds
+        # anything settling under the recipient's address, and the recipient buying the product
+        # for themselves is stored under exactly that address, so their own purchase matches. Tell
+        # the sender what is actually in flight rather than describing every match as a gift.
+        errors.add :base, if is_gift_sender_purchase && settling.any?(&:is_gift_sender_purchase)
+          "A gift of this product to #{giftee_email} is still being paid for. Wait for that to finish before sending it again."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} is in the middle of buying this product themselves. Wait for that to finish before gifting it to them."
+        elsif settling.any?(&:is_gift_sender_purchase)
+          "Someone is in the middle of gifting you this product. Give that a moment to complete before paying for it yourself."
+        else
+          "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+        end
       end
     end
 
@@ -4852,13 +4919,39 @@ class Purchase < ApplicationRecord
       potential_duplicates.each(&:cancel_charge_intent)
     end
 
+    # The wording here has to work for two different readers. On a normal purchase the person
+    # reading it is the buyer, so "you" is right. On a gift the person reading it is the sender,
+    # who has not been charged and whose mailbox is not where anything was delivered — telling
+    # them "it has been emailed to you" reads like the gift went through, so they try again.
+    #
+    # The gift wording also has to stay neutral about *who owns* the gift it is describing. Two
+    # people can independently gift the same product to the same person, so the blocking gift may
+    # belong to a different sender, and its receipt goes to them rather than to whoever is reading
+    # this. Describe the gift and what to do about it; never promise this reader an email.
     def add_errors_for_existing_purchase(purchases)
-      if purchases.any?(&:successful?)
-        errors.add :base, "You have already paid for this product. It has been emailed to you."
+      # A gift sender can be blocked by something that is not a gift. The lookup that produced
+      # these keys on the recipient's address, and the recipient buying the product for themselves
+      # is stored under exactly that address, so their own purchase matches. Only call it a gift
+      # when the purchase actually being reported is one — checked per state, because a recipient
+      # can have both a settled direct purchase and someone's in-flight gift at the same time.
+      if (successful = purchases.select(&:successful?)).any?
+        errors.add :base, if is_gift_sender_purchase && successful.any?(&:is_gift_sender_purchase)
+          "This product was just sent as a gift to #{giftee_email}. Check with them before sending it again."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} just bought this product themselves. Check with them before sending it as a gift."
+        else
+          "You have already paid for this product. It has been emailed to you."
+        end
       elsif purchases.any?(&:preorder_authorization_successful?)
         errors.add :base, "You have already pre-ordered this product. A confirmation has been emailed to you."
-      elsif purchases.any?(&:in_progress?)
-        errors.add :base, "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
+      elsif (in_progress = purchases.select(&:in_progress?)).any?
+        errors.add :base, if is_gift_sender_purchase && in_progress.any?(&:is_gift_sender_purchase)
+          "A gift of this product to #{giftee_email} is already going through. Wait for it to finish before sending another."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} is in the middle of buying this product themselves. Wait for that to finish before gifting it to them."
+        else
+          "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
+        end
       end
     end
 

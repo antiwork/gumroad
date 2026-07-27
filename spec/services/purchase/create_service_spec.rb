@@ -2177,7 +2177,7 @@ describe Purchase::CreateService, :vcr do
 
       before :each do
         gift = create(:gift, giftee_email:)
-        create(:purchase, link: product, gift_given: gift, purchaser: user, email: user.email, is_gift_sender_purchase: true)
+        @gifter_purchase = create(:purchase, link: product, gift_given: gift, purchaser: user, email: user.email, is_gift_sender_purchase: true)
         create(:purchase, link: product, gift_received: gift, is_gift_receiver_purchase: true)
       end
 
@@ -2207,7 +2207,7 @@ describe Purchase::CreateService, :vcr do
           ).perform
 
           gift = purchase.gift_given
-          expect(error).to eq "You have already paid for this product. It has been emailed to you."
+          expect(error).to eq "This product was just sent as a gift to #{giftee_email}. Check with them before sending it again."
           expect(gift.state).to eq "failed"
           expect(gift.gifter_purchase).to be_nil
           expect(gift.giftee_purchase.purchase_state).to eq("gift_receiver_purchase_failed")
@@ -2229,6 +2229,27 @@ describe Purchase::CreateService, :vcr do
         end
       end
 
+      context "when the earlier gift was sent long ago" do
+        before :each do
+          @gifter_purchase.update!(created_at: 2.days.ago)
+        end
+
+        it "can be gifted to the same person again" do
+          gift_params[:gift][:giftee_email] = giftee_email
+
+          purchase, error = Purchase::CreateService.new(
+            product:,
+            params: gift_params
+          ).perform
+
+          expect(error).to be_nil
+          expect(purchase).to be_successful
+          gift = purchase.gift_given
+          expect(gift.state).to eq "successful"
+          expect(gift.giftee_purchase.purchase_state).to eq "gift_receiver_purchase_successful"
+        end
+      end
+
       context "by a signed-out user" do
         it "can't be gifted again to the same person" do
           gift_params[:gift][:giftee_email] = giftee_email
@@ -2241,7 +2262,7 @@ describe Purchase::CreateService, :vcr do
           ).perform
 
           gift = purchase.gift_given
-          expect(error).to eq "You have already paid for this product. It has been emailed to you."
+          expect(error).to eq "This product was just sent as a gift to #{giftee_email}. Check with them before sending it again."
           expect(gift.state).to eq "failed"
           expect(gift.gifter_purchase).to be_nil
           expect(gift.giftee_purchase.purchase_state).to eq("gift_receiver_purchase_failed")
@@ -2477,7 +2498,7 @@ describe Purchase::CreateService, :vcr do
         purchase, error = Purchase::CreateService.new(product:, params: gift_params).perform
 
         expect(purchase).not_to be_successful
-        expect(error).to eq "You have already paid for this product. It has been emailed to you."
+        expect(error).to eq "This product was just sent as a gift to giftee@gumroad.com. Check with them before sending it again."
       end
 
       it "does not allow purchase if quantity exceeds product availability" do
