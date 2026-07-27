@@ -1364,10 +1364,34 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal "VAT (25%)", purchase.tax_label
   end
 
-  test "tax_label VAT when include_tax_rate is true returns VAT with percentage for countries that collect tax on all products" do
+  test "tax_label CT when include_tax_rate is true returns CT with percentage for Japan" do
     rate = create_zip_tax_rate(country: "JP", combined_rate: 0.1)
     purchase = create_purchase(price_cents: 100, total_transaction_cents: 110, gumroad_tax_cents: 10, zip_tax_rate: rate)
-    assert_equal "VAT (10%)", purchase.tax_label
+    assert_equal "CT (10%)", purchase.tax_label
+  end
+
+  test "tax_label VAT when include_tax_rate is true returns VAT with percentage for countries that collect tax on all products and call it VAT" do
+    rate = create_zip_tax_rate(country: "ZA", combined_rate: 0.15)
+    purchase = create_purchase(price_cents: 100, total_transaction_cents: 115, gumroad_tax_cents: 15, zip_tax_rate: rate)
+    assert_equal "VAT (15%)", purchase.tax_label
+  end
+
+  test "tax_label GST when include_tax_rate is true returns GST with percentage for India" do
+    rate = create_zip_tax_rate(country: "IN", combined_rate: 0.18)
+    purchase = create_purchase(price_cents: 100, total_transaction_cents: 118, gumroad_tax_cents: 18, zip_tax_rate: rate)
+    assert_equal "GST (18%)", purchase.tax_label
+  end
+
+  test "tax_label GST when include_tax_rate is true returns GST with percentage for New Zealand" do
+    rate = create_zip_tax_rate(country: "NZ", combined_rate: 0.15)
+    purchase = create_purchase(price_cents: 100, total_transaction_cents: 115, gumroad_tax_cents: 15, zip_tax_rate: rate)
+    assert_equal "GST (15%)", purchase.tax_label
+  end
+
+  test "tax_label Service tax when include_tax_rate is true returns Service tax with percentage for Malaysia" do
+    rate = create_zip_tax_rate(country: "MY", combined_rate: 0.08)
+    purchase = create_purchase(price_cents: 100, total_transaction_cents: 108, gumroad_tax_cents: 8, zip_tax_rate: rate)
+    assert_equal "Service tax (8%)", purchase.tax_label
   end
 
   test "tax_label VAT when include_tax_rate is true returns VAT with percentage for countries that collect tax on digital products" do
@@ -1385,12 +1409,21 @@ class PurchaseTest < ActiveSupport::TestCase
   test "tax_label VAT when include_tax_rate is false returns VAT without percentage" do
     eu = create_purchase(price_cents: 100, total_transaction_cents: 119, gumroad_tax_cents: 19, zip_tax_rate: create_zip_tax_rate(country: "DE", combined_rate: 0.19))
     norway = create_purchase(price_cents: 100, total_transaction_cents: 125, gumroad_tax_cents: 25, zip_tax_rate: create_zip_tax_rate(country: "NO", combined_rate: 0.25))
-    japan = create_purchase(price_cents: 100, total_transaction_cents: 110, gumroad_tax_cents: 10, zip_tax_rate: create_zip_tax_rate(country: "JP", combined_rate: 0.1))
+    south_africa = create_purchase(price_cents: 100, total_transaction_cents: 115, gumroad_tax_cents: 15, zip_tax_rate: create_zip_tax_rate(country: "ZA", combined_rate: 0.15))
     digital = create_purchase(price_cents: 100, total_transaction_cents: 120, gumroad_tax_cents: 20, zip_tax_rate: create_zip_tax_rate(country: "BY", combined_rate: 0.2))
     assert_equal "VAT", eu.tax_label(include_tax_rate: false)
     assert_equal "VAT", norway.tax_label(include_tax_rate: false)
-    assert_equal "VAT", japan.tax_label(include_tax_rate: false)
+    assert_equal "VAT", south_africa.tax_label(include_tax_rate: false)
     assert_equal "VAT", digital.tax_label(include_tax_rate: false)
+  end
+
+  test "tax_label when include_tax_rate is false returns the country's own name for the tax without percentage" do
+    india = create_purchase(price_cents: 100, total_transaction_cents: 118, gumroad_tax_cents: 18, zip_tax_rate: create_zip_tax_rate(country: "IN", combined_rate: 0.18))
+    japan = create_purchase(price_cents: 100, total_transaction_cents: 110, gumroad_tax_cents: 10, zip_tax_rate: create_zip_tax_rate(country: "JP", combined_rate: 0.1))
+    malaysia = create_purchase(price_cents: 100, total_transaction_cents: 108, gumroad_tax_cents: 8, zip_tax_rate: create_zip_tax_rate(country: "MY", combined_rate: 0.08))
+    assert_equal "GST", india.tax_label(include_tax_rate: false)
+    assert_equal "CT", japan.tax_label(include_tax_rate: false)
+    assert_equal "Service tax", malaysia.tax_label(include_tax_rate: false)
   end
 
   test "tax_label Sales tax when include_tax_rate is true and was_tax_excluded_from_price is true returns 'Sales tax' for US" do
