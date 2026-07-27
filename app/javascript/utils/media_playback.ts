@@ -9,16 +9,21 @@
 //
 // The player sits several components below the page component, so instead of threading a
 // callback through the whole content tree it broadcasts its playback state on the window and
-// the page listens for it.
+// the page listens for it. Each event carries the id of the player it came from, because a
+// content page can embed several videos: the page tracks which players are playing rather than
+// a single page-wide flag, so one player pausing doesn't cancel out another that's still going.
 export const MEDIA_PLAYBACK_EVENT = "gumroad:media_playback";
 
-export type MediaPlaybackEventDetail = { isPlaying: boolean };
+export type MediaPlaybackEventDetail = { playerId: string; isPlaying: boolean };
 
-export const dispatchMediaPlaybackState = (isPlaying: boolean) =>
-  window.dispatchEvent(new CustomEvent<MediaPlaybackEventDetail>(MEDIA_PLAYBACK_EVENT, { detail: { isPlaying } }));
+export const dispatchMediaPlaybackState = (playerId: string, isPlaying: boolean) =>
+  window.dispatchEvent(
+    new CustomEvent<MediaPlaybackEventDetail>(MEDIA_PLAYBACK_EVENT, { detail: { playerId, isPlaying } }),
+  );
 
 export const isMediaPlaybackEvent = (event: Event): event is CustomEvent<MediaPlaybackEventDetail> => {
   if (!(event instanceof CustomEvent)) return false;
   const detail: unknown = event.detail;
-  return typeof detail === "object" && detail !== null && typeof Reflect.get(detail, "isPlaying") === "boolean";
+  if (typeof detail !== "object" || detail === null) return false;
+  return typeof Reflect.get(detail, "playerId") === "string" && typeof Reflect.get(detail, "isPlaying") === "boolean";
 };

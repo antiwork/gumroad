@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
-import { isPartialReloadResponse } from "../utils/inertia_partial_reload";
+import { isUnredirectedPartialReloadResponse } from "../utils/inertia_partial_reload";
 import { defaults as requestDefaults } from "../utils/request";
 
 // Keep the `request()` util's CSRF token current for Inertia pages. `base_page.ts` only
@@ -82,11 +82,13 @@ router.on("invalid", (event) => {
 
   const response = event.detail.response;
 
-  // Never let a background partial reload navigate the browser. Those requests happen on a
-  // timer while the buyer is using the page, so reloading on one bad response destroys
-  // whatever they were doing (see utils/inertia_partial_reload.ts). Dropping the response is
-  // safe: the poll keeps running and the next successful one refreshes the props.
-  if (isPartialReloadResponse(response)) return;
+  // A background partial reload that came back non-Inertia from the URL it asked for is
+  // dropped rather than navigated to: those requests happen on a timer while the buyer is
+  // using the page, and reloading the same URL re-issues whatever was just intercepted, which
+  // destroys a long viewing session (see utils/inertia_partial_reload.ts). Dropping is safe —
+  // the poll keeps running and the next successful response refreshes the props. A partial
+  // reload that was genuinely REDIRECTED (expired session, revoked access) still navigates.
+  if (isUnredirectedPartialReloadResponse(response)) return;
 
   const redirectedUrl = response.request.responseURL;
   if (redirectedUrl) {

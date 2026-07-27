@@ -33,12 +33,23 @@ function DownloadPage() {
 
   const hasMediaFiles = hasRichContent && contentFiles.length > 0;
 
-  // Set while a video on this page is playing. See app/javascript/utils/media_playback.ts for
-  // why playback pauses the position poll.
-  const [isMediaPlaying, setIsMediaPlaying] = React.useState(false);
+  // The ids of the players currently playing. Tracked as a set rather than a single flag
+  // because a content page can embed several videos, and one of them pausing must not cancel
+  // out another that is still playing. See app/javascript/utils/media_playback.ts for why
+  // playback pauses the position poll.
+  const [playingPlayerIds, setPlayingPlayerIds] = React.useState<ReadonlySet<string>>(new Set());
+  const isMediaPlaying = playingPlayerIds.size > 0;
   React.useEffect(() => {
     const handlePlaybackChange = (event: Event) => {
-      if (isMediaPlaybackEvent(event)) setIsMediaPlaying(event.detail.isPlaying);
+      if (!isMediaPlaybackEvent(event)) return;
+      const { playerId, isPlaying } = event.detail;
+      setPlayingPlayerIds((current) => {
+        if (current.has(playerId) === isPlaying) return current;
+        const next = new Set(current);
+        if (isPlaying) next.add(playerId);
+        else next.delete(playerId);
+        return next;
+      });
     };
     window.addEventListener(MEDIA_PLAYBACK_EVENT, handlePlaybackChange);
     return () => window.removeEventListener(MEDIA_PLAYBACK_EVENT, handlePlaybackChange);

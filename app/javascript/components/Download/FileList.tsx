@@ -665,7 +665,7 @@ const VideoEmbedPreview = ({
         .on("play", () => {
           // Tells the page a video is playing so it can pause its own position poll — the
           // player already reports the position below. See utils/media_playback.ts.
-          dispatchMediaPlaybackState(true);
+          dispatchMediaPlaybackState(videoPlayerId, true);
 
           if (initialSeekDone) return;
 
@@ -679,14 +679,14 @@ const VideoEmbedPreview = ({
           player.seek(resumeLocation);
           initialSeekDone = true;
         })
-        .on("pause", () => dispatchMediaPlaybackState(false))
-        .on("error", () => dispatchMediaPlaybackState(false))
+        .on("pause", () => dispatchMediaPlaybackState(videoPlayerId, false))
+        .on("error", () => dispatchMediaPlaybackState(videoPlayerId, false))
         .on("seek", (event) => trackMediaLocation(event.offset))
         .on("time", (event) => throttledTrackMediaLocation(event.position))
         .on("complete", () => {
           throttledTrackMediaLocation.cancel();
           trackMediaLocation(file.content_length ?? duration);
-          dispatchMediaPlaybackState(false);
+          dispatchMediaPlaybackState(videoPlayerId, false);
           setIsVideoPlayerShowing(false);
         });
     });
@@ -694,7 +694,7 @@ const VideoEmbedPreview = ({
     // The player is torn down whenever this embed stops being shown (and on unmount), so make
     // sure the page never stays in the "video playing" state with no player around.
     return () => {
-      dispatchMediaPlaybackState(false);
+      dispatchMediaPlaybackState(videoPlayerId, false);
     };
   }, [isVideoPlayerShowing]);
 

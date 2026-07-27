@@ -104,13 +104,52 @@ describe("DownloadPage media position polling", () => {
     mediaLocationsPoll()?.stop.mockClear();
 
     act(() => {
-      dispatchMediaPlaybackState(true);
+      dispatchMediaPlaybackState("jwplayer-file-1", true);
     });
     expect(mediaLocationsPoll()?.stop).toHaveBeenCalled();
     expect(mediaLocationsPoll()?.start).not.toHaveBeenCalled();
 
     act(() => {
-      dispatchMediaPlaybackState(false);
+      dispatchMediaPlaybackState("jwplayer-file-1", false);
+    });
+    expect(mediaLocationsPoll()?.start).toHaveBeenCalled();
+  });
+
+  // A content page can embed several videos. One of them stopping must not resume the poll
+  // while another is still playing.
+  it("keeps the poll paused while a second player is still playing", () => {
+    render(<DownloadPage />);
+
+    act(() => {
+      dispatchMediaPlaybackState("jwplayer-file-1", true);
+      dispatchMediaPlaybackState("jwplayer-file-2", true);
+    });
+    mediaLocationsPoll()?.start.mockClear();
+
+    act(() => {
+      dispatchMediaPlaybackState("jwplayer-file-1", false);
+    });
+    expect(mediaLocationsPoll()?.start).not.toHaveBeenCalled();
+
+    act(() => {
+      dispatchMediaPlaybackState("jwplayer-file-2", false);
+    });
+    expect(mediaLocationsPoll()?.start).toHaveBeenCalled();
+  });
+
+  it("ignores a repeated playing event from the same player", () => {
+    render(<DownloadPage />);
+
+    act(() => {
+      dispatchMediaPlaybackState("jwplayer-file-1", true);
+    });
+    mediaLocationsPoll()?.start.mockClear();
+
+    // JW Player fires "play" again after each seek; a duplicate must not double-count the
+    // player, or the matching single "pause" would leave the poll paused forever.
+    act(() => {
+      dispatchMediaPlaybackState("jwplayer-file-1", true);
+      dispatchMediaPlaybackState("jwplayer-file-1", false);
     });
     expect(mediaLocationsPoll()?.start).toHaveBeenCalled();
   });
