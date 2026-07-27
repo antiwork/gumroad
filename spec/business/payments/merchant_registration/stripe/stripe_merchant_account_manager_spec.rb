@@ -9570,10 +9570,11 @@ describe StripeMerchantAccountManager, :vcr do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("Invalid account number", "invalid_account_number"))
         end
 
-        it "emails the creator" do
+        it "emails the creator, flagging it as a format rejection the seller has to correct" do
           expect do
             subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number")
         end
       end
 
@@ -9583,16 +9584,18 @@ describe StripeMerchantAccountManager, :vcr do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "invalid_account_number"))
         end
 
-        it "emails the creator" do
+        it "emails the creator without flagging it as a format rejection" do
           expect do
             subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, nil, "You cannot use this bank account because previous attempts to deliver payouts to this account have failed.")
         end
       end
 
       describe "account flagged as unusable by Stripe" do
+        let(:error_message) { "This bank account can't be used. Contact support at https://support.stripe.com/contact if you think this is an error." }
+
         before do
-          error_message = "This bank account can't be used. Contact support at https://support.stripe.com/contact if you think this is an error."
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "external_account", code: "bank_account_unusable"))
         end
 
@@ -9600,14 +9603,15 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, nil, error_message)
           expect(result).to eq(:invalid_bank_account)
         end
       end
 
       describe "account rejected because previous payouts failed" do
+        let(:error_message) { "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error." }
+
         before do
-          error_message = "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error."
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "external_account"))
         end
 
@@ -9615,7 +9619,7 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, nil, error_message)
           expect(result).to eq(:invalid_bank_account)
         end
       end

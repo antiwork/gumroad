@@ -586,6 +586,32 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(upi_decision.fallback_reason).to eq(:unsupported_product_currency)
     end
 
+    # A single USD-priced line is allowed through here on the quoted-FX path, and that
+    # allowance is deliberately narrow: two USD lines would need one quote per line before the
+    # quoted amounts could reconcile with the persisted purchase rows. Pin the boundary so
+    # widening the single-line allowance can't silently let a multi-line USD cart in.
+    it "withholds the method for multi-item USD carts, which would need one quote per line" do
+      purchases << create(:purchase, link: product, seller:, merchant_account:, purchase_state: "in_progress")
+
+      expect(product.price_currency_type.to_s).to eq(Currency::USD)
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_product_currency)
+    end
+
+    it "withholds the method when the charge has no purchases" do
+      empty_decision = described_class.new(order:,
+                                           seller:,
+                                           merchant_account:,
+                                           chargeable:,
+                                           purchases: [],
+                                           params:,
+                                           setup_future_charges:,
+                                           off_session:).method_forced_decision(payment_method: "ideal")
+
+      expect(empty_decision).not_to be_eligible
+      expect(empty_decision.fallback_reason).to eq(:no_purchases)
+    end
+
     it "withholds the method for installment payments" do
       purchase.update!(is_installment_payment: true)
 

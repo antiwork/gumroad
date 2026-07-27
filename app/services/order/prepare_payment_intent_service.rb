@@ -354,7 +354,14 @@ class Order::PreparePaymentIntentService
       return nil if method_type.blank?
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type) || element_mount_forced_currency
       return nil if forced_currency.blank?
-      return nil unless free_and_test_lines_share_currency?(forced_currency)
+      unless free_and_test_lines_share_currency?(forced_currency)
+        # Every other way this method returns nil is either uninteresting (no forced currency at
+        # all) or logged by Charge::MethodForcedPresentment itself. This branch skips the service
+        # entirely, so without a line here an operator investigating "iDEAL checkouts fail for
+        # this cart shape" sees only the generic charge error the caller raises, with no reason.
+        Rails.logger.info("Skipping method-forced presentment for order #{order.id}: a free or test line is not priced in #{forced_currency}")
+        return nil
+      end
 
       Charge::MethodForcedPresentment.new(
         charge:,
@@ -713,7 +720,7 @@ class Order::PreparePaymentIntentService
     # currency. Mixed-currency charges and USD charges return nil so the resolver falls back to
     # the canonical USD method set — the same answer the presenter gave when the Element mounted.
     def uniform_method_forced_purchase_currency
-      return nil if purchases_to_charge.empty?
+      return nil if charge_purchases.empty?
 
       currencies = charge_purchases.map { _1.link.price_currency_type.to_s.downcase }.uniq
       return nil unless currencies.one?

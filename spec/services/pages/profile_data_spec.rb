@@ -69,6 +69,67 @@ describe Pages::ProfileData do
       expect(Pages::ProfileData.build(seller.reload)[:products].first[:thumbnail_url]).to be_nil
     end
 
+    context "product images" do
+      it "emits the thumbnail and the first image cover for each product" do
+        product = create(:product, user: seller)
+        thumbnail = create(:thumbnail, product:)
+        create(:asset_preview_mov, link: product)
+        cover = create(:asset_preview, link: product)
+
+        entry = Pages::ProfileData.build(seller.reload)[:products].first
+
+        expect(entry[:thumbnail_url]).to eq(thumbnail.url)
+        expect(entry[:cover_url]).to eq(cover.url)
+      end
+
+      it "emits a cover_url for a product with no thumbnail so the card still has an image" do
+        product = create(:product, user: seller)
+        cover = create(:asset_preview, link: product)
+
+        entry = Pages::ProfileData.build(seller.reload)[:products].first
+
+        expect(entry[:thumbnail_url]).to be_nil
+        expect(entry[:cover_url]).to eq(cover.url)
+      end
+
+      it "emits both keys as nil when the product has no thumbnail and no covers" do
+        create(:product, user: seller)
+
+        entry = Pages::ProfileData.build(seller.reload)[:products].first
+
+        expect(entry).to have_key(:cover_url)
+        expect(entry[:thumbnail_url]).to be_nil
+        expect(entry[:cover_url]).to be_nil
+      end
+
+      it "skips non-image covers, which cannot go in an img tag" do
+        product = create(:product, user: seller)
+        create(:asset_preview_mov, link: product)
+
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:cover_url]).to be_nil
+      end
+
+      it "skips Unsplash-hosted images, which the custom-page CSP blocks" do
+        product = create(:product, user: seller)
+        create(:unsplash_thumbnail, product:)
+        create(:asset_preview, link: product, unsplash_url: "https://images.unsplash.com/photo-1587502536575-6dfba0a6e017", attach: false)
+
+        entry = Pages::ProfileData.build(seller.reload)[:products].first
+
+        expect(entry[:thumbnail_url]).to be_nil
+        expect(entry[:cover_url]).to be_nil
+      end
+
+      it "picks up a newly added cover rather than serving the cached payload" do
+        product = create(:product, user: seller)
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:cover_url]).to be_nil
+
+        cover = create(:asset_preview, link: product)
+
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:cover_url]).to eq(cover.url)
+      end
+    end
+
     context "when the seller changes their username" do
       it "invalidates the cache so product URLs use the new subdomain" do
         create(:product, user: seller, name: "My product")

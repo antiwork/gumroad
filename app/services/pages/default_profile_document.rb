@@ -88,11 +88,12 @@ class Pages::DefaultProfileDocument
     return "" if products.blank?
 
     items = products.map do |product|
-      thumbnail = product[:thumbnail_url].present? ? %(<img src="#{ERB::Util.h(product[:thumbnail_url])}" alt="">) : ""
+      thumbnail = product[:thumbnail_url].presence || product[:cover_url].presence
+      image = thumbnail.present? ? %(<img src="#{ERB::Util.h(thumbnail)}" alt="">) : ""
       <<~ITEM
         <li>
           <a href="#{ERB::Util.h(product[:url])}">
-            #{thumbnail}
+            #{image}
             <div class="details">
               <h3>#{ERB::Util.h(product[:name])}</h3>
               <span class="price">#{ERB::Util.h(product[:price])}</span>
