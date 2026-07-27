@@ -1,0 +1,36 @@
+=== BEFORE (main): planner picks Vitest tests -> gate dies at banner, 0 tests run ===
+  📂 4 files changed (fix/custom-receipt-text-char-limit-hint vs main)
+  🧠 Cached plan (00631f652234)
+  ⚡ Risk: low — Purely UI change to two React text input components in the receipt tab, adding a character counter and aria-describedby; tests are colocated Vitest specs with no backend impact.
+
+  ═══════════════════════════════════════════════════
+    TEST CONFIDENCE
+  ───────────────────────────────────────────────────
+EXIT=1
+
+=== AFTER: same diff, gate runs both Vitest milestones + RSpec -> EXIT=0 ===
+       4 files changed (fix/custom-receipt-text-char-limit-hint vs main)
+       Cached plan (00631f652234)
+      Risk: low     Purely UI change to two React text input components in the receipt tab, adding a character counter and aria-describedby; tests are colocated Vitest specs with no backend impact.
+    TEST CONFIDENCE
+   80%       1 test
+          app/javascript/components/ProductEdit/ReceiptTab/CustomReceiptTextInput.test.tsx
+   95%       1 test
+          app/javascript/components/ProductEdit/ReceiptTab/CustomViewContentButtonTextInput.test.tsx
+   99%       1 test
+          requests/products/edit/receipt_spec.rb
+   100%       remaining tests
+                                                                                                                                                                        80%  1/1  1s
+      80%     1 test     1s
+                                                                                                                                                                        95%  1/1  2s
+      95%     1 test     2s
+  [K                                                                                                                               99%  0/1  92s       verifying requests/products/edit/receipt_spec.rb on merge-base...  [K                                                                                                                                                                       99%  1/1  122s      confirmed pre-existing: requests/products/edit/receipt_spec.rb
+      99% confidence     2 tests passed in 122s
+     (1 failure pre-existing, skipped     see list below)
+     Safe to commit.
+  100%       1760 tests     skipped
+  Pre-existing failures (skipped):
+        spec/requests/products/edit/receipt_spec.rb     confirmed pre-existing
+  Re-run with --strict to halt on these.
+  1761 tests more for 100%. Run with --full to continue.
+EXIT=0
