@@ -42,6 +42,21 @@ class Charge::PresentmentOrchestrator
   # supplies exact components (the tip the buyer picked in the product's own currency
   # must not be re-derived by proportional rounding). Quote fields are nullable because
   # a direct-listed-amount presentment has no FX quote by design.
+  #
+  # WHICH PURCHASES GET A PRESENTMENT ROW: exactly the purchases on the charge, which is
+  # to say exactly the rows the buyer actually paid for. Two kinds of 0-cent companion
+  # row exist elsewhere in a checkout and deliberately do NOT get one:
+  #
+  #   * the giftee purchase, built inside Purchase::CreateService#create_giftee_purchase
+  #     and never appended to the order, so it never reaches a charge; and
+  #   * bundle child purchases, created by Purchase::CreateBundleProductPurchaseService
+  #     after the parent purchase succeeds, at 0 cents.
+  #
+  # Both exist to grant access, not to move money — the buyer-facing price lives on the
+  # gifter or bundle-parent row. Giving them presentment rows would add zero-weight lines
+  # to the allocation and show the buyer per-item buyer-currency amounts for items that
+  # were never separately charged. spec/services/order/charge_service_spec.rb pins this
+  # for both single-item and multi-item carts.
   def self.persist!(charge:, presentment_currency:, presentment_total_cents:, presentment_gumroad_amount_cents:,
                     allocations:, stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil,
                     rounding_delta_cents: 0)

@@ -595,6 +595,162 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
     end
 
+    it "creates presentments for the gifter purchases only on a multi-item gift cart" do
+      # Gifting is decided for the whole checkout, so a two-item gift cart produces four
+      # purchase rows: two gifter rows that carry the money and two 0-cent giftee rows.
+      # The giftee rows are built inside Purchase::CreateService and never joined to the
+      # order, so they never reach the charge — which is the behaviour being pinned here.
+      # If they ever did reach it they would be zero-weight lines in the allocation, and
+      # the buyer would see presentment rows for purchases they were not charged for.
+      configure_seller_1_for_presentment_charges
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
+
+      quote = buyer_currency_quote_for(product_1, product_2)
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            quantity: 1
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            perceived_price_cents: product_2.price_cents,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment)
+        .merge(buyer_currency_quote: quote.token,
+               is_gift: "true",
+               giftee_email: "giftee@example.com",
+               gift_note: "Enjoy!")
+        .deep_merge(purchase: { email: "buyer@gumroad.com" })
+      order, = Order::CreateService.new(params:).perform
+      gifter_purchases = order.purchases.to_a
+      expect(gifter_purchases.size).to eq(2)
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:
+        )
+      end
+
+      Order::ChargeService.new(order:, params:).perform
+
+      charge = order.reload.charges.sole
+      # $30.00 at the 0.8 locked rate is CA$37.50, split across the two gifter lines in
+      # proportion to their canonical totals ($10 and $20).
+      expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                           presentment_total_cents: 37_50)
+      expect(charge.purchases).to match_array(gifter_purchases)
+      presentments = gifter_purchases.map { _1.reload.purchase_presentment }
+      expect(presentments.map(&:charge_presentment).uniq).to eq([charge.charge_presentment])
+      expect(presentments.map(&:presentment_total_cents)).to match_array([12_50, 25_00])
+      expect(presentments.sum(&:presentment_total_cents)).to eq(charge.charge_presentment.presentment_total_cents)
+
+      giftee_purchases = Gift.all.map(&:giftee_purchase)
+      expect(giftee_purchases.size).to eq(2)
+      expect(giftee_purchases.map(&:purchase_presentment)).to all(be_nil)
+      # Exactly the two paying rows, so no zero-weight line ever entered the allocation.
+      expect(PurchasePresentment.count).to eq(2)
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
+    it "creates presentments for the bundle parent only on a multi-item cart containing a bundle" do
+      # A bundle in a multi-item cart: the buyer pays the bundle's own price, and the
+      # 0-cent child rows are created by Purchase::CreateBundleProductPurchaseService
+      # AFTER the charge succeeds. So the charge sees two paying rows (the bundle parent
+      # and the standalone product), and the children — which exist only to grant access
+      # — must stay out of the presentment records entirely.
+      configure_seller_1_for_presentment_charges
+      bundle = create(:product, :bundle, user: seller_1, price_cents: 10_00)
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
+
+      quote = buyer_currency_quote_for(bundle, product_2)
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: bundle.unique_permalink,
+            perceived_price_cents: bundle.price_cents,
+            quantity: 1,
+            bundle_products: bundle.bundle_products.map do |bundle_product|
+              {
+                product_id: bundle_product.product.external_id,
+                variant_id: bundle_product.variant&.external_id,
+                quantity: bundle_product.quantity,
+              }
+            end
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            perceived_price_cents: product_2.price_cents,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:
+        )
+      end
+
+      Order::ChargeService.new(order:, params:).perform
+
+      charge = order.reload.charges.sole
+      bundle_purchase = order.purchases.find_by!(link: bundle)
+      standalone_purchase = order.purchases.find_by!(link: product_2)
+      # $30.00 at the 0.8 locked rate is CA$37.50: CA$12.50 for the bundle, CA$25.00 for
+      # the standalone product.
+      expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                           presentment_total_cents: 37_50)
+      expect(bundle_purchase.purchase_presentment).to have_attributes(charge_presentment: charge.charge_presentment,
+                                                                      presentment_total_cents: 12_50)
+      expect(standalone_purchase.purchase_presentment).to have_attributes(charge_presentment: charge.charge_presentment,
+                                                                          presentment_total_cents: 25_00)
+      expect(bundle_purchase.product_purchases).to be_present
+      expect(bundle_purchase.product_purchases.map(&:purchase_presentment)).to all(be_nil)
+      expect(PurchasePresentment.count).to eq(2)
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
     it "fails closed when a stale quote token reaches an unsupported commission checkout" do
       seller_1.update!(check_merchant_account_is_linked: true,
                        disable_buyer_local_currency: false,
