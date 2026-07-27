@@ -2538,7 +2538,44 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase2 = build_purchase(link: product, email: "another-sender@gumroad.com", ip_address: ip,
                                gift_given: second_gift, is_gift_sender_purchase: true, created_at: Time.current)
     assert_not purchase2.valid?
-    assert_equal ["A gift of this product to giftee@gumroad.com is still being paid for. We will email you when it completes — please don't send it again yet."], purchase2.errors[:base]
+    assert_equal ["A gift of this product to giftee@gumroad.com is still being paid for. Wait for that to finish before sending it again."], purchase2.errors[:base]
+  end
+
+  test "not_double_charged settling tells a second sender to wait without promising them the receipt email" do
+    product = create_product
+    ip = unique_ip
+    gift = create_gift(giftee_email: "giftee@gumroad.com", link: product)
+    create_purchase(link: product, seller: product.user, email: "first-sender@gumroad.com", ip_address: ip,
+                    gift_given: gift, is_gift_sender_purchase: true,
+                    purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+    second_gift = build_gift(giftee_email: "giftee@gumroad.com", link: product)
+    purchase2 = build_purchase(link: product, email: "second-sender@gumroad.com", ip_address: unique_ip,
+                               gift_given: second_gift, is_gift_sender_purchase: true, created_at: Time.current)
+    assert_not purchase2.valid?
+    # The settling gift belongs to first-sender, so its receipt goes to them. Telling second-sender
+    # "we will email you" points them at a mailbox that will never receive anything.
+    message = purchase2.errors[:base].sole
+    assert_no_match(/email you/, message)
+    assert_equal "A gift of this product to giftee@gumroad.com is still being paid for. Wait for that to finish before sending it again.", message
+  end
+
+  test "not_double_charged when a second sender's gift is still in progress tells them to wait without promising them an email" do
+    travel_to(Time.current)
+    product = create_product
+    giftee_email = "giftee-#{unique_suffix}@example.com"
+    gift = create_gift(giftee_email:, link: product)
+    create_purchase(link: product, gift_given: gift, is_gift_sender_purchase: true,
+                    ip_address: unique_ip, email: "first-sender-#{unique_suffix}@example.com",
+                    purchase_state: "in_progress")
+
+    second_gift = build_gift(giftee_email:, link: product)
+    purchase = build_purchase(link: product, gift_given: second_gift, is_gift_sender_purchase: true,
+                              ip_address: unique_ip, email: "second-sender-#{unique_suffix}@example.com")
+    assert_not purchase.valid?
+    # Same ownership problem on the non-settling path: the in-progress gift is first-sender's.
+    message = purchase.errors[:base].sole
+    assert_no_match(/email you/, message)
+    assert_equal "A gift of this product to #{giftee_email} is already going through. Wait for it to finish before sending another.", message
   end
 
   test "not_double_charged settling already blocks a direct purchase by the giftee while a gift to them is in progress" do

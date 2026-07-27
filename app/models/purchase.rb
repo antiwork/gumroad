@@ -4866,8 +4866,13 @@ class Purchase < ApplicationRecord
         # previous payment" is wrong for both readers this can face — a *different* sender gifting
         # the same product has made no previous payment, and a giftee buying it directly has not
         # either. Telling either of them "do not pay again" abandons a legitimate purchase.
+        #
+        # The gift wording also has to stay neutral about *who owns* the blocking gift. The gift it
+        # names may have been sent by someone else entirely — two people can independently gift the
+        # same product to the same person — and the receipt for it goes to whoever started it. So
+        # never promise this reader an email: they may not be the one who gets it.
         errors.add :base, if is_gift_sender_purchase
-          "A gift of this product to #{giftee_email} is still being paid for. We will email you when it completes — please don't send it again yet."
+          "A gift of this product to #{giftee_email} is still being paid for. Wait for that to finish before sending it again."
         elsif settling.any?(&:is_gift_sender_purchase)
           "Someone is in the middle of gifting you this product. Give that a moment to complete before paying for it yourself."
         else
@@ -4891,6 +4896,11 @@ class Purchase < ApplicationRecord
     # reading it is the buyer, so "you" is right. On a gift the person reading it is the sender,
     # who has not been charged and whose mailbox is not where anything was delivered — telling
     # them "it has been emailed to you" reads like the gift went through, so they try again.
+    #
+    # The gift wording also has to stay neutral about *who owns* the gift it is describing. Two
+    # people can independently gift the same product to the same person, so the blocking gift may
+    # belong to a different sender, and its receipt goes to them rather than to whoever is reading
+    # this. Describe the gift and what to do about it; never promise this reader an email.
     def add_errors_for_existing_purchase(purchases)
       if purchases.any?(&:successful?)
         errors.add :base, if is_gift_sender_purchase
@@ -4902,7 +4912,7 @@ class Purchase < ApplicationRecord
         errors.add :base, "You have already pre-ordered this product. A confirmation has been emailed to you."
       elsif purchases.any?(&:in_progress?)
         errors.add :base, if is_gift_sender_purchase
-          "A gift of this product to #{giftee_email} is still going through. We will email you if it succeeds."
+          "A gift of this product to #{giftee_email} is already going through. Wait for it to finish before sending another."
         else
           "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
         end
