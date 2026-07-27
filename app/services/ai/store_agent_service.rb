@@ -44,45 +44,46 @@ class Ai::StoreAgentService
   # How much of the message the creator JUST sent we forward. This is the request itself, so
   # trimming it changes what was asked. It needs its own, much larger budget because Gumroad hands
   # creators prompts to paste: the landing-page prompt in ShareTab/LandingPageEditor.tsx is ~4,500
-  # characters, so under the 2,000-character history cap the model never saw the second half of our
-  # own instructions — the publish and verify commands were cut off mid-sentence, and the model was
-  # asked to build a page without being told how to ship it. 12,000 covers that prompt several
+  # characters, so under the 2,000-character history cap any creator who pasted a Gumroad-generated
+  # prompt into this agent had the second half of our own instructions silently dropped — cut off
+  # mid-sentence, with the publish and verify steps missing. 12,000 covers that prompt several
   # times over while still refusing an unbounded paste.
   MAX_CURRENT_MESSAGE_LENGTH = 12_000
   # Anthropic requires max_tokens on every request, so there is always SOME cap — the question is
   # only how big. It has to fit more than a brief chat reply: when the agent authors or edits a
-  # page, the model must emit the ENTIRE new value (a whole self-contained HTML page) inside the
-  # tool call's JSON arguments. A cap sized for text replies (originally 1,500, then 8,192) cut
-  # those tool calls off mid-JSON: the seller asked for a landing page and got the honest
-  # "that's too much for me to handle in one go" fallback on the very first turn, every time,
-  # because a full page does not fit in 8,192 tokens no matter how the request is worded.
+  # custom HTML page, the model must emit the ENTIRE new value (a whole self-contained page) inside
+  # the tool call's JSON arguments. A cap sized for text replies (originally 1,500, then 8,192) cut
+  # those tool calls off mid-JSON, and the seller got the honest "that's too much for me to handle
+  # in one go" fallback on the very first turn, every time, because a full page does not fit in
+  # 8,192 tokens no matter how the request is worded.
   #
-  # 32,000 is sized off the actual artifact: a real landing page (markup, inline CSS/JS, JSON
-  # escaping inside the tool call) runs well past 8k tokens but comfortably under 32k. It still
-  # bounds a runaway turn — one turn can't generate unboundedly — and ordinary chat turns are
-  # unaffected, because the model stops when it's done, not when it hits the cap; nothing here
-  # makes short replies longer or more expensive. The seller-facing throttle (30 agent requests
-  # per hour) bounds how often the worst case can be paid for.
+  # 32,000 is sized off the actual artifact: a real page (markup, inline CSS/JS, JSON escaping
+  # inside the tool call) runs well past 8k tokens but comfortably under 32k. It still bounds a
+  # runaway turn — one turn can't generate unboundedly — and ordinary chat turns are unaffected,
+  # because the model stops when it's done, not when it hits the cap; nothing here makes short
+  # replies longer or more expensive. The seller-facing throttle (30 agent requests per hour)
+  # bounds how often the worst case can be paid for.
   MAX_REPLY_TOKENS = 32_000
   # The buffered (non-streaming) path keeps the smaller cap, because there the cap is a proxy for
   # TIME, not just size: nothing comes back until the whole reply is generated, so the request
   # thread sits blocked for the full generation, bounded by REQUEST_TIMEOUT_IN_SECONDS and by
   # Rack::Timeout's 120s service timeout. A 32k-token generation would routinely blow through both
   # and surface as a generic timeout error — strictly worse for the seller than the honest
-  # "scope it down" reply. Page authoring happens on the streaming path (that's what the web and
-  # mobile Agent tabs use), which is bounded by silence BETWEEN chunks rather than total duration,
-  # so a multi-minute page generation streams fine there.
+  # "scope it down" reply. The web Agent tab authors pages over the STREAMING path, which is
+  # bounded by silence BETWEEN chunks rather than total duration, so a multi-minute page generation
+  # streams fine there. Anything still on a buffered endpoint trades page-sized replies for a
+  # reply that is guaranteed to arrive.
   MAX_BUFFERED_REPLY_TOKENS = 8_192
   # What the seller sees when a model turn still hits the token cap (stop_reason "max_tokens").
   # A truncated turn is unusable — a cut-off tool call has unparseable arguments, and a cut-off
   # text reply would silently present half an answer as if it were complete — so we replace it
-  # with an honest, ACTIONABLE next step instead of streaming garbage or raising. It names the
-  # thing that actually works (ask for one section at a time, then have the agent add the rest),
-  # because the previous wording ("try a smaller section") left sellers re-pasting the same
-  # request and hitting the same wall.
-  TRUNCATED_REPLY = "That answer got too long for one go. Ask me for it in pieces — for a page, " \
-                    "start with the main section and I'll add the rest one at a time — or email " \
-                    "support@gumroad.com and we'll build it with you."
+  # with an honest, ACTIONABLE next step instead of streaming garbage or raising. The previous
+  # wording ("try a smaller section") left sellers re-pasting the same request and hitting the
+  # same wall, so this names the two routes that actually exist: ask for the work in smaller
+  # pieces (the agent can edit an existing page a snippet at a time), or reach a human.
+  TRUNCATED_REPLY = "That answer got too long for one go. Try asking for a smaller piece of it and " \
+                    "I'll build on that, or email support@gumroad.com and we'll work through it " \
+                    "with you."
   # How many prior turns of context we forward to the model. Keeps token usage bounded and avoids
   # echoing an unbounded client-supplied history back to the model.
   MAX_HISTORY_MESSAGES = 20
@@ -289,6 +290,12 @@ class Ai::StoreAgentService
         messages: conversation,
         tools: tool_schemas,
         max_tokens: MAX_REPLY_TOKENS,
+        # If a streamed tool call arrives corrupted, the client recovers by replaying the turn
+        # WITHOUT streaming — and that replay is a buffered generation on this request thread, so it
+        # needs the buffered budget, not the streaming one. Handing it MAX_REPLY_TOKENS would put a
+        # page-sized generation back under the request timeout and turn the recovery into the
+        # timeout error it exists to avoid.
+        buffered_max_tokens: MAX_BUFFERED_REPLY_TOKENS,
         # A corrupted tool call is recovered by replaying the turn without streaming, which
         # regenerates the reply from the start. Tool-use turns usually stream a sentence of
         # preamble first, so without a way to clear it that recovery could never run — the client

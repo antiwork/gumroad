@@ -464,6 +464,50 @@ describe Ai::AnthropicClient do
       expect(result.stop_reason).to eq("tool_use")
     end
 
+    it "replays with the caller's buffered budget, not its streaming one" do
+      # The replay is a buffered generation on the request thread, so it is bounded by wall clock
+      # rather than by silence between chunks. A caller whose streaming cap is sized for a long
+      # artifact must be able to hand the replay a smaller cap, or the recovery becomes the timeout
+      # it exists to avoid.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{broken" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered = stub_request(:post, url)
+        .with(body: hash_including("stream" => false, "max_tokens" => 4_000))
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "done" }], "stop_reason" => "end_turn" }.to_json,
+                   headers: { "Content-Type" => "application/json" })
+
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 40_000, buffered_max_tokens: 4_000)
+
+      expect(buffered).to have_been_requested.once
+    end
+
+    it "replays with the streaming budget when the caller draws no distinction" do
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "{broken" } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered = stub_request(:post, url)
+        .with(body: hash_including("stream" => false, "max_tokens" => 40_000))
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "done" }], "stop_reason" => "end_turn" }.to_json,
+                   headers: { "Content-Type" => "application/json" })
+
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], max_tokens: 40_000)
+
+      expect(buffered).to have_been_requested.once
+    end
+
     it "hands the fallback's regenerated text to the caller's block in one piece when the replay is the final answer" do
       # A replay that comes back with no tool call is the finished reply, and it is what the seller
       # is meant to read. Nothing was streamed before the fallback fired (the fallback either

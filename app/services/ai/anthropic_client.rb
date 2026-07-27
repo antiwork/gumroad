@@ -152,10 +152,17 @@ class Ai::AnthropicClient
   # tool call, so in production the corrupted-tool-call failure nearly always arrives with text
   # already yielded.
   #
+  # `buffered_max_tokens` is the cap for that non-streamed replay, and it defaults to `max_tokens`
+  # only because most callers have no reason to distinguish the two. A caller SHOULD pass a smaller
+  # value when its streaming cap is sized for length rather than time: the replay is a buffered
+  # generation on the request thread, so it is bounded by wall clock (this client's read timeout and
+  # whatever request timeout sits above it), not by silence between chunks. Replaying a very large
+  # streaming budget buffered is how a clear "that was too long" reply turns into a timeout.
+  #
   # @param on_discard_streamed_text [#call, nil] erases text already streamed to the seller
   # @yieldparam text [String] a chunk of assistant text
   # @return [Result]
-  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, on_discard_streamed_text: nil, &on_text)
+  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, buffered_max_tokens: nil, on_discard_streamed_text: nil, &on_text)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
     yielded_any = false
 
@@ -223,7 +230,7 @@ class Ai::AnthropicClient
         yielded_any = false
       end
 
-      buffered_fallback(system:, messages:, tools:, max_tokens:, original_error: e, &on_text)
+      buffered_fallback(system:, messages:, tools:, max_tokens: buffered_max_tokens || max_tokens, original_error: e, &on_text)
     end
   end
 

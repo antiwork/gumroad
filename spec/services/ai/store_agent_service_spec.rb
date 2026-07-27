@@ -605,25 +605,45 @@ describe Ai::StoreAgentService do
       it "tells the seller how to get an answer instead of only that the request was too big" do
         # The old wording ("try asking me to change or summarize a smaller section") left sellers
         # re-pasting the same request; the reply has to name a next step that works.
-        expect(described_class::TRUNCATED_REPLY).to match(/pieces|one at a time/i)
+        expect(described_class::TRUNCATED_REPLY).to match(/smaller piece/i)
         expect(described_class::TRUNCATED_REPLY).to include("support@gumroad.com")
       end
 
       it "asks the model for a cap that fits a whole page on the path page authoring uses" do
         # A landing page is markup plus inline CSS/JS, JSON-escaped inside the tool call. 8,192
-        # tokens could not hold one, so every page request truncated on its first turn.
+        # tokens could not hold one, so every page request truncated on its first turn. This is a
+        # sizing floor, not an exact value — the point is that the streaming budget is big enough
+        # for the artifact and strictly bigger than the buffered one.
         expect(described_class::MAX_REPLY_TOKENS).to be >= 32_000
+        expect(described_class::MAX_REPLY_TOKENS).to be > described_class::MAX_BUFFERED_REPLY_TOKENS
       end
 
       it "keeps a smaller cap on the buffered path, whose reply time is bounded by Rack::Timeout" do
         # Nothing streams back on this path until generation finishes, so an oversized cap turns
         # into a request that outlives the 120s service timeout instead of a page.
-        expect(described_class::MAX_BUFFERED_REPLY_TOKENS).to be < described_class::MAX_REPLY_TOKENS
         allow(client).to receive(:messages).and_return(text_result("You have 3 products."))
 
         service.respond(messages: [{ role: "user", content: "How many products?" }])
 
         expect(client).to have_received(:messages).with(hash_including(max_tokens: described_class::MAX_BUFFERED_REPLY_TOKENS))
+      end
+
+      it "hands the corrupted-tool-call replay the buffered budget, since that replay is not streamed" do
+        # The client recovers a corrupted streamed tool call by replaying the turn WITHOUT streaming.
+        # That replay runs on the request thread under the request timeout, so it needs the buffered
+        # cap; giving it the page-sized streaming cap would turn the recovery into a timeout.
+        captured = nil
+        allow(client).to receive(:stream_messages) do |args, &blk|
+          captured = args
+          blk&.call("ok")
+          text_result("ok")
+        end
+        allow(client).to receive(:messages).and_return(text_result("[]"))
+
+        service.respond_streaming(messages: [{ role: "user", content: "build my page" }]) { |_event, _payload| }
+
+        expect(captured[:buffered_max_tokens]).to eq(described_class::MAX_BUFFERED_REPLY_TOKENS)
+        expect(captured[:max_tokens]).to eq(described_class::MAX_REPLY_TOKENS)
       end
 
       it "handles a truncated tool-call turn gracefully instead of raising" do
