@@ -54,7 +54,24 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
       return unless current_user
 
       key = RedisKey.ai_request_throttle(current_seller.id)
-      throttle!(key:, limit: AI_REQUESTS_PER_PERIOD, period: AI_REQUESTS_PERIOD_WINDOW)
+      throttle!(
+        key:,
+        limit: AI_REQUESTS_PER_PERIOD,
+        period: AI_REQUESTS_PERIOD_WINDOW,
+        # Named plainly, because this text is shown to the seller: the previous generic wording made
+        # a limit they only have to wait out look like a failure of the feature.
+        message: ->(retry_after) do
+          # A zero countdown means the hour's counter expired while this request was being counted,
+          # so the next attempt starts a fresh window and goes through.
+          timing = if retry_after <= 0
+            "You can generate again now."
+          else
+            minutes = [(retry_after.to_f / 60).ceil, 1].max
+            "You can generate again in #{minutes} #{"minute".pluralize(minutes)}."
+          end
+          "You've used all #{AI_REQUESTS_PER_PERIOD} AI generations for this hour. #{timing}"
+        end
+      )
     end
 
     def sanitize_prompt(prompt)

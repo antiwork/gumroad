@@ -10,7 +10,7 @@
 # UserPolicy#use_store_agent? authorization, and the per-seller throttle — so the streaming path is
 # no less protected. The read/propose/confirm safety model lives entirely in Ai::StoreAgentService.
 class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseController
-  include Throttling
+  include AgentRequestThrottling
   include ActionController::Live
   include AgentConversationPersistence
 
@@ -18,10 +18,6 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
   before_action :authorize_store_agent
   before_action :throttle_agent_requests
   after_action :verify_authorized
-
-  AGENT_REQUESTS_PER_PERIOD = 30
-  AGENT_REQUESTS_PERIOD_WINDOW = 1.hour
-  private_constant :AGENT_REQUESTS_PER_PERIOD, :AGENT_REQUESTS_PERIOD_WINDOW
 
   # How often to write an SSE keepalive comment while the turn is being generated. Real events can
   # be minutes apart: tool-use iterations (up to Ai::StoreAgentService::MAX_TOOL_ITERATIONS of
@@ -218,9 +214,8 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
     def throttle_agent_requests
       return unless current_user
 
-      key = RedisKey.agent_request_throttle(current_seller.id)
       # `throttle!` renders a 429 when the limit is exceeded; Rails halts before_actions once a
       # response is performed.
-      throttle!(key:, limit: AGENT_REQUESTS_PER_PERIOD, period: AGENT_REQUESTS_PERIOD_WINDOW)
+      throttle_agent_requests_for(current_seller.id)
     end
 end
