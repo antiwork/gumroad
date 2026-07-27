@@ -2441,4 +2441,149 @@ describe "PurchaseRefunds", :vcr do
                              "Expected no refund SUM queries when refunds are preloaded, got:\n#{sum_queries.join("\n")}"
     end
   end
+
+  # Multi-item single-seller carts charge one PaymentIntent in the buyer's currency and
+  # persist one purchase_presentment per purchase against the shared charge_presentment.
+  # Every other presentment refund example in this file builds a purchase whose
+  # presentment IS the whole charge, so nothing proved that refunding one line of a
+  # multi-line presentment charge stays inside that line's own presentment amount.
+  # These examples pin that: the refund amount sent to Stripe is clamped to the refunded
+  # purchase's presentment cents, never the charge's, and the sibling purchase is
+  # untouched.
+  describe "refunds on one purchase of a multi-item presentment charge" do
+    let(:seller) { create(:user) }
+    let(:merchant_account) do
+      # An explicit id rather than the factory sequence: the sequence restarts per example
+      # and can collide with an existing account, which fails the "already connected with
+      # another Gumroad account" uniqueness validation.
+      create(:merchant_account,
+             user: nil,
+             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+             charge_processor_merchant_id: "acct_multi_item_presentment")
+    end
+    let(:order) { create(:order) }
+    let(:charge) { create(:charge, order:, seller:, merchant_account:, amount_cents: 30_00, gumroad_amount_cents: 6_00) }
+    # $10 and $20 canonical, charged as one CA$37.50 PaymentIntent at a 0.8 rate:
+    # CA$12.50 on the first purchase and CA$25.00 on the second.
+    let(:presentment_cents) { { first: 12_50, second: 25_00 } }
+
+    def build_charged_purchase(price_cents:)
+      purchase = create(:purchase_in_progress,
+                        link: create(:product, user: seller, price_cents:),
+                        seller:,
+                        merchant_account:,
+                        price_cents:,
+                        chargeable: create(:chargeable))
+      purchase.process!
+      purchase.update!(is_part_of_combined_charge: true)
+      purchase.mark_successful!
+      create(:balance, user: seller, amount_cents: 100_00)
+      charge.purchases << purchase
+      purchase
+    end
+
+    let(:charge_presentment) do
+      create(:charge_presentment,
+             charge:,
+             presentment_currency: Currency::CAD,
+             presentment_total_cents: presentment_cents.values.sum,
+             presentment_gumroad_amount_cents: 7_50)
+    end
+    let!(:first_purchase) { build_charged_purchase(price_cents: 10_00) }
+    let!(:second_purchase) { build_charged_purchase(price_cents: 20_00) }
+
+    before do
+      [[first_purchase, presentment_cents[:first]], [second_purchase, presentment_cents[:second]]].each do |purchase, total|
+        create(:purchase_presentment,
+               purchase:,
+               charge_presentment:,
+               presentment_currency: Currency::CAD,
+               presentment_price_cents: total,
+               presentment_tip_cents: 0,
+               presentment_seller_tax_cents: 0,
+               presentment_gumroad_tax_cents: 0,
+               presentment_shipping_cents: 0,
+               presentment_total_cents: total,
+               presentment_gumroad_amount_cents: total / 5)
+        purchase.association(:purchase_presentment).reset
+      end
+    end
+
+    def presentment_charge_refund(presentment_cents:)
+      stripe_refund = double("stripe_refund", status: "succeeded", id: "re_multi_#{SecureRandom.hex(6)}")
+      charge_refund = ChargeRefund.new
+      charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      charge_refund.id = stripe_refund.id
+      charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, -presentment_cents)
+      charge_refund.instance_variable_set(:@refund, stripe_refund)
+      charge_refund
+    end
+
+    it "clamps a full refund of one purchase to that purchase's presentment cents, not the charge's" do
+      # The bug this guards against is refunding CA$37.50 (the whole PaymentIntent) when
+      # only the CA$12.50 line was refunded — Stripe would accept it, and the buyer would
+      # get back money for a product they still own.
+      expect(ChargeProcessor).to receive(:refund!)
+        .with(first_purchase.charge_processor_id, first_purchase.stripe_transaction_id,
+              hash_including(amount_cents: presentment_cents[:first]))
+        .and_return(presentment_charge_refund(presentment_cents: presentment_cents[:first]))
+
+      expect(first_purchase.refund_and_save!(seller.id)).to be(true)
+
+      first_purchase.reload
+      expect(first_purchase.stripe_refunded).to be(true)
+      expect(first_purchase.refunds.sole).to have_attributes(presentment_currency: Currency::CAD,
+                                                             presentment_amount_cents: presentment_cents[:first],
+                                                             total_transaction_cents: 10_00)
+      # The sibling line is untouched: still fully refundable in its own presentment cents.
+      second_purchase.reload
+      expect(second_purchase.stripe_refunded).to be(false)
+      expect(second_purchase.refunds).to be_empty
+      expect(second_purchase.purchase_presentment.presentment_total_cents).to eq(presentment_cents[:second])
+    end
+
+    it "refunds a partial amount of one purchase against that purchase's own remaining presentment balance" do
+      canonical_partial = 4_00
+      # 4.00 of the purchase's 10.00 canonical total, allocated over the line's own
+      # CA$12.50 — not over the charge's CA$37.50, which would refund CA$15.00 here.
+      presentment_partial = 5_00
+
+      expect(ChargeProcessor).to receive(:refund!)
+        .with(first_purchase.charge_processor_id, first_purchase.stripe_transaction_id,
+              hash_including(amount_cents: presentment_partial))
+        .and_return(presentment_charge_refund(presentment_cents: presentment_partial))
+
+      expect(first_purchase.refund_and_save!(seller.id, amount_cents: canonical_partial)).to be(true)
+
+      first_purchase.reload
+      expect(first_purchase.stripe_partially_refunded).to be(true)
+      expect(first_purchase.refunds.sole.presentment_amount_cents).to eq(presentment_partial)
+
+      # The remainder of THIS line, and nothing from the sibling's.
+      remaining = presentment_cents[:first] - presentment_partial
+      expect(ChargeProcessor).to receive(:refund!)
+        .with(first_purchase.charge_processor_id, first_purchase.stripe_transaction_id,
+              hash_including(amount_cents: remaining))
+        .and_return(presentment_charge_refund(presentment_cents: remaining))
+
+      expect(first_purchase.refund_and_save!(seller.id)).to be(true)
+
+      first_purchase.reload
+      expect(first_purchase.stripe_refunded).to be(true)
+      expect(first_purchase.refunds.sum { _1.presentment_amount_cents.to_i }).to eq(presentment_cents[:first])
+      expect(second_purchase.reload.refunds).to be_empty
+    end
+
+    it "refuses a presentment amount larger than the purchase's line even though the charge could cover it" do
+      # A processor-initiated refund arriving for more than this line is only derivable
+      # if the code reads the charge-level total; reading the purchase's own presentment
+      # makes it fail closed, which is what the caller needs.
+      over_line_but_under_charge = presentment_cents[:first] + 1
+
+      expect(Purchase::PresentmentRefund.from_presentment_amount(purchase: first_purchase,
+                                                                 presentment_amount_cents: over_line_but_under_charge)).to be_nil
+      expect(Purchase::PresentmentRefund.from_presentment_amount(purchase: first_purchase,
+                                                                 presentment_amount_cents: presentment_cents[:first])).to be_present
+    end
+  end
 end
