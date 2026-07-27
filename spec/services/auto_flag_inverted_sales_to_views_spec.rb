@@ -169,6 +169,28 @@ describe AutoFlagInvertedSalesToViews, :elasticsearch_wait_for_refresh do
       end
     end
 
+    context "when the seller is marked verified, which the risk state machine refuses to flag" do
+      let(:seller) { create(:user, verified: true) }
+
+      before { create_free_sales(20) }
+
+      it "still takes the product down and records why on it" do
+        expect do
+          described_class.new.process
+        end.to change { product.reload.alive? }.from(true).to(false)
+
+        expect(seller.reload.flagged_for_tos_violation?).to be(false)
+        note = product.comments.where(author_name: described_class::FLAG_AUTHOR_NAME).last
+        expect(note.comment_type).to eq(Comment::COMMENT_TYPE_FLAG_NOTE)
+      end
+
+      it "still emails risk, so the account decision reaches a human" do
+        expect do
+          described_class.new.process
+        end.to have_enqueued_mail(AdminMailer, :inverted_sales_to_views_notify).with(product.id, 20, 0)
+      end
+    end
+
     context "when the product is already unpublished" do
       before do
         create_free_sales(20)

@@ -140,27 +140,44 @@ class AutoFlagInvertedSalesToViews
     def act_on(product:, sales_count:, views_count:)
       content = comment_content(product:, sales_count:, views_count:)
 
-      ActiveRecord::Base.transaction do
-        # Unpublish first. This is the part that stops sends; the flag is bookkeeping.
-        product.unpublish!(is_unpublished_by_admin: true)
+      # Deliberately NOT wrapped in one transaction with the flag below. The unpublish is
+      # the part that stops the sends, and the flag can legitimately fail — a seller who is
+      # already flagged, or one marked `verified` (the risk state machine refuses to flag
+      # verified accounts), both reject the transition. Sharing a transaction would roll the
+      # unpublish back on that failure and leave the blast running, which is the one outcome
+      # this detector exists to prevent.
+      product.unpublish!(is_unpublished_by_admin: true)
 
-        seller = product.user
-        if seller.can_flag_for_tos_violation?
-          seller.update!(tos_violation_reason: TOS_VIOLATION_REASON)
-          seller.flag_for_tos_violation!(author_name: FLAG_AUTHOR_NAME, product_id: product.id, content:)
-        else
-          # The seller is already flagged or on probation, so the state machine won't take
-          # another flag transition. Record what happened on the product anyway, otherwise
-          # an admin reviewing it sees an unpublished product with no explanation.
-          product.comments.create!(
-            author_name: FLAG_AUTHOR_NAME,
-            comment_type: Comment::COMMENT_TYPE_FLAG_NOTE,
-            content:
-          )
-        end
-      end
+      flag_seller(product:, content:)
 
       AdminMailer.inverted_sales_to_views_notify(product.id, sales_count, views_count).deliver_later(queue: "default")
+    end
+
+    def flag_seller(product:, content:)
+      seller = product.user
+
+      if seller.can_flag_for_tos_violation?
+        seller.flag_for_tos_violation!(author_name: FLAG_AUTHOR_NAME, product_id: product.id, content:)
+        # After the transition, not before: a halted transition would otherwise leave a
+        # violation reason on an account that was never flagged.
+        seller.update!(tos_violation_reason: TOS_VIOLATION_REASON)
+      else
+        record_note_on_product(product:, content:)
+      end
+    rescue StateMachines::InvalidTransition
+      # can_flag_for_tos_violation? only checks the state graph; it doesn't run the
+      # transition guards, so a `verified` account passes the check and then halts here.
+      record_note_on_product(product:, content:)
+    end
+
+    # Used when the seller can't be flagged. The product is already down either way; without
+    # this an admin would find an unpublished product with no explanation on it.
+    def record_note_on_product(product:, content:)
+      product.comments.create!(
+        author_name: FLAG_AUTHOR_NAME,
+        comment_type: Comment::COMMENT_TYPE_FLAG_NOTE,
+        content:
+      )
     end
 
     def comment_content(product:, sales_count:, views_count:)
