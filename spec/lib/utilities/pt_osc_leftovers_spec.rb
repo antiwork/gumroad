@@ -30,15 +30,19 @@ describe PtOscLeftovers do
   after do
     connection.execute("DROP TABLE IF EXISTS `_pt_osc_spec_targets_new`")
     connection.execute("DROP TABLE IF EXISTS `_pt_osc_spec_orphans_new`")
+    connection.execute("DROP TABLE IF EXISTS `_pt_osc_spec_others_new`")
     %w[ins upd del].each do |event|
       connection.execute("DROP TRIGGER IF EXISTS `pt_osc_#{database}_pt_osc_spec_targets_#{event}`")
     end
     connection.execute("DROP TABLE IF EXISTS `pt_osc_spec_targets`")
+    connection.execute("DROP TABLE IF EXISTS `pt_osc_spec_others`")
   end
 
   before do
     connection.execute("DROP TABLE IF EXISTS `pt_osc_spec_targets`")
     connection.execute("CREATE TABLE `pt_osc_spec_targets` (id INT PRIMARY KEY, name VARCHAR(20))")
+    connection.execute("DROP TABLE IF EXISTS `pt_osc_spec_others`")
+    connection.execute("CREATE TABLE `pt_osc_spec_others` (id INT PRIMARY KEY)")
   end
 
   describe ".all" do
@@ -158,6 +162,32 @@ describe PtOscLeftovers do
       create_shadow_table("pt_osc_spec_targets")
 
       expect(described_class.failure_message(described_class.all)).to include("ALLOW_PT_OSC_LEFTOVERS=1")
+    end
+
+    it "does not blame triggers when only a shadow table was left behind" do
+      # A shadow table with no triggers is a different problem: nothing is
+      # duplicating writes, and there are no triggers to drop. Saying otherwise
+      # sends whoever reads this looking for something that is not there.
+      create_shadow_table("pt_osc_spec_targets")
+
+      message = described_class.failure_message(described_class.all)
+
+      expect(message).to include("no leftover triggers")
+      expect(message).to include("drop the leftover shadow table")
+      expect(message).not_to include("cannot create triggers that already exist")
+      expect(message).not_to include("drop the triggers FIRST")
+      expect(message).not_to include("duplicating every write")
+    end
+
+    it "explains each table on its own terms when one has triggers and another does not" do
+      create_pt_osc_triggers("pt_osc_spec_targets")
+      connection.execute("CREATE TABLE `_pt_osc_spec_others_new` LIKE `pt_osc_spec_others`")
+
+      message = described_class.failure_message(described_class.all)
+
+      expect(message).to include("Any schema change to pt_osc_spec_targets will fail")
+      expect(message).to include("pt_osc_spec_others carries a leftover shadow table but no leftover triggers")
+      expect(message).to include("drop its triggers FIRST")
     end
   end
 end

@@ -89,23 +89,55 @@ class PtOscLeftovers
 
     # The operator-facing explanation. Kept next to the detection so the message a
     # deploy prints and the message a console prints cannot drift apart.
+    #
+    # The two kinds of leftover are explained separately, because they are
+    # different problems with different cleanup steps. Telling somebody to drop
+    # triggers on a table that has none sends them looking for something that is
+    # not there instead of at the shadow table that is.
     def failure_message(leftovers)
-      <<~MESSAGE.strip
-        Refusing to migrate: #{leftovers.size} table#{'s' if leftovers.size > 1} still #{leftovers.size > 1 ? 'carry' : 'carries'} pt-online-schema-change artifacts from a run that never cleaned up.
+      with_triggers = leftovers.select { |leftover| leftover.triggers.any? }
+      shadow_only = leftovers.reject { |leftover| leftover.triggers.any? }
 
-        #{leftovers.map { |leftover| "  - #{leftover.description}" }.join("\n")}
+      paragraphs = [
+        "Refusing to migrate: #{leftovers.size} table#{'s' if leftovers.size > 1} still #{leftovers.size > 1 ? 'carry' : 'carries'} pt-online-schema-change artifacts from a run that never cleaned up.",
+        leftovers.map { |leftover| "  - #{leftover.description}" }.join("\n"),
+      ]
 
-        Any schema change to #{leftovers.size > 1 ? 'these tables' : 'this table'} will fail, because pt-online-schema-change cannot create triggers that already exist -- and the leftover triggers are duplicating every write to the table in the meantime.
+      if with_triggers.any?
+        paragraphs << "Any schema change to #{table_list(with_triggers)} will fail, because pt-online-schema-change cannot create triggers that already exist -- and those leftover triggers are duplicating every write to the table in the meantime."
+      end
 
-        Clean the artifacts up before deploying this migration: drop the triggers FIRST, then the shadow table, one table at a time and off-peak. Dropping a large shadow table unlinks a multi-gigabyte file and can briefly lag the replicas.
+      if shadow_only.any?
+        paragraphs << "#{table_list(shadow_only)} #{shadow_only.size > 1 ? 'carry' : 'carries'} a leftover shadow table but no leftover triggers, so writes are not being duplicated there. A schema change still cannot run: pt-online-schema-change creates its shadow copy under that same name and will not reuse a table it did not just create. Until it is dropped, the copy also occupies storage on the writer and on every replica that nothing reads."
+      end
 
-        Do NOT work around this by inserting the migration's version into schema_migrations by hand. That leaves the schema claiming a change that does not exist, which is how antiwork/gumroad-private#1417 happened.
+      paragraphs << cleanup_instruction(with_triggers:, shadow_only:)
 
-        If you are deliberately deploying while a pt-osc run is genuinely in flight, set ALLOW_PT_OSC_LEFTOVERS=1 for that deploy.
-      MESSAGE
+      paragraphs << "Do NOT work around this by inserting the migration's version into schema_migrations by hand. That leaves the schema claiming a change that does not exist, which is how antiwork/gumroad-private#1417 happened."
+
+      paragraphs << "If you are deliberately deploying while a pt-osc run is genuinely in flight, set ALLOW_PT_OSC_LEFTOVERS=1 for that deploy."
+
+      paragraphs.join("\n\n").strip
     end
 
     private
+      def table_list(leftovers)
+        leftovers.map(&:table).sort.join(", ")
+      end
+
+      # What to actually do about it, which depends on which artifacts are there.
+      def cleanup_instruction(with_triggers:, shadow_only:)
+        shadow_warning = "Dropping a large shadow table unlinks a multi-gigabyte file and can briefly lag the replicas."
+
+        if with_triggers.any? && shadow_only.any?
+          "Clean the artifacts up before deploying this migration, one table at a time and off-peak: where a table has both, drop its triggers FIRST and then its shadow table; where it has only a shadow table, drop that. #{shadow_warning}"
+        elsif with_triggers.any?
+          "Clean the artifacts up before deploying this migration: drop the triggers FIRST, then the shadow table, one table at a time and off-peak. #{shadow_warning}"
+        else
+          "Clean the artifacts up before deploying this migration: drop the leftover shadow table#{'s' if shadow_only.size > 1}, one table at a time and off-peak. #{shadow_warning}"
+        end
+      end
+
       # [[altered_table, trigger_name], ...] for every pt-osc trigger in this
       # database. The altered table is the trigger's own EVENT_OBJECT_TABLE rather
       # than something parsed out of the trigger name -- table names can contain
