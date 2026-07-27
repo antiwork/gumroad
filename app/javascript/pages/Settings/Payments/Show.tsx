@@ -674,6 +674,9 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "MacaoBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
+    if (form.data.bank_account.type === "GambiaBankAccount" && !form.data.bank_account.bank_code) {
+      markFieldInvalid("bank_code");
+    }
     if (!form.data.bank_account.account_number) {
       markFieldInvalid("account_number");
     }

@@ -4687,6 +4687,56 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
     end
 
+    describe "Gambia creator" do
+      before do
+        old_user_compliance_info = @user.alive_user_compliance_info
+        new_user_compliance_info = old_user_compliance_info.dup
+        new_user_compliance_info.country = "Gambia"
+        ActiveRecord::Base.transaction do
+          old_user_compliance_info.mark_deleted!
+          new_user_compliance_info.save!
+        end
+      end
+
+      it "allows to enter bank account details" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "Gambian")
+        fill_in("Last name", with: "Creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Banjul")
+        fill_in("Phone number", with: "3123456")
+        fill_in("Postal code", with: "00220")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Pay to the order of", with: "Gambian Creator")
+        fill_in("SWIFT / BIC Code", with: "AAAAGMGMXYZ")
+        fill_in("Account #", with: "000123000456000789")
+        fill_in("Confirm account #", with: "000123000456000789")
+
+        expect(page).to have_content("Must exactly match the name on your bank account")
+        expect(page).to have_content("Payouts will be made in GMD.")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(page).to have_content("SWIFT / BIC code")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.first_name).to eq("Gambian")
+        expect(compliance_info.last_name).to eq("Creator")
+        expect(compliance_info.street_address).to eq("address_full_match")
+        expect(compliance_info.city).to eq("Banjul")
+        expect(compliance_info.zip_code).to eq("00220")
+        expect(compliance_info.phone).to eq("+2203123456")
+        expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123000456000789")
+        expect(@user.reload.active_bank_account.routing_number).to eq("AAAAGMGMXYZ")
+      end
+    end
+
     describe "Monaco creator" do
       before do
         old_user_compliance_info = @user.alive_user_compliance_info

@@ -694,6 +694,13 @@ export type BankAccount =
       account_number_confirmation: string;
     }
   | {
+      type: "GambiaBankAccount";
+      account_holder_full_name: string;
+      bank_code: string;
+      account_number: string;
+      account_number_confirmation: string;
+    }
+  | {
       type: "MonacoBankAccount";
       account_holder_full_name: string;
       account_number: string;
@@ -754,6 +761,7 @@ const BankAccountSection = ({
     "EG",
     "ET",
     "GA",
+    "GM",
     "GT",
     "GY",
     "JO",
@@ -946,6 +954,7 @@ const BankAccountSection = ({
       KH: "CambodiaBankAccount",
       MN: "MongoliaBankAccount",
       GA: "GabonBankAccount",
+      GM: "GambiaBankAccount",
       MC: "MonacoBankAccount",
       DZ: "AlgeriaBankAccount",
     };
@@ -2082,6 +2091,22 @@ const BankAccountSection = ({
                     type="text"
                     id={`${uid}-bank-code`}
                     placeholder="AAAAGAGAXXX"
+                    maxLength={11}
+                    required
+                    disabled={isFormDisabled}
+                    aria-invalid={errorFieldNames.has("bank_code")}
+                    onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
+                  />
+                </Fieldset>
+              ) : user.country_code === "GM" ? (
+                <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
+                  </FieldsetTitle>
+                  <Input
+                    type="text"
+                    id={`${uid}-bank-code`}
+                    placeholder="AGIXGMGM"
                     maxLength={11}
                     required
                     disabled={isFormDisabled}
