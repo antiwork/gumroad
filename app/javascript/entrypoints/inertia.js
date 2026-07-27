@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
-import { isUnredirectedDownloadPagePollResponse } from "../utils/inertia_partial_reload";
+import { isUnredirectedDownloadPagePollResponse, warnAboutDroppedPollResponse } from "../utils/inertia_partial_reload";
 import { defaults as requestDefaults } from "../utils/request";
 
 // Keep the `request()` util's CSRF token current for Inertia pages. `base_page.ts` only
@@ -101,7 +101,12 @@ router.on("invalid", (event) => {
   // interception this guard exists to absorb, and the client cannot tell them apart without a
   // server-side signal (a distinct header on terminal states would be the way to fix it).
   // Erring toward keeping the session is the point — no new content is served either way.
-  if (isUnredirectedDownloadPagePollResponse(response)) return;
+  if (isUnredirectedDownloadPagePollResponse(response)) {
+    // Dropping is silent from the buyer's side, so leave a console breadcrumb (once per URL) —
+    // otherwise a persistent interception looks like nothing but progress that stopped updating.
+    warnAboutDroppedPollResponse(response);
+    return;
+  }
 
   const redirectedUrl = response.request.responseURL;
   if (redirectedUrl) {

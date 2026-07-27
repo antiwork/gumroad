@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { isUnredirectedDownloadPagePollResponse } from "$app/utils/inertia_partial_reload";
+import {
+  isUnredirectedDownloadPagePollResponse,
+  warnAboutDroppedPollResponse,
+} from "$app/utils/inertia_partial_reload";
 
 const CONTENT_PAGE_URL = "https://gumroad.com/d/abc123";
 
@@ -148,5 +151,68 @@ describe("isUnredirectedDownloadPagePollResponse", () => {
 
     expect(inertiaCore).toContain("X-Inertia-Partial-Data");
     expect(inertiaCore).toContain("X-Inertia-Partial-Component");
+  });
+});
+
+// A dropped response leaves no trace on the page — the buyer just sees values that stop updating.
+// The console breadcrumb is the only way to tell that apart from a page that is simply idle, so it
+// has to name the URL, and it has to stay quiet enough that a poll firing every few seconds does
+// not flood the console.
+describe("warnAboutDroppedPollResponse", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const warnings = () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    return () => warn.mock.calls.map((call) => String(call[0]));
+  };
+
+  it("names the URL that was answered by something other than Gumroad", () => {
+    const logged = warnings();
+    const url = `${CONTENT_PAGE_URL}-named`;
+
+    warnAboutDroppedPollResponse(pollResponse({ url, responseURL: url }));
+
+    expect(logged()).toHaveLength(1);
+    expect(logged()[0]).toContain(url);
+  });
+
+  it("warns only once for the same URL, however many polls are dropped", () => {
+    const logged = warnings();
+    const url = `${CONTENT_PAGE_URL}-repeat`;
+    const dropped = pollResponse({ url, responseURL: url });
+
+    warnAboutDroppedPollResponse(dropped);
+    warnAboutDroppedPollResponse(dropped);
+    warnAboutDroppedPollResponse(dropped);
+
+    expect(logged()).toHaveLength(1);
+  });
+
+  it("warns again for a different URL", () => {
+    const logged = warnings();
+    const first = `${CONTENT_PAGE_URL}-one`;
+    const second = `${CONTENT_PAGE_URL}-two`;
+
+    warnAboutDroppedPollResponse(pollResponse({ url: first, responseURL: first }));
+    warnAboutDroppedPollResponse(pollResponse({ url: second, responseURL: second }));
+
+    expect(logged()).toHaveLength(2);
+  });
+
+  // Falls back to the requested URL so a response with no `responseURL` still says which page was
+  // affected, and stays silent rather than logging a useless "undefined" line when neither exists.
+  it("falls back to the requested URL, and says nothing when there is no URL at all", () => {
+    const logged = warnings();
+    const url = `${CONTENT_PAGE_URL}-fallback`;
+
+    warnAboutDroppedPollResponse({ config: { url }, request: {} });
+    expect(logged()).toHaveLength(1);
+    expect(logged()[0]).toContain(url);
+
+    warnAboutDroppedPollResponse({ config: {}, request: {} });
+    warnAboutDroppedPollResponse(undefined);
+    expect(logged()).toHaveLength(1);
   });
 });

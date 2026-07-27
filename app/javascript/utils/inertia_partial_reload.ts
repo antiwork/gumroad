@@ -114,3 +114,36 @@ export const isUnredirectedDownloadPagePollResponse = (response: unknown): boole
 
   return isGet(config) && isDownloadPagePoll(config) && !wasRedirected(config, request);
 };
+
+// Dropping a response is invisible by design: the page keeps showing what it already has. That
+// makes an ongoing interception look like nothing more than progress that stopped updating, which
+// is very hard to diagnose from a buyer's bug report. So leave one console breadcrumb naming the
+// URL that came back non-Inertia.
+//
+// The poll runs every few seconds, and an interception usually persists for as long as whatever
+// caused it, so logging every drop would bury the console in identical lines. One warning per URL
+// per page load is enough to answer "is this page silently dropping polls?" — the URLs seen so far
+// live here and reset naturally when the page is reloaded.
+const alreadyWarnedUrls = new Set<string>();
+
+/**
+ * Warns once per URL that a background poll response was dropped. Safe to call on every drop.
+ *
+ * `response` is the same axios response passed to `isUnredirectedDownloadPagePollResponse`.
+ */
+export const warnAboutDroppedPollResponse = (response: unknown): void => {
+  if (!isRecord(response)) return;
+  const { config, request } = response;
+
+  // Prefer the URL the browser actually ended on; fall back to the one the request asked for.
+  const requestedUrl =
+    (isRecord(request) ? stringOrNull(request.responseURL) : null) ??
+    (isRecord(config) ? stringOrNull(config.url) : null);
+  if (requestedUrl === null || alreadyWarnedUrls.has(requestedUrl)) return;
+
+  alreadyWarnedUrls.add(requestedUrl);
+  // eslint-disable-next-line no-console
+  console.warn(
+    `Dropped a non-Inertia response to a background content-page poll of ${requestedUrl}. Something between the browser and Gumroad answered the poll with its own page (an edge challenge, a proxy error, a captive portal). The page keeps what it already loaded and the poll keeps retrying; further drops for this URL are not logged.`,
+  );
+};
