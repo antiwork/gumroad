@@ -162,7 +162,12 @@ describe Purchase::Reportable do
       end
 
       it "returns 0 (chargeback attribution is unchanged by the refund cutover)" do
-        purchase.update!(chargeback_date: Time.current)
+        # Anchor the chargeback before CHARGEBACK_REPORTING_CUTOVER so it keeps the legacy
+        # treatment, which is what zeroes the sale's reported amounts here. Using Time.current
+        # instead would silently change what this example tests once the clock passes that
+        # cutover: the chargeback becomes event-dated, the sale stays reported at gross in its
+        # own period (the clawback is a separate negative leg), and the expectation below flips.
+        purchase.update!(chargeback_date: Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day - 1.day)
 
         expect(purchase.price_cents_for_tax_reporting).to eq(0)
       end
