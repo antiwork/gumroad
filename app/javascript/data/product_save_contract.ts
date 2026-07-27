@@ -41,12 +41,20 @@ export type DeletionSources = {
   confirmed_removed_rich_content_ids?: string[];
   files?: { id: string; status: { type: string } }[];
   public_files?: { id: string; status?: { type: string } }[];
-  integrations?: Record<string, boolean>;
+  // Keyed by provider name. The VALUES are the integration objects the server
+  // sends (or null when that provider is not connected) — deliberately NOT
+  // booleans: this mirrors Product["integrations"], and typing it as a boolean
+  // map let the unit tests pass `true`/`false` fixtures that no real payload
+  // ever produces, hiding the difference from the type checker.
+  integrations?: Record<string, unknown>;
   // What the integrations looked like when this editing session loaded, so an
   // integration that was ON and is now OFF can be told apart from one that was
   // never on. Without this the client cannot distinguish "seller unchecked it"
   // from "it was already off", and would ask to disconnect things that were
   // never connected.
+  //
+  // This one IS a boolean map: it is a server-issued connected/not-connected
+  // snapshot (ProductPresenter#edit_props), not the integration records.
   loaded_integrations?: Record<string, boolean>;
 };
 

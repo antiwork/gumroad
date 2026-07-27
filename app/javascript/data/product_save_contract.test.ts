@@ -135,11 +135,17 @@ describe("buildDeletionOperations", () => {
   });
 
   describe("integrations", () => {
+    // The real payload shape: Product["integrations"] holds the integration
+    // RECORD (or null when disconnected), never a boolean. The earlier fixtures
+    // here used booleans, which typechecked against a wrong local type and hid
+    // the difference — these use the shape the server actually sends.
+    const connected = (name: string) => ({ name, keep_inactive_members: false, integration_details: {} });
+
     it("names an integration that was connected and the seller turned off", () => {
       const operations = buildDeletionOperations(
         productWith({
           loaded_integrations: { circle: true, discord: true },
-          integrations: { circle: false, discord: true },
+          integrations: { circle: null, discord: connected("discord") },
         }),
       );
 
@@ -151,7 +157,7 @@ describe("buildDeletionOperations", () => {
     // disconnecting is irreversible.
     it("does not name an integration that was already off", () => {
       const operations = buildDeletionOperations(
-        productWith({ loaded_integrations: { circle: false }, integrations: { circle: false } }),
+        productWith({ loaded_integrations: { circle: false }, integrations: { circle: null } }),
       );
 
       expect(operations.deleted_ids.integrations).toBeUndefined();
@@ -160,7 +166,7 @@ describe("buildDeletionOperations", () => {
 
     it("does not name an integration the seller just turned on", () => {
       const operations = buildDeletionOperations(
-        productWith({ loaded_integrations: { circle: false }, integrations: { circle: true } }),
+        productWith({ loaded_integrations: { circle: false }, integrations: { circle: connected("circle") } }),
       );
 
       expect(operations.deleted_ids.integrations).toBeUndefined();
@@ -169,10 +175,46 @@ describe("buildDeletionOperations", () => {
     // Without a baseline the client cannot tell removal from never-connected,
     // so it must not guess — the safe answer is to ask for no disconnections.
     it("asks for no disconnections when the server sent no baseline", () => {
-      const operations = buildDeletionOperations(productWith({ integrations: { circle: false } }));
+      const operations = buildDeletionOperations(productWith({ integrations: { circle: null } }));
 
       expect(operations.deleted_ids.integrations).toBeUndefined();
       expect(hasDeletions(operations)).toBe(false);
+    });
+
+    // gumroad-private#1379: connect -> save -> disconnect -> save, no reload.
+    //
+    // The baseline is issued at page load, when circle was NOT connected. The
+    // first save connects it. If the editor keeps the load-time baseline, the
+    // second save compares "was off at load" against "off now" and emits no
+    // deletion — the integration silently survives a disconnect the seller
+    // explicitly performed. The fix is for the save response to carry a
+    // refreshed baseline that the editor adopts (applyCanonicalIds).
+    it("names an integration connected and then disconnected in the same session", () => {
+      // Page load: circle is off.
+      const product = productWith({
+        loaded_integrations: { circle: false },
+        integrations: { circle: connected("circle") },
+      });
+      // Save #1 connects it, and the server answers with the refreshed
+      // baseline for the state it just committed.
+      product.loaded_integrations = { circle: true };
+      // The seller now turns it off and saves again, without reloading.
+      product.integrations = { circle: null };
+
+      const operations = buildDeletionOperations(product);
+
+      expect(operations.deleted_ids.integrations).toEqual(["circle"]);
+    });
+
+    // The same sequence with the STALE baseline, i.e. the bug. Kept as an
+    // explicit statement of what must not happen.
+    it("misses the disconnect if the baseline is never refreshed", () => {
+      const stale = productWith({
+        loaded_integrations: { circle: false }, // never updated after save #1
+        integrations: { circle: null },
+      });
+
+      expect(buildDeletionOperations(stale).deleted_ids.integrations).toBeUndefined();
     });
   });
 });

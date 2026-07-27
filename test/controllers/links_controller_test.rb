@@ -6703,4 +6703,49 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_not second_file.reload.deleted?
   end
+
+  # --- the integrations baseline has to move with the session ----------------
+
+  test "flag on: the save response carries the integrations baseline for the state it committed" do
+    enable_contract!
+    discord = create_discord_integration
+    @product.active_integrations << discord
+    @product.reload
+
+    post :update, params: @params.merge(editor_revision: current_revision), format: :json
+    assert_response :success
+
+    baseline = response.parsed_body["loaded_integrations"]
+    assert_not_nil baseline, "save response must issue a refreshed integrations baseline"
+    assert_equal true, baseline["discord"]
+    assert_equal false, baseline["circle"]
+  end
+
+  test "flag on: a connect in one save is reflected in the baseline the next save sees" do
+    enable_contract!
+    # Page load: nothing connected. The presenter's baseline would be all false.
+    assert_empty @product.reload.active_integrations
+
+    # Save #1 connects discord.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      integrations: { discord: { keep_inactive_members: false, integration_details: { server_id: "0", server_name: "Gaming", username: "gumbot" } } },
+    ), format: :json
+    assert_response :success
+    assert_equal ["discord"], @product.reload.active_integrations.map(&:name)
+
+    # The response must already say discord is connected, so the editor that
+    # never reloaded can recognise a later disconnect as a removal.
+    assert_equal true, response.parsed_body["loaded_integrations"]["discord"]
+  end
+
+  test "flag on: no baseline is issued while the contract is off" do
+    disable_contract!
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert_nil response.parsed_body["loaded_integrations"]
+    assert_nil response.parsed_body["editor_revision"]
+  end
 end

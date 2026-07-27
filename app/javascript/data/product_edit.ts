@@ -29,6 +29,10 @@ export type SaveProductResponse = {
   // is stale as soon as the first save returns; the editor adopts this one so a
   // deletion later in the same session isn't refused as stale.
   editor_revision?: string | null;
+  // Which integrations are connected as of the state this save committed. The
+  // editor adopts this as its new baseline so a disconnect later in the same
+  // session is recognised as a removal — see applyCanonicalIds.
+  loaded_integrations?: Record<string, boolean>;
 };
 
 // The server's fail-closed answer when a save would delete version-level pages

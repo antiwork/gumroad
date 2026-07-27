@@ -1286,7 +1286,26 @@ class LinksController < ApplicationController
     def editor_revision_response
       return {} unless product_save_contract.enforced?
 
-      { editor_revision: Product::EditorRevision.current(@product.reload) }
+      {
+        editor_revision: Product::EditorRevision.current(@product.reload),
+        # The integrations baseline for the state this save just committed.
+        #
+        # Same staleness problem as the token, different symptom. The baseline
+        # says which integrations were connected when the session loaded, and
+        # the client asks to disconnect one only if it was in that baseline and
+        # is now off. If the baseline is never refreshed, an integration that
+        # was CONNECTED during this session (connect -> save) is still recorded
+        # as "was off at load", so turning it off and saving again emits no
+        # deletion at all and the integration silently survives.
+        loaded_integrations: current_integrations_baseline,
+      }
+    end
+
+    # Which integrations are connected right now, keyed by provider name. Same
+    # shape and source of truth as ProductPresenter#edit_props issues on page
+    # load, so the client can swap one for the other without special-casing.
+    def current_integrations_baseline
+      Integration::ALL_NAMES.index_with { @product.find_integration_by_name(_1).present? }
     end
 
     # Fresh post-save snapshot timestamps for every alive page and variant,

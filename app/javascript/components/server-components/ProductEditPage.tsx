@@ -229,6 +229,13 @@ const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
   // keeping the old one would make the next deletion in this session look like
   // it came from a stale tab and be silently refused.
   if (response.editor_revision) product.editor_revision = response.editor_revision;
+  // Adopt the refreshed integrations baseline for the same reason. It records
+  // which integrations were connected as of the state this save committed; an
+  // integration connected earlier in this session is only in that baseline
+  // once the save that connected it has returned. Without adopting it,
+  // connect -> save -> disconnect -> save (no reload) emits no deletion,
+  // because the stale baseline still says the integration was never on.
+  if (response.loaded_integrations) product.loaded_integrations = response.loaded_integrations;
   for (const variant of product.variants) {
     const canonicalId = variantMappings[variant.id];
     if (canonicalId) {
