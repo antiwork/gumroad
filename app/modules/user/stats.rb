@@ -108,35 +108,37 @@ module User::Stats
   end
 
   # Lifetime affiliate revenue shown on the affiliated products dashboard: the
-  # sum of the affiliate's paid credits.
+  # gross sum of every affiliate credit the user has earned.
   #
-  # Deliberately does NOT adjust for partial refunds, unlike
-  # #affiliate_credit_sum_from_scope below. Two reasons, and the second one is
-  # the more important:
+  # "Gross" is meant literally here — no filtering at all. Every credit counts
+  # its full amount_cents, whether or not the sale was later refunded or
+  # charged back, and whether or not the credit's balance rows have been
+  # written yet. Three things follow from that, and they are all intentional:
   #
-  # 1. That adjustment joins every one of the affiliate's credit rows to
-  #    purchases just to read the purchases.stripe_partially_refunded boolean.
-  #    No index can serve that check after the join, so MySQL fetches each
-  #    joined purchase row from the clustered index, and the cost grows with the
-  #    affiliate's entire credit history even though partial refunds are rare.
-  #    It was roughly 70% of this page's request time (Sentry GUMROAD-H8).
-  # 2. The adjustment also double-counted. A partial refund leaves the credit in
-  #    the `paid` scope (its refund balance id stays NULL), so the first term of
-  #    that sum already counts the credit in full; the second term then adds the
-  #    same amount_cents again and the third subtracts only the recorded
-  #    affiliate_partial_refunds amount. The page therefore reported MORE than
-  #    the affiliate earned, and more than the per-product table below it.
+  # 1. It pairs with the "Total sales" stat next to it, which is likewise an
+  #    unfiltered count of the same rows. Before this, the two headline numbers
+  #    were drawn from different populations, so a refunded sale was counted in
+  #    one and not the other, and the pair could not be reconciled by eye.
+  # 2. It does NOT adjust for partial refunds, unlike
+  #    #affiliate_credit_sum_from_scope below. That adjustment joins every one
+  #    of the affiliate's credit rows to purchases just to read the
+  #    purchases.stripe_partially_refunded boolean. No index can serve that
+  #    check after the join, so MySQL fetches each joined purchase row from the
+  #    clustered index, and the cost grows with the affiliate's whole credit
+  #    history even though partial refunds are rare — roughly 70% of this
+  #    page's request time (Sentry GUMROAD-H8). It also double-counted: a
+  #    partial refund leaves the credit in the `paid` scope, so the first term
+  #    of that sum already counted the credit in full and the second term added
+  #    the same amount again.
+  # 3. It reads HIGHER than the per-product Revenue column on the same page,
+  #    which excludes credits carrying a refund or chargeback balance. That is
+  #    the difference between a lifetime gross figure and a currently-earning
+  #    breakdown, and it is the behaviour asked for on #6420.
   #
-  # What is left is the gross figure, which lines up with the per-product
-  # Revenue column on the same page (that column is an unadjusted
-  # SUM(affiliate_credits.amount_cents) over credits with no refund or
-  # chargeback balance). The two are not identical in every edge case: this sum
-  # additionally requires a success balance, so a credit still waiting for its
-  # balance row appears in the table before it appears here. Nothing about money
-  # movement reads this method — payouts go through
-  # #affiliate_credit_cents_for_balances.
+  # Nothing about money movement reads this method — payouts go through
+  # #affiliate_credit_cents_for_balances. This is a dashboard stat only.
   def affiliate_credits_total_revenue_cents
-    affiliate_credits.paid.sum(:amount_cents).to_i
+    affiliate_credits.sum(:amount_cents).to_i
   end
 
   def affiliate_credit_sum_from_scope(paid_scope, all_scope)

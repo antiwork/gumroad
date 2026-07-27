@@ -73,9 +73,11 @@ class AffiliatedProductsPresenter
 
     def stats
       {
-        # A plain indexed sum of the affiliate's paid credits — see
-        # User#affiliate_credits_total_revenue_cents for why this headline
-        # figure deliberately skips the partial-refund adjustment.
+        # A plain indexed gross sum of every affiliate credit the user has
+        # earned — the same population as `total_sales` right below, so the two
+        # headline numbers reconcile with each other. See
+        # User#affiliate_credits_total_revenue_cents for why this figure is
+        # gross and skips the partial-refund adjustment.
         total_revenue: user.affiliate_credits_total_revenue_cents,
         total_sales: user.affiliate_credits.count,
         # Count distinct products with a single SQL COUNT instead of executing

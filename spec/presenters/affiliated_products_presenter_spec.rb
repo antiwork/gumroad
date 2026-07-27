@@ -621,26 +621,45 @@ describe AffiliatedProductsPresenter do
   describe "revenue stats" do
     let(:user) { create(:affiliate_user) }
 
-    it "reports total_revenue as the plain sum of paid credits, with no partial-refund adjustment" do
-      # The headline revenue figure is deliberately the indexed paid-credit sum:
-      # adjusting it for partial refunds requires joining every credit row to
-      # purchases, which was about 70% of this page's request time. A credit
-      # whose sale was later partially refunded still contributes its full
-      # amount here.
-      plain_credit = create(:affiliate_credit, affiliate_user: user, amount_cents: 500,
-                                               affiliate_credit_success_balance: create(:balance))
-      partially_refunded_credit = create(:affiliate_credit, affiliate_user: user, amount_cents: 300,
-                                                            affiliate_credit_success_balance: create(:balance))
-      partially_refunded_credit.purchase.update!(stripe_partially_refunded: true)
-      create(:affiliate_partial_refund, affiliate_credit: partially_refunded_credit, amount_cents: 100)
-      # Fully refunded credits are excluded from the "paid" scope, so they do
-      # not contribute at all.
-      create(:affiliate_credit, affiliate_user: user, amount_cents: 700,
-                                affiliate_credit_success_balance: create(:balance),
-                                affiliate_credit_refund_balance: create(:balance))
+    it "reports total_revenue as the gross sum of every credit, including refunded and chargebacked ones" do
+      # The headline revenue figure is deliberately gross: it counts the same
+      # rows the "Total sales" stat counts, so the two numbers on the page
+      # reconcile with each other. Refunds, chargebacks and missing balance
+      # rows do not remove a credit from it.
+      # `purchase_in_progress` rather than the bare purchase factory: a plain
+      # `create(:purchase)` runs the charge validations, which is unrelated
+      # machinery for a spec about summing credit rows.
+      credit = ->(cents) do
+        create(:affiliate_credit, affiliate_user: user, amount_cents: cents,
+                                  purchase: create(:purchase_in_progress))
+      end
 
-      expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue])
-        .to eq plain_credit.amount_cents + partially_refunded_credit.amount_cents
+      plain_credit = credit.call(500)
+      partially_refunded_credit = credit.call(300)
+      # This flag is the column the old partial-refund adjustment joined
+      # purchases to read. Setting it is what proves that adjustment no longer
+      # runs: under the old shape this credit's amount was counted twice.
+      partially_refunded_credit.purchase.update_column(:stripe_partially_refunded, true)
+      fully_refunded_credit = credit.call(700)
+      chargebacked_credit = credit.call(900)
+
+      # The balance ids are what mark a credit as refunded or charged back. They
+      # are set directly rather than through the balance factory because this
+      # spec only cares that the ids are present — which balance row they point
+      # at makes no difference to a sum that ignores them.
+      fully_refunded_credit.update_column(:affiliate_credit_refund_balance_id, 1)
+      chargebacked_credit.update_column(:affiliate_credit_chargeback_balance_id, 2)
+
+      props = described_class.new(user).affiliated_products_page_props
+
+      expect(props[:stats][:total_revenue]).to eq 500 + 300 + 700 + 900
+      # Same population as the sales count beside it.
+      expect(props[:stats][:total_sales]).to eq 4
+      expect([plain_credit, partially_refunded_credit, fully_refunded_credit,
+              chargebacked_credit].sum(&:amount_cents)).to eq props[:stats][:total_revenue]
+      # Guard against the old `paid`-scoped shape quietly coming back: under it
+      # the refunded and chargebacked credits would have been excluded.
+      expect(user.affiliate_credits.paid.sum(:amount_cents)).to be < props[:stats][:total_revenue]
     end
 
     it "does not run the partial-refund adjustment query for the revenue stat" do
