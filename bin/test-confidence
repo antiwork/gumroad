@@ -497,15 +497,30 @@ for (( m=0; m<MILESTONES; m++ )); do
     # `|| true` on grep -c: a milestone can legitimately end up with nothing
     # runnable, and under `set -e` a non-matching grep would abort the whole
     # script right after the banner.
+    # `|| true` on both assignments: a `while` loop exits with the status of the
+    # last command in its body, so a milestone whose final planned path is not
+    # runnable makes the substitution exit non-zero, and under `set -e` that
+    # aborts the whole script right after the banner. Same failure shape as the
+    # bare `grep "spec/"` this script used to die on.
     NAMES=$(echo "$TESTS_JSON" | while IFS= read -r t; do
       is_runnable_test "$t" && echo "$t"
-    done)
+    done) || true
+    SKIPPED_NAMES=$(echo "$TESTS_JSON" | while IFS= read -r t; do
+      [[ -z "$t" ]] && continue
+      is_runnable_test "$t" || echo "$t"
+    done) || true
     N=$(echo "$NAMES" | grep -c . | tr -d ' ' || true)
     [[ -z "$N" ]] && N=0
     echo "   ${CONF}%  ←  $(pluralize $N test)"
     echo "$NAMES" | while IFS= read -r name; do
       [[ -z "$name" ]] && continue
       echo "          ${name#spec/}"
+    done
+    # Show what the plan asked for but this run cannot execute, so a shrunken
+    # milestone is never a silent difference between planned and actual coverage.
+    echo "$SKIPPED_NAMES" | while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      echo "          ⚠ discarded (not a runnable test file): $name"
     done
   fi
 done
@@ -542,17 +557,51 @@ for (( m=0; m<MILESTONES; m++ )); do
   TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
 
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
+    PLAN_IS_ALL_REMAINING=true
+    PLANNED_RUNNABLE=0
+    DISCARDED=()
     MILESTONE_TESTS=$(echo "$ALL_TESTS" | while IFS= read -r s; do
       grep -qxF "$s" "$SEEN_RUN" 2>/dev/null || echo "$s"
     done)
   else
-    MILESTONE_TESTS=$(echo "$TESTS_JSON" | while IFS= read -r s; do
-      is_runnable_test "$s" && ! grep -qxF "$s" "$SEEN_RUN" 2>/dev/null && echo "$s"
+    PLAN_IS_ALL_REMAINING=false
+    PLANNED_RUNNABLE=0
+    DISCARDED=()
+    RUNNABLE_PLANNED=()
+    while IFS= read -r s; do
+      [[ -z "$s" ]] && continue
+      if is_runnable_test "$s"; then
+        RUNNABLE_PLANNED+=("$s")
+      else
+        DISCARDED+=("$s")
+      fi
+    done <<< "$TESTS_JSON"
+    PLANNED_RUNNABLE=${#RUNNABLE_PLANNED[@]}
+    MILESTONE_TESTS=$(for s in ${RUNNABLE_PLANNED[@]+"${RUNNABLE_PLANNED[@]}"}; do
+      grep -qxF "$s" "$SEEN_RUN" 2>/dev/null || printf '%s\n' "$s"
     done)
+  fi
+
+  # A milestone that discards planned paths has not covered what the plan said it
+  # would, so say so out loud. Reporting a confidence number that came from fewer
+  # tests than were planned, silently, is the one failure mode a merge gate cannot
+  # have: the number is the only thing anyone reads.
+  if [[ ${#DISCARDED[@]} -gt 0 ]]; then
+    for d in "${DISCARDED[@]}"; do
+      echo "  ⚠ ${CONF}% milestone: discarded planned path (not a runnable test file): $d"
+    done
   fi
 
   MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c . 2>/dev/null || true)
   if [[ -z "$MILESTONE_COUNT" || "$MILESTONE_COUNT" -eq 0 ]]; then
+    # Nothing left to run at this level. Advancing confidence is only honest when
+    # the milestone's tests really were executed — either just now, or in an
+    # earlier milestone (the SEEN_RUN dedupe). If the plan named nothing runnable
+    # at all, zero tests stand behind this number, so the gate must not claim it.
+    if [[ "$PLAN_IS_ALL_REMAINING" != true && "$PLANNED_RUNNABLE" -eq 0 ]]; then
+      echo "  ⚠ ${CONF}% not claimed — no runnable test in this milestone's plan; confidence stays at ${CURRENT_CONFIDENCE}%"
+      continue
+    fi
     CURRENT_CONFIDENCE=$CONF
     continue
   fi
