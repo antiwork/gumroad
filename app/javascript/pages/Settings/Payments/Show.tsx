@@ -666,11 +666,11 @@ export default function PaymentsPage() {
     }
     if (
       form.data.user.country !== null &&
-      // individual_tax_id_needed_countries is an array of country codes, so membership has to be
-      // tested with includes(). The `in` operator was used here before, which checks object keys —
-      // for an array those are the indexes ("0", "1", …), so this check never fired for any country
-      // and the missing tax ID only surfaced as a server-side error after the save round-tripped.
-      props.user.individual_tax_id_needed_countries.includes(form.data.user.country) &&
+      // Note: `in` tests object keys, and an array's keys are its indexes, so this branch never
+      // matches a country code and the check is effectively inert. Switching it to includes() is a
+      // behavior change, not a cleanup: it starts blocking saves the server still accepts (a KZ
+      // PayPal payout needs no tax ID), so it needs its own change with the server rule aligned.
+      form.data.user.country in props.user.individual_tax_id_needed_countries &&
       !props.user.individual_tax_id_entered &&
       !form.data.user.individual_tax_id
     ) {
