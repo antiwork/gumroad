@@ -171,10 +171,10 @@ class Preorder < ApplicationRecord
     seller == purchaser
   end
 
-  def mobile_json_data
+  def mobile_json_data(include_product_updates: true)
     if charge_purchase_successful?
       preorder_charge_purchase = purchases.last
-      return preorder_charge_purchase.url_redirect.product_json_data
+      return preorder_charge_purchase.url_redirect.product_json_data(include_product_updates:)
     end
     result = link.as_json(mobile: true)
     preorder_data = { external_id:, release_at: preorder_link.release_at }
@@ -183,7 +183,7 @@ class Preorder < ApplicationRecord
       result[:purchase_id] = authorization_purchase.external_id
       result[:purchased_at] = authorization_purchase.created_at
       result[:user_id] = authorization_purchase.purchaser.external_id if authorization_purchase.purchaser
-      result[:product_updates_data] = authorization_purchase.update_json_data_for_mobile
+      result[:product_updates_data] = authorization_purchase.update_json_data_for_mobile if include_product_updates
       result[:is_archived] = authorization_purchase.is_archived
     end
     result
