@@ -41,6 +41,13 @@ import { WithTooltip } from "$app/components/WithTooltip";
 const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
 const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=Latin}\d\s\-.]*$/u;
 
+// GambiaBankAccount requires exactly 18 letters or digits (/^[0-9A-Za-z]{18}$/). The account-number
+// input carries a matching `pattern`, but the Save button runs this page's own validation and posts
+// through Inertia rather than submitting the form element, so the browser never enforces that
+// pattern. Re-check the same shape here so a wrong-length number is caught before the request goes
+// out instead of coming back as a generic server-side save failure.
+const GAMBIA_ACCOUNT_NUMBER_REGEX = /^[0-9A-Za-z]{18}$/u;
+
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
@@ -679,6 +686,12 @@ export default function PaymentsPage() {
     }
     if (!form.data.bank_account.account_number) {
       markFieldInvalid("account_number");
+    } else if (
+      form.data.bank_account.type === "GambiaBankAccount" &&
+      !GAMBIA_ACCOUNT_NUMBER_REGEX.test(form.data.bank_account.account_number)
+    ) {
+      markFieldInvalid("account_number");
+      setClientErrorMessage({ message: "Account number must be exactly 18 letters or digits." });
     }
     if (!form.data.bank_account.account_number_confirmation) {
       markFieldInvalid("account_number_confirmation");
