@@ -113,6 +113,9 @@ class RichContent < ApplicationRecord
 
   validates :entity, presence: true
   validates :description, json: { schema: DESCRIPTION_JSON_SCHEMA, message: :invalid }
+  # Runs BEFORE the validation below so a page carrying only dead cross-product
+  # embeds saves cleanly instead of failing forever — see the method for why.
+  before_validation :drop_dead_cross_product_file_embeds, if: :will_save_change_to_description?
   validate :embedded_files_belong_to_product, if: :will_save_change_to_description?
   validate :link_hrefs_use_permitted_schemes, if: :will_save_change_to_description?
 
@@ -159,6 +162,22 @@ class RichContent < ApplicationRecord
     return [] if product.nil?
 
     ProductFile.where(id: embedded_ids).where.not(link_id: product.id).pluck(:id)
+  end
+
+  # Cross-product embeds split by whether the file they point at still exists.
+  #
+  # A soft-deleted foreign file delivers nothing: the editor renders its embed as
+  # nothing at all, so there is no node for the seller to click and remove. Those
+  # are dead content and get dropped on save (see #drop_dead_cross_product_file_embeds).
+  # An ALIVE foreign file is the case #5416 was written to stop, and it stays a
+  # hard validation failure — the seller can see that embed and may well intend to
+  # deliver it, so silently deleting it would throw away their work.
+  def cross_product_file_embeds_by_liveness
+    foreign_ids = cross_product_file_embed_ids
+    return { alive: [], dead: [] } if foreign_ids.empty?
+
+    alive_ids = ProductFile.alive.where(id: foreign_ids).pluck(:id)
+    { alive: alive_ids, dead: foreign_ids - alive_ids }
   end
 
   def self.reject_file_embeds(nodes, product_file_ids)
@@ -258,14 +277,57 @@ class RichContent < ApplicationRecord
       canonicalized[/\A([a-zA-Z][a-zA-Z0-9+.-]*):/, 1]&.downcase
     end
 
+    # A cross-product embed pointing at a SOFT-DELETED file is unfixable from the
+    # seller's side, so it must not block the save.
+    #
+    # #5416 added the validation below to stop products embedding another product's
+    # files. That was right for new content, but it also applies to rows written
+    # before it merged — and those rows already exist (usually from copy-pasting a
+    # content page between two products before the editor resolved copied embeds).
+    # When the foreign file has since been soft-deleted, the embed renders as
+    # nothing in the editor, so the seller sees no node to delete and every save of
+    # that product fails permanently with an error naming an obfuscated file ID.
+    # One seller lost the ability to edit two products entirely this way
+    # (Helper 98aed6e0).
+    #
+    # Dropping the node is safe precisely because the file is gone: a soft-deleted
+    # ProductFile delivers nothing to buyers, so the embed was already dead
+    # content. This is the same remediation Onetime::RemoveCrossProductFileEmbeds
+    # performs in bulk, applied lazily when the seller next saves.
+    #
+    # ALIVE foreign files are deliberately NOT dropped here — the seller can see
+    # that embed and may intend to deliver it, so it keeps failing validation
+    # rather than having their content silently deleted.
+    def drop_dead_cross_product_file_embeds
+      return unless description.is_a?(Array)
+
+      dead_ids = cross_product_file_embeds_by_liveness[:dead]
+      return if dead_ids.empty?
+
+      self.description = self.class.reject_file_embeds(description, dead_ids.to_set)
+    end
+
     def embedded_files_belong_to_product
       return unless description.is_a?(Array)
 
       foreign_ids = cross_product_file_embed_ids
       return if foreign_ids.empty?
 
-      external_ids = foreign_ids.map { ObfuscateIds.encrypt(_1) }
-      errors.add(:base, "File embeds reference files not belonging to this product: #{external_ids.join(", ")}")
+      errors.add(:base, "File embeds reference files not belonging to this product: #{cross_product_file_embed_error_details(foreign_ids)}")
+    end
+
+    # Names the product each foreign file actually belongs to, so the seller can
+    # find and remove the embed. The bare obfuscated ID this used to emit was not
+    # actionable: it appears nowhere in the UI, so there was no way to tell which
+    # embed was at fault or where it came from.
+    def cross_product_file_embed_error_details(foreign_ids)
+      files = ProductFile.where(id: foreign_ids).includes(:link)
+
+      files.map do |file|
+        label = file.name_displayable.presence || ObfuscateIds.encrypt(file.id)
+        owner = file.link&.name.presence
+        owner.present? ? "#{label} (from \"#{owner}\")" : label
+      end.join(", ")
     end
 
     def select_file_embed_ids(node)
