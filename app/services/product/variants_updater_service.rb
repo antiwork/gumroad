@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context, :contract
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -34,7 +34,9 @@ class Product::VariantsUpdaterService
   # deletion_audit_context: :actor_user_id, :request_id and :revision_token for
   # the deletion audit trail (ProductVariantDeletionAudit), threaded down rather
   # than read from a global so these services still work off-request.
-  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {})
+  # +contract+ - optional Product::SaveContract (gumroad-private#1379), supplied
+  # only by the editor's save path. nil preserves the legacy behaviour.
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {}, contract: nil)
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
@@ -46,6 +48,7 @@ class Product::VariantsUpdaterService
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
     @deletion_audit_context = deletion_audit_context || {}
+    @contract = contract
   end
 
   def perform
@@ -58,6 +61,7 @@ class Product::VariantsUpdaterService
       variant_category_updater = Product::VariantCategoryUpdaterService.new(
         product:,
         category_params: category,
+        contract:,
         confirmed_removed_variant_ids:,
         payload_page_ids:,
         confirmed_removed_rich_content_ids:,
@@ -71,9 +75,20 @@ class Product::VariantsUpdaterService
       keep_categories << variant_category if category[:id].present?
     end
 
-    categories_to_delete = existing_categories - keep_categories
+    # Product::SaveContract, Rule 2. Same substitution as inside the category
+    # updater: a grouping absent from the payload is not an instruction to
+    # delete it. Under the contract, only groupings the client named — or a
+    # clear-all — are swept.
+    categories_to_delete = contract_scoped_category_deletions(existing_categories - keep_categories, existing_categories)
     categories_to_delete.each do |variant_category|
-      next if variant_category.has_alive_grouping_variants_with_purchases?
+      # NOTE (gumroad-private#1379, ruling item 4): this `next` skips the whole
+      # branch for a grouping whose versions have purchases — including the
+      # `mark_deleted!` below, so nothing is actually deleted and the effect is
+      # safe. But it reads as "purchased groupings are exempt from the intent
+      # check", which is backwards and one refactor away from real data loss.
+      # Renamed the condition to say what it means: purchased groupings are not
+      # swept at all.
+      next if grouping_protected_from_sweep?(variant_category)
 
       # Captured before the sweep: these are the versions whose removal this
       # operation authorises, and the same list the guard checks. Read afterwards
@@ -124,6 +139,27 @@ class Product::VariantsUpdaterService
   end
 
   private
+    # Narrows the diff-derived sweep set to what the contract authorises.
+    # Untouched when no contract is supplied or the flag is off.
+    def contract_scoped_category_deletions(diff_deletions, existing_categories)
+      return diff_deletions unless contract&.enforced?
+      return existing_categories if contract.cleared?(:variants)
+
+      ids = contract.deleted_ids(:variants)
+      return [] if ids.empty?
+
+      # Deleted ids name versions OR groupings — the editor removes a whole
+      # grouping by naming it, and removes versions by naming them. A grouping
+      # is swept only when it is named directly.
+      existing_categories.select { ids.include?(_1.external_id) }
+    end
+
+    # A grouping whose versions have purchases is never swept by omission. This
+    # is a protection, not a guard exemption — see the call site.
+    def grouping_protected_from_sweep?(variant_category)
+      variant_category.has_alive_grouping_variants_with_purchases?
+    end
+
     def clean_variants_params(params)
       return [] if !params.present?
 

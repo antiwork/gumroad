@@ -45,6 +45,8 @@ describe UrlRedirectPresenter do
                                                                      pdf_stamp_enabled: false,
                                                                      processing: false,
                                                                      thumbnail_url: nil,
+                                                                     width: nil,
+                                                                     height: nil,
                                                                    }]
                                                                  },
                                                                  {
@@ -77,6 +79,8 @@ describe UrlRedirectPresenter do
                                                                    pdf_stamp_enabled: false,
                                                                    processing: false,
                                                                    thumbnail_url: nil,
+                                                                   width: nil,
+                                                                   height: nil,
                                                                  }])
     end
 
@@ -129,6 +133,24 @@ describe UrlRedirectPresenter do
       content_items = instance.download_attributes[:content_items]
       expect(content_items.length).to eq(1)
       expect(content_items.first[:thumbnail_url]).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{file.thumbnail_variant.key}")
+    end
+
+    it "includes the recorded pixel dimensions for video files so the player frame can match their shape" do
+      product = create(:product)
+      portrait = create(:streamable_video, link: product, width: 1080, height: 1920)
+      landscape = create(:streamable_video, link: product, width: 1920, height: 1080)
+      unmeasured = create(:streamable_video, link: product, width: nil, height: nil)
+      pdf = create(:readable_document, link: product)
+      purchase = create(:free_purchase, link: product)
+      url_redirect = create(:url_redirect, purchase:)
+
+      content_items = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).download_attributes[:content_items]
+      by_id = content_items.index_by { _1[:id] }
+
+      expect(by_id[portrait.external_id]&.values_at(:width, :height)).to eq([1080, 1920])
+      expect(by_id[landscape.external_id]&.values_at(:width, :height)).to eq([1920, 1080])
+      expect(by_id[unmeasured.external_id]&.values_at(:width, :height)).to eq([nil, nil])
+      expect(by_id[pdf.external_id]&.values_at(:width, :height)).to eq([nil, nil])
     end
 
     it "keeps a known oversized EPUB download-only while allowing an unknown size" do
@@ -495,7 +517,9 @@ describe UrlRedirectPresenter do
             subtitle_files: [],
             pdf_stamp_enabled: false,
             processing: false,
-            thumbnail_url: nil
+            thumbnail_url: nil,
+            width: nil,
+            height: nil
           },
           {
             type: "file",
@@ -516,7 +540,9 @@ describe UrlRedirectPresenter do
             subtitle_files: [],
             pdf_stamp_enabled: false,
             processing: false,
-            thumbnail_url: nil
+            thumbnail_url: nil,
+            width: nil,
+            height: nil
           }
         )
       end

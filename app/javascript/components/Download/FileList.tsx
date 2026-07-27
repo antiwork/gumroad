@@ -22,6 +22,7 @@ import { createJWPlayer } from "$app/utils/jwPlayer";
 import { dispatchMediaPlaybackState } from "$app/utils/media_playback";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
+import { videoFrameIsPortrait, videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { AudioPlayerContainer } from "$app/components/DownloadPage/AudioPlayerContainer";
@@ -75,6 +76,11 @@ export type FileItem = {
   pdf_stamp_enabled: boolean;
   processing: boolean;
   thumbnail_url: string | null;
+  // Pixel dimensions of the video, when we know them. Used to shape the player
+  // frame to the file's real aspect ratio; null for non-video files and for
+  // older uploads whose dimensions were never recorded.
+  width?: number | null;
+  height?: number | null;
   isbn?: string | null;
 };
 export type FolderItem = {
@@ -654,6 +660,7 @@ const VideoEmbedPreview = ({
       dispatchMediaPlaybackState(videoPlayerId, isPlaying);
     };
     void createJWPlayer(videoPlayerId, {
+      ...videoPlayerAspectRatio(file),
       playlist: [
         {
           sources: mediaUrls.map((url) => ({ file: url })),
@@ -732,18 +739,29 @@ const VideoEmbedPreview = ({
     }
   }, [autoPlay]);
 
+  const frameStyle = videoFrameStyle(file);
+
   return isVideoPlayerShowing ? (
-    <div className={classNames("preview", className)}>
+    <div className={classNames("preview", className)} style={frameStyle}>
       <div id={videoPlayerId}></div>
     </div>
   ) : (
-    <figure className={classNames("preview", className)}>
+    <figure className={classNames("preview", className)} style={frameStyle}>
       <img
         src={file.thumbnail_url ?? thumbnailPlaceholder}
         style={{
           position: "absolute",
           height: "100%",
-          objectFit: "cover",
+          // Constrain the still to the frame in both axes. Height alone was
+          // enough while every frame was 16:9 like the images themselves, but a
+          // portrait frame is narrower than a landscape still, which would then
+          // spill out past the row's edges.
+          width: "100%",
+          // Only a portrait box needs the whole still shown: "cover" there
+          // would crop the top and bottom off the subject. Landscape and
+          // unknown-dimension boxes keep cropping to fill, so a thumbnail that
+          // does not match the video's ratio looks exactly as it does today.
+          objectFit: videoFrameIsPortrait(file) ? "contain" : "cover",
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />

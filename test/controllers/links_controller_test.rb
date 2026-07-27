@@ -5981,3 +5981,1095 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_nil AuditCorrelationId.for("")
   end
 end
+
+# End-to-end coverage of the editor's save contract (Product::SaveContract,
+# gumroad-private#1379) through the real save endpoint.
+#
+# The old save read every collection as `params[:thing] || []`, so a request
+# that simply didn't mention a collection — or sent it in a shape strong
+# parameters dropped — was read as "delete everything in it". The contract
+# changes that, behind the :product_editor_save_contract flag: leaving a
+# collection out means "no changes", and deleting requires an explicit ask
+# (deletion_operations) plus proof of which snapshot the client was editing
+# (editor_revision).
+#
+# The flag-OFF tests below deliberately document the OLD deleting behaviour,
+# so that if someone changes the disabled path they find out here: the flag
+# has to be a pure kill switch, byte-identical to what shipped before it.
+class LinksControllerSaveContractTest < ActionController::TestCase
+  tests LinksController
+  include LinksControllerTestHelpers
+
+  setup do
+    sign_in_seller_area!
+    @product = create_product_with_pdf_file(user: @seller)
+    product_file = @product.product_files.alive.first
+    # The same baseline payload the editor's save sends: the product's fields
+    # and its one file, with NO variants or rich_content keys. Every test
+    # merges what it needs on top, so "absent collection" is the default.
+    @params = {
+      id: @product.unique_permalink,
+      name: "sumlink",
+      description: "New description",
+      files: [{ id: product_file.external_id, url: product_file.url }],
+    }
+    @category = create_variant_category(link: @product, title: "Versions")
+  end
+
+  teardown do
+    # Per-user deactivation on purpose. The Flipper store is Redis-backed and
+    # shared across concurrently running test processes, so a global
+    # Feature.deactivate here would switch the flag off under another process
+    # mid-test. Deactivating only for this test's seller is safe: no other
+    # process knows this user.
+    Feature.deactivate_user(Product::SaveContract::FEATURE_NAME, @seller)
+    # Remove the in-process pin (see pin_contract_flag!) so later tests read
+    # the real flag again.
+    Feature.singleton_class.send(:remove_method, :active?) if @contract_flag_pinned
+  end
+
+  # Pins what the save reads for THIS one flag, inside this process only,
+  # while every other flag still goes through the real Feature module.
+  #
+  # Why pinning is needed at all: the Flipper flag store lives in a shared
+  # Redis, and other test processes running at the same time flush that Redis
+  # at the start of every one of their tests (test_helper/spec_helper both do
+  # this to keep tests isolated). A flag this test just activated can
+  # therefore vanish between the activation and the request — which made these
+  # tests fail at random whenever another suite ran alongside. Verified
+  # empirically: same seed, different failures per run, and a concurrent
+  # rspec process was present each time.
+  def pin_contract_flag!(value)
+    original = Feature.method(:active?)
+    Feature.define_singleton_method(:active?) do |name, actor = nil|
+      name.to_sym == Product::SaveContract::FEATURE_NAME ? value : original.call(name, actor)
+    end
+    @contract_flag_pinned = true
+  end
+
+  # Turns the contract on for this test's seller. Called explicitly by the
+  # flag-ON tests rather than in setup, so the flag-OFF tests in this same
+  # class genuinely run with the flag off.
+  def enable_contract!
+    # The real per-user activation, exactly what a rollout does...
+    Feature.activate_user(Product::SaveContract::FEATURE_NAME, @seller)
+    # ...plus the in-process pin so a concurrent process flushing Redis can't
+    # switch the flag off underneath this test.
+    pin_contract_flag!(true)
+  end
+
+  # Pins the contract OFF for the flag-off tests, for the mirror-image reason:
+  # a concurrent process could conceivably turn the flag on, and these tests
+  # exist precisely to document what the disabled path does.
+  def disable_contract!
+    pin_contract_flag!(false)
+  end
+
+  # Makes the flag store RAISE, the way a Redis outage does. Distinct from the
+  # flag being off: off is an answer, this is the absence of one.
+  def break_contract_flag_store!(error: Redis::CannotConnectError.new("flag store down"))
+    original = Feature.method(:active?)
+    Feature.define_singleton_method(:active?) do |name, actor = nil|
+      raise error if name.to_sym == Product::SaveContract::FEATURE_NAME
+
+      original.call(name, actor)
+    end
+    @contract_flag_pinned = true
+  end
+
+  # The token the editor would have been handed when it loaded the product.
+  # Computed fresh (after this test's factory setup) so the save's deletion
+  # check sees it as current.
+  def current_revision
+    Product::EditorRevision.current(@product.reload)
+  end
+
+  # A content page with no title and no body. Pages like this carry no seller
+  # work, so the existing rich-content deletion guard lets them be deleted
+  # without a confirmation — which keeps these tests about the CONTRACT's
+  # decision, not about the older guard's.
+  def create_blank_page
+    create_rich_content(entity: @product, description: [])
+  end
+
+  # --- flag OFF: the old behaviour must be exactly preserved -----------------
+
+  test "flag off: a payload with no variants key still deletes every version (the old behaviour)" do
+    disable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    # This is the pre-contract behaviour being pinned, not endorsed: omitting
+    # the key wipes the collection. If this test starts failing, the kill
+    # switch is no longer a pure revert.
+    assert_not variant.reload.alive?
+  end
+
+  test "flag off: a payload with no rich_content key still deletes existing pages (the old behaviour)" do
+    disable_contract!
+    page = create_blank_page
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert_not page.reload.alive?
+  end
+
+  # --- flag ON, Rule 1: absent and [] both mean "no changes" -----------------
+
+  test "flag on: a payload with no variants key deletes nothing" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert variant.reload.alive?
+  end
+
+  test "flag on: variants sent as an empty list deletes nothing" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params.merge(variants: []), format: :json
+    assert_response :success
+
+    assert variant.reload.alive?
+  end
+
+  test "flag on: a payload with no rich_content key deletes nothing" do
+    enable_contract!
+    # The category needs at least one version to pass product validation once
+    # the contract stops the save from sweeping the (otherwise empty) category
+    # away — mirroring a real product, where a category always has versions.
+    create_variant(variant_category: @category, name: "Plain version")
+    page = create_blank_page
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert page.reload.alive?
+  end
+
+  test "flag on: rich_content sent as an empty list deletes nothing" do
+    enable_contract!
+    create_variant(variant_category: @category, name: "Plain version")
+    page = create_blank_page
+
+    post :update, params: @params.merge(rich_content: []), format: :json
+    assert_response :success
+
+    assert page.reload.alive?
+  end
+
+  # --- flag ON, Rule 2: deletion only through an explicit operation ----------
+
+  test "flag on: deleted_ids plus a fresh revision deletes exactly the named variant" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    # The sibling was not named, so the deletion must not spread to it.
+    assert kept.reload.alive?
+  end
+
+  test "flag on: a named variant in a grouping the editor does not address is still deleted" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    # A product can own more than one grouping — older editors and the v2 API
+    # both create them — but the current editor only ever shows and submits the
+    # FIRST one. A deletion naming a version in any other grouping must still
+    # happen, otherwise the save reports success and the version reappears.
+    other_category = create_variant_category(link: @product, title: "Formats")
+    removed = create_variant(variant_category: other_category, name: "Removed elsewhere")
+    sibling = create_variant(variant_category: other_category, name: "Sibling elsewhere")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    # Visiting the second grouping must not turn into a sweep of it.
+    assert sibling.reload.alive?
+    assert other_category.reload.alive?
+    assert kept.reload.alive?
+  end
+
+  test "flag on: a second grouping is left alone when the save names no deletions" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    other_category = create_variant_category(link: @product, title: "Formats")
+    untouched = create_variant(variant_category: other_category, name: "Untouched")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+    ), format: :json
+    assert_response :success
+
+    assert untouched.reload.alive?
+    assert other_category.reload.alive?
+    assert_equal "Formats", other_category.reload.title
+  end
+
+  test "flag on: deleting the last version of a grouping through deleted_ids removes the grouping" do
+    enable_contract!
+    only_version = create_variant(variant_category: @category, name: "Only version")
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [only_version.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not only_version.reload.alive?
+    assert_not @category.reload.alive?
+  end
+
+  test "flag on: a partial deletion keeps the grouping and its name" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    # `variants` omitted entirely, so the save reaches the "grouping wasn't
+    # submitted" route with no name in hand. It must not blank the seller's
+    # grouping title as a side effect of deleting one version.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert kept.reload.alive?
+    assert @category.reload.alive?
+    assert_equal "Versions", @category.reload.title
+  end
+
+  test "flag on: deleted_ids plus a fresh revision deletes exactly the named page" do
+    enable_contract!
+    create_variant(variant_category: @category, name: "Plain version")
+    removed = create_blank_page
+    kept = create_blank_page
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { rich_content: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert kept.reload.alive?
+  end
+
+  test "flag on: an explicit clear-all plus a fresh revision deletes every variant" do
+    enable_contract!
+    first = create_variant(variant_category: @category, name: "First version")
+    second = create_variant(variant_category: @category, name: "Second version")
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { cleared_collections: ["variants"] },
+    ), format: :json
+    assert_response :success
+
+    # "Empty this collection" stays expressible — it just has to be asked for
+    # in so many words instead of implied by an empty or missing list.
+    assert_not first.reload.alive?
+    assert_not second.reload.alive?
+  end
+
+  test "flag on: deleted_ids without an editor_revision is refused with a 409 and deletes nothing" do
+    enable_contract!
+    named = create_variant(variant_category: @category, name: "Named for deletion")
+    sibling = create_variant(variant_category: @category, name: "Sibling")
+
+    # The ids are supplied, but the client never says which snapshot it was
+    # editing. A destructive save that can't vouch for its snapshot is refused
+    # outright — silently skipping the deletion would tell the seller "saved"
+    # while the rows quietly survive, so the save is rejected before any
+    # mutation and the editor is handed a fresh token to retry with.
+    original_name = @product.name
+    post :update, params: @params.merge(
+      deletion_operations: { deleted_ids: { variants: [named.external_id] } },
+    ), format: :json
+    assert_response :conflict
+
+    body = response.parsed_body
+    assert_equal "stale_deletion_conflict", body["error_code"]
+    # The response carries the token for the CURRENT state, so the editor can
+    # reconcile and retry without a full reload.
+    assert_equal Product::EditorRevision.current(@product.reload), body["editor_revision"]
+
+    # Nothing was written: the deletion did not happen AND the ordinary field
+    # updates in the same payload were rolled back with it.
+    assert named.reload.alive?
+    assert sibling.reload.alive?
+    assert_equal original_name, @product.reload.name
+  end
+
+  # --- flag ON: the malformed-value case the contract exists for -------------
+
+  test "flag on: a malformed variants value deletes nothing" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    # Strong parameters silently drops a value that isn't the expected list of
+    # hashes, so by the time the save runs, this looks identical to not
+    # sending the key at all. Before the contract, that dropped value read as
+    # "delete every version" — a client bug becoming data loss.
+    post :update, params: @params.merge(variants: "not-a-list"), format: :json
+    assert_response :success
+
+    assert variant.reload.alive?
+  end
+
+  # --- flag ON: ordinary saves keep working -----------------------------------
+
+  test "flag on: a save that deletes nothing still applies normal field updates" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params.merge(name: "Renamed under the contract"), format: :json
+    assert_response :success
+
+    # The contract only decides what may be DELETED; everything else about the
+    # save must go through untouched.
+    assert_equal "Renamed under the contract", @product.reload.name
+    assert variant.reload.alive?
+  end
+
+  # --- flag ON: an explicit deletion must not widen into a sweep --------------
+
+  test "flag on: naming one variant while the collection is omitted deletes only that variant" do
+    enable_contract!
+    removed = create_variant(variant_category: @category, name: "Removed")
+    sibling = create_variant(variant_category: @category, name: "Sibling")
+
+    # No `variants` key at all, but an explicit id to delete. The save reaches
+    # the "this grouping wasn't submitted" route, which historically swept every
+    # version in the category — turning a one-version deletion into a wipe of
+    # the whole grouping. The contract has to scope it to the named id.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert sibling.reload.alive?
+    # The grouping still holds a live version, so it must survive too.
+    assert @category.reload.alive?
+  end
+
+  test "flag on: a clear-all with the collection omitted still empties the grouping" do
+    enable_contract!
+    first = create_variant(variant_category: @category, name: "First version")
+    second = create_variant(variant_category: @category, name: "Second version")
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { cleared_collections: ["variants"] },
+    ), format: :json
+    assert_response :success
+
+    assert_not first.reload.alive?
+    assert_not second.reload.alive?
+  end
+
+  # --- flag ON: the revision must survive the session ------------------------
+
+  test "flag on: the save response returns the revision for the state it committed" do
+    enable_contract!
+    create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params.merge(editor_revision: current_revision), format: :json
+    assert_response :success
+
+    returned = response.parsed_body["editor_revision"]
+    assert returned.present?
+    # It describes the post-save state, which is what the editor must echo next.
+    assert_equal Product::EditorRevision.current(@product.reload), returned
+  end
+
+  test "flag on: a deletion after an ordinary save in the same session still deletes" do
+    enable_contract!
+    removed = create_variant(variant_category: @category, name: "Removed")
+    kept = create_variant(variant_category: @category, name: "Kept")
+
+    # First save: an ordinary edit, no deletions. It moves the product's
+    # fingerprint, so the token the editor loaded with is now stale.
+    post :update, params: @params.merge(
+      name: "Renamed",
+      editor_revision: current_revision,
+    ), format: :json
+    assert_response :success
+    refreshed = response.parsed_body["editor_revision"]
+
+    # Second save: the seller deletes a version without reloading the page. The
+    # editor echoes the token the FIRST save handed back. Before the response
+    # carried one, this deletion was silently refused as stale and the version
+    # reappeared on reload.
+    @controller = LinksController.new
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: refreshed,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert kept.reload.alive?
+  end
+
+  # --- flag ON: explicit deletion across the remaining collections -----------
+
+  test "flag on: deleted_ids plus a fresh revision deletes exactly the named file" do
+    enable_contract!
+    kept = @product.product_files.alive.first
+    removed = create_product_file(link: @product, display_name: "Removed file")
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { files: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert removed.reload.deleted?
+    assert_not kept.reload.deleted?
+  end
+
+  test "flag on: deleted_ids plus a fresh revision schedules exactly the named public file" do
+    enable_contract!
+    removed = create_public_file(resource: @product, display_name: "Removed audio")
+    kept = create_public_file(resource: @product, display_name: "Kept audio")
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { public_files: [removed.public_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert removed.reload.scheduled_for_deletion?
+    assert_not kept.reload.scheduled_for_deletion?
+  end
+
+  test "flag on: deleted_ids plus a fresh revision disconnects exactly the named integration" do
+    enable_contract!
+    removed = create_circle_integration
+    kept = create_zoom_integration
+    @product.active_integrations << [removed, kept]
+    @product.reload
+
+    # Integrations carry no external id in the editor payload — the collection
+    # is keyed by provider name, so the "ids" here are provider names.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { integrations: ["circle"] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not @product.reload.active_integrations.include?(removed)
+    assert @product.active_integrations.include?(kept)
+  end
+
+  # --- flag ON, Rule 1 for the files collection --------------------------------
+
+  test "flag on: a payload with no files key deletes no files" do
+    enable_contract!
+    file = @product.product_files.alive.first
+
+    post :update, params: @params.except(:files), format: :json
+    assert_response :success
+
+    assert_not file.reload.deleted?
+  end
+
+  test "flag on: files sent as an empty list deletes no files" do
+    enable_contract!
+    file = @product.product_files.alive.first
+
+    post :update, params: @params.merge(files: []), format: :json
+    assert_response :success
+
+    assert_not file.reload.deleted?
+  end
+
+  # --- flag ON: malformed deletion_operations degrade to "no deletions" -------
+
+  test "flag on: a malformed deletion_operations value deletes nothing and does not 500" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+    page = create_blank_page
+    file = @product.product_files.alive.first
+
+    # Every malformed shape has to read as "no explicit deletions were
+    # legible" (Rule 1): a bare String, an Integer, and a deletion_operations
+    # whose deleted_ids is not a hash. A fresh token rides along each time so
+    # nothing but the contract's hardening stands between these payloads and
+    # a wipe — a raise here would turn a client bug into a failed save, and a
+    # lenient parse would turn it into data loss.
+    [
+      "just-a-string",
+      12345,
+      { deleted_ids: "not-a-hash" },
+    ].each do |malformed|
+      post :update, params: @params.merge(
+        editor_revision: current_revision,
+        deletion_operations: malformed,
+      ), format: :json
+      assert_response :success, "deletion_operations=#{malformed.inspect} must not fail the save"
+
+      assert variant.reload.alive?, "deletion_operations=#{malformed.inspect} must not delete variants"
+      assert page.reload.alive?, "deletion_operations=#{malformed.inspect} must not delete pages"
+      assert_not file.reload.deleted?, "deletion_operations=#{malformed.inspect} must not delete files"
+    end
+  end
+
+  # --- flag ON: staleness gates deletions, and only deletions -----------------
+
+  test "flag on: a destructive save with a stale token is refused with a 409 and deletes nothing" do
+    enable_contract!
+    named = create_variant(variant_category: @category, name: "Named for deletion")
+    sibling = create_variant(variant_category: @category, name: "Sibling")
+
+    stale_token = current_revision
+    # Another session edits the product after this session captured its token:
+    # any edit to a deletable child moves the fingerprint.
+    named.update!(name: "Renamed by another session")
+    assert_not Product::EditorRevision.fresh?(product: @product.reload, token: stale_token)
+
+    original_name = @product.name
+    post :update, params: @params.merge(
+      editor_revision: stale_token,
+      deletion_operations: { deleted_ids: { variants: [named.external_id] } },
+    ), format: :json
+    assert_response :conflict
+
+    body = response.parsed_body
+    assert_equal "stale_deletion_conflict", body["error_code"]
+    # The 409 carries a token for the state as it stands NOW, so the editor
+    # can reconcile and retry without forcing a full reload.
+    assert_equal Product::EditorRevision.current(@product.reload), body["editor_revision"]
+
+    # Refused BEFORE any mutation: the rows survive and the ordinary field
+    # updates in the same payload were rolled back with the transaction.
+    assert named.reload.alive?
+    assert sibling.reload.alive?
+    assert_equal original_name, @product.reload.name
+  end
+
+  test "flag on: a stale clear-all is refused with a 409 and deletes nothing" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    stale_token = current_revision
+    variant.update!(name: "Renamed by another session")
+
+    post :update, params: @params.merge(
+      editor_revision: stale_token,
+      deletion_operations: { cleared_collections: ["variants"] },
+    ), format: :json
+    assert_response :conflict
+
+    assert_equal "stale_deletion_conflict", response.parsed_body["error_code"]
+    assert variant.reload.alive?
+  end
+
+  test "flag on: a write-only save from a stale tab still succeeds" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    stale_token = current_revision
+    variant.update!(name: "Renamed by another session")
+    assert_not Product::EditorRevision.fresh?(product: @product.reload, token: stale_token)
+
+    # No deletions requested, so staleness must not block the save: a stale
+    # tab fixing a typo is recoverable and has to keep working — rejecting
+    # every stale save is what forced product-wide optimistic concurrency off.
+    post :update, params: @params.merge(
+      name: "Renamed from a stale tab",
+      editor_revision: stale_token,
+    ), format: :json
+    assert_response :success
+
+    assert_equal "Renamed from a stale tab", @product.reload.name
+    assert variant.reload.alive?
+  end
+
+  # --- flag ON: clear-all for files --------------------------------------------
+
+  test "flag on: an explicit clear-all plus a fresh revision empties the files collection" do
+    enable_contract!
+    second_file = create_product_file(link: @product, display_name: "Second file")
+    @product.reload
+
+    post :update, params: @params.except(:files).merge(
+      editor_revision: current_revision,
+      deletion_operations: { cleared_collections: ["files"] },
+    ), format: :json
+    assert_response :success
+
+    assert_empty @product.reload.alive_product_files
+    assert second_file.reload.deleted?
+  end
+
+  # --- flag store DOWN: never fall back to implicit deletion -----------------
+  #
+  # A raising flag lookup used to be rescued into `false`, i.e. "contract
+  # disabled", which routes the save down the legacy delete-by-omission path.
+  # A Redis blip therefore became a data wipe of every collection the payload
+  # didn't mention. These pin that shut for all three collections.
+
+  test "flag store down: a payload with no files key deletes no files" do
+    break_contract_flag_store!
+    second_file = create_product_file(link: @product, display_name: "Second file")
+    @product.reload
+
+    post :update, params: @params.except(:files), format: :json
+    assert_response :success
+
+    assert_not second_file.reload.deleted?
+    assert_equal 2, @product.reload.alive_product_files.count
+  end
+
+  test "flag store down: a payload with no public_files key deletes no public files" do
+    break_contract_flag_store!
+    public_file = create_public_file(with_audio: true, resource: @product, display_name: "Audio 1")
+    @product.reload
+
+    # No public_files key AND a description that embeds nothing: the legacy
+    # rule infers "delete" from exactly this shape.
+    post :update, params: @params.merge(description: "<p>No embeds here</p>"), format: :json
+    assert_response :success
+
+    assert_nil public_file.reload.scheduled_for_deletion_at
+    assert_equal 1, @product.reload.public_files.alive.count
+  end
+
+  test "flag store down: a payload with no integrations key disconnects nothing" do
+    break_contract_flag_store!
+    discord = create_discord_integration
+    @product.active_integrations << discord
+    @product.reload
+
+    # disconnect! is an irreversible third-party call; it must not fire on a
+    # save that never mentioned integrations.
+    Integration.any_instance.expects(:disconnect!).never
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert_equal [discord], @product.reload.active_integrations
+  end
+
+  test "flag store down: writes still land, only implicit deletion is suppressed" do
+    break_contract_flag_store!
+    second_file = create_product_file(link: @product, display_name: "Second file")
+    @product.reload
+
+    post :update, params: @params.except(:files).merge(name: "Renamed while the flag store was down"), format: :json
+    assert_response :success
+
+    assert_equal "Renamed while the flag store was down", @product.reload.name
+    assert_not second_file.reload.deleted?
+  end
+
+  test "flag store down: a failing error notifier does not break the save" do
+    break_contract_flag_store!
+    # The notifier reaches out over the network from inside a locked save. If
+    # it throws, the seller's save must still succeed.
+    ErrorNotifier.expects(:notify).at_least_once.raises(StandardError.new("bugsnag unreachable"))
+    second_file = create_product_file(link: @product, display_name: "Second file")
+    @product.reload
+
+    post :update, params: @params.except(:files), format: :json
+    assert_response :success
+
+    assert_not second_file.reload.deleted?
+  end
+
+  # --- the integrations baseline has to move with the session ----------------
+
+  test "flag on: the save response carries the integrations baseline for the state it committed" do
+    enable_contract!
+    discord = create_discord_integration
+    @product.active_integrations << discord
+    @product.reload
+
+    post :update, params: @params.merge(editor_revision: current_revision), format: :json
+    assert_response :success
+
+    baseline = response.parsed_body["loaded_integrations"]
+    assert_not_nil baseline, "save response must issue a refreshed integrations baseline"
+    assert_equal true, baseline["discord"]
+    assert_equal false, baseline["circle"]
+  end
+
+  test "flag on: a connect in one save is reflected in the baseline the next save sees" do
+    enable_contract!
+    # Page load: nothing connected. The presenter's baseline would be all false.
+    assert_empty @product.reload.active_integrations
+
+    # Save #1 connects discord.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      integrations: { discord: { keep_inactive_members: false, integration_details: { server_id: "0", server_name: "Gaming", username: "gumbot" } } },
+    ), format: :json
+    assert_response :success
+    assert_equal ["discord"], @product.reload.active_integrations.map(&:name)
+
+    # The response must already say discord is connected, so the editor that
+    # never reloaded can recognise a later disconnect as a removal.
+    assert_equal true, response.parsed_body["loaded_integrations"]["discord"]
+  end
+
+  test "flag on: no baseline is issued while the contract is off" do
+    disable_contract!
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert_nil response.parsed_body["loaded_integrations"]
+    assert_nil response.parsed_body["editor_revision"]
+  end
+
+  # --- version-level integrations are explicit, owner-scoped, revision-gated --
+  #
+  # These joins live between a variant and an integration. They used to be
+  # removed by inference from the submitted checkbox map, which meant a payload
+  # that simply didn't re-check a box tore the integration down — and because
+  # the join was absent from the revision fingerprint, a stale tab's teardown
+  # looked perfectly fresh.
+
+  def variant_with_integration
+    variant = create_variant(variant_category: @category, name: "Pro")
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+    [variant, integration]
+  end
+
+  # The checkbox map for a version, as the editor sends it. `price_difference_cents`
+  # is deliberately omitted: in a controller test every param arrives as a
+  # String, and the updater does `option[:price] /= 100.0` on it, which raises
+  # on a String. Real payloads go through the JSON body, not this path.
+  def version_params(variant, integrations:)
+    [{ id: variant.external_id, name: variant.name, integrations: }]
+  end
+
+  test "flag on: a version's integration survives a save that simply doesn't re-check it" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+
+    # No deletion named for this version: unchecking alone is not a request.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: version_params(variant, integrations: { "discord" => false }),
+    ), format: :json
+    assert_response :success
+
+    assert_equal 1, variant.reload.active_integrations.count
+  end
+
+  test "flag on: an explicitly named version integration is disconnected" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: version_params(variant, integrations: { "discord" => false }),
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty variant.reload.active_integrations
+  end
+
+  test "flag on: naming a version's integration leaves the same integration on a sibling version" do
+    enable_contract!
+    variant, integration = variant_with_integration
+    sibling = create_variant(variant_category: @category, name: "Basic")
+    sibling.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: version_params(variant, integrations: { "discord" => false }) +
+                version_params(sibling, integrations: { "discord" => true }),
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty variant.reload.active_integrations
+    assert_equal 1, sibling.reload.active_integrations.count, "the sibling version's join must survive"
+  end
+
+  test "flag on: a stale tab cannot disconnect a version integration another tab just enabled" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Pro")
+    @product.reload
+    # Tab A loaded here, before the integration existed.
+    stale_token = current_revision
+
+    # Tab B enables the integration on that version.
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+
+    # The join alone must move the fingerprint, or tab A's teardown looks fresh.
+    assert_not Product::EditorRevision.fresh?(product: @product.reload, token: stale_token),
+               "enabling a version integration must invalidate an older token"
+
+    post :update, params: @params.merge(
+      editor_revision: stale_token,
+      variants: version_params(variant, integrations: { "discord" => false }),
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "stale_deletion_conflict", response.parsed_body["error_code"]
+    assert_equal 1, variant.reload.active_integrations.count, "the stale save must not have disconnected anything"
+  end
+
+  test "flag on: omitting the integrations key for a version removes nothing" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: [{ id: variant.external_id, name: variant.name }],
+    ), format: :json
+    assert_response :success
+
+    assert_equal 1, variant.reload.active_integrations.count
+  end
+
+  test "flag on: an empty integrations map for a version removes nothing" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: version_params(variant, integrations: {}),
+    ), format: :json
+    assert_response :success
+
+    assert_equal 1, variant.reload.active_integrations.count
+  end
+
+  test "flag on: an explicitly named integration on a version in a later grouping is disconnected" do
+    enable_contract!
+    # A legacy product with two alive variant groupings. The editor only ever
+    # renders and submits the first one, so a version in the second is never
+    # visited by the save — but the payload can still name it for deletion.
+    other_category = create_variant_category(link: @product, title: "Sizes")
+    variant = create_variant(variant_category: other_category, name: "Large")
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty variant.reload.active_integrations,
+                 "a named integration on a version outside the first grouping must actually be disconnected"
+  end
+
+  test "flag on: a version-scoped deletion in a later grouping leaves everything else in that grouping alone" do
+    enable_contract!
+    other_category = create_variant_category(link: @product, title: "Sizes")
+    named = create_variant(variant_category: other_category, name: "Large")
+    untouched = create_variant(variant_category: other_category, name: "Small")
+    integration = create_discord_integration
+    named.active_integrations << integration
+    untouched.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { variant_deleted_ids: { named.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty named.reload.active_integrations
+    assert_equal 1, untouched.reload.active_integrations.count,
+                 "the unnamed sibling's join must survive"
+    assert untouched.reload.alive?, "visiting the grouping must not delete versions nobody named"
+    assert_equal "Sizes", other_category.reload.title, "the grouping's name must survive"
+    assert other_category.alive?, "the grouping itself must survive"
+  end
+
+  test "flag on: a stale tab cannot disconnect an integration on a version in a later grouping" do
+    enable_contract!
+    other_category = create_variant_category(link: @product, title: "Sizes")
+    variant = create_variant(variant_category: other_category, name: "Large")
+    @product.reload
+    stale_token = current_revision
+
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: stale_token,
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal 1, variant.reload.active_integrations.count,
+                 "a stale save must not reach a version in another grouping either"
+  end
+
+  test "flag on: malformed version-scoped deletion operations delete nothing and do not 500" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+    token = current_revision
+
+    [
+      "not-a-hash",
+      { variant.external_id => "not-a-hash" },
+      { variant.external_id => { integrations: "discord" } },       # string, not a list
+      { variant.external_id => { integrations: [{ evil: 1 }] } },   # non-string members
+      { variant.external_id => { not_a_collection: ["discord"] } }, # unknown collection
+    ].each do |malformed|
+      post :update, params: @params.merge(
+        editor_revision: token,
+        variants: version_params(variant, integrations: { "discord" => false }),
+        deletion_operations: { variant_deleted_ids: malformed },
+      ), format: :json
+
+      assert_response :success, "malformed payload #{malformed.inspect} should not break the save"
+      assert_equal 1, variant.reload.active_integrations.count,
+                   "malformed payload #{malformed.inspect} must not delete anything"
+    end
+  end
+
+  # --- two versions created in one save, then a content edit in the same tab --
+  #
+  # gumroad-private#1379. The first save creates both versions server-side; the
+  # editor adopts their canonical ids and the fresh token. The second save is an
+  # ordinary content edit that does not mention versions at all. Neither version
+  # may be dropped from the product, and the shared-content flag must not be
+  # flipped as a side effect of the second save.
+  test "flag on: two versions created in one save both survive a later content edit in the same session" do
+    enable_contract!
+    shared_content_before = @product.reload.has_same_rich_content_for_all_variants?
+
+    # Save #1: create two versions at once (no ids — they don't exist yet).
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: [{ id: nil, name: "First version" }, { id: nil, name: "Second version" }],
+    ), format: :json
+    assert_response :success
+
+    created = @product.reload.alive_variants.order(:id).to_a
+    assert_equal ["First version", "Second version"], created.map(&:name).sort
+    # The editor adopts the token this save returned; it never reloads the page.
+    adopted_token = response.parsed_body["editor_revision"]
+    assert_not_nil adopted_token, "the save must hand back a token for the state it committed"
+
+    # Save #2: a plain content edit in the same session. It says nothing about
+    # versions, so under Rule 1 nothing about them may change.
+    #
+    # Note this second save exercises the controller's `variants.any?`
+    # short-circuit rather than the contract: with no variants key the updater
+    # is never reached at all. That is the real protection for an absent
+    # collection here, and the assertions below hold it in place.
+    post :update, params: @params.merge(
+      editor_revision: adopted_token,
+      description: "<p>Edited in the same session, without reloading</p>",
+    ), format: :json
+    assert_response :success
+
+    survivors = @product.reload.alive_variants.order(:id).to_a
+    assert_equal created.map(&:id).sort, survivors.map(&:id).sort,
+                 "both versions created in the first save must survive the second"
+    assert_equal shared_content_before, @product.reload.has_same_rich_content_for_all_variants?,
+                 "the shared-content flag must not change as a side effect of a content edit"
+  end
+
+  # The same session, but the second save DOES carry a variants key — the shape
+  # the editor actually sends when the seller edits content while versions are
+  # on screen. This one reaches the updater, so it is the case where the
+  # contract, not the controller's short-circuit, has to keep both versions.
+  test "flag on: a same-session content edit that resubmits one version does not drop the other" do
+    enable_contract!
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: [{ id: nil, name: "First version" }, { id: nil, name: "Second version" }],
+    ), format: :json
+    assert_response :success
+
+    created = @product.reload.alive_variants.order(:id).to_a
+    assert_equal 2, created.count
+    adopted_token = response.parsed_body["editor_revision"]
+    first, second = created
+
+    # The editor re-submits only the version being edited, and names no
+    # deletions. The other version must not be swept for being absent.
+    post :update, params: @params.merge(
+      editor_revision: adopted_token,
+      variants: [{ id: first.external_id, name: "First version renamed" }],
+    ), format: :json
+    assert_response :success
+
+    assert_equal "First version renamed", first.reload.name
+    assert first.reload.alive?, "the resubmitted version must survive"
+    assert second.reload.alive?, "the version merely absent from the payload must survive"
+  end
+
+  # Reaching a version in a later grouping means visiting every other alive
+  # grouping, including ones that hold nothing. Such a grouping cannot survive
+  # the visit — an alive grouping with no alive versions makes the product
+  # invalid — but nothing of the seller's goes with it, so it must not be filed
+  # as an omission-driven deletion. That count is the number the save-contract
+  # rollout watches, and a cleanup that removed nothing would inflate it.
+  test "flag on: a pass-through empty grouping is audited as a cleanup, not an omission" do
+    enable_contract!
+    empty_category = create_variant_category(link: @product, title: "Sizes")
+    other_category = create_variant_category(link: @product, title: "Formats")
+    variant = create_variant(variant_category: other_category, name: "Large")
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty variant.reload.active_integrations, "the named integration must still be disconnected"
+    assert variant.reload.alive?, "no version may be removed by the pass-through"
+
+    cleanup = ProductVariantDeletionAudit.where(product_id: @product.id)
+                                         .find { Array(_1.deleted_variant_category_external_ids).include?(empty_category.external_id) }
+    assert_not_nil cleanup, "removing the empty grouping must still be recorded"
+    assert_equal ProductVariantDeletionAudit::EMPTY_GROUPING_CLEANUP, cleanup.intent_source
+    assert_empty cleanup.deleted_variant_external_ids, "the cleanup removed no versions"
+
+    omissions = ProductVariantDeletionAudit.where(product_id: @product.id,
+                                                  intent_source: ProductVariantDeletionAudit::PAYLOAD_OMISSION)
+    assert_empty omissions, "a pass-through must not register as an omission-driven deletion"
+  end
+end

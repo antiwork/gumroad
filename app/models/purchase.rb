@@ -2654,15 +2654,22 @@ class Purchase < ApplicationRecord
 
   # Public: Return json information about this purchase for the mobile api.
   def json_data_for_mobile(options = {})
+    # `product_updates_data` is the list of creator posts this buyer is entitled to
+    # see for the product. Working out that entitlement is the most expensive thing
+    # the mobile library endpoints do, so the list and search endpoints opt out of it
+    # (no mobile client reads the field from a list response — see
+    # Api::Mobile::PurchasesController#purchases_to_json for the full reasoning).
+    include_product_updates = options.fetch(:include_product_updates, true)
+
     if url_redirect.present?
-      json_data = url_redirect.product_json_data
+      json_data = url_redirect.product_json_data(include_product_updates:)
     elsif preorder.present?
-      json_data = preorder.mobile_json_data
+      json_data = preorder.mobile_json_data(include_product_updates:)
     else
       json_data = link.as_json(mobile: true)
       json_data[:purchase_id] = external_id
       json_data[:purchased_at] = created_at
-      json_data[:product_updates_data] = update_json_data_for_mobile
+      json_data[:product_updates_data] = update_json_data_for_mobile if include_product_updates
       json_data[:user_id] = purchaser.external_id if purchaser
       json_data[:is_archived] = is_archived
       json_data[:custom_delivery_url] = nil # Deprecated

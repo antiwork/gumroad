@@ -913,5 +913,75 @@ describe Api::Mobile::PurchasesController do
         @records = create_list(:purchase, 2, purchaser: @purchaser)
       end
     end
+
+    describe "product_updates_data" do
+      before do
+        @updates_product = create(:product, user: @user)
+        @updates_purchase = create(:purchase_with_balance, link: @updates_product, purchaser: @purchaser, seller: @user)
+        post = create(:installment, link: @updates_product, published_at: Time.current, name: "A post")
+        create(:creator_contacting_customers_email_info_sent, purchase: @updates_purchase, installment: post)
+      end
+
+      it "is omitted from the response" do
+        get :search, params: @params
+
+        expect(response).to match_json_schema("api/mobile/purchases_search")
+        expect(response.parsed_body[:purchases].size).to eq(1)
+        expect(response.parsed_body[:purchases][0]).not_to have_key(:product_updates_data)
+      end
+
+      # json_data_for_mobile picks one of three branches depending on what the purchase has,
+      # and each branch drops the field separately. The purchase above has a url_redirect, so
+      # these two cover the other branches: without them, removing the guard from either one
+      # leaves the field in the search response with the whole suite still green.
+      it "is omitted for a purchase that has no url_redirect" do
+        @updates_purchase.url_redirect.destroy!
+
+        get :search, params: @params
+
+        expect(response.parsed_body[:purchases].size).to eq(1)
+        expect(response.parsed_body[:purchases][0]).not_to have_key(:product_updates_data)
+      end
+
+      it "is omitted for a preorder that has not been charged yet" do
+        preorder_product = create(:product, user: @user, is_in_preorder_state: true)
+        preorder_link = create(:preorder_link, link: preorder_product, release_at: 2.days.from_now)
+        authorization_purchase = create(:preorder_authorization_purchase, link: preorder_product, purchaser: @purchaser, seller: @user, email: @purchaser.email)
+        preorder = create(:preorder, preorder_link:, seller: @user, purchaser: @purchaser, state: "authorization_successful")
+        authorization_purchase.update!(preorder:)
+        post = create(:installment, link: preorder_product, published_at: Time.current, name: "A preorder post")
+        create(:creator_contacting_customers_email_info_sent, purchase: authorization_purchase, installment: post)
+
+        get :search, params: @params
+
+        preorder_item = response.parsed_body[:purchases].find { _1[:purchase_id] == authorization_purchase.external_id }
+        expect(preorder_item).to be_present
+        expect(preorder_item).not_to have_key(:product_updates_data)
+      end
+
+      it "does not run the queries that decide which posts the buyer can see" do
+        expect(Purchase).not_to receive(:preload_product_updates_data!)
+        expect(Installment).not_to receive(:profile_only_for_sellers)
+        expect(Installment).not_to receive(:seller_with_sent_emails_for_purchases)
+
+        get :search, params: @params
+
+        expect(response.parsed_body[:success]).to be true
+      end
+
+      it "is still returned by purchase_attributes for the same purchase" do
+        get :purchase_attributes, params: @params.merge(id: @updates_purchase.external_id)
+
+        expect(response.parsed_body["product"]).to have_key("product_updates_data")
+        expect(response.parsed_body["product"]["product_updates_data"].map { _1["name"] }).to eq(["A post"])
+      end
+
+      it "is still returned by index for the same purchase" do
+        get :index, params: @params
+
+        expect(response.parsed_body["products"][0]).to have_key("product_updates_data")
+        expect(response.parsed_body["products"][0]["product_updates_data"].map { _1["name"] }).to eq(["A post"])
+      end
+    end
   end
 end

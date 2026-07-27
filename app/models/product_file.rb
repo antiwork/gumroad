@@ -111,6 +111,12 @@ class ProductFile < ApplicationRecord
       hide_kindle_and_read_buttons: hide_kindle_and_read_buttons?,
       is_streamable: streamable?,
       stream_only: stream_only?,
+      # Pixel dimensions, so the product editor's video preview can be shaped to
+      # the file rather than assuming 16:9 and pillarboxing portrait video. Nil
+      # for non-video files and for uploads analyzed before we recorded them.
+      # See https://github.com/antiwork/gumroad-private/issues/1392
+      width: streamable? ? width : nil,
+      height: streamable? ? height : nil,
       is_transcoding_in_progress: options[:existing_product_file] ? false : transcoding_in_progress?,
       id: external_id,
       attached_product_name: link.try(:name),
