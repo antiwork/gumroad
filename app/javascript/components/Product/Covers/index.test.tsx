@@ -133,4 +133,34 @@ describe("Covers", () => {
 
     expect(screen.getByRole("button", { name: "Show next cover" })).toBeTruthy();
   });
+
+  // Capping the frame's height affects every cover TYPE, not just video. An image or
+  // embed sized from its width alone overflows a capped frame and gets cropped top and
+  // bottom — which is the bug this PR fixes, reintroduced on a different cover type.
+  it("keeps a portrait image cover inside the capped frame instead of cropping it", () => {
+    const { container } = renderCovers([portrait({ type: "image", filetype: "png" })]);
+    const image = container.querySelector<HTMLImageElement>("img");
+
+    expect(image?.className).toContain("max-h-full");
+    expect(image?.className).toContain("object-contain");
+  });
+
+  it("sizes a portrait embed cover by ratio so it shrinks to fit the capped frame", () => {
+    const { container } = renderCovers([portrait({ type: "oembed", filetype: null })]);
+    const box = container.querySelector<HTMLElement>("[role=tabpanel] > div");
+
+    expect(box?.style.aspectRatio).toBe("1080 / 1920");
+    expect(box?.style.height).toBe("100%");
+    expect(box?.style.paddingBottom).toBe("");
+  });
+
+  it("keeps the old percentage-padding box for an embed with no recorded dimensions", () => {
+    const { container } = renderCovers([
+      cover({ type: "oembed", filetype: null, native_width: null, native_height: null }),
+    ]);
+
+    // No native dimensions means CoverItem renders nothing at all, so there is no box to
+    // reshape — the same fallback the video path takes.
+    expect(container.querySelector("[role=tabpanel] > div")).toBeNull();
+  });
 });
