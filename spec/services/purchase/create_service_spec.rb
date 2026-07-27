@@ -2437,6 +2437,22 @@ describe Purchase::CreateService, :vcr do
         expect(error).to_not match(/test/i)
         expect(error).to_not match(/enabled/i)
       end
+
+      # Purchase error messages reach the buyer through Receipt.tsx, which renders them with
+      # dangerouslySetInnerHTML, so anything in this string is interpreted as markup rather than
+      # text. The current wording contains "Checkout > Discounts"; a bare ">" is inert, but a "<"
+      # or a bare "&" would be swallowed or mis-rendered. This pins that constraint so a future
+      # rewording of the message cannot silently start emitting markup.
+      it "returns a message that is safe to render as HTML" do
+        _, error = Purchase::CreateService.new(
+          product:,
+          params: gift_params,
+          buyer: product.user
+        ).perform
+
+        expect(error).to_not include("<")
+        expect(error).to_not match(/&(?!amp;|lt;|gt;|quot;|#)/)
+      end
     end
 
     context "but the gifter and giftee emails are the same" do
