@@ -86,9 +86,65 @@ describe TaxRemittances::StageQuarterlyDrafts do
       expect(TaxRemittance.for_period(period).count).to eq(2)
     end
 
+    # A quarter keeps settling after the first staging run, so a re-run has to
+    # correct the draft rather than leave a reviewer looking at the old number.
+    it "refreshes an untouched draft when the quarter's liability has changed" do
+      described_class.new(period).process
+      ato = TaxRemittance.find_by!(authority: "Australian Taxation Office", period:)
+      expect(ato.usd_amount_cents).to eq(10_00)
+
+      travel_to(in_period) do
+        create_taxed_purchase(product, country: "Australia", gumroad_tax_cents: 5_00)
+      end
+
+      service = described_class.new(period).process
+
+      expect(service.created).to be_empty
+      expect(ato.reload.usd_amount_cents).to eq(15_00)
+      expect(ato.notes).to include("net $15.00")
+      expect(ato.status).to eq("draft")
+      expect(ato.attempt).to eq(1)
+      # Still one row for the filing — a refresh must not become a second draft.
+      expect(TaxRemittance.where(authority: "Australian Taxation Office", period:).count).to eq(1)
+
+      refreshed = service.refreshed.find { _1[:authority] == "Australian Taxation Office" }
+      expect(refreshed[:from_cents]).to eq(10_00)
+      expect(refreshed[:to_cents]).to eq(15_00)
+    end
+
+    it "reports a draft whose amount already matches as an untouched skip" do
+      described_class.new(period).process
+      service = described_class.new(period).process
+
+      expect(service.refreshed).to be_empty
+      expect(service.skipped.find { _1[:authority] == "Australian Taxation Office" }[:reason])
+        .to include("already matches")
+    end
+
+    # Once a human is working the row, its amount is theirs. Silently rewriting
+    # a number someone is reviewing is worse than telling them it moved.
+    it "leaves a row a human has picked up alone and reports the drift" do
+      described_class.new(period).process
+      ato = TaxRemittance.find_by!(authority: "Australian Taxation Office", period:)
+      ato.update!(status: "pending_approval")
+
+      travel_to(in_period) do
+        create_taxed_purchase(product, country: "Australia", gumroad_tax_cents: 5_00)
+      end
+
+      service = described_class.new(period).process
+
+      expect(ato.reload.usd_amount_cents).to eq(10_00)
+      expect(ato.status).to eq("pending_approval")
+
+      skipped = service.skipped.find { _1[:authority] == "Australian Taxation Office" }
+      expect(skipped[:reason]).to include("pending_approval")
+      expect(skipped[:stale_amount]).to eq(recorded_cents: 10_00, computed_cents: 15_00)
+    end
+
     # The strongest case: a filing already PAID must never be re-staged, or a
     # re-run at the wrong moment would propose paying an authority twice.
-    it "never stages a filing that was already paid" do
+    it "never stages or rewrites a filing that was already paid" do
       described_class.new(period).process
       oss = TaxRemittance.find_by!(authority: "Irish Revenue (EU VAT OSS)", period:)
       oss.update!(status: "pending_approval")
@@ -96,12 +152,42 @@ describe TaxRemittances::StageQuarterlyDrafts do
       oss.update!(status: "sent", paid_at: Time.current)
       oss.update!(status: "completed")
 
+      travel_to(in_period) do
+        create_taxed_purchase(product, country: "Germany", gumroad_tax_cents: 19_00)
+      end
+
       service = described_class.new(period).process
 
       expect(service.created).to be_empty
+      expect(service.refreshed).to be_empty
+      expect(oss.reload.usd_amount_cents).to eq(39_00)
       expect(service.skipped.find { _1[:authority] == "Irish Revenue (EU VAT OSS)" }[:reason])
         .to include("completed")
       expect(TaxRemittance.where(authority: "Irish Revenue (EU VAT OSS)", period:).count).to eq(1)
+    end
+
+    # An authority can drop out of the computation entirely once refunds cancel
+    # its collections, and then nothing in the staging loop ever looks at its
+    # draft again.
+    it "surfaces a draft for an authority the quarter no longer owes" do
+      hmrc = TaxRemittance.create!(
+        authority: "HMRC",
+        jurisdiction: "GB",
+        period:,
+        currency: "GBP",
+        usd_amount_cents: 25_00,
+        rail: "wise",
+        attempt: 1,
+        status: "draft",
+      )
+
+      service = described_class.new(period).process
+
+      expect(service.orphaned_drafts.map { _1[:authority] }).to eq(["HMRC"])
+      expect(service.orphaned_drafts.first[:recorded_cents]).to eq(25_00)
+      # Reported, not deleted — a draft can't move money, and cancelling a
+      # filing is a human's call.
+      expect(hmrc.reload.status).to eq("draft")
     end
 
     # A failed attempt is retryable, so staging continues the filing's
