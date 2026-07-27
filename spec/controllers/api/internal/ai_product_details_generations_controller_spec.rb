@@ -133,7 +133,10 @@ describe Api::Internal::AiProductDetailsGenerationsController do
         post :create, params: valid_params, format: :json
 
         expect(response).to have_http_status(:too_many_requests)
-        expect(response.parsed_body["error"]).to match(/Rate limit exceeded/)
+        # The seller reads this text, so it names the real limit and how long is left rather than
+        # reporting a generic failure for something they only have to wait out.
+        expect(response.parsed_body["error"]).to match(/You've used all 10 AI generations for this hour\. You can generate again in \d+ minutes?\./)
+        expect(response.parsed_body["retry_after"]).to be > 0
         expect(response.headers["Retry-After"]).to be_present
       end
     end
