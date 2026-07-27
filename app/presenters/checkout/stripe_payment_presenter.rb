@@ -309,8 +309,27 @@ class Checkout::StripePaymentPresenter
 
       # Initial eligibility uses pre-tax item prices; the browser waits for the final loaded total.
       total_price_cents = items.sum { _1[:price_cents].to_i }
-      return "not_charged" unless total_price_cents.positive?
-      return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
+      # A zero total normally means nothing will be charged (a free product), so the legacy card
+      # surface is the right place for it. But a pay-what-you-want product listed from zero also
+      # reads as zero HERE, because this runs when the page loads — before the buyer has typed an
+      # amount into the price field. Treating that as "free" picked the checkout surface for a
+      # cart the buyer then paid real money on: they entered $25 and were charged on the legacy
+      # CardElement, losing the Payment Element's local payment methods and wallets for no
+      # reason (gumroad-private#1430).
+      #
+      # So a zero total is only "not charged" when no item could still acquire a price. For a
+      # pay-what-you-want item the amount is unknown at load rather than zero, and the browser
+      # re-runs eligibility once the buyer commits a total, which is what decides the real charge.
+      if !total_price_cents.positive? && items.none? { _1[:has_customizable_price] }
+        return "not_charged"
+      end
+      # Skipped for a pay-what-you-want cart at load for the same reason as the zero check above:
+      # its total is not yet the amount that will be charged, so comparing it against Stripe's
+      # minimum would reject the Payment Element on a cart the buyer may well pay $25 on. The
+      # browser re-runs this once a real total exists, and the minimum is enforced then.
+      if total_price_cents.positive? && total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
+        return "stripe_payment_element_amount_below_minimum"
+      end
       if items.any? { buyer_currency_presentment_candidate?(_1) }
         # PR-1 safety gate, progressively narrowed: presentment candidates originally rode
         # CardElement because the canonical USD Payment Element couldn't carry buyer-currency
@@ -451,7 +470,8 @@ class Checkout::StripePaymentPresenter
           native_type: product.native_type,
           buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:),
           product_currency: product.price_currency_type.to_s.downcase,
-          ppp_discounted: product.ppp_details(ip).present?
+          ppp_discounted: product.ppp_details(ip).present?,
+          has_customizable_price: product.has_customizable_price_option?
         )
       end
     end
@@ -476,14 +496,18 @@ class Checkout::StripePaymentPresenter
           # currency_code is the product's own pricing currency (price_currency_type), set by
           # CheckoutPresenter#product_common on every add_products entry.
           product_currency: product[:currency_code].to_s.downcase.presence,
-          ppp_discounted: product[:ppp_details].present?
+          ppp_discounted: product[:ppp_details].present?,
+          # CheckoutPresenter#product_common sets pwyw on every add_products entry when the
+          # product (or, for a tiered membership, the selected tier) lets the buyer name their
+          # own price, which is the case fallback_reason_for must not read as "free".
+          has_customizable_price: product[:pwyw].present?
         )
       end
     end
 
     # quantity defaults to 1: price_cents is always the per-unit price, and the only current
     # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
       {
         seller:,
         price_cents:,
@@ -497,6 +521,7 @@ class Checkout::StripePaymentPresenter
         buyer_currency_display:,
         product_currency:,
         ppp_discounted:,
+        has_customizable_price:,
       }
     end
 end

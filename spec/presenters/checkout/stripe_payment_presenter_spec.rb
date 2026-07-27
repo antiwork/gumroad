@@ -3,7 +3,8 @@
 describe Checkout::StripePaymentPresenter do
   def checkout_product_for(product, price: product.price_cents, recurrence: nil, pay_in_installments: false,
                            is_preorder: product.is_in_preorder_state, free_trial: product.free_trial_enabled,
-                           native_type: product.native_type, buyer_currency_display: nil, ppp_details: nil)
+                           native_type: product.native_type, buyer_currency_display: nil, ppp_details: nil,
+                           pwyw: product.customizable_price? ? { suggested_price_cents: product.suggested_price_cents } : nil)
     {
       product: {
         creator: { id: product.user.external_id },
@@ -12,6 +13,10 @@ describe Checkout::StripePaymentPresenter do
         native_type:,
         buyer_currency_display:,
         ppp_details:,
+        # Set by CheckoutPresenter#product_common whenever the buyer names their own price;
+        # the presenter reads it so a pay-what-you-want cart listed from zero is not mistaken
+        # for a free one before the buyer has entered an amount.
+        pwyw:,
         # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
         # which sets currency_code on every real add_products entry.
         currency_code: product.price_currency_type.to_s.downcase,
@@ -484,6 +489,58 @@ describe Checkout::StripePaymentPresenter do
   it "falls back to CardElement when the checkout total is not positive" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(price: 0)]))
       .to eq(card_element_fallback("not_charged"))
+  end
+
+  # gumroad-private#1430. A pay-what-you-want product listed from zero reads as a zero total
+  # here, because the surface is chosen when the page loads — before the buyer types an amount.
+  # Treating that as "free" mounted the legacy card surface on carts buyers then paid real money
+  # on, costing them the Payment Element's local methods and wallets for no reason.
+  it "keeps the Payment Element for a pay-what-you-want product listed from zero" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(pwyw_product, price: 0)]))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
+  end
+
+  # The zero total is not yet the amount that will be charged, so it must not be measured
+  # against Stripe's minimum either — that would reject the Payment Element on a cart the
+  # buyer may well pay well above the minimum on.
+  it "does not reject a zero-total pay-what-you-want cart as below the Payment Element minimum" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
+
+    props = stripe_payment_props(add_products: [checkout_product_for(pwyw_product, price: 0)])
+
+    expect(props.dig(:elements_options, :fallback_reason)).to be_nil
+    expect(props[:integration]).to eq("payment_element")
+  end
+
+  # A genuinely free product has no way to acquire a price, so it must keep falling back.
+  it "still falls back to CardElement for a free product that is not pay-what-you-want" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    free_product = create(:product, user: seller, price_cents: 0)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(free_product, price: 0, pwyw: nil)]))
+      .to eq(card_element_fallback("not_charged"))
+  end
+
+  # A cart mixing a free product with a pay-what-you-want one can still be paid, so the
+  # presence of one free line must not drag the whole cart back to the legacy surface.
+  it "keeps the Payment Element when a free line shares the cart with a pay-what-you-want line" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    free_product = create(:product, user: seller, price_cents: 0)
+    pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
+
+    expect(stripe_payment_props(add_products: [
+                                  checkout_product_for(free_product, price: 0, pwyw: nil),
+                                  checkout_product_for(pwyw_product, price: 0),
+                                ]))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   end
 
   it "falls back to CardElement for a future-charge product with no future charge amount" do
