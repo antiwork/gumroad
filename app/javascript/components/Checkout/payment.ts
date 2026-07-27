@@ -191,6 +191,14 @@ export type State = {
     | { type: "loaded"; result: SurchargesResponse };
   availablePaymentMethods: PaymentMethod[];
   paymentMethod: PaymentMethodType;
+  // Which payment-method row the buyer has selected INSIDE the Stripe Payment Element ("card",
+  // "upi", "apple_pay", ...), mirrored from the element's change event. Checkout's own form
+  // reacts to it: for selections where the element collects the full billing details itself
+  // (UPI on digital carts — see paymentElementBillingDetailsCollection in
+  // card_payment_method_data.ts), the form hides its Full name and Country/ZIP fields so the
+  // buyer is never asked for the same information twice. Always "card" when the element is not
+  // mounted (that is the element's own default selection).
+  paymentElementType: string;
   // Card checkouts that save the card charge canonically in PR 1 (no buyer-presentment), so
   // buyer-currency display and the quote token are suppressed while this is set.
   willSaveCard: boolean;
@@ -235,6 +243,7 @@ type SimpleValue =
   | "zipCode"
   | "saveAddress"
   | "paymentMethod"
+  | "paymentElementType"
   | "willSaveCard"
   | "gift"
   | "payLabel"
@@ -592,6 +601,24 @@ export function getCustomFieldKey(
 
 export const hasShipping = (state: State) => state.products.some((item) => item.requireShipping);
 
+// Whether the Stripe Payment Element is collecting the buyer's FULL billing details itself for
+// the current selection (the "element-full" collection mode — UPI on digital carts, see
+// paymentElementBillingDetailsCollection in card_payment_method_data.ts). Mirrors that rule
+// instead of importing it: card_payment_method_data.ts already imports from this module, and a
+// value import back would create a module cycle. When this is true, checkout's own form hides
+// its Country/ZIP fields (the element's pane asks for the full street address with Stripe's
+// localized labels and validation) and the ZIP requirement for US buyers is waived — the buyer
+// types their postal code into the element instead. The Full name field stays visible: the
+// pane's name field is pinned to "never" and tokenization passes the form's name (see
+// paymentElementBillingDetailsOverride). Guarded on the card/element lane being checkout's
+// active payment method: a buyer who selected UPI inside the element and then switched to
+// PayPal pays with PayPal's own flow, and the form's fields must come back.
+export const paymentElementCollectsFullBillingDetails = (state: State) =>
+  state.paymentMethod === "card" &&
+  state.paymentElementType === "upi" &&
+  !hasShipping(state) &&
+  (canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state));
+
 export const getErrors = (state: State) => (state.status.type === "input" ? state.status.errors : new Set());
 
 export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
@@ -647,9 +674,20 @@ function validatePaymentMethodIndependentFields(state: State) {
     state.paymentMethod !== "stripePaymentRequest" &&
     !hasShipping(state) &&
     state.country === "US" &&
-    !state.zipCode
+    !state.zipCode &&
+    // The element's own pane collects the postal code when it collects the full billing
+    // details (UPI on digital carts) — checkout's ZIP field is hidden then, so requiring it
+    // would block the purchase on a field the buyer cannot see.
+    !paymentElementCollectsFullBillingDetails(state)
   )
     errors.add("zipCode");
+  // Stripe requires billing_details.name to confirm a UPI payment, and on the element-full
+  // mode the pane's own name field is pinned to "never" — checkout's Full name field is the
+  // only source (see paymentElementBillingDetailsOverride). Without this gate a blank name
+  // reaches Stripe's confirm and fails server-side with parameter_missing and no
+  // last_payment_error — the un-actionable failure shape of gumroad-private#933.
+  if (requiresPayment(state) && paymentElementCollectsFullBillingDetails(state) && !state.fullName)
+    errors.add("fullName");
   if (state.gift?.type === "normal" && !isValidEmail(state.gift.email)) errors.add("gift");
   return errors;
 }
@@ -917,6 +955,7 @@ export function createReducer(initial: {
         elements_options: null,
       },
       paymentMethod: "card",
+      paymentElementType: "card",
       willSaveCard: false,
       tip: { type: "percentage", percentage: initial.defaultTipOption },
       status: { type: "input", errors: new Set() },
