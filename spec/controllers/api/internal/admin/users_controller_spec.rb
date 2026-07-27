@@ -3004,7 +3004,10 @@ describe Api::Internal::Admin::UsersController do
     it "keeps the existing sibling-account compliant side effect" do
       payment_address = "shared@example.com"
       user.update!(payment_address:)
-      sibling = create(:user, user_risk_state: "suspended_for_fraud", payment_address:)
+      sibling = create(:user, payment_address:)
+      # Suspend it the way the cascade actually does, so the release side can tell this
+      # suspension came from the cascade rather than from a decision about this account.
+      sibling.suspend_for_fraud!(author_name: "suspend_sellers_other_accounts", content: "cascade")
 
       post :mark_compliant, params: { user_id: user.external_id, clear_suspension: "true" }
 
@@ -3055,6 +3058,23 @@ describe Api::Internal::Admin::UsersController do
 
         expect(response).to have_http_status(:ok)
         expect(user.reload).to be_compliant
+      end
+
+      it "returns 409 when the account becomes suspended after the request's own check" do
+        # The precheck above reads the copy of the user loaded at the start of the request.
+        # Simulate another lane suspending the account after that point: the locked re-read
+        # inside the transition has to catch it, which only works if the controller forwards
+        # the caller's real intent rather than a hardcoded true.
+        unsuspended = create(:user, user_risk_state: "flagged_for_fraud")
+        allow_any_instance_of(User).to receive(:suspended?).and_return(false)
+        User.where(id: unsuspended.id).update_all(user_risk_state: "suspended_for_tos_violation")
+
+        post :mark_compliant, params: { user_id: unsuspended.external_id }
+
+        expect(response).to have_http_status(:conflict)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("refusing to clear suspended_for_tos_violation")
+        expect(unsuspended.reload).to be_suspended_for_tos_violation
       end
     end
   end

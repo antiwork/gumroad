@@ -258,7 +258,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       # ask for it explicitly. Automated reviews that only look at their own signals (the
       # first-payout review, for instance) don't send this and are refused, instead of
       # silently reversing a suspension another lane just wrote (gumroad-private#1438).
-      if user.suspended? && !ActiveModel::Type::Boolean.new.cast(params[:clear_suspension])
+      clear_suspension = ActiveModel::Type::Boolean.new.cast(params[:clear_suspension])
+      if user.suspended? && !clear_suspension
         return render json: {
           success: false,
           message: "User is #{user.user_risk_state}; pass clear_suspension=true to lift the suspension as well"
@@ -268,7 +269,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       note = build_admin_note(user, params[:note]) if params[:note].present?
       return render_invalid_comment(note) if note&.invalid?
 
-      user.mark_compliant!(author_id: current_admin_actor_id, clear_suspension: true)
+      # Pass the caller's actual intent, not a literal true. The check above reads the copy of
+      # the user loaded at the start of this request, so it can't see a suspension written
+      # since; the locked re-read inside the transition is what catches that, and hardcoding
+      # the flag here would satisfy it unconditionally and defeat the guard.
+      user.mark_compliant!(author_id: current_admin_actor_id, clear_suspension:)
       note&.save!
       render json: internal_admin_user_success_payload(user, status: "marked_compliant", message: "User marked compliant")
     rescue StateMachines::InvalidTransition => e

@@ -59,6 +59,30 @@ describe User::Risk do
       expect(user.reload).to be_compliant
     end
 
+    it "releases a sibling this cascade suspended" do
+      payment_address = "shared@example.com"
+      parent = create(:user, payment_address:, user_risk_state: "suspended_for_fraud")
+      sibling = create(:user, payment_address:)
+      sibling.suspend_for_fraud!(author_name: "suspend_sellers_other_accounts", content: "cascade")
+
+      parent.mark_compliant!(author_id: admin.id, clear_suspension: true)
+
+      expect(sibling.reload).to be_compliant
+    end
+
+    it "leaves a sibling suspended on its own merits alone" do
+      # The suspend cascade skips already-suspended accounts, so this one never entered it.
+      # Releasing it here would undo a decision nobody in this call has looked at.
+      payment_address = "shared@example.com"
+      parent = create(:user, payment_address:, user_risk_state: "suspended_for_fraud")
+      sibling = create(:user, payment_address:)
+      sibling.suspend_for_tos_violation!(author_id: admin.id, content: "piracy")
+
+      parent.mark_compliant!(author_id: admin.id, clear_suspension: true)
+
+      expect(sibling.reload).to be_suspended_for_tos_violation
+    end
+
     it "leaves a suspension in place when the low-balance probation check runs after it" do
       # This check lifts probation once a seller's balance recovers. It knows nothing about
       # why an account might be suspended, so a suspension written while it was in flight

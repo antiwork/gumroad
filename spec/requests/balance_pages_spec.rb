@@ -549,7 +549,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
               seller.flag_for_tos_violation!(author_name: "ContentModeration", bulk: true)
               seller.suspend_for_tos_violation!(author_name: "ContentModeration", bulk: true)
               Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
-              seller.mark_compliant!(author_name: "ContentModeration")
+              seller.mark_compliant!(author_name: "ContentModeration", clear_suspension: true)
             end
 
             it "shows the payout-skipped notice" do
