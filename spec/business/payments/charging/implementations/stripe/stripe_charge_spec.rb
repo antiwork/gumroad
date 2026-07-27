@@ -266,6 +266,38 @@ describe StripeCharge, :vcr do
       end
     end
 
+    describe "with a stripe charge paid with Alipay" do
+      let(:stripe_charge_hash) do
+        {
+          id: "ch_test_alipay",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          currency: Currency::USD,
+          amount: 25_00,
+          payment_method_details: { type: "alipay" },
+          billing_details: { address: { postal_code: nil } },
+          payment_method: "pm_test_alipay",
+          outcome: { risk_level: "normal" },
+        }
+      end
+
+      let(:stripe_charge_balance_transaction) do
+        {
+          currency: Currency::USD,
+          amount: 25_00,
+          fee_details: [{ type: "stripe_fee", currency: Currency::USD, amount: 1_00 }],
+        }
+      end
+
+      let(:subject) { described_class.new(Stripe::Charge.construct_from(stripe_charge_hash), stripe_charge_balance_transaction, nil, nil, nil) }
+
+      it "records the real method type instead of a generic card" do
+        expect(subject.card_type).to eq(CardType::ALIPAY)
+        expect(subject.payment_method_type).to eq("alipay")
+      end
+    end
+
     describe "with a destination charge but nil destination payment balance transaction" do
       let(:stripe_charge_hash) do
         {

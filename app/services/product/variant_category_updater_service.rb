@@ -3,7 +3,7 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
-  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings
+  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context
   attr_accessor :variant_category
 
   delegate :price_currency_type,
@@ -33,7 +33,13 @@ class Product::VariantCategoryUpdaterService
   # pages with a client-generated page id; the mappings tell the editor which
   # canonical server ids they got, so its next save addresses the same records
   # instead of re-creating them (and tripping the deletion guards).
-  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil)
+  # deletion_audit_context: who and which request is deleting, for the audit
+  # trail (ProductVariantDeletionAudit). Carries :actor_user_id, :request_id and
+  # :revision_token. Passed down the same way as deletion_guard_diagnostics
+  # rather than read from a global, so the services stay usable outside a
+  # request (backfills, console, tests). Defaults to empty: a caller that
+  # doesn't know the actor still deletes normally, it just records less.
+  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {})
     @product = product
     @category_params = category_params
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
@@ -43,6 +49,7 @@ class Product::VariantCategoryUpdaterService
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
+    @deletion_audit_context = deletion_audit_context || {}
   end
 
   # Blocks deleting variants the seller has invested in — ones that carry
@@ -119,8 +126,14 @@ class Product::VariantCategoryUpdaterService
 
     if category_params[:options].nil?
       self.class.ensure_deletion_intent!(product:, variants: variant_category.variants.alive.to_a, confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
-      batch_delete_variants(variant_category.variants)
-      variant_category.mark_deleted! if variant_category.title.blank?
+      deleted_variant_external_ids = batch_delete_variants(variant_category.variants)
+      category_was_deleted = variant_category.title.blank?
+      variant_category.mark_deleted! if category_was_deleted
+      record_deletion_audit(
+        route: ProductVariantDeletionAudit::EDITOR_CATEGORY_OMITTED,
+        deleted_variant_external_ids:,
+        deleted_variant_category_external_ids: category_was_deleted ? [variant_category.external_id] : [],
+      )
     else
       existing_variants = variant_category.variants.to_a
       keep_variants = []
@@ -165,7 +178,10 @@ class Product::VariantCategoryUpdaterService
 
       variants_to_delete = existing_variants - keep_variants
       self.class.ensure_deletion_intent!(product:, variants: variants_to_delete.select(&:alive?), confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
-      batch_delete_variants(variants_to_delete)
+      record_deletion_audit(
+        route: ProductVariantDeletionAudit::EDITOR_VARIANTS_DIFFED,
+        deleted_variant_external_ids: batch_delete_variants(variants_to_delete),
+      )
     end
 
     variant_category.save!
@@ -173,19 +189,49 @@ class Product::VariantCategoryUpdaterService
   end
 
   private
+    # Records a successful deletion for the audit trail. Never raises: see
+    # ProductVariantDeletionAudit.
+    def record_deletion_audit(route:, deleted_variant_external_ids: [], deleted_variant_category_external_ids: [])
+      ProductVariantDeletionAudit.record_deletion(
+        actor_user_id: deletion_audit_context[:actor_user_id],
+        product_id: product.id,
+        route:,
+        deleted_variant_external_ids:,
+        deleted_variant_category_external_ids:,
+        confirmed_removed_variant_ids:,
+        revision_token: deletion_audit_context[:revision_token],
+        correlation_id: deletion_audit_context[:correlation_id],
+        request_id: deletion_audit_context[:request_id],
+      )
+    end
+
+    # Returns the external ids of the variants this call actually soft-deleted,
+    # which the deletion audit records. That is narrower than `variants`: a
+    # variant an earlier save already deleted stays deleted with its original
+    # timestamp (see below), and attributing it to this request would overstate
+    # what this save removed.
     def batch_delete_variants(variants)
       variant_ids = variants.respond_to?(:pluck) ? variants.pluck(:id) : variants.map(&:id)
-      return if variant_ids.empty?
+      return [] if variant_ids.empty?
 
+      # Only stamp variants that aren't already deleted, so a variant keeps the
+      # timestamp from the save that actually deleted it. Support uses that
+      # timestamp to find which rows a bad save wiped.
       now = Time.current
-      BaseVariant.where(id: variant_ids).update_all(deleted_at: now, updated_at: now)
+      newly_deleted = BaseVariant.where(id: variant_ids).alive.to_a
+      BaseVariant.where(id: newly_deleted.map(&:id)).update_all(deleted_at: now, updated_at: now) if newly_deleted.any?
 
+      # Cleanup runs for every id, including ones deleted earlier: an earlier
+      # delete may not have finished cleaning up, and both workers are safe to
+      # run twice.
       variant_ids.each do |variant_id|
         DeleteProductRichContentWorker.perform_async(product.id, variant_id)
         DeleteProductFilesArchivesWorker.perform_async(product.id, variant_id)
       end
 
       product.invalidate_cache
+
+      newly_deleted.map(&:external_id)
     end
 
     def create_or_update_variant!(external_id, params)

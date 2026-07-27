@@ -4,7 +4,12 @@ import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
 import typia from "typia";
 
-import { HiddenVariantContentConflictError, SaveProductResponse, saveProduct } from "$app/data/product_edit";
+import {
+  HiddenVariantContentConflictError,
+  SaveProductResponse,
+  StaleContentConflictError,
+  saveProduct,
+} from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
@@ -217,6 +222,8 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
 const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
   const variantMappings = response.variant_id_mappings ?? {};
   const pageMappings = response.rich_content_id_mappings ?? {};
+  const variantTimestamps = response.variant_updated_at ?? {};
+  const pageTimestamps = response.rich_content_updated_at ?? {};
   for (const variant of product.variants) {
     const canonicalId = variantMappings[variant.id];
     if (canonicalId) {
@@ -225,9 +232,22 @@ const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
       // instead of asking for another creation.
       delete variant.newlyAdded;
     }
-    for (const page of variant.rich_content) page.id = pageMappings[page.id] ?? page.id;
+    // Adopt the fresh post-save snapshot timestamp so the next save echoes
+    // the value this save produced — echoing the pre-save one would trip the
+    // server's stale-write guard against our own save.
+    const variantTimestamp = variantTimestamps[variant.id];
+    if (variantTimestamp) variant.updated_at = variantTimestamp;
+    for (const page of variant.rich_content) {
+      page.id = pageMappings[page.id] ?? page.id;
+      const timestamp = pageTimestamps[page.id];
+      if (timestamp) page.updated_at = timestamp;
+    }
   }
-  for (const page of product.rich_content) page.id = pageMappings[page.id] ?? page.id;
+  for (const page of product.rich_content) {
+    page.id = pageMappings[page.id] ?? page.id;
+    const timestamp = pageTimestamps[page.id];
+    if (timestamp) page.updated_at = timestamp;
+  }
 };
 
 const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
@@ -275,6 +295,12 @@ const ProductEditPage = (props: Props) => {
   // the choice modal is open.
   const [hiddenContentConflict, setHiddenContentConflict] = React.useState<
     { id: string; title: string | null; variant_name: string | null }[] | null
+  >(null);
+  // Pages/variants the server refused to overwrite because this session's
+  // snapshot is older than the stored rows (another session saved in
+  // between). Non-null while the reload modal is open.
+  const [staleContentConflict, setStaleContentConflict] = React.useState<
+    { type: "page" | "variant"; id: string; name: string | null }[] | null
   >(null);
   // Client-generated id → canonical server id, accumulated from save
   // responses; exposed via context so components holding an id in local state
@@ -387,6 +413,8 @@ const ProductEditPage = (props: Props) => {
     } catch (e) {
       if (e instanceof HiddenVariantContentConflictError) {
         setHiddenContentConflict(e.hiddenPages);
+      } else if (e instanceof StaleContentConflictError) {
+        setStaleContentConflict(e.staleRecords);
       } else {
         assertResponseError(e);
         showAlert(e.message, "error");
@@ -579,6 +607,40 @@ const ProductEditPage = (props: Props) => {
                 Gumroad will permanently delete the content you don't keep. "Keep shared content" deletes the{" "}
                 {variantLabel} pages listed above. "Keep {variantLabel} content" deletes the shared pages and turns off
                 "Use the same content for all {variantLabel}s."
+              </p>
+            </div>
+          </Modal>
+        ) : null}
+        {staleContentConflict ? (
+          <Modal
+            open
+            onClose={() => setStaleContentConflict(null)}
+            title="This product changed since you opened it"
+            footer={
+              <>
+                <Button onClick={() => setStaleContentConflict(null)}>Keep editing</Button>
+                <Button color="accent" onClick={() => window.location.reload()}>
+                  Reload page
+                </Button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <p>
+                Someone else — or another tab — saved changes to this product after this page was loaded. Saving now
+                would overwrite their changes to:
+              </p>
+              <ul className="list-disc pl-6">
+                {staleContentConflict.map(({ type, id, name }) => (
+                  <li key={id}>
+                    {titleWithFallback(name)}
+                    {type === "variant" ? ` (${variantLabel})` : null}
+                  </li>
+                ))}
+              </ul>
+              <p>
+                Nothing was saved. Reload the page to get the latest content — your unsaved edits in this session will
+                be lost, so copy anything you need first.
               </p>
             </div>
           </Modal>
