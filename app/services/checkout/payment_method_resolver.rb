@@ -491,7 +491,16 @@ class Checkout::PaymentMethodResolver
                          MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
       return false if merchant_account.blank?
 
-      Checkout::BuyerCurrencyEligibility.usd_holding_merchant_account?(merchant_account)
+      # Asked of the account the PaymentIntent is CREATED on. Only a Stripe Connect
+      # (direct-charge) seller is charged on their own account; every other seller is
+      # charged on the Gumroad platform account with their account as the transfer
+      # destination, and a destination account's balance currency does not restrict the
+      # currency of the intent (verified against Stripe: an INR/UPI intent and an
+      # EUR/iDEAL intent both create and confirm with a GBP-settling destination).
+      # Reading the destination account's currency here is what hid UPI from the seller
+      # in gumroad-private#1409 and from every other seller whose Gumroad-managed Stripe
+      # account settles in a non-USD currency.
+      Checkout::BuyerCurrencyEligibility.usd_holding_settlement_account?(merchant_account)
     end
 
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify

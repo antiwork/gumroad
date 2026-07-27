@@ -476,11 +476,29 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(paypal_decision.fallback_reason).to eq(:unsupported_processor)
     end
 
-    it "withholds the method for seller-managed destination-charge models" do
-      merchant_account.update!(json_data: {})
+    # The Gumroad platform account is the account a destination charge's PaymentIntent is
+    # created on, so the three destination-charge tests below need it to exist. It is a
+    # seeded row in most environments; create it here so the file is self-contained.
+    def platform_merchant_account
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                  charge_processor_merchant_id: nil, country: "US", currency: Currency::USD)
+    end
 
-      expect(forced_decision).not_to be_eligible
-      expect(forced_decision.fallback_reason).to eq(:unsupported_charge_model)
+    # Superseded by gumroad-private#1409. A Gumroad-managed seller account IS a
+    # destination-charge model: the PaymentIntent is created on the Gumroad platform
+    # account with the seller's account as transfer_data[destination] — the same intent
+    # shape as a seller with no Stripe account at all, which this lane has always
+    # supported. Withholding it only hid local payment methods from checkouts that could
+    # complete. The card lane's own charge-model gate is unchanged (it mints an FX quote
+    # against the seller's account, where the model genuinely matters).
+    it "allows the method for a seller-managed destination-charge model" do
+      platform_merchant_account
+      merchant_account.update!(json_data: {}, currency: Currency::USD)
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
     end
 
     it "withholds the method for merchant accounts that settle in a non-USD currency, even for EUR-priced products" do
@@ -489,6 +507,48 @@ describe Checkout::BuyerCurrencyEligibility do
 
       expect(forced_decision).not_to be_eligible
       expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
+    end
+
+    # gumroad-private#1409. The default merchant_account in this spec is a Stripe Connect
+    # (direct-charge) account, so the test above is about the account the intent is
+    # genuinely created on. A destination-charge seller is different: the intent is
+    # created on the Gumroad platform account and their own account merely receives the
+    # transfer afterwards, so their balance currency must not withhold the method.
+    it "keeps the method available for a destination-charge seller whose own account settles in a non-USD currency" do
+      platform_merchant_account.update!(currency: Currency::USD)
+      destination_merchant_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::GBP, country: "GB")
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 81_800_00), merchant_account: destination_merchant_account)
+
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account: destination_merchant_account,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision).to be_eligible
+      expect(upi_decision.currency).to eq(Currency::INR)
+      expect(upi_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "withholds the method when the Gumroad platform account the destination charge is created on holds a non-USD balance" do
+      platform_merchant_account.update!(currency: Currency::CAD)
+      destination_merchant_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD)
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR), merchant_account: destination_merchant_account)
+
+      destination_decision = described_class.new(order:,
+                                                 seller:,
+                                                 merchant_account: destination_merchant_account,
+                                                 chargeable:,
+                                                 purchases:,
+                                                 params:,
+                                                 setup_future_charges:,
+                                                 off_session:).method_forced_decision(payment_method:)
+
+      expect(destination_decision).not_to be_eligible
+      expect(destination_decision.fallback_reason).to eq(:unsupported_settlement_currency)
     end
 
     # Regression test for the 2026-07-23 iDEAL dark-ramp (gumroad-private#933): enabling
