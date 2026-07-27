@@ -13,9 +13,12 @@ class CheckoutPresenter
 
   attr_reader :logged_in_user, :ip
 
-  def initialize(logged_in_user:, ip:)
+  # `host` is optional and used only by the TEMP preview-QA reCAPTCHA bypass
+  # (revert before merge); callers that don't pass it get the normal behavior.
+  def initialize(logged_in_user:, ip:, host: nil)
     @logged_in_user = logged_in_user
     @ip = ip
+    @host = host
   end
 
   def checkout_props(params:, browser_guid:, cart: nil)
@@ -31,6 +34,11 @@ class CheckoutPresenter
       **checkout_common,
       recaptcha_key: CheckoutRecaptcha.site_key(logged_in_user),
       recaptcha_score_based: CheckoutRecaptcha.score_based?(logged_in_user),
+      # TEMP (preview QA only — revert only AFTER QA sign-off, before merge): see
+      # CheckoutRecaptcha.preview_qa_bypass?. Tells the checkout frontend to skip executing
+      # reCAPTCHA on per-PR preview apps, where the widget never resolves a token and
+      # silently strands the Pay button.
+      recaptcha_preview_qa_bypass: CheckoutRecaptcha.preview_qa_bypass?(@host),
       country: Compliance::Countries.find_by_name(country)&.alpha2,
       state: logged_in_user&.state || detected_state,
       address: logged_in_user ? {

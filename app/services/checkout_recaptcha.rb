@@ -29,6 +29,23 @@ module CheckoutRecaptcha
   MIN_TRUSTED_PURCHASE_AGE = 5.years
 
   class << self
+    # TEMP (preview QA only — revert only AFTER QA sign-off, before merge): per-PR preview
+    # subdomains score badly with reCAPTCHA Enterprise. The widget loads but never resolves
+    # a token, so the checkout submit is abandoned in the BROWSER — no request is ever sent
+    # and the buyer sees no error at all. A server-side skip therefore cannot unblock QA;
+    # the frontend has to be told not to run the check in the first place.
+    #
+    # Scoped exactly like PreviewQaDebugMiddleware: Stripe test keys AND a per-PR preview
+    # app host (or local development). Production runs live Stripe keys, so this can never
+    # activate there. The shared staging site also runs test keys, which is why the host
+    # check is required and not just the key check.
+    def preview_qa_bypass?(host)
+      return false unless Stripe.api_key.to_s.start_with?("sk_test_")
+      return true if Rails.env.development?
+
+      host.to_s.end_with?(PreviewQaDebugMiddleware::PREVIEW_HOST_SUFFIX)
+    end
+
     def score_based?(user)
       score_site_key.present? && Feature.active?(COHORT_FEATURE, user)
     end

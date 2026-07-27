@@ -11,6 +11,51 @@ describe CheckoutRecaptcha do
     allow(GlobalConfig).to receive(:get).with("RECAPTCHA_MONEY_SCORE_SITE_KEY").and_return("money_score_site_key")
   end
 
+  describe ".preview_qa_bypass?" do
+    # TEMP (preview QA only — revert with the bypass itself, before merge). These specs exist
+    # because the bypass disables a fraud control: the important assertions are the negative
+    # ones, proving it can never engage with live Stripe keys or off a preview host.
+    let(:preview_host) { "presentment-qa-ledger.apps.staging.gumroad.org" }
+
+    context "with Stripe test keys" do
+      before { allow(Stripe).to receive(:api_key).and_return("sk_test_abc123") }
+
+      it "is true on a per-PR preview app host" do
+        expect(described_class.preview_qa_bypass?(preview_host)).to be(true)
+      end
+
+      it "is false on the shared staging host, which also runs test keys" do
+        expect(described_class.preview_qa_bypass?("staging.gumroad.com")).to be(false)
+      end
+
+      it "is false on the production host" do
+        expect(described_class.preview_qa_bypass?("gumroad.com")).to be(false)
+      end
+
+      it "is false for a host merely containing the preview suffix elsewhere" do
+        expect(described_class.preview_qa_bypass?("apps.staging.gumroad.org.evil.com")).to be(false)
+      end
+
+      it "is false for a blank host" do
+        expect(described_class.preview_qa_bypass?(nil)).to be(false)
+      end
+    end
+
+    context "with live Stripe keys (production)" do
+      before { allow(Stripe).to receive(:api_key).and_return("sk_live_abc123") }
+
+      it "is false even on a preview host" do
+        expect(described_class.preview_qa_bypass?(preview_host)).to be(false)
+      end
+
+      it "is false in development, so a misconfigured live key cannot open the bypass" do
+        allow(Rails.env).to receive(:development?).and_return(true)
+
+        expect(described_class.preview_qa_bypass?("localhost")).to be(false)
+      end
+    end
+  end
+
   describe ".score_based?" do
     it "is false for a buyer not in the cohort" do
       expect(described_class.score_based?(user)).to be(false)

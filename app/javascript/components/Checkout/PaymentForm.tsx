@@ -1732,7 +1732,15 @@ export const PaymentForm = ({
     }
 
     if (state.status.type === "captcha") {
-      if ((process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") && state.recaptchaKey === null) {
+      // TEMP (preview QA only — revert only AFTER QA sign-off, before merge): on per-PR
+      // preview apps the reCAPTCHA widget loads but never resolves a token, so execute()
+      // never settles and the Pay click is abandoned in the browser with no error shown.
+      // The server grants this bypass only for Stripe test keys on a preview host (see
+      // CheckoutRecaptcha.preview_qa_bypass?), so production is unaffected.
+      const skipRecaptcha =
+        state.recaptchaPreviewQaBypass ||
+        ((process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") && state.recaptchaKey === null);
+      if (skipRecaptcha) {
         dispatch({ type: "set-recaptcha-response" });
       } else {
         recaptcha

@@ -7,7 +7,7 @@ class CheckoutController < ApplicationController
 
   def show
     cart_presenter = CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid])
-    checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip)
+    checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip, host: request.host)
 
     render inertia: "Checkout/Show", props: {
       cart: -> { cart_presenter.cart_props },

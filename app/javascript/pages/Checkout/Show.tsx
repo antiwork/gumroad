@@ -80,6 +80,8 @@ type CheckoutIndexPageProps = {
     paypal_client_id: string;
     recaptcha_key: string | null;
     recaptcha_score_based: boolean;
+    // TEMP (preview QA only — revert before merge): see CheckoutRecaptcha.preview_qa_bypass?
+    recaptcha_preview_qa_bypass: boolean;
     saved_credit_card: SavedCreditCard | null;
     state: string | null;
     tip_options: number[];
@@ -122,6 +124,7 @@ const CheckoutIndexPage = () => {
       saved_credit_card,
       recaptcha_key,
       recaptcha_score_based,
+      recaptcha_preview_qa_bypass,
       paypal_client_id,
       max_allowed_cart_products,
       cart_save_debounce_ms,
@@ -183,6 +186,7 @@ const CheckoutIndexPage = () => {
     products: getProducts(cartForm.data.cart),
     recaptchaKey: recaptcha_key,
     recaptchaScoreBased: recaptcha_score_based,
+    recaptchaPreviewQaBypass: recaptcha_preview_qa_bypass,
     paypalClientId: paypal_client_id,
     gift,
     // Always on since the require_email_typo_acknowledgment rollout flag was removed

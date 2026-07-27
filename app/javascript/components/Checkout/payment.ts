@@ -204,6 +204,9 @@ export type State = {
   payLabel?: string;
   recaptchaKey: string | null;
   recaptchaScoreBased: boolean;
+  // TEMP (preview QA only — revert before merge): skips executing reCAPTCHA on per-PR
+  // preview apps, where the widget never resolves a token and strands the Pay button.
+  recaptchaPreviewQaBypass: boolean;
   paypalClientId?: string;
   tip: Tip;
   warning?: string | null;
@@ -874,6 +877,7 @@ export function createReducer(initial: {
   payLabel?: string;
   recaptchaKey: string | null;
   recaptchaScoreBased?: boolean;
+  recaptchaPreviewQaBypass?: boolean;
   paypalClientId: string;
   gift: Gift | null;
   requireEmailTypoAcknowledgment: boolean;
@@ -894,6 +898,7 @@ export function createReducer(initial: {
       fullName: "",
       ...initial,
       recaptchaScoreBased: initial.recaptchaScoreBased ?? false,
+      recaptchaPreviewQaBypass: initial.recaptchaPreviewQaBypass ?? false,
       country: initial.country ?? "US",
       vatId: "",
       address: initial.address?.street ?? "",
