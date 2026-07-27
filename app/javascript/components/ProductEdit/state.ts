@@ -38,6 +38,12 @@ export type Variant = {
   updated_at?: string;
   max_purchase_count: number | null;
   integrations: Record<keyof Product["integrations"], boolean>;
+  // Which of this variant's integrations were connected as of the last
+  // committed state — the version-scoped twin of Product["loaded_integrations"].
+  // Set by the server on load and refreshed after each successful save, so
+  // switching one off is recognised as a removal rather than inferred from the
+  // checkbox map. Unset for variants created in this session.
+  loaded_integrations?: Record<string, boolean>;
   newlyAdded?: boolean;
   rich_content: Page[];
   // Whether the variant has files attached directly (legacy products predating
@@ -219,6 +225,13 @@ export type SaveContractCollection = "rich_content" | "variants" | "files" | "pu
 export type DeletionOperations = {
   deleted_ids: Partial<Record<SaveContractCollection, string[]>>;
   cleared_collections: SaveContractCollection[];
+  // Deletions scoped to ONE version/tier rather than to the product, keyed by
+  // that version's id. Version-level integrations live on a join between the
+  // version and the integration, so "disconnect Discord from this tier" cannot
+  // be expressed as a product-level id: the same integration may legitimately
+  // stay connected on a sibling tier. Absent means "no version-scoped
+  // deletions", exactly like the product-level lists.
+  variant_deleted_ids?: Record<string, Partial<Record<SaveContractCollection, string[]>>>;
 };
 
 export type ProfileSection = { id: string; header: string | null; product_names: string[]; default: boolean };

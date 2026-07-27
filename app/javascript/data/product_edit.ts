@@ -33,6 +33,8 @@ export type SaveProductResponse = {
   // editor adopts this as its new baseline so a disconnect later in the same
   // session is recognised as a removal — see applyCanonicalIds.
   loaded_integrations?: Record<string, boolean>;
+  // The same baseline, per version, keyed by variant external id.
+  variant_loaded_integrations?: Record<string, Record<string, boolean>>;
 };
 
 // The server's fail-closed answer when a save would delete version-level pages

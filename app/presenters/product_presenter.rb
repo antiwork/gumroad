@@ -187,6 +187,12 @@ class ProductPresenter
             updated_at: Product::StaleContentWriteGuard.snapshot_at(variant),
             max_purchase_count: variant.max_purchase_count,
             integrations: Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? },
+            # The version-scoped baseline. Same value as `integrations` on load,
+            # but the two diverge as soon as the seller touches a switch: the
+            # live prop follows the UI while this stays on the last committed
+            # state, which is what makes "was on, now off" a removal the seller
+            # actually asked for rather than an inference from the payload.
+            loaded_integrations: Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? },
             rich_content: variant.rich_content_json,
             # Whether the variant has files attached directly (legacy products
             # predating embedded rich-content files). The editor's save-time

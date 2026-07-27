@@ -1340,7 +1340,21 @@ class LinksController < ApplicationController
         # as "was off at load", so turning it off and saving again emits no
         # deletion at all and the integration silently survives.
         loaded_integrations: current_integrations_baseline,
+        # The same refresh, per version. Without it the version-scoped baseline
+        # goes stale in exactly the way the product-level one did: enable an
+        # integration on a tier, save, switch it off, save again — and the
+        # second save emits no version-scoped deletion because the tier is
+        # still recorded as "was off at load".
+        variant_loaded_integrations: current_variant_integrations_baseline,
       }
+    end
+
+    # Per-variant connected/not-connected snapshot, keyed by variant external
+    # id. Mirrors what ProductPresenter issues for each variant on page load.
+    def current_variant_integrations_baseline
+      @product.reload.alive_variants.each_with_object({}) do |variant, acc|
+        acc[variant.external_id] = Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? }
+      end
     end
 
     # Which integrations are connected right now, keyed by provider name. Same

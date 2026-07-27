@@ -56,6 +56,15 @@ export type DeletionSources = {
   // This one IS a boolean map: it is a server-issued connected/not-connected
   // snapshot (ProductPresenter#edit_props), not the integration records.
   loaded_integrations?: Record<string, boolean>;
+  // Versions / tiers / durations, for their version-scoped integration
+  // deletions. Only the fields this derivation reads are required, so callers
+  // can pass the editor's richer Variant objects unchanged.
+  variants?: {
+    id: string;
+    newlyAdded?: boolean;
+    integrations?: Record<string, boolean>;
+    loaded_integrations?: Record<string, boolean>;
+  }[];
 };
 
 // `clear_all` is deliberately not derived either. An empty collection in state
@@ -100,10 +109,34 @@ export const buildDeletionOperations = (
     if (disconnected.length > 0) deletedIds.integrations = [...new Set(disconnected)];
   }
 
-  return {
+  // Version/tier-level integrations. Same rule as the product-level one above,
+  // applied per version: an integration counts as removed only if the version
+  // had it on when this session's baseline was taken and the seller has since
+  // switched it off. Scoping matters here — the same integration can stay
+  // connected on a sibling version, so this cannot collapse into the flat
+  // `integrations` list.
+  const variantDeletedIds: Record<string, Partial<Record<SaveContractCollection, string[]>>> = {};
+  for (const variant of product.variants ?? []) {
+    // A version created in this session has no server row to delete from, and
+    // its id is a client-side counter rather than an external id.
+    if (variant.newlyAdded) continue;
+
+    const loadedForVariant = variant.loaded_integrations;
+    if (!loadedForVariant) continue;
+
+    const currentForVariant = variant.integrations ?? {};
+    const turnedOff = Object.keys(loadedForVariant).filter(
+      (name) => loadedForVariant[name] && !currentForVariant[name],
+    );
+    if (turnedOff.length > 0) variantDeletedIds[variant.id] = { integrations: [...new Set(turnedOff)] };
+  }
+
+  const operations: DeletionOperations = {
     deleted_ids: deletedIds,
     cleared_collections: [...new Set(clearedCollections)],
   };
+  if (Object.keys(variantDeletedIds).length > 0) operations.variant_deleted_ids = variantDeletedIds;
+  return operations;
 };
 
 // True when this save asks the server to remove anything at all. Used to decide
@@ -116,4 +149,11 @@ export const buildDeletionOperations = (
 // undefined, and reading `.length` off that would throw during a save.
 export const hasDeletions = (operations: DeletionOperations): boolean =>
   operations.cleared_collections.length > 0 ||
-  Object.values(operations.deleted_ids).some((ids: unknown) => Array.isArray(ids) && ids.length > 0);
+  Object.values(operations.deleted_ids).some((ids: unknown) => Array.isArray(ids) && ids.length > 0) ||
+  // Version-scoped removals are deletions too. Omitting them here would let a
+  // save whose ONLY deletion is "disconnect Discord from this tier" travel
+  // without a revision token, which is precisely the stale-tab case the token
+  // exists to catch.
+  Object.values(operations.variant_deleted_ids ?? {}).some((collections) =>
+    Object.values(collections).some((ids: unknown) => Array.isArray(ids) && ids.length > 0),
+  );

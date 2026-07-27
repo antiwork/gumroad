@@ -238,4 +238,112 @@ describe("hasDeletions", () => {
   it("is true when any collection is cleared", () => {
     expect(hasDeletions({ deleted_ids: {}, cleared_collections: ["integrations"] })).toBe(true);
   });
+
+  // A save whose only deletion is version-scoped still has to carry the
+  // revision token, or the stale-tab guard never runs for it.
+  it("is true when only a version-scoped deletion is named", () => {
+    expect(
+      hasDeletions({
+        deleted_ids: {},
+        cleared_collections: [],
+        variant_deleted_ids: { v1: { integrations: ["discord"] } },
+      }),
+    ).toBe(true);
+  });
+
+  it("is false when a version-scoped entry is present but empty", () => {
+    expect(
+      hasDeletions({ deleted_ids: {}, cleared_collections: [], variant_deleted_ids: { v1: { integrations: [] } } }),
+    ).toBe(false);
+  });
+});
+
+// The version/tier equivalent of the product-level integrations rules. The
+// editor could not express these at all before: `variant_deleted_ids` existed
+// server-side, but nothing in the client emitted it, so unchecking a version's
+// Discord switch returned success and left the integration connected.
+describe("buildDeletionOperations, version-scoped integrations", () => {
+  const variant = (fields: Partial<NonNullable<DeletionSources["variants"]>[number]> = {}) => ({
+    id: "v1",
+    integrations: { discord: false },
+    loaded_integrations: { discord: true },
+    ...fields,
+  });
+
+  it("names an integration a version had on and the seller switched off", () => {
+    const operations = buildDeletionOperations(productWith({ variants: [variant()] }));
+
+    expect(operations.variant_deleted_ids).toEqual({ v1: { integrations: ["discord"] } });
+  });
+
+  it("scopes the removal to that version, leaving a sibling with the same integration alone", () => {
+    const operations = buildDeletionOperations(
+      productWith({
+        variants: [
+          variant(),
+          variant({ id: "v2", integrations: { discord: true }, loaded_integrations: { discord: true } }),
+        ],
+      }),
+    );
+
+    expect(operations.variant_deleted_ids).toEqual({ v1: { integrations: ["discord"] } });
+  });
+
+  it("asks for nothing when a version's integration is untouched", () => {
+    const operations = buildDeletionOperations(
+      productWith({ variants: [variant({ integrations: { discord: true } })] }),
+    );
+
+    expect(operations.variant_deleted_ids).toBeUndefined();
+  });
+
+  // The version-scoped mirror of the product-level baseline rule: an
+  // integration that was never on cannot be "removed" by being off.
+  it("asks for nothing when the integration was already off at the baseline", () => {
+    const operations = buildDeletionOperations(
+      productWith({ variants: [variant({ loaded_integrations: { discord: false } })] }),
+    );
+
+    expect(operations.variant_deleted_ids).toBeUndefined();
+  });
+
+  // Without a baseline the client cannot tell "switched off" from "never on",
+  // so it must not guess — same rule as the product level.
+  it("asks for nothing when the version has no baseline", () => {
+    const operations = buildDeletionOperations(
+      productWith({ variants: [{ id: "v1", integrations: { discord: false } }] }),
+    );
+
+    expect(operations.variant_deleted_ids).toBeUndefined();
+  });
+
+  // A version created in this session has no server row to delete from, and its
+  // id is a client-side counter the server would not recognise.
+  it("ignores a version created in this session", () => {
+    const operations = buildDeletionOperations(productWith({ variants: [variant({ newlyAdded: true })] }));
+
+    expect(operations.variant_deleted_ids).toBeUndefined();
+  });
+
+  // connect -> save -> disconnect -> save, without reloading. The second save
+  // only emits the deletion because the first save's response refreshed this
+  // version's baseline (applyCanonicalIds); with a stale baseline the
+  // integration was recorded as "never on" and silently survived.
+  it("names the removal after a same-session enable, once the baseline is refreshed", () => {
+    const beforeRefresh = buildDeletionOperations(
+      productWith({
+        variants: [variant({ integrations: { discord: false }, loaded_integrations: { discord: false } })],
+      }),
+    );
+    expect(beforeRefresh.variant_deleted_ids).toBeUndefined();
+
+    // The save that connected it returns variant_loaded_integrations; the
+    // editor adopts that as the version's new baseline.
+    const afterRefresh = buildDeletionOperations(
+      productWith({
+        variants: [variant({ integrations: { discord: false }, loaded_integrations: { discord: true } })],
+      }),
+    );
+    expect(afterRefresh.variant_deleted_ids).toEqual({ v1: { integrations: ["discord"] } });
+  });
 });
