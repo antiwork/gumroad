@@ -47,8 +47,23 @@ module Charge::Disputable
       is_a?(Charge) ? amount_cents : total_transaction_cents
     end
 
+    # The disputed amount as it appears to everyone outside Gumroad.
+    #
+    # Dispute evidence is read by the card network and the issuing bank, and their record of
+    # the transaction — like the buyer's own statement — is in the currency the buyer was
+    # charged. Showing our canonical USD figure instead invites the reviewer to conclude the
+    # amounts do not match, which weakens a document whose entire purpose is winning the money
+    # back. Show the presentment amount when this charge has one, keeping the canonical figure
+    # alongside it so our own books remain traceable from the evidence
+    # (gumroad-private#1328 A5).
     def formatted_disputed_amount
-      formatted_dollar_amount(disputed_amount_cents)
+      canonical = formatted_dollar_amount(disputed_amount_cents)
+      presentment_cents = presentment_refundable_amount_cents
+      currency = presentment_currency
+      return canonical if presentment_cents.blank? || currency.blank?
+
+      presentment = MoneyFormatter.format(presentment_cents, currency.to_sym, no_cents_if_whole: false, symbol: true)
+      "#{presentment} (#{canonical})"
     end
 
     def customer_email

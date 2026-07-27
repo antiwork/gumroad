@@ -1149,9 +1149,16 @@ class StripeChargeProcessor
                        FlowOfFunds::Amount.new(
                          currency: stripe_charge.application_fee.currency,
                          cents: stripe_charge.application_fee.amount_refunded) :
-                       FlowOfFunds::Amount.new(
-                         currency: stripe_charge.currency,
-                         cents: stripe_charge.amount - amount_cents)
+                       # `amount_cents` above is canonical USD (it comes from our own
+                       # charged_amount_cents), while `stripe_charge.amount` is in the currency the
+                       # buyer was actually charged in. For a buyer-currency presentment charge
+                       # those differ, so subtracting one from the other produces a number that is
+                       # in neither currency while being labelled as the charge's — e.g. a €18.74
+                       # charge minus 1874 "cents" of USD. Use the presentment snapshot's own
+                       # Gumroad amount when this charge has one, which is already recorded in the
+                       # charge's currency, and fall back to the canonical subtraction only for
+                       # charges that really were made in USD (gumroad-private#1328 A2).
+                       presentment_gumroad_amount_for(chargeable, stripe_charge, amount_cents)
 
     merchant_account_gross_amount = FlowOfFunds::Amount.new(
       currency: destination_payment.balance_transaction.currency,
@@ -1167,6 +1174,34 @@ class StripeChargeProcessor
       gumroad_amount:,
       merchant_account_gross_amount:,
       merchant_account_net_amount:
+    )
+  end
+
+  # Gumroad's share of a disputed charge, expressed in the charge's own currency.
+  #
+  # For a buyer-currency presentment charge the snapshot already recorded this amount in the
+  # currency Stripe charged, so read it from there. For a canonical USD charge there is no
+  # snapshot and the historical subtraction is correct, because both sides really are USD.
+  #
+  # Failing closed matters here: this number becomes a balance-transaction amount on a
+  # dispute-won event, so a presentment charge whose snapshot is somehow missing must raise
+  # rather than silently book a mixed-currency figure (gumroad-private#1328 A2).
+  def self.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_gumroad_cents)
+    presentment_currency = chargeable.presentment_currency
+
+    if presentment_currency.blank?
+      return FlowOfFunds::Amount.new(
+        currency: stripe_charge.currency,
+        cents: stripe_charge.amount - canonical_gumroad_cents
+      )
+    end
+
+    presentment_cents = chargeable.presentment_gumroad_amount_cents
+    raise "Presentment charge #{stripe_charge.id} has a presentment currency but no presentment Gumroad amount" if presentment_cents.nil?
+
+    FlowOfFunds::Amount.new(
+      currency: presentment_currency,
+      cents: stripe_charge.amount - presentment_cents
     )
   end
 
