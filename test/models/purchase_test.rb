@@ -2404,6 +2404,40 @@ class PurchaseTest < ActiveSupport::TestCase
     assert purchase.valid?
   end
 
+  test "not_double_charged when gifting again to the same person right away blocks it and tells the sender who already got it" do
+    travel_to(Time.current)
+    ip = unique_ip
+    user = create_user
+    product = create_product
+    giftee_email = "giftee-#{unique_suffix}@example.com"
+    gift = create_gift(giftee_email:, link: product)
+    create_purchase(link: product, gift_given: gift, purchaser: user, is_gift_sender_purchase: true, ip_address: ip, email: user.email)
+
+    second_gift = build_gift(giftee_email:, link: product)
+    purchase = build_purchase(link: product, gift_given: second_gift, is_gift_sender_purchase: true, ip_address: unique_ip, email: "other-sender-#{unique_suffix}@example.com")
+    assert_not purchase.valid?
+    assert_equal ["This product was just sent as a gift to #{giftee_email}. Check with them before sending it again."], purchase.errors[:base]
+  end
+
+  test "not_double_charged when gifting again to the same person after the double-charge window allows it" do
+    travel_to(Time.current)
+    ip = unique_ip
+    user = create_user
+    product = create_product
+    giftee_email = "giftee-#{unique_suffix}@example.com"
+    gift = create_gift(giftee_email:, link: product)
+    create_purchase(link: product, gift_given: gift, purchaser: user, is_gift_sender_purchase: true, ip_address: ip, email: user.email, created_at: 4.minutes.ago)
+
+    second_gift = build_gift(giftee_email:, link: product)
+    purchase = build_purchase(link: product, gift_given: second_gift, purchaser: user, is_gift_sender_purchase: true, ip_address: ip, email: user.email)
+    purchase.send(:not_double_charged)
+    assert purchase.valid?
+
+    purchase_received = build_purchase(link: product, gift_received: second_gift, is_gift_receiver_purchase: true, ip_address: ip, email: giftee_email)
+    purchase_received.send(:not_double_charged)
+    assert purchase_received.valid?
+  end
+
   test "not_double_charged when gifting a subscription disallows double-charges to the same email and IP address" do
     travel_to(Time.current)
     ip = unique_ip
@@ -2493,7 +2527,7 @@ class PurchaseTest < ActiveSupport::TestCase
     assert purchase2.valid?
   end
 
-  test "not_double_charged settling already blocks a repeat gift to the same giftee via the gift join in the parent check without any time window" do
+  test "not_double_charged settling still blocks a repeat gift to the same giftee while an earlier gift is settling, however long it takes" do
     product = create_product
     ip = unique_ip
     gift = create_gift(giftee_email: "giftee@gumroad.com", link: product)
@@ -2504,7 +2538,44 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase2 = build_purchase(link: product, email: "another-sender@gumroad.com", ip_address: ip,
                                gift_given: second_gift, is_gift_sender_purchase: true, created_at: Time.current)
     assert_not purchase2.valid?
-    assert_equal ["You have already attempted to purchase this product. We will email you shortly if the purchase is successful."], purchase2.errors[:base]
+    assert_equal ["A gift of this product to giftee@gumroad.com is still being paid for. Wait for that to finish before sending it again."], purchase2.errors[:base]
+  end
+
+  test "not_double_charged settling tells a second sender to wait without promising them the receipt email" do
+    product = create_product
+    ip = unique_ip
+    gift = create_gift(giftee_email: "giftee@gumroad.com", link: product)
+    create_purchase(link: product, seller: product.user, email: "first-sender@gumroad.com", ip_address: ip,
+                    gift_given: gift, is_gift_sender_purchase: true,
+                    purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+    second_gift = build_gift(giftee_email: "giftee@gumroad.com", link: product)
+    purchase2 = build_purchase(link: product, email: "second-sender@gumroad.com", ip_address: unique_ip,
+                               gift_given: second_gift, is_gift_sender_purchase: true, created_at: Time.current)
+    assert_not purchase2.valid?
+    # The settling gift belongs to first-sender, so its receipt goes to them. Telling second-sender
+    # "we will email you" points them at a mailbox that will never receive anything.
+    message = purchase2.errors[:base].sole
+    assert_no_match(/email you/, message)
+    assert_equal "A gift of this product to giftee@gumroad.com is still being paid for. Wait for that to finish before sending it again.", message
+  end
+
+  test "not_double_charged when a second sender's gift is still in progress tells them to wait without promising them an email" do
+    travel_to(Time.current)
+    product = create_product
+    giftee_email = "giftee-#{unique_suffix}@example.com"
+    gift = create_gift(giftee_email:, link: product)
+    create_purchase(link: product, gift_given: gift, is_gift_sender_purchase: true,
+                    ip_address: unique_ip, email: "first-sender-#{unique_suffix}@example.com",
+                    purchase_state: "in_progress")
+
+    second_gift = build_gift(giftee_email:, link: product)
+    purchase = build_purchase(link: product, gift_given: second_gift, is_gift_sender_purchase: true,
+                              ip_address: unique_ip, email: "second-sender-#{unique_suffix}@example.com")
+    assert_not purchase.valid?
+    # Same ownership problem on the non-settling path: the in-progress gift is first-sender's.
+    message = purchase.errors[:base].sole
+    assert_no_match(/email you/, message)
+    assert_equal "A gift of this product to #{giftee_email} is already going through. Wait for it to finish before sending another.", message
   end
 
   test "not_double_charged settling already blocks a direct purchase by the giftee while a gift to them is in progress" do
@@ -2516,6 +2587,57 @@ class PurchaseTest < ActiveSupport::TestCase
                     purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
     purchase2 = build_purchase(link: product, email: "giftee@gumroad.com", ip_address: ip, created_at: Time.current)
     assert_not purchase2.valid?
+    # The giftee has not paid for anything, so they must not be told their own payment is processing.
+    assert_equal ["Someone is in the middle of gifting you this product. Give that a moment to complete before paying for it yourself."], purchase2.errors[:base]
+  end
+
+  test "not_double_charged settling tells a sender the recipient is buying it themselves, not that a gift is settling" do
+    product = create_product
+    ip = unique_ip
+    # The recipient's own direct purchase is settling. It is stored under their address, which is
+    # the address the gift lookup keys on, so it blocks the sender — but it is not a gift.
+    create_purchase(link: product, seller: product.user, email: "giftee@gumroad.com", ip_address: ip,
+                    purchase_state: "in_progress", stripe_status: "processing", created_at: 2.days.ago)
+    gift = build_gift(giftee_email: "giftee@gumroad.com", link: product)
+    purchase2 = build_purchase(link: product, email: "sender@gumroad.com", ip_address: unique_ip,
+                               gift_given: gift, is_gift_sender_purchase: true, created_at: Time.current)
+    assert_not purchase2.valid?
+    message = purchase2.errors[:base].sole
+    assert_no_match(/gift of this product/, message)
+    assert_no_match(/email you/, message)
+    assert_equal "giftee@gumroad.com is in the middle of buying this product themselves. Wait for that to finish before gifting it to them.", message
+  end
+
+  test "not_double_charged tells a sender the recipient's own in-progress purchase is not a gift" do
+    travel_to(Time.current)
+    product = create_product
+    giftee_email = "giftee-#{unique_suffix}@example.com"
+    ip = unique_ip
+    create_purchase(link: product, email: giftee_email, ip_address: ip, purchase_state: "in_progress")
+
+    gift = build_gift(giftee_email:, link: product)
+    purchase = build_purchase(link: product, gift_given: gift, is_gift_sender_purchase: true,
+                              ip_address: ip, email: "sender-#{unique_suffix}@example.com")
+    assert_not purchase.valid?
+    message = purchase.errors[:base].sole
+    assert_no_match(/gift of this product/, message)
+    assert_equal "#{giftee_email} is in the middle of buying this product themselves. Wait for that to finish before gifting it to them.", message
+  end
+
+  test "not_double_charged tells a sender the recipient's own successful purchase is not a gift" do
+    travel_to(Time.current)
+    product = create_product
+    giftee_email = "giftee-#{unique_suffix}@example.com"
+    ip = unique_ip
+    create_purchase(link: product, email: giftee_email, ip_address: ip, purchase_state: "successful")
+
+    gift = build_gift(giftee_email:, link: product)
+    purchase = build_purchase(link: product, gift_given: gift, is_gift_sender_purchase: true,
+                              ip_address: ip, email: "sender-#{unique_suffix}@example.com")
+    assert_not purchase.valid?
+    message = purchase.errors[:base].sole
+    assert_no_match(/sent as a gift/, message)
+    assert_equal "#{giftee_email} just bought this product themselves. Check with them before sending it as a gift.", message
   end
 
   # context "purchasing physical products"

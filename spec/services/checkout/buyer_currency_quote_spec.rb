@@ -21,7 +21,13 @@ describe Checkout::BuyerCurrencyQuote do
     products.map { |product| { permalink: product.unique_permalink, total_cents: product.price_cents } }
   end
 
-  let(:seller) { create(:user, disable_buyer_local_currency: false) }
+  # Mirroring the seller's price ending into the buyer's currency is ON by default for
+  # sellers charging buyers in their own currency, and it moves the quoted total. That is
+  # exercised on purpose in the "price-ending mirroring" examples below; everywhere else in
+  # this file the subject is the quote mechanics (FX round trip, allocations, token signing,
+  # mismatch cache), so it is opted out to keep the arithmetic in those examples the plain
+  # converted amount.
+  let(:seller) { create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true) }
   let(:product) { create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD) }
   let!(:merchant_account) do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
@@ -58,6 +64,47 @@ describe Checkout::BuyerCurrencyQuote do
                                         stripe_fx_quote_id: "fxq_test",
                                         stripe_fx_quote_expires_at: stripe_fx_quote.expires_at)
       expect(result.token).to be_present
+    end
+
+    context "with price-ending mirroring on (the default for sellers charging in the buyer's currency)" do
+      let(:seller) { create(:user, disable_buyer_local_currency: false) }
+
+      it "quotes the seller's own price ending, records the delta, and signs it into the token" do
+        # $9.99 at 0.8 USD per CAD unit converts to CA$12.49. The seller's ending is 99, so
+        # the buyer is quoted CA$11.99 — the same price ending, in their currency.
+        product.update!(price_cents: 9_99)
+
+        result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 9_99, ip: "24.48.0.1")
+
+        expect(result).to have_attributes(currency: Currency::CAD,
+                                          canonical_total_cents: 9_99,
+                                          presentment_total_cents: 11_99,
+                                          rounding_delta_cents: -50)
+
+        # The delta has to survive the token round trip, because the charge books the
+        # difference against Gumroad's share from the verified quote rather than
+        # recomputing it (a seller flipping the setting mid-checkout must not move money).
+        verified = described_class.verify!(token: result.token, seller:, merchant_account:, currency: Currency::CAD, canonical_total_cents: 9_99, canonical_line_items: canonical_line_items_for(product))
+        expect(verified.presentment_total_cents).to eq(11_99)
+        expect(verified.rounding_delta_cents).to eq(-50)
+      end
+
+      it "quotes a whole-unit amount when the seller priced in whole dollars" do
+        # $10.00 converts to CA$12.50; the seller's price has no cents, so neither does the
+        # buyer's — CA$12.
+        result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+        expect(result).to have_attributes(presentment_total_cents: 12_00, rounding_delta_cents: -50)
+      end
+
+      it "quotes the exact converted amount when the seller opted out" do
+        seller.update!(disable_buyer_currency_rounding: true)
+
+        result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+        expect(result.presentment_total_cents).to eq(12_50)
+        expect(result.rounding_delta_cents).to eq(0)
+      end
     end
 
     it "returns nil before the internal charging flag is enabled" do

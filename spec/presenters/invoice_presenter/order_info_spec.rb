@@ -3,12 +3,19 @@
 describe InvoicePresenter::OrderInfo do
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller) }
+  # The purchase factory attaches Gumroad's own Stripe merchant account, and a paid
+  # purchase fails validation without one, so make sure it exists.
+  let!(:merchant_account) do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+  end
   let(:purchase) do
     create(
       :purchase,
       email: "customer@example.com",
       link: product,
       seller:,
+      merchant_account:,
       price_cents: 14_99,
       created_at: DateTime.parse("January 1, 2023")
     )
@@ -307,6 +314,80 @@ describe InvoicePresenter::OrderInfo do
     let(:chargeable) { purchase }
 
     it_behaves_like "chargeable"
+
+    context "when the purchase was charged in the buyer's own currency" do
+      let(:charge) { create(:charge, seller:, purchases: [purchase]) }
+      let(:charge_presentment) { create(:charge_presentment, charge:, presentment_total_cents: 24_98) }
+      let!(:purchase_presentment) do
+        create(:purchase_presentment,
+               purchase:,
+               charge_presentment:,
+               presentment_currency: Currency::EUR,
+               presentment_price_cents: 21_80,
+               presentment_tip_cents: 0,
+               presentment_seller_tax_cents: 0,
+               presentment_gumroad_tax_cents: 3_18,
+               presentment_shipping_cents: 0,
+               presentment_total_cents: 24_98)
+      end
+
+      before do
+        purchase.update!(
+          was_purchase_taxable: true,
+          gumroad_tax_cents: 254,
+          displayed_price_cents: 17_44,
+          price_cents: 17_44,
+          total_transaction_cents: 17_44 + 254
+        )
+      end
+
+      it "states the tax line and the payment total in the buyer's currency" do
+        expect(presenter.pdf_attributes).to include(
+          { label: "Sales tax (included)", value: "€3.18" },
+          { label: "Payment Total", value: "€24.98" }
+        )
+      end
+
+      context "when the VAT was refunded on its own" do
+        before do
+          create(:refund,
+                 purchase:,
+                 amount_cents: 0,
+                 gumroad_tax_cents: 254,
+                 total_transaction_cents: 254,
+                 presentment_currency: Currency::EUR,
+                 presentment_amount_cents: 3_18,
+                 presentment_gumroad_tax_cents: 3_18)
+        end
+
+        it "zeroes the tax line and reduces the buyer-currency payment total by the refunded tax" do
+          # Single-purchase invoices keep the tax row and show it at zero (the same way
+          # canonical USD invoices do once their tax is refunded), so the buyer can see
+          # the tax came back rather than the row silently disappearing.
+          expect(presenter.pdf_attributes).to include(
+            { label: "Sales tax (included)", value: "€0" },
+            { label: "Payment Total", value: "€21.80" }
+          )
+        end
+      end
+
+      context "when a refund carries no buyer-currency snapshot" do
+        before do
+          create(:refund,
+                 purchase:,
+                 amount_cents: 0,
+                 gumroad_tax_cents: 254,
+                 total_transaction_cents: 254)
+        end
+
+        it "falls back to canonical USD amounts rather than print an unverifiable buyer-currency figure" do
+          expect(presenter.pdf_attributes).to include(
+            { label: "Payment Total", value: "$17.44" }
+          )
+          expect(presenter.pdf_attributes).not_to include(hash_including(value: "€24.98"))
+        end
+      end
+    end
   end
 
   describe "for Charge" do
@@ -320,6 +401,41 @@ describe InvoicePresenter::OrderInfo do
     end
 
     it_behaves_like "chargeable"
+
+    context "when a free purchase shares the charge with a buyer-currency purchase" do
+      let(:free_purchase) do
+        create(
+          :free_purchase,
+          email: "customer@example.com",
+          link: create(:product, name: "Free product", user: seller, price_cents: 0),
+          seller:
+        )
+      end
+
+      before do
+        charge.purchases << free_purchase
+        order.purchases << free_purchase
+        charge_presentment = create(:charge_presentment, charge:, presentment_total_cents: 21_80)
+        create(:purchase_presentment,
+               purchase:,
+               charge_presentment:,
+               presentment_currency: Currency::EUR,
+               presentment_price_cents: 21_80,
+               presentment_tip_cents: 0,
+               presentment_seller_tax_cents: 0,
+               presentment_gumroad_tax_cents: 0,
+               presentment_shipping_cents: 0,
+               presentment_total_cents: 21_80)
+      end
+
+      # A free line moved no money and has no presentment row, so it must not force
+      # the invoice's payment total back to USD under buyer-currency line items.
+      it "keeps the payment total in the buyer's currency" do
+        expect(presenter.pdf_attributes).to include(
+          { label: "Payment Total", value: "€21.80" }
+        )
+      end
+    end
 
     context "when the charge has a second purchase" do
       let(:second_purchase) do

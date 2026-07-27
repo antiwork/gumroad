@@ -37,7 +37,12 @@ class Checkout::PaymentMethodResolver
   # (docs.stripe.com/payments/alipay), and memberships/preorders are out of scope for its
   # first launch anyway (gumroad-private#1339), so the policy set must not claim it on a
   # recurring cart.
-  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna alipay].freeze
+  # iDEAL and Bancontact are one-shot bank approvals: the buyer authorises a single payment in
+  # their banking app, and charging them again later requires separately collecting a SEPA Direct
+  # Debit mandate, which Gumroad's checkout does not do. So a membership or preorder priced in
+  # euros must never claim them either — the buyer would authorise the first charge and every
+  # renewal after it would have nothing to charge against.
+  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna alipay ideal bancontact].freeze
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
   # element flags themselves since Stripe's dashboard payment-method settings are the emergency

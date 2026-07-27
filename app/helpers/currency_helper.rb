@@ -125,6 +125,13 @@ module CurrencyHelper
       rate:
     )
     return default_props if local_price_cents.blank?
+    # Deliberately NOT rounded here. This is the product page's approximate preview,
+    # converted from hourly cached rates rather than a locked quote, and the browser
+    # derives variant/option prices from `rate` on top of it — rounding only the base
+    # price would make the options disagree with it. The rounding that the buyer is
+    # actually charged happens once, when the checkout quote is minted
+    # (Checkout::PresentmentRounding), so the amount shown at checkout, itemized, and
+    # charged is the rounded one.
 
     {
       product_id: product.external_id,
