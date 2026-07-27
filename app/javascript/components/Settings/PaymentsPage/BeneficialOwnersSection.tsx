@@ -215,9 +215,13 @@ const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
     idSuffix: "chile-id-number",
   },
   CO: {
-    label: "Cédula de Ciudadanía (CC)",
-    placeholder: "1.123.123.123",
-    minLength: 13,
+    // Colombia issues two personal IDs: the Cédula de Ciudadanía to citizens and the Cédula de
+    // Extranjería to foreign residents. Both are valid here, and their numbers range from about six
+    // to ten digits, so the field accepts a loose range rather than one exact length. Kept in sync
+    // with the same entry in AccountDetailsSection.tsx.
+    label: "Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)",
+    placeholder: "1234567890",
+    minLength: 6,
     maxLength: 13,
     idSuffix: "colombia-id-number",
   },

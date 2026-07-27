@@ -25,6 +25,23 @@ describe Order::ChargeService, :vcr do
       )
     end
 
+    # Puts seller_1 into the state the buyer-presentment charge path needs.
+    #
+    # Rounding is switched off deliberately. The examples that call this cover the
+    # presentment charge plumbing — the idempotency key, Gumroad's share of the charge,
+    # which purchases get a presentment row — not price endings. Buyer-currency price
+    # rounding (Checkout::PresentmentRounding) can move a converted total onto the
+    # seller's price ending, by as much as half a major unit, so leaving it on would make
+    # these examples assert the rounding rule's output instead of the behaviour they are
+    # named for. The rounding rule has its own spec.
+    def configure_seller_1_for_presentment_charges
+      seller_1.update!(
+        check_merchant_account_is_linked: true,
+        disable_buyer_local_currency: false,
+        disable_buyer_currency_rounding: true
+      )
+    end
+
     let(:seller_1) { create(:user) }
     let(:seller_2) { create(:user) }
     let(:seller_3) { create(:user) }
@@ -215,7 +232,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "creates a buyer-presentment charge through the order path when the internal flag is enabled in test mode" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       merchant_account = create(:merchant_account_stripe_connect,
                                 user: seller_1,
                                 charge_processor_merchant_id: "acct_presentment",
@@ -314,8 +331,87 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
     end
 
-    it "creates a buyer-presentment charge for a paid item alongside a free item" do
+    it "charges the rounded total end to end and leaves the canonical amounts alone" do
+      # The one order-level example that runs with rounding ON, so a rounded quote is
+      # actually charged: a $10 cart converts to CA$12.50 at 0.8, and the seller's ending
+      # (a round unit) pulls it to CA$12.00. What must hold is that only the buyer-facing
+      # presentment moves — the charge and purchase stay at $10.00 canonical — and that the
+      # 50-cent reduction is recorded as such and comes out of Gumroad's share.
       seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      merchant_account = create(:merchant_account_stripe_connect,
+                                user: seller_1,
+                                charge_processor_merchant_id: "acct_presentment",
+                                currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
+
+      quote = buyer_currency_quote_for(product_1)
+      expect(quote).to have_attributes(presentment_total_cents: 12_00, rounding_delta_cents: -50)
+
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+      charge_processor_call = {}
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, chargeable_arg, amount_cents, gumroad_amount_cents, reference, description, **options|
+        charge_processor_call.replace(amount_cents:, gumroad_amount_cents:, options:)
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:
+        )
+      end
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      charge = order.reload.charges.sole
+      purchase = order.purchases.sole
+      exact_presentment_gumroad_amount_cents = ((BigDecimal(charge.gumroad_amount_cents.to_s) / 100) / BigDecimal("0.8") * 100).round
+      # The reduction is Gumroad's to fund, so its share of the charge is the converted
+      # share minus the 50 cents.
+      expect(charge_processor_call.fetch(:options)).to include(
+        processor_amount_cents: 12_00,
+        processor_currency: Currency::CAD,
+        processor_gumroad_amount_cents: exact_presentment_gumroad_amount_cents - 50
+      )
+      expect(charge_processor_call.fetch(:amount_cents)).to eq(10_00)
+      expect(purchase).to be_successful
+      # Canonical amounts are untouched by rounding: the seller's proceeds and the recorded
+      # sale are the same as they would be without it.
+      expect(charge.amount_cents).to eq(10_00)
+      expect(purchase.total_transaction_cents).to eq(10_00)
+      expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                           presentment_total_cents: 12_00,
+                                                           rounding_delta_cents: -50,
+                                                           presentment_gumroad_amount_cents: exact_presentment_gumroad_amount_cents - 50)
+      expect(purchase.purchase_presentment).to have_attributes(presentment_total_cents: 12_00,
+                                                               presentment_seller_tax_cents: 0,
+                                                               presentment_gumroad_tax_cents: 0)
+      expect(charge_responses.fetch("unique-id-0")).to include(buyer_presentment_currency: "CAD",
+                                                               buyer_presentment_total_cents: 12_00)
+      expect(merchant_account.reload.charge_processor_merchant_id).to eq("acct_presentment")
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+    end
+
+    it "creates a buyer-presentment charge for a paid item alongside a free item" do
+      configure_seller_1_for_presentment_charges
       create(:merchant_account_stripe_connect,
              user: seller_1,
              charge_processor_merchant_id: "acct_presentment",
@@ -376,7 +472,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "creates the presentment for the gifter purchase only on gift checkouts" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       create(:merchant_account_stripe_connect,
              user: seller_1,
              charge_processor_merchant_id: "acct_presentment",
@@ -437,7 +533,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "creates the presentment only on the bundle parent purchase" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       bundle = create(:product, :bundle, user: seller_1, price_cents: 10_00)
       create(:merchant_account_stripe_connect,
              user: seller_1,
@@ -576,7 +672,7 @@ describe Order::ChargeService, :vcr do
     end
 
     it "keeps buyer-presentment purchases in progress when Stripe settlement data is not available yet" do
-      seller_1.update!(check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+      configure_seller_1_for_presentment_charges
       create(:merchant_account_stripe_connect,
              user: seller_1,
              charge_processor_merchant_id: "acct_presentment",

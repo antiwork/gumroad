@@ -1482,15 +1482,16 @@ class Purchase < ApplicationRecord
   def tax_label(include_tax_rate: true)
     return unless has_tax_label?
 
-    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
-      label = "VAT"
-      label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
-      label
-    elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      label = "GST"
+    country = zip_tax_rate&.country
+
+    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country) ||
+       Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(country) ||
+       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(country) ||
+       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(country) ||
+       Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(country)
+      # Name the tax the way a buyer in that country knows it (GST in India, CT in Japan, and so
+      # on) instead of calling everything "VAT". Matches what the checkout UI shows them.
+      label = Compliance::Countries.tax_name_for(country)
       label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
       label
     else
@@ -1511,38 +1512,23 @@ class Purchase < ApplicationRecord
   def seller_tax_label
     return unless has_tax_label?
 
-    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "EU VAT"
-      else
-        "EU VAT (included)"
-      end
-    elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(zip_tax_rate&.country) ||
-          Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "VAT"
-      else
-        "VAT (included)"
-      end
-    elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "GST"
-      else
-        "GST (included)"
-      end
-    elsif Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "Norway VAT"
-      else
-        "Norway VAT (included)"
-      end
+    country = zip_tax_rate&.country
+
+    label = if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country)
+      "EU VAT"
+    elsif Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(country)
+      "Norway VAT"
+    elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(country) ||
+          Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(country) ||
+          Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(country)
+      # Same per-country naming as the buyer-facing label, so the seller's sale notification and
+      # the buyer's receipt call the tax the same thing.
+      Compliance::Countries.tax_name_for(country)
     else
-      if was_tax_excluded_from_price
-        "Sales tax"
-      else
-        "Sales tax (included)"
-      end
+      "Sales tax"
     end
+
+    was_tax_excluded_from_price ? label : "#{label} (included)"
   end
 
   def has_tax_label?
@@ -1605,15 +1591,11 @@ class Purchase < ApplicationRecord
   # Sum of the buyer-currency amounts actually returned to the buyer across this
   # purchase's effective refunds, in buyer-currency minor units.
   #
-  # Presentment refund amounts intentionally live as snapshots in refunds.json_data
-  # rather than a database column (see gumroad#5419: aggregate refunded-presentment
-  # reporting has to be derived deliberately, never SUM()ed in SQL), so this walks the
-  # refunds association in memory. Uses the same effective?/loaded? pattern as
-  # amount_refunded_cents so callers that preload :refunds — the Sales API and the CSV
-  # export both do — issue no extra queries per purchase.
+  # Only refunds carrying a buyer-currency snapshot contribute; see
+  # refunds_that_moved_money for why the amounts are walked in Ruby rather than SUM()ed,
+  # and buyer_presentment_refunded_cents_incomplete? for what a missing snapshot means.
   def buyer_presentment_refunded_cents
-    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
-    effective_refunds.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
+    refunds_that_moved_money.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
   end
 
   # True when this purchase has an effective refund that carries NO buyer-currency
@@ -1626,8 +1608,7 @@ class Purchase < ApplicationRecord
   # worse than an empty cell. Callers rendering the total for a human use this to blank the
   # cell instead of publishing a number they'd have to caveat.
   def buyer_presentment_refunded_cents_incomplete?
-    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
-    effective_refunds.any? { |refund| !refund.presentment_snapshot? }
+    refunds_that_moved_money.any? { |refund| !refund.presentment_snapshot? }
   end
 
   # Buyer-currency minor units expressed as a plain major-unit number (12.34, not "$12.34"),
@@ -1644,6 +1625,46 @@ class Purchase < ApplicationRecord
     return amount_cents if scaling_factor == 1
 
     (amount_cents.to_f / scaling_factor).round(2)
+  end
+
+  # Whether buyer-currency amounts are safe to print on a receipt or invoice.
+  #
+  # Every refund that actually moved money reduces what the buyer paid. Refunds on
+  # buyer-currency purchases normally carry a buyer-currency snapshot (see
+  # Purchase::PresentmentRefund), but a refund created without one consumed canonical
+  # USD cents while recording zero buyer-currency cents — which is exactly what
+  # buyer_presentment_refunded_cents_incomplete? reports. Any "remaining" buyer-currency
+  # figure derived from that state would overstate what the buyer is still out of pocket.
+  # An invoice is the document a tax authority reads, so in that case receipts and
+  # invoices fall back to canonical USD amounts for every line rather than print a
+  # confident buyer-currency number that is wrong.
+  def buyer_presentment_display?
+    buyer_presentment? && !buyer_presentment_refunded_cents_incomplete?
+  end
+
+  # Buyer-currency tax still retained after refunds. A tax amount printed in the buyer's
+  # currency is the figure a tax authority reads off the invoice, so it has to be net of
+  # anything already returned: Gumroad-remitted tax (VAT/GST) can be refunded on its own
+  # — for example when a buyer supplies a valid VAT ID while generating an invoice — and
+  # a full or partial refund of the purchase returns a share of both tax components.
+  # (Canonical non_refunded_tax_amount nets only the Gumroad-remitted side; here both
+  # sides are netted because both are printed as one buyer-currency tax line.)
+  def buyer_presentment_non_refunded_tax_cents
+    return unless buyer_presentment?
+
+    refunded_tax_cents = refunds_that_moved_money.sum do |refund|
+      refund.presentment_seller_tax_cents.to_i + refund.presentment_gumroad_tax_cents.to_i
+    end
+    [buyer_presentment_tax_cents - refunded_tax_cents, 0].max
+  end
+
+  # Buyer-currency amount the buyer has actually paid after refunds — the buyer-currency
+  # counterpart of non_refunded_total_transaction_amount, used for an invoice's payment
+  # total so it is denominated in the same currency as the line items above it.
+  def buyer_presentment_non_refunded_total_cents
+    return unless buyer_presentment?
+
+    [buyer_presentment_total_cents - buyer_presentment_refunded_cents, 0].max
   end
 
   def formatted_buyer_presentment_price
@@ -3228,6 +3249,32 @@ class Purchase < ApplicationRecord
     fee_cents + paypal_fee_usd_cents
   end
 
+  # The slice of fee_cents that is Gumroad's own percentage revenue on this sale.
+  #
+  # fee_cents is a bundle: Gumroad's percentage fee, Gumroad's fixed fee, and — on sales
+  # charged through a Gumroad-owned Stripe account — the processor's percentage and fixed
+  # costs, which Gumroad only collects in order to hand them to Stripe. Anything that will
+  # be paid out to somebody else is not Gumroad's to give away, so a caller that needs to
+  # know how much of a charge Gumroad could absorb has to ask for this rather than reading
+  # fee_cents. Used by the buyer-currency charge path, where a displayed price rounded down
+  # from the exact conversion is taken out of Gumroad's share of the payment and must never
+  # reach the seller's proceeds or Stripe's costs (Charge::PresentmentOrchestrator).
+  #
+  # Returns 0 exactly where Gumroad's percentage fee is zero: a fee-waived sale (Gumroad
+  # Day or the per-seller waiver), a free purchase, and Brazilian Stripe Connect sellers,
+  # for whom calculate_fees zeroes the fee outright. The discover fee and the fixed Gumroad
+  # fee are deliberately left out even though they are Gumroad revenue — this is meant to
+  # be a floor on what is safely disposable, not an accurate total.
+  def gumroad_percentage_fee_cents
+    return 0 if price_cents.to_i.zero?
+    return 0 if merchant_account&.is_a_brazilian_stripe_connect_account?
+
+    fee_per_thousand = (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand).to_i
+    return 0 unless fee_per_thousand.positive?
+
+    [price_cents.to_i * fee_per_thousand / 1000, fee_cents.to_i].min
+  end
+
   # "not_charged" purchases that are free trial purchases should be treated as
   # successful purchases for the purposes of some tasks such as scheduling workflows,
   # while other "not_charged" purchases should not be. This method identifies
@@ -3680,6 +3727,18 @@ class Purchase < ApplicationRecord
       return if purchase_presentment.blank?
 
       FlowOfFunds::Amount.new(currency: Currency::USD, cents: total_transaction_cents)
+    end
+
+    # This purchase's refunds that actually moved money, as an in-memory array.
+    #
+    # Presentment refund amounts live as snapshots in refunds.json_data rather than
+    # database columns (see gumroad#5419: aggregate refunded-presentment reporting has to
+    # be derived deliberately, never SUM()ed in SQL), so every buyer-currency refund
+    # figure has to walk the refunds in Ruby. Uses the same effective?/loaded? pattern as
+    # amount_refunded_cents, so callers that preload :refunds — the Sales API, the CSV
+    # export, and the receipt and invoice presenters — issue no extra query per purchase.
+    def refunds_that_moved_money
+      association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
     end
 
     # Refund counterpart of presentment_canonical_issued_amount: the processor refund is

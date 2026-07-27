@@ -297,7 +297,14 @@ describe Charge::CreateService, :vcr do
       # check_merchant_account_is_linked lets quote creation resolve the seller's Stripe
       # Connect account (User#merchant_account only returns connect accounts for
       # migration-enabled sellers), so the quote and the charge use the same account.
-      seller = create(:user, disable_buyer_local_currency: false, check_merchant_account_is_linked: true)
+      # Price-ending rounding is off so the locked total stays the exact converted 12.51
+      # CAD. This example is about largest-remainder allocation — splitting a total that
+      # no proportional division hits exactly across two purchases — so it needs a known
+      # total to split. Rounding would pull 12.51 to 12.01 (the 01 ending of the 10.01 USD
+      # total; the tie between 12.01 and 13.01 goes to the buyer) and the example would be
+      # checking the rounding rule's arithmetic instead of the allocation's.
+      # Checkout::PresentmentRounding has its own spec.
+      seller = create(:user, disable_buyer_local_currency: false, check_merchant_account_is_linked: true, disable_buyer_currency_rounding: true)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")

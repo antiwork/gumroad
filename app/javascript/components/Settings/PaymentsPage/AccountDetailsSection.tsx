@@ -202,9 +202,18 @@ const AccountDetailsSection = ({
         idSuffix: "social-insurance-number",
       },
       CO: {
-        label: "Cédula de Ciudadanía (CC)",
-        placeholder: "1.123.123.123",
-        minLength: 13,
+        // Colombia issues two personal IDs: the Cédula de Ciudadanía to citizens and the Cédula de
+        // Extranjería to foreign residents. Both are sent to Stripe as the generic
+        // individual.id_number, so both are accepted — the label has to say so, otherwise a foreign
+        // resident reads "Cédula de Ciudadanía" and concludes their ID cannot be used.
+        label: "Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)",
+        placeholder: "1234567890",
+        // Colombian ID numbers vary in length: Cédula de Extranjería numbers are commonly six or
+        // seven digits, citizen numbers eight to ten. A single exact length would block most of that
+        // range, so only a loose range is enforced here (the upper bound leaves room for a number
+        // pasted with thousands separators, e.g. "1.123.123.123"). Stripe does the authoritative
+        // validation on individual.id_number.
+        minLength: 6,
         maxLength: 13,
         idSuffix: "colombia-id-number",
       },
