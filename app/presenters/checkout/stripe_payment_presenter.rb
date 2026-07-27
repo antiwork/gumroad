@@ -15,6 +15,12 @@ class Checkout::StripePaymentPresenter
   # natively (instead of the deprecated Payment Request Button rendering them next to it) and the
   # Payment Request Button is not mounted for that cart. Rollout flag for antiwork/gumroad#5768.
   PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
+  # Ramp flag for wallets on the buyer-currency (FX-quoted) presentment lane, gumroad-private#1436.
+  # Separate from PAYMENT_ELEMENT_WALLETS_FEATURE_NAME (at 100% since July 2026) because this lane
+  # has a distinct risk: the wallet sheet quotes a locked local-currency total from an FX quote, so
+  # it needs its own kill switch that does not take wallets off every other checkout with it.
+  # Keyed per seller and ANDed with the general wallet flag — a seller must be in BOTH.
+  BUYER_CURRENCY_WALLETS_FEATURE_NAME = :buyer_currency_wallets
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
@@ -46,6 +52,9 @@ class Checkout::StripePaymentPresenter
 
   def props
     checkout_items = items
+    # CardElement candidates keep wallets suppressed: that lane never mounts a Payment Element,
+    # so a wallet there is the Payment Request Button, whose sheet is built from the canonical USD
+    # total and cannot show the buyer-currency total the cart displays.
     disable_wallets = checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
@@ -57,10 +66,23 @@ class Checkout::StripePaymentPresenter
     # shape — not for this GeoIP-driven card mode. The server-confirm lane creates a plain card
     # PaymentMethod (currency-less), so the element can mount in the buyer's currency purely for
     # display/method-filtering while the charge path prices the intent from the verified quote
-    # token. Wallets stay disabled for the same reason as CardElement candidates: a wallet payment
-    # would charge canonical USD while the cart displays buyer-currency totals.
+    # token.
+    #
+    # Wallets are allowed here when the rollout flag below is on, because on this lane the
+    # element's wallet sheet quotes the SAME locked buyer-currency total the cart displays: the
+    # browser mounts the element from the FX quote in the surcharge response, and the charge
+    # verifies that quote's signed token. A wallet payment therefore charges what its sheet
+    # showed. Three properties make that safe, all covered by specs — the sheet reads the quote
+    # (getStripePaymentElementAmount), the purchase carries the quote token, and a wallet whose
+    # adopted billing address moves the tax location is held and re-confirmed rather than
+    # submitted (resolveHeldWalletPayment). Ramped per seller by
+    # BUYER_CURRENCY_WALLETS_FEATURE_NAME so it can be pulled instantly.
     if buyer_currency_presentment_element_shape?(checkout_items)
-      return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, buyer_currency_presentment: true, disable_wallets: true)
+      return payment_element_props(
+        STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+        buyer_currency_presentment: true,
+        disable_wallets: !buyer_currency_wallets?
+      )
     end
 
     # Client-confirm eligible carts are always one-time charges, so check them before setup mode.
@@ -185,6 +207,15 @@ class Checkout::StripePaymentPresenter
     # enabling wallets-in-the-element for one seller must never change another seller's checkout.
     def payment_element_wallets?
       sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
+    end
+
+    # Same seller-complete keying as payment_element_wallets?, and ANDed with it: a seller must be
+    # in the general wallet rollout AND this lane's ramp before their buyer-currency checkouts
+    # offer a wallet. That means ramping the general flag down still removes wallets everywhere,
+    # while this flag scopes an emergency ramp-down to presentment carts only.
+    def buyer_currency_wallets?
+      payment_element_wallets? &&
+        sellers.all? { Feature.active?(BUYER_CURRENCY_WALLETS_FEATURE_NAME, _1) }
     end
 
     # Whether the checkout renders the flat payment-methods list (the Payment Element's
