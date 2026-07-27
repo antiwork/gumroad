@@ -48,6 +48,10 @@ describe GambiaBankAccount do
     it "allows records that match the required account number regex" do
       expect(build(:gambia_bank_account)).to be_valid
 
+      # Stripe documents Gambian account numbers as 18 "characters", not 18 "digits" (which is
+      # the wording used for e.g. Gabon), so letters are accepted at that same fixed length.
+      expect(build(:gambia_bank_account, account_number: "AB0123000456000789")).to be_valid
+
       gm_bank_account = build(:gambia_bank_account, account_number: "00012300045600078")
       expect(gm_bank_account).to_not be_valid
       expect(gm_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
