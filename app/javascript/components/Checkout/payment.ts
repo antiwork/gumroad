@@ -3,6 +3,7 @@ import { groupBy } from "lodash-es";
 import * as React from "react";
 
 import { getSurcharges, SurchargesResponse } from "$app/data/customer_surcharge";
+import { paymentElementRequiresBillingName } from "$app/data/payment_element_methods";
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { SavedCreditCard } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
@@ -683,15 +684,16 @@ export const paymentElementCollectsFullBillingDetails = (state: State) =>
   (canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state));
 
 // Whether the currently selected Payment Element method needs `billing_details.name` from
-// checkout's own Full name field. Mirrors paymentElementRequiresBillingName in
-// card_payment_method_data.ts for the same module-cycle reason as above. Bancontact is the case
-// this exists for: Stripe rejects its authorization without a name, but unlike UPI it stays in
-// "form" collection mode, so paymentElementCollectsFullBillingDetails is false for it and the
-// name would otherwise never be required on a digital cart (gumroad-private#1306). Guarded on
-// the card/element lane for the same reason: switching to PayPal must not keep the requirement.
+// checkout's own Full name field. The list of such methods lives in
+// $app/data/payment_element_methods (a cycle-free module, since card_payment_method_data.ts and
+// this module import each other). Bancontact is the case this exists for: Stripe rejects its
+// authorization without a name, but unlike UPI it stays in "form" collection mode, so
+// paymentElementCollectsFullBillingDetails is false for it and the name would otherwise never be
+// required on a digital cart (gumroad-private#1306). Guarded on the card/element lane for the
+// same reason as above: switching to PayPal must not keep the requirement.
 export const paymentElementRequiresBillingNameForSelection = (state: State) =>
   state.paymentMethod === "card" &&
-  (state.paymentElementType === "upi" || state.paymentElementType === "bancontact") &&
+  paymentElementRequiresBillingName(state.paymentElementType) &&
   (canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state));
 
 export const getErrors = (state: State) => (state.status.type === "input" ? state.status.errors : new Set());
