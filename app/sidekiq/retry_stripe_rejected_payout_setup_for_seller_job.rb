@@ -119,44 +119,49 @@ class RetryStripeRejectedPayoutSetupForSellerJob
 
       already_notified = notes.any? { |candidate| StripeMerchantAccountManager.bank_sync_note_seller_notified?(candidate) }
       note_to_notify = already_notified ? nil : notes.first
-      enqueue_format_rejection_email(user, note_to_notify) if note_to_notify
+      notify_format_rejection!(user, note_to_notify) if note_to_notify
 
-      # The "we told them" marker is written in the SAME transaction as the abandonment, not as
-      # its own save. Both are conclusions drawn from this one pass, so committing them together
-      # means there is a single point where the pass either took effect or did not, instead of
-      # three separately-failable writes that can disagree with each other.
+      # The abandonment and the payout note explaining it are one unit (see abandon_stale_notes!),
+      # but the "we told them" marker deliberately is NOT part of it — it was already committed
+      # above, right after the email was enqueued. If it lived in here, a failure while writing
+      # the audit note would roll the marker back too, and the next weekly pass would re-select
+      # these notes and email the seller the same message all over again, once per pass, for as
+      # long as the write kept failing.
       ActiveRecord::Base.transaction do
         notes.each do |candidate|
           candidate.json_data["abandoned_at"] = Time.current.iso8601
           candidate.json_data["abandoned_reason"] = ABANDONED_REASON_BANK_FORMAT_REJECTION
-          candidate.json_data["seller_notified"] = true if candidate == note_to_notify
           candidate.save!
         end
         user.add_payout_note(content: BANK_FORMAT_REJECTION_NOTE)
       end
     end
 
-    # The email is enqueued BEFORE the caller commits the "seller_notified" marker, and that
-    # order is deliberate. Sidekiq guarantees at-least-once execution, so one of the two can
-    # always be replayed; the only question is which way an interruption fails.
+    # Enqueue the email, then immediately commit the "we told them" marker on its own — before
+    # the abandonment that follows. The ordering of these two is deliberate in both directions.
     #
-    # "seller_notified" is not a delivery ledger. The abandonment branch reads it as "has anyone
-    # told this seller their bank details need correcting?", because a note recorded during
-    # account creation (that path re-raises instead of emailing) has no notification behind it.
-    # Committing the marker first would mean a crash before the enqueue leaves a note claiming
-    # the seller was told when no email exists — the next pass then abandons the retries and the
-    # seller hears nothing at all, which is the exact failure this job exists to prevent, and
-    # nothing in the data would ever reveal it. Enqueuing first fails the other way: at worst a
-    # second copy of an email asking them to re-enter their bank details, bounded to one extra
-    # copy per interruption, saying exactly the same thing as the first. A repeated ask is
-    # recoverable by the seller; a silent one is not.
-    def enqueue_format_rejection_email(user, note)
+    # Email first: "seller_notified" is not a delivery ledger. The abandonment branch reads it as
+    # "has anyone told this seller their bank details need correcting?", because a note recorded
+    # during account creation (that path re-raises instead of emailing) has no notification behind
+    # it. Marking first would let a crash before the enqueue leave a note claiming the seller was
+    # told when no email exists; the next pass would abandon the retries on that claim and the
+    # seller would hear nothing, which is the exact failure this job exists to prevent.
+    #
+    # Marker second, but committed on its own rather than folded into the abandonment: once the
+    # email is out, the fact that it went out has to survive whatever happens next. Sidekiq is
+    # at-least-once, so an interruption between the enqueue and this save still costs at most one
+    # duplicate copy of the same "please re-enter your bank details" email — but a failure further
+    # downstream, in the abandonment, no longer costs anything at all, because the marker is
+    # already durable and the retrying pass will skip the email.
+    def notify_format_rejection!(user, note)
       _code, message = StripeMerchantAccountManager.bank_sync_note_error_details(note)
       ContactingCreatorMailer.invalid_bank_account(
         user.id,
         StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
         message
       ).deliver_later(queue: "critical")
+      note.json_data["seller_notified"] = true
+      note.save!
     end
 
     def attempt_remediation(user, note)
@@ -207,16 +212,18 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     end
 
     def give_up!(user, note)
-      # The email is enqueued BEFORE the abandonment commits, for the same reason as the format
-      # rejection path: abandonment is terminal, so once it is committed no later run will ever
-      # look at this note again. If the enqueue then failed, the outer rescue would swallow it
-      # and the seller would never learn that the retries stopped — this is the only place that
-      # email is sent, so there is no second chance. Enqueuing first fails the other way: if the
-      # transaction below rolls back, the seller has been told retries are over slightly early,
-      # the note stays outstanding, and the next weekly run reaches the ceiling again and
-      # re-sends the same message. A duplicate or early notice is recoverable; silence is not.
-      marker_type = bank_note?(note) ? "bank" : "postal"
-      ContactingCreatorMailer.payout_setup_retry_exhausted(user.id, marker_type).deliver_later(queue: "critical")
+      # Tell the seller first, and record that we did so as its own committed write, before the
+      # abandonment below. Same shape as the format-rejection path, for the same two reasons:
+      #
+      # - Before the abandonment, because abandonment is terminal — once abandoned_at commits no
+      #   later run looks at this note again, and this is the only place the exhausted-retries
+      #   email is sent. An enqueue downstream of that commit could fail, be swallowed by the
+      #   job's rescue, and leave the seller never knowing the retries stopped.
+      # - Its own commit, because the marker has to outlive a failure in the abandonment. Without
+      #   it, a rolled-back abandonment leaves the note outstanding at the retry ceiling, and
+      #   every subsequent weekly pass reaches this branch again and re-sends the same terminal
+      #   notice. With it, the retrying pass skips the email and only redoes the abandonment.
+      notify_retries_exhausted!(user, note) unless note.json_data["exhausted_notified"] == true
 
       # Same reasoning as abandon_stale_notes!: the terminal state and its explanation are one
       # unit, so support never sees a dead note with no record of why the retries stopped.
@@ -225,5 +232,12 @@ class RetryStripeRejectedPayoutSetupForSellerJob
         note.save!
         user.add_payout_note(content: GAVE_UP_NOTE)
       end
+    end
+
+    def notify_retries_exhausted!(user, note)
+      marker_type = bank_note?(note) ? "bank" : "postal"
+      ContactingCreatorMailer.payout_setup_retry_exhausted(user.id, marker_type).deliver_later(queue: "critical")
+      note.json_data["exhausted_notified"] = true
+      note.save!
     end
 end

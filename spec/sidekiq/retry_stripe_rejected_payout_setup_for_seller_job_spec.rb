@@ -136,22 +136,28 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
     end
 
-    it "commits the notification marker together with the abandonment, so a replay cannot re-email" do
-      # Without the marker being part of the abandonment transaction, a run that dies partway
-      # leaves the note unabandoned AND unmarked, so the next run re-selects it and emails the
-      # seller a second time. Simulate the crash by failing the audit note inside the transaction.
+    it "keeps the notification marker when the abandonment fails, so the retry cannot re-email" do
+      # The abandonment can fail (and roll back) after the seller has already been emailed. The
+      # note then stays outstanding and every later weekly pass reaches this branch again — so if
+      # the marker rolled back with the abandonment, each of those passes would send the seller
+      # another copy of the same email. Simulate the failure by making the audit note raise.
       note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
-      allow(user).to receive(:add_payout_note).and_call_original
       allow(User).to receive(:find_by).with(id: user.id).and_return(user)
+      allow(user).to receive(:add_payout_note).and_call_original
       allow(user).to receive(:add_payout_note).with(content: described_class::BANK_FORMAT_REJECTION_NOTE).and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
 
-      described_class.new.perform(user.id)
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).once
 
       note.reload
       expect(note.json_data["abandoned_at"]).to be_blank
-      # The marker rolled back with the abandonment rather than being stranded as a lone write,
-      # so the state is self-consistent: nothing was concluded about this note in that pass.
-      expect(note.json_data["seller_notified"]).to be_blank
+      expect(note.json_data["seller_notified"]).to be(true)
+
+      # The next pass redoes the abandonment it could not finish, in silence.
+      expect do
+        described_class.new.perform(user.id)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
     end
 
     it "classifies from the stored Stripe error message rather than the truncated note text" do
@@ -267,6 +273,24 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       # The abandonment rolled back with its audit note, so the note is still outstanding and the
       # next run retries the whole terminal step rather than leaving a dead record behind.
       expect(note.reload.json_data["abandoned_at"]).to be_blank
+    end
+
+    it "does not re-send the exhausted notice on the passes that retry a failed abandonment" do
+      # A note left outstanding by a failed abandonment is still at the retry ceiling, so every
+      # later weekly pass lands here again. Only the abandonment should be retried — the seller
+      # has already been told the automated retries stopped, and telling them weekly is spam.
+      note = add_note(bank_prefix, json: { retry_count: RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES })
+      allow(User).to receive(:find_by).with(id: user.id).and_return(user)
+      allow(user).to receive(:add_payout_note).and_call_original
+      allow(user).to receive(:add_payout_note).with(content: described_class::GAVE_UP_NOTE)
+                                              .and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
+
+      described_class.new.perform(user.id)
+      expect(note.reload.json_data["abandoned_at"]).to be_blank
+
+      expect do
+        described_class.new.perform(user.id)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted)
     end
   end
 
