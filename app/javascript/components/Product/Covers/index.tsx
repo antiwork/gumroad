@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { AssetPreview } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
+import { MAX_PORTRAIT_FRAME_HEIGHT, videoFrameIsPortrait } from "$app/utils/videoFrame";
 
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useOnChange } from "$app/components/useOnChange";
@@ -36,12 +37,50 @@ export const Covers = ({
   let activeCoverIndex = covers.findIndex((cover) => cover.id === activeCoverId);
   if (activeCoverIndex === -1) activeCoverIndex = 0;
   const activeCover = covers[activeCoverIndex];
-  const aspectRatio =
-    !isThumbnail && covers[0]?.native_height && covers[0]?.native_width
-      ? covers[0].native_width / covers[0].native_height
-      : undefined;
+  // Shape the cover frame to the cover the buyer is actually looking at, and stop it
+  // growing taller than the window.
+  //
+  // The ratio used to come from `covers[0]` unconditionally, so a product whose first
+  // cover was landscape squeezed every later cover into 16:9 — a phone-filmed 9:16
+  // video showed as a thin strip between wide bars. Following the active cover fixes
+  // that, but alone it creates the opposite problem: a 9:16 frame at the full width of
+  // the product column derives a height about 1.8x that width, taller than a laptop
+  // window, pushing the title and Buy button below the fold. `maxHeight` caps that the
+  // same way the buyer content page was capped in #6367; the frame keeps the column's
+  // full width and the video letterboxes horizontally inside it (see CoverItem).
+  //
+  // The cap has to be a max-HEIGHT rather than a narrower frame: the carousel decides
+  // which cover is active by comparing scroll offsets against each panel's width, so a
+  // frame that changed width with the active cover would move the panels out from under
+  // that calculation and bounce a two-cover carousel back to the first cover.
+  //
+  // Covers with no recorded dimensions still get no ratio at all and fall back to the
+  // CSS box exactly as before.
+  // See https://github.com/antiwork/gumroad-private/issues/1437
+  const frameStyle =
+    isThumbnail || !activeCover?.native_width || !activeCover.native_height
+      ? undefined
+      : {
+          // Width is pinned so the frame always spans the product column: with only a
+          // ratio and a max-height, a portrait ratio makes the browser DERIVE a
+          // narrower width, which moves the carousel panels and breaks the scroll
+          // position the active-cover calculation reads.
+          width: "100%",
+          aspectRatio: `${activeCover.native_width} / ${activeCover.native_height}`,
+          maxHeight: MAX_PORTRAIT_FRAME_HEIGHT,
+        };
   const prevCover = covers[activeCoverIndex - 1];
   const nextCover = covers[activeCoverIndex + 1];
+  // A portrait cover no longer fills the frame horizontally, so for the first time
+  // something behind it is visible. The decorative tiled artwork is meant for products
+  // with no cover at all, and tiling it either side of a video reads as a rendering
+  // glitch — fall back to the plain page background there.
+  const isPortraitCover =
+    !isThumbnail &&
+    videoFrameIsPortrait({
+      width: activeCover?.native_width ?? null,
+      height: activeCover?.native_height ?? null,
+    });
 
   const { itemsRef, handleScroll } = useScrollableCarousel(activeCoverIndex, (index) =>
     setActiveCoverId(covers[index]?.id ?? null),
@@ -50,7 +89,8 @@ export const Covers = ({
   return (
     <figure
       className={classNames(
-        "group relative col-span-full overflow-hidden rounded-t border-b border-border bg-(image:--product-cover-placeholder) bg-cover",
+        "group relative col-span-full overflow-hidden rounded-t border-b border-border bg-cover",
+        isPortraitCover ? "bg-background" : "bg-(image:--product-cover-placeholder)",
         className,
       )}
       aria-label="Product preview"
@@ -61,9 +101,7 @@ export const Covers = ({
       <div
         className="flex h-full snap-x snap-mandatory items-center overflow-x-scroll overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         ref={itemsRef}
-        style={{
-          aspectRatio,
-        }}
+        style={frameStyle}
         onScroll={handleScroll}
       >
         {covers.map((cover) => (
@@ -162,7 +200,10 @@ const CoverItem = ({ cover }: { cover: AssetPreview }) => {
       ref={containerRef}
       role="tabpanel"
       id={cover.id}
-      className="mt-0! flex min-h-[1px] flex-[1_0_100%] snap-start justify-center border-0! p-0!"
+      // h-full lets a cover fill the (possibly height-capped) frame instead of
+      // overflowing it: a portrait cover's natural height is far greater than the cap,
+      // and without this the video would spill past the bottom of the figure.
+      className="mt-0! flex h-full min-h-[1px] flex-[1_0_100%] snap-start items-center justify-center border-0! p-0!"
     >
       {coverComponent}
     </div>
