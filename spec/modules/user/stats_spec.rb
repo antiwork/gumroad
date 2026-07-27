@@ -426,10 +426,14 @@ describe User::Stats, :vcr do
         expect(@user.affiliate_credit_cents_for_balances(balance_ids)).to eq(294 - 20)
       end
 
-      it "counts a partially refunded sale once in the lifetime total too" do
-        partially_refund_affiliate_credit!(Purchase.last, amount_cents: 20)
+      it "counts a partially refunded sale once in the weekly credits sum too" do
+        purchase = Purchase.last
+        partially_refund_affiliate_credit!(purchase, amount_cents: 20)
 
-        expect(@user.affiliate_credits_sum_total).to eq(294 - 20)
+        # The same credit, summed through the other caller: a window wide enough to include
+        # every sale the before block created.
+        expect(@user.affiliate_credits_sum_for_credits_created_between(8.weeks.ago, Time.current))
+          .to eq(294 - 20)
       end
     end
 
