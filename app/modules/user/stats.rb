@@ -113,6 +113,31 @@ module User::Stats
     affiliate_credit_sum_from_scope(paid_scope, all_scope)
   end
 
+  # Gross lifetime affiliate earnings: the sum of the user's affiliate credits
+  # that were actually paid out to them (no refund or chargeback), with no
+  # adjustment for partial refunds on the underlying purchases.
+  #
+  # This is deliberately a different, simpler number from
+  # #affiliate_credits_sum_total above. That method also adds back credits whose
+  # purchase was partially refunded and then subtracts the partially-refunded
+  # portion, which is the right thing to do when the number feeds money
+  # movement (payout balances) or a period-over-period earnings report. Getting
+  # it needs a join from every one of the user's credit rows to purchases just
+  # to read one boolean, which no index can serve, so its cost grows with the
+  # affiliate's whole earning history — around 70% of the affiliated-products
+  # page's request time for long-lived affiliates.
+  #
+  # The affiliated-products dashboard only wants a headline "gross sales"
+  # figure, so it uses this instead: equality on affiliate_user_id plus the
+  # three balance-id checks and amount_cents, all of which are covered by
+  # idx_affiliate_credits_on_user_and_balances_and_amount. It is also the same
+  # basis as the per-product revenue column on that page, which has always been
+  # an unadjusted SUM(affiliate_credits.amount_cents), so the headline stat and
+  # the table below it now agree.
+  def affiliate_credits_gross_sum_total
+    affiliate_credits.paid.sum(:amount_cents).to_i
+  end
+
   def affiliate_credit_sum_from_scope(paid_scope, all_scope)
     aff_credit_cents = paid_scope.sum("amount_cents").to_i
     aff_credit_cents += all_scope

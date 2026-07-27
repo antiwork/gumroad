@@ -618,11 +618,51 @@ describe AffiliatedProductsPresenter do
     end
   end
 
+  describe "the total revenue stat" do
+    let(:affiliate_user) { create(:affiliate_user) }
+
+    it "reports gross earnings, ignoring partial refunds on the underlying purchases" do
+      # A credit whose purchase was partially refunded, with a matching
+      # AffiliatePartialRefund row recording the affiliate's share of it.
+      partially_refunded_purchase = create(:purchase, stripe_partially_refunded: true)
+      credit_with_partial_refund = create(:affiliate_credit,
+                                          affiliate_user:,
+                                          purchase: partially_refunded_purchase,
+                                          amount_cents: 500,
+                                          affiliate_credit_success_balance: create(:balance))
+      create(:affiliate_partial_refund, affiliate_credit: credit_with_partial_refund, amount_cents: 200)
+
+      # And one whose purchase is partially refunded but has no affiliate
+      # partial-refund row, which the old adjusted sum double-counted.
+      create(:affiliate_credit,
+             affiliate_user:,
+             purchase: create(:purchase, stripe_partially_refunded: true),
+             amount_cents: 300,
+             affiliate_credit_success_balance: create(:balance))
+
+      # Plus an ordinary credit with no refund of any kind.
+      create(:affiliate_credit,
+             affiliate_user:,
+             amount_cents: 100,
+             affiliate_credit_success_balance: create(:balance))
+
+      props = described_class.new(affiliate_user).affiliated_products_page_props
+
+      # Gross: every paid credit at its full amount, 500 + 300 + 100. The
+      # partial refunds are deliberately not netted out here — the page shows
+      # gross sales, on the same basis as the per-product revenue column.
+      expect(props[:stats][:total_revenue]).to eq 900
+      # For contrast, the money-movement sum still nets them out: it adds the
+      # partially-refunded credits back and subtracts the refunded portion.
+      expect(affiliate_user.affiliate_credits_sum_total).to eq 1500
+    end
+  end
+
   describe "revenue stats caching" do
     let(:user) { create(:affiliate_user) }
 
     it "caches total_revenue per user and expires it after the TTL" do
-      expect(user).to receive(:affiliate_credits_sum_total).once.and_return(1234)
+      expect(user).to receive(:affiliate_credits_gross_sum_total).once.and_return(1234)
 
       presenter = described_class.new(user)
       expect(presenter.affiliated_products_page_props[:stats][:total_revenue]).to eq 1234
@@ -631,7 +671,7 @@ describe AffiliatedProductsPresenter do
       expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 1234
 
       travel_to(described_class::STATS_CACHE_TTL.from_now + 1.second) do
-        expect(user).to receive(:affiliate_credits_sum_total).once.and_return(5678)
+        expect(user).to receive(:affiliate_credits_gross_sum_total).once.and_return(5678)
         expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 5678
       end
     end
@@ -677,8 +717,8 @@ describe AffiliatedProductsPresenter do
 
     it "does not share cached revenue between users" do
       other_user = create(:affiliate_user)
-      expect(user).to receive(:affiliate_credits_sum_total).and_return(100)
-      expect(other_user).to receive(:affiliate_credits_sum_total).and_return(200)
+      expect(user).to receive(:affiliate_credits_gross_sum_total).and_return(100)
+      expect(other_user).to receive(:affiliate_credits_gross_sum_total).and_return(200)
 
       expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 100
       expect(described_class.new(other_user).affiliated_products_page_props[:stats][:total_revenue]).to eq 200

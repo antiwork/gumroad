@@ -104,13 +104,15 @@ class AffiliatedProductsPresenter
       }
     end
 
-    # The lifetime affiliate revenue sum scans every affiliate_credits row for
-    # the user (with partial-refund adjustment joins) — the single slowest
-    # query on this page in production traces. Cache it briefly; see
-    # STATS_CACHE_TTL for why short staleness is fine here.
+    # The gross lifetime affiliate revenue sum. It is cached briefly (see
+    # STATS_CACHE_TTL) because it still scans every one of the user's paid
+    # affiliate credits, but it is now index-covered rather than joining to
+    # purchases for a partial-refund adjustment — see
+    # User#affiliate_credits_gross_sum_total for why this page uses the
+    # unadjusted gross figure.
     def cached_total_revenue
       Rails.cache.fetch("affiliated_products/total_revenue/#{user.id}", expires_in: STATS_CACHE_TTL) do
-        user.affiliate_credits_sum_total
+        user.affiliate_credits_gross_sum_total
       end
     end
 
