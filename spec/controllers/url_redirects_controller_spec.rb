@@ -2520,6 +2520,77 @@ describe UrlRedirectsController, inertia: true do
           .to raise_error(ActionController::RoutingError)
       end
     end
+
+    # A post emailed to a creator's followers is the one content page with no product and no
+    # purchase behind it: `Installment#generate_url_redirect_for_follower` creates the redirect
+    # with nothing but the post itself. So this is the case where sending a poll to the expired
+    # page can land on a page that has no product to name, and it has to render anyway.
+    describe "withdrawn follower post on a polling request" do
+      let(:follower) { create(:user) }
+      let(:creator) { create(:follower, follower_user_id: follower.id).user }
+      let(:installment) { create(:follower_installment, seller: creator, name: "Chapter 12") }
+      # Exactly what a follower gets: no link, no purchase.
+      let(:url_redirect) { installment.generate_url_redirect_for_follower }
+
+      before do
+        sign_in(follower)
+        url_redirect
+      end
+
+      # Inertia ships the page's meta tags as a prop, so the rendered <title> is readable here.
+      # A partial-reload request gets the JSON page object instead of the prop hash, so read
+      # whichever one this request produced.
+      def page_title_meta_tag
+        Array(inertia.props[:_inertia_meta]).find { |tag| tag[:head_key] == "title" }&.[](:inner_content) ||
+          JSON.parse(response.body).dig("props", "_inertia_meta")&.find { |tag| tag["headKey"] == "title" }&.dig("innerContent")
+      end
+
+      it "has neither a product nor a purchase behind it" do
+        expect(url_redirect.link).to be_nil
+        expect(url_redirect.purchase).to be_nil
+        expect(url_redirect.referenced_link).to be_nil
+      end
+
+      it "sends a poll to the expired page, which renders with the post's name as the title" do
+        installment.mark_deleted!
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+
+        get :download_page, params: { id: url_redirect.token }
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+
+        # Follow the redirect the way the browser would, headers and all: an XHR keeps the
+        # original request's headers when it follows one.
+        get :expired, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+        expect_inertia.to render_component("UrlRedirects/Expired")
+        expect(page_title_meta_tag).to eq("Chapter 12 - Access expired")
+      end
+
+      # A post can be published with no name at all — the app shows a truncated excerpt of its
+      # message instead — so the title has to hold up when there is nothing to name either.
+      it "renders the expired page for an unnamed post" do
+        installment.update!(name: nil)
+        installment.mark_deleted!
+
+        get :expired, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+        expect(page_title_meta_tag).to eq("#{installment.displayed_name} - Access expired")
+      end
+
+      it "renders the rental-expired and membership-inactive pages too" do
+        installment.mark_deleted!
+
+        get :rental_expired_page, params: { id: url_redirect.token }
+        expect(response).to be_successful
+        expect(page_title_meta_tag).to eq("Chapter 12 - Your rental has expired")
+
+        get :membership_inactive_page, params: { id: url_redirect.token }
+        expect(response).to be_successful
+        expect(page_title_meta_tag).to eq("Chapter 12 - Your membership is inactive")
+      end
+    end
   end
 
   describe "GET 'media_urls" do
