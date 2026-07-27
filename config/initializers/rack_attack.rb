@@ -253,6 +253,14 @@ class Rack::Attack
   # Every free product in the cart, so a cart can't dodge the cap by ordering its items
   # a particular way. Public so specs can exercise it against the request shapes that
   # reach it in production.
+  #
+  # Permalinks are lower-cased before they become counter keys. The `links` table is
+  # `utf8mb4_unicode_ci`, so the lookup checkout performs
+  # (`Link.find_by(unique_permalink: ...)`, and the same field's `case_sensitive: false`
+  # uniqueness validation) resolves `abc`, `Abc` and `ABC` to one and the same product.
+  # Keying on the raw string would hand each casing its own budget, so alternating case
+  # between requests would multiply the cap by however many spellings the attacker cares
+  # to type. One product has to mean one counter.
   def self.free_checkout_permalinks(req)
     return [] unless req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
 
@@ -275,7 +283,7 @@ class Rack::Attack
       next unless item.is_a?(Hash)
       next unless item["perceived_price_cents"].to_s == "0"
 
-      item["permalink"].presence
+      item["permalink"].presence&.downcase
     end.uniq
   rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
     []
@@ -284,10 +292,12 @@ class Rack::Attack
   # The per-hour bucket a product's free-checkout attempts are counted in. Built the same
   # way `Rack::Attack::Cache#count` builds its own keys — the window number the current
   # time falls in, then the throttle name — so `free_checkout_attempts` below reads exactly
-  # the counter that `cache.count` writes.
+  # the counter that `cache.count` writes. The permalink is lower-cased here for the same
+  # reason it is in `free_checkout_permalinks`: the product lookup is case-insensitive, so
+  # every spelling of one permalink has to land in one bucket.
   def self.free_checkout_bucket(permalink, now: Time.now.to_i)
     window = now / CHECKOUT_FREE_PRODUCT_PERIOD.to_i
-    "#{window}:#{CHECKOUT_FREE_PRODUCT_THROTTLE}:#{permalink}"
+    "#{window}:#{CHECKOUT_FREE_PRODUCT_THROTTLE}:#{permalink.to_s.downcase}"
   end
 
   # How many free-checkout attempts this product has already spent in the current hour.

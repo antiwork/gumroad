@@ -601,6 +601,27 @@ describe "Rack::Attack throttle", type: :request do
         end
       end
 
+      # A permalink lookup is case-insensitive (the `links` table is `utf8mb4_unicode_ci`,
+      # and `unique_permalink`'s uniqueness validation is `case_sensitive: false`), so
+      # `AbC` and `abc` are the same product to checkout. If they were not the same product
+      # to the throttle, alternating case between requests would buy a fresh budget per
+      # spelling and the cap would be worth nothing.
+      it "counts case variants of one permalink against the same budget" do
+        travel_to(Time.current) do
+          permalink = product.unique_permalink
+          spellings = [permalink.downcase, permalink.upcase, permalink.capitalize,
+                       permalink.swapcase, permalink.downcase]
+
+          spellings.each_with_index do |spelling, i|
+            checkout(ip: "10.18.0.#{i + 1}", permalinks: [spelling], uid: "case#{i}")
+            expect(response.status).not_to eq(429), "request #{i + 1} (#{spelling}) unexpectedly throttled"
+          end
+
+          checkout(ip: "10.18.9.9", permalinks: [permalink.upcase], uid: "over")
+          expect(response.status).to eq(429)
+        end
+      end
+
       # A rejected request must cost nobody anything. Otherwise one exhausted product turns
       # into a lever against every other: put it in a cart next to a victim's product and
       # repeat the (rejected) request, and each rejection still spends one of the victim's
@@ -725,6 +746,16 @@ describe "Rack::Attack throttle", type: :request do
 
       it "counts a repeated permalink once per request" do
         expect(free_permalinks_for({ "line_items" => [free_item("abc"), free_item("abc")] })).to eq(["abc"])
+      end
+
+      # One product, one counter — see the case-variant request spec above for why.
+      it "folds case variants of one permalink into a single key" do
+        expect(free_permalinks_for({ "line_items" => [free_item("AbC")] })).to eq(["abc"])
+        expect(free_permalinks_for({ "line_items" => [free_item("abc"), free_item("ABC")] })).to eq(["abc"])
+      end
+
+      it "reads the same bucket for every spelling of a permalink" do
+        expect(Rack::Attack.free_checkout_bucket("AbC")).to eq(Rack::Attack.free_checkout_bucket("abc"))
       end
 
       it "handles line_items arriving as a hash of indexed items" do
