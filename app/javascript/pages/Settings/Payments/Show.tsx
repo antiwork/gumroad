@@ -220,11 +220,22 @@ export default function PaymentsPage() {
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
   const [errorFieldNames, setErrorFieldNames] = React.useState(() => new Set<FormFieldName>());
+  // The authoritative set of fields the current validation pass has rejected. It lives in a ref as
+  // well as in state because validateForm both writes it (through markFieldInvalid, from a dozen
+  // nested helpers) and reads it back within the same synchronous call, before React has re-rendered.
+  const errorFieldNamesRef = React.useRef(errorFieldNames);
+  const resetErrorFieldNames = () => {
+    errorFieldNamesRef.current = new Set();
+    setErrorFieldNames(errorFieldNamesRef.current);
+  };
   // Counts failed save attempts. The scroll-to-first-invalid-field effect keys off this rather than
   // off errorFieldNames, so it fires once per press of "Update settings" and never again while the
   // seller is typing their way through the fields it pointed them at.
   const [failedSaveAttempts, setFailedSaveAttempts] = React.useState(0);
-  const markFieldInvalid = (fieldName: FormFieldName) => setErrorFieldNames(new Set(errorFieldNames.add(fieldName)));
+  const markFieldInvalid = (fieldName: FormFieldName) => {
+    errorFieldNamesRef.current = new Set(errorFieldNamesRef.current).add(fieldName);
+    setErrorFieldNames(errorFieldNamesRef.current);
+  };
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
   const [saveCounter, setSaveCounter] = React.useState(0);
@@ -261,7 +272,7 @@ export default function PaymentsPage() {
 
   const updatePayoutMethod = (newPayoutMethod: PayoutMethod) => {
     setSelectedPayoutMethod(newPayoutMethod);
-    setErrorFieldNames(new Set());
+    resetErrorFieldNames();
     if (props.user.country_code === "AE") {
       if (newPayoutMethod === "paypal") {
         form.setData("user", { ...form.data.user, is_business: false });
@@ -281,12 +292,12 @@ export default function PaymentsPage() {
       setShowUpdateCountryConfirmationModal(true);
     }
     form.setData("user", { ...form.data.user, ...newComplianceInfo });
-    setErrorFieldNames(new Set());
+    resetErrorFieldNames();
   };
 
   const updateBankAccount = (newBankAccount: Partial<BankAccount>) => {
     form.setData("bank_account", { ...form.data.bank_account, ...newBankAccount });
-    setErrorFieldNames(new Set());
+    resetErrorFieldNames();
   };
 
   const [debitCard, setDebitCard] = React.useState<PayoutDebitCardData | null>(null);
@@ -311,7 +322,7 @@ export default function PaymentsPage() {
         bank_account: props.bank_account_details.bank_account,
         payment_address: props.paypal_address,
       });
-      setErrorFieldNames(new Set());
+      resetErrorFieldNames();
       setClientErrorMessage(null);
       previousCountryRef.current = currentCountry;
     }
@@ -951,6 +962,10 @@ export default function PaymentsPage() {
 
   const validateForm = () => {
     setClientErrorMessage(null);
+    // Start from a clean slate every attempt. Not every input clears the set as it changes (the
+    // PayPal email field and the saved-bank-account toggle don't), so a leftover entry from a
+    // previous attempt would otherwise block a save and name a field the seller has since filled in.
+    resetErrorFieldNames();
 
     if (isUpdateCountryConfirmed) {
       return true;
@@ -966,7 +981,7 @@ export default function PaymentsPage() {
       validateComplianceInfoFields();
     }
 
-    if (errorFieldNames.size === 0) return true;
+    if (errorFieldNamesRef.current.size === 0) return true;
 
     // Some individual checks above (P.O. Box address, phone format, Kana character sets, and so on)
     // already set a specific message explaining what is wrong. The effect below fills in a generic
