@@ -206,6 +206,7 @@ describe UrlRedirectPresenter do
           email: @purchase.email,
           email_digest: @purchase.email_digest,
           is_archived: false,
+          has_invoice: true,
           product_long_url: @product.long_url,
           product_id: @product.external_id,
           product_name: @product.name,
@@ -238,6 +239,32 @@ describe UrlRedirectPresenter do
         )
       }]
       expect(instance.download_page_with_content_props).to eq(@props)
+    end
+
+    # The download page shows its "Generate invoice" link off this flag, and the whole point of
+    # the flag is to match the receipt's own gate rather than inventing a second rule. A free
+    # purchase has no amount to invoice, so offering the link would send the buyer to a page
+    # that cannot render anything.
+    describe "has_invoice" do
+      it "is true for a paid purchase" do
+        instance = described_class.new(url_redirect: @url_redirect, logged_in_user: nil)
+        expect(instance.download_page_with_content_props[:purchase][:has_invoice]).to be(true)
+      end
+
+      it "is false for a free purchase" do
+        product = create(:product, user: @user, price_cents: 0)
+        purchase = create(:free_purchase, link: product)
+        url_redirect = create(:url_redirect, purchase:, link: product)
+
+        instance = described_class.new(url_redirect:, logged_in_user: nil)
+        expect(instance.download_page_with_content_props[:purchase][:has_invoice]).to be(false)
+      end
+
+      it "tracks the purchase's own has_invoice? rather than duplicating its logic" do
+        instance = described_class.new(url_redirect: @url_redirect, logged_in_user: nil)
+        expect(instance.download_page_with_content_props[:purchase][:has_invoice])
+          .to eq(@purchase.has_invoice?)
+      end
     end
 
     it "does not include a creator byline in props" do
@@ -646,6 +673,7 @@ describe UrlRedirectPresenter do
           email: @purchase.email,
           email_digest: @purchase.email_digest,
           is_archived: false,
+          has_invoice: true,
           product_id: @product.external_id,
           product_name: @product.name,
           variant_id: nil,

@@ -101,6 +101,14 @@ class UrlRedirectPresenter
           email_digest: purchase.email_digest,
           created_at: purchase.created_at,
           is_archived: purchase.is_archived,
+          # Whether this purchase can produce an invoice at all. The download page shows a
+          # "Generate invoice" link only when this is true, matching the gate the receipt
+          # already applies (Purchase#has_invoice? — false for free purchases and for
+          # memberships still in their free trial, neither of which has an amount to invoice).
+          # Sent as a plain boolean rather than the URL itself because the invoice URL embeds
+          # the buyer's email, which must not reach the page when email confirmation is still
+          # pending; the frontend builds the URL from the id it already has.
+          has_invoice: purchase.has_invoice?,
           product_permalink: purchase.link&.unique_permalink,
           product_id: purchase.link&.external_id,
           product_name: purchase.link&.name,
