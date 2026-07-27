@@ -107,10 +107,24 @@ module User::Stats
     affiliate_credit_sum_from_scope(paid_scope, all_scope)
   end
 
-  def affiliate_credits_sum_total
-    paid_scope = affiliate_credits.paid
-    all_scope = affiliate_credits
-    affiliate_credit_sum_from_scope(paid_scope, all_scope)
+  # Lifetime affiliate revenue shown on the affiliated products dashboard: the
+  # sum of the affiliate's paid credits, matching the revenue column of the
+  # per-product table on that page (both exclude credits whose sale was fully
+  # refunded or charged back).
+  #
+  # Deliberately does NOT adjust for partial refunds, unlike
+  # #affiliate_credit_sum_from_scope below. That adjustment joins every one of
+  # the affiliate's credit rows to purchases just to read the
+  # purchases.stripe_partially_refunded boolean, and no index can serve that
+  # check after the join, so MySQL fetches each joined purchase row from the
+  # clustered index. The cost is proportional to the affiliate's entire credit
+  # history even though partial refunds are rare, which made it roughly 70% of
+  # this page's request time (Sentry GUMROAD-H8). The dashboard is a headline
+  # figure, so it takes the plain paid sum instead — that one is served
+  # entirely from idx_affiliate_credits_on_user_and_balances_and_amount and
+  # runs in single-digit milliseconds.
+  def affiliate_credits_total_revenue_cents
+    affiliate_credits.paid.sum(:amount_cents).to_i
   end
 
   def affiliate_credit_sum_from_scope(paid_scope, all_scope)

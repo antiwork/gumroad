@@ -618,22 +618,35 @@ describe AffiliatedProductsPresenter do
     end
   end
 
-  describe "revenue stats caching" do
+  describe "revenue stats" do
     let(:user) { create(:affiliate_user) }
 
-    it "caches total_revenue per user and expires it after the TTL" do
-      expect(user).to receive(:affiliate_credits_sum_total).once.and_return(1234)
+    it "reports total_revenue as the plain sum of paid credits, with no partial-refund adjustment" do
+      # The headline revenue figure is deliberately the indexed paid-credit sum:
+      # adjusting it for partial refunds requires joining every credit row to
+      # purchases, which was about 70% of this page's request time. A credit
+      # whose sale was later partially refunded still contributes its full
+      # amount here.
+      plain_credit = create(:affiliate_credit, affiliate_user: user, amount_cents: 500,
+                                               affiliate_credit_success_balance: create(:balance))
+      partially_refunded_credit = create(:affiliate_credit, affiliate_user: user, amount_cents: 300,
+                                                            affiliate_credit_success_balance: create(:balance))
+      partially_refunded_credit.purchase.update!(stripe_partially_refunded: true)
+      create(:affiliate_partial_refund, affiliate_credit: partially_refunded_credit, amount_cents: 100)
+      # Fully refunded credits are excluded from the "paid" scope, so they do
+      # not contribute at all.
+      create(:affiliate_credit, affiliate_user: user, amount_cents: 700,
+                                affiliate_credit_success_balance: create(:balance),
+                                affiliate_credit_refund_balance: create(:balance))
 
-      presenter = described_class.new(user)
-      expect(presenter.affiliated_products_page_props[:stats][:total_revenue]).to eq 1234
-      # A second render within the TTL serves the aggregate from the cache
-      # rather than re-running the expensive sum (hence `.once` above).
-      expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 1234
+      expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue])
+        .to eq plain_credit.amount_cents + partially_refunded_credit.amount_cents
+    end
 
-      travel_to(described_class::STATS_CACHE_TTL.from_now + 1.second) do
-        expect(user).to receive(:affiliate_credits_sum_total).once.and_return(5678)
-        expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 5678
-      end
+    it "does not run the partial-refund adjustment query for the revenue stat" do
+      expect(user).not_to receive(:affiliate_credit_sum_from_scope)
+
+      described_class.new(user).affiliated_products_page_props
     end
 
     it "caches the raw global affiliate earnings but formats them fresh on every request" do
@@ -675,10 +688,10 @@ describe AffiliatedProductsPresenter do
       expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
     end
 
-    it "does not share cached revenue between users" do
+    it "reports revenue per user" do
       other_user = create(:affiliate_user)
-      expect(user).to receive(:affiliate_credits_sum_total).and_return(100)
-      expect(other_user).to receive(:affiliate_credits_sum_total).and_return(200)
+      expect(user).to receive(:affiliate_credits_total_revenue_cents).and_return(100)
+      expect(other_user).to receive(:affiliate_credits_total_revenue_cents).and_return(200)
 
       expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 100
       expect(described_class.new(other_user).affiliated_products_page_props[:stats][:total_revenue]).to eq 200
