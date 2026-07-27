@@ -3,6 +3,10 @@
 module User::Risk
   extend ActiveSupport::Concern
 
+  # Raised when something tries to clear a suspension without saying it means to.
+  # See #refuse_unauthorized_suspension_clear.
+  class SuspensionClearNotAuthorizedError < StandardError; end
+
   PAYMENT_REMINDER_RISK_STATES = %w[flagged_for_tos_violation not_reviewed compliant].freeze
   SUSPENDED_STATES = %w[suspended_for_tos_violation suspended_for_fraud].freeze
   INCREMENTAL_ENQUEUE_BALANCE = 100_00
@@ -143,11 +147,14 @@ module User::Risk
     enable_accounts_with_same_stripe_fingerprint
   end
 
+  # These two mirror suspend_sellers_other_accounts: when an account is cleared, the sibling
+  # accounts that were auto-suspended alongside it are cleared too. That is a deliberate
+  # un-suspension, so it passes clear_suspension.
   def enable_accounts_with_same_payment_address
     return if payment_address.blank?
 
     User.where(payment_address:).where.not(id:).each do |user|
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
+      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts, clear_suspension: true)
     end
   end
 
@@ -163,7 +170,7 @@ module User::Risk
 
     User.where(id: user_ids_with_same_fingerprint).each do |user|
       matching_fingerprint = (fingerprints & user.alive_bank_accounts.pluck(:stripe_fingerprint)).first
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as bank account fingerprint #{matching_fingerprint} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
+      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as bank account fingerprint #{matching_fingerprint} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts, clear_suspension: true)
     end
   end
 
@@ -197,6 +204,37 @@ module User::Risk
       .last
 
     last_suspension_comment&.author_id.present?
+  end
+
+  # A suspension is only ever cleared on purpose. Anything moving an account to compliant
+  # has to pass `clear_suspension: true` when the account is actually suspended, to say that
+  # it looked at the suspension and still means to lift it.
+  #
+  # Without this, any review that ends in "this account looks fine" silently un-suspends a
+  # seller. That happened: a seller was suspended for selling pirated content, and 106
+  # seconds later an unrelated first-payout review — which only looks at financial signals
+  # like chargebacks and refunds, and had no idea a suspension had just been written —
+  # marked the same account compliant. The products went back on sale and the account sold
+  # for another eight days before anyone noticed.
+  #
+  # The state the caller thinks the account is in can be stale (that's the whole shape of
+  # the bug: the losing lane loaded the account before the suspension was written), so the
+  # check reads the row inside the transition's own transaction with a row lock rather than
+  # trusting the attribute in memory. The lock also serializes two lanes racing on the same
+  # account, so the second one sees the first one's suspension instead of overwriting it.
+  def refuse_unauthorized_suspension_clear(transition)
+    return true if new_record?
+
+    persisted_risk_state = self.class.where(id:).lock.pick(:user_risk_state)
+    return true unless SUSPENDED_STATES.include?(persisted_risk_state)
+
+    params = transition.args.first || {}
+    unless params[:clear_suspension]
+      raise SuspensionClearNotAuthorizedError,
+            "refusing to clear #{persisted_risk_state} without clear_suspension: true"
+    end
+
+    true
   end
 
   def add_user_comment(transition)

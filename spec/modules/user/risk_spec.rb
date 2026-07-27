@@ -14,6 +14,66 @@ describe User::Risk do
     end
   end
 
+  describe "clearing a suspension" do
+    let(:admin) { create(:admin_user) }
+
+    User::Risk::SUSPENDED_STATES.each do |suspended_state|
+      context "when the account is #{suspended_state}" do
+        let!(:user) { create(:user, user_risk_state: suspended_state) }
+
+        it "refuses to mark the account compliant without clear_suspension" do
+          expect do
+            user.mark_compliant!(author_id: admin.id)
+          end.to raise_error(User::Risk::SuspensionClearNotAuthorizedError, /refusing to clear #{suspended_state}/)
+
+          expect(user.reload.user_risk_state).to eq(suspended_state)
+        end
+
+        it "marks the account compliant when clear_suspension is passed" do
+          user.mark_compliant!(author_id: admin.id, clear_suspension: true)
+
+          expect(user.reload).to be_compliant
+        end
+
+        it "refuses even when the in-memory copy still thinks the account is not suspended" do
+          # This is the actual race: a lane loads the account, another lane suspends it, and
+          # the first lane then writes its own verdict from the stale copy it is holding.
+          stale_copy = User.find(user.id)
+          stale_copy.update_column(:user_risk_state, "not_reviewed")
+          User.where(id: user.id).update_all(user_risk_state: suspended_state)
+
+          expect do
+            stale_copy.mark_compliant!(author_name: "first_payout_review")
+          end.to raise_error(User::Risk::SuspensionClearNotAuthorizedError)
+
+          expect(user.reload.user_risk_state).to eq(suspended_state)
+        end
+      end
+    end
+
+    it "still allows a non-suspended account to be marked compliant without clear_suspension" do
+      user = create(:user, user_risk_state: "flagged_for_tos_violation")
+
+      user.mark_compliant!(author_id: admin.id)
+
+      expect(user.reload).to be_compliant
+    end
+
+    it "leaves a suspension in place when the low-balance probation check runs after it" do
+      # This check lifts probation once a seller's balance recovers. It knows nothing about
+      # why an account might be suspended, so a suspension written while it was in flight
+      # has to win.
+      user = create(:user)
+      allow(user).to receive(:unpaid_balance_cents).and_return(100_00)
+      user.send(:disable_refunds_and_put_on_probation!)
+      user.suspend_for_tos_violation!(author_name: "piracy_review")
+
+      expect { user.check_for_high_balance_and_remove_low_balance_probation! }
+        .not_to change { user.reload.user_risk_state }
+      expect(user.reload).to be_suspended_for_tos_violation
+    end
+  end
+
   describe "#suspend_due_to_stripe_risk" do
     let(:user) { create(:user) }
 
