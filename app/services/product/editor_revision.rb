@@ -37,7 +37,8 @@
 # ## What the token is
 #
 # A digest over the identity and liveness of everything the editor can delete:
-# the alive ids of all five collections, plus the product's own updated_at.
+# the alive ids of all five collections, plus the handful of product columns
+# that change what a save is allowed to delete.
 # Deliberately NOT a timestamp — a digest changes only when something the
 # contract cares about changes, so an unrelated write (a price edit, a tag) does
 # not invalidate a seller's in-flight deletion and produce the false conflicts
@@ -49,7 +50,32 @@ class Product::EditorRevision
   #
   # v2: each collection now contributes updated_at as well as id, so edits to
   # existing children move the token and not just additions and removals.
-  VERSION = "v2"
+  # v3: the product's own updated_at is no longer part of the digest. It made
+  # every product write invalidate outstanding deletions — a price or tag edit
+  # bumps updated_at, which is precisely the false-conflict behaviour this class
+  # documents itself as avoiding. Replaced by the named columns in
+  # DELETION_RELEVANT_ATTRIBUTES.
+  VERSION = "v3"
+
+  # Product attributes that change WHAT A SAVE MAY DELETE, and therefore have
+  # to be witnessed by the token. This is deliberately a short allowlist rather
+  # than `updated_at`: everything absent from it (price, name, tags,
+  # description, visibility, …) can be edited by a co-editor without
+  # invalidating a stale tab's in-flight deletion, because none of it changes
+  # which rows that deletion would remove.
+  #
+  # - has_same_rich_content_for_all_variants: decides whether version-level
+  #   pages are even visible to the editor. Product::RichContentDeletionGuard
+  #   branches on the PERSISTED value to classify a page deletion, and a save
+  #   built while it was off means something different once it is on — this is
+  #   the July 21 wipe mechanism in that guard's comment.
+  # - is_tiered_membership: selects the variant deletion route, and decides
+  #   whether tier-level recurring prices are swept alongside a version.
+  DELETION_RELEVANT_ATTRIBUTES = %w[
+    has_same_rich_content_for_all_variants
+    is_tiered_membership
+  ].freeze
+
 
   class << self
     # The token for the product's current committed state.
@@ -84,12 +110,13 @@ class Product::EditorRevision
       #
       # This deliberately does not extend to non-deletable state (a price, a
       # tag): those still must not invalidate an in-flight deletion, which is
-      # the false-conflict problem that killed #6245.
+      # the false-conflict problem that killed #6245. That is why the product
+      # contributes only DELETION_RELEVANT_COLUMNS and not its updated_at.
       def fingerprint(product)
         {
           version: VERSION,
           product: product.id,
-          updated_at: product.updated_at&.to_fs(:usec),
+          product_state: product_state(product),
           rich_content: stamped(product.alive_rich_contents),
           variants: alive_variant_stamps(product),
           variant_categories: stamped(product.variant_categories.alive),
@@ -104,6 +131,25 @@ class Product::EditorRevision
           # co-editor had just enabled, and the deletion would look fresh.
           variant_integrations: variant_integration_stamps(product),
         }
+      end
+
+      # The deletion-relevant product attributes, read straight off the record.
+      #
+      # These are `flags` bits (flag_shih_tzu) rather than real columns, so the
+      # existence check is on the reader, not on column_names. Raises if one
+      # stops existing: a rename that silently dropped an attribute here would
+      # quietly widen what a stale token is willing to delete, which is the
+      # failure mode this class exists to prevent — better a loud failure.
+      def product_state(product)
+        DELETION_RELEVANT_ATTRIBUTES.index_with do |attribute|
+          unless product.respond_to?(attribute)
+            raise ArgumentError, "Product::EditorRevision: no such attribute #{attribute.inspect}"
+          end
+
+          # Normalise to a boolean: flag_shih_tzu readers return nil for unset
+          # bits and true once set, and nil vs false must not move the digest.
+          !!product.public_send(attribute)
+        end
       end
 
       # [variant_id, integration_id] pairs for every live version-level join, in
