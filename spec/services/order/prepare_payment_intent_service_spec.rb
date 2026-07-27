@@ -1425,7 +1425,13 @@ describe Order::PreparePaymentIntentService, :vcr do
         # Gumroad's cut is stored twice: once on the charge-level presentment row and once per
         # purchase. Payouts and refunds read the per-purchase rows, so if the allocator ever
         # dropped or double-counted a cent the seller's proceeds would silently disagree with what
-        # was charged. Pin the invariant that the per-purchase shares sum to the charge-level share.
+        # was charged.
+        #
+        # Pinning only "the parts sum to the whole" would prove nothing here, because the
+        # charge-level figure is computed as the sum of the per-purchase figures — that assertion
+        # holds even if every purchase were given the whole charge's cut. So assert each
+        # purchase's own expected value: its own fee + affiliate credit + Gumroad tax, converted
+        # at its own stored rate.
         it "splits Gumroad's presentment fee share across purchases so it sums to the charge-level share" do
           other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
           params = {
@@ -1440,10 +1446,24 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(responses.values).to all(include(success: true))
 
           charge_presentment = order.charges.last.charge_presentment
-          purchase_shares = order.purchases.map { _1.reload.purchase_presentment.presentment_gumroad_amount_cents }
+          purchases = order.purchases.map(&:reload)
+          purchase_shares = purchases.map { _1.purchase_presentment.presentment_gumroad_amount_cents }
 
           expect(purchase_shares.size).to eq(2)
-          expect(purchase_shares).to all(be >= 0)
+
+          # The value each purchase must carry on its own, independent of the charge total: the
+          # same USD composition the payout path reads (Purchase#total_transaction_amount_for_gumroad_cents),
+          # converted back with the rate that purchase stored.
+          expected_shares = purchases.map do |purchase|
+            usd_cents = purchase.fee_cents + purchase.affiliate_credit_cents + purchase.gumroad_tax_cents
+            purchase.send(:usd_cents_to_currency, Currency::EUR, usd_cents, purchase.rate_converted_to_usd)
+          end
+
+          expect(expected_shares).to all(be > 0)
+          expect(purchase_shares).to eq(expected_shares)
+          # And a purchase can never be assigned the whole charge's cut — the bug the sum
+          # assertion below is blind to.
+          expect(purchase_shares).to all(be < charge_presentment.presentment_gumroad_amount_cents)
           expect(purchase_shares.sum).to eq(charge_presentment.presentment_gumroad_amount_cents)
           expect(charge_presentment.presentment_gumroad_amount_cents).to be <= charge_presentment.presentment_total_cents
         end
