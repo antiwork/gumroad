@@ -101,6 +101,11 @@ class Ai::AnthropicClient
   # request can generate in total: the per-call `max_tokens` cap only bounds ONE turn, so without
   # a running total a loop can pay that cap over and over. It is always a number, never nil — see
   # #output_tokens_for for what happens when the provider doesn't report usage.
+  #
+  # On the streaming path it counts the whole turn, including any attempt that was generated and
+  # then discarded (a corrupted tool call, a dropped connection) before a retry or the buffered
+  # replay regenerated it. Those attempts were generated and billed, so a caller enforcing a
+  # spending bound has to see them.
   Result = Struct.new(:text, :tool_uses, :stop_reason, :output_tokens, keyword_init: true)
 
   # Roughly how many characters of generated output make up one token. Only used to estimate a
@@ -175,6 +180,13 @@ class Ai::AnthropicClient
   def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, buffered_max_tokens: nil, on_discard_streamed_text: nil, &on_text)
     body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
     yielded_any = false
+    # Output the model generated on streamed attempts we ended up throwing away — a corrupted tool
+    # call, a connection that dropped mid-stream — and that a retry or the buffered replay then
+    # regenerated from scratch. The provider generated and billed it either way, so a caller
+    # bounding how much one request may generate has to see it: reporting only the attempt that
+    # happened to succeed would let a request that burned three page-sized turns look like it spent
+    # one. Whatever Result we finally return carries this on top of its own usage.
+    discarded_output_tokens = 0
 
     begin
       with_retries(retryable: -> { !yielded_any }) do
@@ -229,10 +241,19 @@ class Ai::AnthropicClient
           text:,
           tool_uses:,
           stop_reason:,
-          output_tokens: output_tokens_for(reported: reported_output_tokens, text:, tool_uses:),
+          output_tokens: discarded_output_tokens + output_tokens_for(reported: reported_output_tokens, text:, tool_uses:),
         )
       rescue HTTP::Error => e
+        discarded_output_tokens += discarded_output_tokens_for(reported: reported_output_tokens, text:, blocks:)
         raise TransientError, "Anthropic network error: #{e.message}"
+      rescue Error
+        # This attempt is being thrown away — a corrupted tool call, a mid-stream error event, an
+        # overloaded response — but the model may already have generated (and the provider billed)
+        # its output before we found that out. Charge it before the retry or the buffered replay
+        # regenerates the turn from scratch, so the caller's spending bound sees everything the
+        # request generated rather than only the attempt that finally worked.
+        discarded_output_tokens += discarded_output_tokens_for(reported: reported_output_tokens, text:, blocks:)
+        raise
       end
     rescue UnreadableToolCallError => e
       # Every streamed attempt "completed" yet delivered a corrupted tool call — retrying the same
@@ -249,7 +270,7 @@ class Ai::AnthropicClient
         yielded_any = false
       end
 
-      buffered_fallback(system:, messages:, tools:, max_tokens: buffered_max_tokens || max_tokens, original_error: e, &on_text)
+      buffered_fallback(system:, messages:, tools:, max_tokens: buffered_max_tokens || max_tokens, original_error: e, already_generated_output_tokens: discarded_output_tokens, &on_text)
     end
   end
 
@@ -273,7 +294,11 @@ class Ai::AnthropicClient
     #
     # If the buffered replay fails too, the seller-facing error must stay as clear as before the
     # fallback existed, so the ORIGINAL unreadable-tool-call error is what surfaces.
-    def buffered_fallback(system:, messages:, tools:, max_tokens:, original_error:, &on_text)
+    # `already_generated_output_tokens` is what the failed streamed attempt(s) generated before we
+    # threw them away. The replay regenerates the turn, so the request has now paid for both; the
+    # returned Result carries the sum, because the caller uses it to bound how much one request may
+    # generate and would otherwise see only the replay.
+    def buffered_fallback(system:, messages:, tools:, max_tokens:, original_error:, already_generated_output_tokens: 0, &on_text)
       Rails.logger.warn("Anthropic streamed tool call unreadable after retries; falling back to a non-streamed request. (#{original_error.message})")
 
       body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
@@ -289,6 +314,8 @@ class Ai::AnthropicClient
       rescue Error, HTTP::Error, JSON::ParserError
         raise original_error
       end
+
+      result.output_tokens = already_generated_output_tokens + result.output_tokens.to_i
 
       # A buffered replay can hit the token cap itself, and it can come back as a tool-use turn.
       # The caller discards the text in both cases — a "max_tokens" turn is unusable and gets
@@ -569,6 +596,19 @@ class Ai::AnthropicClient
       return reported if reported.is_a?(Numeric) && reported >= 0
 
       generated_characters = text.to_s.length + Array(tool_uses).sum { |tool_use| tool_use[:input].to_json.length }
+      (generated_characters / CHARACTERS_PER_TOKEN_ESTIMATE.to_f).ceil
+    end
+
+    # How many output tokens a streamed attempt we are about to DISCARD already cost. Same idea as
+    # #output_tokens_for, but it works from the raw accumulated blocks rather than assembled
+    # tool_uses, because the reason the attempt is being discarded is usually that those blocks
+    # can't be assembled (a tool call whose JSON doesn't parse). The half-written JSON string is
+    # itself what the model generated, so its length is the right thing to charge for.
+    def discarded_output_tokens_for(reported:, text:, blocks:)
+      return reported if reported.is_a?(Numeric) && reported >= 0
+
+      generated_characters = text.to_s.length +
+                             blocks.values.sum { |block| block[:json].to_s.length }
       (generated_characters / CHARACTERS_PER_TOKEN_ESTIMATE.to_f).ceil
     end
 

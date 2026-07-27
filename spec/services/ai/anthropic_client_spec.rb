@@ -556,6 +556,86 @@ describe Ai::AnthropicClient do
       expect(buffered).to have_been_requested.once
     end
 
+    it "counts what the discarded streamed attempts generated on top of the replay's own usage" do
+      # The failed attempts were generated and billed before we found out their tool call was
+      # unreadable, and the replay regenerates the turn from scratch. A caller bounding how much one
+      # request may generate has to see all of it — reporting only the replay would let a request
+      # that burned three page-sized turns look like it spent one, and walk straight past its
+      # ceiling.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_user_custom_html","params":{"custom_html":"<div>cut off' } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 30_000 } }],
+      )
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      buffered_body = {
+        "content" => [{ "type" => "tool_use", "id" => "toolu_y", "name" => "api_write", "input" => { "endpoint" => "update_user_custom_html" } }],
+        "stop_reason" => "tool_use",
+        "usage" => { "output_tokens" => 8_000 },
+      }
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => false))
+        .to_return(status: 200, body: buffered_body.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      # Three streamed attempts at 30,000 each, then the 8,000-token replay.
+      expect(result.output_tokens).to eq(98_000)
+    end
+
+    it "counts what a retried streamed attempt generated on top of the attempt that succeeded" do
+      # Same reasoning one step earlier in the recovery: when a corrupted attempt is followed by a
+      # clean re-request rather than a buffered replay, the corrupted one still generated output.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 12_000 } }],
+      )
+      complete = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product"}' } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 900 } }],
+      )
+      stub_request(:post, url)
+        .to_return({ status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" } },
+                   { status: 200, body: complete, headers: { "Content-Type" => "text/event-stream" } })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(result.tool_uses).to eq([{ id: "toolu_x", name: "api_write", input: { "endpoint" => "update_product" } }])
+      expect(result.output_tokens).to eq(12_900)
+    end
+
+    it "estimates a discarded attempt's size from its half-written tool call when the provider reports no usage" do
+      # The reason the attempt is discarded is usually that its tool-call JSON doesn't parse, so
+      # there are no assembled arguments to measure — the half-written JSON string is itself what
+      # the model generated, and charging zero for it would leave the largest turns free.
+      allow(client).to receive(:sleep)
+      half_written = %({"endpoint":"update_user_custom_html","params":{"custom_html":") + ("x" * 4_000)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: half_written } }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => false))
+        .to_return(status: 200,
+                   body: { "content" => [{ "type" => "text", "text" => "done" }], "stop_reason" => "end_turn", "usage" => { "output_tokens" => 10 } }.to_json,
+                   headers: { "Content-Type" => "application/json" })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      # Three discarded attempts, each estimated from the half-written JSON's own length.
+      expect(result.output_tokens).to eq(10 + (3 * (half_written.length / 4.0).ceil))
+    end
+
     it "hands the fallback's regenerated text to the caller's block in one piece when the replay is the final answer" do
       # A replay that comes back with no tool call is the finished reply, and it is what the seller
       # is meant to read. Nothing was streamed before the fallback fired (the fallback either
