@@ -117,6 +117,35 @@ const missingFieldsErrorMessage = (fieldNames: Set<FormFieldName>) => {
   return `Please complete the required fields below: ${labels.join(", ")}.`;
 };
 
+// Names the invalid fields from the labels actually rendered next to them, so the banner matches
+// what the seller is looking at. Several labels change with the seller's country — a US seller sees
+// "ZIP code" where everyone else sees "Postal code", and the state field is variously labelled
+// State, Province, County or Prefecture — so a hardcoded list would name a field they cannot find.
+// Falls back to FIELD_LABELS for any input with no label element, and always uses it for the three
+// date-of-birth selects, whose own labels ("Month", "Day", "Year") only make sense together.
+const missingFieldsErrorMessageFromDom = (form: HTMLElement, fieldNames: Set<FormFieldName>) => {
+  const labels: string[] = [];
+  let usedDobLabel = false;
+
+  for (const field of form.querySelectorAll<HTMLElement>('[aria-invalid="true"]')) {
+    if (field.id.includes("-dob-")) {
+      if (usedDobLabel) continue;
+      usedDobLabel = true;
+      labels.push(FIELD_LABELS.dob_year);
+      continue;
+    }
+    const label = field.id ? form.querySelector(`label[for="${CSS.escape(field.id)}"]`) : null;
+    const text = label?.textContent?.trim();
+    if (text) labels.push(text);
+  }
+
+  const deduplicated = [...new Set(labels)];
+  // No labelled invalid inputs in the DOM (a field rendered without a label, or an error that isn't
+  // tied to a visible input) — fall back to the curated names so the banner still says something.
+  if (deduplicated.length === 0) return missingFieldsErrorMessage(fieldNames);
+  return `Please complete the required fields below: ${deduplicated.join(", ")}.`;
+};
+
 const PERU_DNI_DIGIT_COUNT = 9;
 // A Singapore NRIC/FIN is a leading letter (S/T/F/G/M), seven digits, and a trailing checksum
 // letter — e.g. S1234567A. Mirrors the authoritative server-side check in
@@ -191,6 +220,10 @@ export default function PaymentsPage() {
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
   const [errorFieldNames, setErrorFieldNames] = React.useState(() => new Set<FormFieldName>());
+  // Counts failed save attempts. The scroll-to-first-invalid-field effect keys off this rather than
+  // off errorFieldNames, so it fires once per press of "Update settings" and never again while the
+  // seller is typing their way through the fields it pointed them at.
+  const [failedSaveAttempts, setFailedSaveAttempts] = React.useState(0);
   const markFieldInvalid = (fieldName: FormFieldName) => setErrorFieldNames(new Set(errorFieldNames.add(fieldName)));
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
@@ -290,12 +323,27 @@ export default function PaymentsPage() {
   }, [props.bank_account_details.account_number_visual]);
 
   React.useEffect(() => {
-    const hasError = (errors?.base && errors.base.length > 0) || clientErrorMessage || errorFieldNames.size > 0;
-    if (!hasError) return;
+    const hasServerError = Boolean(errors?.base && errors.base.length > 0);
+    // failedSaveAttempts only ever increments on a client-side validation failure, so a non-zero
+    // value here means the last press of "Update settings" was rejected before it left the browser.
+    if (!hasServerError && !clientErrorMessage && failedSaveAttempts === 0) return;
+
+    // The individual checks in validateForm set a specific message for the cases they know about
+    // (P.O. Box address, phone format, Kana character sets, and so on). When none of them did, fill
+    // in a generic list of the fields that are blocking the save, read from the labels next to them.
+    if (!hasServerError && !clientErrorMessage && formRef.current) {
+      const message = missingFieldsErrorMessageFromDom(formRef.current, errorFieldNames);
+      if (message) setClientErrorMessage({ message });
+    }
 
     // Prefer scrolling to the first field that actually failed validation — the seller needs to see
     // the input, not just the banner at the top of the form. Falls back to the form itself for
     // server-side errors that aren't tied to a specific field.
+    //
+    // This deliberately keys off failedSaveAttempts rather than the set of invalid fields. Typing in
+    // any field clears that set (see updateComplianceInfo), which would re-run this effect with no
+    // invalid field left and scroll the seller back to the top of the form mid-keystroke — away from
+    // the very field the banner just told them to fill in.
     const firstInvalidField = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
     if (firstInvalidField) {
       firstInvalidField.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -303,7 +351,8 @@ export default function PaymentsPage() {
     } else {
       formRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [errors, clientErrorMessage, errorFieldNames]);
+    // errorFieldNames is deliberately NOT a dependency — see the comment above.
+  }, [errors, clientErrorMessage, failedSaveAttempts]);
 
   const isStreetAddressPOBox = (input: string) =>
     input
@@ -920,13 +969,9 @@ export default function PaymentsPage() {
     if (errorFieldNames.size === 0) return true;
 
     // Some individual checks above (P.O. Box address, phone format, Kana character sets, and so on)
-    // already set a specific message explaining what is wrong. Only fall back to the generic
+    // already set a specific message explaining what is wrong. The effect below fills in a generic
     // "these fields are missing" list when none of them did, so the save always says something.
-    setClientErrorMessage((currentMessage) => {
-      if (currentMessage) return currentMessage;
-      const message = missingFieldsErrorMessage(errorFieldNames);
-      return message ? { message } : null;
-    });
+    setFailedSaveAttempts((count) => count + 1);
 
     return false;
   };
@@ -935,6 +980,8 @@ export default function PaymentsPage() {
     if (!validateForm()) return;
 
     setClientErrorMessage(null);
+    // The save is going out, so the previous failed attempt is no longer what the page is showing.
+    setFailedSaveAttempts(0);
 
     let cardData: CardPayoutToken | { stripe_error: unknown } | null = null;
     if (selectedPayoutMethod === "card") {

@@ -129,11 +129,16 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         click_on("Update settings")
         expect(page).to have_status(text: "Please complete the required fields below:")
         expect(page).to have_status(text: "City")
-        expect(page).to have_status(text: "Postal code")
+        # The banner names the label a US seller actually sees, not the generic "Postal code".
+        expect(page).to have_status(text: "ZIP code")
         expect(page).to have_status(text: "Date of birth")
       end.to_not change { @user.alive_user_compliance_info.reload.first_name }
 
+      # Filling one of the named fields must not yank the seller away from it: the scroll-to-field
+      # effect fires once per save attempt, not on every keystroke.
       fill_in("City", with: "barnabasville")
+      expect(page).to have_field("City", with: "barnabasville", focused: true)
+
       fill_in("ZIP code", with: "12345")
       select("1", from: "Day")
       select("January", from: "Month")
