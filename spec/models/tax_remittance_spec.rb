@@ -253,6 +253,47 @@ describe TaxRemittance do
     end
   end
 
+  describe "#submit_for_approval!" do
+    it "moves a draft to pending_approval when the amount is still the reviewed one" do
+      draft = create(:tax_remittance, usd_amount_cents: 10_00)
+
+      draft.submit_for_approval!(reviewed_amount_cents: 10_00)
+
+      expect(draft.reload.status).to eq("pending_approval")
+    end
+
+    # The race this guards: the staging service refreshes an untouched draft
+    # while a reviewer has it open, then the reviewer submits. Without the
+    # check they would push an amount into the approval flow that they never
+    # saw.
+    it "refuses to submit an amount that changed since the reviewer saw it" do
+      draft = create(:tax_remittance, usd_amount_cents: 10_00)
+      reviewed_amount_cents = draft.usd_amount_cents
+
+      # The staging refresh commits in between.
+      described_class.where(id: draft.id).update_all(usd_amount_cents: 15_00)
+
+      expect { draft.submit_for_approval!(reviewed_amount_cents:) }
+        .to raise_error(described_class::AmountChangedSinceReview, /15\d{2} cents, not the 10\d{2}/)
+
+      # Still a draft, so the reviewer can re-read and submit the real number.
+      expect(draft.reload.status).to eq("draft")
+      expect(draft.usd_amount_cents).to eq(15_00)
+
+      # And submitting the refreshed amount works.
+      draft.submit_for_approval!(reviewed_amount_cents: 15_00)
+      expect(draft.reload.status).to eq("pending_approval")
+    end
+
+    it "refuses to submit a row that is no longer a draft" do
+      remittance = create(:tax_remittance, usd_amount_cents: 10_00)
+      remittance.update!(status: "pending_approval")
+
+      expect { remittance.submit_for_approval!(reviewed_amount_cents: 10_00) }
+        .to raise_error(ArgumentError, /can only submit a draft/)
+    end
+  end
+
   describe "scopes" do
     it "separates in-progress from terminal remittances" do
       draft = create(:tax_remittance)

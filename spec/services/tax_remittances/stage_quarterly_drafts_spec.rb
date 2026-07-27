@@ -181,6 +181,38 @@ describe TaxRemittances::StageQuarterlyDrafts do
       expect(skipped[:stale_amount]).to eq(recorded_cents: 10_00, computed_cents: 15_00)
     end
 
+    # The other ordering of the same race, and the one the row lock alone does
+    # not solve: the refresh commits FIRST, and the reviewer submits afterwards
+    # holding the amount they were shown before it moved. The lock makes the
+    # write safe but says nothing about whether the human saw it, so the
+    # approval transition itself has to re-check. Submitting the stale amount
+    # is refused; submitting the refreshed one goes through.
+    it "refuses a reviewer's submission that carries an amount the refresh replaced" do
+      described_class.new(period).process
+      ato = TaxRemittance.find_by!(authority: "Australian Taxation Office", period:)
+      # What the reviewer had on screen before the re-run.
+      reviewed_amount_cents = ato.usd_amount_cents
+      expect(reviewed_amount_cents).to eq(10_00)
+
+      travel_to(in_period) do
+        create_taxed_purchase(product, country: "Australia", gumroad_tax_cents: 5_00)
+      end
+
+      service = described_class.new(period).process
+      expect(service.refreshed.map { _1[:authority] }).to include("Australian Taxation Office")
+      expect(ato.reload.usd_amount_cents).to eq(15_00)
+
+      expect { ato.submit_for_approval!(reviewed_amount_cents:) }
+        .to raise_error(TaxRemittance::AmountChangedSinceReview)
+
+      # The row stays a draft: nothing unreviewed entered the approval flow.
+      expect(ato.reload.status).to eq("draft")
+
+      # Once the reviewer re-reads the refreshed amount, the submission lands.
+      ato.submit_for_approval!(reviewed_amount_cents: 15_00)
+      expect(ato.reload.status).to eq("pending_approval")
+    end
+
     # The strongest case: a filing already PAID must never be re-staged, or a
     # re-run at the wrong moment would propose paying an authority twice.
     it "never stages or rewrites a filing that was already paid" do

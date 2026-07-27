@@ -151,6 +151,11 @@ class TaxRemittances::StageQuarterlyDrafts
       # commits first (we see it and leave the row alone) or waits for us and
       # then applies on top of a refreshed draft — never silently on top of a
       # discarded amount.
+      #
+      # The lock cannot tell us whether the human SAW the refreshed number,
+      # only that the write order is safe. That half is enforced on the other
+      # side: TaxRemittance#submit_for_approval! takes the amount the reviewer
+      # was shown and refuses the transition if this refresh has moved it since.
       existing.with_lock do
         if existing.status != "draft"
           outcome = [:skip_live, stale_amount_for(existing, liability)]
