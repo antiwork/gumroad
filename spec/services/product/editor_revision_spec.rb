@@ -176,34 +176,23 @@ describe Product::EditorRevision do
       expect(described_class.fresh?(product: product.reload, token: before)).to eq(false)
     end
 
-    it "changes the token when skus_enabled flips, because it decides whether a save can delete SKUs" do
-      product.update_attribute(:skus_enabled, false)
-      before = described_class.current(product.reload)
-
-      product.update_attribute(:skus_enabled, true)
-
-      expect(described_class.current(product.reload)).not_to eq(before)
-      expect(described_class.fresh?(product: product.reload, token: before)).to eq(false)
-    end
-
-    it "changes the token when a SKU is deleted" do
-      # Skus hang off the product rather than a version category, so they are
-      # outside the variant scope and need their own witness.
+    it "keeps the token when skus_enabled flips or a SKU changes, because this save cannot delete SKUs" do
+      # Product::SkusUpdaterService is the only code that deletes SKU rows, and
+      # VariantsUpdaterService only calls it `if skus_enabled` — while
+      # LinksController#update sets skus_enabled = false before that point on
+      # every editor save. Fingerprinting SKU state would therefore invalidate
+      # tokens over state no deletion on this path can touch. The reachability
+      # side of this is pinned in
+      # test/controllers/links_controller_test.rb ("cannot delete a SKU").
       sku = Sku.create!(link: product, name: "A sku", price_difference_cents: 0)
       before = described_class.current(product.reload)
 
+      product.update_attribute(:skus_enabled, !product.skus_enabled?)
       sku.mark_deleted!
-
-      expect(described_class.current(product.reload)).not_to eq(before)
-      expect(described_class.fresh?(product: product.reload, token: before)).to eq(false)
-    end
-
-    it "changes the token when a SKU is added by another tab" do
-      before = described_class.current(product.reload)
-
       Sku.create!(link: product, name: "Added elsewhere", price_difference_cents: 0)
 
-      expect(described_class.current(product.reload)).not_to eq(before)
+      expect(described_class.current(product.reload)).to eq(before)
+      expect(described_class.fresh?(product: product.reload, token: before)).to eq(true)
     end
 
     it "raises rather than silently ignoring a deletion-relevant attribute that no longer exists" do

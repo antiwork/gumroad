@@ -60,9 +60,9 @@ class Product::EditorRevision
   # deletion — the too-many-false-conflicts behaviour described above, which
   # this class exists to avoid. Replaced by the named attributes in
   # DELETION_RELEVANT_ATTRIBUTES.
-  # v4: is_physical and skus_enabled joined that list, and SKU rows are now
-  # witnessed (they hang off the product rather than a version category, so the
-  # variant stamps did not see them).
+  # v4: is_physical joined that list — it decides whether the product-level or
+  # the per-version content pages are authoritative, so it changes which pages a
+  # deletion can remove.
   VERSION = "v4"
 
   # Product attributes that change WHAT A SAVE MAY DELETE, and therefore have
@@ -92,15 +92,21 @@ class Product::EditorRevision
   #   short-circuits on it, and the editor's own presenter does the same). So
   #   flipping it changes which set of pages the editor loads and therefore which
   #   pages a deletion computed from that load would remove.
-  # - skus_enabled: when on, the save additionally runs Product::SkusUpdaterService,
-  #   which soft-deletes the SKU rows missing from the payload — and deletes every
-  #   non-default SKU outright when no version category is left. A token issued
-  #   while it was off describes a save that could not touch SKUs at all.
+  #
+  # Deliberately NOT here: skus_enabled. Product::SkusUpdaterService is the only
+  # thing that deletes SKU rows, VariantsUpdaterService is its only caller and
+  # guards it with `if skus_enabled` — and LinksController#update assigns
+  # `skus_enabled = false` before that runs, on every editor save. So this save
+  # path can never delete a SKU, whatever the column said when the page loaded.
+  # Fingerprinting it (or the SKU rows) would only invalidate tokens over state
+  # no deletion here can act on, which is the false-conflict problem this class
+  # exists to avoid. Verified by driving the real endpoint: with skus_enabled
+  # persisted true and a live SKU, the flag reads false inside the updater,
+  # SkusUpdaterService is never constructed, and the SKU is still alive after.
   DELETION_RELEVANT_ATTRIBUTES = %w[
     has_same_rich_content_for_all_variants
     is_tiered_membership
     is_physical
-    skus_enabled
   ].freeze
 
 
@@ -147,7 +153,6 @@ class Product::EditorRevision
           product_state: product_state(product),
           rich_content: stamped(product.alive_rich_contents),
           variants: alive_variant_stamps(product),
-          skus: sku_stamps(product),
           variant_categories: stamped(product.variant_categories.alive),
           files: stamped(product.product_files.alive),
           public_files: stamped(product.alive_public_files),
@@ -243,23 +248,13 @@ class Product::EditorRevision
       # column rather than by association name — that covers every subtype the
       # editor can delete.
       #
-      # Skus are the exception: they hang off the product directly and leave
-      # variant_category_id null, so the scope below cannot see them even though
-      # Product::SkusUpdaterService soft-deletes them during a save. They are
-      # collected separately in sku_stamps.
+      # Skus fall outside this scope (they hang off the product and leave
+      # variant_category_id null) and are deliberately not covered: the editor
+      # save cannot delete them. See DELETION_RELEVANT_ATTRIBUTES.
       def alive_variant_stamps(product)
         stamped(
           BaseVariant.alive.where(variant_category_id: product.variant_categories.alive.select(:id))
         )
-      end
-
-      # Skus belong to the product rather than to a version category, so they sit
-      # outside alive_variant_stamps' scope. Without them the token cannot
-      # witness a SKU being added or removed by another tab, and a stale
-      # deletion would look fresh while SkusUpdaterService sweeps rows the
-      # submitting session never saw.
-      def sku_stamps(product)
-        stamped(Sku.alive.where(link_id: product.id))
       end
 
       def digest(fingerprint)
