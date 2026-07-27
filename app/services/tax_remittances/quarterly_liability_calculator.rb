@@ -87,19 +87,24 @@ class TaxRemittances::QuarterlyLiabilityCalculator
     keyword_init: true
   )
 
-  attr_reader :period, :liabilities, :unmapped_countries, :unresolved_country_names
+  attr_reader :period, :liabilities, :unmapped_countries, :unresolved_country_names, :countryless_tax_cents
 
   # period — a quarter string like "2026-Q2", matching TaxRemittance#period.
   def initialize(period)
     raise ArgumentError, "period must look like 2026-Q1 (got #{period.inspect})" unless period.to_s.match?(PERIOD_FORMAT)
 
     @period = period
-    @liabilities = []
-    @unmapped_countries = {}
-    @unresolved_country_names = Hash.new(0)
+    reset_results
   end
 
   def process
+    # Every result is recomputed from scratch, so clear the previous run's
+    # too. Without this, calling process twice would keep coverage gaps that
+    # no longer exist and add the same unresolved tax in again, while the
+    # liabilities beside them were freshly computed — a mix a reviewer has no
+    # way to spot.
+    reset_results
+
     by_country = Hash.new { |hash, key| hash[key] = { sales: 0, refunds: 0, chargebacks: 0 } }
 
     accumulate_sales_leg(by_country)
@@ -107,11 +112,13 @@ class TaxRemittances::QuarterlyLiabilityCalculator
     accumulate_chargeback_legs(by_country)
 
     build_liabilities(by_country)
+    prune_settled_diagnostics
 
     Rails.logger.info(
       "#{self.class.name}: period=#{period} authorities=#{liabilities.size} " \
       "total_usd_cents=#{total_usd_cents} unmapped_countries=#{unmapped_countries.size} " \
-      "unresolved_country_names=#{unresolved_country_names.size}"
+      "unresolved_country_names=#{unresolved_country_names.size} " \
+      "countryless_tax_cents=#{countryless_tax_cents}"
     )
 
     self
@@ -150,10 +157,11 @@ class TaxRemittances::QuarterlyLiabilityCalculator
         .select(:id, :country, :ip_country, :created_at, :gumroad_tax_cents,
                 :stripe_partially_refunded, :stripe_refunded, :flags, :chargeback_date)
         .find_each do |purchase|
-          code = country_code_for(purchase)
+          leg_tax_cents = purchase.gumroad_tax_cents_for_tax_reporting.to_i
+          code = country_code_for(purchase, leg_tax_cents)
           next if code.blank?
 
-          by_country[code][:sales] += purchase.gumroad_tax_cents_for_tax_reporting.to_i
+          by_country[code][:sales] += leg_tax_cents
         end
     end
 
@@ -183,10 +191,15 @@ class TaxRemittances::QuarterlyLiabilityCalculator
         )
         .includes(:purchase)
         .find_each do |refund|
-          code = country_code_for(refund.purchase)
+          # A refund REDUCES the tax at stake for its country, so the
+          # diagnostics get a negative amount. Passing the purchase's gross
+          # tax here instead would count the same sale again on every leg and
+          # overstate what a reviewer is asked to chase down.
+          leg_tax_cents = refund.gumroad_tax_cents.to_i
+          code = country_code_for(refund.purchase, -leg_tax_cents)
           next if code.blank?
 
-          by_country[code][:refunds] += refund.gumroad_tax_cents.to_i
+          by_country[code][:refunds] += leg_tax_cents
         end
     end
 
@@ -196,10 +209,11 @@ class TaxRemittances::QuarterlyLiabilityCalculator
     def accumulate_chargeback_legs(by_country)
       chargeback_filters(Purchase.chargebacks_for_tax_period_reporting(period_range.first, period_range.last))
         .find_each do |purchase|
-          code = country_code_for(purchase)
+          leg_tax_cents = purchase.gumroad_tax_cents_for_chargeback_reporting.to_i
+          code = country_code_for(purchase, -leg_tax_cents)
           next if code.blank?
 
-          by_country[code][:chargebacks] += purchase.gumroad_tax_cents_for_chargeback_reporting.to_i
+          by_country[code][:chargebacks] += leg_tax_cents
         end
 
       chargeback_filters(Purchase.chargeback_reversals_for_tax_period_reporting(period_range.first, period_range.last))
@@ -212,10 +226,12 @@ class TaxRemittances::QuarterlyLiabilityCalculator
           won_at = purchase.chargeback_reversal_reporting_date
           next unless won_at && period_range.cover?(won_at)
 
-          code = country_code_for(purchase)
+          # A won dispute adds the tax back, so it adds back here too.
+          leg_tax_cents = purchase.gumroad_tax_cents_for_chargeback_reporting.to_i
+          code = country_code_for(purchase, leg_tax_cents)
           next if code.blank?
 
-          by_country[code][:chargebacks] -= purchase.gumroad_tax_cents_for_chargeback_reporting.to_i
+          by_country[code][:chargebacks] -= leg_tax_cents
         end
     end
 
@@ -239,16 +255,44 @@ class TaxRemittances::QuarterlyLiabilityCalculator
     # collected and might not remit. ISO name matching is not exhaustive
     # (e.g. "Slovak Republic" and "Holland" both fail), so this is a real
     # possibility, not a theoretical one.
-    def country_code_for(purchase)
+    #
+    # leg_tax_cents is THIS leg's signed contribution, not the purchase's
+    # gross tax: positive for a sale or a won dispute, negative for a refund
+    # or a chargeback. The diagnostics below net those together so the amount
+    # a reviewer is asked to chase is the tax still at stake, not the sum of
+    # every leg that touched the same purchase.
+    def country_code_for(purchase, leg_tax_cents)
       raw = purchase.country.presence || purchase.ip_country.presence
-      return nil if raw.blank?
+
+      # No country name and no GeoIP country. There is nowhere to file this
+      # tax, which makes it the same class of problem as an unresolvable
+      # name: real money we collected that no return accounts for. Returning
+      # early without recording it is how it goes missing entirely — it
+      # appears in neither the liabilities nor any coverage gap.
+      if raw.blank?
+        @countryless_tax_cents += leg_tax_cents
+        return nil
+      end
 
       code = normalized_country_codes[raw]
-      if code.nil?
-        tax_cents = purchase.gumroad_tax_cents.to_i
-        @unresolved_country_names[raw] += tax_cents if tax_cents > 0
-      end
+      @unresolved_country_names[raw] += leg_tax_cents if code.nil?
       code
+    end
+
+    def reset_results
+      @liabilities = []
+      @unmapped_countries = {}
+      @unresolved_country_names = Hash.new(0)
+      @countryless_tax_cents = 0
+    end
+
+    # Diagnostics are netted across legs, so an entry can land at zero or
+    # below — tax collected in the quarter and then fully refunded in it. That
+    # is settled, with nothing left to chase, so it is dropped rather than
+    # reported as a gap. This mirrors how build_liabilities declines to report
+    # an unmapped country that nets to nothing.
+    def prune_settled_diagnostics
+      @unresolved_country_names.delete_if { |_name, cents| cents <= 0 }
     end
 
     def normalized_country_codes

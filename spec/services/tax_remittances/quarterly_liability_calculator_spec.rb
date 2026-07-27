@@ -290,7 +290,11 @@ describe TaxRemittances::QuarterlyLiabilityCalculator do
       expect(calculator.unmapped_countries).to be_empty
     end
 
-    it "ignores purchases with no resolvable country at all" do
+    # Tax collected against a purchase with no country name and no GeoIP
+    # country belongs to no return. It cannot be remitted, but it must not
+    # vanish either — money that appears in neither the liabilities nor a
+    # coverage gap is money nobody knows to go looking for.
+    it "reports tax on purchases with no resolvable country at all" do
       travel_to(in_period) do
         create_taxed_purchase(product, country: nil, ip_country: nil, gumroad_tax_cents: 5_00)
       end
@@ -300,6 +304,7 @@ describe TaxRemittances::QuarterlyLiabilityCalculator do
       expect(calculator.liabilities).to be_empty
       expect(calculator.unmapped_countries).to be_empty
       expect(calculator.unresolved_country_names).to be_empty
+      expect(calculator.countryless_tax_cents).to eq(5_00)
     end
 
     # ISO name matching is not exhaustive, so a country name we can't resolve
@@ -316,6 +321,72 @@ describe TaxRemittances::QuarterlyLiabilityCalculator do
       expect(calculator.unresolved_country_names).to eq({ "Slovak Republic" => 8_00 })
       # And it does not leak into any authority's payment.
       expect(calculator.total_usd_cents).to eq(10_00)
+    end
+
+    # The amount reported is what is still at stake, so a refund in the same
+    # quarter has to come off it. Counting each leg's gross purchase tax would
+    # report 16_00 here — twice the money that actually exists — and send a
+    # reviewer chasing a number that was never collected.
+    it "nets a refund against the unresolved country name it belongs to" do
+      travel_to(in_period) do
+        @unresolvable = create_taxed_purchase(product, country: "Slovak Republic", gumroad_tax_cents: 8_00)
+      end
+      travel_to(in_period + 5.days) do
+        create(:refund, purchase: @unresolvable, total_transaction_cents: 50_00, gumroad_tax_cents: 4_00)
+      end
+
+      calculator = described_class.new(period).process
+
+      expect(calculator.unresolved_country_names).to eq({ "Slovak Republic" => 4_00 })
+    end
+
+    # Fully refunded within the quarter means there is nothing left to chase,
+    # so it stops being reported at all rather than showing up as a zero.
+    it "drops an unresolved country name whose tax was fully refunded in the quarter" do
+      travel_to(in_period) do
+        @unresolvable = create_taxed_purchase(product, country: "Slovak Republic", gumroad_tax_cents: 8_00)
+      end
+      travel_to(in_period + 5.days) do
+        create(:refund, purchase: @unresolvable, total_transaction_cents: 108_00, gumroad_tax_cents: 8_00)
+      end
+
+      calculator = described_class.new(period).process
+
+      expect(calculator.unresolved_country_names).to be_empty
+    end
+
+    # Liabilities were always recomputed from scratch; the diagnostics beside
+    # them were not. Re-running has to produce the same answer as the first
+    # run, or a stale coverage gap sits next to fresh amounts with nothing
+    # marking it as old.
+    it "produces identical results when process is called again" do
+      travel_to(in_period) do
+        create_taxed_purchase(product, country: "Slovak Republic", gumroad_tax_cents: 8_00)
+        create_taxed_purchase(product, country: "Canada", state: "ON", gumroad_tax_cents: 13_00)
+        create_taxed_purchase(product, country: nil, ip_country: nil, gumroad_tax_cents: 5_00)
+        create_taxed_purchase(product, country: "Australia", gumroad_tax_cents: 10_00)
+      end
+
+      calculator = described_class.new(period).process
+      first_run = [
+        calculator.total_usd_cents,
+        calculator.unmapped_countries.dup,
+        calculator.unresolved_country_names.dup,
+        calculator.countryless_tax_cents,
+      ]
+
+      calculator.process
+
+      expect(
+        [
+          calculator.total_usd_cents,
+          calculator.unmapped_countries,
+          calculator.unresolved_country_names,
+          calculator.countryless_tax_cents,
+        ]
+      ).to eq(first_run)
+      expect(calculator.unresolved_country_names).to eq({ "Slovak Republic" => 8_00 })
+      expect(calculator.countryless_tax_cents).to eq(5_00)
     end
   end
 
