@@ -161,4 +161,35 @@ describe GlobalAffiliate do
       expect(affiliate.eligible_for_credit?).to be false
     end
   end
+
+  describe "#eligible_for_credit_on_renewal?" do
+    let(:affiliate) { create(:user).global_affiliate }
+    # Renewal eligibility deliberately doesn't look at Discover listing, so a plain product
+    # (not on Discover) is enough here and keeps the example off the charge path.
+    let(:product) { create(:product) }
+
+    it "returns true while the seller is still in the Gumroad Affiliate Program" do
+      expect(affiliate.eligible_for_credit_on_renewal?(product:)).to eq true
+    end
+
+    it "returns false once the seller has opted out of the Gumroad Affiliate Program" do
+      product.user.update!(disable_global_affiliate: true)
+
+      expect(affiliate.eligible_for_credit_on_renewal?(product:)).to eq false
+    end
+
+    it "returns false if the affiliate itself is no longer eligible" do
+      affiliate.update!(deleted_at: Time.current)
+
+      expect(affiliate.eligible_for_credit_on_renewal?(product:)).to eq false
+    end
+
+    it "keeps paying a referral whose product is not (or no longer) on Discover" do
+      # A *new* purchase of a product that isn't on Discover earns no global-affiliate
+      # commission. An existing referral still does: the referral already happened, and
+      # where the product is listed today doesn't change that.
+      expect(affiliate.eligible_for_purchase_credit?(product:)).to eq false
+      expect(affiliate.eligible_for_credit_on_renewal?(product:)).to eq true
+    end
+  end
 end

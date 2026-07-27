@@ -146,6 +146,16 @@ class Affiliate < ApplicationRecord
     alive? && !affiliate_user.suspended? && !affiliate_user.has_brazilian_stripe_connect_account?
   end
 
+  # Whether this affiliate should still earn commission on a *renewal* of a membership they
+  # originally referred. A renewal inherits the original purchase's affiliate instead of
+  # re-resolving one from cookies, so it never goes through `eligible_for_purchase_credit?`.
+  # That means any seller-level setting checked only at purchase time would be ignored forever
+  # once a membership is attached to an affiliate. Subclasses that have such a setting override
+  # this; by default a referral keeps earning for as long as the affiliate is eligible at all.
+  def eligible_for_credit_on_renewal?(product:)
+    eligible_for_credit?
+  end
+
   private
     def construct_permalink(unique_permalink)
       "#{referral_url}/#{unique_permalink}"

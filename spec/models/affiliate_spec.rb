@@ -297,4 +297,24 @@ describe Affiliate do
       expect(affiliate.eligible_for_credit?).to be false
     end
   end
+
+  describe "#eligible_for_credit_on_renewal?" do
+    let(:affiliate_user) { create(:affiliate_user, username: "creator") }
+    let(:affiliate) { create(:direct_affiliate, affiliate_user:, apply_to_all_products: true) }
+    let(:product) { create(:membership_product, user: affiliate.seller) }
+
+    it "follows #eligible_for_credit? by default, so a direct referral keeps earning on renewals" do
+      expect(affiliate.eligible_for_credit_on_renewal?(product:)).to be true
+
+      affiliate.update!(deleted_at: Time.current)
+
+      expect(affiliate.eligible_for_credit_on_renewal?(product:)).to be false
+    end
+
+    it "is unaffected by the seller's Gumroad Affiliate Program opt-out, which only governs global affiliates" do
+      affiliate.seller.update!(disable_global_affiliate: true)
+
+      expect(affiliate.eligible_for_credit_on_renewal?(product:)).to be true
+    end
+  end
 end
