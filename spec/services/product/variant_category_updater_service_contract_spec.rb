@@ -81,10 +81,24 @@ describe Product::VariantCategoryUpdaterService, "version-level save contract" d
       expect(other_page.reload.alive?).to eq(true)
     end
 
-    it "still unchecks an integration the payload explicitly submits as off" do
-      # A submitted-but-empty integrations hash is a real statement, and must
-      # keep working exactly as it does today.
+    # Superseded by the owner-scoped contract (reviewer, 2026-07-27). This
+    # previously asserted that a submitted-but-empty integrations hash unchecks
+    # the integration — i.e. deletion inferred from the checkbox map. That
+    # inference is exactly what let a stale tab tear down an integration another
+    # tab had just enabled, so a version's integration is now removed only when
+    # the payload names it for that version.
+    it "does not disconnect an integration merely absent from the submitted map" do
       save(option_without_nested.merge(integrations: {}), contract: contract)
+
+      expect(version.reload.active_integrations).to include(integration)
+    end
+
+    it "disconnects an integration the payload explicitly names for this version" do
+      naming_contract = contract(
+        deletion_operations: { variant_deleted_ids: { version.external_id => { integrations: [integration.name] } } }
+      )
+
+      save(option_without_nested.merge(integrations: {}), contract: naming_contract)
 
       expect(version.reload.active_integrations).not_to include(integration)
     end

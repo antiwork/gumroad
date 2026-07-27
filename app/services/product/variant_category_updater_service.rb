@@ -370,9 +370,18 @@ class Product::VariantCategoryUpdaterService
         end
       end
 
-      if contract&.enforced? && !variant_submitted_integrations?(option)
-        # Nothing was stated about this version's integrations, so add whatever
-        # was newly enabled (there will be none) and remove nothing.
+      if contract&.enforced?
+        # Under the contract a version's integrations are removed only when the
+        # payload names them for THIS version (owner-scoped, see
+        # SaveContract#variant_deleted_ids). The submitted checkbox map is a
+        # statement about what should be ON; it is not evidence that anything
+        # missing from it was deliberately turned off, and treating it that way
+        # let a stale tab silently disconnect an integration another tab had
+        # just enabled — the join is not something the old flat contract or the
+        # revision token could see.
+        names_to_delete = contract.variant_deleted_ids(variant.external_id, :integrations)
+        deleted_integrations = variant.active_integrations.select { _1.name.in?(names_to_delete) }
+        variant.live_base_variant_integrations.where(integration: deleted_integrations).map(&:mark_deleted!)
         variant.active_integrations << enabled_integrations - variant.active_integrations
         return
       end
@@ -382,21 +391,10 @@ class Product::VariantCategoryUpdaterService
       variant.active_integrations << enabled_integrations - variant.active_integrations
     end
 
-    # Did this version's payload actually carry an integrations statement?
-    #
-    # A present-but-empty hash is a real statement ("nothing is checked"); an
-    # absent or malformed key is not. Strong parameters drops malformed values,
-    # so those arrive as absent and are treated as "no statement" — the same
-    # rule the top-level contract applies.
-    def variant_submitted_integrations?(option)
-      value = option[:integrations]
-      value.is_a?(Hash) || value.is_a?(ActionController::Parameters)
-    end
-
     # Did this version's payload actually carry a rich_content statement?
     #
-    # Mirrors `variant_submitted_integrations?`. An empty array IS a statement
-    # in the same sense the top-level contract means it — and, exactly as
+    # An empty array IS a statement in the same sense the top-level contract
+    # means it — and, exactly as
     # there, it does not authorise deletion on its own: emptying a version's
     # pages requires naming them or clearing the collection.
     #

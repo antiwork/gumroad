@@ -860,9 +860,42 @@ class LinksController < ApplicationController
               cleared_collections: [],
             }
           ).to_h.deep_symbolize_keys
-        ),
+        ).deep_merge(variant_scoped_deletion_params),
         product: @product
       )
+    end
+
+    # Version-scoped deletion operations, permitted separately because their
+    # keys are variant external ids — arbitrary strings that cannot be named in
+    # a static `permit` list.
+    #
+    # Each variant id maps to a per-collection list, so the shape is validated
+    # by hand rather than trusted: anything that is not a hash of
+    # collection => array-of-strings is dropped, which lands a malformed
+    # payload on "no deletions requested" instead of raising inside the save.
+    def variant_scoped_deletion_params
+      raw = params[:deletion_operations]
+      # `raw` is client-controlled and may be any shape. A bare String responds
+      # to `[]` but raises TypeError on a Symbol key, so `respond_to?(:[])` is
+      # not a sufficient guard here — require the hash-like shape explicitly.
+      return {} unless raw.is_a?(Hash) || raw.is_a?(ActionController::Parameters)
+
+      by_owner = raw[:variant_deleted_ids]
+      return {} unless by_owner.respond_to?(:each_pair)
+
+      scoped = by_owner.each_pair.with_object({}) do |(owner_id, collections), acc|
+        next unless collections.respond_to?(:each_pair)
+
+        permitted = collections.each_pair.with_object({}) do |(collection, ids), inner|
+          next unless collection.to_sym.in?(Product::SaveContract::COLLECTIONS)
+          next unless ids.is_a?(Array)
+
+          inner[collection.to_sym] = ids.select { _1.is_a?(String) || _1.is_a?(Symbol) }.map(&:to_s)
+        end
+        acc[owner_id.to_s] = permitted if permitted.any?
+      end
+
+      scoped.any? ? { deletion_operations: { variant_deleted_ids: scoped } } : {}
     end
 
     # Narrows a diff-derived set of pages down to what the contract actually

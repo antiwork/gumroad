@@ -211,7 +211,8 @@ class Product::SaveContract
   def requested_deletion?
     return false unless enforced?
 
-    COLLECTIONS.any? { |collection| raw_cleared?(collection) || raw_deleted_ids(collection).any? }
+    COLLECTIONS.any? { |collection| raw_cleared?(collection) || raw_deleted_ids(collection).any? } ||
+      requested_variant_deletion?
   end
 
   # Ids the client explicitly asked to delete from this collection.
@@ -252,6 +253,67 @@ class Product::SaveContract
     Array(ids[collection.to_sym]).map(&:to_s).uniq.reject(&:blank?)
   rescue StandardError
     []
+  end
+
+  # Ids the client explicitly asked to delete from a collection owned by ONE
+  # version, rather than by the product.
+  #
+  # Version-level integrations are the case this exists for. They live on a
+  # join between a variant and an integration, and the editor addresses them
+  # per version, so a single flat `deleted_ids[:integrations]` list cannot say
+  # "disconnect discord from version A but leave it on version B". The payload
+  # shape mirrors the flat one, nested under the owner's external id:
+  #
+  #   deletion_operations: {
+  #     variant_deleted_ids: { "<variant_external_id>": { integrations: ["discord"] } }
+  #   }
+  #
+  # Same rules as everywhere else: absent means no statement, malformed
+  # degrades to no deletions rather than raising, and nothing is inferred from
+  # what the payload did or didn't re-submit.
+  def variant_deleted_ids(owner_external_id, collection)
+    return [] unless enforced?
+    return [] unless may_delete?
+
+    raw_variant_deleted_ids(owner_external_id, collection)
+  rescue StandardError
+    []
+  end
+
+  # What was REQUESTED for a version-scoped collection, before freshness is
+  # considered. Mirrors raw_deleted_ids; see the comment there for why the
+  # requested/allowed split matters.
+  def raw_variant_deleted_ids(owner_external_id, collection)
+    return [] unless enforced?
+
+    assert_known!(collection)
+    return [] if owner_external_id.blank?
+
+    by_owner = deletion_operations[:variant_deleted_ids]
+    return [] unless by_owner.respond_to?(:dig)
+
+    scoped = by_owner[owner_external_id.to_s] || by_owner[owner_external_id.to_sym]
+    return [] unless scoped.respond_to?(:dig)
+
+    Array(scoped[collection.to_sym] || scoped[collection.to_s]).map(&:to_s).uniq.reject(&:blank?)
+  rescue StandardError
+    []
+  end
+
+  # Did the client ask to remove anything from any version-scoped collection?
+  # Folded into requested_deletion? so a version-scoped removal is treated as a
+  # destructive save for staleness purposes, exactly like a product-level one.
+  def requested_variant_deletion?
+    return false unless enforced?
+
+    by_owner = deletion_operations[:variant_deleted_ids]
+    return false unless by_owner.respond_to?(:each_pair)
+
+    by_owner.each_pair.any? do |owner_id, _scoped|
+      COLLECTIONS.any? { |collection| raw_variant_deleted_ids(owner_id, collection).any? }
+    end
+  rescue StandardError
+    false
   end
 
   # Did the client explicitly ask to empty this collection?

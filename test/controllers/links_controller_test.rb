@@ -6748,4 +6748,227 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert_nil response.parsed_body["loaded_integrations"]
     assert_nil response.parsed_body["editor_revision"]
   end
+
+  # --- version-level integrations are explicit, owner-scoped, revision-gated --
+  #
+  # These joins live between a variant and an integration. They used to be
+  # removed by inference from the submitted checkbox map, which meant a payload
+  # that simply didn't re-check a box tore the integration down — and because
+  # the join was absent from the revision fingerprint, a stale tab's teardown
+  # looked perfectly fresh.
+
+  def variant_with_integration
+    variant = create_variant(variant_category: @category, name: "Pro")
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+    [variant, integration]
+  end
+
+  # The checkbox map for a version, as the editor sends it. `price_difference_cents`
+  # is deliberately omitted: in a controller test every param arrives as a
+  # String, and the updater does `option[:price] /= 100.0` on it, which raises
+  # on a String. Real payloads go through the JSON body, not this path.
+  def version_params(variant, integrations:)
+    [{ id: variant.external_id, name: variant.name, integrations: }]
+  end
+
+  test "flag on: a version's integration survives a save that simply doesn't re-check it" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+
+    # No deletion named for this version: unchecking alone is not a request.
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: version_params(variant, integrations: { "discord" => false }),
+    ), format: :json
+    assert_response :success
+
+    assert_equal 1, variant.reload.active_integrations.count
+  end
+
+  test "flag on: an explicitly named version integration is disconnected" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: version_params(variant, integrations: { "discord" => false }),
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty variant.reload.active_integrations
+  end
+
+  test "flag on: naming a version's integration leaves the same integration on a sibling version" do
+    enable_contract!
+    variant, integration = variant_with_integration
+    sibling = create_variant(variant_category: @category, name: "Basic")
+    sibling.active_integrations << integration
+    @product.reload
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: version_params(variant, integrations: { "discord" => false }) +
+                version_params(sibling, integrations: { "discord" => true }),
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+    assert_response :success
+
+    assert_empty variant.reload.active_integrations
+    assert_equal 1, sibling.reload.active_integrations.count, "the sibling version's join must survive"
+  end
+
+  test "flag on: a stale tab cannot disconnect a version integration another tab just enabled" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Pro")
+    @product.reload
+    # Tab A loaded here, before the integration existed.
+    stale_token = current_revision
+
+    # Tab B enables the integration on that version.
+    integration = create_discord_integration
+    variant.active_integrations << integration
+    @product.reload
+
+    # The join alone must move the fingerprint, or tab A's teardown looks fresh.
+    assert_not Product::EditorRevision.fresh?(product: @product.reload, token: stale_token),
+               "enabling a version integration must invalidate an older token"
+
+    post :update, params: @params.merge(
+      editor_revision: stale_token,
+      variants: version_params(variant, integrations: { "discord" => false }),
+      deletion_operations: { variant_deleted_ids: { variant.external_id => { integrations: ["discord"] } } },
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "stale_deletion_conflict", response.parsed_body["error_code"]
+    assert_equal 1, variant.reload.active_integrations.count, "the stale save must not have disconnected anything"
+  end
+
+  test "flag on: omitting the integrations key for a version removes nothing" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: [{ id: variant.external_id, name: variant.name }],
+    ), format: :json
+    assert_response :success
+
+    assert_equal 1, variant.reload.active_integrations.count
+  end
+
+  test "flag on: an empty integrations map for a version removes nothing" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: version_params(variant, integrations: {}),
+    ), format: :json
+    assert_response :success
+
+    assert_equal 1, variant.reload.active_integrations.count
+  end
+
+  test "flag on: malformed version-scoped deletion operations delete nothing and do not 500" do
+    enable_contract!
+    variant, _integration = variant_with_integration
+    token = current_revision
+
+    [
+      "not-a-hash",
+      { variant.external_id => "not-a-hash" },
+      { variant.external_id => { integrations: "discord" } },       # string, not a list
+      { variant.external_id => { integrations: [{ evil: 1 }] } },   # non-string members
+      { variant.external_id => { not_a_collection: ["discord"] } }, # unknown collection
+    ].each do |malformed|
+      post :update, params: @params.merge(
+        editor_revision: token,
+        variants: version_params(variant, integrations: { "discord" => false }),
+        deletion_operations: { variant_deleted_ids: malformed },
+      ), format: :json
+
+      assert_response :success, "malformed payload #{malformed.inspect} should not break the save"
+      assert_equal 1, variant.reload.active_integrations.count,
+                   "malformed payload #{malformed.inspect} must not delete anything"
+    end
+  end
+
+  # --- two versions created in one save, then a content edit in the same tab --
+  #
+  # gumroad-private#1379. The first save creates both versions server-side; the
+  # editor adopts their canonical ids and the fresh token. The second save is an
+  # ordinary content edit that does not mention versions at all. Neither version
+  # may be dropped from the product, and the shared-content flag must not be
+  # flipped as a side effect of the second save.
+  test "flag on: two versions created in one save both survive a later content edit in the same session" do
+    enable_contract!
+    shared_content_before = @product.reload.has_same_rich_content_for_all_variants?
+
+    # Save #1: create two versions at once (no ids — they don't exist yet).
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: [{ id: nil, name: "First version" }, { id: nil, name: "Second version" }],
+    ), format: :json
+    assert_response :success
+
+    created = @product.reload.alive_variants.order(:id).to_a
+    assert_equal ["First version", "Second version"], created.map(&:name).sort
+    # The editor adopts the token this save returned; it never reloads the page.
+    adopted_token = response.parsed_body["editor_revision"]
+    assert_not_nil adopted_token, "the save must hand back a token for the state it committed"
+
+    # Save #2: a plain content edit in the same session. It says nothing about
+    # versions, so under Rule 1 nothing about them may change.
+    #
+    # Note this second save exercises the controller's `variants.any?`
+    # short-circuit rather than the contract: with no variants key the updater
+    # is never reached at all. That is the real protection for an absent
+    # collection here, and the assertions below hold it in place.
+    post :update, params: @params.merge(
+      editor_revision: adopted_token,
+      description: "<p>Edited in the same session, without reloading</p>",
+    ), format: :json
+    assert_response :success
+
+    survivors = @product.reload.alive_variants.order(:id).to_a
+    assert_equal created.map(&:id).sort, survivors.map(&:id).sort,
+                 "both versions created in the first save must survive the second"
+    assert_equal shared_content_before, @product.reload.has_same_rich_content_for_all_variants?,
+                 "the shared-content flag must not change as a side effect of a content edit"
+  end
+
+  # The same session, but the second save DOES carry a variants key — the shape
+  # the editor actually sends when the seller edits content while versions are
+  # on screen. This one reaches the updater, so it is the case where the
+  # contract, not the controller's short-circuit, has to keep both versions.
+  test "flag on: a same-session content edit that resubmits one version does not drop the other" do
+    enable_contract!
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      variants: [{ id: nil, name: "First version" }, { id: nil, name: "Second version" }],
+    ), format: :json
+    assert_response :success
+
+    created = @product.reload.alive_variants.order(:id).to_a
+    assert_equal 2, created.count
+    adopted_token = response.parsed_body["editor_revision"]
+    first, second = created
+
+    # The editor re-submits only the version being edited, and names no
+    # deletions. The other version must not be swept for being absent.
+    post :update, params: @params.merge(
+      editor_revision: adopted_token,
+      variants: [{ id: first.external_id, name: "First version renamed" }],
+    ), format: :json
+    assert_response :success
+
+    assert_equal "First version renamed", first.reload.name
+    assert first.reload.alive?, "the resubmitted version must survive"
+    assert second.reload.alive?, "the version merely absent from the payload must survive"
+  end
 end

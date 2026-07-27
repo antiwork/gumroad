@@ -96,7 +96,27 @@ class Product::EditorRevision
           files: stamped(product.product_files.alive),
           public_files: stamped(product.alive_public_files),
           integrations: stamped(product.active_integrations),
+          # Version-level integration joins (gumroad-private#1379). Without
+          # these the token cannot witness an integration enabled on a version
+          # by another tab: the join row is what changes, and neither the
+          # product's own integrations nor the variant's updated_at moves when
+          # it is created. A stale tab could then remove an integration a
+          # co-editor had just enabled, and the deletion would look fresh.
+          variant_integrations: variant_integration_stamps(product),
         }
+      end
+
+      # [variant_id, integration_id] pairs for every live version-level join, in
+      # a stable order. Ids alone are the right witness here: the join carries
+      # no state of its own beyond existing, and it is created and soft-deleted
+      # rather than edited.
+      def variant_integration_stamps(product)
+        BaseVariantIntegration
+          .alive
+          .joins(:base_variant)
+          .where(base_variants: { id: product.base_variants.select(:id) })
+          .order(:base_variant_id, :integration_id)
+          .pluck(:base_variant_id, :integration_id)
       end
 
       # [id, stamp] pairs in a stable order, where the stamp changes whenever
