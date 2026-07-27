@@ -54,14 +54,16 @@ class TaxRemittances::StageQuarterlyDrafts
   end
 
   # Coverage gaps found while computing the quarter, passed through from the
-  # calculator so a caller that only runs this service still sees them. A
-  # country collecting tax with no authority mapped, or a country name that
-  # doesn't resolve, means potential unremitted tax — staging drafts without
-  # surfacing that would hide it behind a tidy-looking set of rows.
+  # calculator so a caller that only runs this service still sees them. Tax
+  # collected against a country with no authority mapped, a country name that
+  # doesn't resolve, or a purchase with no country at all all mean potential
+  # unremitted tax — staging drafts without surfacing that would hide it
+  # behind a tidy-looking set of rows.
   def coverage_gaps
     {
       unmapped_countries: calculator.unmapped_country_report,
       unresolved_country_names: calculator.unresolved_country_names,
+      countryless_tax_cents: calculator.countryless_tax_cents,
     }
   end
 

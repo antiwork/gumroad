@@ -143,6 +143,20 @@ describe TaxRemittances::StageQuarterlyDrafts do
 
       expect(service.coverage_gaps[:unresolved_country_names]).to eq({ "Slovak Republic" => 8_00 })
     end
+
+    # A purchase with no country at all can't be filed anywhere, so the amount
+    # has to reach whoever runs this rather than staying inside the calculator.
+    it "passes through tax on purchases with no country at all" do
+      travel_to(in_period) do
+        create_taxed_purchase(product, country: nil, ip_country: nil, gumroad_tax_cents: 6_00)
+      end
+
+      service = described_class.new(period).process
+
+      expect(service.coverage_gaps[:countryless_tax_cents]).to eq(6_00)
+      # And it is not invented as a payment to anyone.
+      expect(service.created.sum { _1.usd_amount_cents }).to eq(39_00 + 10_00)
+    end
   end
 
   it "stages nothing for a quarter with no collected tax" do
