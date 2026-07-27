@@ -1347,6 +1347,82 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(create_args[:payment_method_types]).to eq(%w[card link ideal])
           expect(create_args[:payment_method_types]).not_to include("cashapp", "us_bank_account")
         end
+
+        # A card ConfirmationToken on this USD-priced cart, which is the shape gumroad-private#1382
+        # is about: the buyer-currency card lane mounts the Element in the buyer's FX-quoted
+        # currency, so the token is non-USD even though nothing about the cart is forced-currency.
+        # Defined locally because the EUR-priced context further down has its own NL-card variant.
+        def perform_with_usd_cart_card_preview(order, params, confirmation_token:)
+          preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "NL" })
+          allow(Stripe::ConfirmationToken).to receive(:retrieve)
+            .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+          charge_intent = instance_double(StripeChargeIntent, id: "pi_usd_cart_card", client_secret: "pi_usd_cart_card_secret")
+          create_args = nil
+          allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+            create_args = kwargs
+            charge_intent
+          end
+
+          responses = described_class.new(order:, params:, confirmation_token:).perform
+          [create_args, responses]
+        end
+
+        # gumroad-private#1382. Both mount-currency guards require the PRODUCT to be listed in a
+        # forced currency, so this USD-priced cart got neither: a card/Link buyer whose Element
+        # mounted in their FX-quoted currency minted a EUR ConfirmationToken, the intent was
+        # created in canonical USD, and Stripe rejected the confirm synchronously with no
+        # payment_failed webhook. The buyer saw a dead end and the purchase sat in_progress until
+        # FailAbandonedPurchaseWorker swept it — 1,711 events across 204 users in two days.
+        # Fail cleanly with the quote-invalid code instead, which makes the checkout cancel,
+        # re-fetch surcharges and re-mount, so the retry confirms in one consistent currency.
+        it "fails closed when a card token reports a non-USD Element mount currency for a USD intent" do
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::EUR
+
+          create_args, responses = perform_with_usd_cart_card_preview(order, params, confirmation_token: "ctoken_usd_intent_eur_mount")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          purchase = order.purchases.first.reload
+          expect(purchase).to be_failed
+          expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+        end
+
+        # The mirror direction: an EUR presentment intent whose Element remounted to USD
+        # mid-session (PaymentElementInput remounts on currency change by design, so an
+        # eligibility or fallback change between mount and confirm produces a USD token).
+        it "fails closed when a USD-mounted token would confirm against the EUR presentment intent" do
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::USD
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_eur_intent_usd_mount")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
+          expect(order.charges.last&.charge_presentment).to be_nil
+        end
+
+        it "still prepares the EUR intent when the reported mount currency matches it" do
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::EUR
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_eur_intent_eur_mount")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+        end
+
+        it "leaves a checkout that reports no mount currency on today's path" do
+          order, params = build_order
+          params.delete(:payment_element_mount_currency)
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_eur_intent_no_mount")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+        end
       end
 
       context "with a product priced in the forced currency (direct listed-amount case)" do

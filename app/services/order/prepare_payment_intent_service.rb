@@ -283,6 +283,15 @@ class Order::PreparePaymentIntentService
       presentment = method_forced_presentment_for(charge)
       return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && method_forced_presentment_required?
 
+      # Checked after the presentment is resolved (it determines the intent's currency) but
+      # before any intent is created, so a mismatch costs the buyer a clean retry rather than an
+      # unconfirmable intent. The presentment rows are only persisted from here on, so there is
+      # nothing to clean up on this path.
+      if block_element_currency_mismatch(presentment)
+        charge.destroy_presentment_records! if presentment.present?
+        return
+      end
+
       @charge_with_prepare_time_presentment = charge if presentment.present?
       charge_intent = create_unconfirmed_intent(charge, presentment)
       if charge_intent.nil?
@@ -442,6 +451,46 @@ class Order::PreparePaymentIntentService
       return nil unless params[:payment_element_mount_currency].to_s.downcase == product_currency
 
       product_currency
+    end
+
+    # Fail closed when the Element's mount currency cannot match the currency this intent will be
+    # created in. Stripe rejects a ConfirmationToken minted on an Element of one currency against
+    # an intent of another, SYNCHRONOUSLY and with no payment_failed webhook, so without this the
+    # buyer hits a dead end at the final confirm step: no charge, no error we recorded, and the
+    # purchase sits in_progress until FailAbandonedPurchaseWorker sweeps it — indistinguishable
+    # from someone who closed the tab (gumroad-private#1382: 1,711 events / 204 users in 2 days,
+    # ordinary card and Link buyers, not the local-method lane this machinery was built for).
+    #
+    # The mismatch is reachable in both directions and neither is a forced-currency cart:
+    #   * A USD-priced cart on the buyer-currency card lane whose Element mounted in the buyer's
+    #     FX-quoted currency, then reached this client-confirm prepare (which has no machinery to
+    #     honor a quote) — the guards above key on the product being listed in a forced currency,
+    #     so both return nil for a USD-priced product and the intent is created in USD.
+    #   * An EUR intent whose Element remounted to USD mid-session (eligibility or fallback
+    #     changed; PaymentElementInput remounts on currency change by design).
+    #
+    # Failing here converts an unrecoverable dead end into the same clean, retryable failure the
+    # buyer-currency quote guard produces: the checkout cancels, re-fetches surcharges, and
+    # re-runs the display gates, so the retry mounts and confirms in one consistent currency.
+    # Deliberately narrow: it fires only when the browser actually reported a mount currency AND
+    # that currency differs from the intent's, so every checkout that agrees with itself — the
+    # overwhelming majority — is untouched.
+    def block_element_currency_mismatch(presentment)
+      reported_currency = params[:payment_element_mount_currency].to_s.downcase
+      return false if reported_currency.blank?
+
+      intent_currency = presentment&.presentment_currency.to_s.downcase.presence ||
+        Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+      return false if reported_currency == intent_currency
+
+      Rails.logger.error(
+        "Client-confirm prepare blocked for order #{order.id}: Payment Element mounted in " \
+        "#{reported_currency} but the intent would be created in #{intent_currency}; failing " \
+        "closed rather than letting Stripe reject the confirm with no recoverable error"
+      )
+      purchases_to_charge.each { |purchase| purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID }
+      fail_purchases_with(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      true
     end
 
     def create_unconfirmed_intent(charge, presentment = nil)
