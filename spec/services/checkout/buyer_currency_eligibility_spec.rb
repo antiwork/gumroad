@@ -180,11 +180,21 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::JPY)
   end
 
-  it "falls back for wallet payment requests" do
+  # Wallet payments are no longer refused. The Payment Request Button is deliberately not
+  # special-cased even though its sheet shows canonical USD: it cannot reach a presentment
+  # checkout at all. It is suppressed whenever the Payment Element renders wallets
+  # (PaymentForm.tsx passes `disable_wallets || payment_element_wallets` as its disabled
+  # flag), and selecting it sets checkout's paymentMethod to "stripePaymentRequest", which
+  # makes getCheckoutBuyerCurrencyDisplay return null — so no quote token is ever issued for
+  # one. Gumroad is migrating fully to Payment Element wallets, so this case is being retired
+  # rather than guarded.
+  it "allows a wallet payment" do
     params[:wallet_type] = "apple_pay"
+    params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
 
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:wallet_payment_request)
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.fallback_reason).to be_nil
   end
 
   it "falls back for future-charge card setups such as save-card checkouts" do

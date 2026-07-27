@@ -188,7 +188,6 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
-    return fallback(:wallet_payment_request) if wallet_type.present?
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
     return fallback(:no_purchases) if purchases.empty?
@@ -370,10 +369,6 @@ class Checkout::BuyerCurrencyEligibility
 
       merchant_account.is_a_stripe_connect_account? ||
         self.class.settlement_merchant_account(merchant_account)&.is_managed_by_gumroad? || false
-    end
-
-    def wallet_type
-      params[:wallet_type]
     end
 
     # True when the order's purchases span more than one seller — i.e. the order produces
