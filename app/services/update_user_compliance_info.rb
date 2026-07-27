@@ -469,7 +469,7 @@ class UpdateUserComplianceInfo
     end
 
     def po_box_address?(address)
-      address.gsub(/[^\w]/, "").downcase.include?("pobox")
+      PoBoxAddress.match?(address)
     end
 
     def business_mode_changed?

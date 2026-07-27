@@ -1465,6 +1465,533 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edited content" }] }], page.reload.description
   end
 
+  # --- stale-snapshot overwrite guard (gumroad-private#1295) -------------------
+  # The editor submits the full product on every save, so a session working
+  # from an outdated snapshot resubmits existing page/variant ids carrying old
+  # data. Those are plain in-place updates — the deletion guards above never
+  # fire — and they silently revert whatever a newer session saved. The editor
+  # echoes each page's/variant's served updated_at; the server rejects the
+  # save with a structured conflict when a stored row changed after the
+  # snapshot, before anything is mutated. Each "two-session" test simulates
+  # session A loading (capturing snapshot timestamps), session B saving
+  # (bumping the rows), then session A saving from its stale snapshot.
+  #
+  # The seller-visible rejection is OFF by default in production: enforcing it
+  # blocked hundreds of legitimate saves because the timestamps the editor
+  # echoes aren't yet trustworthy (see Product::StaleContentWriteGuard's class
+  # comment). The tests that assert the 409 therefore turn the flag on
+  # explicitly via enforce_stale_content_block!, and the tests below them cover
+  # the DEFAULT (flag off) behavior — which is what production runs today.
+
+  # Turns on the seller-blocking 409 path for tests that assert it. Without
+  # this, a stale save is detected and reported but allowed through.
+  def enforce_stale_content_block!
+    Feature.activate(Product::StaleContentWriteGuard::BLOCK_FEATURE_NAME)
+  end
+
+  test "PUT update rejects a two-session page overwrite: a save echoing a stale page snapshot cannot replace content saved in between" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Session B's newer content" }] }]
+
+    # Session B saves newer content after session A loaded.
+    travel 1.minute
+    @version1_page.update!(description: newer_content)
+
+    # Session A saves old content under the same page id, echoing its stale
+    # snapshot timestamp.
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_includes response.parsed_body["error_message"], "reload the page"
+    assert_equal [{ "type" => "page", "id" => @version1_page.external_id, "name" => nil }],
+                 response.parsed_body["stale_records"].map { _1.slice("type", "id", "name") }
+    assert_equal newer_content, @version1_page.reload.description
+  end
+
+  test "PUT update rejects a two-session product-level page overwrite" do
+    enforce_stale_content_block!
+    product_page = create_rich_content(entity: @product, description: guard_content_description, title: "Shared page")
+    stale_snapshot = product_page.updated_at.as_json
+    newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Session B's newer content" }] }]
+
+    travel 1.minute
+    product_page.update!(description: newer_content)
+
+    post :update, params: @params.merge(
+      rich_content: [{ id: product_page.external_id, title: "Shared page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }]
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_equal newer_content, product_page.reload.description
+  end
+
+  test "PUT update rejects a two-session variant overwrite: a save echoing a stale variant snapshot cannot revert attributes saved in between" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+    stale_snapshot = @version1.updated_at.as_json
+
+    # Session B renames the variant after session A loaded.
+    travel 1.minute
+    @version1.update!(name: "Session B's newer name")
+
+    # Session A submits the old name, echoing its stale variant snapshot.
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: "Summer Sale", updated_at: stale_snapshot, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_equal [{ "type" => "variant", "id" => @version1.external_id, "name" => "Session B's newer name" }],
+                 response.parsed_body["stale_records"].map { _1.slice("type", "id", "name") }
+    assert_equal "Session B's newer name", @version1.reload.name
+  end
+
+  test "PUT update rejects a stale save before mutating ANY part of the payload" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    original_name = @product.name
+
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+    post :update, params: @params.merge(
+      name: "Renamed by the stale session",
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal original_name, @product.reload.name
+  end
+
+  test "PUT update sends a Sentry notification alongside the stale-save rejection" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :conflict
+    message, context = notified.find { |m, _| m.include?("stale snapshot") }
+    assert_not_nil message, "Expected a stale-save notification (got: #{notified.inspect})"
+    assert_equal @product.id, context[:product_id]
+    assert_equal [@version1_page.external_id], context[:stale_page_external_ids]
+  end
+
+  test "PUT update allows a save echoing the CURRENT snapshot timestamps and refreshes them in the response" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+    updated_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edited by this session" }] }]
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: @version1.updated_at.as_json, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: @version1_page.updated_at.as_json, description: { type: "doc", content: updated_content } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal updated_content, @version1_page.reload.description
+    # The response reports the fresh post-save timestamps so the session's
+    # NEXT save echoes them instead of the pre-save ones (which would now
+    # reject the session's own follow-up save as stale).
+    fresh_timestamp = response.parsed_body["rich_content_updated_at"][@version1_page.external_id]
+    assert_equal @version1_page.updated_at.to_i, Time.zone.parse(fresh_timestamp).to_i
+    assert response.parsed_body["variant_updated_at"].key?(@version1.external_id)
+
+    # Echoing the refreshed timestamps, the follow-up save succeeds.
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: response.parsed_body["variant_updated_at"][@version1.external_id], rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: fresh_timestamp, description: { type: "doc", content: updated_content } }] }]
+    ), format: :json
+
+    assert_response :success
+  end
+
+  # The freshness check has to run while this request holds the product row
+  # lock, otherwise two saves that each echo the same (at-request-time fresh)
+  # timestamps both pass the check and the last writer silently overwrites the
+  # other — the exact overwrite the guard exists to stop. This test drives that
+  # ordering: the concurrent save is committed at the moment the request
+  # acquires the lock (`SELECT ... FOR UPDATE` on the product row), which is
+  # where a real second request would have been unblocked. The check must
+  # therefore read the post-lock state and reject, even though the echoed
+  # timestamps were current when the request started.
+  test "PUT update checks freshness while holding the product row lock, so a save committed just before the lock is honored" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+    snapshot_current_at_request_time = @version1_page.updated_at.as_json
+    concurrent_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Committed by the concurrent save" }] }]
+
+    locked_product_row = false
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+      next if locked_product_row
+      next unless payload[:sql].to_s.include?("FOR UPDATE") && payload[:sql].to_s.include?("`links`")
+      locked_product_row = true
+      travel 1.minute
+      @version1_page.update!(description: concurrent_content)
+    end
+
+    begin
+      post :update, params: @params.merge(
+        variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: snapshot_current_at_request_time, description: { type: "doc", content: guard_content_description } }] }]
+      ), format: :json
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+
+    assert locked_product_row, "Expected the save to lock the product row (SELECT ... FOR UPDATE) before checking freshness"
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+  end
+
+  test "PUT update does NOT reject a save whose variant row was only touched by a buyer's purchase" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+    @version1.update!(max_purchase_count: 100)
+    stale_variant_snapshot = @version1.reload.updated_at.as_json
+    page_snapshot = @version1_page.updated_at.as_json
+
+    # Every sale of a limited-quantity variant touches the variant row to bust
+    # the product cache (Purchase#touch_variants_if_limited_quantity). That
+    # bumps updated_at without changing anything the seller edits, so a save
+    # from a session that loaded before the sale has no newer seller content to
+    # overwrite and must still go through.
+    travel 1.minute
+    @version1.touch
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: stale_variant_snapshot, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: page_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+  end
+
+  # Membership tier prices are rows in a separate table (VariantPrice) and
+  # saving them does not bump the tier row's own updated_at, so the tier row's
+  # timestamp alone would let a stale full save silently revert a price another
+  # session had just changed.
+  test "PUT update rejects a two-session membership tier price overwrite: a stale save cannot revert a tier price saved in between" do
+    enforce_stale_content_block!
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+
+    # Session B raises the tier's monthly price after session A loaded. Only
+    # the price row changes — the tier row itself is untouched.
+    travel 1.minute
+    first_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 2500 })
+
+    # Session A resubmits the price it was served, echoing its stale snapshot.
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_equal [{ "type" => "variant", "id" => first_tier.external_id, "name" => "First Tier" }],
+                 response.parsed_body["stale_records"].map { _1.slice("type", "id", "name") }
+    assert_equal 2500, first_tier.reload.alive_prices.is_buy.find_by!(recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+  end
+
+  test "PUT update lets a session change a membership tier price and save again, because the response refreshes the tier's price-aware snapshot" do
+    enforce_stale_content_block!
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    tier_params = ->(snapshots) do
+      [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: snapshots[first_tier.external_id],
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 900 } } },
+        { id: second_tier.external_id, name: second_tier.name, updated_at: snapshots[second_tier.external_id],
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    end
+    served_snapshots = product.tiers.to_h { [_1.external_id, Product::StaleContentWriteGuard.snapshot_at(_1).as_json] }
+
+    post :update, params: { id: product.unique_permalink, name: product.name, variants: tier_params.call(served_snapshots) }, format: :json
+
+    assert_response :success
+    assert_equal 900, first_tier.reload.alive_prices.is_buy.find_by!(recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+    # The refreshed snapshot has to account for the price row this save wrote,
+    # otherwise the session's next save echoes a timestamp older than the price
+    # and rejects itself.
+    refreshed = response.parsed_body["variant_updated_at"]
+    assert_equal Product::StaleContentWriteGuard.snapshot_at(first_tier).to_i, Time.zone.parse(refreshed[first_tier.external_id]).to_i
+
+    travel 1.second
+    post :update, params: { id: product.unique_permalink, name: product.name, variants: tier_params.call(refreshed) }, format: :json
+
+    assert_response :success
+  end
+
+  test "PUT update does NOT reject a save that resubmits a membership tier's stored prices unchanged" do
+    enforce_stale_content_block!
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller)
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+
+    # The tier row moves without any seller-editable value changing — the same
+    # bare touch a sale of a limited-quantity tier performs. Resubmitting the
+    # stored prices would overwrite nothing, so the save must go through.
+    travel 1.minute
+    first_tier.touch
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :success
+  end
+
+  test "PUT update rejects a stale tier save that would re-enable a recurrence another session turned off" do
+    enforce_stale_content_block!
+    # Both tiers carry the same set of recurrences — the editor enforces that,
+    # and a payload with mismatched sets is rejected before the guard runs.
+    product = create_membership_product_with_preset_tiered_pricing(
+      user: @seller,
+      recurrence_price_values: [
+        { monthly: { enabled: true, price_cents: 300 }, yearly: { enabled: true, price_cents: 3000 } },
+        { monthly: { enabled: true, price_cents: 500 }, yearly: { enabled: true, price_cents: 5000 } },
+      ]
+    )
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+    stale_snapshot = Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json
+    second_snapshot = Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json
+
+    # Session B drops the yearly option from both tiers. That SOFT-DELETES the
+    # yearly price rows rather than writing live ones, and the monthly prices it
+    # resubmits are unchanged so those rows aren't touched either — a snapshot
+    # built only from ALIVE price rows therefore doesn't move. Session A's stale
+    # payload would bring the deleted yearly prices straight back.
+    travel 1.minute
+    first_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 300 })
+    second_tier.save_recurring_prices!(monthly: { enabled: true, price_cents: 500 })
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name, updated_at: stale_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 }, yearly: { enabled: true, price_cents: 3000 } } },
+        { id: second_tier.external_id, name: second_tier.name, updated_at: second_snapshot,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 }, yearly: { enabled: true, price_cents: 5000 } } },
+      ]
+    }, format: :json
+
+    assert_response :conflict
+    assert_equal "stale_content_conflict", response.parsed_body["error_code"]
+    assert_nil first_tier.reload.alive_prices.is_buy.find_by(recurrence: BasePrice::Recurrence::YEARLY)
+  end
+
+  test "PUT update fails open for payloads that do not echo snapshot timestamps (sessions predating the guard)" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+    newer_content = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }]
+
+    travel 1.minute
+    @version1_page.update!(description: newer_content)
+
+    # No updated_at anywhere in the payload — a legacy session. The save goes
+    # through the way it always did (this is the pre-guard behavior, kept so a
+    # deploy doesn't break every open editor tab).
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal guard_content_description, @version1_page.reload.description
+  end
+
+  test "PUT update ignores unparseable echoed timestamps instead of failing the save" do
+    enforce_stale_content_block!
+    setup_guarded_version!
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: "not-a-timestamp", rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: "also-not-a-timestamp", description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+  end
+
+  # --- enforcement is OFF by default (gumroad-private#1295) --------------------
+  # In production the seller-visible 409 blocked 363 saves for 61 sellers in
+  # about twelve hours, and every sampled block submitted exactly as many pages
+  # and variants as the product had — nothing was being overwritten. The
+  # rejection is therefore gated off while the payload contract is fixed
+  # (gumroad-private#1329). These tests pin the DEFAULT behavior: staleness is
+  # still detected and still reported to Sentry, but the save goes through, and
+  # the deletion guards are unaffected.
+
+  # The tab a seller had open when the guard deployed is the case the guard's
+  # "fail open for legacy sessions" allowance was supposed to cover and did
+  # NOT: page timestamps were already part of the editor payload long before
+  # the guard shipped (RichContents#rich_content_json), so such a tab carries a
+  # real page id AND a page timestamp it has no way to refresh. It was blocked
+  # on its very next save. With enforcement off it saves normally.
+  test "PUT update lets a pre-deploy editor tab save: a real page id with an unrefreshed page timestamp is not blocked" do
+    setup_guarded_version!
+    # The timestamp this tab was served when it loaded, before the guard existed.
+    pre_deploy_snapshot = @version1_page.updated_at.as_json
+    seller_edit = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edit made in the old tab" }] }]
+
+    # The stored page moves on afterwards, for any reason at all — another save
+    # from this same seller, a support restore, a background touch.
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Something else" }] }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: pre_deploy_snapshot, description: { type: "doc", content: seller_edit } }] }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal seller_edit, @version1_page.reload.description
+  end
+
+  test "PUT update lets ordinary consecutive saves through even when the session never refreshes its page snapshot" do
+    setup_guarded_version!
+    snapshot = @version1_page.updated_at.as_json
+    save = ->(text) do
+      post :update, params: @params.merge(
+        variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: snapshot, description: { type: "doc", content: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => text }] }] } }] }]
+      ), format: :json
+    end
+
+    # Save a minute after the editor loaded, so this save's own write lands on a
+    # later second than the snapshot the session is holding.
+    travel 1.minute
+    save.call("First save")
+    assert_response :success
+
+    # The session still echoes the snapshot it was served on load — it never
+    # adopted the timestamp the first save handed back. The stored row is now
+    # newer, so with enforcement on this second save is rejected and refreshing
+    # does not help: this is the retry-storm shape sellers were stuck in.
+    save.call("Second save")
+
+    assert_response :success
+    assert_equal [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Second save" }] }], @version1_page.reload.description
+  end
+
+  test "PUT update still reports a stale snapshot to Sentry when enforcement is off, under an observe-only message" do
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: guard_content_description } }] }]
+    ), format: :json
+
+    assert_response :success
+    message, context = notified.find { |m, _| m == Product::StaleContentWriteGuard::OBSERVED_MESSAGE }
+    assert_not_nil message, "Expected the observe-only stale-snapshot notification (got: #{notified.map(&:first).inspect})"
+    assert_equal @product.id, context[:product_id]
+    assert_equal [@version1_page.external_id], context[:stale_page_external_ids]
+    # The blocking message must not be sent while the flag is off — the two are
+    # separate Sentry issues and the blocking one has to stay at zero events.
+    assert_nil notified.find { |m, _| m == Product::StaleContentWriteGuard::BLOCKED_MESSAGE }
+  end
+
+  # The two deletion guards (#6178, #6244) are what actually stopped the July
+  # 13/18/21 wipes, and gating the stale-write rejection must not weaken them.
+  # These re-assert both malformed-payload shapes with enforcement OFF, so a
+  # future change that accidentally routes the deletion guards through the same
+  # flag fails here.
+
+  test "PUT update still blocks a payload missing a content-bearing page when stale-write enforcement is off" do
+    setup_guarded_version!
+    # A stale snapshot AND an omitted page: the stale-write guard stays silent
+    # (enforcement off) and the deletion guard has to catch the omission.
+    stale_snapshot = @version1_page.updated_at.as_json
+    travel 1.minute
+    @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+    post :update, params: @params.merge(
+      variants: [{ id: @version1.external_id, name: @version1.name, updated_at: stale_snapshot, rich_content: [] }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_includes response.parsed_body["error_message"], "refresh the page"
+    assert @version1_page.reload.alive?
+  end
+
+  test "PUT update still blocks a payload missing a content-bearing variant when stale-write enforcement is off" do
+    setup_guarded_version!
+
+    post :update, params: @params.merge(variants: [{ id: nil, name: "Brand new version" }]), format: :json
+
+    assert_response :unprocessable_entity
+    assert_includes response.parsed_body["error_message"], "refresh the page"
+    assert @version1.reload.alive?
+    assert @version1_page.reload.alive?
+  end
+
+  # The kill switch reads a Flipper flag, which is a Redis round trip, and it
+  # runs inside the save's transaction while that transaction holds the product
+  # row lock. If the feature store is unreachable the save must still go
+  # through: a 500 here would recreate the failure this gate exists to remove.
+  test "PUT update still saves when the enforcement flag lookup itself fails" do
+    setup_guarded_version!
+    stale_snapshot = @version1_page.updated_at.as_json
+    seller_edit = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Saved despite a flag-store outage" }] }]
+    # Simulate the feature store failing for THIS flag only, without mocha:
+    # a `.with` matcher turns every OTHER flag lookup in the request into an
+    # unexpected invocation (custom_html_pages, cancellation_discounts), so
+    # override the singleton and restore it in an ensure block.
+    original = Feature.method(:active?)
+    Feature.define_singleton_method(:active?) do |name, actor = nil|
+      raise Redis::CannotConnectError, "Error connecting to Redis" if name == Product::StaleContentWriteGuard::BLOCK_FEATURE_NAME
+
+      original.call(name, actor)
+    end
+
+    begin
+      travel 1.minute
+      @version1_page.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Newer" }] }])
+
+      post :update, params: @params.merge(
+        variants: [{ id: @version1.external_id, name: @version1.name, rich_content: [{ id: @version1_page.external_id, title: "Page", updated_at: stale_snapshot, description: { type: "doc", content: seller_edit } }] }]
+      ), format: :json
+    ensure
+      Feature.define_singleton_method(:active?, original)
+    end
+
+    assert_response :success
+    assert_equal seller_edit, @version1_page.reload.description
+  end
+
   # --- the July 21, 2026 incident shape (gumroad-private#1230) -----------------
   # Support restored a product's per-version pages while
   # has_same_rich_content_for_all_variants stayed on and a blank product-level
@@ -5063,5 +5590,394 @@ class LinksControllerWithoutEmailTest < ActionController::TestCase
     get :show, params: { id: product.to_param }
 
     assert_response :success
+  end
+end
+
+# Covers the deletion audit trail (ProductVariantDeletionAudit), added because a
+# July 2026 production investigation of 55 candidate products could not tell
+# whether a deleted version had been explicitly confirmed by the seller: the
+# confirmation list arrives on the request and was never stored anywhere.
+#
+# These tests assert the audit records what actually happened, and — just as
+# importantly — that it cannot alter or break the save it observes.
+class LinksControllerDeletionAuditTest < ActionController::TestCase
+  tests LinksController
+  include LinksControllerTestHelpers
+
+  setup do
+    sign_in_seller_area!
+    @product = create_product_with_pdf_file(user: @seller)
+    product_file = @product.product_files.alive.first
+    @params = {
+      id: @product.unique_permalink,
+      name: "sumlink",
+      description: "New description",
+      files: [{ id: product_file.external_id, url: product_file.url }],
+    }
+    @category = create_variant_category(link: @product, title: "Versions")
+  end
+
+  # The `options.nil?` branch: the category is submitted with no options, which
+  # the save reads as "remove this whole grouping".
+  test "a category submitted with no options records an audit for the variants it actually deleted" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    assert_difference -> { ProductVariantDeletionAudit.count }, 1 do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :success
+    end
+
+    audit = ProductVariantDeletionAudit.last
+    assert_equal ProductVariantDeletionAudit::EDITOR_CATEGORY_OMITTED, audit.route
+    assert_equal @product.id, audit.product_id
+    assert_equal @logged_in_user.id, audit.actor_user_id
+    assert_equal [variant.external_id], audit.deleted_variant_external_ids
+    assert_equal 1, audit.deleted_variant_count
+    assert_equal ProductVariantDeletionAudit::PAYLOAD_OMISSION, audit.intent_source
+    assert_equal 0, audit.confirmed_affected_variant_count
+    assert_equal 1, audit.unconfirmed_affected_variant_count
+    # The revision token does not exist yet (gumroad-private#1379).
+    assert_nil audit.revision_token
+  end
+
+  # The diff branch: the category survives, one version is missing from the
+  # submitted list AND was explicitly confirmed for removal.
+  test "a confirmed removal from a surviving category records intent as confirmed ids" do
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    assert_difference -> { ProductVariantDeletionAudit.count }, 1 do
+      post :update, params: @params.merge(
+        variants: [{ id: kept.external_id, name: "Kept" }],
+        confirmed_removed_variant_ids: [removed.external_id],
+      ), format: :json
+      assert_response :success
+    end
+
+    audit = ProductVariantDeletionAudit.last
+    assert_equal ProductVariantDeletionAudit::EDITOR_VARIANTS_DIFFED, audit.route
+    assert_equal [removed.external_id], audit.deleted_variant_external_ids
+    assert_equal [removed.external_id], audit.confirmed_affected_variant_external_ids
+    assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
+    assert_equal 0, audit.unconfirmed_affected_variant_count
+    assert kept.reload.alive?
+  end
+
+  # The confirmation list can name rows this request never deleted. Only the
+  # intersection with what was actually affected belongs in the audit, otherwise
+  # the record overstates what the seller agreed to in this save.
+  test "only confirmed ids that were actually deleted are recorded" do
+    removed = create_variant(variant_category: @category, name: "Removed")
+    already_gone = create_variant(variant_category: @category, name: "Already gone")
+    already_gone_external_id = already_gone.external_id
+    already_gone.mark_deleted!
+
+    post :update, params: @params.merge(
+      variants: [],
+      confirmed_removed_variant_ids: [removed.external_id, already_gone_external_id],
+    ), format: :json
+    assert_response :success
+
+    audit = ProductVariantDeletionAudit.last
+    assert_equal [removed.external_id], audit.deleted_variant_external_ids
+    assert_equal [removed.external_id], audit.confirmed_affected_variant_external_ids
+    assert_not_includes audit.deleted_variant_external_ids, already_gone_external_id
+  end
+
+  # --- the outer category sweep (Product::VariantsUpdaterService) ---
+  #
+  # A whole grouping absent from the payload is swept after each submitted
+  # grouping is processed. Marking it deleted does NOT soft-delete its versions,
+  # so intent must be judged against the versions the sweep authorised removing.
+  # Judging it from the (empty) deleted set reported every sweep as
+  # omission-driven, including fully confirmed ones.
+
+  test "a swept category whose children were all confirmed records intent as confirmed ids" do
+    swept = create_variant_category(link: @product, title: "Swept")
+    child = create_variant(variant_category: swept, name: "Confirmed child")
+    kept_variant = create_variant(variant_category: @category, name: "Kept")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept_variant.external_id, name: "Kept" }],
+      confirmed_removed_variant_ids: [child.external_id],
+    ), format: :json
+    assert_response :success
+
+    audit = ProductVariantDeletionAudit.where(route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT).last
+    assert_not_nil audit, "expected an audit for the swept category"
+    assert_equal [swept.external_id], audit.deleted_variant_category_external_ids
+    assert_equal [child.external_id], audit.affected_variant_external_ids
+    assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
+    assert_equal 0, audit.unconfirmed_affected_variant_count
+    # The no-cascade behaviour is recorded rather than left to be discovered.
+    assert_equal 1, audit.alive_child_variant_count
+  end
+
+  test "a swept category with some children confirmed records intent as mixed" do
+    swept = create_variant_category(link: @product, title: "Swept")
+    confirmed_child = create_variant(variant_category: swept, name: "Confirmed child")
+    unconfirmed_child = create_variant(variant_category: swept, name: "Unconfirmed child")
+    kept_variant = create_variant(variant_category: @category, name: "Kept")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept_variant.external_id, name: "Kept" }],
+      confirmed_removed_variant_ids: [confirmed_child.external_id],
+    ), format: :json
+    assert_response :success
+
+    audit = ProductVariantDeletionAudit.where(route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT).last
+    assert_not_nil audit
+    assert_equal ProductVariantDeletionAudit::MIXED, audit.intent_source
+    assert_equal 2, audit.affected_variant_count
+    assert_equal 1, audit.confirmed_affected_variant_count
+    assert_equal 1, audit.unconfirmed_affected_variant_count
+    assert_includes audit.affected_variant_external_ids, unconfirmed_child.external_id
+  end
+
+  test "a swept category with no confirmations records intent as payload omission" do
+    swept = create_variant_category(link: @product, title: "Swept")
+    create_variant(variant_category: swept, name: "Unconfirmed child")
+    kept_variant = create_variant(variant_category: @category, name: "Kept")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept_variant.external_id, name: "Kept" }],
+    ), format: :json
+    assert_response :success
+
+    audit = ProductVariantDeletionAudit.where(route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT).last
+    assert_not_nil audit
+    assert_equal ProductVariantDeletionAudit::PAYLOAD_OMISSION, audit.intent_source
+    assert_equal 0, audit.confirmed_affected_variant_count
+  end
+
+  # A blocked save deleted nothing, so there is nothing to audit. This also pins
+  # that the audit did not weaken the guard.
+  test "a save blocked by the deletion guard writes no audit and still fails" do
+    protected_variant = create_variant(variant_category: @category, name: "Paid version", price_difference_cents: 500)
+
+    assert_no_difference -> { ProductVariantDeletionAudit.count } do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :unprocessable_entity
+    end
+
+    assert protected_variant.reload.alive?
+  end
+
+  # The blocked-save test above raises BEFORE any audit is scheduled, so it says
+  # nothing about rollback. This one lets the deletion and the audit scheduling
+  # both happen, then fails the transaction afterwards: the after-commit callback
+  # must not fire, because the deletion it would describe never committed.
+  test "a real deletion rolled back writes no audit and leaves the variant alive" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    assert_no_difference -> { ProductVariantDeletionAudit.count } do
+      assert_raises(ActiveRecord::RecordInvalid) do
+        ActiveRecord::Base.transaction do
+          # A REAL deletion through the same service the editor uses, so this
+          # exercises the actual audit scheduling rather than a bare call.
+          Product::VariantCategoryUpdaterService.new(
+            product: @product,
+            category_params: { id: @category.external_id, options: nil },
+            confirmed_removed_variant_ids: [variant.external_id],
+            deletion_audit_context: { actor_user_id: @logged_in_user.id }
+          ).perform
+
+          # The deletion is real at this point...
+          assert_not BaseVariant.find(variant.id).alive?
+
+          # ...and then the transaction fails.
+          raise ActiveRecord::RecordInvalid.new(Link.new)
+        end
+      end
+    end
+
+    # The deletion was rolled back, so the version is alive again and the audit
+    # that would have described it was never written. This is why audits are
+    # written after commit rather than inline.
+    assert variant.reload.alive?
+  end
+
+  # Observability must never take down a save. This stubs `create!` to raise the
+  # error a real database failure produces, rather than executing a genuinely
+  # failing INSERT — the point being verified is that the rescue path swallows a
+  # persistence error and leaves the deletion committed, not that any particular
+  # SQL is rejected.
+  test "a failing audit write does not stop the deletion" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    ProductVariantDeletionAudit.stub(:create!, ->(**_args) { raise ActiveRecord::StatementInvalid, "simulated database failure" }) do
+      assert_no_difference -> { ProductVariantDeletionAudit.count } do
+        post :update, params: @params.merge(variants: []), format: :json
+        assert_response :success
+      end
+    end
+
+    # The deletion still happened and committed.
+    assert_not variant.reload.alive?
+  end
+
+  # A broken notifier must not resurrect the exception it was called to swallow.
+  test "a failing error notifier also cannot stop the deletion" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    ProductVariantDeletionAudit.stub(:create!, ->(**_args) { raise ActiveRecord::StatementInvalid, "simulated database failure" }) do
+      ErrorNotifier.stub(:notify, ->(*_args, **_kwargs) { raise "notifier is down" }) do
+        post :update, params: @params.merge(variants: []), format: :json
+        assert_response :success
+      end
+    end
+
+    assert_not variant.reload.alive?
+  end
+
+  # Correlation logging used to run INSIDE the deletion's transaction, where a
+  # raising logger propagated out, rolled the deletion back, and turned a full disk
+  # into a save that silently did not delete. Proven empirically before the fix.
+  #
+  # It now runs in `after_commit`, after the row is written, so a raise can no
+  # longer undo the deletion — it would instead 500 a request whose work had fully
+  # succeeded. This asserts the weaker-but-still-required property that survives
+  # the move: a broken logger costs the log line and nothing else.
+  test "a broken correlation logger cannot stop an editor save" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    AuditCorrelationId.stub(:log_pair, ->(**_args) { raise IOError, "log device full" }) do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :success
+    end
+
+    # The deletion still committed, and the audit row was still written: a missing
+    # log line must not cost the row as well.
+    assert_not variant.reload.alive?
+    assert_equal 1, ProductVariantDeletionAudit.where(product_id: @product.id).count
+  end
+
+  # The real logger object raising, rather than the wrapper being stubbed out —
+  # this exercises the rescue inside AuditCorrelationId.log_pair itself.
+  test "a logger that raises is swallowed by log_pair" do
+    broken = Object.new
+    def broken.info(*) = raise(IOError, "log device full")
+
+    assert_nothing_raised do
+      assert_not AuditCorrelationId.log_pair(
+        request_id: "req-1",
+        correlation_id: AuditCorrelationId.for("req-1"),
+        logger: broken
+      )
+    end
+  end
+
+  # The pair has to reach the log, or a correlation id that exists only in the
+  # database cannot correlate anything.
+  #
+  # Asserted here on the CALL, not on the request id's value: `post` rebuilds the
+  # rack env, so a request id pre-set on @request is wiped, and
+  # ActionDispatch::RequestId is middleware that controller tests bypass entirely.
+  # The end-to-end version with a real request id lives in
+  # test/integration/product_variant_deletion_audit_request_id_test.rb.
+  test "a successful deletion logs a correlation pair exactly once" do
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    # Capture the pair as it is logged. The write is deferred to after_commit, so a
+    # `Rails.stub(:logger)` block can close before it runs; recording the arguments
+    # is both simpler and not timing-dependent.
+    logged = []
+    AuditCorrelationId.stub(:log_pair, ->(request_id:, correlation_id:, **) { logged << [request_id, correlation_id]; true }) do
+      post :update, params: @params.merge(variants: []), format: :json
+      assert_response :success
+    end
+
+    audit = ProductVariantDeletionAudit.where(product_id: @product.id).sole
+    assert_not variant.reload.alive?
+
+    # Exactly one pair, carrying the digest that was actually stored.
+    assert_equal 1, logged.size
+    assert_equal audit.correlation_id, logged.sole.last
+  end
+
+  # A correlation id in the log must always lead to an audit row. If the INSERT
+  # fails, logging the pair anyway would leave a line pointing at a row that does
+  # not exist — the exact false trail the correlation id is meant to prevent.
+  test "a failed audit write logs no correlation pair" do
+    create_variant(variant_category: @category, name: "Plain version")
+
+    logged = []
+    ProductVariantDeletionAudit.stub(:create!, ->(**_args) { raise ActiveRecord::StatementInvalid, "simulated database failure" }) do
+      AuditCorrelationId.stub(:log_pair, ->(**kwargs) { logged << kwargs; true }) do
+        assert_no_difference -> { ProductVariantDeletionAudit.count } do
+          post :update, params: @params.merge(variants: []), format: :json
+          assert_response :success
+        end
+      end
+    end
+
+    assert_empty logged, "no row was written, so no correlation line should exist"
+  end
+
+  # The real log line, end to end through the real logger, so the format itself is
+  # covered rather than just the call.
+  test "log_pair writes the request id and correlation id to the log" do
+    log = StringIO.new
+
+    assert AuditCorrelationId.log_pair(
+      request_id: "req-abc",
+      correlation_id: "digest-xyz",
+      logger: ActiveSupport::Logger.new(log)
+    )
+
+    assert_match(/\[audit_correlation\] request_id=req-abc correlation_id=digest-xyz/, log.string)
+  end
+
+  # ...and only then. A save that deletes nothing must not emit a correlation
+  # line, or the log fills with entries that lead to no audit row.
+  test "a save that deletes nothing logs no correlation line" do
+    # Submit the variant so the save KEEPS it. Note @params carries no `variants`
+    # key at all, which the save reads as "remove everything" — reusing @params
+    # unchanged would delete, not preserve, which is what made an earlier version
+    # of this test pass for the wrong reason.
+    variant = create_variant(variant_category: @category, name: "Plain version")
+    keep = @params.merge(variants: [{ id: variant.external_id, name: variant.name }])
+
+    logged = []
+    AuditCorrelationId.stub(:log_pair, ->(**kwargs) { logged << kwargs; true }) do
+      post :update, params: keep, format: :json
+      assert_response :success
+    end
+
+    assert variant.reload.alive?, "the variant should have been kept, not deleted"
+    assert_empty logged
+    assert_equal 0, ProductVariantDeletionAudit.where(product_id: @product.id).count
+  end
+
+  # The audit is deliberately non-PII and its schema is fixed. If someone adds a
+  # column that carries seller or buyer content, this fails.
+  test "the audit stores no personal data" do
+    create_variant(variant_category: @category, name: "Secret version name")
+
+    post :update, params: @params.merge(variants: []), format: :json
+    assert_response :success
+
+    values = ProductVariantDeletionAudit.last.attributes.values.map(&:to_s).join(" ")
+    assert_not_includes values, @seller.email
+    assert_not_includes values, "Secret version name"
+    assert_not_includes values, "New description"
+    assert_not_includes values, "Versions"
+
+    # No open-ended blob to smuggle content into later.
+    assert_empty ProductVariantDeletionAudit.column_names & %w[metadata payload params_snapshot data]
+  end
+
+  # End-to-end proof that a hostile header never reaches the database lives in
+  # test/integration/product_variant_deletion_audit_request_id_test.rb, because
+  # ActionDispatch::RequestId is middleware and controller tests bypass the
+  # middleware stack entirely (request_id is always nil here — verified, not
+  # assumed).
+
+  test "the correlation digest is stable for one request id and differs across them" do
+    first = AuditCorrelationId.for("request-one")
+    assert_equal first, AuditCorrelationId.for("request-one")
+    assert_not_equal first, AuditCorrelationId.for("request-two")
+    assert_nil AuditCorrelationId.for(nil)
+    assert_nil AuditCorrelationId.for("")
   end
 end

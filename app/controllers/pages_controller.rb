@@ -157,6 +157,7 @@ class PagesController < Sellers::BaseController
           <meta name="viewport" content="width=device-width, initial-scale=1">
           #{SANDBOX_COMPAT_SCRIPT}
           #{self.class.pages_tailwind_head}
+          #{self.class.tailwind_v3_gradient_compat_head(interpolated)}
         </head>
         <body>
           #{interpolated}

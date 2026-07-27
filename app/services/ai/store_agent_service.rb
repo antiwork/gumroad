@@ -258,6 +258,16 @@ class Ai::StoreAgentService
         messages: conversation,
         tools: tool_schemas,
         max_tokens: MAX_REPLY_TOKENS,
+        # A corrupted tool call is recovered by replaying the turn without streaming, which
+        # regenerates the reply from the start. Tool-use turns usually stream a sentence of
+        # preamble first, so without a way to clear it that recovery could never run — the client
+        # refuses to replay over text the seller can still see. This is the same :reset the normal
+        # tool-use path below uses to discard preamble, so the seller ends up in the identical
+        # state: an empty transcript that the recovered turn then fills in.
+        on_discard_streamed_text: -> {
+          emit.call(:reset, {}) if streamed_any
+          streamed_any = false
+        },
       ) do |text|
         streamed_any = true
         emit.call(:token, { text: })

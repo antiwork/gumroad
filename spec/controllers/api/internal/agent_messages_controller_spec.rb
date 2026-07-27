@@ -203,7 +203,7 @@ describe Api::Internal::AgentMessagesController do
   end
 
   describe "POST execute" do
-    let(:valid_params) { { type: "api_write", params: { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 } } }
+    let(:valid_params) { { type: "api_write", params: { endpoint: "create_offer_code", code: "LAUNCH", percent_off: 20 } } }
 
     it_behaves_like "authentication required for action", :post, :execute do
       let(:request_params) { valid_params }
@@ -240,7 +240,7 @@ describe Api::Internal::AgentMessagesController do
             "proposed_action" => {
               "type" => "api_write",
               "summary" => "Create discount LAUNCH",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -286,7 +286,7 @@ describe Api::Internal::AgentMessagesController do
           metadata: {
             "proposed_action" => {
               "type" => "api_write",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -312,7 +312,7 @@ describe Api::Internal::AgentMessagesController do
           metadata: {
             "proposed_action" => {
               "type" => "api_write",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
+              "params" => { "endpoint" => "create_offer_code", "code" => "LAUNCH", "percent_off" => 20 },
             },
           },
         )
@@ -371,6 +371,95 @@ describe Api::Internal::AgentMessagesController do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body["success"]).to be(false)
+      end
+
+      it "puts fixed failure metadata and the catalog endpoint id in the request's log payload" do
+        # The 422s from this endpoint are a bucket (permission denials, unknown-key rejections, API
+        # validation failures all land here). Fixed categories, the upstream status, and a
+        # catalog-resolved endpoint separate those causes without copying seller or API text into
+        # Elasticsearch.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(
+          success: false,
+          message: "You don't have permission to do that.",
+          failure_reason: "permission_denied",
+          failure_status: 403,
+        )
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "message" => "You don't have permission to do that.")
+        expect(payload[:agent_action_failure_reason]).to eq("permission_denied")
+        expect(payload[:agent_action_failure_status]).to eq(403)
+        expect(payload[:agent_action_endpoint]).to eq("create_offer_code")
+      end
+
+      it "never copies a reflected API validation value into the request's log payload" do
+        # The v2 API can echo a rejected callback URL, including its query credentials. The seller
+        # still needs that exact message, but the long-lived log gets only a fixed category and
+        # integer status.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        secret = "seller-secret-token"
+        reflected = "Invalid post URL 'not-a-url?token=#{secret}'"
+        allow(executor_double).to receive(:execute).and_return(
+          success: false,
+          message: reflected,
+          failure_reason: "api_failure",
+          failure_status: 422,
+        )
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "message" => reflected)
+        expect(payload).to include(
+          agent_action_failure_reason: "api_failure",
+          agent_action_failure_status: 422,
+          agent_action_endpoint: "create_offer_code",
+        )
+        expect(payload.to_json).not_to include(secret)
+      end
+
+      it "omits the endpoint from the log payload when the confirmed action names one the catalog doesn't have" do
+        # The endpoint is what these 422s get grouped by, so it is resolved through the catalog
+        # rather than copied from the request — a tampered or stale proposal naming something the
+        # catalog doesn't have contributes no value of its own choosing to the metric.
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(
+          success: false,
+          message: "That action isn't supported.",
+          failure_reason: "unsupported_action",
+        )
+
+        payload = {}
+        post :execute, params: { type: "api_write", params: { endpoint: "not_a_real_endpoint" } }, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(payload[:agent_action_failure_reason]).to eq("unsupported_action")
+        expect(payload).not_to have_key(:agent_action_endpoint)
+      end
+
+      it "does not add failure fields to the log payload when the confirmed action succeeds" do
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: true, message: "Created discount code LAUNCH.")
+
+        payload = {}
+        post :execute, params: valid_params, format: :json
+        controller.send(:append_info_to_payload, payload)
+
+        expect(response).to be_successful
+        expect(payload).not_to have_key(:agent_action_failure_reason)
+        expect(payload).not_to have_key(:agent_action_endpoint)
       end
 
       it "halts on throttle without invoking the action executor" do

@@ -580,21 +580,28 @@ describe UrlRedirect do
     end
 
     it "returns the video URL and GUID for the file" do
-      expected_video_url = @multifile_url_redirect.signed_video_url(@file_1)
-      expected_guid = expected_video_url[described_class::GUID_GETTER_FROM_S3_URL_REGEX, 1]
-      expected_video_url.sub!(expected_guid, described_class::FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION)
+      # The URL we compare against is a second signed URL for the same file, and the signature
+      # covers the moment of signing: the credential scope and expiry are both derived from the
+      # current time. Generating the expected URL and the actual one at two different instants
+      # produces two different signatures whenever those instants land on opposite sides of a
+      # second boundary, so both have to be signed at the same frozen time to be comparable.
+      freeze_time do
+        expected_video_url = @multifile_url_redirect.signed_video_url(@file_1)
+        expected_guid = expected_video_url[described_class::GUID_GETTER_FROM_S3_URL_REGEX, 1]
+        expected_video_url.sub!(expected_guid, described_class::FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION)
 
-      video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, @file_1)
-      expect(video_url).to eq(expected_video_url)
-      expect(guid).to eq(expected_guid)
+        video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, @file_1)
+        expect(video_url).to eq(expected_video_url)
+        expect(guid).to eq(expected_guid)
 
-      expected_video_url = @multifile_url_redirect.signed_video_url(@file_2)
-      expected_guid = expected_video_url[described_class::GUID_GETTER_FROM_S3_URL_REGEX, 1]
-      expected_video_url.sub!(expected_guid, described_class::FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION)
+        expected_video_url = @multifile_url_redirect.signed_video_url(@file_2)
+        expected_guid = expected_video_url[described_class::GUID_GETTER_FROM_S3_URL_REGEX, 1]
+        expected_video_url.sub!(expected_guid, described_class::FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION)
 
-      video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, @file_2)
-      expect(video_url).to eq(expected_video_url)
-      expect(guid).to eq(expected_guid)
+        video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, @file_2)
+        expect(video_url).to eq(expected_video_url)
+        expect(guid).to eq(expected_guid)
+      end
     end
   end
 

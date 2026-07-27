@@ -248,6 +248,19 @@ describe ContactingCreatorMailer do
   end
 
   describe "seller_update" do
+    # The mailer reports on "last week", which it defines as the seven days ending at the most
+    # recent Sunday midnight (`Date.today.beginning_of_week(:sunday)`). These examples rely on
+    # being able to create a purchase that lands *after* that window closes, so that it is
+    # excluded from the totals — they do this with `5.minutes.ago`.
+    #
+    # That only holds if "now" is comfortably past Sunday midnight. When the suite runs during the
+    # first minutes of a Sunday in UTC, the window closes at today's midnight, so `5.minutes.ago`
+    # falls back into Saturday and is counted as part of last week — the excluded purchase silently
+    # becomes an included one and the expected totals shift. Pinning the clock to a mid-week moment
+    # keeps the window boundary a fixed distance from "now", so these examples do not depend on
+    # which day of the week CI happens to run.
+    before { travel_to(Time.utc(2024, 5, 1, 12, 0, 0)) } # a Wednesday
+
     before do
       @user = create(:user)
       allow_any_instance_of(User).to receive(:secure_external_id).and_return("sample-secure-id")
@@ -1788,6 +1801,29 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "gumroad.com/settings/payments"
       expect(mail.body.encoded).to include settings_payments_url
     end
+
+    it "drops the upload instructions and points at support when the reason is one the seller can't act on" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_document_verification_failed(creator.id, UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "uploading it again won&#39;t help"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "upload a valid document"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+      expect(mail.body.encoded).to_not include "Here&#39;s what Stripe reported"
+    end
+
+    it "also treats the previously queued P.O. Box wording as unactionable" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_document_verification_failed(creator.id, UserComplianceInfoRequest::PREVIOUS_PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "Your registered address is a P.O. Box"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "upload a valid document"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+    end
   end
 
   describe "#stripe_identity_verification_failed" do
@@ -1803,6 +1839,29 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include stripe_error_reason
       expect(mail.body.encoded).to include "gumroad.com/settings/payments"
       expect(mail.body.encoded).to include settings_payments_url
+    end
+
+    it "drops the update instructions and points at support when the reason is one the seller can't act on" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_identity_verification_failed(creator.id, UserComplianceInfoRequest::PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "uploading it again won&#39;t help"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "update the relevant information"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
+      expect(mail.body.encoded).to_not include "Here&#39;s what Stripe reported"
+    end
+
+    it "also treats the previously queued P.O. Box wording as unactionable" do
+      creator = create(:user)
+
+      mail = ContactingCreatorMailer.stripe_identity_verification_failed(creator.id, UserComplianceInfoRequest::PREVIOUS_PO_BOX_ADDRESS_DEADLOCK_MESSAGE)
+
+      expect(mail.body.encoded).to include "Your registered address is a P.O. Box"
+      expect(mail.body.encoded).to include "mailto:support@gumroad.com"
+      expect(mail.body.encoded).to_not include "update the relevant information"
+      expect(mail.body.encoded).to_not include "Go to payout settings"
     end
   end
 
