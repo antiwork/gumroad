@@ -8,10 +8,18 @@
 # presentment lane under QA on antiwork/gumroad#5781 never activates.
 #
 # Seeds a few plausible USD-based rates at boot so QA testers (and the scripted QA run)
-# can exercise the presentment-mounted Payment Element. Gated to Stripe test mode so it
-# can never run in production (production runs live keys).
+# can exercise the presentment-mounted Payment Element.
+#
+# Scope matches the QA middleware below: local development, or a throwaway per-PR preview
+# app (staging with BRANCH_DEPLOYMENT set — the same signal
+# StagingApplePayDomainRegistration.applicable? uses). The Stripe test-key check alone is
+# not enough, because the shared staging site and CI also run test keys, and there the
+# real hourly UpdateCurrenciesWorker cache should be the only source of display rates —
+# hand-seeded approximations would quietly mask a broken rate refresh. Production runs
+# live keys, so this can never run there.
 Rails.application.config.after_initialize do
   next unless Stripe.api_key.to_s.start_with?("sk_test_")
+  next unless Rails.env.development? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true")
 
   begin
     namespace = Redis::Namespace.new(:currencies, redis: $redis)
