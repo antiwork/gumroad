@@ -615,7 +615,7 @@ describe Order::ChargeService, :vcr do
       allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
 
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
-      allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
 
       quote = buyer_currency_quote_for(product_1, product_2)
       params = {
@@ -694,7 +694,7 @@ describe Order::ChargeService, :vcr do
       allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
 
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
-      allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
+      expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
 
       quote = buyer_currency_quote_for(bundle, product_2)
       params = {

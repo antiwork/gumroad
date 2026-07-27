@@ -2450,12 +2450,18 @@ describe "PurchaseRefunds", :vcr do
   # These examples pin that: the refund amount sent to Stripe is clamped to the refunded
   # purchase's presentment cents, never the charge's, and the sibling purchase is
   # untouched.
+  #
+  # Scope caveat: the fixture approximates the combined charge with per-purchase intents
+  # and retrofits the shared charge_presentment, and ChargeProcessor.refund! is mocked. So
+  # what is pinned here is the AMOUNT clamping. Whether a refund is routed to the right
+  # transaction id on a genuinely shared PaymentIntent is not covered by these examples.
   describe "refunds on one purchase of a multi-item presentment charge" do
     let(:seller) { create(:user) }
     let(:merchant_account) do
-      # An explicit id rather than the factory sequence: the sequence restarts per example
-      # and can collide with an existing account, which fails the "already connected with
-      # another Gumroad account" uniqueness validation.
+      # An explicit id rather than the factory sequence: the sequence is monotonic within
+      # a process but restarts on the next run, so a fresh run can regenerate an id that
+      # already exists in seeded data and fail the "already connected with another Gumroad
+      # account" uniqueness validation.
       create(:merchant_account,
              user: nil,
              charge_processor_id: StripeChargeProcessor.charge_processor_id,
