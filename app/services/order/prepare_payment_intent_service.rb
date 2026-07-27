@@ -12,6 +12,22 @@ class Order::PreparePaymentIntentService
   # never succeed — so it must not reuse the retry-oriented generic message above. Tell the
   # buyer the one action that works: pick a different payment method.
   KLARNA_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Klarna supports. Please choose a different payment method (you have not been charged)."
+  PIX_PAYMENT_METHOD_TYPE = Checkout::PaymentMethodResolver::PIX_PAYMENT_METHOD_TYPE
+  # Same reasoning as the Klarna message above: a Pix amount-window rejection is deterministic for
+  # this cart, so telling the buyer to try again would send them in a loop.
+  PIX_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Pix supports. Please choose a different payment method (you have not been charged)."
+  # Gumroad absorbs the Brazilian IOF tax on the buyer's behalf so the amount in their banking app
+  # matches the price checkout quoted them, and recovers it from the seller as a fee component
+  # (Purchase::PIX_IOF_FEE_PER_THOUSAND) — the ruling on gumroad-private#1305. Stripe's default is
+  # the opposite (`never`, marking the buyer's amount up 3.5%), which would undo the whole point of
+  # showing an honest local-currency price, so this option is always sent explicitly.
+  PIX_AMOUNT_INCLUDES_IOF = "always"
+  # How long the buyer has to pay the Pix key in their banking app before it expires. Stripe's
+  # default is 4 hours; ours is 30 minutes because the purchase sits in progress until the payment
+  # lands and the product is only delivered on settlement — a buyer who wandered off is better
+  # served by a clean expiry (and a re-purchase) than by a key that outlives their session by
+  # hours. Also keeps the pending window near the abandonment worker's own horizon.
+  PIX_EXPIRES_AFTER_SECONDS = 30.minutes.to_i
 
   def initialize(order:, params:, confirmation_token:)
     @order = order
@@ -153,6 +169,14 @@ class Order::PreparePaymentIntentService
       purchases_to_charge.each do |purchase|
         purchase.card_country = country
         purchase.card_country_source = CARD_COUNTRY_SOURCE
+        # Record the selected method now, before fees are computed, for the methods whose fees
+        # depend on it: a Pix purchase carries the Brazilian IOF component (see
+        # Purchase::PIX_IOF_FEE_PER_THOUSAND), so calculate_fees has to know it is a Pix payment
+        # before the intent amount is derived from it. Stripe re-confirms the method from the
+        # settled charge afterwards (Purchase::FinalizeConfirmedChargeService), so this is a
+        # pre-charge seed rather than the final word. Left untouched for other methods, which
+        # record card_type from the confirmed charge exactly as before.
+        purchase.card_type = CardType::PIX if pix_selected?
       end
     end
 
@@ -162,8 +186,9 @@ class Order::PreparePaymentIntentService
     # Stripe-owned funding-source countries, safe to trust for PPP verification. US-locked methods
     # (Cash App Pay, ACH) expose no country in their preview blocks, but Stripe only lets a US Cash
     # App account or US bank account fund them — the region lock IS the funding country, so verify
-    # them as US (U13's region-locked bucket). UPI has the same property for India. We deliberately
-    # do NOT fall back to buyer-supplied billing_details: that is checkout-form input, so trusting it
+    # them as US (U13's region-locked bucket). UPI has the same property for India, and Pix for
+    # Brazil (both settle over domestic rails the buyer can only reach from a local bank account).
+    # We deliberately do NOT fall back to buyer-supplied billing_details: that is checkout-form input, so trusting it
     # would let a buyer spoof the discounted country. When Stripe exposes no funding country and the
     # method has no region lock, the value stays nil and a PPP-discounted purchase fails closed. Uses
     # [] access because a Stripe::StripeObject raises on a missing attribute reader but returns nil
@@ -212,8 +237,16 @@ class Order::PreparePaymentIntentService
     def region_locked_country(method_type)
       return Checkout::PaymentMethodResolver::US_ALPHA2 if Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
       return Checkout::PaymentMethodResolver::IN_ALPHA2 if Checkout::PaymentMethodResolver::IN_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
+      return Checkout::PaymentMethodResolver::BR_ALPHA2 if Checkout::PaymentMethodResolver::BR_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
 
       nil
+    end
+
+    # The buyer picked Pix in the Payment Element. Pix is the only method today whose intent needs
+    # per-method options at create time and whose fee composition differs, so both call this rather
+    # than re-deriving the check.
+    def pix_selected?
+      @previewed_payment_method_type == PIX_PAYMENT_METHOD_TYPE
     end
 
     def block_purchasing_power_parity_mismatches
@@ -250,6 +283,66 @@ class Order::PreparePaymentIntentService
         amount_cents <= Checkout::PaymentMethodResolver::KLARNA_MAX_USD_CHARGE_CENTS
     end
 
+    # Stripe enforces Pix's transaction window at confirm, and a cart outside it can never succeed
+    # with Pix no matter how many times the buyer retries — so fail the order closed here, before
+    # any intent exists, with a message that names the one action that works. Same shape as the
+    # Klarna gate above; the difference is that a Pix ConfirmationToken can only ever confirm as
+    # Pix, so there is no "silently drop the method and let their card through" branch.
+    def block_pix_amount_outside_window(presentment)
+      return false unless pix_selected?
+
+      # A Pix payment normally always has a BRL presentment (Pix forces BRL), so a missing one is
+      # our own state being wrong, not a cart the buyer can fix by picking a cheaper basket. The one
+      # way to reach here without a presentment is a Pix token confirming while the seller's
+      # buyer-currency flags are off, which is what a rolled-back local-method rollout looks like:
+      # the presentment layer no longer runs, but a token minted before the rollback can still
+      # arrive. (With the flags on, prepare_unconfirmed_charge's own nil-presentment guard fails the
+      # order before this method is ever called.) Fail closed either way, but keep the two causes
+      # distinguishable: PIX_AMOUNT_OUTSIDE_WINDOW is what monitoring watches to see how often real
+      # carts fall outside Stripe's window, and folding our own broken state into that number would
+      # make the metric mean two things at once. The buyer gets the generic retry message, which is
+      # the right advice here: the same cart succeeds once the flags are back on.
+      if presentment.blank?
+        Rails.logger.error("Pix payment blocked for order #{order.id}: no BRL presentment record exists at prepare time, so the presentment layer did not run for this Pix cart (most likely the seller's buyer-currency flags are off)")
+        cleanup_prepare_time_presentment_records
+        fail_purchases_with(GENERIC_CHARGE_ERROR)
+        return true
+      end
+
+      return false if pix_amount_within_window?(presentment)
+
+      Rails.logger.error("Pix payment blocked for order #{order.id}: charged amount #{amount_cents} USD cents / #{presentment.presentment_total_cents} presentment cents is outside Stripe's Pix window")
+      purchases_to_charge.each { _1.error_code = PurchaseErrorCode::PIX_AMOUNT_OUTSIDE_WINDOW if _1.error_code.blank? }
+      # The snapshot belongs to an intent that will never exist, so drop it rather than orphaning it.
+      cleanup_prepare_time_presentment_records
+      fail_purchases_with(PIX_AMOUNT_INELIGIBLE_MESSAGE)
+      true
+    end
+
+    # Each of Stripe's two Pix bounds is compared against the amount already denominated in that
+    # bound's own currency: the 0.50 BRL floor against the BRL presentment total the intent is
+    # created with, and the 3,000 USD ceiling against the canonical USD total. Nothing is converted,
+    # so no FX rate can drift the answer. Callers guarantee a presentment exists — the blank case is
+    # handled as an internal fault by block_pix_amount_outside_window above.
+    def pix_amount_within_window?(presentment)
+      presentment.presentment_total_cents >= Checkout::PaymentMethodResolver::PIX_MIN_BRL_CHARGE_CENTS &&
+        amount_cents <= Checkout::PaymentMethodResolver::PIX_MAX_USD_CHARGE_CENTS
+    end
+
+    # Per-method options Stripe wants at intent CREATE time. Only sent when the buyer actually
+    # picked Pix — Stripe rejects options for a method the intent doesn't list, and the previewed
+    # method is what decides whether pix rides this intent at all.
+    def pix_payment_method_options
+      return nil unless pix_selected?
+
+      {
+        pix: {
+          amount_includes_iof: PIX_AMOUNT_INCLUDES_IOF,
+          expires_after_seconds: PIX_EXPIRES_AFTER_SECONDS,
+        },
+      }
+    end
+
     # Server-confirm checkout runs this at charge time; client-confirm combined charges skip it at
     # create time, so run it before creating the PaymentIntent.
     def block_purchases_with_blocked_customer_emails
@@ -284,6 +377,10 @@ class Order::PreparePaymentIntentService
       return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && method_forced_presentment_required?
 
       @charge_with_prepare_time_presentment = charge if presentment.present?
+      # Runs after the presentment because Pix's floor is denominated in BRL, which only the
+      # presentment knows the charged amount in. Any rows persisted above are cleaned up inside the
+      # gate, since a blocked order never gets an intent for them to belong to.
+      return if block_pix_amount_outside_window(presentment)
       charge_intent = create_unconfirmed_intent(charge, presentment)
       if charge_intent.nil?
         # The presentment rows were persisted before the intent create failed, and the
@@ -467,7 +564,8 @@ class Order::PreparePaymentIntentService
         idempotency_key: "#{presentment&.idempotency_key || "deferred_intent_#{charge.external_id}"}_#{confirmation_token}",
         payment_method_types: intent_payment_method_types(presentment),
         currency: presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY,
-        stripe_fx_quote_id: presentment&.stripe_fx_quote_id
+        stripe_fx_quote_id: presentment&.stripe_fx_quote_id,
+        payment_method_options: pix_payment_method_options
       )
     rescue ChargeProcessorCardError => e
       # The seller-proceeds guard is an expected buyer-facing rejection, not a generic prepare
