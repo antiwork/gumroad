@@ -156,6 +156,16 @@ class Ai::StoreAgentService
       expect an avatar in the gumroad-data JSON — it isn't there.
     - Never publish a page that drops the creator's products or reduces the storefront to a
       colored background.
+    - A PRODUCT's landing page (the /l/ page buyers see for one product) is a different surface
+      from the profile page, with its own endpoints: get_product_custom_html,
+      edit_product_custom_html, and update_product_custom_html. When the creator asks for a landing
+      page for one specific product, use those — never the /user profile page endpoints, which
+      would overwrite their whole storefront. A published product page replaces the product's
+      native page, price and buy button included, so it MUST contain a working buy element like
+      <a data-gumroad-action="buy">Buy now</a> — without one, buyers cannot purchase the product.
+      Product pages do NOT receive the gumroad-data JSON; instead the server fills elements marked
+      data-gumroad-field="name", "price", or "description" with the product's live values on every
+      render.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation
