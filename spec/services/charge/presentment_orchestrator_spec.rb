@@ -120,6 +120,56 @@ describe Charge::PresentmentOrchestrator do
     expect(purchase_presentments.sum(&:presentment_gumroad_amount_cents)).to eq(3_75)
   end
 
+  it "persists the exact converted tax on a rounded charge rather than a share of the rounding difference" do
+    # The reviewer's case, at the layer where it reaches the receipt: a taxed cart whose
+    # total is rounded onto the seller's price ending. The tax row must be what the exact
+    # conversion gives, with the whole difference on the price row.
+    taxed_purchase = create(:purchase,
+                            link: product,
+                            seller:,
+                            merchant_account:,
+                            price_cents: 9_99,
+                            gumroad_tax_cents: 1_50,
+                            total_transaction_cents: 11_49)
+    locked_quote.canonical_total_cents = 11_49
+    # 11.49 USD at the 0.8 locked rate converts to exactly 14.36 CAD; the seller's .49
+    # ending pulls the charged total to 14.49, a 13-cent increase.
+    locked_quote.presentment_total_cents = 14_49
+    locked_quote.rounding_delta_cents = 13
+
+    orchestrate = lambda do |quote|
+      described_class.new(charge:,
+                          merchant_account:,
+                          purchases: [taxed_purchase],
+                          amount_cents: 11_49,
+                          gumroad_amount_cents: 3_00,
+                          eligibility_decision:,
+                          locked_quote: quote).perform
+      taxed_purchase.reload.purchase_presentment
+    end
+
+    # The exact leg runs FIRST and only its component numbers are kept: persisting a
+    # presentment replaces any existing rows for the charge, so the rounded leg has to be
+    # the last one to run for the charge-level assertions below to describe it.
+    exact_components = orchestrate.call(locked_quote.dup.tap do |quote|
+      quote.presentment_total_cents = 14_36
+      quote.rounding_delta_cents = 0
+    end).slice(:presentment_price_cents, :presentment_gumroad_tax_cents)
+    rounded_row = orchestrate.call(locked_quote)
+
+    # The tax the buyer is told they paid is the same figure whether or not the total was
+    # rounded — spreading the difference proportionally instead would report 189 here.
+    expect(rounded_row.presentment_gumroad_tax_cents).to eq(exact_components["presentment_gumroad_tax_cents"])
+    expect(rounded_row.presentment_gumroad_tax_cents).to eq(1_87)
+    expect(rounded_row.presentment_price_cents).to eq(exact_components["presentment_price_cents"] + 13)
+    expect(rounded_row.presentment_total_cents).to eq(14_49)
+    expect(charge.reload.charge_presentment).to have_attributes(presentment_total_cents: 14_49,
+                                                                rounding_delta_cents: 13)
+    # Canonical amounts are untouched: the seller is paid from these.
+    expect(taxed_purchase.total_transaction_cents).to eq(11_49)
+    expect(taxed_purchase.gumroad_tax_cents).to eq(1_50)
+  end
+
   it "falls back without leaving partial presentment records when persistence fails" do
     allow(ErrorNotifier).to receive(:notify)
     allow_any_instance_of(Charge::PresentmentAllocator).to receive(:allocations).and_raise("allocation failed")

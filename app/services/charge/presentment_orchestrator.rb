@@ -107,6 +107,12 @@ class Charge::PresentmentOrchestrator
     # (and the receipt built from them) show the true converted tax rather than a share of a
     # cosmetic adjustment. The exact total is recoverable from the signed quote: the locked
     # total is the exact one plus the difference.
+    #
+    # If the allocator raises (a difference with no non-tax component to carry it), the
+    # rescue below returns nil and Charge::CreateService fails the charge closed — it does
+    # NOT quietly charge canonical USD, because the buyer confirmed the rounded total and
+    # charging anything else would break the invariant this feature rests on. Nothing is
+    # persisted either way: the raise happens before the transactional #persist!.
     allocations = Charge::PresentmentAllocator.new(
       purchases:,
       presentment_total_cents: presentment_total_cents - rounding_delta_cents,

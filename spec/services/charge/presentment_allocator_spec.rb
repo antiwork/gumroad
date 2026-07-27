@@ -332,34 +332,59 @@ describe Charge::PresentmentAllocator do
       end
     end
 
-    it "never takes a component below zero when the reduction is larger than one component can give up" do
-      # A tip-only line cannot give up more than the tip it was allocated, so the remainder
-      # of the reduction has to move on to another non-tax component.
+    it "raises when a reduction is larger than the cart's non-tax money" do
+      # The only way a reduction can fail: it asks for more than price + tip + shipping
+      # can give up. Anything within that budget is safe, because a largest-remainder
+      # portion is never larger than its own weight. The orchestrator's rescue turns this
+      # into a fail-closed charge rather than rows that disagree with what was charged.
       purchase = instance_double(Purchase,
                                  total_transaction_cents: 10_00,
                                  total_transaction_amount_for_gumroad_cents: 10_00,
-                                 tip: instance_double(Tip, value_usd_cents: 20),
-                                 tax_cents: 0,
+                                 tip: nil,
+                                 tax_cents: 2_00,
+                                 gumroad_tax_cents: 0,
+                                 shipping_cents: 0)
+
+      expect do
+        described_class.new(
+          purchases: [purchase],
+          presentment_total_cents: 10_00,
+          presentment_gumroad_amount_cents: 1_00,
+          # 8_00 of the 10_00 total is price; asking for 8_01 back cannot be honoured
+          # without dipping into the tax.
+          rounding_delta_cents: -8_01
+        ).allocations
+      end.to raise_error(ArgumentError, /reduction of 801 exceeds the cart's 800 cents of non-tax components/)
+    end
+
+    it "spends a reduction down to the last non-tax cent without touching tax" do
+      # The boundary case on the other side of the raise above: a reduction of exactly the
+      # cart's non-tax money is allowed, takes the price to zero, and leaves the tax at its
+      # exact converted value.
+      purchase = instance_double(Purchase,
+                                 total_transaction_cents: 10_00,
+                                 total_transaction_amount_for_gumroad_cents: 10_00,
+                                 tip: nil,
+                                 tax_cents: 2_00,
                                  gumroad_tax_cents: 0,
                                  shipping_cents: 0)
 
       allocation = described_class.new(
         purchases: [purchase],
         presentment_total_cents: 10_00,
-        presentment_gumroad_amount_cents: 9_00,
-        rounding_delta_cents: -1_00
+        presentment_gumroad_amount_cents: 1_00,
+        rounding_delta_cents: -8_00
       ).allocations.sole
 
-      expect(allocation.presentment_total_cents).to eq(9_00)
-      expect(allocation.presentment_price_cents).to be >= 0
-      expect(allocation.presentment_tip_cents).to be >= 0
-      expect(allocation.presentment_price_cents + allocation.presentment_tip_cents).to eq(9_00)
+      expect(allocation).to have_attributes(presentment_price_cents: 0,
+                                            presentment_seller_tax_cents: 2_00,
+                                            presentment_total_cents: 2_00)
     end
 
     it "raises when only tax components are left to carry the difference" do
-      # A tax-only cart has no honest place to put the difference. Raising makes the
-      # orchestrator fall back to a canonical USD charge instead of persisting rows that
-      # disagree with what was charged.
+      # A tax-only cart has no honest place to put the difference. The quote's rescue turns
+      # this into a canonical-USD checkout; the orchestrator's fails the charge closed.
+      # Either way nothing is persisted that disagrees with what was charged.
       purchase = instance_double(Purchase,
                                  total_transaction_cents: 1_00,
                                  total_transaction_amount_for_gumroad_cents: 1_00,

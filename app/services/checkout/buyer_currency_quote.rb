@@ -268,6 +268,10 @@ class Checkout::BuyerCurrencyQuote
     #
     # The total passed in is the exact converted one; the rounding difference is applied on
     # top of the split, so the line totals sum to the rounded total that was locked.
+    #
+    # A raise from the allocator (a difference with no non-tax component to carry it) is
+    # caught by #create's rescue, which drops the whole cart back to canonical USD — a
+    # cosmetic price ending must never break a checkout.
     def line_allocations_for(converted_total_cents, rounding_delta_cents)
       Charge::PresentmentAllocator.allocate_lines(
         presentment_total_cents: converted_total_cents,

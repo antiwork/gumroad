@@ -17,8 +17,8 @@ class Charge::PresentmentAllocator
   LineAllocation = Struct.new(:presentment_total_cents, :presentment_component_cents, keyword_init: true)
 
   # Which components a price-ending rounding difference is allowed to land on: the price,
-  # the tip and the shipping — in that order of preference — and never either tax
-  # component (indexes 2 and 3).
+  # the tip and the shipping, and never either tax component (indexes 2 and 3). The
+  # difference is spread proportionally across all three at once, not preferentially.
   #
   # Tax is excluded because the tax figures are not ours to move. They are computed from
   # the canonical USD amounts, they are what the seller remits or what Gumroad remits as
@@ -66,9 +66,13 @@ class Charge::PresentmentAllocator
 
   # Spreads the rounding difference over the non-tax components of the cart, proportionally
   # to how large each of those components is, so a multi-line cart's lines each carry the
-  # part of the difference that belongs to them. A reduction can never push a component
-  # below zero: whatever a component cannot give up moves on to the next one that still has
-  # room, which keeps the components summing to the charged total.
+  # part of the difference that belongs to them.
+  #
+  # A largest-remainder portion is never larger than its own weight when the amount being
+  # split is no larger than the total weight, so a reduction sized within the cart's
+  # non-tax money can never push a component below zero. A reduction LARGER than that
+  # money has nowhere to come from, so it raises instead — see the caller notes on what
+  # each caller does with that.
   def self.apply_rounding_delta(component_shares, delta_cents)
     shares = component_shares.map(&:dup)
     absorbing_positions = shares.each_index.flat_map do |line_index|
@@ -76,34 +80,22 @@ class Charge::PresentmentAllocator
     end
     weights = absorbing_positions.map { |line_index, component_index| shares[line_index][component_index] }
 
+    if delta_cents.negative? && delta_cents.abs > weights.sum
+      raise ArgumentError, "reduction of #{delta_cents.abs} exceeds the cart's #{weights.sum} cents of non-tax components"
+    end
     if weights.sum.zero?
-      # A cart with nothing but tax behind it cannot give a reduction back, and there is no
-      # honest place to put an increase either. This cannot happen for a real cart (a
-      # round-down is sized against Gumroad's fee, which only exists when there is a price),
-      # so treat it as a defect: raising here makes the caller fall back to charging the
-      # canonical USD amount rather than persisting rows that disagree with the charge.
+      # A cart with nothing but tax behind it has no honest place to put an increase
+      # either. This cannot happen for a real cart (tax is computed from the price, so a
+      # cart with no price has no tax), so treat it as a defect rather than inventing a
+      # placement.
       raise ArgumentError, "no non-tax component can carry the #{delta_cents}-cent rounding difference"
     end
 
     portions = Charge.allocate_by_largest_remainder(delta_cents.abs, weights, weights.sum)
     sign = delta_cents.negative? ? -1 : 1
-    displaced_cents = 0
-
     absorbing_positions.each_with_index do |(line_index, component_index), position|
-      # Only a reduction is bounded — it can take a component down to zero and no further.
-      step = sign.negative? ? [portions[position], shares[line_index][component_index]].min : portions[position]
-      shares[line_index][component_index] += sign * step
-      displaced_cents += portions[position] - step
+      shares[line_index][component_index] += sign * portions[position]
     end
-
-    absorbing_positions.each do |line_index, component_index|
-      break if displaced_cents.zero?
-
-      step = [displaced_cents, shares[line_index][component_index]].min
-      shares[line_index][component_index] -= step
-      displaced_cents -= step
-    end
-    raise ArgumentError, "rounding difference of #{delta_cents} exceeds the cart's non-tax components" unless displaced_cents.zero?
 
     shares
   end
