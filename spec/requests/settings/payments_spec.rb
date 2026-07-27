@@ -905,6 +905,30 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_field("PayPal Email")
     end
 
+    it "warns a Zambian creator that PayPal cannot receive payouts there" do
+      old_user_compliance_info = @user.alive_user_compliance_info
+      new_user_compliance_info = old_user_compliance_info.dup
+      new_user_compliance_info.country = "Zambia"
+      ActiveRecord::Base.transaction do
+        old_user_compliance_info.mark_deleted!
+        new_user_compliance_info.save!
+      end
+
+      visit settings_payments_path
+
+      expect(page).to have_field("PayPal Email")
+      expect(page).to have_content("PayPal does not let accounts registered in Zambia receive money")
+      expect(page).to have_content("Bank payouts are not available in Zambia either")
+    end
+
+    it "does not show the Zambia PayPal warning to creators in other countries" do
+      @user.update(payment_address: "barny@paypal.com")
+      visit settings_payments_path
+
+      expect(page).to have_field("PayPal Email")
+      expect(page).to_not have_content("PayPal does not let accounts registered in Zambia receive money")
+    end
+
     it "allows US creator to switch to ACH" do
       @user.update(payment_address: "barny@paypal.com")
       visit settings_payments_path
