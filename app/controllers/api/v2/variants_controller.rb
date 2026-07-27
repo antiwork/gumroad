@@ -79,11 +79,51 @@ class Api::V2::VariantsController < Api::V2::BaseController
   end
 
   def destroy
-    if @variant.update_attribute(:deleted_at, Time.current)
-      success_with_variant
-    else
-      error_with_variant
+    # Deleting a single version, outside the product editor's deletion guards.
+    # Audited for the same reason as the grouping-level destroy: an explicit
+    # destructive API call with no confirmation or revision context.
+    #
+    # A retry must not add a second audit row for one deletion, but that must not
+    # be bought by bypassing the model. `update_all` would skip BaseVariant's
+    # `after_commit :invalidate_product_cache` and `:update_product_search_index`,
+    # leaving stale product caches and stale search state.
+    #
+    # So lock the row, re-read `deleted_at` under the lock, and keep the original
+    # `update_attribute(:deleted_at, ...)` call — deliberately not `mark_deleted`,
+    # which additionally enqueues rich-content and archive cleanup workers this
+    # endpoint has never run.
+    deletion_failed = false
+
+    @variant.with_lock do
+      # Re-read under the lock: `@variant` was loaded before it was taken.
+      unless @variant.reload.deleted?
+        if @variant.update_attribute(:deleted_at, Time.current)
+          # Scheduled inside the deletion's transaction, so the audit is only
+          # scheduled if the deletion itself commits — a rolled-back deletion
+          # records nothing. The audit INSERT then runs after the commit and fails
+          # open: if it fails, the deletion still stands and only observability is
+          # lost. The two do not commit atomically, and deliberately so.
+          ProductVariantDeletionAudit.record_deletion(
+            actor_user_id: current_resource_owner&.id,
+            product_id: @product.id,
+            route: ProductVariantDeletionAudit::API_V2_VARIANT_DESTROY,
+            deleted_variant_external_ids: [@variant.external_id],
+            intent_source: ProductVariantDeletionAudit::API_EXPLICIT_DESTROY,
+            correlation_id: AuditCorrelationId.for(request.request_id),
+            request_id: request.request_id,
+          )
+        else
+          deletion_failed = true
+        end
+      end
     end
+
+    return error_with_variant if deletion_failed
+
+    # Already deleted, or a concurrent request won the race: the row is deleted
+    # either way, so report success, but record nothing — this request did not
+    # perform the deletion.
+    success_with_variant
   end
 
   private

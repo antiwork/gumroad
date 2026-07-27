@@ -162,7 +162,11 @@ describe Purchase::Reportable do
       end
 
       it "returns 0 (chargeback attribution is unchanged by the refund cutover)" do
-        purchase.update!(chargeback_date: Time.current)
+        # The point of this example is the REFUND cutover, so the chargeback has to stay on the
+        # legacy attribution path. Date it before the chargeback cutover explicitly: using
+        # Time.current made the example pass only while "now" happened to precede that date, and
+        # it started failing on its own the day the chargeback cutover arrived.
+        purchase.update!(chargeback_date: Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day - 1.day)
 
         expect(purchase.price_cents_for_tax_reporting).to eq(0)
       end
