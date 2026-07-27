@@ -3,7 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FileItem, FileList, FileRow, FolderItem, videoFrameStyle } from "$app/components/Download/FileList";
+import { videoFrameStyle } from "$app/utils/videoFrame";
+
+import { FileItem, FileList, FileRow, FolderItem } from "$app/components/Download/FileList";
 import {
   IsMobileAppViewProvider,
   MediaUrlsProvider,

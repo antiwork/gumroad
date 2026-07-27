@@ -21,6 +21,7 @@ import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
+import { videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { AudioPlayerContainer } from "$app/components/DownloadPage/AudioPlayerContainer";
@@ -611,36 +612,6 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
 
 const LOCATION_TRACK_EVENT_DELAY = 10000;
 
-// The download page's player box is styled 16:9 by default (see
-// `.embed > .preview` in stylesheets/_rich_text.scss). That is wrong for the
-// growing number of sellers who film on a phone: a 1080x1920 portrait video
-// gets fit into a landscape box, so buyers see a thin strip of video between
-// wide black bars and reasonably conclude the video "plays in landscape".
-// When we know the video's real dimensions we shape the box to them instead.
-// See https://github.com/antiwork/gumroad-private/issues/1392
-//
-// Portrait video also needs a height cap, or a 9:16 frame at full content
-// width would be taller than the browser window and push everything else on
-// the page out of view. We cap the height and let the box narrow to keep the
-// aspect ratio, then centre it in the row.
-const MAX_PORTRAIT_PLAYER_HEIGHT = "80svh";
-
-export const videoFrameStyle = (file: FileItem): React.CSSProperties | undefined => {
-  const { width, height } = file;
-  if (width == null || height == null || width <= 0 || height <= 0) return undefined;
-
-  const style: React.CSSProperties = { aspectRatio: `${width} / ${height}` };
-  if (height > width) {
-    // Set an explicit width rather than a max-width: the frame is a grid item
-    // whose children are absolutely positioned, so it has no intrinsic width of
-    // its own, and the centring margins below suppress the grid's default
-    // stretch — leaving a max-width alone would collapse the box to nothing.
-    style.width = `min(100%, calc(${MAX_PORTRAIT_PLAYER_HEIGHT} * ${width} / ${height}))`;
-    style.marginInline = "auto";
-  }
-  return style;
-};
-
 type VideoEmbedPreviewProps = {
   file: FileItem;
   resumeLocation: number;
@@ -679,12 +650,7 @@ const VideoEmbedPreview = ({
   React.useEffect(() => {
     if (!mediaUrls.length || !isVideoPlayerShowing) return;
     void createJWPlayer(videoPlayerId, {
-      // Tell the player the file's real shape so it fills our (equally
-      // reshaped) container instead of letterboxing itself into 16:9, which is
-      // what it falls back to when no ratio is given.
-      ...(file.width != null && file.height != null && file.width > 0 && file.height > 0
-        ? { aspectratio: `${file.width}:${file.height}` }
-        : {}),
+      ...videoPlayerAspectRatio(file),
       playlist: [
         {
           sources: mediaUrls.map((url) => ({ file: url })),
