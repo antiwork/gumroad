@@ -189,6 +189,76 @@ class Rack::Attack
 
   throttle_by_ip_for_period path: "/purchases", requests: 50, period: 1.hour
 
+  # Checkout abuse: cap how many times ONE PRODUCT can be checked out, regardless of who
+  # is doing it.
+  #
+  # Why this exists (incident 2026-07-26): a seller scripted 150,529 checkouts of their own
+  # free product in four days. Every checkout fires a receipt from
+  # noreply@customers.gumroad.com, so the run mailed 148,535 scraped addresses — turning
+  # Gumroad's transactional mailer into a bulk spam relay, on Gumroad's sending reputation
+  # and with Gumroad's branding on the message.
+  #
+  # Why the existing throttles did not stop it:
+  #   1. Every checkout throttle above keys on `req.remote_ip`. The run came from 16,933
+  #      distinct IPs (residential proxy rotation), so no single IP ever approached 40/min.
+  #      Any purely IP-keyed limit is defeated by renting more IPs.
+  #   2. The modern cart checkout posts to /orders, which had NO throttle at all — only the
+  #      legacy /purchases path was covered.
+  #
+  # So the limit has to key on something the attacker cannot rotate. The product being
+  # bought is exactly that: the whole point of the abuse is to check out ONE product many
+  # times, so `permalink` is the natural chokepoint.
+  #
+  # Sizing: 300/minute per product. A genuine launch spike is nowhere near this — the
+  # busiest legitimate minute we can find is comfortably under 100 — while the abuse ran at
+  # a sustained 2-4/second (120-240/min) and would trip within a minute.
+  #
+  # This uses a FLAT throttle rather than the `throttle_by_params` helper on purpose. That
+  # helper always layers on exponential-backoff tiers (max_level: 6), which derive limits
+  # of `rpm * level` over `8**level` seconds. With a 60s base period those derived tiers are
+  # STRICTER in rate than the base limit, so a legitimate launch selling steadily would trip
+  # a tier and start refusing real buyers. A single flat ceiling is the correct shape here:
+  # we want to stop a sustained flood, not punish a busy hour.
+  #
+  # Note this is deliberately a blunt instrument for a rare shape. It protects the mailer,
+  # not revenue; a real product selling 300 copies in one minute is a good problem and the
+  # seller can be exempted.
+  ORDERS_PER_PRODUCT_PER_MINUTE = 300
+
+  # Pull the product identifier out of an /orders POST. The modern cart sends
+  # line_items[][permalink]; the single-product path sends a bare permalink. Returns nil
+  # (skip the throttle) when neither is present or params are malformed — a request we
+  # cannot attribute to a product is handled by the other rules, and raising here would
+  # 500 the middleware.
+  ORDERS_PRODUCT_KEY = proc do |req|
+    begin
+      line_items = req.params["line_items"]
+      permalink =
+        if line_items.is_a?(Array)
+          first = line_items.first
+          first["permalink"] if first.is_a?(Hash)
+        elsif line_items.is_a?(Hash)
+          first = line_items.values.first
+          first["permalink"] if first.is_a?(Hash)
+        end
+      (permalink.presence || req.params["permalink"].presence)
+    rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+      nil
+    end
+  end
+
+  throttle("/params:/orders:POST", limit: ORDERS_PER_PRODUCT_PER_MINUTE, period: 60.seconds) do |req|
+    if req.post? && req.path.match?(%r{\A/orders(?:\.[^/]+)?\z})
+      permalink = ORDERS_PRODUCT_KEY.call(req)
+      "orders_product:#{permalink}" if permalink
+    end
+  end
+
+  # The /orders path had no IP-keyed ceiling either. This does not stop a proxy-rotating
+  # attacker on its own (see above), but it is the cheap first line against a single
+  # scripted host and matches the /purchases limit so the two checkout paths behave alike.
+  throttle_by_ip path: "/orders", requests: 40, period: 60.seconds
+
   # Help Center contact form. Each submission sends an email into the support
   # inbox, so without a limit a single IP could flood support (and burn email
   # reputation). Real users send one or two messages; `max_level: 1` skips the

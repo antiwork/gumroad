@@ -500,4 +500,63 @@ describe "Rack::Attack throttle", type: :request do
       end
     end
   end
+
+  # Regression cover for the 2026-07-26 receipt-mailer abuse (gumroad-private#1397): a
+  # seller scripted 150,529 checkouts of their own free product from 16,933 rotating IPs,
+  # mailing 148,535 scraped addresses via Gumroad's transactional receipt sender. Every
+  # checkout throttle at the time keyed on IP, and /orders had no throttle at all, so
+  # nothing stopped it.
+  describe "POST /orders per-product throttle" do
+    def order_request(permalink:, ip:)
+      Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(
+          "/orders",
+          method: "POST",
+          params: { "line_items" => [{ "permalink" => permalink, "perceived_price_cents" => "0" }] },
+          "HTTP_CF_CONNECTING_IP" => ip
+        )
+      )
+    end
+
+    it "throttles a single product even when every request comes from a DIFFERENT IP" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        # Rotate the IP on every request, exactly as the residential-proxy run did. The
+        # IP-keyed rules must never fire here; only the per-product rule should.
+        Rack::Attack::ORDERS_PER_PRODUCT_PER_MINUTE.times do |i|
+          request = order_request(permalink: "spamprod", ip: "198.51.100.#{i % 254 + 1}")
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false),
+                                                                    "request #{i + 1} unexpectedly throttled"
+        end
+
+        over_limit = order_request(permalink: "spamprod", ip: "198.51.100.200")
+        expect(Rack::Attack.configuration.throttled?(over_limit)).to be(true)
+      end
+    end
+
+    it "does not let one product's flood block checkout of a DIFFERENT product" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        (Rack::Attack::ORDERS_PER_PRODUCT_PER_MINUTE + 1).times do |i|
+          Rack::Attack.configuration.throttled?(order_request(permalink: "spamprod", ip: "198.51.100.#{i % 254 + 1}"))
+        end
+
+        innocent = order_request(permalink: "goodprod", ip: "198.51.100.7")
+        expect(Rack::Attack.configuration.throttled?(innocent)).to be(false)
+      end
+    end
+
+    it "does not raise when the order carries no identifiable product" do
+      reset_rack_attack!
+
+      request = Rack::Attack::Request.new(
+        Rack::MockRequest.env_for("/orders", method: "POST", params: { "line_items" => "not-a-list" },
+                                             "HTTP_CF_CONNECTING_IP" => "198.51.100.5")
+      )
+
+      expect { Rack::Attack.configuration.throttled?(request) }.not_to raise_error
+    end
+  end
 end
