@@ -60,31 +60,13 @@ class Api::V2::UsersController < Api::V2::BaseController
       return render_response(false, message: length_error)
     end
 
-    previous_custom_html = nil
-    sanitization_report = nil
     begin
-      ActiveRecord::Base.transaction do
-        # Lock the user row so concurrent custom_html PUTs serialize their
-        # build_page calls — otherwise they race against the pages unique index.
-        # lock! reloads the row, swapping in a fresh association cache so the
-        # previous_custom_html read reflects a concurrent writer's committed page.
-        user.lock!
-        previous_custom_html = user.custom_html
-        if params[:custom_html].blank?
-          user.custom_html = nil
-          sanitization_report = Ai::PageSanitizer.empty_report
-        else
-          result = Ai::PageSanitizer.sanitize_with_report(params[:custom_html])
-          user.custom_html = result.html.presence
-          sanitization_report = result.report
-        end
-        user.save!
-      end
+      result = Pages::CustomHtmlWriter.replace!(user, params[:custom_html])
     rescue ActiveRecord::RecordInvalid => e
       return error_with_object(:user, e.record)
     end
 
-    render_response(true, custom_html: user.custom_html, previous_custom_html:, sanitization_report:, profile_url: profile_url_for(user))
+    render_response(true, custom_html: result.custom_html, previous_custom_html: result.previous_custom_html, sanitization_report: result.sanitization_report, profile_url: profile_url_for(user))
   end
 
   # POST a targeted edit to the profile landing page: replaces exactly one occurrence of the
@@ -109,64 +91,15 @@ class Api::V2::UsersController < Api::V2::BaseController
       return render_response(false, message: "replace is required and must be a string (use \"\" to delete the snippet).")
     end
 
-    previous_custom_html = nil
-    sanitization_report = nil
-    edit_error = nil
     begin
-      ActiveRecord::Base.transaction do
-        # Same row lock as update_custom_html: serializes concurrent writers and reloads the
-        # association cache, so the find/replace below splices against the latest committed page
-        # instead of a stale in-memory copy.
-        user.lock!
-        previous_custom_html = user.custom_html
-
-        if previous_custom_html.blank?
-          edit_error = "There is no custom HTML page to edit. Publish one first with the full custom_html update."
-          raise ActiveRecord::Rollback
-        end
-
-        # `find` must locate exactly one place in the page so the edit is unambiguous. Matching is
-        # whitespace-tolerant (Ai::CustomHtmlSnippetMatcher): agents reading the page routinely
-        # normalize characters like non-breaking spaces to plain spaces when they echo a snippet
-        # back, and an exact-only match would make such an edit permanently unappliable
-        # (gumroad-private#1251). Zero matches means the caller is working from stale HTML;
-        # multiple matches means the snippet needs more surrounding context. Both errors say so
-        # explicitly, so the agent can correct itself in the same turn.
-        match = Ai::CustomHtmlSnippetMatcher.match(previous_custom_html, find)
-        if match.occurrences.zero?
-          edit_error = "find does not appear in the current custom HTML. Re-read the page and copy the snippet exactly, including whitespace."
-          raise ActiveRecord::Rollback
-        elsif match.occurrences > 1
-          edit_error = "find matches #{match.occurrences} places in the current custom HTML. Include more surrounding context so it matches exactly once."
-          raise ActiveRecord::Rollback
-        end
-
-        # Block form so the replacement is inserted literally — the two-argument form of String#sub
-        # treats backslash sequences (\0, \1, \\) in the replacement specially, which would corrupt
-        # HTML that legitimately contains backslashes.
-        edited = previous_custom_html.sub(match.matcher) { replace }
-
-        if edited.length > Page::MAX_CUSTOM_HTML_LENGTH
-          edit_error = "The edited custom_html would be too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
-          raise ActiveRecord::Rollback
-        end
-
-        # Re-sanitize the whole spliced result, not just the inserted snippet: the replacement can
-        # change how surrounding markup parses (for example by opening a tag the snippet closes), so
-        # only the full document is safe to check. Matches update_custom_html's blank-to-nil
-        # normalization so an edit that empties the page unpublishes it the same way.
-        result = Ai::PageSanitizer.sanitize_with_report(edited)
-        user.custom_html = result.html.presence
-        sanitization_report = result.report
-        user.save!
-      end
+      result = Pages::CustomHtmlWriter.edit!(user, find:, replace:)
     rescue ActiveRecord::RecordInvalid => e
       return error_with_object(:user, e.record)
     end
 
-    return render_response(false, message: edit_error) if edit_error
+    return render_response(false, message: result.error) unless result.success?
 
-    render_response(true, custom_html: user.custom_html, previous_custom_html:, sanitization_report:, profile_url: profile_url_for(user))
+    render_response(true, custom_html: result.custom_html, previous_custom_html: result.previous_custom_html, sanitization_report: result.sanitization_report, profile_url: profile_url_for(user))
   end
 
   # Dry-run sanitize: returns what custom_html would look like after the
