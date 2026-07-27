@@ -1,6 +1,7 @@
 import { Editor, findChildren } from "@tiptap/core";
 import typia from "typia";
 
+import { buildDeletionOperations } from "$app/data/product_save_contract";
 import { CurrencyCode } from "$app/utils/currency";
 import { ResponseError, request } from "$app/utils/request";
 
@@ -23,6 +24,17 @@ export type SaveProductResponse = {
   // would echo pre-save timestamps and be rejected as stale.
   rich_content_updated_at?: Record<string, string>;
   variant_updated_at?: Record<string, string>;
+  // The revision token for the state this save committed. Every successful
+  // save moves the product's fingerprint, so the token the editor loaded with
+  // is stale as soon as the first save returns; the editor adopts this one so a
+  // deletion later in the same session isn't refused as stale.
+  editor_revision?: string | null;
+  // Which integrations are connected as of the state this save committed. The
+  // editor adopts this as its new baseline so a disconnect later in the same
+  // session is recognised as a removal — see applyCanonicalIds.
+  loaded_integrations?: Record<string, boolean>;
+  // The same baseline, per version, keyed by variant external id.
+  variant_loaded_integrations?: Record<string, Record<string, boolean>>;
 };
 
 // The server's fail-closed answer when a save would delete version-level pages
@@ -112,6 +124,15 @@ export const saveProduct = async (
       confirmed_removed_variant_ids: product.confirmed_removed_variant_ids ?? [],
       confirmed_removed_rich_content_ids: product.confirmed_removed_rich_content_ids ?? [],
       preserved_rich_content_ids: product.preserved_rich_content_ids ?? [],
+      // The save contract (gumroad-private#1379). Sent on every save; the
+      // server ignores both unless the :product_editor_save_contract flag is on
+      // for this seller, so this is inert until the rollout enables it.
+      //
+      // `editor_revision` is echoed back exactly as the server issued it. It
+      // gates deletions only — a save carrying no deletions is accepted from a
+      // stale tab, which is why an open second tab can still fix a typo.
+      editor_revision: product.editor_revision ?? null,
+      deletion_operations: product.deletion_operations ?? buildDeletionOperations(product),
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
         newlyAdded ? { ...availability, id: null } : availability,
       ),

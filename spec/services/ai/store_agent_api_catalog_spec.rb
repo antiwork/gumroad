@@ -99,6 +99,71 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  describe "product custom HTML endpoints" do
+    it "exposes a read so the agent can inspect a product's current landing page" do
+      endpoint = described_class.find("get_product_custom_html")
+
+      expect(endpoint).to be_present
+      expect(endpoint.read?).to eq(true)
+      expect(endpoint.method).to eq(:get)
+      expect(endpoint.path).to eq("/products/:id/custom_html")
+      expect(endpoint.scope).to eq("view_sales")
+      expect(endpoint.path_params).to eq(%w[id])
+    end
+
+    it "exposes a targeted-edit write so an existing product page never has to be fully regenerated" do
+      endpoint = described_class.find("edit_product_custom_html")
+
+      expect(endpoint).to be_present
+      expect(endpoint.write?).to eq(true)
+      expect(endpoint.method).to eq(:post)
+      expect(endpoint.path).to eq("/products/:id/custom_html/edit")
+      expect(endpoint.scope).to eq("edit_products")
+      expect(endpoint.params).to eq(%w[find replace])
+    end
+
+    it "exposes the full-page update as a confirmable write accepting only custom_html" do
+      endpoint = described_class.find("update_product_custom_html")
+
+      expect(endpoint).to be_present
+      expect(endpoint.write?).to eq(true)
+      expect(endpoint.method).to eq(:put)
+      expect(endpoint.path).to eq("/products/:id")
+      expect(endpoint.scope).to eq("edit_products")
+      expect(endpoint.params).to eq(%w[custom_html])
+    end
+
+    # A custom page replaces the product's native page, buy button included — HTML without a buy
+    # element makes the product unpurchasable, so the model must be told before it proposes a page.
+    it "warns the model that a page without a buy element makes the product unpurchasable" do
+      summary = described_class.find("update_product_custom_html").summary
+
+      expect(summary).to match(/unpurchasable/i)
+      expect(summary).to include(%(data-gumroad-action="buy"))
+      expect(summary).to match(/price and buy button/i)
+    end
+
+    it "warns the model that the full-page update is destructive and points at the targeted edit" do
+      summary = described_class.find("update_product_custom_html").summary
+
+      expect(summary).to match(/destructive/i)
+      expect(summary).to include("edit_product_custom_html")
+    end
+
+    it "tells the model product pages have no gumroad-data JSON, only data-gumroad-field interpolation" do
+      summary = described_class.find("update_product_custom_html").summary
+
+      expect(summary).to match(/do NOT receive the gumroad-data JSON/)
+      expect(summary).to include("data-gumroad-field")
+    end
+
+    # The guardrail copy lives on update_product_custom_html, so the plain product update must not
+    # offer a second, warning-free path to the same write.
+    it "keeps custom_html out of the generic update_product params" do
+      expect(described_class.find("update_product").params).not_to include("custom_html")
+    end
+  end
+
   describe "public media endpoints" do
     it "exposes an upload write so the agent can host a creator's image for use on a custom page" do
       endpoint = described_class.find("upload_media")

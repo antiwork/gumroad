@@ -17,10 +17,12 @@ import {
   streamAgentMessage,
 } from "$app/data/agent";
 import { classNames } from "$app/utils/classNames";
+import { RateLimitError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { DefinitionList } from "$app/components/ui/DefinitionList";
 import { Textarea } from "$app/components/ui/Textarea";
@@ -116,6 +118,9 @@ type DisplayMessage = ChatMessage & {
   // outcome so the confirmation card collapses into a status line and can't be triggered twice.
   proposedAction?: ProposedAction;
   actionStatus?: "applied" | "dismissed";
+  // A rate-limited confirmation leaves the proposal pending. Keep the reason next to the action so
+  // it remains clear after the global toast disappears.
+  actionWarning?: string | null;
   // Objects the agent looked up or changed this turn, rendered inline as cards beneath the message.
   objects?: DisplayObject[];
 };
@@ -314,6 +319,7 @@ const CustomHtmlProposalPreview = ({ state }: { state: CustomHtmlPreviewState })
 const ProposedActionCard = ({
   action,
   status,
+  warning,
   isPending,
   isApplying,
   onConfirm,
@@ -321,6 +327,7 @@ const ProposedActionCard = ({
 }: {
   action: ProposedAction;
   status?: "applied" | "dismissed";
+  warning: string | null;
   isPending: boolean;
   isApplying: boolean;
   onConfirm: () => void;
@@ -414,6 +421,13 @@ const ProposedActionCard = ({
           fieldRows
         )}
       </CardContent>
+      {warning ? (
+        <CardContent>
+          <Alert role="status" variant="warning" className="w-full">
+            {warning}
+          </Alert>
+        </CardContent>
+      ) : null}
       <CardContent className="justify-end gap-2">
         <Button disabled={isPending} onClick={onDismiss}>
           Dismiss
@@ -699,12 +713,22 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         turnSettled = true;
       }
       if (!recovered) {
-        showAlert(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.", "error");
+        // A rate-limit refusal is not a malfunction: the server already explains which limit was
+        // hit and how long is left, so show that text instead of the generic failure wording. The
+        // generic string is what led sellers to think their account or store was broken and to
+        // spend the wait clearing browser data and re-logging in, none of which helps.
+        const isRateLimited = e instanceof RateLimitError;
+        const message = e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.";
+        showAlert(message, isRateLimited ? "warning" : "error");
         setMessages((prev) => {
           const next = [...prev];
-          // If nothing streamed, drop in a friendly fallback; otherwise keep what arrived.
+          // If nothing streamed, drop in a fallback; otherwise keep what arrived. A rate-limited
+          // turn never streams anything, so its bubble always carries the explanation.
           if (!next[assistantIndex] || next[assistantIndex]?.role !== "assistant") {
-            next[assistantIndex] = { role: "assistant", content: "Sorry, I ran into a problem. Please try again." };
+            next[assistantIndex] = {
+              role: "assistant",
+              content: isRateLimited ? message : "Sorry, I ran into a problem. Please try again.",
+            };
           }
           return next;
         });
@@ -724,6 +748,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
 
   const confirmAction = async (index: number, action: ProposedAction) => {
     setPendingActionIndex(index);
+    setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionWarning: null } : msg)));
     try {
       const { message, object } = await executeAgentAction(action, conversationIdRef.current);
       showAlert(message, "success");
@@ -734,7 +759,15 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         ),
       );
     } catch (e) {
-      showAlert(e instanceof Error && e.message ? e.message : "That change couldn't be applied.", "error");
+      // Same reasoning as the send path: confirming a change spends the same agent budget, so a
+      // refusal here is a limit the seller waits out, not a change that failed to apply. Showing it
+      // as an error (and with our own wording) is what sent sellers looking for a broken store.
+      const isRateLimited = e instanceof RateLimitError;
+      const message = e instanceof Error && e.message ? e.message : "That change couldn't be applied.";
+      showAlert(message, isRateLimited ? "warning" : "error");
+      if (isRateLimited) {
+        setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionWarning: message } : msg)));
+      }
     } finally {
       setPendingActionIndex(null);
     }
@@ -789,6 +822,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                     <ProposedActionCard
                       action={message.proposedAction}
                       status={message.actionStatus}
+                      warning={message.actionWarning ?? null}
                       // Also treat an in-flight turn as pending: while streaming, the proposal card
                       // can render before the terminal `done` event persists the turn server-side.
                       // Confirming in that window would apply the change before the stored proposal

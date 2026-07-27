@@ -97,6 +97,10 @@ Rails.application.routes.draw do
           put "disable"
           put "enable"
           post "preview_custom_html"
+          get "custom_html"
+          # No :as — api_routes is drawn twice (api subdomain + /api path), and an explicitly
+          # named route raises "already in use" on the second draw. Implicit names dedupe silently.
+          post "custom_html/edit", action: :edit_custom_html
         end
       end
       resources :upsells, only: [:index, :show, :create, :update, :destroy]

@@ -12,7 +12,7 @@
 # owner. The read/propose/confirm safety model lives entirely in Ai::StoreAgentService, exactly as
 # on web.
 class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
-  include Throttling
+  include AgentRequestThrottling
   include ActionController::Live
   include AgentConversationPersistence
 
@@ -20,12 +20,6 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
   before_action :ensure_can_use_agent
   before_action :throttle_agent_requests
 
-  # The mutating agent endpoints share one per-seller budget across web and mobile — the throttle
-  # key is seller-scoped, and these constants match the web streaming controller and the buffered
-  # mobile controller so no surface gets a bigger allowance than another.
-  AGENT_REQUESTS_PER_PERIOD = 30
-  AGENT_REQUESTS_PERIOD_WINDOW = 1.hour
-  private_constant :AGENT_REQUESTS_PER_PERIOD, :AGENT_REQUESTS_PERIOD_WINDOW
 
   # POST /api/mobile/agent/messages/stream
   # params: { messages: [{ role:, content: }, ...], conversation_id: <optional external id>,
@@ -166,9 +160,8 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
     end
 
     def throttle_agent_requests
-      key = RedisKey.agent_request_throttle(seller.id)
       # `throttle!` renders a 429 when the limit is exceeded; Rails halts before_actions once a
       # response is performed.
-      throttle!(key:, limit: AGENT_REQUESTS_PER_PERIOD, period: AGENT_REQUESTS_PERIOD_WINDOW)
+      throttle_agent_requests_for(seller.id)
     end
 end

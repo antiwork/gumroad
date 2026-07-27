@@ -9,6 +9,7 @@ import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
@@ -41,6 +42,19 @@ import { WithTooltip } from "$app/components/WithTooltip";
 const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
 const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=Latin}\d\s\-.]*$/u;
 
+// GambiaBankAccount requires exactly 18 letters or digits (/^[0-9A-Za-z]{18}$/). The account-number
+// input carries a matching `pattern`, but the Save button runs this page's own validation and posts
+// through Inertia rather than submitting the form element, so the browser never enforces that
+// pattern. Re-check the same shape here so a wrong-length number is caught before the request goes
+// out instead of coming back as a generic server-side save failure.
+const GAMBIA_ACCOUNT_NUMBER_REGEX = /^[0-9A-Za-z]{18}$/u;
+
+// GambiaBankAccount's bank code is a SWIFT/BIC of 8 to 11 letters or digits
+// (/^[0-9A-Za-z]{8,11}$/), e.g. AGIXGMGM. Same story as the account number above: the input's
+// `pattern` never runs because the page posts through Inertia instead of submitting the form, so
+// a malformed code would only surface as a generic "The bank code is invalid." from the server.
+const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
+
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
@@ -48,6 +62,103 @@ const HAS_JAPANESE_CHARS = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FF
 const HAS_KATAKANA = /[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F]/u;
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
+
+// Human-readable names for every field the client-side validation can reject, so a failed save
+// can tell the seller exactly which fields are blocking it. Without this the only signal was a red
+// outline on the field itself, which is normally scrolled off-screen: the save button lives in the
+// sticky header at the top of the page while the compliance and bank fields sit far below the fold,
+// so sellers pressed "Update settings", saw nothing happen, and reported the button as dead. See
+// antiwork/gumroad-private#1388.
+const FIELD_LABELS: Record<FormFieldName, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  first_name_kanji: "First name (Kanji)",
+  last_name_kanji: "Last name (Kanji)",
+  first_name_kana: "First name (Kana)",
+  last_name_kana: "Last name (Kana)",
+  building_number: "Block / Building number",
+  building_number_kana: "Block / Building number (Kana)",
+  street_address_kanji: "Town/Cho-me (Kanji)",
+  street_address_kana: "Town/Cho-me (Kana)",
+  street_address: "Address",
+  city: "City",
+  city_kana: "City (Kana)",
+  state: "State or province",
+  zip_code: "Postal code",
+  dob_year: "Date of birth",
+  dob_month: "Date of birth",
+  dob_day: "Date of birth",
+  phone: "Phone number",
+  nationality: "Nationality",
+  individual_tax_id: "Tax ID",
+  business_type: "Business type",
+  business_name: "Legal business name",
+  business_name_kanji: "Business name (Kanji)",
+  business_name_kana: "Business name (Kana)",
+  business_street_address: "Business address",
+  business_building_number: "Business block / building number",
+  business_building_number_kana: "Business block / building number (Kana)",
+  business_street_address_kanji: "Business town/Cho-me (Kanji)",
+  business_street_address_kana: "Business town/Cho-me (Kana)",
+  business_city: "Business city",
+  business_city_kana: "Business city (Kana)",
+  business_state: "Business state or province",
+  business_zip_code: "Business postal code",
+  business_phone: "Business phone number",
+  job_title: "Job title",
+  business_tax_id: "Business tax ID",
+  routing_number: "Routing number",
+  transit_number: "Transit number",
+  institution_number: "Institution number",
+  bsb_number: "BSB number",
+  bank_code: "Bank code",
+  branch_code: "Branch code",
+  clearing_code: "Clearing code",
+  sort_code: "Sort code",
+  ifsc: "IFSC",
+  account_type: "Account type",
+  account_holder_full_name: "Pay to the order of",
+  account_number: "Account number",
+  account_number_confirmation: "Confirm account number",
+  paypal_email_address: "PayPal email address",
+};
+
+const missingFieldsErrorMessage = (fieldNames: Set<FormFieldName>) => {
+  // Deduplicate labels: the three date-of-birth inputs share one label, and several country-specific
+  // bank fields reuse the same one too.
+  const labels = [...new Set([...fieldNames].map((fieldName) => FIELD_LABELS[fieldName]))];
+  if (labels.length === 0) return null;
+  return `Please complete the required fields below: ${labels.join(", ")}.`;
+};
+
+// Names the invalid fields from the labels actually rendered next to them, so the banner matches
+// what the seller is looking at. Several labels change with the seller's country — a US seller sees
+// "ZIP code" where everyone else sees "Postal code", and the state field is variously labelled
+// State, Province, County or Prefecture — so a hardcoded list would name a field they cannot find.
+// Falls back to FIELD_LABELS for any input with no label element, and always uses it for the three
+// date-of-birth selects, whose own labels ("Month", "Day", "Year") only make sense together.
+const missingFieldsErrorMessageFromDom = (form: HTMLElement, fieldNames: Set<FormFieldName>) => {
+  const labels: string[] = [];
+  let usedDobLabel = false;
+
+  for (const field of form.querySelectorAll<HTMLElement>('[aria-invalid="true"]')) {
+    if (field.id.includes("-dob-")) {
+      if (usedDobLabel) continue;
+      usedDobLabel = true;
+      labels.push(FIELD_LABELS.dob_year);
+      continue;
+    }
+    const label = field.id ? form.querySelector(`label[for="${CSS.escape(field.id)}"]`) : null;
+    const text = label?.textContent?.trim();
+    if (text) labels.push(text);
+  }
+
+  const deduplicated = [...new Set(labels)];
+  // No labelled invalid inputs in the DOM (a field rendered without a label, or an error that isn't
+  // tied to a visible input) — fall back to the curated names so the banner still says something.
+  if (deduplicated.length === 0) return missingFieldsErrorMessage(fieldNames);
+  return `Please complete the required fields below: ${deduplicated.join(", ")}.`;
+};
 
 const PERU_DNI_DIGIT_COUNT = 9;
 // A Singapore NRIC/FIN is a leading letter (S/T/F/G/M), seven digits, and a trailing checksum
@@ -104,6 +215,8 @@ type PaymentsPageProps = {
   instant_payout_fee_percent: number;
   buyer_local_currency_enabled: boolean;
   disable_buyer_local_currency: boolean;
+  buyer_currency_charging_enabled: boolean;
+  disable_buyer_currency_rounding: boolean;
   can_manage_beneficial_owners: boolean;
   errors?: {
     base?: string[];
@@ -123,7 +236,22 @@ export default function PaymentsPage() {
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
   const [errorFieldNames, setErrorFieldNames] = React.useState(() => new Set<FormFieldName>());
-  const markFieldInvalid = (fieldName: FormFieldName) => setErrorFieldNames(new Set(errorFieldNames.add(fieldName)));
+  // The authoritative set of fields the current validation pass has rejected. It lives in a ref as
+  // well as in state because validateForm both writes it (through markFieldInvalid, from a dozen
+  // nested helpers) and reads it back within the same synchronous call, before React has re-rendered.
+  const errorFieldNamesRef = React.useRef(errorFieldNames);
+  const resetErrorFieldNames = () => {
+    errorFieldNamesRef.current = new Set();
+    setErrorFieldNames(errorFieldNamesRef.current);
+  };
+  // Counts failed save attempts. The scroll-to-first-invalid-field effect keys off this rather than
+  // off errorFieldNames, so it fires once per press of "Update settings" and never again while the
+  // seller is typing their way through the fields it pointed them at.
+  const [failedSaveAttempts, setFailedSaveAttempts] = React.useState(0);
+  const markFieldInvalid = (fieldName: FormFieldName) => {
+    errorFieldNamesRef.current = new Set(errorFieldNamesRef.current).add(fieldName);
+    setErrorFieldNames(errorFieldNamesRef.current);
+  };
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
   const [saveCounter, setSaveCounter] = React.useState(0);
@@ -134,6 +262,7 @@ export default function PaymentsPage() {
     payout_threshold_cents: number | null;
     payout_frequency: PayoutFrequency;
     disable_buyer_local_currency: boolean;
+    disable_buyer_currency_rounding: boolean;
     bank_account: Partial<BankAccount> | null;
     payment_address: string | null;
   }>({
@@ -142,6 +271,7 @@ export default function PaymentsPage() {
     payout_threshold_cents: props.payout_threshold_cents,
     payout_frequency: props.payout_frequency,
     disable_buyer_local_currency: props.disable_buyer_local_currency,
+    disable_buyer_currency_rounding: props.disable_buyer_currency_rounding,
     bank_account: props.bank_account_details.bank_account,
     payment_address: props.paypal_address,
   });
@@ -160,7 +290,7 @@ export default function PaymentsPage() {
 
   const updatePayoutMethod = (newPayoutMethod: PayoutMethod) => {
     setSelectedPayoutMethod(newPayoutMethod);
-    setErrorFieldNames(new Set());
+    resetErrorFieldNames();
     if (props.user.country_code === "AE") {
       if (newPayoutMethod === "paypal") {
         form.setData("user", { ...form.data.user, is_business: false });
@@ -180,12 +310,12 @@ export default function PaymentsPage() {
       setShowUpdateCountryConfirmationModal(true);
     }
     form.setData("user", { ...form.data.user, ...newComplianceInfo });
-    setErrorFieldNames(new Set());
+    resetErrorFieldNames();
   };
 
   const updateBankAccount = (newBankAccount: Partial<BankAccount>) => {
     form.setData("bank_account", { ...form.data.bank_account, ...newBankAccount });
-    setErrorFieldNames(new Set());
+    resetErrorFieldNames();
   };
 
   const [debitCard, setDebitCard] = React.useState<PayoutDebitCardData | null>(null);
@@ -207,10 +337,11 @@ export default function PaymentsPage() {
         payout_threshold_cents: props.payout_threshold_cents,
         payout_frequency: props.payout_frequency,
         disable_buyer_local_currency: props.disable_buyer_local_currency,
+        disable_buyer_currency_rounding: props.disable_buyer_currency_rounding,
         bank_account: props.bank_account_details.bank_account,
         payment_address: props.paypal_address,
       });
-      setErrorFieldNames(new Set());
+      resetErrorFieldNames();
       setClientErrorMessage(null);
       previousCountryRef.current = currentCountry;
     }
@@ -222,10 +353,36 @@ export default function PaymentsPage() {
   }, [props.bank_account_details.account_number_visual]);
 
   React.useEffect(() => {
-    if ((errors?.base && errors.base.length > 0) || clientErrorMessage) {
+    const hasServerError = Boolean(errors?.base && errors.base.length > 0);
+    // failedSaveAttempts only ever increments on a client-side validation failure, so a non-zero
+    // value here means the last press of "Update settings" was rejected before it left the browser.
+    if (!hasServerError && !clientErrorMessage && failedSaveAttempts === 0) return;
+
+    // The individual checks in validateForm set a specific message for the cases they know about
+    // (P.O. Box address, phone format, Kana character sets, and so on). When none of them did, fill
+    // in a generic list of the fields that are blocking the save, read from the labels next to them.
+    if (!hasServerError && !clientErrorMessage && formRef.current) {
+      const message = missingFieldsErrorMessageFromDom(formRef.current, errorFieldNames);
+      if (message) setClientErrorMessage({ message });
+    }
+
+    // Prefer scrolling to the first field that actually failed validation — the seller needs to see
+    // the input, not just the banner at the top of the form. Falls back to the form itself for
+    // server-side errors that aren't tied to a specific field.
+    //
+    // This deliberately keys off failedSaveAttempts rather than the set of invalid fields. Typing in
+    // any field clears that set (see updateComplianceInfo), which would re-run this effect with no
+    // invalid field left and scroll the seller back to the top of the form mid-keystroke — away from
+    // the very field the banner just told them to fill in.
+    const firstInvalidField = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (firstInvalidField) {
+      firstInvalidField.scrollIntoView({ behavior: "smooth", block: "center" });
+      firstInvalidField.focus({ preventScroll: true });
+    } else {
       formRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [errors, clientErrorMessage]);
+    // errorFieldNames is deliberately NOT a dependency — see the comment above.
+  }, [errors, clientErrorMessage, failedSaveAttempts]);
 
   const isStreetAddressPOBox = (input: string) =>
     input
@@ -536,8 +693,22 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "MacaoBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
+    if (form.data.bank_account.type === "GambiaBankAccount") {
+      if (!form.data.bank_account.bank_code) {
+        markFieldInvalid("bank_code");
+      } else if (!GAMBIA_SWIFT_BIC_REGEX.test(form.data.bank_account.bank_code)) {
+        markFieldInvalid("bank_code");
+        setClientErrorMessage({ message: "SWIFT / BIC code must be 8 to 11 letters or digits." });
+      }
+    }
     if (!form.data.bank_account.account_number) {
       markFieldInvalid("account_number");
+    } else if (
+      form.data.bank_account.type === "GambiaBankAccount" &&
+      !GAMBIA_ACCOUNT_NUMBER_REGEX.test(form.data.bank_account.account_number)
+    ) {
+      markFieldInvalid("account_number");
+      setClientErrorMessage({ message: "Account number must be exactly 18 letters or digits." });
     }
     if (!form.data.bank_account.account_number_confirmation) {
       markFieldInvalid("account_number_confirmation");
@@ -646,7 +817,7 @@ export default function PaymentsPage() {
       markFieldInvalid("state");
       setClientErrorMessage({ message: "Please select a valid state or province." });
     }
-    if (!form.data.user.zip_code && form.data.user.country !== "BW") {
+    if (!form.data.user.zip_code && countryRequiresPostalCode(form.data.user.country)) {
       markFieldInvalid("zip_code");
     }
     if (!validatePhoneNumber(form.data.user.phone, form.data.user.country)) {
@@ -666,6 +837,10 @@ export default function PaymentsPage() {
     }
     if (
       form.data.user.country !== null &&
+      // Note: `in` tests object keys, and an array's keys are its indexes, so this branch never
+      // matches a country code and the check is effectively inert. Switching it to includes() is a
+      // behavior change, not a cleanup: it starts blocking saves the server still accepts (a KZ
+      // PayPal payout needs no tax ID), so it needs its own change with the server rule aligned.
       form.data.user.country in props.user.individual_tax_id_needed_countries &&
       !props.user.individual_tax_id_entered &&
       !form.data.user.individual_tax_id
@@ -803,7 +978,7 @@ export default function PaymentsPage() {
         markFieldInvalid("business_state");
         setClientErrorMessage({ message: "Please select a valid state or province." });
       }
-      if (!form.data.user.business_zip_code && props.user.country_code !== "BW") {
+      if (!form.data.user.business_zip_code && countryRequiresPostalCode(props.user.country_code)) {
         markFieldInvalid("business_zip_code");
       }
       if (!validatePhoneNumber(form.data.user.business_phone, form.data.user.business_country)) {
@@ -824,6 +999,10 @@ export default function PaymentsPage() {
 
   const validateForm = () => {
     setClientErrorMessage(null);
+    // Start from a clean slate every attempt. Not every input clears the set as it changes (the
+    // PayPal email field and the saved-bank-account toggle don't), so a leftover entry from a
+    // previous attempt would otherwise block a save and name a field the seller has since filled in.
+    resetErrorFieldNames();
 
     if (isUpdateCountryConfirmed) {
       return true;
@@ -839,13 +1018,22 @@ export default function PaymentsPage() {
       validateComplianceInfoFields();
     }
 
-    return errorFieldNames.size === 0;
+    if (errorFieldNamesRef.current.size === 0) return true;
+
+    // Some individual checks above (P.O. Box address, phone format, Kana character sets, and so on)
+    // already set a specific message explaining what is wrong. The effect below fills in a generic
+    // "these fields are missing" list when none of them did, so the save always says something.
+    setFailedSaveAttempts((count) => count + 1);
+
+    return false;
   };
 
   const handleSave = asyncVoid(async () => {
     if (!validateForm()) return;
 
     setClientErrorMessage(null);
+    // The save is going out, so the previous failed attempt is no longer what the page is showing.
+    setFailedSaveAttempts(0);
 
     let cardData: CardPayoutToken | { stripe_error: unknown } | null = null;
     if (selectedPayoutMethod === "card") {
@@ -876,6 +1064,7 @@ export default function PaymentsPage() {
         payout_threshold_cents: data.payout_threshold_cents,
         payout_frequency: data.payout_frequency,
         disable_buyer_local_currency: data.disable_buyer_local_currency,
+        disable_buyer_currency_rounding: data.disable_buyer_currency_rounding,
       };
 
       if (selectedPayoutMethod === "bank") {
@@ -997,8 +1186,12 @@ export default function PaymentsPage() {
           />
         ) : null}
 
+        {/* The banner uses the same padding as every FormSection on this page (see
+            components/ui/FormSection.tsx), so it lines up with the form fields below it and keeps an
+            even gap on all four sides. The old `mb-12 px-8` left it flush against the tabs above and
+            inset further than the content on mobile. */}
         {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
-          <div className="mb-12 px-8">
+          <div className="p-4! md:p-8!">
             <Alert variant="danger" role="status">
               {errors?.base?.[0] ?? clientErrorMessage?.message}
             </Alert>
@@ -1106,6 +1299,24 @@ export default function PaymentsPage() {
                 USD.
               </FieldsetDescription>
             </Fieldset>
+            {props.buyer_currency_charging_enabled && !form.data.disable_buyer_local_currency ? (
+              <Fieldset>
+                <Switch
+                  checked={!form.data.disable_buyer_currency_rounding}
+                  onChange={(e) => form.setData("disable_buyer_currency_rounding", !e.target.checked)}
+                  aria-label="Keep price endings in local currency"
+                  disabled={props.is_form_disabled}
+                  label="Keep price endings in local currency"
+                />
+                <FieldsetDescription>
+                  Buyers charged in their own currency see the ending of the USD total rather than the exact converted
+                  amount: a $9.99 total shows €8.99 instead of €8.53, and a $10 total shows €9. When tax is added, the
+                  ending mirrored is the taxed total's, so a buyer paying in their own currency sees the same ending a
+                  buyer paying in USD would. Your earnings, taxes and payouts are unchanged — the difference is absorbed
+                  on our side.
+                </FieldsetDescription>
+              </Fieldset>
+            ) : null}
           </FormSection>
         ) : null}
 

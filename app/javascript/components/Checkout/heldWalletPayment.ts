@@ -1,14 +1,20 @@
-import { getStripePaymentElementAmount, State } from "$app/components/Checkout/payment";
+import { getStripePaymentElementAmount, getTotalPrice, State } from "$app/components/Checkout/payment";
 
-// A wallet payment (Apple Pay / Google Pay) tokenized through the Payment Element, held back
-// from submission because applying the wallet sheet's billing address changed checkout's tax
-// location. The new location invalidates the surcharges quote, so the server may now calculate
-// a different tax-inclusive total than the one the wallet sheet showed the buyer.
-// `approvedAmount` is the Payment Element amount at the moment the buyer approved the sheet —
-// the number the buyer actually agreed to pay.
+// A payment tokenized through the Payment Element (a wallet sheet, or a pane like UPI that
+// collects the billing address itself), held back from submission because applying the
+// pane/sheet's billing address changed checkout's tax location. The new location invalidates
+// the surcharges quote, so the server may now calculate a different tax-inclusive total than
+// the one the buyer saw when approving.
+// `approvedAmount` is the Payment Element amount at the moment the buyer approved — the number
+// shown inside the wallet sheet. `approvedTotal` is checkout's own tax-inclusive USD total at
+// that same moment. Both are recorded because on the method-forced surface (UPI, iDEAL, ...)
+// the element amount is a server-rendered constant that cannot move when taxes are
+// recalculated — comparing it alone would wave through a total the buyer never saw. The
+// checkout total is the tax-sensitive number there.
 export type HeldWalletPayment<PaymentMethod> = {
   paymentMethod: PaymentMethod;
   approvedAmount: number | null;
+  approvedTotal: number | null;
 };
 
 export type HeldWalletPaymentResolution<PaymentMethod> =
@@ -36,7 +42,11 @@ export const resolveHeldWalletPayment = <PaymentMethod>(
   // submitted totals can't be shown to agree — treat it like a mismatch and re-confirm.
   if (state.surcharges.type === "error") return { type: "re-confirm" };
   const amount = getStripePaymentElementAmount(state);
-  return amount === held.approvedAmount
+  // Both recorded numbers must still match. The element amount catches lanes where the mount
+  // amount tracks the recalculated total; the checkout total catches the method-forced surface,
+  // where the element amount is a fixed server-rendered constant and only checkout's own
+  // tax-inclusive total moves when the adopted address changes the tax.
+  return amount === held.approvedAmount && getTotalPrice(state) === held.approvedTotal
     ? { type: "continue", paymentMethod: held.paymentMethod }
     : { type: "re-confirm" };
 };

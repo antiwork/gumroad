@@ -117,6 +117,10 @@ class DirectAffiliate < Affiliate
     products.include?(product)
   end
 
+  def eligible_for_credit_on_renewal?(product:)
+    eligible_for_credit? && !product.user.has_brazilian_stripe_connect_account?
+  end
+
   def basis_points(product_id: nil)
     return affiliate_basis_points if apply_to_all_products || product_id.blank?
 

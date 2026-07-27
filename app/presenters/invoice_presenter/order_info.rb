@@ -13,6 +13,9 @@ class InvoicePresenter::OrderInfo
     receipt_presenter = ReceiptPresenter.new(chargeable, for_email: false)
     @payment_info = receipt_presenter.payment_info
     @charge_info  = receipt_presenter.charge_info
+    # An invoice states the same amounts as the receipt, so it reuses the receipt's one
+    # currency decision instead of making it again — see ReceiptPresenter#presentment_currency.
+    @presentment_currency = receipt_presenter.presentment_currency
     @business_vat_id = business_vat_id
     @business_vat_id_country_code = business_vat_id_country_code
     @business_name = business_name
@@ -137,7 +140,7 @@ class InvoicePresenter::OrderInfo
   end
 
   private
-    attr_reader :additional_notes, :business_vat_id, :business_vat_id_country_code, :business_name, :show_reverse_charge_note, :chargeable, :address_fields, :payment_info
+    attr_reader :additional_notes, :business_vat_id, :business_vat_id_country_code, :business_name, :show_reverse_charge_note, :chargeable, :address_fields, :payment_info, :presentment_currency
 
     def purchase_sales_tax_info
       chargeable.purchase_sales_tax_info
@@ -228,14 +231,33 @@ class InvoicePresenter::OrderInfo
     end
 
     def non_refunded_total_payment_attribute
-      amount_cents = chargeable.successful_purchases.sum do |purchase|
-        purchase.is_free_trial_purchase? ? 0 : purchase.non_refunded_total_transaction_amount
-      end
-
       {
         label: "Payment Total",
-        value: formatted_dollar_amount(amount_cents),
+        value: non_refunded_total_payment_value,
       }
+    end
+
+    # An invoice's payment total has to be denominated in the same currency as the line
+    # items above it, and for a buyer-currency purchase those lines are in the buyer's
+    # currency. Printing a USD total under EUR lines misstates the amount a tax
+    # authority reads off the document.
+    def non_refunded_total_payment_value
+      purchases = chargeable.successful_purchases
+      currency = presentment_currency
+
+      if currency.present?
+        amount_cents = purchases.sum do |purchase|
+          # Free lines have no presentment row and moved no money; they contribute zero.
+          next 0 if purchase.is_free_trial_purchase? || purchase.total_transaction_cents.to_i.zero?
+          purchase.buyer_presentment_non_refunded_total_cents
+        end
+        MoneyFormatter.format(amount_cents, currency.to_sym, no_cents_if_whole: true, symbol: true)
+      else
+        amount_cents = purchases.sum do |purchase|
+          purchase.is_free_trial_purchase? ? 0 : purchase.non_refunded_total_transaction_amount
+        end
+        formatted_dollar_amount(amount_cents)
+      end
     end
 
     # Marks the invoice when money has been returned, so a buyer's books

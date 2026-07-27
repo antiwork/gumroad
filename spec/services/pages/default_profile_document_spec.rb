@@ -70,6 +70,19 @@ describe Pages::DefaultProfileDocument do
       expect(html).not_to include("display: none")
     end
 
+    it "shows a product's cover image when it has no thumbnail, and no image tag when it has neither" do
+      with_cover = create(:product, user: seller, name: "Has a cover")
+      cover = create(:asset_preview, link: with_cover)
+      create(:product, user: seller, name: "No images at all")
+
+      html = described_class.render(seller)
+
+      expect(html).to include(%(<img src="#{ERB::Util.h(cover.url)}" alt="">))
+      # The imageless product must render its card without an <img> rather than one
+      # with an empty src, which browsers show as a broken-image icon.
+      expect(html).not_to include(%(<img src="" alt="">))
+    end
+
     it "omits the products and posts sections when the seller has none" do
       html = described_class.render(seller)
 

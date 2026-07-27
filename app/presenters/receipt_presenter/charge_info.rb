@@ -5,12 +5,14 @@ class ReceiptPresenter::ChargeInfo
   include CurrencyHelper
   include MailerHelper
   include ERB::Util
+  include BuyerPresentmentDisplay
 
-  def initialize(chargeable, for_email:, order_items_count:)
+  def initialize(chargeable, for_email:, order_items_count:, presentment_currency: BuyerPresentmentDisplay::PRESENTMENT_CURRENCY_UNDECIDED)
     @for_email = for_email
     @order_items_count = order_items_count
     @chargeable = chargeable
     @seller = chargeable.seller
+    @presentment_currency = presentment_currency
   end
 
   def formatted_created_at
@@ -49,11 +51,10 @@ class ReceiptPresenter::ChargeInfo
     attr_reader :for_email, :order_items_count, :chargeable, :seller
 
     def presentment_currency
-      currencies = chargeable.successful_purchases.filter_map(&:buyer_presentment_currency).uniq
-      currencies.one? ? currencies.first : nil
+      presentment_currency_or_decide(chargeable.successful_purchases)
     end
 
     def presentment_total_cents
-      chargeable.successful_purchases.sum { _1.buyer_presentment_total_cents || _1.total_transaction_cents }
+      @_presentment_total_cents ||= chargeable.successful_purchases.sum { _1.buyer_presentment_total_cents.to_i }
     end
 end

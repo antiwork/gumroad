@@ -49,11 +49,13 @@ import {
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
   getChargeTodayPrice,
+  getTotalPrice,
   hasShipping,
   isCardReadyToPay,
   isProcessing,
   isSubmitDisabled,
   PaymentMethodType,
+  paymentElementCollectsFullBillingDetails,
   requiresReusablePaymentMethodForCardCollection,
   requiresPayment,
   requiresReusablePaymentMethod,
@@ -214,7 +216,7 @@ const ZipCodeInput = () => {
   );
 };
 
-const SharedInputs = ({ className }: { className?: string | undefined }) => {
+const SharedInputs = () => {
   const uid = React.useId();
   const loggedInUser = useLoggedInUser();
   const [state, dispatch] = useState();
@@ -344,88 +346,96 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
       break;
   }
 
-  const showCountryInput = !(hasShipping(state) || !requiresPayment(state));
+  // When the Payment Element collects the buyer's full street address itself (UPI on digital
+  // carts), checkout's own Country/ZIP fields hide so nothing is asked for twice, and the
+  // pane's country drives the tax location once the payment tokenizes (see the client-confirm
+  // submit effect). The Full name field stays visible: name remains checkout's own field for
+  // every selection — the pane's name field is pinned to "never" (a name typed before switching
+  // to UPI cannot be carried into the pane's defaultValues after it renders, so moving the
+  // field would force the buyer to retype it — PR #6191 review) and tokenization passes the
+  // form's name alongside.
+  const elementCollectsFullBillingDetails = paymentElementCollectsFullBillingDetails(state);
+  const showCountryInput = !(hasShipping(state) || !requiresPayment(state)) && !elementCollectsFullBillingDetails;
   const showFullNameInput = requiresPayment(state) && !hasShipping(state);
 
+  // These fields render inside the same box as the "Pay with" section (one card: email address,
+  // then the payment methods right below) rather than a separate "Contact information" card, so
+  // this component returns bare fieldsets for the caller's flex column.
   return (
-    <Card>
-      <div className={className}>
-        <div className="flex grow flex-col gap-4">
-          <h4 className="text-base sm:text-lg">Contact information</h4>
-          <Fieldset state={errors.has("email") ? "danger" : undefined}>
-            <FieldsetTitle>
-              <Label htmlFor={`${uid}email`}>Email address</Label>
-            </FieldsetTitle>
-            <div className="relative inline-block w-full">
-              <Popover open={!!state.emailTypoSuggestion}>
-                <PopoverAnchor>
-                  <Input
-                    id={`${uid}email`}
-                    type="email"
-                    aria-invalid={errors.has("email")}
-                    value={state.email}
-                    onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
-                    disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
-                    onBlur={checkForEmailTypos}
-                  />
-                </PopoverAnchor>
-                {/* Open upward: the pay/download button sits right below the email field, and a
-                    downward popover covers it, blocking the purchase until the buyer answers. */}
-                <PopoverContent className="grid gap-2" matchTriggerWidth side="top">
-                  <div>Did you mean {state.emailTypoSuggestion}?</div>
-                  <div className="flex gap-2">
-                    <Button onClick={rejectEmailTypoSuggestion}>No</Button>
-                    <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </Fieldset>
-          {showFullNameInput ? (
-            <Fieldset state={errors.has("fullName") ? "danger" : undefined}>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}fullName`}>Full name</Label>
-              </FieldsetTitle>
+    <>
+      <Fieldset state={errors.has("email") ? "danger" : undefined}>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}email`}>Email address</Label>
+        </FieldsetTitle>
+        <div className="relative inline-block w-full">
+          <Popover open={!!state.emailTypoSuggestion}>
+            <PopoverAnchor>
               <Input
-                id={`${uid}fullName`}
-                type="text"
-                aria-invalid={errors.has("fullName")}
-                value={state.fullName}
-                onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
-                disabled={isProcessing(state)}
+                id={`${uid}email`}
+                type="email"
+                aria-invalid={errors.has("email")}
+                value={state.email}
+                onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
+                disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
+                onBlur={checkForEmailTypos}
               />
-            </Fieldset>
-          ) : null}
-          {showCountryInput ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(min((20rem - 100%) * 1000, 100%), 1fr))",
-                gap: "var(--spacer-4)",
-              }}
-            >
-              <CountryInput />
-              {state.country === "US" ? <ZipCodeInput /> : null}
-              {state.country === "CA" ? <StateInput /> : null}
-            </div>
-          ) : null}
-          {showVatIdInput ? (
-            <Fieldset state={errors.has("vatId") ? "danger" : undefined}>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}vatId`}>{vatLabel}</Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}vatId`}
-                type="text"
-                value={state.vatId}
-                onChange={(e) => dispatch({ type: "set-value", vatId: e.target.value })}
-                disabled={isProcessing(state)}
-              />
-            </Fieldset>
-          ) : null}
+            </PopoverAnchor>
+            {/* Open upward: on paid carts the payment methods (and on free carts the
+                    pay/download button) sit right below the email field, and a downward
+                    popover covers them, blocking the purchase until the buyer answers. */}
+            <PopoverContent className="grid gap-2" matchTriggerWidth side="top">
+              <div>Did you mean {state.emailTypoSuggestion}?</div>
+              <div className="flex gap-2">
+                <Button onClick={rejectEmailTypoSuggestion}>No</Button>
+                <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
-      </div>
-    </Card>
+      </Fieldset>
+      {showFullNameInput ? (
+        <Fieldset state={errors.has("fullName") ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}fullName`}>Full name</Label>
+          </FieldsetTitle>
+          <Input
+            id={`${uid}fullName`}
+            type="text"
+            aria-invalid={errors.has("fullName")}
+            value={state.fullName}
+            onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
+            disabled={isProcessing(state)}
+          />
+        </Fieldset>
+      ) : null}
+      {showCountryInput ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min((20rem - 100%) * 1000, 100%), 1fr))",
+            gap: "var(--spacer-4)",
+          }}
+        >
+          <CountryInput />
+          {state.country === "US" ? <ZipCodeInput /> : null}
+          {state.country === "CA" ? <StateInput /> : null}
+        </div>
+      ) : null}
+      {showVatIdInput ? (
+        <Fieldset state={errors.has("vatId") ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}vatId`}>{vatLabel}</Label>
+          </FieldsetTitle>
+          <Input
+            id={`${uid}vatId`}
+            type="text"
+            value={state.vatId}
+            onChange={(e) => dispatch({ type: "set-value", vatId: e.target.value })}
+            disabled={isProcessing(state)}
+          />
+        </Fieldset>
+      ) : null}
+    </>
   );
 };
 
@@ -493,7 +503,6 @@ const CustomerDetails = ({ className }: { className?: string }) => {
 
   return (
     <>
-      <SharedInputs className={className} />
       {hasShipping(state) ? (
         <Card>
           <div className={className}>
@@ -656,6 +665,12 @@ const CreditCardContent = ({
     dispatch({ type: "set-value", willSaveCard });
   }, [dispatch, willSaveCard]);
 
+  // Same reason, for the other direction: paying with a card on file stays on the server-confirm
+  // path, which charges canonical USD even on a forced-currency cart, so the summary needs to know.
+  React.useEffect(() => {
+    dispatch({ type: "set-value", usingSavedCard: useSavedCard });
+  }, [dispatch, useSavedCard]);
+
   const [cardError, setCardError] = React.useState(false);
 
   // The in-flight elements.submit() started synchronously by the pay-button click for a wallet
@@ -727,8 +742,11 @@ const CreditCardContent = ({
     // selected Apple Pay before a remount would still be recorded as paying by wallet even
     // though the remounted element is showing the card form — and the card submission would then
     // skip the checkout-form billing details it depends on. Reset to the safe default and let
-    // the element's change event re-establish any wallet selection.
+    // the element's change event re-establish any wallet selection. The mirrored checkout state
+    // resets too, so form fields hidden for a UPI selection (see SharedInputs) reappear when a
+    // remount lands the buyer back on the card form.
     paymentElementTypeRef.current = "card";
+    dispatch({ type: "set-value", paymentElementType: "card" });
     setPaymentElementReady(controller !== null);
   }, []);
 
@@ -808,21 +826,13 @@ const CreditCardContent = ({
     (async () => {
       if (!useSavedCard && usesPaymentElement && !paymentElementReady) return;
 
-      // Selections in "element-address" collection mode (UPI on digital carts — see
-      // paymentElementBillingDetailsCollection) confirm with the checkout form's name plus the
-      // element-collected street address. Checkout doesn't normally require the full name for
-      // digital purchases, but Stripe rejects these confirms without billing_details.name — so
-      // require it here, with a pointed message instead of a late generic Stripe failure.
-      if (
-        !useSavedCard &&
-        usesPaymentElement &&
-        paymentElementBillingDetailsCollection(paymentElementTypeRef.current, hasShipping(state)) ===
-          "element-address" &&
-        !state.fullName
-      ) {
-        showAlert("Please enter your full name — it's required for this payment method.", "warning");
-        return dispatch({ type: "cancel" });
-      }
+      // Selections in "element-full" collection mode (UPI on digital carts — see
+      // paymentElementBillingDetailsCollection) have Stripe's pane collect the buyer's full
+      // street address itself; checkout's Country/ZIP fields are hidden for them. The Full
+      // name field stays checkout's own (validated in
+      // validatePaymentMethodIndependentFields) and Stripe's element-side validation blocks
+      // submission until the pane's address is complete — elements.submit() inside
+      // tokenization surfaces any missing pane field as a field-level error.
 
       // Client-confirm checkout mints a ConfirmationToken; saved cards stay on server-confirm.
       if (useStripePaymentElementClientConfirm && !useSavedCard) {
@@ -879,6 +889,31 @@ const CreditCardContent = ({
             heldWalletPaymentRef.current = {
               paymentMethod: clientConfirmPaymentMethod,
               approvedAmount: getStripePaymentElementAmount(state),
+              approvedTotal: getTotalPrice(state),
+            };
+            return;
+          }
+        }
+        // The name on the tokenized payment method is checkout's own form name (the pane's name
+        // field is pinned to "never" — see paymentElementBillingDetailsOverride). Echo whatever
+        // actually landed on the PaymentMethod back into state so the purchase payload always
+        // matches it.
+        if (tokenResult.elementBillingFullName) {
+          dispatch({ type: "set-value", fullName: tokenResult.elementBillingFullName });
+        }
+        // Adopt the pane's address as checkout's tax location too. The same held-submission rule
+        // applies when it changes the tax location.
+        if (tokenResult.elementBillingAddress && !hasShipping(state)) {
+          const taxLocationChanged = applyWalletBillingAddressToCheckout(
+            tokenResult.elementBillingAddress,
+            state,
+            dispatch,
+          );
+          if (taxLocationChanged) {
+            heldWalletPaymentRef.current = {
+              paymentMethod: clientConfirmPaymentMethod,
+              approvedAmount: getStripePaymentElementAmount(state),
+              approvedTotal: getTotalPrice(state),
             };
             return;
           }
@@ -961,6 +996,40 @@ const CreditCardContent = ({
           heldWalletPaymentRef.current = {
             paymentMethod,
             approvedAmount: getStripePaymentElementAmount(state),
+            approvedTotal: getTotalPrice(state),
+          };
+          return;
+        }
+      }
+      // Same PaymentMethod-name echo as the client-confirm lane above (the name is checkout's
+      // own form value passed at tokenization — see paymentElementBillingDetailsOverride).
+      if (
+        paymentMethod.type === "new" &&
+        paymentMethod.cardParamsResult.type === "cc" &&
+        paymentMethod.cardParamsResult.cardParams.elementBillingFullName
+      ) {
+        dispatch({
+          type: "set-value",
+          fullName: paymentMethod.cardParamsResult.cardParams.elementBillingFullName,
+        });
+      }
+      // Adopt the pane-collected address for tax calculation, matching the client-confirm lane.
+      if (
+        paymentMethod.type === "new" &&
+        paymentMethod.cardParamsResult.type === "cc" &&
+        paymentMethod.cardParamsResult.cardParams.elementBillingAddress &&
+        !hasShipping(state)
+      ) {
+        const taxLocationChanged = applyWalletBillingAddressToCheckout(
+          paymentMethod.cardParamsResult.cardParams.elementBillingAddress,
+          state,
+          dispatch,
+        );
+        if (taxLocationChanged) {
+          heldWalletPaymentRef.current = {
+            paymentMethod,
+            approvedAmount: getStripePaymentElementAmount(state),
+            approvedTotal: getTotalPrice(state),
           };
           return;
         }
@@ -1023,12 +1092,21 @@ const CreditCardContent = ({
             disabled={isProcessing(state)}
             defaultEmail={state.email}
             defaultName={state.fullName}
+            defaultCountry={state.country}
             hasShippingCart={hasShipping(state)}
             onReady={handlePaymentElementReady}
             invalid={cardError}
             onFocus={reclaimCardLane}
             onChange={(evt) => {
               paymentElementTypeRef.current = evt.value.type;
+              // Mirror the selection into checkout state so the form can react to it — the
+              // Full name and Country/ZIP fields hide while a selection has the element
+              // collect the full billing details (UPI on digital carts, see SharedInputs).
+              // Dispatched unconditionally: guarding on the render-closure `state` could skip
+              // the second of two change events landing before a re-render flush, stranding
+              // state on the stale type. An identical value is a no-op assignment in the
+              // reducer, so redundant dispatches cost nothing.
+              dispatch({ type: "set-value", paymentElementType: evt.value.type });
               if (evt.complete) setCardError(false);
               // A change means the buyer is interacting with the element — reclaim the
               // card/wallet lane from PayPal. Ignore the empty card-form event a freshly
@@ -1760,9 +1838,13 @@ export const PaymentForm = ({
       {showCustomFields ? <CustomFields className="p-4 sm:p-5" /> : null}
       <CustomerDetails className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" />
       {!isFreePurchase ? (
+        // One box for the whole payment step: the buyer's email address (plus name/country when
+        // the selected payment method doesn't collect them) sits directly above "Pay with", so
+        // contact details and payment methods read as a single flow instead of two cards.
         <Card borderless={borderless}>
           <CardContent className="sm:p-5">
             <div className="flex grow flex-col gap-4">
+              <SharedInputs />
               <h4 className="text-base sm:text-lg">Pay with</h4>
               <StripeElementsProvider>
                 <PaymentMethodsSection isPayPalAvailable={isPayPalAvailable} isTestPurchase={!!isTestPurchase} />
@@ -1778,10 +1860,16 @@ export const PaymentForm = ({
           ) : null}
         </Card>
       ) : (
-        <PayButton
-          className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5"
-          isTestPurchase={!!isTestPurchase}
-        />
+        // Free purchases skip the payment methods but still need the contact fields — keep the
+        // same one-box shape: email (plus any other shared fields) with the download CTA below.
+        <Card borderless={borderless}>
+          <CardContent className="sm:p-5">
+            <div className="flex grow flex-col gap-4">
+              <SharedInputs />
+              <PayButton className="flex" card={false} isTestPurchase={!!isTestPurchase} />
+            </div>
+          </CardContent>
+        </Card>
       )}
       {recaptcha.container}
     </div>

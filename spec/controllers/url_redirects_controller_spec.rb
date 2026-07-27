@@ -2373,6 +2373,224 @@ describe UrlRedirectsController, inertia: true do
         expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
       end
     end
+
+    # The content page's polls are the only thing that re-checks access while the buyer sits on
+    # the page — the player's position POSTs check nothing, and its signed video URLs stay valid
+    # for hours. The page keeps a slower poll running during playback for exactly this reason,
+    # so each way access can end has to actually move the buyer off the page.
+    describe "access checks on a polling request" do
+      let(:product) { create(:product) }
+      let(:purchase) { create(:purchase, link: product) }
+      let(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+      def poll_for_media_locations
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+        get :download_page, params: { id: url_redirect.token }
+      end
+
+      # A refund or chargeback is the one termination the controller answers with a 404 rather
+      # than a redirect. The page deliberately drops a non-Inertia response that comes back from
+      # the URL it polled (that is what an edge challenge looks like), so a 404 here would be
+      # swallowed and access would never actually end. Polls get the expired page instead.
+      it "redirects a poll to the expired page when the purchase was refunded" do
+        purchase.update!(stripe_refunded: true)
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "redirects a poll to the expired page after a chargeback" do
+        purchase.update!(chargeback_date: Time.current)
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "still 404s a refunded purchase on an ordinary page load" do
+        purchase.update!(stripe_refunded: true)
+
+        # Controller specs let the routing error escape rather than rendering the 404 page.
+        expect { get :download_page, params: { id: url_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+      end
+
+      it "redirects a poll to the expired page when access was revoked" do
+        purchase.update!(is_access_revoked: true)
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "redirects a poll to the rental-expired page when the rental ran out" do
+        purchase.update!(is_rental: true)
+        url_redirect.update!(is_rental: true, rental_first_viewed_at: 100.days.ago)
+        ExpireRentalPurchasesWorker.new.perform
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_rental_expired_page_path(url_redirect.token))
+      end
+
+      it "redirects a poll to the membership-inactive page when the membership lapsed" do
+        allow_any_instance_of(Subscription).to receive(:grant_access_to_product?).and_return(false)
+        subscription = create(:subscription, link: product)
+        purchase.update!(subscription:, is_original_subscription_purchase: true)
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_membership_inactive_page_path(url_redirect.token))
+      end
+    end
+
+    # The content itself going away is the other terminal state that used to be answered with a
+    # 404 at the same URL the poll asked for — the exact shape the client drops. A buyer with the
+    # page already open would have kept seeing withdrawn content indefinitely.
+    describe "withdrawn content on a polling request" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller) }
+      let(:installment) { create(:installment, seller:, installment_type: "seller", link: nil) }
+      let(:url_redirect) { create(:url_redirect, installment:, purchase: nil, link: product) }
+
+      before do
+        installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
+        url_redirect
+      end
+
+      def poll_for_media_locations
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+        get :download_page, params: { id: url_redirect.token }
+      end
+
+      it "redirects a poll to the expired page when the installment was deleted" do
+        installment.mark_deleted!
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "redirects a poll to the expired page when the installment's files were removed" do
+        installment.product_files.last.mark_deleted!
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "still 404s a deleted installment on an ordinary page load" do
+        installment.mark_deleted!
+
+        expect { get :download_page, params: { id: url_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+      end
+
+      it "still 404s an installment without files on an ordinary page load" do
+        installment.product_files.last.mark_deleted!
+
+        expect { get :download_page, params: { id: url_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+      end
+
+      # The redirect target runs through the same before_action, and an XHR carries the original
+      # request's headers when it follows a redirect. If the expired page also classified that as
+      # a poll it would redirect to itself forever, so the pages that exist to explain missing
+      # content skip the withdrawn-content check entirely.
+      it "renders the expired page for a request carrying the polling headers" do
+        installment.mark_deleted!
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+
+        get :expired, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+        expect_inertia.to render_component("UrlRedirects/Expired")
+      end
+
+      # Only the content page itself sends these polls. Every other action goes through the same
+      # permission check, so the poll classification is scoped to the action rather than trusting
+      # headers a client could send anywhere.
+      it "still 404s another action that carries the polling headers" do
+        purchase = create(:purchase, link: product, stripe_refunded: true)
+        other_redirect = create(:url_redirect, link: product, purchase:)
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+
+        expect { get :show, params: { id: other_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+      end
+    end
+
+    # A post emailed to a creator's followers is the one content page with no product and no
+    # purchase behind it: `Installment#generate_url_redirect_for_follower` creates the redirect
+    # with nothing but the post itself. So this is the case where sending a poll to the expired
+    # page can land on a page that has no product to name, and it has to render anyway.
+    describe "withdrawn follower post on a polling request" do
+      let(:follower) { create(:user) }
+      let(:creator) { create(:follower, follower_user_id: follower.id).user }
+      let(:installment) { create(:follower_installment, seller: creator, name: "Chapter 12") }
+      # Exactly what a follower gets: no link, no purchase.
+      let(:url_redirect) { installment.generate_url_redirect_for_follower }
+
+      before do
+        sign_in(follower)
+        url_redirect
+      end
+
+      # Inertia ships the page's meta tags as a prop, so the rendered <title> is readable here.
+      # A partial-reload request gets the JSON page object instead of the prop hash, so read
+      # whichever one this request produced.
+      def page_title_meta_tag
+        Array(inertia.props[:_inertia_meta]).find { |tag| tag[:head_key] == "title" }&.[](:inner_content) ||
+          JSON.parse(response.body).dig("props", "_inertia_meta")&.find { |tag| tag["headKey"] == "title" }&.dig("innerContent")
+      end
+
+      it "has neither a product nor a purchase behind it" do
+        expect(url_redirect.link).to be_nil
+        expect(url_redirect.purchase).to be_nil
+        expect(url_redirect.referenced_link).to be_nil
+      end
+
+      it "sends a poll to the expired page, which renders with the post's name as the title" do
+        installment.mark_deleted!
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+
+        get :download_page, params: { id: url_redirect.token }
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+
+        # Follow the redirect the way the browser would, headers and all: an XHR keeps the
+        # original request's headers when it follows one.
+        get :expired, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+        expect_inertia.to render_component("UrlRedirects/Expired")
+        expect(page_title_meta_tag).to eq("Chapter 12 - Access expired")
+      end
+
+      # A post can be published with no name at all — the app shows a truncated excerpt of its
+      # message instead — so the title has to hold up when there is nothing to name either.
+      it "renders the expired page for an unnamed post" do
+        installment.update!(name: nil)
+        installment.mark_deleted!
+
+        get :expired, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+        expect(page_title_meta_tag).to eq("#{installment.displayed_name} - Access expired")
+      end
+
+      it "renders the rental-expired and membership-inactive pages too" do
+        installment.mark_deleted!
+
+        get :rental_expired_page, params: { id: url_redirect.token }
+        expect(response).to be_successful
+        expect(page_title_meta_tag).to eq("Chapter 12 - Your rental has expired")
+
+        get :membership_inactive_page, params: { id: url_redirect.token }
+        expect(response).to be_successful
+        expect(page_title_meta_tag).to eq("Chapter 12 - Your membership is inactive")
+      end
+    end
   end
 
   describe "GET 'media_urls" do

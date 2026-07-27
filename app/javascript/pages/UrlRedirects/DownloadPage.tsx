@@ -4,6 +4,7 @@ import typia from "typia";
 
 import { useDropbox } from "$app/hooks/useDropbox";
 import FileUtils from "$app/utils/file";
+import { MEDIA_PLAYBACK_EVENT, isMediaPlaybackEvent } from "$app/utils/media_playback";
 
 import { FileItem } from "$app/components/Download/FileList";
 import { LayoutProps } from "$app/components/DownloadPage/Layout";
@@ -32,8 +33,40 @@ function DownloadPage() {
 
   const hasMediaFiles = hasRichContent && contentFiles.length > 0;
 
+  // The ids of the players currently playing. Tracked as a set rather than a single flag
+  // because a content page can embed several videos, and one of them pausing must not cancel
+  // out another that is still playing. See app/javascript/utils/media_playback.ts for why
+  // playback pauses the position poll.
+  const [playingPlayerIds, setPlayingPlayerIds] = React.useState<ReadonlySet<string>>(new Set());
+  const isMediaPlaying = playingPlayerIds.size > 0;
+  React.useEffect(() => {
+    const handlePlaybackChange = (event: Event) => {
+      if (!isMediaPlaybackEvent(event)) return;
+      const { playerId, isPlaying } = event.detail;
+      setPlayingPlayerIds((current) => {
+        if (current.has(playerId) === isPlaying) return current;
+        const next = new Set(current);
+        if (isPlaying) next.add(playerId);
+        else next.delete(playerId);
+        return next;
+      });
+    };
+    window.addEventListener(MEDIA_PLAYBACK_EVENT, handlePlaybackChange);
+    return () => window.removeEventListener(MEDIA_PLAYBACK_EVENT, handlePlaybackChange);
+  }, []);
+
   const audioDurationsPoll = usePoll(5_000, { only: ["audio_durations"] }, { autoStart: false });
   const mediaLocationsPoll = usePoll(10_000, { only: ["latest_media_locations"] }, { autoStart: false });
+  // While a video plays the player already reports the buyer's position, so the 10-second read
+  // above is redundant and is stopped. It is not only a read, though: every one of these
+  // requests re-runs the server's access check, which is what notices a refund, a chargeback,
+  // an expired rental, revoked access, or a membership that lapsed mid-session and moves the
+  // buyer off the page. The player's own position POSTs do no such check and its video URLs
+  // stay valid for hours, so stopping the poll outright would leave a two-hour session with no
+  // authorization check at all. This slower poll takes over during playback purely as that
+  // heartbeat: same request, one sixth as often, so access still ends within a minute of being
+  // taken away without putting the long stream of requests back.
+  const mediaLocationsHeartbeatPoll = usePoll(60_000, { only: ["latest_media_locations"] }, { autoStart: false });
 
   React.useEffect(() => {
     if (hasUnprocessedAudio) audioDurationsPoll.start();
@@ -41,9 +74,20 @@ function DownloadPage() {
   }, [hasUnprocessedAudio]);
 
   React.useEffect(() => {
-    if (hasMediaFiles) mediaLocationsPoll.start();
-    else mediaLocationsPoll.stop();
-  }, [hasMediaFiles]);
+    if (!hasMediaFiles) {
+      mediaLocationsPoll.stop();
+      mediaLocationsHeartbeatPoll.stop();
+      return;
+    }
+
+    if (isMediaPlaying) {
+      mediaLocationsPoll.stop();
+      mediaLocationsHeartbeatPoll.start();
+    } else {
+      mediaLocationsHeartbeatPoll.stop();
+      mediaLocationsPoll.start();
+    }
+  }, [hasMediaFiles, isMediaPlaying]);
 
   return (
     <div className="flex min-h-screen flex-col">

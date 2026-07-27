@@ -220,6 +220,19 @@ class User < ApplicationRecord
     set_json_data_for_attr("disable_buyer_local_currency", ActiveModel::Type::Boolean.new.cast(value))
   end
 
+  # Opt-out of mirroring the seller's USD price ending into the buyer's currency ($9.99 →
+  # €8,99 rather than the exact €8,53). It rides along with buyer-local-currency and is on
+  # by default for sellers who have that, so a seller who wants the exact converted amount
+  # shown and charged sets this. See Checkout::PresentmentRounding.
+  def disable_buyer_currency_rounding
+    ActiveModel::Type::Boolean.new.cast(json_data_for_attr("disable_buyer_currency_rounding", default: false))
+  end
+  alias_method :disable_buyer_currency_rounding?, :disable_buyer_currency_rounding
+
+  def disable_buyer_currency_rounding=(value)
+    set_json_data_for_attr("disable_buyer_currency_rounding", ActiveModel::Type::Boolean.new.cast(value))
+  end
+
   attr_blockable :email
   attr_blockable :form_email, object_type: :email
   attr_blockable :email_domain

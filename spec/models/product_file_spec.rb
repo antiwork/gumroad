@@ -1400,6 +1400,27 @@ describe ProductFile do
     end
   end
 
+  describe "#as_json video dimensions" do
+    # The product editor shapes its video preview from these, so a portrait
+    # video the seller filmed on a phone is not pillarboxed into a landscape
+    # box in their own editor. See gumroad-private#1392.
+    it "includes the recorded dimensions for a video file" do
+      video = create(:streamable_video, width: 1080, height: 1920)
+
+      expect(video.as_json).to include(width: 1080, height: 1920)
+    end
+
+    it "reports nil dimensions for a non-video file" do
+      expect(create(:readable_document).as_json).to include(width: nil, height: nil)
+    end
+
+    it "reports nil dimensions for a video that was never measured" do
+      video = create(:streamable_video, width: nil, height: nil)
+
+      expect(video.as_json).to include(width: nil, height: nil)
+    end
+  end
+
   describe "subtitle file S3 NotFound handling" do
     let(:product_file) { create(:product_file) }
     let(:english_srt_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/english.srt" }

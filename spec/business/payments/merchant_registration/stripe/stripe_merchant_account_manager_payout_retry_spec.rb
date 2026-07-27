@@ -345,7 +345,8 @@ describe StripeMerchantAccountManager do
     it "emails the seller and records a failure note by default" do
       expect do
         described_class.update_bank_account(user, passphrase:)
-      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number")
 
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
     end
@@ -374,11 +375,50 @@ describe StripeMerchantAccountManager do
       result = nil
       expect do
         result = described_class.update_bank_account(user, passphrase:)
-      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, nil, "We couldn't find the bank for that BIC")
 
       expect(result).to eq(:invalid_bank_account)
       expect(ErrorNotifier).not_to have_received(:notify)
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+    end
+  end
+
+  describe "bank code rejected on format during a bank account sync" do
+    let(:zip_code) { "94107" }
+    let(:error_message) do
+      "Invalid routing number for PK. The number must contain both the bank code and the branch code, and should be in the format AAAAPKBB or AAAAPKBBXYZ."
+    end
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new(error_message, "bank_account[routing_number]", code: "routing_number_invalid")
+      )
+    end
+
+    it "tells the mailer this is a format rejection and passes Stripe's expected-format message" do
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message)
+
+      expect(result).to eq(:invalid_bank_account)
+    end
+
+    it "records the error details and marks the note so the retry loop knows the seller was told" do
+      described_class.update_bank_account(user, passphrase:)
+
+      note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+      expect(note.json_data["stripe_error_code"]).to eq("routing_number_invalid")
+      expect(note.json_data["stripe_error_message"]).to eq(error_message)
+      expect(note.json_data["seller_notified"]).to be(true)
     end
   end
 

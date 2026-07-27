@@ -25,6 +25,14 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.invalid_bank_account(User.last&.id)
   end
 
+  def invalid_bank_account_format_rejected
+    ContactingCreatorMailer.invalid_bank_account(
+      User.last&.id,
+      StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+      "Invalid routing number for PK. The number must contain both the bank code and the branch code, and should be in the format AAAAPKBB or AAAAPKBBXYZ."
+    )
+  end
+
   def chargeback_lost_no_refund_policy
     ContactingCreatorMailer.chargeback_lost_no_refund_policy(Purchase.last&.id)
   end

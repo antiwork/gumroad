@@ -37,6 +37,7 @@ const clientConfirmConfig: CheckoutPaymentConfig = {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
     presentment_amount_cents: null,
+    listed_currency_display: null,
     payment_method_types: ["card"],
     stripe_link_enabled: false,
     stripe_connect_account_id: null,
@@ -98,6 +99,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   surcharges: loadedSurcharges(0),
   availablePaymentMethods: [],
   paymentMethod: "card",
+  paymentElementType: "card",
   willSaveCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
@@ -120,9 +122,13 @@ const clientConfirmPaymentMethod: PurchasePaymentMethod = {
   mountCurrency: "usd",
 };
 
-// The held payment was tokenized while surcharges showed no tax (total 1000), so that is the
-// amount the buyer approved on the wallet sheet.
-const held = <PaymentMethod>(paymentMethod: PaymentMethod) => ({ paymentMethod, approvedAmount: 1_000 });
+// The held payment was tokenized while surcharges showed no tax (total 1000), so those are the
+// element amount and checkout total the buyer approved.
+const held = <PaymentMethod>(paymentMethod: PaymentMethod) => ({
+  paymentMethod,
+  approvedAmount: 1_000,
+  approvedTotal: 1_000,
+});
 
 describe("resolveHeldWalletPayment", () => {
   describe.each([
@@ -166,6 +172,44 @@ describe("resolveHeldWalletPayment", () => {
           held(paymentMethod),
         ),
       ).toEqual({ type: "abort" });
+    });
+  });
+
+  // The method-forced surface (UPI, iDEAL, ...) mounts the element with a fixed server-rendered
+  // presentment amount that cannot move when taxes are recalculated — so the tax-change guard
+  // must compare checkout's own total there, not the element amount (which trivially matches).
+  describe("method-forced client-confirm lane (fixed presentment amount)", () => {
+    const methodForcedConfig: CheckoutPaymentConfig = {
+      ...clientConfirmConfig,
+      elements_options: {
+        ...clientConfirmConfig.elements_options,
+        currency: "inr",
+        presentment_amount_cents: 89_000,
+        payment_method_types: ["upi"],
+      },
+    };
+    const methodForcedHeld = {
+      paymentMethod: clientConfirmPaymentMethod,
+      approvedAmount: 89_000,
+      approvedTotal: 1_000,
+    };
+
+    it("continues when the recalculated checkout total still matches the approved one", () => {
+      expect(
+        resolveHeldWalletPayment(
+          state({ checkoutPayment: methodForcedConfig, surcharges: loadedSurcharges(0) }),
+          methodForcedHeld,
+        ),
+      ).toEqual({ type: "continue", paymentMethod: clientConfirmPaymentMethod });
+    });
+
+    it("requires re-confirmation when the adopted address changes the tax even though the element amount is constant", () => {
+      expect(
+        resolveHeldWalletPayment(
+          state({ checkoutPayment: methodForcedConfig, surcharges: loadedSurcharges(180) }),
+          methodForcedHeld,
+        ),
+      ).toEqual({ type: "re-confirm" });
     });
   });
 });

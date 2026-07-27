@@ -288,7 +288,7 @@ describe ProductPresenter do
     let!(:custom_domain) { create(:custom_domain, :with_product, product:) }
     let(:product_files) do
       product_file = product.product_files.first
-      [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
+      [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, stream_only: false, width: nil, height: nil, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
     end
     let(:available_countries) { ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } } }
 
@@ -308,6 +308,13 @@ describe ProductPresenter do
           product: {
             name: "Product",
             description: "I am a product!",
+            # The editor snapshot props (gumroad-private#1379). `editor_revision`
+            # identifies the state this session loaded; `loaded_integrations` is the
+            # baseline that lets the client tell "the seller just disconnected this"
+            # from "it was never connected", which decides whether an irreversible
+            # disconnect is requested on save.
+            editor_revision: Product::EditorRevision.current(product),
+            loaded_integrations: Integration::ALL_NAMES.index_with { product.find_integration_by_name(_1).present? },
             custom_permalink: "custom",
             price_cents: 100,
             **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
@@ -396,6 +403,12 @@ describe ProductPresenter do
                   "zoom" => false,
                   "google_calendar" => false,
                 },
+                loaded_integrations: {
+                  "circle" => false,
+                  "discord" => false,
+                  "zoom" => false,
+                  "google_calendar" => false,
+                },
                 rich_content: [],
                 has_files: false,
                 sales_count_for_inventory: 0,
@@ -409,6 +422,12 @@ describe ProductPresenter do
                 price_difference_cents: 100,
                 max_purchase_count: 100,
                 integrations: {
+                  "circle" => false,
+                  "discord" => false,
+                  "zoom" => false,
+                  "google_calendar" => false,
+                },
+                loaded_integrations: {
                   "circle" => false,
                   "discord" => false,
                   "zoom" => false,
@@ -623,6 +642,8 @@ describe ProductPresenter do
             product: {
               name: "Membership",
               description: "Join now",
+              editor_revision: Product::EditorRevision.current(membership),
+              loaded_integrations: Integration::ALL_NAMES.index_with { membership.find_integration_by_name(_1).present? },
               custom_permalink: nil,
               price_cents: 0,
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
@@ -704,6 +725,12 @@ describe ProductPresenter do
                     "every_two_years" => { enabled: false },
                   },
                   integrations: {
+                    "circle" => false,
+                    "discord" => true,
+                    "zoom" => false,
+                    "google_calendar" => false,
+                  },
+                  loaded_integrations: {
                     "circle" => false,
                     "discord" => true,
                     "zoom" => false,
@@ -833,6 +860,12 @@ describe ProductPresenter do
                 "zoom" => false,
                 "google_calendar" => false,
               },
+              loaded_integrations: {
+                "circle" => false,
+                "discord" => false,
+                "zoom" => false,
+                "google_calendar" => false,
+              },
               rich_content: [],
               has_files: false,
               sales_count_for_inventory: 0,
@@ -847,6 +880,12 @@ describe ProductPresenter do
               duration_in_minutes: 60,
               max_purchase_count: nil,
               integrations: {
+                "circle" => false,
+                "discord" => false,
+                "zoom" => false,
+                "google_calendar" => false,
+              },
+              loaded_integrations: {
                 "circle" => false,
                 "discord" => false,
                 "zoom" => false,
@@ -890,6 +929,8 @@ describe ProductPresenter do
             product: {
               name: "Product",
               description: "Boring",
+              editor_revision: Product::EditorRevision.current(new_product),
+              loaded_integrations: Integration::ALL_NAMES.index_with { new_product.find_integration_by_name(_1).present? },
               custom_permalink: nil,
               price_cents: 100,
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
@@ -1172,7 +1213,7 @@ describe ProductPresenter do
     let(:presenter) { described_class.new(product: product) }
     let(:product_files) do
       product_file = product.product_files.first
-      [{ attached_product_name: product.name,  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, stream_only: false, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
+      [{ attached_product_name: product.name,  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, stream_only: false, width: nil, height: nil, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
     end
 
     it "returns existing files" do

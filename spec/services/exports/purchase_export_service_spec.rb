@@ -328,6 +328,9 @@ describe Exports::PurchaseExportService do
           { country: "IT", rate: 0.22, excluded: nil, expected_type: "VAT" },
           { country: "AU", rate: 0.10, excluded: nil, expected_type: "GST" },
           { country: "SG", rate: 0.07, excluded: nil, expected_type: "GST" },
+          { country: "IN", rate: 0.18, excluded: nil, expected_type: "GST" },
+          { country: "JP", rate: 0.10, excluded: nil, expected_type: "CT" },
+          { country: "MY", rate: 0.08, excluded: nil, expected_type: "Service tax" },
           { country: "US", rate: 0.085, excluded: true, expected_type: "Sales tax" },
           { country: "US", rate: 0.085, excluded: false, expected_type: "Sales tax" },
           { country: nil, rate: nil, excluded: true, expected_type: "Sales tax" },
@@ -405,6 +408,9 @@ describe Exports::PurchaseExportService do
 
       @purchase.update!(card_type: "ideal")
       expect(field_value(last_data_row, "Payment Type")).to eq("iDEAL")
+
+      @purchase.update!(card_type: "bancontact")
+      expect(field_value(last_data_row, "Payment Type")).to eq("Bancontact")
 
       @purchase.update!(card_type: "klarna")
       expect(field_value(last_data_row, "Payment Type")).to eq("Klarna")

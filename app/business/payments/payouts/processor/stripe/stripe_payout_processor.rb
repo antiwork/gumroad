@@ -660,7 +660,7 @@ class StripePayoutProcessor
       "active merchant account#{active_account ? " (now #{active_account.charge_processor_merchant_id})" : ""}. " \
       "The funds are stranded there and future payouts will fail the destination balance check " \
       "until they are moved to the active account."
-    payment.user.add_payout_note(content: "[PAYOUT][DRIFT] #{message}")
+    payment.user.add_payout_note(content: "[PAYOUT][DRIFT] #{message}", seller_visible: false)
     ErrorNotifier.notify(message, payment_id: payment.id, user_id: payment.user_id)
   end
 

@@ -635,3 +635,8 @@
   title: "Supporting your customers"
   description: "You answer questions about your own products. This covers your support email, product-specific support emails, resending emails and receipts, refunds, reviews, blocking difficult customers, and when to send someone to Gumroad support instead."
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 353
+  slug: "353-custom-product-landing-pages"
+  title: "Custom product landing pages"
+  description: "A custom landing page replaces one product's page with your own design, written as HTML by an AI agent. This covers what it replaces, how to build it, keeping the page buyable, what the page is allowed to do, and how to update or remove it."
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
