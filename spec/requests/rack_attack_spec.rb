@@ -601,6 +601,35 @@ describe "Rack::Attack throttle", type: :request do
         end
       end
 
+      # A rejected request must cost nobody anything. Otherwise one exhausted product turns
+      # into a lever against every other: put it in a cart next to a victim's product and
+      # repeat the (rejected) request, and each rejection still spends one of the victim's
+      # attempts until their free checkout is locked out too.
+      it "does not spend other products' budgets on a request it rejects" do
+        travel_to(Time.current) do
+          # Exhaust the attacker's own product.
+          6.times { |i| checkout(ip: "10.15.0.#{i + 1}", uid: "spend#{i}") }
+          expect(response.status).to eq(429)
+
+          # Now repeatedly submit it alongside the victim's product. Every one of these is
+          # rejected for the exhausted item, and must leave the victim's counter untouched.
+          20.times do |i|
+            checkout(ip: "10.16.0.#{i + 1}",
+                     permalinks: [product.unique_permalink, other_product.unique_permalink],
+                     uid: "drain#{i}")
+            expect(response.status).to eq(429), "mixed request #{i + 1} was not rejected"
+          end
+
+          expect(Rack::Attack.free_checkout_attempts(other_product.unique_permalink)).to eq(0)
+
+          # ...so the victim still has their whole hour left.
+          5.times do |i|
+            checkout(ip: "10.17.0.#{i + 1}", permalinks: [other_product.unique_permalink], uid: "victim#{i}")
+            expect(response.status).not_to eq(429), "victim request #{i + 1} unexpectedly throttled"
+          end
+        end
+      end
+
       # The cap is a budget shared across every source IP, so a stranger can spend it on a
       # seller's behalf. Scoping it to free line items is what keeps that from ever costing
       # someone a real sale: a paid checkout never consults this counter at all.

@@ -281,8 +281,25 @@ class Rack::Attack
     []
   end
 
-  # Charges every free product in the cart one attempt and returns the first one that has
-  # gone over its hourly budget, or nil when they are all still under it.
+  # The per-hour bucket a product's free-checkout attempts are counted in. Built the same
+  # way `Rack::Attack::Cache#count` builds its own keys — the window number the current
+  # time falls in, then the throttle name — so `free_checkout_attempts` below reads exactly
+  # the counter that `cache.count` writes.
+  def self.free_checkout_bucket(permalink, now: Time.now.to_i)
+    window = now / CHECKOUT_FREE_PRODUCT_PERIOD.to_i
+    "#{window}:#{CHECKOUT_FREE_PRODUCT_THROTTLE}:#{permalink}"
+  end
+
+  # How many free-checkout attempts this product has already spent in the current hour.
+  # Reads without incrementing, unlike `cache.count`. Redis stores counters as strings and
+  # returns nil for a bucket nothing has written yet, so both go through `to_i`.
+  def self.free_checkout_attempts(permalink)
+    cache.read(free_checkout_bucket(permalink)).to_i
+  end
+
+  # Names the product in this cart whose hourly free-checkout budget is already spent, or
+  # nil when every product in the cart still has room — in which case each of them is
+  # charged one attempt.
   #
   # Rack::Attack's own counting supports exactly one bucket per request (the value the
   # throttle block returns), which is why this counts by hand: a cart holds several
@@ -290,17 +307,31 @@ class Rack::Attack
   # product would hide the abused one. `Rack::Attack.cache.count` is the same
   # increment-and-read the gem uses internally, so these buckets expire with the window
   # like every other throttle's do.
+  #
+  # Note the ordering: read everything first, and charge nothing at all when the request is
+  # going to be rejected. Charging first and rejecting afterwards would have handed an
+  # attacker a way to spend OTHER products' budgets — put one already-exhausted product in
+  # a cart next to a victim's product and repeat the (rejected) request, and each rejection
+  # still cost the victim an attempt, so the victim's free checkout gets locked out too.
+  # A rejected request now costs nobody anything, which means one exhausted product cannot
+  # be used as a lever against any other.
+  #
+  # Two requests for the same product can still race between the read and the increment and
+  # both be allowed. That is fine for an abuse ceiling: the overshoot is bounded by how many
+  # requests are genuinely in flight at once, nowhere near the order of magnitude this cap
+  # exists to stop.
   def self.exceeded_free_checkout_permalink(req)
     permalinks = free_checkout_permalinks(req)
     return if permalinks.empty?
 
-    # Count every product BEFORE looking for one over budget — `find` alone would stop
-    # incrementing at the first offender and leave the rest of the cart uncharged.
-    counts = permalinks.map do |permalink|
-      [permalink, cache.count("#{CHECKOUT_FREE_PRODUCT_THROTTLE}:#{permalink}", CHECKOUT_FREE_PRODUCT_PERIOD)]
+    exceeded = permalinks.find { |permalink| free_checkout_attempts(permalink) >= CHECKOUT_FREE_PRODUCT_HOURLY_LIMIT }
+    return exceeded if exceeded
+
+    permalinks.each do |permalink|
+      cache.count("#{CHECKOUT_FREE_PRODUCT_THROTTLE}:#{permalink}", CHECKOUT_FREE_PRODUCT_PERIOD)
     end
 
-    counts.find { |_permalink, count| count > CHECKOUT_FREE_PRODUCT_HOURLY_LIMIT }&.first
+    nil
   end
 
   # `limit: 0` because the budget is already enforced by
