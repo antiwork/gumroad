@@ -466,7 +466,18 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       {purchase.license ? (
         <>
           <dt>License</dt>
-          <dd>{purchase.license.serial}</dd>
+          <dd>
+            {purchase.license.serial}{" "}
+            {/* A real Button rather than the bare <Copy /> icon used elsewhere in this file: the
+                icon-only form renders no focusable control, so the copy action is unreachable by
+                keyboard and invisible to a screen reader. This matches the license copy control
+                shipped on the sale detail page in #6418. */}
+            <CopyToClipboard text={purchase.license.serial} copyTooltip="Copy license key">
+              <Button outline aria-label="Copy license key">
+                <Copy className="size-5" />
+              </Button>
+            </CopyToClipboard>
+          </dd>
         </>
       ) : null}
 
