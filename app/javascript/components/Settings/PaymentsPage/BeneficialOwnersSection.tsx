@@ -1,6 +1,7 @@
 import * as React from "react";
 import typia from "typia";
 
+import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -1071,7 +1072,7 @@ const BeneficialOwnersSection = ({
                       </Fieldset>
                     );
                   })()}
-                  {formState.address_country === "BW" ? null : (
+                  {countryRequiresPostalCode(formState.address_country) ? (
                     <Fieldset>
                       <FieldsetTitle>
                         <Label htmlFor={`${uid}-address-postal-code`}>
@@ -1087,7 +1088,7 @@ const BeneficialOwnersSection = ({
                         onChange={(event) => updateForm({ address_postal_code: event.target.value })}
                       />
                     </Fieldset>
-                  )}
+                  ) : null}
                 </div>
 
                 <Fieldset>
