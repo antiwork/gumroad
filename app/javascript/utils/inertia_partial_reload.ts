@@ -117,17 +117,41 @@ export const isUnredirectedDownloadPagePollResponse = (response: unknown): boole
 
 // Dropping a response is invisible by design: the page keeps showing what it already has. That
 // makes an ongoing interception look like nothing more than progress that stopped updating, which
-// is very hard to diagnose from a buyer's bug report. So leave one console breadcrumb naming the
-// URL that came back non-Inertia.
+// is very hard to diagnose from a buyer's bug report. So leave one console breadcrumb saying which
+// page was affected.
 //
+// The breadcrumb must NOT contain the content URL itself. A buyer content page lives at
+// `/d/:token`, and that token is the credential: anyone holding it can read the purchased files.
+// The whole point of this warning is that a buyer copies it into a support ticket, so anything it
+// prints ends up in a shared inbox. So the path is reduced to its shape (`/d/[redacted]`) and the
+// query string and fragment are dropped entirely — enough to say "a content-page poll is being
+// intercepted", nothing that grants access. Support can still identify the buyer from the ticket.
+//
+// Every path segment after the first is redacted rather than only the token, because other pages
+// that could reach this code path (`/d/:token/:file_id`, and anything added later) put identifiers
+// in those positions too. Redacting by position means a new route cannot quietly start leaking.
+const redactUrlForLogging = (url: string): string => {
+  try {
+    const { pathname } = new URL(url, window.location.origin);
+    const segments = pathname.split("/").filter((segment) => segment !== "");
+    if (segments.length === 0) return "/";
+    return `/${[segments[0], ...segments.slice(1).map(() => "[redacted]")].join("/")}`;
+  } catch {
+    // Unparseable URL: say nothing about it rather than risk printing a raw token.
+    return "[redacted]";
+  }
+};
+
 // The poll runs every few seconds, and an interception usually persists for as long as whatever
 // caused it, so logging every drop would bury the console in identical lines. One warning per URL
 // per page load is enough to answer "is this page silently dropping polls?" — the URLs seen so far
-// live here and reset naturally when the page is reloaded.
+// live here and reset naturally when the page is reloaded. This set is keyed on the FULL url so two
+// genuinely different pages each get their own warning; it is only ever compared, never logged.
 const alreadyWarnedUrls = new Set<string>();
 
 /**
  * Warns once per URL that a background poll response was dropped. Safe to call on every drop.
+ * The warning names only the redacted path shape — never the content token or query string.
  *
  * `response` is the same axios response passed to `isUnredirectedDownloadPagePollResponse`.
  */
@@ -144,6 +168,6 @@ export const warnAboutDroppedPollResponse = (response: unknown): void => {
   alreadyWarnedUrls.add(requestedUrl);
   // eslint-disable-next-line no-console
   console.warn(
-    `Dropped a non-Inertia response to a background content-page poll of ${requestedUrl}. Something between the browser and Gumroad answered the poll with its own page (an edge challenge, a proxy error, a captive portal). The page keeps what it already loaded and the poll keeps retrying; further drops for this URL are not logged.`,
+    `Dropped a non-Inertia response to a background content-page poll of ${redactUrlForLogging(requestedUrl)} (path redacted on purpose — it is not safe to share). Something between the browser and Gumroad answered the poll with its own page (an edge challenge, a proxy error, a captive portal). The page keeps what it already loaded and the poll keeps retrying; further drops for this page are not logged.`,
   );
 };

@@ -156,8 +156,12 @@ describe("isUnredirectedDownloadPagePollResponse", () => {
 
 // A dropped response leaves no trace on the page — the buyer just sees values that stop updating.
 // The console breadcrumb is the only way to tell that apart from a page that is simply idle, so it
-// has to name the URL, and it has to stay quiet enough that a poll firing every few seconds does
-// not flood the console.
+// has to say which page was affected, and it has to stay quiet enough that a poll firing every few
+// seconds does not flood the console.
+//
+// It also has to be safe to paste into a support ticket, which is the whole reason it exists. The
+// content URL is `/d/:token`, and that token is the credential for the purchased files, so the
+// warning names only the shape of the path — never the token, and never the query string.
 describe("warnAboutDroppedPollResponse", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -168,14 +172,42 @@ describe("warnAboutDroppedPollResponse", () => {
     return () => warn.mock.calls.map((call) => String(call[0]));
   };
 
-  it("names the URL that was answered by something other than Gumroad", () => {
+  it("says which page was affected without printing the content token", () => {
     const logged = warnings();
     const url = `${CONTENT_PAGE_URL}-named`;
 
     warnAboutDroppedPollResponse(pollResponse({ url, responseURL: url }));
 
     expect(logged()).toHaveLength(1);
-    expect(logged()[0]).toContain(url);
+    expect(logged()[0]).toContain("/d/[redacted]");
+    expect(logged()[0]).not.toContain("abc123");
+    expect(logged()[0]).not.toContain(url);
+  });
+
+  // The token can arrive in any position a route puts an identifier in, and a poll URL carries
+  // query parameters of its own. None of it may reach the console.
+  it("keeps tokens and query parameters out of the warning", () => {
+    const logged = warnings();
+    const url = "https://gumroad.com/d/s3cr3t-token/file-9f8e7d?email=buyer%40example.com&purchase_id=t0ps3cr3t#anchor";
+
+    warnAboutDroppedPollResponse(pollResponse({ url, responseURL: url }));
+
+    expect(logged()).toHaveLength(1);
+    const warning = logged()[0] ?? "";
+    expect(warning).toContain("/d/[redacted]/[redacted]");
+    for (const secret of [
+      "s3cr3t-token",
+      "file-9f8e7d",
+      "buyer",
+      "example.com",
+      "purchase_id",
+      "t0ps3cr3t",
+      "anchor",
+    ]) {
+      expect(warning).not.toContain(secret);
+    }
+    expect(warning).not.toContain("?");
+    expect(warning).not.toContain("#");
   });
 
   it("warns only once for the same URL, however many polls are dropped", () => {
@@ -190,6 +222,8 @@ describe("warnAboutDroppedPollResponse", () => {
     expect(logged()).toHaveLength(1);
   });
 
+  // Dedupe is keyed on the full URL, which is never logged, so two genuinely different pages each
+  // get their own warning even though both are reported redacted.
   it("warns again for a different URL", () => {
     const logged = warnings();
     const first = `${CONTENT_PAGE_URL}-one`;
@@ -209,10 +243,23 @@ describe("warnAboutDroppedPollResponse", () => {
 
     warnAboutDroppedPollResponse({ config: { url }, request: {} });
     expect(logged()).toHaveLength(1);
-    expect(logged()[0]).toContain(url);
+    expect(logged()[0]).toContain("/d/[redacted]");
+    expect(logged()[0]).not.toContain(url);
 
     warnAboutDroppedPollResponse({ config: {}, request: {} });
     warnAboutDroppedPollResponse(undefined);
     expect(logged()).toHaveLength(1);
+  });
+
+  // A URL the browser cannot parse must not be echoed verbatim as a "best effort" — that is exactly
+  // where a raw token would slip through.
+  it("reports an unparseable URL as fully redacted", () => {
+    const logged = warnings();
+
+    warnAboutDroppedPollResponse({ config: { url: "http://[not-a-url/d/s3cr3t" }, request: {} });
+
+    expect(logged()).toHaveLength(1);
+    expect(logged()[0]).toContain("[redacted]");
+    expect(logged()[0]).not.toContain("s3cr3t");
   });
 });
