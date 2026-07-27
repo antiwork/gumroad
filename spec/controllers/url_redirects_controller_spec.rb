@@ -2373,6 +2373,77 @@ describe UrlRedirectsController, inertia: true do
         expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
       end
     end
+
+    # The content page's polls are the only thing that re-checks access while the buyer sits on
+    # the page — the player's position POSTs check nothing, and its signed video URLs stay valid
+    # for hours. The page keeps a slower poll running during playback for exactly this reason,
+    # so each way access can end has to actually move the buyer off the page.
+    describe "access checks on a polling request" do
+      let(:product) { create(:product) }
+      let(:purchase) { create(:purchase, link: product) }
+      let(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+      def poll_for_media_locations
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+        get :download_page, params: { id: url_redirect.token }
+      end
+
+      # A refund or chargeback is the one termination the controller answers with a 404 rather
+      # than a redirect. The page deliberately drops a non-Inertia response that comes back from
+      # the URL it polled (that is what an edge challenge looks like), so a 404 here would be
+      # swallowed and access would never actually end. Polls get the expired page instead.
+      it "redirects a poll to the expired page when the purchase was refunded" do
+        purchase.update!(stripe_refunded: true)
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "redirects a poll to the expired page after a chargeback" do
+        purchase.update!(chargeback_date: Time.current)
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "still 404s a refunded purchase on an ordinary page load" do
+        purchase.update!(stripe_refunded: true)
+
+        # Controller specs let the routing error escape rather than rendering the 404 page.
+        expect { get :download_page, params: { id: url_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+      end
+
+      it "redirects a poll to the expired page when access was revoked" do
+        purchase.update!(is_access_revoked: true)
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
+      it "redirects a poll to the rental-expired page when the rental ran out" do
+        purchase.update!(is_rental: true)
+        url_redirect.update!(is_rental: true, rental_first_viewed_at: 100.days.ago)
+        ExpireRentalPurchasesWorker.new.perform
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_rental_expired_page_path(url_redirect.token))
+      end
+
+      it "redirects a poll to the membership-inactive page when the membership lapsed" do
+        allow_any_instance_of(Subscription).to receive(:grant_access_to_product?).and_return(false)
+        subscription = create(:subscription, link: product)
+        purchase.update!(subscription:, is_original_subscription_purchase: true)
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_membership_inactive_page_path(url_redirect.token))
+      end
+    end
   end
 
   describe "GET 'media_urls" do

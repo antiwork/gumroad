@@ -428,7 +428,21 @@ class UrlRedirectsController < ApplicationController
 
       purchase = @url_redirect.purchase
 
-      return e404 if purchase && (purchase.stripe_refunded || (purchase.chargeback_date.present? && !purchase.chargeback_reversed))
+      if purchase && (purchase.stripe_refunded || (purchase.chargeback_date.present? && !purchase.chargeback_reversed))
+        # Every other way access ends here (rental expiry, revoked access, an inactive
+        # membership, a mismatched purchaser) answers with a redirect, and the buyer content
+        # page's background polls follow redirects. A refund or chargeback answered with a 404
+        # is the one case that does not move the buyer anywhere: the page deliberately drops a
+        # non-Inertia response that comes back from the URL it polled, because that is what an
+        # edge challenge or proxy error page looks like and reloading would just repeat it
+        # (see app/javascript/utils/inertia_partial_reload.ts). Sending a poll to the expired
+        # page instead keeps the refund/chargeback check effective while the buyer sits on the
+        # page. Ordinary page loads still get the 404 they always did.
+        return redirect_to url_redirect_expired_page_path(@url_redirect.token) if download_page_polling_request?
+
+        return e404
+      end
+
       return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
 
       return redirect_to url_redirect_rental_expired_page_path(@url_redirect.token) if @url_redirect.rental_expired?

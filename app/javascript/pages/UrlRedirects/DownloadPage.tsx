@@ -57,6 +57,16 @@ function DownloadPage() {
 
   const audioDurationsPoll = usePoll(5_000, { only: ["audio_durations"] }, { autoStart: false });
   const mediaLocationsPoll = usePoll(10_000, { only: ["latest_media_locations"] }, { autoStart: false });
+  // While a video plays the player already reports the buyer's position, so the 10-second read
+  // above is redundant and is stopped. It is not only a read, though: every one of these
+  // requests re-runs the server's access check, which is what notices a refund, a chargeback,
+  // an expired rental, revoked access, or a membership that lapsed mid-session and moves the
+  // buyer off the page. The player's own position POSTs do no such check and its video URLs
+  // stay valid for hours, so stopping the poll outright would leave a two-hour session with no
+  // authorization check at all. This slower poll takes over during playback purely as that
+  // heartbeat: same request, one sixth as often, so access still ends within a minute of being
+  // taken away without putting the long stream of requests back.
+  const mediaLocationsHeartbeatPoll = usePoll(60_000, { only: ["latest_media_locations"] }, { autoStart: false });
 
   React.useEffect(() => {
     if (hasUnprocessedAudio) audioDurationsPoll.start();
@@ -64,8 +74,19 @@ function DownloadPage() {
   }, [hasUnprocessedAudio]);
 
   React.useEffect(() => {
-    if (hasMediaFiles && !isMediaPlaying) mediaLocationsPoll.start();
-    else mediaLocationsPoll.stop();
+    if (!hasMediaFiles) {
+      mediaLocationsPoll.stop();
+      mediaLocationsHeartbeatPoll.stop();
+      return;
+    }
+
+    if (isMediaPlaying) {
+      mediaLocationsPoll.stop();
+      mediaLocationsHeartbeatPoll.start();
+    } else {
+      mediaLocationsHeartbeatPoll.stop();
+      mediaLocationsPoll.start();
+    }
   }, [hasMediaFiles, isMediaPlaying]);
 
   return (

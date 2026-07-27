@@ -64,9 +64,13 @@ const pageProps = () => ({
   dropbox_api_key: null,
 });
 
-// The page's two polls, identified by their interval rather than by call order: keying on
+// The page's polls, identified by their interval rather than by call order: keying on
 // position would silently start asserting against the wrong poll if a third one were ever added.
 const MEDIA_LOCATIONS_POLL_INTERVAL = 10_000;
+// The slower poll that takes over during playback. It exists to keep the server's access check
+// running (refund, chargeback, rental expiry, revoked access, lapsed membership) while the
+// 10-second read is stopped.
+const MEDIA_LOCATIONS_HEARTBEAT_INTERVAL = 60_000;
 
 type PollFake = { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> };
 
@@ -97,6 +101,7 @@ describe("DownloadPage media position polling", () => {
   });
 
   const mediaLocationsPoll = () => pollsByInterval.get(MEDIA_LOCATIONS_POLL_INTERVAL);
+  const heartbeatPoll = () => pollsByInterval.get(MEDIA_LOCATIONS_HEARTBEAT_INTERVAL);
 
   // Guards the lookup above: if the page's poll interval changes, every assertion below would
   // silently be reading an absent poll and passing on optional chaining.
@@ -104,12 +109,14 @@ describe("DownloadPage media position polling", () => {
     render(<DownloadPage />);
 
     expect(mediaLocationsPoll()).toBeDefined();
+    expect(heartbeatPoll()).toBeDefined();
   });
 
   it("polls for media positions while nothing is playing", () => {
     render(<DownloadPage />);
 
     expect(mediaLocationsPoll()?.start).toHaveBeenCalled();
+    expect(heartbeatPoll()?.start).not.toHaveBeenCalled();
   });
 
   it("stops polling for media positions while a video is playing, and resumes when it stops", () => {
@@ -127,6 +134,46 @@ describe("DownloadPage media position polling", () => {
       dispatchMediaPlaybackState("jwplayer-file-1", false);
     });
     expect(mediaLocationsPoll()?.start).toHaveBeenCalled();
+  });
+
+  // The same request re-runs the server's access check, so it can't simply stop for the whole
+  // of a long playback session: a refund, chargeback, rental expiry, revoked access, or a
+  // membership that lapses mid-session would otherwise go unnoticed until the buyer navigated,
+  // while the player's position POSTs check nothing and its video URLs stay valid for hours.
+  it("keeps an access-check heartbeat running while a video is playing", () => {
+    render(<DownloadPage />);
+    heartbeatPoll()?.start.mockClear();
+    heartbeatPoll()?.stop.mockClear();
+
+    act(() => {
+      dispatchMediaPlaybackState("jwplayer-file-1", true);
+    });
+    expect(heartbeatPoll()?.start).toHaveBeenCalled();
+
+    heartbeatPoll()?.start.mockClear();
+
+    act(() => {
+      dispatchMediaPlaybackState("jwplayer-file-1", false);
+    });
+    // Once the full-rate poll is back it does the access check itself, so the heartbeat stops
+    // rather than doubling up.
+    expect(heartbeatPoll()?.stop).toHaveBeenCalled();
+    expect(heartbeatPoll()?.start).not.toHaveBeenCalled();
+  });
+
+  // The heartbeat is only there to cover the paused full-rate poll. With no media files there
+  // is no poll to pause, so neither should run.
+  it("runs neither poll when the page has no media files", async () => {
+    const propsWithoutFiles = pageProps();
+    propsWithoutFiles.content.content_items = [];
+    mocks.usePage.mockReturnValue({ props: propsWithoutFiles });
+    pollsByInterval.clear();
+    DownloadPage = (await import("$app/pages/UrlRedirects/DownloadPage")).default;
+
+    render(<DownloadPage />);
+
+    expect(mediaLocationsPoll()?.start).not.toHaveBeenCalled();
+    expect(heartbeatPoll()?.start).not.toHaveBeenCalled();
   });
 
   // A content page can embed several videos. One of them stopping must not resume the poll
