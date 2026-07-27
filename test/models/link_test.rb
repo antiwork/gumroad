@@ -3394,11 +3394,50 @@ class LinkTest < ActiveSupport::TestCase
 
   # --- #require_captcha? ------------------------------------------------------
 
-  test "require_captcha? is false for sellers older than 6 months, true for younger" do
+  test "require_captcha? keys on seller age for compliant sellers" do
+    # Age is only half the rule now — an established seller must ALSO be compliant to skip
+    # the check, so these two must be explicitly compliant to isolate the age dimension.
     older = create_user(created_at: 6.months.ago - 1.day)
+    older.update!(user_risk_state: "compliant")
     assert_equal false, create_product(user: older).require_captcha?
+
     younger = create_user(created_at: 6.months.ago + 1.day)
+    younger.update!(user_risk_state: "compliant")
     assert_equal true, create_product(user: younger).require_captcha?
+  end
+
+  # More #require_captcha? coverage — the risk-state dimension.
+  #
+  # Free checkouts are the cheapest thing on Gumroad to automate: no card to decline, no
+  # money at risk, but every completed checkout still sends a receipt from our
+  # transactional mailer. gumroad-private#1397: a seller whose account was over four years
+  # old scripted 150,529 free checkouts and mailed 148,535 scraped addresses, sailing past
+  # the age-only check purely by being old. Risk state, not age, was what distinguished
+  # them.
+
+  test "require_captcha? is true for a young seller even when compliant" do
+    seller = create_user(created_at: 1.day.ago)
+    seller.update!(user_risk_state: "compliant")
+
+    assert create_product(user: seller).require_captcha?
+  end
+
+  test "require_captcha? is false for an established compliant seller" do
+    seller = create_user(created_at: (Link::REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN + 1.month).ago)
+    seller.update!(user_risk_state: "compliant")
+
+    assert_not create_product(user: seller).require_captcha?
+  end
+
+  test "require_captcha? is true for an established seller who is not compliant" do
+    # The gumroad-private#1397 shape: old enough to clear the age check, but flagged.
+    %w[not_reviewed flagged_for_tos_violation flagged_for_fraud on_probation].each do |state|
+      seller = create_user(created_at: (Link::REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN + 1.month).ago)
+      seller.update!(user_risk_state: state)
+
+      assert create_product(user: seller).require_captcha?,
+             "expected require_captcha? for an established seller in state #{state}"
+    end
   end
 
   # --- #toggle_community_chat! -----------------------------------------------
@@ -3872,4 +3911,5 @@ class LinkTest < ActiveSupport::TestCase
       ].each { |m| product.define_singleton_method(m) { |*| true } }
       product.define_singleton_method(:auto_transcode_videos?) { false }
     end
+
 end
