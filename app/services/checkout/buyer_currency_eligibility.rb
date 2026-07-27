@@ -199,7 +199,7 @@ class Checkout::BuyerCurrencyEligibility
   # a currency (card/Link) when they are picked on a Payment Element that was MOUNTED in
   # a forced currency: the ConfirmationToken inherits the element's currency, so the
   # intent must be created in it no matter which method the buyer chose. The presenter
-  # only mounts a forced-currency element for a product priced in that currency
+  # only mounts a forced-currency element for carts priced uniformly in that currency
   # (method_forced_shape?), so these checkouts land in the direct-listed-amount case.
   #
   # This mode intentionally does not look at the buyer's GeoIP location or at the
@@ -232,22 +232,24 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:unsupported_settlement_currency) unless self.class.usd_holding_merchant_account?(merchant_account)
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
-    return fallback(:multi_item_checkout) unless purchases.one?
+    return fallback(:no_purchases) if purchases.empty?
 
-    purchase = purchases.first
-    return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
+    product_currencies = []
+    purchases.each do |purchase|
+      return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
 
-    product_currency = purchase.link.price_currency_type.to_s.downcase
-    # Two supported pricing cases:
-    #   1. Product priced in the forced currency itself (e.g. an EUR-priced
-    #      product paid with iDEAL) — charge the listed amount directly, no FX
-    #      quote needed.
-    #   2. Product priced in USD — the charge path converts through an FX quote.
-    # Any other product currency cannot be presented in the forced currency.
-    priced_in_forced_currency = product_currency == forced_currency
-    unless priced_in_forced_currency || product_currency == Currency::USD
-      return fallback(:unsupported_product_currency)
+      product_currency = purchase.link.price_currency_type.to_s.downcase
+      product_currencies << product_currency
+      # Multi-line forced-currency presentment is currently limited to the direct-listed-amount
+      # case, where every line is already priced in the forced currency and no FX quote is needed.
+      # USD-priced single-line checkouts keep the existing quote path; mixed direct/quoted carts need
+      # the per-line quote basis tracked in gumroad-private#1298 before they can be safe.
+      unless product_currency == forced_currency || (purchases.one? && product_currency == Currency::USD)
+        return fallback(:unsupported_product_currency)
+      end
     end
+
+    priced_in_forced_currency = product_currencies.all? { _1 == forced_currency }
 
     # The USD-priced case converts through a Stripe FX quote (forced currency -> USD),
     # which is exactly the call a fresh mismatch marker predicts Stripe will reject —

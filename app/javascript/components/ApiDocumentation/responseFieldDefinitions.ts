@@ -298,7 +298,8 @@ export const SALE_FIELDS: FieldDefinition[] = [
   {
     name: "tax_label",
     type: "string",
-    description: 'Tax type label, such as "VAT", "GST", or "Sales tax"',
+    description:
+      'Tax type label naming the tax the way the buyer\'s country does, such as "VAT", "GST", "CT", "Service tax", or "Sales tax"',
     condition: "omitted when no tax label applies",
   },
   {
