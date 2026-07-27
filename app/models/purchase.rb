@@ -2940,8 +2940,28 @@ class Purchase < ApplicationRecord
                                            .not_fully_refunded
                                            .not_chargedback_or_chargedback_reversed
                                            .pluck(:id)
-    emailed_seller_posts = Installment.seller_with_sent_emails_for_purchases(purchase_ids + purchase_ids_with_same_email)
-                                      .select("installments.*, email_infos.sent_at, email_infos.delivered_at, email_infos.opened_at")
+    # Same slim-then-reload split as the profile-only seller posts below, for
+    # the same reason. This scope joins `email_infos` (one row per email the
+    # buyer was sent) and MySQL discards roughly 95% of what the join touches
+    # afterwards, on the `installment_type` and flag predicates — so
+    # `installments.*` drags each post's LONGTEXT `message` body through the
+    # join just for the Ruby-side buyer filters to read `json_data`. On
+    # production this shape was 27% of the time in the slowest mobile library
+    # search requests (gumroad-private#1412). Run the filter pass on slim rows,
+    # then reload full rows for the few posts the buyer can actually see.
+    emailed_seller_posts_scope = Installment.seller_with_sent_emails_for_purchases(purchase_ids + purchase_ids_with_same_email)
+    slim_emailed_seller_posts = emailed_seller_posts_scope
+                                  .select(:id, :seller_id, :installment_type, :link_id, :base_variant_id, :flags, :published_at, :json_data)
+    candidate_emailed_seller_post_ids = check_filters.call(slim_emailed_seller_posts).map(&:id).uniq
+    # Reload through the same scope (join included, so the `email_infos`
+    # timestamps the final sort reads come back with the row) restricted to the
+    # candidates. A post mutated between the two queries — unpublished, flipped
+    # to profile-only — drops out here rather than reaching the sort with a nil
+    # published_at, matching the profile-only path's behavior.
+    emailed_seller_posts = candidate_emailed_seller_post_ids.any? ?
+      emailed_seller_posts_scope.where(installments: { id: candidate_emailed_seller_post_ids })
+                                .select("installments.*, email_infos.sent_at, email_infos.delivered_at, email_infos.opened_at").to_a :
+      []
     # `profile_only_for_sellers` matches every profile-only seller post the
     # seller has ever published — for prolific sellers that's thousands of
     # rows, and `installments.*` drags in each post's LONGTEXT `message` body
