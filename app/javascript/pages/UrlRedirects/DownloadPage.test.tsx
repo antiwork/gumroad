@@ -3,6 +3,15 @@ import { act, cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// The page is imported statically rather than with `await import(...)` inside beforeEach. It
+// pulls in typia, React and the whole Download component tree, and transforming that graph took
+// longer than vitest's 10s default hookTimeout on a loaded CI runner, so every test in the file
+// failed with "Hook timed out in 10000ms" even though nothing was actually wrong. A static
+// import is charged to the file's own import phase, which has no such deadline. The vi.mock
+// calls below still apply, because vitest hoists them above every import. Re-importing per test
+// was never needed anyway: the module registry caches it, and the component reads usePage() at
+// render time, so swapping the mocked props between tests is enough.
+import DownloadPage from "$app/pages/UrlRedirects/DownloadPage";
 import { dispatchMediaPlaybackState } from "$app/utils/media_playback";
 
 const mocks = vi.hoisted(() => ({
@@ -75,12 +84,11 @@ const MEDIA_LOCATIONS_HEARTBEAT_INTERVAL = 60_000;
 type PollFake = { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> };
 
 describe("DownloadPage media position polling", () => {
-  let DownloadPage: React.ComponentType;
   // One persistent fake per interval. The same object has to come back on every render, or
   // calls made during earlier renders would be lost.
   const pollsByInterval = new Map<number, PollFake>();
 
-  beforeEach(async () => {
+  beforeEach(() => {
     pollsByInterval.clear();
     mocks.usePoll.mockImplementation((interval: number) => {
       const existing = pollsByInterval.get(interval);
@@ -92,7 +100,6 @@ describe("DownloadPage media position polling", () => {
     // typia.assert runs for real against this fixture, so it doubles as a check that the
     // fixture still satisfies the page's prop contract.
     mocks.usePage.mockReturnValue({ props: pageProps() });
-    DownloadPage = (await import("$app/pages/UrlRedirects/DownloadPage")).default;
   });
 
   afterEach(() => {
@@ -163,12 +170,11 @@ describe("DownloadPage media position polling", () => {
 
   // The heartbeat is only there to cover the paused full-rate poll. With no media files there
   // is no poll to pause, so neither should run.
-  it("runs neither poll when the page has no media files", async () => {
+  it("runs neither poll when the page has no media files", () => {
     const propsWithoutFiles = pageProps();
     propsWithoutFiles.content.content_items = [];
     mocks.usePage.mockReturnValue({ props: propsWithoutFiles });
     pollsByInterval.clear();
-    DownloadPage = (await import("$app/pages/UrlRedirects/DownloadPage")).default;
 
     render(<DownloadPage />);
 
