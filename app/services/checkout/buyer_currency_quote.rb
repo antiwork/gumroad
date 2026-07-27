@@ -43,8 +43,11 @@ class Checkout::BuyerCurrencyQuote
     # whatever currency the seller priced the product in. The browser converts before it
     # posts — getProducts in pages/Checkout/Show.tsx sends
     # `price: convertToUSD(item, price)` — and Purchase#set_price_and_rate independently
-    # arrives at the same USD figure for total_transaction_cents, which is what charge-time
-    # verification compares this token against. Do NOT convert by price_currency_type here:
+    # derives the USD figure for total_transaction_cents the same way, which is what
+    # charge-time verification compares this token against. (The two figures agree only
+    # while the stored rate still equals the exchange_rate baked into the page props at
+    # render; the hourly rate refresh can move the stored rate under an open checkout,
+    # in which case verification rejects the token.) Do NOT convert by price_currency_type here:
     # that double-converts (a €10.00 product posts 1233 USD cents, converting again gives
     # 1520) and makes every non-USD-priced checkout fail quote verification. Covered by the
     # units-invariant example in the spec.
