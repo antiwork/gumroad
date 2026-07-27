@@ -2,7 +2,6 @@ import ClipboardJS from "clipboard";
 import * as React from "react";
 
 import { useRefToLatest } from "$app/components/useRefToLatest";
-import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip, Position as TooltipPosition } from "$app/components/WithTooltip";
 
 type CopyToClipboardProps = {
@@ -23,21 +22,30 @@ export const CopyToClipboard = ({
   const ref = React.useRef<HTMLElement | null>(null);
   const latestTextToCopyRef = useRefToLatest(text);
 
-  useRunOnce(() => {
+  // Deliberately a plain useEffect rather than useRunOnce: this sets up a ClipboardJS instance and
+  // a DOM listener that both have to be torn down when the component unmounts, and useRunOnce
+  // ignores a returned cleanup function. The effect body is still only ever run once per mount
+  // because it depends on nothing that changes — the copied text is read through a ref so that
+  // updating it does not rebuild the ClipboardJS instance.
+  React.useEffect(() => {
     const el = ref.current;
+    if (!el) return;
 
-    if (el) {
-      const clip = new ClipboardJS(el, { text: () => latestTextToCopyRef.current });
-      clip.on("success", (event) => {
-        setStatus("copied");
+    const clip = new ClipboardJS(el, { text: () => latestTextToCopyRef.current });
+    clip.on("success", (event) => {
+      setStatus("copied");
 
-        event.clearSelection();
-      });
+      event.clearSelection();
+    });
 
-      el.addEventListener("mouseleave", () => setStatus("initial"));
-      return () => clip.destroy();
-    }
-  });
+    const resetStatus = () => setStatus("initial");
+    el.addEventListener("mouseleave", resetStatus);
+
+    return () => {
+      clip.destroy();
+      el.removeEventListener("mouseleave", resetStatus);
+    };
+  }, []);
 
   return (
     <WithTooltip tip={status === "initial" ? copyTooltip : copiedTooltip} position={tooltipPosition}>

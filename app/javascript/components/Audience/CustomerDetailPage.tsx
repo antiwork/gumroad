@@ -54,6 +54,7 @@ import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
+import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -1539,6 +1540,16 @@ const LicenseSection = ({
           <pre className="grow break-all whitespace-pre-wrap">
             <code>{license.key}</code>
           </pre>
+          {/* Creators pass license keys to buyers manually as part of routine support, so make the
+              key copyable in one tap instead of requiring them to select the text — which is
+              especially awkward on a phone. */}
+          <span className="ml-auto">
+            <CopyToClipboard text={license.key} copyTooltip="Copy license key" tooltipPosition="left">
+              <Button outline aria-label="Copy license key">
+                Copy
+              </Button>
+            </CopyToClipboard>
+          </span>
         </CardContent>
         <CardContent>
           <h5 className="grow font-bold">Uses</h5>
