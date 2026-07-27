@@ -398,7 +398,7 @@ describe User::Stats, :vcr do
       # drops it out of the `paid` scope, so the sum adds back the part of a partially
       # refunded credit the affiliate still keeps. These cover the three shapes that add-back
       # has to distinguish: an untouched credit, one reversed in part, and one clawed back in
-      # full (which must contribute nothing — gumroad-private#1432).
+      # full (which must contribute nothing at all).
       before do
         # The purchase factory reaches for MerchantAccount.gumroad, which is only seeded by
         # the specs that need it, and without it the purchase fails card validation.
