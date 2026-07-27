@@ -1,15 +1,27 @@
 # frozen_string_literal: true
 
 class SavePublicFilesService
-  attr_reader :resource, :files_params, :content
+  attr_reader :resource, :files_params, :content, :contract
 
-  def initialize(resource:, files_params:, content:)
+  def initialize(resource:, files_params:, content:, contract: nil)
     @resource = resource
     @files_params = files_params.presence || []
     @content = content.to_s
+    @contract = contract
   end
 
   def process
+    # Product::SaveContract, Rule 1: a request that did not submit
+    # `public_files` and did not explicitly ask for a deletion must leave this
+    # collection completely alone. That means not just skipping the
+    # schedule-for-deletion pass — it means not touching the description at
+    # all, because clean_invalid_file_embeds runs against valid_file_ids and
+    # any pass through it can strip <public-file-embed> nodes. The 10-day
+    # deletion delay protects the file rows, but the description damage was
+    # always immediate; returning the content byte-identical is the only safe
+    # answer here.
+    return content if contract_enforced? && no_public_files_intent?
+
     ActiveRecord::Base.transaction do
       persisted_files = resource.alive_public_files
       doc = Nokogiri::HTML.fragment(content)
@@ -44,8 +56,38 @@ class SavePublicFilesService
 
     def schedule_unused_files_for_deletion(persisted_files, file_ids_in_content)
       persisted_files
-        .reject { _1.scheduled_for_deletion? || _1.public_id.in?(file_ids_in_content) }
+        .reject(&:scheduled_for_deletion?)
+        .select { deletable?(_1, file_ids_in_content) }
         .each(&:schedule_for_deletion!)
+    end
+
+    # With the contract enforced, "not mentioned in the payload" is no longer
+    # a deletion signal (Rule 1) — only an explicit deleted_ids entry or an
+    # explicit clear-all may schedule a file (Rule 2). Without the contract
+    # (or with the kill switch off) this is the historical diff-based rule,
+    # byte-identical to the previous behaviour.
+    def deletable?(file, file_ids_in_content)
+      if contract_enforced?
+        return true if contract.cleared?(:public_files)
+
+        file.public_id.in?(contract.deleted_ids(:public_files))
+      else
+        !file.public_id.in?(file_ids_in_content)
+      end
+    end
+
+    def contract_enforced?
+      contract.present? && contract.enforced?
+    end
+
+    # True when this request expressed no intent about public_files at all:
+    # the collection wasn't submitted (absent and [] read the same, Rule 1)
+    # and no explicit deletion targets it. In that case #process must be a
+    # no-op for both the rows and the description.
+    def no_public_files_intent?
+      !contract.submitted?(:public_files) &&
+        contract.deleted_ids(:public_files).empty? &&
+        !contract.cleared?(:public_files)
     end
 
     def clean_invalid_file_embeds(doc, persisted_files)

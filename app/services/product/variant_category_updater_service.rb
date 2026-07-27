@@ -3,7 +3,7 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
-  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context
+  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context, :contract
   attr_accessor :variant_category
 
   delegate :price_currency_type,
@@ -39,7 +39,10 @@ class Product::VariantCategoryUpdaterService
   # rather than read from a global, so the services stay usable outside a
   # request (backfills, console, tests). Defaults to empty: a caller that
   # doesn't know the actor still deletes normally, it just records less.
-  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {})
+  # +contract+ - optional Product::SaveContract (gumroad-private#1379). Only the
+  # product editor's save path supplies one; nil means the legacy diff-derived
+  # behaviour, so every other caller is unchanged by construction.
+  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {}, contract: nil)
     @product = product
     @category_params = category_params
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
@@ -50,6 +53,7 @@ class Product::VariantCategoryUpdaterService
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
     @deletion_audit_context = deletion_audit_context || {}
+    @contract = contract
   end
 
   # Blocks deleting variants the seller has invested in — ones that carry
@@ -176,7 +180,13 @@ class Product::VariantCategoryUpdaterService
         id_mappings[:variants][option[:client_id]] = variant.external_id if option[:id].blank? && option[:client_id].present?
       end
 
-      variants_to_delete = existing_variants - keep_variants
+      # Product::SaveContract, Rule 2. `existing - keep` infers deletion from
+      # what the payload failed to mention; the contract replaces that with what
+      # the client explicitly asked to remove. Under the contract, a version
+      # missing from the payload is "no statement", not "delete me" — which is
+      # what a stale tab, a truncated body, or a dropped malformed field
+      # produces.
+      variants_to_delete = contract_scoped_variant_deletions(existing_variants - keep_variants, existing_variants)
       self.class.ensure_deletion_intent!(product:, variants: variants_to_delete.select(&:alive?), confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
       record_deletion_audit(
         route: ProductVariantDeletionAudit::EDITOR_VARIANTS_DIFFED,
@@ -189,6 +199,23 @@ class Product::VariantCategoryUpdaterService
   end
 
   private
+    # Narrows a diff-derived deletion set to what the contract authorises.
+    # Returns the diff untouched when no contract is supplied or the flag is
+    # off, so non-editor callers and the disabled path are byte-identical.
+    #
+    # A clear-all deletes from the PRE-SAVE set, not the diff, so it means
+    # "everything that existed when the editor loaded" and cannot sweep up a
+    # variant this same request just created.
+    def contract_scoped_variant_deletions(diff_deletions, existing_variants)
+      return diff_deletions unless contract&.enforced?
+      return existing_variants if contract.cleared?(:variants)
+
+      ids = contract.deleted_ids(:variants)
+      return [] if ids.empty?
+
+      existing_variants.select { ids.include?(_1.external_id) }
+    end
+
     # Records a successful deletion for the audit trail. Never raises: see
     # ProductVariantDeletionAudit.
     def record_deletion_audit(route:, deleted_variant_external_ids: [], deleted_variant_category_external_ids: [])

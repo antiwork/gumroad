@@ -411,6 +411,16 @@ class LinksController < ApplicationController
         # describe the committed pre-save state.
         deletion_guard_diagnostics
 
+        # Build the save contract NOW, before anything is written
+        # (gumroad-private#1379). Its freshness check compares the client's
+        # revision token against the product's current fingerprint, and the
+        # save mutates rows as it proceeds — creating a content page changes
+        # that fingerprint. Constructing it here, immediately after the lock and
+        # reload, means the question it answers is "was the client editing the
+        # state that was committed when this save started?", which is the only
+        # version of the question that has a stable answer.
+        product_save_contract
+
         # Reject a save built from a stale snapshot BEFORE any mutation: a
         # payload that echoes page/variant snapshot timestamps older than the
         # stored rows would silently overwrite content another session saved in
@@ -502,7 +512,7 @@ class LinksController < ApplicationController
         product_permitted_params[:variants].each { rich_content_params.push(*_1[:rich_content]) } if product_permitted_params[:variants].present?
         rich_content_params = rich_content_params.flat_map { _1[:description] = _1.dig(:description, :content) }
         rich_contents_to_keep = []
-        SaveFilesService.perform(@product, product_permitted_params, rich_content_params)
+        SaveFilesService.perform(@product, product_permitted_params, rich_content_params, contract: product_save_contract)
         existing_rich_contents = @product.alive_rich_contents.to_a
         rich_content.each.with_index do |product_rich_content, index|
           rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
@@ -516,6 +526,16 @@ class LinksController < ApplicationController
         end
         product_rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
           .reject { preserved_rich_content_ids.include?(_1.external_id) }
+        # Product::SaveContract, Rules 1 and 2. `existing - kept` is exactly the
+        # omission-inference this contract exists to remove: a payload that
+        # doesn't mention a page — including one strong parameters dropped
+        # because it was malformed — currently reads as "delete that page".
+        # Under the contract the diff stops being deletion authority: pages go
+        # only when the client names them, or asks to clear the collection.
+        product_rich_contents_to_delete = contract_scoped_rich_content_deletions(
+          product_rich_contents_to_delete,
+          existing_rich_contents
+        )
         Product::RichContentDeletionGuard.ensure_intent!(
           product: @product,
           rich_contents_to_delete: product_rich_contents_to_delete,
@@ -526,7 +546,7 @@ class LinksController < ApplicationController
         )
         product_rich_contents_to_delete.each(&:mark_deleted!)
 
-        Product::SaveIntegrationsService.perform(@product, product_permitted_params[:integrations])
+        Product::SaveIntegrationsService.perform(@product, product_permitted_params[:integrations], contract: product_save_contract)
         update_variants
         update_removed_file_attributes
         update_custom_domain
@@ -541,7 +561,7 @@ class LinksController < ApplicationController
         unless @product.is_licensed
           @product.is_multiseat_license = false
         end
-        @product.description = SavePublicFilesService.new(resource: @product, files_params: product_permitted_params[:public_files], content: @product.description).process
+        @product.description = SavePublicFilesService.new(resource: @product, files_params: product_permitted_params[:public_files], content: @product.description, contract: product_save_contract).process
         @product.save!
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
         @product.generate_product_files_archives!
@@ -781,6 +801,65 @@ class LinksController < ApplicationController
       end
     end
 
+    # The editor's save contract (Product::SaveContract, gumroad-private#1379).
+    # Built from PERMITTED params on purpose: `submitted?` must see collections
+    # exactly as strong parameters shaped them, so a malformed value — which
+    # the permit list drops — reads as "not submitted" rather than as data.
+    # The contract-specific keys (editor_revision, deletion_operations) are not
+    # product attributes, so they are permitted here rather than in the policy.
+    # Deletion operations are wired per collection as its save path adopts the
+    # contract: :files, :public_files (ids are PublicFile#public_id) and
+    # :integrations (integrations have no external id in the editor payload —
+    # they are keyed by provider name, so their "ids" here are provider names
+    # from Integration::ALL_NAMES).
+    #
+    # deep_symbolize_keys is load-bearing: the contract reads
+    # `deletion_operations.dig(:deleted_ids, :files)` with symbol keys, and
+    # Parameters#to_unsafe_h.symbolize_keys re-stringifies NESTED keys, so the
+    # contract must be handed plain, deeply-symbolized hashes.
+    def product_save_contract
+      @_product_save_contract ||= Product::SaveContract.new(
+        params: product_permitted_params.to_h.deep_symbolize_keys.merge(
+          params.permit(
+            :editor_revision,
+            deletion_operations: {
+              deleted_ids: {
+                files: [],
+                public_files: [],
+                integrations: [],
+                variants: [],
+                rich_content: [],
+              },
+              cleared_collections: [],
+            }
+          ).to_h.deep_symbolize_keys
+        ),
+        product: @product
+      )
+    end
+
+    # Narrows a diff-derived set of pages down to what the contract actually
+    # authorises removing. Returns the input untouched when the contract is not
+    # enforced, so the flag-off path is byte-identical to before.
+    #
+    # `cleared?` deletes from the PRE-SAVE set rather than the diff, so a
+    # clear-all means "everything that existed when the editor loaded" and can
+    # never sweep up a page created by this same request.
+    def contract_scoped_rich_content_deletions(diff_deletions, existing_rich_contents)
+      contract = product_save_contract
+      return diff_deletions unless contract.enforced?
+
+      if contract.cleared?(:rich_content)
+        return existing_rich_contents.reject { preserved_rich_content_ids.include?(_1.external_id) }
+      end
+
+      ids = contract.deleted_ids(:rich_content)
+      return [] if ids.empty?
+
+      existing_rich_contents.select { ids.include?(_1.external_id) }
+        .reject { preserved_rich_content_ids.include?(_1.external_id) }
+    end
+
     def check_banned
       e404 if @product.banned?
     end
@@ -883,6 +962,20 @@ class LinksController < ApplicationController
     def update_variants
       variant_category = @product.variant_categories_alive.first
       variants = product_permitted_params[:variants] || []
+      # Product::SaveContract, Rule 1. The `elsif` below submits
+      # `options: nil`, which VariantCategoryUpdaterService reads as "remove
+      # this whole grouping" — so an absent or malformed `variants` key (strong
+      # parameters drops a malformed value, making it absent) currently asks to
+      # delete every version on the product. That is the single widest wipe path
+      # in the editor. Under the contract an unsubmitted collection is not a
+      # statement about deletion, so there is nothing to do here at all: the
+      # explicit-deletion routes below carry any removals the client asked for.
+      contract = product_save_contract
+      if contract.enforced? && !contract.submitted?(:variants)
+        return unless contract.may_delete? &&
+          (contract.cleared?(:variants) || contract.deleted_ids(:variants).any?)
+      end
+
       if variants.any? || @product.is_tiered_membership?
         variant_category_params = variant_category.present? ?
           {
@@ -906,6 +999,7 @@ class LinksController < ApplicationController
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
           deletion_audit_context:,
+          contract: product_save_contract,
         ).perform
       elsif variant_category.present?
         Product::VariantsUpdaterService.new(
@@ -924,6 +1018,7 @@ class LinksController < ApplicationController
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
           deletion_audit_context:,
+          contract: product_save_contract,
         ).perform
       end
     end

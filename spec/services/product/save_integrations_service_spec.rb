@@ -184,5 +184,125 @@ describe Product::SaveIntegrationsService do
         end
       end
     end
+
+    describe "save contract (Product::SaveContract)" do
+      let(:seller) { product.user }
+      let!(:discord_integration) do
+        integration = create(:discord_integration)
+        product.active_integrations << integration
+        integration
+      end
+
+      def contract_for(contract_params)
+        # Mirrors the controller wiring (LinksController#product_save_contract):
+        # the contract is handed plain, deeply-symbolized hashes.
+        Product::SaveContract.new(params: contract_params.deep_symbolize_keys, product:)
+      end
+
+      context "when the :product_editor_save_contract flag is off" do
+        it "preserves today's behaviour: absent integrations still disconnects everything" do
+          contract = contract_for({ editor_revision: "rev-1" })
+          expect(contract.enforced?).to eq(false)
+
+          expect_any_instance_of(DiscordIntegration).to receive(:disconnect!).and_return(true)
+          expect do
+            described_class.perform(product, nil, contract:)
+          end.to change { product.active_integrations.count }.by(-1)
+        end
+      end
+
+      context "when the :product_editor_save_contract flag is on" do
+        # Scoped deactivation, NOT `Feature.deactivate(...)`. Flipper is backed by
+        # Redis with no per-worker namespace (config/initializers/feature_toggle.rb),
+        # so a global deactivate in an after-hook clears the flag for every other
+        # spec process sharing that Redis — which made a sibling run fail with
+        # unrelated errors while this suite was green in isolation.
+        before { Feature.activate_user(:product_editor_save_contract, seller) }
+        after { Feature.deactivate_user(:product_editor_save_contract, seller) }
+
+        it "does not disconnect anything when integrations is absent" do
+          contract = contract_for({ editor_revision: "rev-1" })
+
+          expect_any_instance_of(DiscordIntegration).not_to receive(:disconnect!)
+          expect do
+            described_class.perform(product, nil, contract:)
+          end.to not_change { product.active_integrations.count }
+             .and not_change { ProductIntegration.alive.count }
+        end
+
+        it "does not disconnect anything when integrations is an empty hash" do
+          contract = contract_for({ integrations: {}, editor_revision: "rev-1" })
+
+          expect_any_instance_of(DiscordIntegration).not_to receive(:disconnect!)
+          expect do
+            described_class.perform(product, {}, contract:)
+          end.to not_change { product.active_integrations.count }
+             .and not_change { ProductIntegration.alive.count }
+        end
+
+        it "does not disconnect an active integration merely omitted from a submitted payload" do
+          # circle is submitted, discord is omitted — under the contract that
+          # omission is not a deletion.
+          circle_params = { "circle" => { "api_key" => "key", "community_id" => "0", "space_group_id" => "0" } }
+          contract = contract_for({ integrations: circle_params, editor_revision: "rev-1" })
+
+          expect_any_instance_of(DiscordIntegration).not_to receive(:disconnect!)
+          expect do
+            described_class.perform(product, circle_params.deep_dup, contract:)
+          end.to change { product.active_integrations.count }.by(1) # circle added
+
+          expect(product.active_integrations.map(&:name)).to match_array ["circle", "discord"]
+        end
+
+        it "disconnects exactly the explicitly deleted integrations" do
+          circle_integration = create(:circle_integration)
+          product.active_integrations << circle_integration
+
+          contract = contract_for(
+            {
+              editor_revision: "rev-1",
+              deletion_operations: { deleted_ids: { integrations: ["discord"] } },
+            }
+          )
+
+          expect_any_instance_of(DiscordIntegration).to receive(:disconnect!).and_return(true)
+          expect_any_instance_of(CircleIntegration).not_to receive(:disconnect!)
+          expect do
+            described_class.perform(product, nil, contract:)
+          end.to change { product.active_integrations.count }.by(-1)
+
+          expect(product.reload.active_integrations.map(&:name)).to match_array ["circle"]
+        end
+
+        it "ignores deleted_ids when the save carries no editor_revision (write-only save)" do
+          contract = contract_for(
+            { deletion_operations: { deleted_ids: { integrations: ["discord"] } } }
+          )
+
+          expect_any_instance_of(DiscordIntegration).not_to receive(:disconnect!)
+          expect do
+            described_class.perform(product, nil, contract:)
+          end.to not_change { product.active_integrations.count }
+        end
+
+        it "disconnects everything on an explicit clear-all" do
+          circle_integration = create(:circle_integration)
+          product.active_integrations << circle_integration
+
+          contract = contract_for(
+            {
+              editor_revision: "rev-1",
+              deletion_operations: { cleared_collections: ["integrations"] },
+            }
+          )
+
+          expect_any_instance_of(DiscordIntegration).to receive(:disconnect!).and_return(true)
+          expect_any_instance_of(CircleIntegration).to receive(:disconnect!).and_return(true)
+          expect do
+            described_class.perform(product, nil, contract:)
+          end.to change { product.active_integrations.count }.by(-2)
+        end
+      end
+    end
   end
 end

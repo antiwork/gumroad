@@ -7,6 +7,7 @@ import { ResponseError, request } from "$app/utils/request";
 import { extensions } from "$app/components/ProductEdit/ContentTab";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Product } from "$app/components/ProductEdit/state";
+import { buildDeletionOperations } from "$app/data/product_save_contract";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export type SaveProductResponse = {
@@ -112,6 +113,15 @@ export const saveProduct = async (
       confirmed_removed_variant_ids: product.confirmed_removed_variant_ids ?? [],
       confirmed_removed_rich_content_ids: product.confirmed_removed_rich_content_ids ?? [],
       preserved_rich_content_ids: product.preserved_rich_content_ids ?? [],
+      // The save contract (gumroad-private#1379). Sent on every save; the
+      // server ignores both unless the :product_editor_save_contract flag is on
+      // for this seller, so this is inert until the rollout enables it.
+      //
+      // `editor_revision` is echoed back exactly as the server issued it. It
+      // gates deletions only — a save carrying no deletions is accepted from a
+      // stale tab, which is why an open second tab can still fix a typo.
+      editor_revision: product.editor_revision ?? null,
+      deletion_operations: product.deletion_operations ?? buildDeletionOperations(product),
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
         newlyAdded ? { ...availability, id: null } : availability,
       ),

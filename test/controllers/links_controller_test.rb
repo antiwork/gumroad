@@ -5981,3 +5981,275 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_nil AuditCorrelationId.for("")
   end
 end
+
+# End-to-end coverage of the editor's save contract (Product::SaveContract,
+# gumroad-private#1379) through the real save endpoint.
+#
+# The old save read every collection as `params[:thing] || []`, so a request
+# that simply didn't mention a collection — or sent it in a shape strong
+# parameters dropped — was read as "delete everything in it". The contract
+# changes that, behind the :product_editor_save_contract flag: leaving a
+# collection out means "no changes", and deleting requires an explicit ask
+# (deletion_operations) plus proof of which snapshot the client was editing
+# (editor_revision).
+#
+# The flag-OFF tests below deliberately document the OLD deleting behaviour,
+# so that if someone changes the disabled path they find out here: the flag
+# has to be a pure kill switch, byte-identical to what shipped before it.
+class LinksControllerSaveContractTest < ActionController::TestCase
+  tests LinksController
+  include LinksControllerTestHelpers
+
+  setup do
+    sign_in_seller_area!
+    @product = create_product_with_pdf_file(user: @seller)
+    product_file = @product.product_files.alive.first
+    # The same baseline payload the editor's save sends: the product's fields
+    # and its one file, with NO variants or rich_content keys. Every test
+    # merges what it needs on top, so "absent collection" is the default.
+    @params = {
+      id: @product.unique_permalink,
+      name: "sumlink",
+      description: "New description",
+      files: [{ id: product_file.external_id, url: product_file.url }],
+    }
+    @category = create_variant_category(link: @product, title: "Versions")
+  end
+
+  teardown do
+    # Per-user deactivation on purpose. The Flipper store is Redis-backed and
+    # shared across concurrently running test processes, so a global
+    # Feature.deactivate here would switch the flag off under another process
+    # mid-test. Deactivating only for this test's seller is safe: no other
+    # process knows this user.
+    Feature.deactivate_user(Product::SaveContract::FEATURE_NAME, @seller)
+    # Remove the in-process pin (see pin_contract_flag!) so later tests read
+    # the real flag again.
+    Feature.singleton_class.send(:remove_method, :active?) if @contract_flag_pinned
+  end
+
+  # Pins what the save reads for THIS one flag, inside this process only,
+  # while every other flag still goes through the real Feature module.
+  #
+  # Why pinning is needed at all: the Flipper flag store lives in a shared
+  # Redis, and other test processes running at the same time flush that Redis
+  # at the start of every one of their tests (test_helper/spec_helper both do
+  # this to keep tests isolated). A flag this test just activated can
+  # therefore vanish between the activation and the request — which made these
+  # tests fail at random whenever another suite ran alongside. Verified
+  # empirically: same seed, different failures per run, and a concurrent
+  # rspec process was present each time.
+  def pin_contract_flag!(value)
+    original = Feature.method(:active?)
+    Feature.define_singleton_method(:active?) do |name, actor = nil|
+      name.to_sym == Product::SaveContract::FEATURE_NAME ? value : original.call(name, actor)
+    end
+    @contract_flag_pinned = true
+  end
+
+  # Turns the contract on for this test's seller. Called explicitly by the
+  # flag-ON tests rather than in setup, so the flag-OFF tests in this same
+  # class genuinely run with the flag off.
+  def enable_contract!
+    # The real per-user activation, exactly what a rollout does...
+    Feature.activate_user(Product::SaveContract::FEATURE_NAME, @seller)
+    # ...plus the in-process pin so a concurrent process flushing Redis can't
+    # switch the flag off underneath this test.
+    pin_contract_flag!(true)
+  end
+
+  # Pins the contract OFF for the flag-off tests, for the mirror-image reason:
+  # a concurrent process could conceivably turn the flag on, and these tests
+  # exist precisely to document what the disabled path does.
+  def disable_contract!
+    pin_contract_flag!(false)
+  end
+
+  # The token the editor would have been handed when it loaded the product.
+  # Computed fresh (after this test's factory setup) so the save's deletion
+  # check sees it as current.
+  def current_revision
+    Product::EditorRevision.current(@product.reload)
+  end
+
+  # A content page with no title and no body. Pages like this carry no seller
+  # work, so the existing rich-content deletion guard lets them be deleted
+  # without a confirmation — which keeps these tests about the CONTRACT's
+  # decision, not about the older guard's.
+  def create_blank_page
+    create_rich_content(entity: @product, description: [])
+  end
+
+  # --- flag OFF: the old behaviour must be exactly preserved -----------------
+
+  test "flag off: a payload with no variants key still deletes every version (the old behaviour)" do
+    disable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    # This is the pre-contract behaviour being pinned, not endorsed: omitting
+    # the key wipes the collection. If this test starts failing, the kill
+    # switch is no longer a pure revert.
+    assert_not variant.reload.alive?
+  end
+
+  test "flag off: a payload with no rich_content key still deletes existing pages (the old behaviour)" do
+    disable_contract!
+    page = create_blank_page
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert_not page.reload.alive?
+  end
+
+  # --- flag ON, Rule 1: absent and [] both mean "no changes" -----------------
+
+  test "flag on: a payload with no variants key deletes nothing" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert variant.reload.alive?
+  end
+
+  test "flag on: variants sent as an empty list deletes nothing" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params.merge(variants: []), format: :json
+    assert_response :success
+
+    assert variant.reload.alive?
+  end
+
+  test "flag on: a payload with no rich_content key deletes nothing" do
+    enable_contract!
+    # The category needs at least one version to pass product validation once
+    # the contract stops the save from sweeping the (otherwise empty) category
+    # away — mirroring a real product, where a category always has versions.
+    create_variant(variant_category: @category, name: "Plain version")
+    page = create_blank_page
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert page.reload.alive?
+  end
+
+  test "flag on: rich_content sent as an empty list deletes nothing" do
+    enable_contract!
+    create_variant(variant_category: @category, name: "Plain version")
+    page = create_blank_page
+
+    post :update, params: @params.merge(rich_content: []), format: :json
+    assert_response :success
+
+    assert page.reload.alive?
+  end
+
+  # --- flag ON, Rule 2: deletion only through an explicit operation ----------
+
+  test "flag on: deleted_ids plus a fresh revision deletes exactly the named variant" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    # The sibling was not named, so the deletion must not spread to it.
+    assert kept.reload.alive?
+  end
+
+  test "flag on: deleted_ids plus a fresh revision deletes exactly the named page" do
+    enable_contract!
+    create_variant(variant_category: @category, name: "Plain version")
+    removed = create_blank_page
+    kept = create_blank_page
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { rich_content: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert kept.reload.alive?
+  end
+
+  test "flag on: an explicit clear-all plus a fresh revision deletes every variant" do
+    enable_contract!
+    first = create_variant(variant_category: @category, name: "First version")
+    second = create_variant(variant_category: @category, name: "Second version")
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { cleared_collections: ["variants"] },
+    ), format: :json
+    assert_response :success
+
+    # "Empty this collection" stays expressible — it just has to be asked for
+    # in so many words instead of implied by an empty or missing list.
+    assert_not first.reload.alive?
+    assert_not second.reload.alive?
+  end
+
+  test "flag on: deleted_ids without an editor_revision deletes nothing" do
+    enable_contract!
+    named = create_variant(variant_category: @category, name: "Named for deletion")
+    sibling = create_variant(variant_category: @category, name: "Sibling")
+
+    # The ids are supplied, but the client never says which snapshot it was
+    # editing. A save that can't vouch for its snapshot may write, but it may
+    # not delete — this is what keeps a contract-unaware or stale client from
+    # deleting on the strength of a payload it can't back up.
+    post :update, params: @params.merge(
+      deletion_operations: { deleted_ids: { variants: [named.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert named.reload.alive?
+    assert sibling.reload.alive?
+  end
+
+  # --- flag ON: the malformed-value case the contract exists for -------------
+
+  test "flag on: a malformed variants value deletes nothing" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    # Strong parameters silently drops a value that isn't the expected list of
+    # hashes, so by the time the save runs, this looks identical to not
+    # sending the key at all. Before the contract, that dropped value read as
+    # "delete every version" — a client bug becoming data loss.
+    post :update, params: @params.merge(variants: "not-a-list"), format: :json
+    assert_response :success
+
+    assert variant.reload.alive?
+  end
+
+  # --- flag ON: ordinary saves keep working -----------------------------------
+
+  test "flag on: a save that deletes nothing still applies normal field updates" do
+    enable_contract!
+    variant = create_variant(variant_category: @category, name: "Plain version")
+
+    post :update, params: @params.merge(name: "Renamed under the contract"), format: :json
+    assert_response :success
+
+    # The contract only decides what may be DELETED; everything else about the
+    # save must go through untouched.
+    assert_equal "Renamed under the contract", @product.reload.name
+    assert variant.reload.alive?
+  end
+end

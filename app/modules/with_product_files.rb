@@ -34,7 +34,13 @@ module WithProductFiles
     product_files.alive.exists?
   end
 
-  def save_files!(files_params, rich_content_params = [])
+  # +delete_missing+ - when true (the default, and the behaviour of every
+  # existing caller), any alive file not present in +files_params+ is
+  # soft-deleted — the historical "full snapshot" diff-and-delete. The product
+  # editor's save contract (Product::SaveContract, gumroad-private#1379) passes
+  # false: under the contract, omission never deletes; deletion happens only
+  # through explicit operations applied by the caller (SaveFilesService).
+  def save_files!(files_params, rich_content_params = [], delete_missing: true)
     files_to_keep = []
     new_product_files = []
     existing_files = alive_product_files
@@ -84,7 +90,7 @@ module WithProductFiles
       rich_content_params.each { apply_rich_content_id_mappings(_1, rich_content_id_mappings) }
     end
 
-    (existing_files - files_to_keep).each(&:mark_deleted)
+    (existing_files - files_to_keep).each(&:mark_deleted) if delete_missing
     self.cached_alive_product_files = nil
     generate_entity_archive! if is_a?(Installment) && needs_updated_entity_archive?
 

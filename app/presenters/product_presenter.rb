@@ -116,6 +116,16 @@ class ProductPresenter
     {
       product: {
         name: product.name,
+        # The snapshot this editor session is being built from
+        # (gumroad-private#1379). The client echoes it back on save, and the
+        # server refuses to act on a DELETION whose token no longer matches the
+        # product's current state — which is what stops a tab left open for an
+        # hour, or a second tab, from removing rows it never knew about.
+        #
+        # Only deletions are gated on it. Ordinary edits from a stale tab still
+        # save, because rejecting those is what made an earlier attempt at this
+        # (product-wide optimistic concurrency) block legitimate work.
+        editor_revision: Product::EditorRevision.current(product),
         custom_permalink: product.custom_permalink,
         description: product.description || "",
         price_cents: product.price_cents,
