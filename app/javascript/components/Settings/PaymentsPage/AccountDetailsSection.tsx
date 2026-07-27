@@ -4,6 +4,7 @@ import * as React from "react";
 import typia from "typia";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
+import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 
 import { Button } from "$app/components/Button";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -727,22 +728,24 @@ const AccountDetailsSection = ({
                   "business_state",
                 )
               : null}
-            <Fieldset state={errorFieldNames.has("business_zip_code") ? "danger" : undefined}>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-business-zip-code`}>
-                  {complianceInfo.business_country === "US" ? "ZIP code" : "Postal code"}
-                </Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}-business-zip-code`}
-                placeholder="12345"
-                required={complianceInfo.is_business}
-                value={complianceInfo.business_zip_code || ""}
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("business_zip_code")}
-                onChange={(evt) => updateComplianceInfo({ business_zip_code: evt.target.value })}
-              />
-            </Fieldset>
+            {countryRequiresPostalCode(complianceInfo.business_country) ? (
+              <Fieldset state={errorFieldNames.has("business_zip_code") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-business-zip-code`}>
+                    {complianceInfo.business_country === "US" ? "ZIP code" : "Postal code"}
+                  </Label>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}-business-zip-code`}
+                  placeholder="12345"
+                  required={complianceInfo.is_business}
+                  value={complianceInfo.business_zip_code || ""}
+                  disabled={isFormDisabled}
+                  aria-invalid={errorFieldNames.has("business_zip_code")}
+                  onChange={(evt) => updateComplianceInfo({ business_zip_code: evt.target.value })}
+                />
+              </Fieldset>
+            ) : null}
           </div>
           <Fieldset>
             <FieldsetTitle>
@@ -1156,22 +1159,24 @@ const AccountDetailsSection = ({
                 "state",
               )
             : null}
-          <Fieldset state={errorFieldNames.has("zip_code") ? "danger" : undefined}>
-            <FieldsetTitle>
-              <Label htmlFor={`${uid}-creator-zip-code`}>
-                {complianceInfo.country === "US" ? "ZIP code" : "Postal code"}
-              </Label>
-            </FieldsetTitle>
-            <Input
-              id={`${uid}-creator-zip-code`}
-              type="text"
-              value={complianceInfo.zip_code || ""}
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("zip_code")}
-              required
-              onChange={(evt) => updateComplianceInfo({ zip_code: evt.target.value })}
-            />
-          </Fieldset>
+          {countryRequiresPostalCode(complianceInfo.country) ? (
+            <Fieldset state={errorFieldNames.has("zip_code") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-creator-zip-code`}>
+                  {complianceInfo.country === "US" ? "ZIP code" : "Postal code"}
+                </Label>
+              </FieldsetTitle>
+              <Input
+                id={`${uid}-creator-zip-code`}
+                type="text"
+                value={complianceInfo.zip_code || ""}
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("zip_code")}
+                required
+                onChange={(evt) => updateComplianceInfo({ zip_code: evt.target.value })}
+              />
+            </Fieldset>
+          ) : null}
         </div>
       )}
       <Fieldset>

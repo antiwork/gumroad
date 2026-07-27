@@ -9,6 +9,7 @@ import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
@@ -811,7 +812,7 @@ export default function PaymentsPage() {
       markFieldInvalid("state");
       setClientErrorMessage({ message: "Please select a valid state or province." });
     }
-    if (!form.data.user.zip_code && form.data.user.country !== "BW") {
+    if (!form.data.user.zip_code && countryRequiresPostalCode(form.data.user.country)) {
       markFieldInvalid("zip_code");
     }
     if (!validatePhoneNumber(form.data.user.phone, form.data.user.country)) {
@@ -972,7 +973,7 @@ export default function PaymentsPage() {
         markFieldInvalid("business_state");
         setClientErrorMessage({ message: "Please select a valid state or province." });
       }
-      if (!form.data.user.business_zip_code && props.user.country_code !== "BW") {
+      if (!form.data.user.business_zip_code && countryRequiresPostalCode(props.user.country_code)) {
         markFieldInvalid("business_zip_code");
       }
       if (!validatePhoneNumber(form.data.user.business_phone, form.data.user.business_country)) {

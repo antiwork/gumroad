@@ -4706,7 +4706,10 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Address", with: "address_full_match")
         fill_in("City", with: "Banjul")
         fill_in("Phone number", with: "3123456")
-        fill_in("Postal code", with: "00220")
+
+        # Gambia has no postal codes in its official addressing format, so the field is not shown
+        # and saving without one has to work.
+        expect(page).to have_no_field("Postal code")
 
         select("1", from: "Day")
         select("January", from: "Month")
@@ -4729,7 +4732,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.last_name).to eq("Creator")
         expect(compliance_info.street_address).to eq("address_full_match")
         expect(compliance_info.city).to eq("Banjul")
-        expect(compliance_info.zip_code).to eq("00220")
+        expect(compliance_info.zip_code).to be_blank
         expect(compliance_info.phone).to eq("+2203123456")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123000456000789")
