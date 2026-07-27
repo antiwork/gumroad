@@ -29,7 +29,15 @@ class Api::V2::ProductReviewsController < Api::V2::BaseController
       rescue ArgumentError
         return error_400("Invalid page_key.")
       end
-      reviews = reviews.where("product_reviews.created_at <= ? and product_reviews.id < ?", last_review_created_at, last_review_id)
+      # Keyset predicate must match the `created_at desc, id desc` ordering exactly. A naive
+      # `created_at <= ? AND id < ?` permanently drops any review whose id is higher than the
+      # boundary row's but whose created_at is older — possible because created_at is stored at
+      # second precision, so two reviews can be inserted out of id order within the same second.
+      # This is the same corrected form used by the payouts endpoint.
+      reviews = reviews.where(
+        "(product_reviews.created_at < ?) OR (product_reviews.created_at = ? AND product_reviews.id < ?)",
+        last_review_created_at, last_review_created_at, last_review_id
+      )
     end
 
     # Fetch one extra row to learn whether another page exists without running a COUNT over a

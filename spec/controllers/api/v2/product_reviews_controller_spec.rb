@@ -21,6 +21,14 @@ describe Api::V2::ProductReviewsController do
 
   it_behaves_like "authorized oauth v1 api method"
 
+  it "rejects a token that holds no read scope" do
+    token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_profile")
+
+    get @action, params: @params.merge(access_token: token.token)
+
+    expect(response).to have_http_status(:forbidden)
+  end
+
   describe "GET 'index'" do
     before do
       @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
@@ -86,6 +94,27 @@ describe Api::V2::ProductReviewsController do
       expect(response.parsed_body["product_reviews"].map { _1["id"] }).to eq([visible.external_id])
     end
 
+    it "includes a review left as a video with no written message" do
+      purchase = create(:purchase, link: @product, seller: @user)
+      review = create(:product_review, purchase:, link: @product, rating: 5, message: nil)
+      create(:product_review_video, :approved, product_review: review)
+
+      get @action, params: @params
+
+      returned = response.parsed_body["product_reviews"]
+      expect(returned.map { _1["id"] }).to eq([review.external_id])
+      expect(returned.first["message"]).to be_nil
+    end
+
+    it "falls back to the purchase's full name when the buyer has no account" do
+      review = create_review
+      review.purchase.update!(purchaser: nil, full_name: "Purchaser")
+
+      get @action, params: @params
+
+      expect(response.parsed_body["product_reviews"].first["rater_name"]).to eq("Purchaser")
+    end
+
     it "does not expose another creator's product" do
       other_product = create(:product, user: create(:user))
 
@@ -118,6 +147,20 @@ describe Api::V2::ProductReviewsController do
         get @action, params: @params.merge(page_key: "not-a-key")
 
         expect(response).to have_http_status(:bad_request)
+      end
+
+      it "still returns a review whose id is higher but whose date is older than the page boundary" do
+        newer = create_review(message: "Newer", created_at: 2.days.ago)
+        # Inserted second, so it has the higher id, but it is the older review. A keyset predicate
+        # that only compared ids would drop this row from every page.
+        older = create_review(message: "Older", created_at: 3.days.ago)
+
+        get @action, params: @params
+        first_page = response.parsed_body
+        expect(first_page["product_reviews"].map { _1["id"] }).to eq([newer.external_id])
+
+        get @action, params: @params.merge(page_key: first_page["next_page_key"])
+        expect(response.parsed_body["product_reviews"].map { _1["id"] }).to eq([older.external_id])
       end
     end
   end

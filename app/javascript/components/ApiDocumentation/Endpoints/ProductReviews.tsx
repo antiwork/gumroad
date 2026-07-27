@@ -55,7 +55,11 @@ export const GetProductReviews = () => (
           children: [
             { name: "id", type: "string", description: "The review's unique external ID" },
             { name: "rating", type: "number", description: "The star rating, from 1 to 5" },
-            { name: "message", type: "string", description: "The review text written by the buyer" },
+            {
+              name: "message",
+              type: "string | null",
+              description: "The review text written by the buyer; null when the buyer left a video instead",
+            },
             { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the review was submitted" },
             { name: "purchase_id", type: "string", description: "External ID of the purchase being reviewed" },
             {
