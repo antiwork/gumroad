@@ -3911,5 +3911,4 @@ class LinkTest < ActiveSupport::TestCase
       ].each { |m| product.define_singleton_method(m) { |*| true } }
       product.define_singleton_method(:auto_transcode_videos?) { false }
     end
-
 end
