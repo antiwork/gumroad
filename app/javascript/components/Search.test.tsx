@@ -50,6 +50,14 @@ describe("normalizeSearchQuery", () => {
   it("does not strip a mailto: that is not at the start", () => {
     expect(normalizeSearchQuery("about mailto:links")).toBe("about mailto:links");
   });
+
+  it("keeps a plus-addressed alias intact", () => {
+    expect(normalizeSearchQuery("mailto:jane+shop@example.com")).toBe("jane+shop@example.com");
+  });
+
+  it("leaves nothing behind when the link carries no address", () => {
+    expect(normalizeSearchQuery("mailto:")).toBe("");
+  });
 });
 
 describe("Search", () => {
@@ -74,5 +82,22 @@ describe("Search", () => {
 
     expect(onSearch).toHaveBeenLastCalledWith("Jane");
     expect(input.value).toBe("Jane");
+  });
+
+  it("does not eat characters while a query is typed one key at a time", () => {
+    const onSearch = vi.fn();
+    render(<Search value="" onSearch={onSearch} placeholder="Search sales" />);
+
+    // Normalizing on every keystroke would be a problem if it could truncate a query mid-typing,
+    // so walk a name through character by character the way a real seller types it.
+    const input = openSearch();
+    let typed = "";
+    for (const character of "Jane Cooper") {
+      typed += character;
+      fireEvent.change(input, { target: { value: typed } });
+      expect(input.value).toBe(typed);
+    }
+
+    expect(onSearch).toHaveBeenLastCalledWith("Jane Cooper");
   });
 });
