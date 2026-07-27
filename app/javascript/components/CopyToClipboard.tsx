@@ -43,6 +43,19 @@ export const CopyToClipboard = ({
     <WithTooltip tip={status === "initial" ? copyTooltip : copiedTooltip} position={tooltipPosition}>
       <span ref={ref} className="contents" onClick={(e) => e.stopPropagation()}>
         {children}
+        {/*
+          Sighted users see the copy succeed because the tooltip flips to "Copied!". That swap is
+          invisible to a screen reader: WithTooltip exposes the tip through aria-describedby, and
+          changing the text of an already-referenced description is not an announced event.
+
+          This live region carries the same confirmation as an announcement. It is polite so it
+          waits for a pause rather than interrupting, and it is only populated after a successful
+          copy so nothing is read out on render. Visually hidden, since the tooltip already covers
+          the sighted case.
+        */}
+        <span role="status" aria-live="polite" className="sr-only">
+          {status === "copied" ? copiedTooltip : ""}
+        </span>
       </span>
     </WithTooltip>
   );

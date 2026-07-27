@@ -466,7 +466,12 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       {purchase.license ? (
         <>
           <dt>License</dt>
-          <dd>{purchase.license.serial}</dd>
+          <dd>
+            {purchase.license.serial}{" "}
+            <CopyToClipboard text={purchase.license.serial} copyTooltip="Copy license key">
+              <Copy className="size-5" />
+            </CopyToClipboard>
+          </dd>
         </>
       ) : null}
 
