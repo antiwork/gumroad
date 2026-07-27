@@ -71,6 +71,14 @@ class SavePublicFilesService
         return true if contract.cleared?(:public_files)
 
         file.public_id.in?(contract.deleted_ids(:public_files))
+      elsif contract&.degraded?
+        # Flag lookup failed, so we cannot tell whether the contract governs
+        # this save. The legacy rule below infers deletion from the description
+        # markup — and scheduling a public file for deletion also strips its
+        # <public-file-embed> node — so a Redis blip would silently rewrite the
+        # description. Suppress the inference; explicit intent is absent here by
+        # definition. See Product::SaveContract#degraded?.
+        false
       else
         !file.public_id.in?(file_ids_in_content)
       end

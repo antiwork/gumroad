@@ -6065,6 +6065,18 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     pin_contract_flag!(false)
   end
 
+  # Makes the flag store RAISE, the way a Redis outage does. Distinct from the
+  # flag being off: off is an answer, this is the absence of one.
+  def break_contract_flag_store!(error: Redis::CannotConnectError.new("flag store down"))
+    original = Feature.method(:active?)
+    Feature.define_singleton_method(:active?) do |name, actor = nil|
+      raise error if name.to_sym == Product::SaveContract::FEATURE_NAME
+
+      original.call(name, actor)
+    end
+    @contract_flag_pinned = true
+  end
+
   # The token the editor would have been handed when it loaded the product.
   # Computed fresh (after this test's factory setup) so the save's deletion
   # check sees it as current.
@@ -6615,5 +6627,80 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_empty @product.reload.alive_product_files
     assert second_file.reload.deleted?
+  end
+
+  # --- flag store DOWN: never fall back to implicit deletion -----------------
+  #
+  # A raising flag lookup used to be rescued into `false`, i.e. "contract
+  # disabled", which routes the save down the legacy delete-by-omission path.
+  # A Redis blip therefore became a data wipe of every collection the payload
+  # didn't mention. These pin that shut for all three collections.
+
+  test "flag store down: a payload with no files key deletes no files" do
+    break_contract_flag_store!
+    second_file = create_product_file(link: @product, display_name: "Second file")
+    @product.reload
+
+    post :update, params: @params.except(:files), format: :json
+    assert_response :success
+
+    assert_not second_file.reload.deleted?
+    assert_equal 2, @product.reload.alive_product_files.count
+  end
+
+  test "flag store down: a payload with no public_files key deletes no public files" do
+    break_contract_flag_store!
+    public_file = create_public_file(with_audio: true, resource: @product, display_name: "Audio 1")
+    @product.reload
+
+    # No public_files key AND a description that embeds nothing: the legacy
+    # rule infers "delete" from exactly this shape.
+    post :update, params: @params.merge(description: "<p>No embeds here</p>"), format: :json
+    assert_response :success
+
+    assert_nil public_file.reload.scheduled_for_deletion_at
+    assert_equal 1, @product.reload.public_files.alive.count
+  end
+
+  test "flag store down: a payload with no integrations key disconnects nothing" do
+    break_contract_flag_store!
+    discord = create_discord_integration
+    @product.active_integrations << discord
+    @product.reload
+
+    # disconnect! is an irreversible third-party call; it must not fire on a
+    # save that never mentioned integrations.
+    Integration.any_instance.expects(:disconnect!).never
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert_equal [discord], @product.reload.active_integrations
+  end
+
+  test "flag store down: writes still land, only implicit deletion is suppressed" do
+    break_contract_flag_store!
+    second_file = create_product_file(link: @product, display_name: "Second file")
+    @product.reload
+
+    post :update, params: @params.except(:files).merge(name: "Renamed while the flag store was down"), format: :json
+    assert_response :success
+
+    assert_equal "Renamed while the flag store was down", @product.reload.name
+    assert_not second_file.reload.deleted?
+  end
+
+  test "flag store down: a failing error notifier does not break the save" do
+    break_contract_flag_store!
+    # The notifier reaches out over the network from inside a locked save. If
+    # it throws, the seller's save must still succeed.
+    ErrorNotifier.expects(:notify).at_least_once.raises(StandardError.new("bugsnag unreachable"))
+    second_file = create_product_file(link: @product, display_name: "Second file")
+    @product.reload
+
+    post :update, params: @params.except(:files), format: :json
+    assert_response :success
+
+    assert_not second_file.reload.deleted?
   end
 end

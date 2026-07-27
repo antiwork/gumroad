@@ -125,27 +125,61 @@ class Product::SaveContract
   #
   # The flag store is Redis-backed (config/initializers/feature_toggle.rb) and
   # this runs while the product row is locked, so a Redis outage must not raise
-  # through the seller's save. It fails CLOSED — treated as disabled — which is
-  # the safe direction here: with the contract off, deletion still requires the
-  # pre-existing confirmation guards from #6359, whereas failing "enabled" would
-  # start rejecting legitimate deletions from clients that never sent a token.
+  # through the seller's save.
   #
-  # Note what this deliberately does NOT do: it never falls back to implicit
-  # deletion. Disabled means "behave exactly as main does today", which is the
-  # state every seller is in until the rollout reaches them.
+  # It must also not answer "disabled", which is what an earlier version of this
+  # did. "Disabled" routes the save down the legacy path, and the legacy path
+  # deletes by omission — so a Redis blip would have turned an ordinary save
+  # into a wipe of every collection the payload happened not to mention. That is
+  # the exact failure this PR exists to prevent, reintroduced through the error
+  # handler.
+  #
+  # So a failed lookup is neither enabled nor disabled: see `#degraded?`. The
+  # contract stays off (no token gating, no 409s for clients that never sent a
+  # token), but implicit deletion is suppressed for the duration of the save.
   def enforced?
     return @enforced if defined?(@enforced)
 
-    @enforced =
-      begin
-        product.present? && Feature.active?(FEATURE_NAME, product.user)
-      rescue StandardError => e
-        # Report it rather than swallowing it: a Redis outage that quietly
-        # disables the contract for every save is exactly the kind of silent
-        # regression this PR exists to stop.
-        ErrorNotifier.notify(e, product_id: product&.id, context: "Product::SaveContract flag lookup")
-        false
-      end
+    @enforced = resolve_enforced
+  end
+
+  # Did the flag lookup itself fail?
+  #
+  # Distinct from "the flag is off". Off is a real answer and means "behave
+  # exactly as main does today". Degraded means we do not know, and the only
+  # safe reading of "we do not know" is that nothing may be deleted implicitly:
+  # the request never asked for a deletion, so not deleting cannot lose data,
+  # while deleting on a guess can and did.
+  def degraded?
+    enforced? unless defined?(@enforced)
+
+    @degraded
+  end
+
+  # May this save remove rows the payload simply didn't mention?
+  #
+  # The legacy paths ask this before their diff-and-delete. It is the one
+  # question a flag-store outage has to answer conservatively.
+  def implicit_deletion_allowed?
+    !degraded?
+  end
+
+  private def resolve_enforced
+    @degraded = false
+    product.present? && Feature.active?(FEATURE_NAME, product.user)
+  rescue StandardError => e
+    @degraded = true
+    report_lookup_failure(e)
+    false
+  end
+
+  # Reporting must never be the thing that breaks a seller's save. The notifier
+  # reaches out over the network (Bugsnag) from inside a locked, mid-transaction
+  # save, so it gets the same treatment as the lookup it is reporting on.
+  private def report_lookup_failure(error)
+    ErrorNotifier.notify(error, product_id: product&.id, context: "Product::SaveContract flag lookup")
+  rescue StandardError
+    nil
   end
 
   # Did this request actually submit this collection?

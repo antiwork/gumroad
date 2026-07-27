@@ -102,6 +102,12 @@ class Product::SaveIntegrationsService
     # deletion stands on its own, and an implicit diff never deletes.
     def integrations_to_delete(enabled_integrations)
       implicit = product.active_integrations - enabled_integrations
+      # Flag lookup failed: we cannot tell whether the contract governs this
+      # save, and this diff calls integration.disconnect! — an irreversible
+      # third-party API call. Guessing "delete" here is unrecoverable, guessing
+      # "keep" costs a stale row the seller can remove again. See
+      # Product::SaveContract#degraded?.
+      return [] if contract&.degraded?
       return implicit unless contract_enforced?
 
       return implicit if contract.cleared?(:integrations) # clear-all: everything not re-submitted goes

@@ -61,6 +61,13 @@ class SaveFilesService
     params[:files] = [] unless params.key?(:files)
 
     save_files_params = updated_file_params(params[:files])
+    # A flag-store outage leaves us unable to tell whether the contract applies.
+    # The legacy call below deletes every file missing from the payload, so on
+    # that path we keep the writes and drop the implicit deletion: the request
+    # never asked for one, and not deleting is recoverable while deleting is
+    # not. See Product::SaveContract#degraded?.
+    return owner.save_files!(save_files_params, rich_content_params, delete_missing: false) if contract&.degraded?
+
     owner.save_files!(save_files_params, rich_content_params)
   end
 
