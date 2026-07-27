@@ -40,28 +40,32 @@ class PaypalPayoutProcessor
 
     payout_email = user.paypal_payout_email
 
+    # The "Payout via PayPal ... skipped" notes below are recorded for support only. The Payouts
+    # page has always kept them out of its banner (it filtered them out by content), so they are
+    # written with seller_visible: false to keep that behaviour now that visibility is explicit.
+
     # User is payable on PayPal if they've provided an email address.
     if !EmailFormatValidator.valid?(payout_email)
-      user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because the account does not have a valid PayPal payment address") if add_comment
+      user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because the account does not have a valid PayPal payment address", seller_visible: false) if add_comment
       return false
     end
 
     # Email address contains non-ascii characters
     unless payout_email.ascii_only?
-      user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because the PayPal payment address contains invalid characters") if add_comment
+      user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because the PayPal payment address contains invalid characters", seller_visible: false) if add_comment
       return false
     end
 
     # User hasn't given us their compliance info.
     if user.alive_user_compliance_info.try(:legal_entity_name).blank? && !user.has_paypal_account_connected?
-      user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because the account does not have a valid name on record") if add_comment
+      user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because the account does not have a valid name on record", seller_visible: false) if add_comment
       return false
     end
 
     # If a user's previous payment is still processing, don't allow for new payments.
     processing_payment_ids = user.payments.processing.ids
     if processing_payment_ids.any?
-      user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because there are already payouts (ID #{processing_payment_ids.join(', ')}) in processing") if add_comment
+      user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because there are already payouts (ID #{processing_payment_ids.join(', ')}) in processing", seller_visible: false) if add_comment
       return false
     end
 
