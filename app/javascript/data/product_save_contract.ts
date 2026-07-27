@@ -62,7 +62,10 @@ export type DeletionSources = {
   variants?: {
     id: string;
     newlyAdded?: boolean;
-    integrations?: Record<string, boolean>;
+    // A checkbox map. `undefined` for a provider means the payload said nothing
+    // about it, which is deliberately distinct from `false` ("switched off") —
+    // only the latter is a disconnect request.
+    integrations?: Record<string, boolean | undefined>;
     loaded_integrations?: Record<string, boolean>;
   }[];
 };
@@ -100,21 +103,37 @@ export const buildDeletionOperations = (
     .map((file) => file.id);
   if (removedPublicFiles.length > 0) deletedIds.public_files = [...new Set(removedPublicFiles)];
 
-  // An integration counts as removed only if it was actually on when this
-  // session loaded and the seller has since turned it off.
+  // An integration counts as removed only if it was actually connected when this
+  // session's baseline was taken AND the live map explicitly says it is now
+  // disconnected.
+  //
+  // "Explicitly" is load-bearing. An earlier version of this asked
+  // `loaded[name] && !current[name]`, which is the omission-inference bug this
+  // whole contract exists to kill, just relocated to the client: a missing
+  // `integrations` map, or a provider key absent from it, reads as `undefined`,
+  // `!undefined` is true, and the editor would then send explicit deletion
+  // intent derived from state it never actually had. Incomplete state must
+  // produce no deletion request at all.
+  //
+  // At product level the values are the integration RECORDS the server sends,
+  // so the disconnected value is `null` — not merely falsy, and not absent.
   const loadedIntegrations = product.loaded_integrations;
-  if (loadedIntegrations) {
-    const current = product.integrations ?? {};
-    const disconnected = Object.keys(loadedIntegrations).filter((name) => loadedIntegrations[name] && !current[name]);
+  const currentIntegrations = product.integrations;
+  if (loadedIntegrations && currentIntegrations) {
+    const disconnected = Object.keys(loadedIntegrations).filter(
+      (name) => loadedIntegrations[name] && name in currentIntegrations && currentIntegrations[name] === null,
+    );
     if (disconnected.length > 0) deletedIds.integrations = [...new Set(disconnected)];
   }
 
   // Version/tier-level integrations. Same rule as the product-level one above,
-  // applied per version: an integration counts as removed only if the version
-  // had it on when this session's baseline was taken and the seller has since
-  // switched it off. Scoping matters here — the same integration can stay
-  // connected on a sibling version, so this cannot collapse into the flat
-  // `integrations` list.
+  // applied per version, with the same requirement that the live map and the
+  // provider key both exist before anything is treated as a removal. Scoping
+  // matters here — the same integration can stay connected on a sibling
+  // version, so this cannot collapse into the flat `integrations` list.
+  //
+  // At version level the values ARE booleans (a checkbox map), so the
+  // disconnected value is `false`; `undefined` means the payload said nothing.
   const variantDeletedIds: Record<string, Partial<Record<SaveContractCollection, string[]>>> = {};
   for (const variant of product.variants ?? []) {
     // A version created in this session has no server row to delete from, and
@@ -122,11 +141,11 @@ export const buildDeletionOperations = (
     if (variant.newlyAdded) continue;
 
     const loadedForVariant = variant.loaded_integrations;
-    if (!loadedForVariant) continue;
+    const currentForVariant = variant.integrations;
+    if (!loadedForVariant || !currentForVariant) continue;
 
-    const currentForVariant = variant.integrations ?? {};
     const turnedOff = Object.keys(loadedForVariant).filter(
-      (name) => loadedForVariant[name] && !currentForVariant[name],
+      (name) => loadedForVariant[name] && name in currentForVariant && currentForVariant[name] === false,
     );
     if (turnedOff.length > 0) variantDeletedIds[variant.id] = { integrations: [...new Set(turnedOff)] };
   }

@@ -172,6 +172,45 @@ describe("buildDeletionOperations", () => {
       expect(operations.deleted_ids.integrations).toBeUndefined();
     });
 
+    // Incomplete state must never become deletion intent. `loaded[name] &&
+    // !current[name]` used to answer "removed" here, because a missing map or a
+    // missing key reads as `undefined` and `!undefined` is true — the contract's
+    // own omission-inference bug, relocated to the client. The live map and the
+    // provider key both have to be present before anything counts as removed.
+    it("asks for no disconnections when the live integrations map is absent", () => {
+      const operations = buildDeletionOperations(productWith({ loaded_integrations: { circle: true, discord: true } }));
+
+      expect(operations.deleted_ids.integrations).toBeUndefined();
+      expect(hasDeletions(operations)).toBe(false);
+    });
+
+    it("asks for no disconnections for a provider key absent from the live map", () => {
+      const operations = buildDeletionOperations(
+        productWith({
+          loaded_integrations: { circle: true, discord: true },
+          // `discord` was connected at baseline but this payload says nothing
+          // about it. Silence is not a disconnect request.
+          integrations: { circle: connected("circle") },
+        }),
+      );
+
+      expect(operations.deleted_ids.integrations).toBeUndefined();
+      expect(hasDeletions(operations)).toBe(false);
+    });
+
+    // Only an explicit `null` — the shape the server uses for "not connected" —
+    // counts. An `undefined` value is absence, not a disconnection.
+    it("names only providers explicitly reported as disconnected", () => {
+      const operations = buildDeletionOperations(
+        productWith({
+          loaded_integrations: { circle: true, discord: true },
+          integrations: { circle: null, discord: undefined },
+        }),
+      );
+
+      expect(operations.deleted_ids.integrations).toEqual(["circle"]);
+    });
+
     // Without a baseline the client cannot tell removal from never-connected,
     // so it must not guess — the safe answer is to ask for no disconnections.
     it("asks for no disconnections when the server sent no baseline", () => {
@@ -315,6 +354,55 @@ describe("buildDeletionOperations, version-scoped integrations", () => {
     );
 
     expect(operations.variant_deleted_ids).toBeUndefined();
+  });
+
+  // The version-level twin of the product-level incomplete-state rule. A
+  // version whose payload carries no integrations map, or omits a provider that
+  // was connected at baseline, has said nothing — and silence is not a request
+  // to disconnect.
+  it("asks for nothing when the version's live integrations map is absent", () => {
+    const operations = buildDeletionOperations(
+      productWith({ variants: [{ id: "v1", loaded_integrations: { discord: true, circle: true } }] }),
+    );
+
+    expect(operations.variant_deleted_ids).toBeUndefined();
+    expect(hasDeletions(operations)).toBe(false);
+  });
+
+  it("asks for nothing for a provider key absent from the version's live map", () => {
+    const operations = buildDeletionOperations(
+      productWith({
+        variants: [
+          {
+            id: "v1",
+            loaded_integrations: { discord: true, circle: true },
+            // `discord` was on at baseline but this payload never mentions it.
+            integrations: { circle: true },
+          },
+        ],
+      }),
+    );
+
+    expect(operations.variant_deleted_ids).toBeUndefined();
+    expect(hasDeletions(operations)).toBe(false);
+  });
+
+  // Version-level values are booleans, so `false` is the disconnect signal and
+  // `undefined` is absence.
+  it("names only versions' providers explicitly switched off", () => {
+    const operations = buildDeletionOperations(
+      productWith({
+        variants: [
+          {
+            id: "v1",
+            loaded_integrations: { discord: true, circle: true },
+            integrations: { discord: false, circle: undefined },
+          },
+        ],
+      }),
+    );
+
+    expect(operations.variant_deleted_ids).toEqual({ v1: { integrations: ["discord"] } });
   });
 
   // A version created in this session has no server row to delete from, and its
