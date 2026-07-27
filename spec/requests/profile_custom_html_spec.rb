@@ -194,7 +194,7 @@ describe "Profile custom HTML rendering", type: :request do
       data = JSON.parse(json)
       expect(data.keys).to match_array(%w[products posts pages])
       expect(data["products"].map { _1["name"] }).to include("Cool thing")
-      expect(data["products"].first.keys).to match_array(%w[name url price native_type thumbnail_url description])
+      expect(data["products"].first.keys).to match_array(%w[name url price native_type thumbnail_url cover_url description])
     end
   end
 

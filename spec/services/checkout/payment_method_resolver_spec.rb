@@ -358,6 +358,15 @@ describe Checkout::PaymentMethodResolver do
           expect(methods).not_to include("bancontact")
         end
 
+        it "launches Bancontact in live mode when its per-method launch flag is on, without pulling iDEAL along" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_bancontact, seller)
+
+          methods = resolve(cart_product_currency: "eur").payment_method_types
+          expect(methods).to include("bancontact")
+          expect(methods).not_to include("ideal")
+        end
+
         # Regression test for the 2026-07-23 iDEAL dark-ramp (gumroad-private#933): the
         # EUR mismatch marker is the expected steady state once iDEAL/SEPA capabilities
         # make the account settle EUR in EUR, and the resolver only offers these methods
@@ -512,6 +521,28 @@ describe Checkout::PaymentMethodResolver do
 
         expect(eligible).not_to include("afterpay_clearpay", "affirm", "upi")
         expect(eligible).to include("card", "link")
+      end
+
+      # A euro-priced membership must never claim iDEAL or Bancontact: both are single bank
+      # approvals, and collecting renewals off them would need a SEPA Direct Debit mandate
+      # checkout doesn't ask for. Recurring carts fall back to Lane A before a Stripe method
+      # list is built, so this only shows up in the logged eligible-policy set today — but that
+      # set is what later units intersect with, so it must not claim a method that can't renew.
+      it "disables the EUR bank methods on recurring carts — a membership can't be renewed off a one-shot bank approval" do
+        eligible = resolve(recurring: true).eligible_payment_method_types
+
+        expect(eligible).not_to include("ideal", "bancontact")
+      end
+
+      it "keeps a launched Bancontact off a recurring EUR cart entirely" do
+        Feature.activate_user(:buyer_currency_charging, seller)
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(:checkout_local_method_bancontact, seller)
+
+        resolution = resolve(recurring: true, cart_product_currency: "eur")
+
+        expect(resolution.eligible_payment_method_types).not_to include("bancontact")
+        expect(resolution.payment_method_types).to be_nil
       end
 
       it "stays on Lane A because subscription setup on the client-confirmed path is deferred" do

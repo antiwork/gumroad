@@ -24,6 +24,12 @@ class CardType
   # purchase's real payment method queryable (and stops receipts from promising a credit-card
   # statement line that will never appear).
   PIX = "pix"
+  # Bancontact, the debit-card scheme almost every Belgian bank issues. The buyer approves the
+  # payment in their own banking app, so — like iDEAL above — no card network is involved from
+  # Gumroad's side and nothing about it shows up as a card brand. Recording "bancontact" here is
+  # what keeps the purchase's real payment method queryable in the database (and stops receipts
+  # from promising a credit-card statement line that will never appear).
+  BANCONTACT = "bancontact"
   # Buy-now-pay-later method offered through the same Payment Element. Not a card network
   # either: Klarna bills the buyer through their own Klarna account, so the purchase's
   # payment method has to be recorded here to stay queryable.

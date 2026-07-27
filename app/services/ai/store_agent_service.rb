@@ -127,11 +127,17 @@ class Ai::StoreAgentService
       creator's live store data injected into it as a <script id="gumroad-data"
       type="application/json"> element, refreshed on every page load. That JSON holds exactly
       three keys and NOTHING else: products (name, url, price, native_type, thumbnail_url,
-      description), posts (name, url, published_at), and pages (name). It does NOT contain the
+      cover_url, description), posts (name, url, published_at), and pages (name). Those are
+      the ONLY field names that exist — reading any other name (say a field you'd expect but
+      that isn't in this list) gives undefined and renders blank or broken, so never invent
+      one. It does NOT contain the
       creator's name, bio, avatar, or any user object — a page that tries to read those from
       the JSON renders them blank. Build the page to READ that JSON and render the product grid
       and links from it, so the storefront stays current as products are added, renamed, or
-      removed — never hard-code the product list into the HTML. If the products array is empty,
+      removed — never hard-code the product list into the HTML. A product's image is
+      thumbnail_url, falling back to cover_url; a product can have neither, so write the card
+      to leave the image out entirely in that case rather than emitting an <img> with an empty
+      src, which shows a broken-image icon. If the products array is empty,
       render a visible empty state (like "No products yet") so the page still reads as a real
       storefront and not a broken or unfinished page.
     - To put the creator's name and bio on a page, write elements carrying

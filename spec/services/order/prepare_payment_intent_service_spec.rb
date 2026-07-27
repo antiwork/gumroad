@@ -1379,6 +1379,141 @@ describe Order::PreparePaymentIntentService, :vcr do
                                                                    presentment_total_cents: 15_00)
         end
 
+        it "prepares one forced-currency intent for a multi-item cart uniformly priced in the forced currency" do
+          expect(StripeFxQuote).not_to receive(:create)
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_multi_direct")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(22_00)
+          expect(create_args[:stripe_fx_quote_id]).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(responses["unique-id-1"][:success]).to eq(true)
+
+          charge = order.charges.last
+          expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::EUR,
+                                                               presentment_total_cents: 22_00,
+                                                               stripe_fx_quote_id: nil)
+          expect(order.purchases.map { _1.reload.purchase_presentment.presentment_total_cents }).to contain_exactly(15_00, 7_00)
+        end
+
+        # The Payment Element mounts at the quantity-inclusive cart subtotal (the presenter
+        # multiplies per-unit price by quantity), so prepare must create the intent for the same
+        # number. If prepare summed per-unit prices instead, a quantity-2 cart would confirm an
+        # EUR 15.00 intent against an Element that showed EUR 30.00 and Stripe would reject it.
+        it "prepares the forced-currency intent for the quantity-inclusive amount" do
+          expect(StripeFxQuote).not_to receive(:create)
+
+          order, params = build_order(line_item_overrides: { quantity: 2, perceived_price_cents: 30_00 })
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_quantity_two")
+
+          expect(order.purchases.first.reload.displayed_price_cents).to eq(30_00)
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(30_00)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment.presentment_total_cents).to eq(30_00)
+        end
+
+        # Gumroad's cut is stored twice: once on the charge-level presentment row and once per
+        # purchase. Payouts and refunds read the per-purchase rows, so if the allocator ever
+        # dropped or double-counted a cent the seller's proceeds would silently disagree with what
+        # was charged.
+        #
+        # Pinning only "the parts sum to the whole" would prove nothing here, because the
+        # charge-level figure is computed as the sum of the per-purchase figures — that assertion
+        # holds even if every purchase were given the whole charge's cut. So assert each
+        # purchase's own expected value: its own fee + affiliate credit + Gumroad tax, converted
+        # at its own stored rate.
+        it "splits Gumroad's presentment fee share across purchases so it sums to the charge-level share" do
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          _create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_fee_split")
+          expect(responses.values).to all(include(success: true))
+
+          charge_presentment = order.charges.last.charge_presentment
+          purchases = order.purchases.map(&:reload)
+          purchase_shares = purchases.map { _1.purchase_presentment.presentment_gumroad_amount_cents }
+
+          expect(purchase_shares.size).to eq(2)
+
+          # The value each purchase must carry on its own, independent of the charge total: the
+          # same USD composition the payout path reads (Purchase#total_transaction_amount_for_gumroad_cents),
+          # converted back with the rate that purchase stored.
+          expected_shares = purchases.map do |purchase|
+            usd_cents = purchase.fee_cents + purchase.affiliate_credit_cents + purchase.gumroad_tax_cents
+            purchase.send(:usd_cents_to_currency, Currency::EUR, usd_cents, purchase.rate_converted_to_usd)
+          end
+
+          expect(expected_shares).to all(be > 0)
+          expect(purchase_shares).to eq(expected_shares)
+          # And a purchase can never be assigned the whole charge's cut — the bug the sum
+          # assertion below is blind to.
+          expect(purchase_shares).to all(be < charge_presentment.presentment_gumroad_amount_cents)
+          expect(purchase_shares.sum).to eq(charge_presentment.presentment_gumroad_amount_cents)
+          expect(charge_presentment.presentment_gumroad_amount_cents).to be <= charge_presentment.presentment_total_cents
+        end
+
+        # The currency basis includes this seller's free/test lines (charge_purchases), but the
+        # presentment snapshot is built from the paid lines only. A free line priced in a different
+        # currency therefore makes the cart non-uniform for the Element while still looking uniform
+        # to the presentment call. iDEAL forces EUR by itself, so without a guard prepare would
+        # build an EUR presentment for a cart whose Element mounted in USD and create an intent the
+        # token can never confirm. It must fail the purchases cleanly instead.
+        it "fails cleanly rather than building a forced-currency presentment when a free line is priced differently" do
+          expect(StripeFxQuote).not_to receive(:create)
+          free_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_free_line_currency")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.charges.last&.charge_presentment).to be_nil
+          expect(order.purchases.find { _1.link_id == product.id }.reload).to be_failed
+        end
+
+        # The same shape with the free line priced in the forced currency stays on the
+        # forced-currency path — the guard must not reject a genuinely uniform cart.
+        it "still prepares the forced-currency intent when the free line shares the forced currency" do
+          expect(StripeFxQuote).not_to receive(:create)
+          free_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_free_line_eur")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(15_00)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment.presentment_total_cents).to eq(15_00)
+        end
+
         it "keys the intent on the charge external id and currency (no quote), scoped to the confirmation token" do
           order, params = build_order
           create_args, = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_direct")
@@ -1405,6 +1540,28 @@ describe Order::PreparePaymentIntentService, :vcr do
 
           responses = described_class.new(order:, params:, confirmation_token:).perform
           [create_args, responses]
+        end
+
+        it "keeps the USD intent when a free differently priced line makes the cart non-uniform" do
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          free_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+              { uid: "unique-id-2", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_mixed_free_currency")
+
+          # The Element also sees the free USD line, so it mounts in canonical USD instead of
+          # offering EUR-only methods. Prepare must preserve that same method/currency set.
+          expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+          expect(create_args[:payment_method_types]).to eq(%w[card link])
+          expect(responses.values).to all(include(success: true))
+          expect(order.charges.last.charge_presentment).to be_nil
         end
 
         it "prepares an EUR intent with presentment rows when the buyer pays by card on the forced-currency element" do
