@@ -511,9 +511,9 @@ describe "Rack::Attack throttle", type: :request do
     before { reset_rack_attack! }
     after { reset_rack_attack! }
 
-    def checkout(path: "/orders", permalinks: [product.unique_permalink], ip:, uid: "u1")
+    def checkout(path: "/orders", permalinks: [product.unique_permalink], ip:, uid: "u1", perceived_price_cents: "0")
       line_items = permalinks.each_with_index.map do |permalink, i|
-        { uid: "#{uid}-#{i}", permalink:, perceived_price_cents: "0" }
+        { uid: "#{uid}-#{i}", permalink:, perceived_price_cents: }
       end
       post path, params: { line_items: }, headers: { "HTTP_CF_CONNECTING_IP" => ip }
     end
@@ -538,10 +538,10 @@ describe "Rack::Attack throttle", type: :request do
       end
     end
 
-    context "per-product cap" do
+    context "per-product free-checkout cap" do
       # Exercising the real 600/hour cap would mean issuing 600 checkouts per example, so
       # stub the limit down. The throttle reads it per request precisely so this works.
-      before { stub_const("Rack::Attack::CHECKOUT_PER_PRODUCT_HOURLY_LIMIT", 5) }
+      before { stub_const("Rack::Attack::CHECKOUT_FREE_PRODUCT_HOURLY_LIMIT", 5) }
 
       it "throttles one product past the cap even when the source IP rotates" do
         # This is the case the per-IP rules miss: a residential-proxy pool keeps every
@@ -579,17 +579,49 @@ describe "Rack::Attack throttle", type: :request do
         end
       end
 
-      it "keys a mixed cart on the first permalink so padding cannot dodge the cap" do
-        travel_to(Time.current) do
-          5.times do |i|
-            padding = create(:product, price_cents: 0)
-            checkout(ip: "10.10.0.#{i + 1}", permalinks: [product.unique_permalink, padding.unique_permalink], uid: "a#{i}")
-            expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
-          end
+      # Every product in the cart is charged, so neither ordering hides the abused one.
+      # The padding product rotates each request, which is the shape that would slip past
+      # a cap keyed on only one line item.
+      [:first, :last].each do |position|
+        it "charges the abused product when it is the #{position} item in a mixed cart" do
+          travel_to(Time.current) do
+            5.times do |i|
+              padding = create(:product, price_cents: 0).unique_permalink
+              target = product.unique_permalink
+              permalinks = position == :first ? [target, padding] : [padding, target]
+              checkout(ip: "10.10.#{position == :first ? 0 : 1}.#{i + 1}", permalinks:, uid: "a#{i}")
+              expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+            end
 
-          fresh = create(:product, price_cents: 0)
-          checkout(ip: "10.11.0.1", permalinks: [product.unique_permalink, fresh.unique_permalink], uid: "over")
+            fresh = create(:product, price_cents: 0).unique_permalink
+            permalinks = position == :first ? [product.unique_permalink, fresh] : [fresh, product.unique_permalink]
+            checkout(ip: "10.11.0.1", permalinks:, uid: "over")
+            expect(response.status).to eq(429)
+          end
+        end
+      end
+
+      # The cap is a budget shared across every source IP, so a stranger can spend it on a
+      # seller's behalf. Scoping it to free line items is what keeps that from ever costing
+      # someone a real sale: a paid checkout never consults this counter at all.
+      it "does not count paid line items, so a paid purchase can't be throttled out by others" do
+        travel_to(Time.current) do
+          20.times do |i|
+            checkout(ip: "10.13.0.#{i + 1}", uid: "paid#{i}", perceived_price_cents: "500")
+            expect(response.status).not_to eq(429), "paid request #{i + 1} unexpectedly throttled"
+          end
+        end
+      end
+
+      # ...and free traffic against the product does not spend a paid buyer's budget either,
+      # because the two never share a counter.
+      it "leaves paid checkout of the same product working after the free budget is spent" do
+        travel_to(Time.current) do
+          6.times { |i| checkout(ip: "10.14.0.#{i + 1}", uid: "free#{i}") }
           expect(response.status).to eq(429)
+
+          checkout(ip: "10.14.9.9", uid: "paid", perceived_price_cents: "500")
+          expect(response.status).not_to eq(429)
         end
       end
     end
@@ -628,15 +660,19 @@ describe "Rack::Attack throttle", type: :request do
 
     # The throttle key extractor in isolation, so the pre-existing controller crash above
     # can't hide a regression in it. These are the shapes that reach it in production.
-    describe "per-product throttle key extraction" do
-      def product_key_for(params, json: false)
+    describe "free-checkout permalink extraction" do
+      def free_permalinks_for(params, json: false)
         env = if json
           Rack::MockRequest.env_for("/orders", method: "POST", input: params.to_json,
                                                "CONTENT_TYPE" => "application/json")
         else
           Rack::MockRequest.env_for("/orders", method: "POST", params:)
         end
-        Rack::Attack.throttles["checkout_orders/product"].block.call(Rack::Attack::Request.new(env))
+        Rack::Attack.free_checkout_permalinks(Rack::Attack::Request.new(env))
+      end
+
+      def free_item(permalink, price: "0")
+        { "permalink" => permalink, "perceived_price_cents" => price }
       end
 
       # This is the case that matters most: the real checkout frontend posts a JSON body
@@ -645,42 +681,67 @@ describe "Rack::Attack throttle", type: :request do
       # fire at all. Specs that post form-encoded params (the rspec default) pass either
       # way, so without this example the throttle could ship dead.
       it "reads the permalink from a JSON body, as the checkout frontend sends it" do
-        expect(product_key_for({ "line_items" => [{ "permalink" => "abc" }] }, json: true)).to eq("abc")
+        expect(free_permalinks_for({ "line_items" => [free_item("abc")] }, json: true)).to eq(["abc"])
       end
 
-      it "returns the first permalink for a well-formed cart" do
-        expect(product_key_for({ "line_items" => [{ "permalink" => "abc" }, { "permalink" => "def" }] })).to eq("abc")
+      it "returns every free permalink in a cart, not just the first" do
+        expect(free_permalinks_for({ "line_items" => [free_item("abc"), free_item("def")] })).to eq(%w[abc def])
+      end
+
+      it "ignores paid line items" do
+        items = [free_item("abc"), free_item("paid", price: "500")]
+        expect(free_permalinks_for({ "line_items" => items })).to eq(["abc"])
+        expect(free_permalinks_for({ "line_items" => [free_item("paid", price: "500")] })).to eq([])
+      end
+
+      it "counts a repeated permalink once per request" do
+        expect(free_permalinks_for({ "line_items" => [free_item("abc"), free_item("abc")] })).to eq(["abc"])
       end
 
       it "handles line_items arriving as a hash of indexed items" do
-        expect(product_key_for({ "line_items" => { "0" => { "permalink" => "abc" } } })).to eq("abc")
+        expect(free_permalinks_for({ "line_items" => { "0" => free_item("abc") } })).to eq(["abc"])
       end
 
-      it "returns nil rather than raising for malformed or absent line_items" do
-        expect(product_key_for({ "line_items" => "not-an-array" })).to be_nil
-        expect(product_key_for({ "line_items" => ["a string, not a hash"] })).to be_nil
-        expect(product_key_for({ "line_items" => [{ "permalink" => "" }] })).to be_nil
-        expect(product_key_for({ "email" => "buyer@example.com" })).to be_nil
-        expect(product_key_for({ "line_items" => "not-an-array" }, json: true)).to be_nil
-        expect(product_key_for({ "line_items" => ["a string, not a hash"] }, json: true)).to be_nil
+      it "returns nothing rather than raising for malformed or absent line_items" do
+        expect(free_permalinks_for({ "line_items" => "not-an-array" })).to eq([])
+        expect(free_permalinks_for({ "line_items" => ["a string, not a hash"] })).to eq([])
+        expect(free_permalinks_for({ "line_items" => [free_item("")] })).to eq([])
+        expect(free_permalinks_for({ "line_items" => [{ "permalink" => "abc" }] })).to eq([])
+        expect(free_permalinks_for({ "email" => "buyer@example.com" })).to eq([])
+        expect(free_permalinks_for({ "line_items" => "not-an-array" }, json: true)).to eq([])
+        expect(free_permalinks_for({ "line_items" => ["a string, not a hash"] }, json: true)).to eq([])
       end
 
       it "does not raise on a malformed JSON body" do
         env = Rack::MockRequest.env_for("/orders", method: "POST", input: "{not json",
                                                    "CONTENT_TYPE" => "application/json")
-        expect { Rack::Attack.throttles["checkout_orders/product"].block.call(Rack::Attack::Request.new(env)) }
+        expect { Rack::Attack.free_checkout_permalinks(Rack::Attack::Request.new(env)) }
           .not_to raise_error
       end
 
       # json_params reads the request body; if it did not rewind, the app would see an
       # already-consumed body and checkout would break for every request.
       it "leaves the request body readable for the app" do
-        body = { "line_items" => [{ "permalink" => "abc" }] }.to_json
+        body = { "line_items" => [free_item("abc")] }.to_json
         env = Rack::MockRequest.env_for("/orders", method: "POST", input: body,
                                                    "CONTENT_TYPE" => "application/json")
-        req = Rack::Attack::Request.new(env)
-        Rack::Attack.throttles["checkout_orders/product"].block.call(req)
+        Rack::Attack.free_checkout_permalinks(Rack::Attack::Request.new(env))
         expect(env["rack.input"].read).to eq(body)
+      end
+
+      # The registered throttle only blocks once a bucket is already over budget, and its
+      # discriminator names which product ran out — checked directly here so the
+      # request-level examples above aren't the only thing standing between a silent
+      # rewrite of the counting and a dead cap.
+      it "names the over-budget product only once its bucket is spent" do
+        stub_const("Rack::Attack::CHECKOUT_FREE_PRODUCT_HOURLY_LIMIT", 2)
+        env = Rack::MockRequest.env_for("/orders", method: "POST", input: { "line_items" => [free_item("abc")] }.to_json,
+                                                   "CONTENT_TYPE" => "application/json")
+        req = -> { Rack::Attack::Request.new(env.dup) }
+
+        expect(Rack::Attack.exceeded_free_checkout_permalink(req.call)).to be_nil
+        expect(Rack::Attack.exceeded_free_checkout_permalink(req.call)).to be_nil
+        expect(Rack::Attack.exceeded_free_checkout_permalink(req.call)).to eq("abc")
       end
     end
   end

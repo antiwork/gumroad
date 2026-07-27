@@ -198,8 +198,10 @@ class Rack::Attack
   # exact string compare on "/orders" would miss `/orders.json` and every
   # non-primary-host variant. Keyed on IP alone so all variants share one counter.
   CHECKOUT_ORDER_PATH = %r{\A/orders(?:/prepare)?(?:\.[^/]+)?\z}
-  # Total checkout attempts allowed per product per hour, across all source IPs.
-  CHECKOUT_PER_PRODUCT_HOURLY_LIMIT = 600
+  # Free checkout attempts allowed per product per hour, across all source IPs.
+  CHECKOUT_FREE_PRODUCT_HOURLY_LIMIT = 600
+  CHECKOUT_FREE_PRODUCT_THROTTLE = "checkout_orders/free_product"
+  CHECKOUT_FREE_PRODUCT_PERIOD = 1.hour
   # Initial: 40rpm, Max: 200 requests/9 hours
   throttle_with_exponential_backoff(name: "checkout_orders/ip", requests: 40, period: 60.seconds) do |req|
     req.remote_ip if req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
@@ -208,7 +210,7 @@ class Rack::Attack
     req.remote_ip if req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
   end
 
-  # Per-product checkout cap, on top of the per-IP rules above.
+  # Per-product cap on FREE checkouts, on top of the per-IP rules above.
   #
   # The per-IP limits do nothing against a proxy pool: an operator renting thousands of
   # residential IPs stays under every per-IP budget while hammering one product. That is
@@ -217,44 +219,98 @@ class Rack::Attack
   # scraped addresses turns free checkouts into bulk unsolicited mail on our reputation
   # and with our branding.
   #
-  # So cap total checkout attempts per product per hour, keyed on the product permalink
-  # rather than the source IP. 600/hour is far above anything organic (a genuine product
-  # doing 600 sales in an hour is a launch spike we would hear about, and it recovers on
-  # the next window) and far below the ~16-29K/hour this abuse sustained.
+  # So cap checkout attempts per product per hour, keyed on the product permalink rather
+  # than the source IP. 600/hour is far above anything organic (a product genuinely
+  # getting 600 free claims in an hour is a launch we would hear about, and the window
+  # resets) and far below the ~16-29K/hour this abuse sustained.
   #
-  # The limit is a proc rather than a literal so it is read per request instead of frozen
-  # at boot — that lets specs exercise the throttle without issuing 600 real checkouts,
-  # and lets the cap be lowered in an incident without a deploy.
+  # Two deliberate scoping decisions, both about keeping the blast radius of a shared
+  # counter small. A budget shared across all source IPs is inherently something a
+  # stranger can spend on a seller's behalf: the middleware runs before the app, so it
+  # cannot know whether a request would have become a real purchase, and a rejected
+  # request costs the same budget as an accepted one.
+  #
+  # 1. Only FREE line items (`perceived_price_cents == "0"`) are counted, so nobody can
+  #    ever be 429'd out of a PAID purchase by someone else's traffic. That is also
+  #    where the abuse lives — a paid checkout is self-limiting because it needs a card
+  #    that actually charges.
+  # 2. An attacker cannot escape the cap by claiming a non-zero price for a free
+  #    product: `perceived_price_cents` is the same field
+  #    `OrdersController#all_free_products_without_captcha?` reads, and a non-zero value
+  #    there means reCAPTCHA is no longer skipped. So the traffic is either
+  #    cheap-and-capped or captcha-gated, with no third option.
+  #
+  # The residual exposure is that 600 free-checkout attempts against one product can
+  # spend that product's hour, delaying free claims from real buyers until the window
+  # rolls. That is the trade we want: a free claim that has to be retried later is
+  # recoverable, mailing a scraped list from our sending domain is not.
   #
   # No exponential-backoff tiers here: with a 1-hour base period the derived rpm is 10, so
   # a level-2 tier would allow only 20 requests per 64 seconds — stricter than the base
   # limit, and it would block a legitimate burst (the same trap the media-upload and walks
   # throttles above document).
-  throttle("checkout_orders/product", limit: ->(_req) { CHECKOUT_PER_PRODUCT_HOURLY_LIMIT }, period: 1.hour) do |req|
-    if req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
-      # The checkout frontend posts a JSON body (`utils/request.ts` sets
-      # `Content-Type: application/json` and `JSON.stringify`s the payload), and
-      # `Rack::Request#params` only parses FORM-encoded bodies — it would return nothing
-      # for a real checkout and this cap would never fire. Read `json_params` for JSON
-      # requests, the same way the device-grant throttle above does. Note that specs
-      # posting `params: { ... }` default to form encoding, so a spec exercising only
-      # that path cannot catch this — there is a JSON-content-type example for it.
-      body_params = req.media_type&.include?("json") ? req.json_params : req.POST
-      line_items = body_params.is_a?(Hash) ? body_params["line_items"] : nil
-      # Rails serializes an array of line items as either a JSON array or, form-encoded,
-      # a hash keyed by index — accept both, and ignore anything else rather than raising
-      # (a raise here would take down the middleware for every request on this path).
-      line_items = line_items.values if line_items.is_a?(Hash)
-      if line_items.is_a?(Array)
-        # A cart can hold several products; key on the first permalink so a mixed cart
-        # can't dodge the cap by padding itself with other products. Requests with no
-        # identifiable product fall through to the per-IP rules above rather than
-        # sharing one global bucket.
-        line_items.filter_map { |item| item["permalink"].presence if item.is_a?(Hash) }.first
-      end
-    end
+
+  # Every free product in the cart, so a cart can't dodge the cap by ordering its items
+  # a particular way. Public so specs can exercise it against the request shapes that
+  # reach it in production.
+  def self.free_checkout_permalinks(req)
+    return [] unless req.path.match?(CHECKOUT_ORDER_PATH) && req.post?
+
+    # The checkout frontend posts a JSON body (`utils/request.ts` sets
+    # `Content-Type: application/json` and `JSON.stringify`s the payload), and
+    # `Rack::Request#params` only parses FORM-encoded bodies — it would return nothing
+    # for a real checkout and this cap would never fire. Read `json_params` for JSON
+    # requests, the same way the device-grant throttle above does. Note that specs
+    # posting `params: { ... }` default to form encoding, so a spec exercising only
+    # that path cannot catch this — there is a JSON-content-type example for it.
+    body_params = req.media_type&.include?("json") ? req.json_params : req.POST
+    line_items = body_params.is_a?(Hash) ? body_params["line_items"] : nil
+    # Rails serializes an array of line items as either a JSON array or, form-encoded,
+    # a hash keyed by index — accept both, and ignore anything else rather than raising
+    # (a raise here would take down the middleware for every request on this path).
+    line_items = line_items.values if line_items.is_a?(Hash)
+    return [] unless line_items.is_a?(Array)
+
+    line_items.filter_map do |item|
+      next unless item.is_a?(Hash)
+      next unless item["perceived_price_cents"].to_s == "0"
+
+      item["permalink"].presence
+    end.uniq
   rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
-    nil
+    []
+  end
+
+  # Charges every free product in the cart one attempt and returns the first one that has
+  # gone over its hourly budget, or nil when they are all still under it.
+  #
+  # Rack::Attack's own counting supports exactly one bucket per request (the value the
+  # throttle block returns), which is why this counts by hand: a cart holds several
+  # products and all of them have to be charged, or padding the cart with a throwaway
+  # product would hide the abused one. `Rack::Attack.cache.count` is the same
+  # increment-and-read the gem uses internally, so these buckets expire with the window
+  # like every other throttle's do.
+  def self.exceeded_free_checkout_permalink(req)
+    permalinks = free_checkout_permalinks(req)
+    return if permalinks.empty?
+
+    # Count every product BEFORE looking for one over budget — `find` alone would stop
+    # incrementing at the first offender and leave the rest of the cart uncharged.
+    counts = permalinks.map do |permalink|
+      [permalink, cache.count("#{CHECKOUT_FREE_PRODUCT_THROTTLE}:#{permalink}", CHECKOUT_FREE_PRODUCT_PERIOD)]
+    end
+
+    counts.find { |_permalink, count| count > CHECKOUT_FREE_PRODUCT_HOURLY_LIMIT }&.first
+  end
+
+  # `limit: 0` because the budget is already enforced by
+  # `exceeded_free_checkout_permalink` above: the block returns a value only for a
+  # request that is already over, and any non-nil discriminator against a limit of 0
+  # blocks. This registered throttle exists to turn that decision into Rack::Attack's
+  # normal 429 response and instrumentation. Its own counter is namespaced separately
+  # (`/exceeded`) so it cannot collide with the per-product buckets counted by hand.
+  throttle("#{CHECKOUT_FREE_PRODUCT_THROTTLE}/exceeded", limit: 0, period: CHECKOUT_FREE_PRODUCT_PERIOD) do |req|
+    Rack::Attack.exceeded_free_checkout_permalink(req)
   end
 
   # Help Center contact form. Each submission sends an email into the support
