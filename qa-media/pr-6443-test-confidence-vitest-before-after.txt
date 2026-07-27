@@ -340,3 +340,84 @@ untouched):
 
 All round-4 fixtures removed (/tmp/vfix, /tmp/vfix2 are outside the repo;
 Input.tsx reverted); `git status` shows only bin/test-confidence.
+
+════════════════════════════════════════════════════════════════════════════
+ROUND 5 — an UNAVAILABLE Vitest replay no longer counts as "pre-existing"
+════════════════════════════════════════════════════════════════════════════
+
+Greptile, round 5: when the merge-base replay comes back inconclusive, the code
+fell back to the basename heuristic, and the heuristic cannot associate an
+unchanged test with a differently-named shared dependency. So the failure was
+recorded as "likely pre-existing (unverified)" and the gate printed
+"Safe to commit". That is round 3's hole again, reachable through a different
+door: instead of the replay being absent, the replay is unavailable.
+
+Reproduced in the real repo before changing anything. Fixture (fixture.sh):
+
+  1. break a shared dependency:  app/javascript/components/ui/Input.tsx
+     (wrap the rendered <input> in an extra <div>)
+  2. leave the failing test untouched: app/javascript/components/ui/InputGroup.test.tsx
+     — it imports Input, and the two share no basename
+  3. make the replay UNAVAILABLE the way a real branch would: touch package.json,
+     which is the documented bail-out (the borrowed node_modules is no longer
+     provably merge-base's dependency set)
+  4. pin a cached plan so the gate runs exactly that test
+
+BEFORE (2dc57f0, current PR head)
+
+     80%  ←  1 test
+            app/javascript/components/ui/InputGroup.test.tsx
+     ⚠ likely pre-existing (unverified): app/javascript/components/ui/InputGroup.test.tsx
+     ✅ 99% confidence — 1 test passed in 5s
+        (1 failure pre-existing, skipped — see list below)
+        Safe to commit.
+  EXIT_CODE: 0
+
+The regression is real, the gate says ship it.
+
+AFTER (this commit)
+
+     ❌ FAILED (could not verify against merge-base) — app/javascript/components/ui/InputGroup.test.tsx
+     ───────────────────────────────────────────────────
+     The merge-base replay could not run, so there is no
+     evidence this failure is pre-existing rather than caused
+     by your branch.
+     Reason: package.json/package-lock.json changed on this branch, so this
+     checkout's node_modules is not the dependency set merge-base would install
+
+     ... real Vitest output ...
+      Test Files  1 failed (1)
+           Tests  2 failed | 1 passed (3)
+
+     Fix this before committing.
+  EXIT_CODE: 1
+
+What changed. There is no cheap substitute for the replay — any filename-based
+guess is blind to exactly the case the replay exists to catch — so the fallback
+is deleted rather than improved. `is_likely_preexisting` is gone entirely (it
+had no other caller once the JS path stopped using it), and an inconclusive JS
+replay now halts with the reason it was inconclusive, so the reader knows what
+to fix to get a verdict: run `npm ci`, or accept that a dependency-manifest
+change means merge-base cannot be replayed at all.
+
+The four inconclusive paths each now carry their reason:
+  - package.json / package-lock.json changed on this branch
+  - no node_modules in this checkout to lend
+  - could not create the merge-base worktree / link node_modules
+  - Vitest executed no tests on either side
+
+CONTROL — a genuinely pre-existing failure must still be SKIPPED, or a gate
+that halts on everything is no more useful than one that halts on nothing.
+app/javascript/components/Search.test.tsx is already red on merge-base
+(3 failed | 10 passed), replay available, branch touches an unrelated file:
+
+     ⚠ confirmed pre-existing: app/javascript/components/Search.test.tsx
+     ✅ 99% confidence — 1 test passed in 21s
+        Safe to commit.
+  EXIT_CODE: 0
+
+  $ bash -n bin/test-confidence                 # clean
+  $ shellcheck -S error bin/test-confidence     # clean
+
+All round-5 fixtures reverted; `git status` shows only bin/test-confidence and
+this transcript.
