@@ -103,12 +103,11 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
     unless result[:success]
       # About a quarter of confirmed actions come back 422, but the status alone is a bucket —
       # permission denials, unknown-key rejections, and API validation failures all land here.
-      # Stash the executor's reason and the endpoint being written so append_info_to_payload can
-      # attach them to this request's log line, making the 422s separable in Elasticsearch. The
-      # reason is bounded before logging (see #log_safe_failure_reason), and the endpoint is
-      # resolved through the catalog so only a known id — never a string chosen by the request —
-      # reaches the field this metric groups by.
-      @agent_action_failure_reason = log_safe_failure_reason(result[:message])
+      # Stash only the executor's fixed category, numeric upstream status, and catalog-resolved
+      # endpoint. The API message can contain reflected seller input such as a callback URL with
+      # credentials, so it must remain in the response and never reach long-lived logs.
+      @agent_action_failure_reason = result[:failure_reason]
+      @agent_action_failure_status = result[:failure_status]
       @agent_action_endpoint = ::Ai::StoreAgentApiCatalog.find(action_params["endpoint"])&.id
     end
 
@@ -124,7 +123,7 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
       ErrorNotifier.notify(e)
     end
 
-    render json: result, status: result[:success] ? :ok : :unprocessable_entity
+    render json: public_action_result(result), status: result[:success] ? :ok : :unprocessable_entity
   rescue ActiveRecord::RecordNotFound
     # Re-raise so the controller-level rescue_from renders the JSON 404 — without this the generic
     # rescue below would report an unknown conversation id as a 500.
@@ -144,25 +143,14 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
     def append_info_to_payload(payload)
       super
       payload[:agent_action_failure_reason] = @agent_action_failure_reason if @agent_action_failure_reason
+      payload[:agent_action_failure_status] = @agent_action_failure_status if @agent_action_failure_status
       payload[:agent_action_endpoint] = @agent_action_endpoint if @agent_action_endpoint
     end
 
-    # Permission denials come from our own code, but validation failures are reflected from the v2
-    # API, which echoes seller-supplied values back in its messages (a rejected product name, a bad
-    # discount code). Those land in structured logs, which are searchable by anyone with log access
-    # and retained far longer than a request, so bound what gets written:
-    #   - collapse newlines, so one failure can't fake extra log lines or break the JSON payload
-    #   - cap the length, so a long echoed value can't bloat every 422's log entry
-    # The point of logging the reason is to tell the buckets of 422 apart (denied vs unknown key vs
-    # validation), and the leading words carry that; the exact rejected value does not.
-    FAILURE_REASON_LOG_LIMIT = 200
-    private_constant :FAILURE_REASON_LOG_LIMIT
-
-    def log_safe_failure_reason(message)
-      normalized = message.to_s.gsub(/\s+/, " ").strip
-      return if normalized.blank?
-
-      normalized.truncate(FAILURE_REASON_LOG_LIMIT)
+    # failure_reason and failure_status are server-only telemetry. Keeping them out of the response
+    # preserves the existing web/mobile contract and avoids exposing logging details to clients.
+    def public_action_result(result)
+      result.except(:failure_reason, :failure_status)
     end
 
     # Runs before throttling so a team member denied the Agent tab can't burn the seller-scoped

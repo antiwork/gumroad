@@ -588,6 +588,79 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(storage_lookups).to eq(1)
       end
 
+      # A membership carries a separate file list per tier, so the budget has to
+      # cover the whole save rather than being handed out once per list —
+      # otherwise a product's worst case multiplies by how many tiers it has.
+      it "spends one budget across the product and all of its variants" do
+        storage_lookups = 0
+        # The first lookup burns the whole budget, so nothing after it is asked,
+        # in this tier or any later one.
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          storage_lookups += 1
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+        membership.tiers.each do |tier|
+          2.times { tier.product_files << create(:product_file, link: membership, analyze_completed: false) }
+          tier.save!
+        end
+
+        expect(described_class.check(membership.reload, :product).passed).to eq(false)
+        expect(storage_lookups).to eq(1)
+      end
+
+      # Running out of time is one event for the whole save, so it has to be
+      # reported once with the total left unchecked. A line per tier would both
+      # flood the log and leave nobody able to see how many files that was.
+      it "logs a single warning naming the total left unchecked across all tiers" do
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+        membership.tiers.each do |tier|
+          2.times { tier.product_files << create(:product_file, link: membership, analyze_completed: false) }
+          tier.save!
+        end
+        membership.reload
+        # Distinct files, not lookups: a file attached to a tier is also in the
+        # product's own list, so both walks reach it and it must be reported once.
+        # Everything but the single lookup that burned the budget went unchecked.
+        unchecked = membership.alive_product_files.count - 1
+
+        warnings = []
+        allow(Rails.logger).to receive(:warn) { |message| warnings << message }
+
+        expect(described_class.check(membership, :product).passed).to eq(false)
+
+        budget_warnings = warnings.grep(/storage check budget spent/)
+        expect(budget_warnings.size).to eq(1)
+        expect(budget_warnings.first).to include("#{unchecked} unverifiable file(s) left unchecked")
+      end
+
+      # Running out of time on the files is only worth reporting if the product
+      # ended up with nothing. A content page delivers on its own, so that save
+      # passes and must not carry a failure-shaped warning about files nobody
+      # needed to look at.
+      it "does not warn about a spent budget when the product passes on its page content" do
+        allow_any_instance_of(ProductFile).to receive(:s3_object) do
+          sleep(described_class::STORAGE_CHECK_TIME_BUDGET_SECONDS)
+          double("s3_object", exists?: false)
+        end
+        3.times { product.product_files << create(:product_file, analyze_completed: false) }
+        create(:rich_content, entity: product, description: [
+                 { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Here is the course." }] }
+               ])
+        product.save!
+
+        warnings = []
+        allow(Rails.logger).to receive(:warn) { |message| warnings << message }
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+        expect(warnings.grep(/storage check budget spent/)).to be_empty
+      end
+
       # A file that finished analyzing is answered from its own row, so a real
       # deliverable sitting behind a pile of unfinished uploads still publishes
       # and still costs nothing to confirm.
@@ -670,6 +743,24 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(result.passed).to eq(true)
         expect(result.reasons).to eq([])
         expect(ContentModerationAdminCommentJob.jobs).to be_empty
+      end
+
+      # Whether a listing delivers anything only matters for deciding if a spam
+      # flag should stop blocking. With nothing flagged there is no such
+      # decision to make, so the save must not go walking the seller's files:
+      # it costs storage lookups that change no outcome, and running out of
+      # time on them would write a rejection-shaped warning onto a save that
+      # published fine.
+      it "does not check storage or warn about a spent budget when nothing was flagged" do
+        expect_any_instance_of(ProductFile).not_to receive(:s3_object)
+        3.times { product.product_files << create(:product_file, analyze_completed: false) }
+        product.save!
+
+        warnings = []
+        allow(Rails.logger).to receive(:warn) { |message| warnings << message }
+
+        expect(described_class.check(product.reload, :product).passed).to eq(true)
+        expect(warnings.grep(/storage check budget spent/)).to be_empty
       end
     end
 

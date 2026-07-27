@@ -1164,18 +1164,72 @@ class LinkTest < ActiveSupport::TestCase
     assert_not build_product(custom_permalink: "asdf!213").valid?
   end
 
+  # --- custom_permalink error copy --------------------------------------------
+  # Each rejection has to name the rule the seller hit. A generic "is invalid"
+  # or "has already been taken" doesn't tell them what to change, and for the
+  # cross-account licensed-product conflict "taken" is actively misleading —
+  # the handle belongs to a different Gumroad account, not to them.
+  # gumroad-private#1363.
+
+  test "custom_permalink format error lists the characters allowed" do
+    product = build_product(custom_permalink: "asdf&asdf")
+
+    assert_not product.valid?
+    assert_equal ["Custom permalink can only contain letters, numbers, dashes, and underscores"],
+                 product.errors.full_messages
+  end
+
+  test "custom_permalink is invalid beyond the length the column can store" do
+    product = build_product(custom_permalink: "a" * (Link::CUSTOM_PERMALINK_MAX_LENGTH + 1))
+
+    assert_not product.valid?
+    assert_equal ["Custom permalink must be #{Link::CUSTOM_PERMALINK_MAX_LENGTH} characters or fewer"],
+                 product.errors.full_messages
+  end
+
+  test "custom_permalink at the maximum length is valid" do
+    assert build_product(custom_permalink: "a" * Link::CUSTOM_PERMALINK_MAX_LENGTH).valid?
+  end
+
+  test "custom_permalink duplicate error says it's the seller's own other product" do
+    user = create_user
+    create_product(user:, custom_permalink: "custom")
+    product = build_product(user:, custom_permalink: "custom")
+
+    assert_not product.valid?
+    assert_equal ["Custom permalink is already used by another one of your products"], product.errors.full_messages
+  end
+
+  test "custom_permalink colliding with the seller's own unique permalink says the same thing" do
+    user = create_user
+    create_product(user:, unique_permalink: "abc")
+    product = build_product(user:, custom_permalink: "abc")
+
+    assert_not product.valid?
+    assert_equal ["Custom permalink is already used by another one of your products"], product.errors.full_messages
+  end
+
+  test "custom_permalink held by another account's licensed product says so instead of taken" do
+    timestamp = seed_licensed_permalink_conflict
+    product = create_product(is_licensed: true, created_at: timestamp - 1.day)
+
+    assert_equal false, product.update(custom_permalink: "abc")
+    assert_equal "Custom permalink is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.",
+                 product.errors.full_messages.to_sentence
+  end
+
   test "a licensed product created before force_product_id_timestamp is invalid when its custom permalink overlaps another seller's licensed product" do
     timestamp = seed_licensed_permalink_conflict
     product = create_product(is_licensed: true, created_at: timestamp - 1.day)
     assert_equal false, product.update(custom_permalink: "abc")
-    assert_equal "Custom permalink has already been taken", product.errors.full_messages.to_sentence
+    assert_equal "Custom permalink is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.", product.errors.full_messages.to_sentence
   end
 
   test "switching a pre-timestamp product to licensed is invalid when its custom permalink overlaps another seller's licensed product" do
     timestamp = seed_licensed_permalink_conflict
     product = create_product(custom_permalink: "abc", created_at: timestamp - 1.day)
     assert_equal false, product.update(is_licensed: true)
-    assert_equal "Custom permalink has already been taken", product.errors.full_messages.to_sentence
+    assert_equal "Custom permalink is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.", product.errors.full_messages.to_sentence
   end
 
   # The overlap validation must be correctly scoped — it should NOT fire in these

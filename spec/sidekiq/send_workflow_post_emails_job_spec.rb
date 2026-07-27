@@ -129,12 +129,91 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
       end
 
+      it "when follower_type? is true and a bought-product filter is set, it still sends to the matching follower" do
+        @post.update!(installment_type: Installment::FOLLOWER_TYPE, bought_products: [@products[0].unique_permalink])
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
+      end
+
       it "when affiliate_type? is true, it sends the expected emails at the right times" do
         @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+      end
+
+      it "when affiliate_type? is true and a bought-product filter is set, it still resolves the matching affiliate" do
+        create(:purchase, link: @products[0], email: @affiliates[0].affiliate_user.email, created_at: 2.hours.ago)
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink], bought_products: [@products[0].unique_permalink])
+
+        member = AudienceMember.filter(seller_id: @post.seller_id, params: @post.audience_members_filter_params, with_ids: true).sole
+        expect(member.affiliate_id).to eq(@affiliates[0].id)
+
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+      end
+
+      it "enqueues an affiliate id the worker can actually resolve to a user" do
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
+        described_class.new.perform(@post.id)
+
+        # The worker resolves this argument with User.find_by, so a DirectAffiliate id here
+        # lands on whichever unrelated user happens to share that number, or on nobody.
+        enqueued_id = SendWorkflowInstallmentWorker.jobs.last["args"].last
+        expect(User.find_by(id: enqueued_id)).to eq(@affiliates[0].affiliate_user)
+        expect(enqueued_id).not_to eq(@affiliates[0].id)
+      end
+
+      it "when the affiliate id is missing from the join, it falls back to an affiliate entry for one of the post's products" do
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
+
+        member = AudienceMember.find_by!(seller: @seller, email: @affiliates[0].affiliate_user.email)
+        # A member accumulates one `details["affiliates"]` entry per (affiliate relationship,
+        # product) pair, and an entry for a relationship that has since been replaced can still be
+        # sitting in the JSON. Here the leftover entry is for a product this post is not about and
+        # carries a higher id and a different created_at, so a fallback that just takes the newest
+        # entry on the member would pick it.
+        details = member.details.deep_dup
+        details["affiliates"] = [
+          { "id" => @affiliates[0].id, "product_id" => @products[0].id, "created_at" => 4.hours.ago.iso8601 },
+          { "id" => @affiliates[0].id + 1_000, "product_id" => @products[2].id, "created_at" => 1.hour.ago.iso8601 },
+        ]
+        # Reproduce the case Greptile flagged: the member still qualifies, but the aggregate over
+        # the JSON_TABLE join hands back a NULL affiliate id, so the job resolves it itself.
+        allow(member).to receive(:details).and_return(details)
+        allow(member).to receive(:affiliate_id).and_return(nil)
+        allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
+
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+      end
+
+      it "when the affiliate id is missing and nothing on the member is in scope, it skips them instead of sending" do
+        @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@products[0].unique_permalink])
+
+        member = AudienceMember.find_by!(seller: @seller, email: @affiliates[0].affiliate_user.email)
+        # Every entry left on the member is for a product this post is not about. There is no
+        # legitimate affiliate to send as, so the job must skip rather than reach for one of them.
+        details = member.details.deep_dup
+        details["affiliates"] = [
+          { "id" => @affiliates[0].id + 1_000, "product_id" => @products[2].id, "created_at" => 1.hour.ago.iso8601 },
+        ]
+        allow(member).to receive(:details).and_return(details)
+        allow(member).to receive(:affiliate_id).and_return(nil)
+        allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
+
+        expect(Rails.logger).to receive(:error).with(/could not resolve a affiliate recipient/)
+
+        described_class.new.perform(@post.id)
+
+        expect(SendWorkflowInstallmentWorker.jobs).to be_empty
       end
 
       it "when audience_type? is true, it sends the expected emails at the right times" do
@@ -145,7 +224,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil).immediately
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
 
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
 
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, @sales[2].id, nil, nil).immediately
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, @sales[3].id, nil, nil).immediately
