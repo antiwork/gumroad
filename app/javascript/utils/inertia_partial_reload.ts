@@ -36,17 +36,29 @@ const isPartialReload = (config: Record<string, unknown>): boolean => {
   return Object.keys(headers).some((name) => name.toLowerCase() === PARTIAL_DATA_HEADER);
 };
 
-// True when the response came back from a different URL than the request was sent to, i.e. the
+// True when the response came back from a different page than the request was sent to, i.e. the
 // server (or the edge) redirected it somewhere else. `responseURL` is the final URL after the
 // browser followed any redirects, so comparing it to the requested URL detects one having
 // happened without needing to see the intermediate 3xx.
+//
+// Only origin + path are compared, deliberately. Axios keeps GET query data in `config.params`
+// and appends it to the wire URL itself, so `config.url` can lack a query string that
+// `responseURL` reports — comparing full hrefs would read that as a redirect and navigate,
+// which is the exact bug this guard exists to prevent. A redirect that actually matters here
+// (session expiry, revoked access) always lands on a different path.
 const wasRedirected = (config: Record<string, unknown>, request: unknown): boolean => {
   const requestedUrl = stringOrNull(config.url);
   const finalUrl = isRecord(request) ? stringOrNull(request.responseURL) : null;
   if (requestedUrl === null || finalUrl === null) return false;
 
+  const pageIdentity = (url: string) => {
+    const { origin, pathname } = new URL(url, window.location.origin);
+    // Ignore a trailing slash so "/d/abc" and "/d/abc/" are the same page.
+    return `${origin}${pathname.replace(/\/$/u, "")}`;
+  };
+
   try {
-    return new URL(finalUrl, window.location.origin).href !== new URL(requestedUrl, window.location.origin).href;
+    return pageIdentity(finalUrl) !== pageIdentity(requestedUrl);
   } catch {
     // Unparseable URL: fall back to treating it as a redirect so navigation still happens. The
     // safe default here is the pre-existing behavior, never silently swallowing the response.

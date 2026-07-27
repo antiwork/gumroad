@@ -64,20 +64,26 @@ const pageProps = () => ({
   dropbox_api_key: null,
 });
 
+// The page's two polls, identified by their interval rather than by call order: keying on
+// position would silently start asserting against the wrong poll if a third one were ever added.
+const MEDIA_LOCATIONS_POLL_INTERVAL = 10_000;
+
+type PollFake = { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> };
+
 describe("DownloadPage media position polling", () => {
   let DownloadPage: React.ComponentType;
-  const polls: { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }[] = [];
+  // One persistent fake per interval. The same object has to come back on every render, or
+  // calls made during earlier renders would be lost.
+  const pollsByInterval = new Map<number, PollFake>();
 
   beforeEach(async () => {
-    polls.length = 0;
-    // usePoll is called once per poll per render, always in the same order, so hand back the
-    // same fake per position: polls[0] is the audio-durations poll, polls[1] the media-positions
-    // one. Fresh objects per render would lose the calls made by earlier renders.
-    let callIndexInRender = 0;
-    mocks.usePoll.mockImplementation(() => {
-      const index = callIndexInRender++ % 2;
-      polls[index] ??= { start: vi.fn(), stop: vi.fn() };
-      return polls[index];
+    pollsByInterval.clear();
+    mocks.usePoll.mockImplementation((interval: number) => {
+      const existing = pollsByInterval.get(interval);
+      if (existing) return existing;
+      const poll: PollFake = { start: vi.fn(), stop: vi.fn() };
+      pollsByInterval.set(interval, poll);
+      return poll;
     });
     // The page asserts its props with typia; bypass that by asserting a loose object.
     mocks.usePage.mockReturnValue({ props: pageProps() });
@@ -89,8 +95,15 @@ describe("DownloadPage media position polling", () => {
     vi.clearAllMocks();
   });
 
-  // usePoll is called for audio durations first, then media locations (DownloadPage.tsx).
-  const mediaLocationsPoll = () => polls[1];
+  const mediaLocationsPoll = () => pollsByInterval.get(MEDIA_LOCATIONS_POLL_INTERVAL);
+
+  // Guards the lookup above: if the page's poll interval changes, every assertion below would
+  // silently be reading an absent poll and passing on optional chaining.
+  it("registers a media-positions poll on the expected interval", () => {
+    render(<DownloadPage />);
+
+    expect(mediaLocationsPoll()).toBeDefined();
+  });
 
   it("polls for media positions while nothing is playing", () => {
     render(<DownloadPage />);

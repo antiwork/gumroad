@@ -48,6 +48,21 @@ describe("isUnredirectedPartialReloadResponse", () => {
     expect(isUnredirectedPartialReloadResponse(pollResponse({ url: "/d/abc123", responseURL: sameOrigin }))).toBe(true);
   });
 
+  // Axios keeps GET query data in `config.params` and appends it to the wire URL itself, so
+  // `config.url` can lack a query string that the browser's `responseURL` reports. Comparing
+  // full hrefs read that as a redirect and navigated — silently undoing this whole guard.
+  it("matches when responseURL carries a query string the request URL did not", () => {
+    expect(
+      isUnredirectedPartialReloadResponse(
+        pollResponse({ url: CONTENT_PAGE_URL, responseURL: `${CONTENT_PAGE_URL}?foo=bar` }),
+      ),
+    ).toBe(true);
+  });
+
+  it("matches across a trailing-slash difference on the same page", () => {
+    expect(isUnredirectedPartialReloadResponse(pollResponse({ responseURL: `${CONTENT_PAGE_URL}/` }))).toBe(true);
+  });
+
   it("does not match a full page visit", () => {
     expect(isUnredirectedPartialReloadResponse(pollResponse({ headers: { "X-Inertia": "true" } }))).toBe(false);
   });
