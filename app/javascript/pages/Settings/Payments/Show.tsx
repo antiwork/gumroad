@@ -9,6 +9,7 @@ import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
@@ -40,6 +41,19 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
 const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=Latin}\d\s\-.]*$/u;
+
+// GambiaBankAccount requires exactly 18 letters or digits (/^[0-9A-Za-z]{18}$/). The account-number
+// input carries a matching `pattern`, but the Save button runs this page's own validation and posts
+// through Inertia rather than submitting the form element, so the browser never enforces that
+// pattern. Re-check the same shape here so a wrong-length number is caught before the request goes
+// out instead of coming back as a generic server-side save failure.
+const GAMBIA_ACCOUNT_NUMBER_REGEX = /^[0-9A-Za-z]{18}$/u;
+
+// GambiaBankAccount's bank code is a SWIFT/BIC of 8 to 11 letters or digits
+// (/^[0-9A-Za-z]{8,11}$/), e.g. AGIXGMGM. Same story as the account number above: the input's
+// `pattern` never runs because the page posts through Inertia instead of submitting the form, so
+// a malformed code would only surface as a generic "The bank code is invalid." from the server.
+const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
 
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
@@ -679,8 +693,22 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "MacaoBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
+    if (form.data.bank_account.type === "GambiaBankAccount") {
+      if (!form.data.bank_account.bank_code) {
+        markFieldInvalid("bank_code");
+      } else if (!GAMBIA_SWIFT_BIC_REGEX.test(form.data.bank_account.bank_code)) {
+        markFieldInvalid("bank_code");
+        setClientErrorMessage({ message: "SWIFT / BIC code must be 8 to 11 letters or digits." });
+      }
+    }
     if (!form.data.bank_account.account_number) {
       markFieldInvalid("account_number");
+    } else if (
+      form.data.bank_account.type === "GambiaBankAccount" &&
+      !GAMBIA_ACCOUNT_NUMBER_REGEX.test(form.data.bank_account.account_number)
+    ) {
+      markFieldInvalid("account_number");
+      setClientErrorMessage({ message: "Account number must be exactly 18 letters or digits." });
     }
     if (!form.data.bank_account.account_number_confirmation) {
       markFieldInvalid("account_number_confirmation");
@@ -789,7 +817,7 @@ export default function PaymentsPage() {
       markFieldInvalid("state");
       setClientErrorMessage({ message: "Please select a valid state or province." });
     }
-    if (!form.data.user.zip_code && form.data.user.country !== "BW") {
+    if (!form.data.user.zip_code && countryRequiresPostalCode(form.data.user.country)) {
       markFieldInvalid("zip_code");
     }
     if (!validatePhoneNumber(form.data.user.phone, form.data.user.country)) {
@@ -950,7 +978,7 @@ export default function PaymentsPage() {
         markFieldInvalid("business_state");
         setClientErrorMessage({ message: "Please select a valid state or province." });
       }
-      if (!form.data.user.business_zip_code && props.user.country_code !== "BW") {
+      if (!form.data.user.business_zip_code && countryRequiresPostalCode(props.user.country_code)) {
         markFieldInvalid("business_zip_code");
       }
       if (!validatePhoneNumber(form.data.user.business_phone, form.data.user.business_country)) {

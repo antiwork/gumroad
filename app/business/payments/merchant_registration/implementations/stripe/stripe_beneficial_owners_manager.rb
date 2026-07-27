@@ -27,7 +27,11 @@ module StripeBeneficialOwnersManager
     country: "Country",
   }.freeze
 
-  COUNTRIES_WITHOUT_POSTAL_CODE = ["BW"].freeze
+  # Countries whose official addressing format has no postal code at all (per the Universal Postal
+  # Union's country address templates). Asking for one produces a made-up value, and Stripe rejects
+  # addresses carrying a postal code for these countries, so we drop the field entirely.
+  # BW = Botswana, GM = Gambia.
+  COUNTRIES_WITHOUT_POSTAL_CODE = %w[BW GM].freeze
   COUNTRIES_WITH_STATE_LIST = %w[US CA AU MX AE IE BR JP].freeze
   COUNTRIES_REQUIRING_NATIONALITY = [
     Compliance::Countries::ARE.alpha2,

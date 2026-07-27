@@ -219,6 +219,13 @@ describe StripeBeneficialOwnersManager do
       expect { described_class.create(user, bw_params) }.not_to raise_error
     end
 
+    it "does not require postal_code when the address country is Gambia (GM has no postal codes)" do
+      gm_params = params.deep_dup
+      gm_params[:address] = { line1: "12 Kairaba Avenue", city: "Banjul", state: "Banjul", country: "GM", postal_code: "" }
+      allow(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
+      expect { described_class.create(user, gm_params) }.not_to raise_error
+    end
+
     it "requires nationality when seller's compliance country is one of AE/SG/BD/PK" do
       user.alive_user_compliance_info.mark_deleted!
       create(:user_compliance_info_uae_business, user: user)

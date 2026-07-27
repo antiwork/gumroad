@@ -83,6 +83,7 @@ class Country
     Compliance::Countries::MAC,
     Compliance::Countries::BEN,
     Compliance::Countries::CIV,
+    Compliance::Countries::GMB,
   ].freeze
   private_constant :CROSS_BORDER_PAYOUTS_COUNTRIES
 
@@ -334,6 +335,8 @@ class Country
       Currency::XOF
     when Compliance::Countries::CIV.alpha2
       Currency::XOF
+    when Compliance::Countries::GMB.alpha2
+      Currency::GMD
     else
       default_currency
     end
@@ -398,6 +401,8 @@ class Country
       1_00
     when Compliance::Countries::GAB.alpha2 # Gabon
       100_00
+    when Compliance::Countries::GMB.alpha2 # Gambia
+      1_900_00
     when Compliance::Countries::GHA.alpha2 # Ghana
       1_00
     when Compliance::Countries::GTM.alpha2 # Guatemala
