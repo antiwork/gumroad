@@ -17,7 +17,8 @@
     <li>A square pixel aspect ratio of 1:1.</li>
     <li>Progressive frames (i.e. 720p) instead of interlacing (i.e. 720i).</li>
   </ul>
-  <p> Any screen aspect ratio works. The player shapes its frame to your video's own dimensions, so a widescreen, square, or portrait video each play in a frame that matches, with no black bars added on the sides. Tall videos, such as anything filmed on a phone held upright, play in a narrower frame that is capped in height so the rest of the page stays in view.</p>
+  <p> Any screen aspect ratio works. The player shapes its frame to your video's own dimensions, so widescreen, square, and portrait videos each play in a frame that matches, with no black bars added on the sides. Tall videos, such as anything filmed on a phone held upright, play in a narrower frame that is capped in height so the rest of the page stays in view. Videos uploaded before we started recording video dimensions still play in the older widescreen frame; re-uploading the file gives it a frame that matches.</p>
+  <p> A video we have no recorded dimensions for still plays in the older 16:9 frame, so a portrait video uploaded before this change may show black bars until it is re-uploaded. Re-uploading the file has us read its dimensions again and the frame then matches.</p>
   <h3 id="video-transcoding">Video transcoding</h3>
   <p> To enable faster loading speeds while streaming, we auto-transcode videos after the first successful sale of the product. Depending on the video, it may take from a few minutes to hours for the transcoding to complete. Once completed, you will receive a success email notification from us.</p>
   <p> If your video fails to transcode, please ensure:</p>
