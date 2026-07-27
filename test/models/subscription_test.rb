@@ -686,6 +686,50 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal true, new_purchase.purchase_offer_code_discount.offer_code_is_percent
   end
 
+  # --- #build_purchase, affiliate inheritance --------------------------------
+  #
+  # A renewal doesn't re-resolve an affiliate from cookies; it inherits the one on the
+  # original purchase. That inheritance has to keep honouring the seller's Gumroad
+  # Affiliate Program opt-out, otherwise flipping the setting off does nothing for a
+  # membership that was already referred and the seller keeps paying 10% forever.
+
+  def global_affiliate_renewal_setup
+    @affiliate = create_user.global_affiliate
+    @purchase.update!(affiliate: @affiliate)
+    # `original_purchase` is a has_one and was already loaded by the shared setup, so it
+    # would otherwise hand back a copy without the affiliate we just attached.
+    @subscription.reload
+  end
+
+  test "#build_purchase carries the original purchase's global affiliate onto the renewal" do
+    global_affiliate_renewal_setup
+
+    assert_equal @affiliate, @subscription.build_purchase.affiliate
+  end
+
+  test "#build_purchase drops the global affiliate once the seller opts out of the Gumroad Affiliate Program" do
+    global_affiliate_renewal_setup
+    @seller.update!(disable_global_affiliate: true)
+
+    assert_nil @subscription.build_purchase.affiliate
+  end
+
+  test "#build_purchase keeps a direct affiliate on renewals regardless of the Gumroad Affiliate Program opt-out" do
+    direct_affiliate = create_direct_affiliate(seller: @seller, products: [@product])
+    @purchase.update!(affiliate: direct_affiliate)
+    @subscription.reload
+    @seller.update!(disable_global_affiliate: true)
+
+    assert_equal direct_affiliate, @subscription.build_purchase.affiliate
+  end
+
+  test "#build_purchase drops an affiliate that is no longer eligible at all" do
+    global_affiliate_renewal_setup
+    @affiliate.update!(deleted_at: Time.current)
+
+    assert_nil @subscription.build_purchase.affiliate
+  end
+
   # The second RSpec `#charge!` describe adds a card to the subscriber before
   # each example; replayed via cassette because card tokenization hits Stripe.
   def charge_section_setup
