@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import ToastAlert from "$app/components/server-components/Alert";
+import ToastAlert, { DISMISS_DELAY_MS } from "$app/components/server-components/Alert";
 
 afterEach(() => {
   cleanup();
@@ -22,7 +22,7 @@ describe("ToastAlert", () => {
     const { unmount } = render(<ToastAlert initial={{ message: "Saved", status: "success" }} />);
 
     // The component starts exactly one 5-second dismiss timer for the initial payload.
-    const dismissTimers = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 5000);
+    const dismissTimers = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === DISMISS_DELAY_MS);
     expect(dismissTimers).toHaveLength(1);
     expect(clearTimeoutSpy).not.toHaveBeenCalled();
 
@@ -38,7 +38,7 @@ describe("ToastAlert", () => {
     render(<ToastAlert initial={null} />);
 
     // Other libraries may schedule timers; assert none of ours is the 5-second dismiss.
-    const dismissTimers = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 5000);
+    const dismissTimers = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === DISMISS_DELAY_MS);
     expect(dismissTimers).toHaveLength(0);
   });
 });

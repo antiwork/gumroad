@@ -9,6 +9,10 @@ import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 
 const ALERT_KEY = "alert";
 
+// How long a toast stays on screen before it dismisses itself. Exported so tests can identify the
+// dismiss timer by its delay without duplicating the literal.
+export const DISMISS_DELAY_MS = 5000;
+
 export type AlertPayload = { message: string; status: "success" | "danger" | "info" | "warning"; html?: boolean };
 
 const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
@@ -33,7 +37,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
 
   const startTimer = () => {
     clearTimer();
-    timerRef.current = window.setTimeout(() => setIsVisible(false), 5000);
+    timerRef.current = window.setTimeout(() => setIsVisible(false), DISMISS_DELAY_MS);
   };
 
   useGlobalEventListener("message", (event: MessageEvent) => {
