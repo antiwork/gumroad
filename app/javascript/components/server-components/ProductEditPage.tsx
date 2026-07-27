@@ -223,7 +223,20 @@ const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
   const variantMappings = response.variant_id_mappings ?? {};
   const pageMappings = response.rich_content_id_mappings ?? {};
   const variantTimestamps = response.variant_updated_at ?? {};
+  const variantBaselines = response.variant_loaded_integrations ?? {};
   const pageTimestamps = response.rich_content_updated_at ?? {};
+  // Adopt the revision token for the state this save committed. The token the
+  // page loaded with describes the pre-save snapshot, and the save moved it, so
+  // keeping the old one would make the next deletion in this session look like
+  // it came from a stale tab and be silently refused.
+  if (response.editor_revision) product.editor_revision = response.editor_revision;
+  // Adopt the refreshed integrations baseline for the same reason. It records
+  // which integrations were connected as of the state this save committed; an
+  // integration connected earlier in this session is only in that baseline
+  // once the save that connected it has returned. Without adopting it,
+  // connect -> save -> disconnect -> save (no reload) emits no deletion,
+  // because the stale baseline still says the integration was never on.
+  if (response.loaded_integrations) product.loaded_integrations = response.loaded_integrations;
   for (const variant of product.variants) {
     const canonicalId = variantMappings[variant.id];
     if (canonicalId) {
@@ -237,6 +250,11 @@ const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
     // server's stale-write guard against our own save.
     const variantTimestamp = variantTimestamps[variant.id];
     if (variantTimestamp) variant.updated_at = variantTimestamp;
+    // Adopt this version's refreshed integrations baseline, for the same reason
+    // as the product-level one above. Read after the id remap so a version
+    // created by this save is keyed by its canonical server id.
+    const variantBaseline = variantBaselines[variant.id];
+    if (variantBaseline) variant.loaded_integrations = variantBaseline;
     for (const page of variant.rich_content) {
       page.id = pageMappings[page.id] ?? page.id;
       const timestamp = pageTimestamps[page.id];

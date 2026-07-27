@@ -6,7 +6,7 @@
 # Both actions authorize against UserPolicy#use_store_agent? and are throttled, since they call out
 # to an LLM and can mutate the store.
 class Api::Internal::AgentMessagesController < Api::Internal::BaseController
-  include Throttling
+  include AgentRequestThrottling
   include AgentConversationPersistence
 
   before_action :authenticate_user!
@@ -17,10 +17,6 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
   # An unknown conversation_id — including another seller's conversation, which the seller-scoped
   # lookup can't see — renders a JSON 404 instead of bubbling up as a 500.
   rescue_from ActiveRecord::RecordNotFound, with: :e404_json
-
-  AGENT_REQUESTS_PER_PERIOD = 30
-  AGENT_REQUESTS_PERIOD_WINDOW = 1.hour
-  private_constant :AGENT_REQUESTS_PER_PERIOD, :AGENT_REQUESTS_PERIOD_WINDOW
 
   # POST /internal/agent/messages
   # params: { messages: [{ role:, content: }, ...], conversation_id: <optional external id> }
@@ -168,9 +164,8 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
     def throttle_agent_requests
       return unless current_user
 
-      key = RedisKey.agent_request_throttle(current_seller.id)
       # `throttle!` renders a 429 when the limit is exceeded; Rails halts before_actions once a
       # response is performed.
-      throttle!(key:, limit: AGENT_REQUESTS_PER_PERIOD, period: AGENT_REQUESTS_PERIOD_WINDOW)
+      throttle_agent_requests_for(current_seller.id)
     end
 end

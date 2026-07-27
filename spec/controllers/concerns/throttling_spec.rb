@@ -59,6 +59,95 @@ describe Throttling, type: :request do
       expect(response.headers["Retry-After"]).to be_present
     end
 
+    it "reports the seconds remaining in the body as well as the header" do
+      6.times { get "/test_throttle" }
+
+      expect(response).to have_http_status(:too_many_requests)
+      retry_after = JSON.parse(response.body)["retry_after"]
+      expect(retry_after).to be > 0
+      expect(retry_after).to eq(response.headers["Retry-After"].to_i)
+    end
+
+    it "falls back to the full period when the key's TTL is unavailable" do
+      6.times { get "/test_throttle" }
+      expect(JSON.parse(response.body)["retry_after"]).to be <= 1.hour.to_i
+
+      # A key with no expiry set reports TTL -1; without a fallback the user would be told to wait a
+      # negative number of seconds.
+      allow(redis).to receive(:ttl).with("test_key").and_return(-1)
+      get "/test_throttle"
+
+      expect(JSON.parse(response.body)["retry_after"]).to eq(1.hour.to_i)
+      expect(response.headers["Retry-After"].to_i).to eq(1.hour.to_i)
+    end
+
+    it "sets the missing expiry when the counter has none, so the window really ends" do
+      6.times { get "/test_throttle" }
+
+      allow(redis).to receive(:ttl).with("test_key").and_return(-1)
+      expect(redis).to receive(:expire).with("test_key", 1.hour.to_i).at_least(:once).and_call_original
+
+      get "/test_throttle"
+    end
+
+    it "reports no wait when the counter expired while the request was being counted" do
+      6.times { get "/test_throttle" }
+
+      # Redis answers -2 when the key is gone: it expired between the INCR that counted this request
+      # and the TTL read. The window is over, so the next request starts a fresh counter and is
+      # allowed — telling the user to wait an hour would be wrong.
+      allow(redis).to receive(:ttl).with("test_key").and_return(-2)
+      get "/test_throttle"
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(JSON.parse(response.body)["retry_after"]).to eq(0)
+      expect(response.headers["Retry-After"].to_i).to eq(0)
+      expect(JSON.parse(response.body)["error"]).to eq("Rate limit exceeded. Please try again.")
+    end
+
+    it "does not restart the window when less than a second remains" do
+      6.times { get "/test_throttle" }
+
+      # TTL rounds the remaining lifetime to whole seconds, so an existing key near expiry can
+      # report zero. Resetting that key to the full period would turn the final fraction of a second
+      # into another hour of throttling.
+      allow(redis).to receive(:ttl).with("test_key").and_return(0)
+      expect(redis).not_to receive(:expire)
+      get "/test_throttle"
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(JSON.parse(response.body)["retry_after"]).to eq(0)
+      expect(response.headers["Retry-After"].to_i).to eq(0)
+    end
+
+    it "renders a caller-supplied message instead of the default wording" do
+      controller_with_message = Class.new(ApplicationController) do
+        include Throttling
+
+        before_action :test_throttle
+
+        def test_action
+          render json: { success: true }
+        end
+
+        private
+          def test_throttle
+            throttle!(
+              key: "test_key",
+              limit: 1,
+              period: 1.hour,
+              message: ->(retry_after) { "Come back in #{retry_after} seconds." }
+            )
+          end
+      end
+      stub_const("AnonymousController", controller_with_message)
+
+      2.times { get "/test_throttle" }
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(JSON.parse(response.body)["error"]).to eq("Come back in #{JSON.parse(response.body)["retry_after"]} seconds.")
+    end
+
     it "sets expiration on first request" do
       get "/test_throttle"
 

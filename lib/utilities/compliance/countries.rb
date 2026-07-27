@@ -328,5 +328,31 @@ module Compliance
     ].freeze
 
     COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS = COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS_WITH_TAX_ID_PRO_VALIDATION + COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS_WITHOUT_TAX_ID_PRO_VALIDATION
+
+    # The name a buyer in this country actually knows the consumption tax by. Several countries we
+    # collect tax in do not call it "VAT" — India and New Zealand call it GST, Japan calls it
+    # consumption tax (abbreviated CT), Malaysia calls it service tax — and a receipt that says
+    # "VAT" to an Indian buyer reads as if we charged them European tax. This only affects the
+    # wording we display; rates, calculation and remittance are unchanged.
+    #
+    # The checkout UI has the same mapping in `nameOfSalesTaxForCountry`
+    # (app/javascript/components/Checkout/index.tsx). Keep the two in sync: if you add a country
+    # here, add it there too, otherwise the price a buyer sees at checkout and the receipt they
+    # keep will name the same tax differently. (The US and Canada are not listed here because
+    # their purchases never reach this mapping — they go through the "Sales tax" branch.)
+    TAX_NAME_BY_COUNTRY_CODE = {
+      IND.alpha2 => "GST",
+      NZL.alpha2 => "GST",
+      AUS.alpha2 => "GST",
+      SGP.alpha2 => "GST",
+      MYS.alpha2 => "Service tax",
+      JPN.alpha2 => "CT",
+    }.freeze
+
+    # Falls back to "VAT", which is correct for the EU, the UK, Norway and the remaining countries
+    # where we collect tax on digital products.
+    def self.tax_name_for(country_code)
+      TAX_NAME_BY_COUNTRY_CODE.fetch(country_code, "VAT")
+    end
   end
 end

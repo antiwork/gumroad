@@ -33,7 +33,19 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
     render json: {
       success: true,
       user_id: current_resource_owner.external_id,
-      purchases: purchases_to_json(paginated_purchases),
+      # `product_updates_data` (the creator posts this buyer is entitled to see for each
+      # product) is deliberately left out of this response. Deciding that entitlement
+      # means, for every product on the page, reading the seller's whole published-post
+      # history and re-running the buyer-targeting filters over it. On the slowest
+      # production samples of this endpoint that work was 82% of the request
+      # (gumroad-private#1412), and it is why buyers with large libraries hit
+      # Rack::Timeout here.
+      #
+      # No client reads it from this response: the app fetches a post only when the buyer
+      # opens one, from Api::Mobile::InstallmentsController#show. The two retired native
+      # apps did cache the field for offline use, but they read it from #index and from
+      # UrlRedirectsController#url_redirect_attributes, which both still return it.
+      purchases: purchases_to_json(paginated_purchases, include_product_updates: false),
       sellers: sellers_from_purchases(purchases),
       meta: { pagination: PagyPresenter.new(pagination).metadata }
     }
@@ -78,7 +90,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       render json: { success: false, message: "Could not find purchase" }, status: :not_found if @purchase.nil? || (!@purchase.successful_and_not_reversed? && !@purchase.subscription)
     end
 
-    def purchases_to_json(purchases)
+    def purchases_to_json(purchases, include_product_updates: true)
       purchases_array = purchases.to_a
       ActiveRecord::Associations::Preloader.new(
         records: purchases_array,
@@ -93,9 +105,9 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
           { subscription: { true_original_purchase: :product_review } }
         ]
       ).call
-      Purchase.preload_product_updates_data!(purchases_array)
+      Purchase.preload_product_updates_data!(purchases_array) if include_product_updates
       UrlRedirect.preload_latest_media_locations!(purchases_array.filter_map(&:url_redirect))
-      purchases_array.map(&:json_data_for_mobile)
+      purchases_array.map { |purchase| purchase.json_data_for_mobile(include_product_updates:) }
     end
 
     def search_purchases
@@ -107,7 +119,19 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       end
 
       if params[:seller].present?
-        purchases = purchases.where(seller_id: User.where(external_id: Array.wrap(params[:seller])).select(:id))
+        # Resolve the seller filter to concrete ids with a separate query rather
+        # than nesting `User.where(...).select(:id)` as a subquery. With the
+        # subquery MySQL plans the join seller-first: it walks each seller's
+        # sales through index_purchases_on_seller_id_and_chargeback_date and
+        # filters for this buyer afterwards, which means a buyer who filters by
+        # a large seller pays for a scan of that seller's entire sales history.
+        # With literal ids the optimizer can use index_purchases_on_purchaser_id
+        # and read only the buyer's own rows. Measured on production: a buyer
+        # filtering by a seller with ~311K sales took 1.6s-78s on the subquery
+        # plan and 4-11ms with literal ids, and this query shape was what
+        # exhausted the 120s request budget in the timeouts on this endpoint.
+        seller_ids = User.where(external_id: Array.wrap(params[:seller])).pluck(:id)
+        purchases = purchases.where(seller_id: seller_ids)
       end
 
       if params[:archived].present?

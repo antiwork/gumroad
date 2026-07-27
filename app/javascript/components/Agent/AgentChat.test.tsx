@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { RateLimitError } from "$app/utils/request";
+
 vi.mock("$app/data/agent", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$app/data/agent")>();
   return {
@@ -282,6 +284,25 @@ describe("AgentChat streamed reply reconciliation", () => {
     expect(fetchAgentTurnStatus).not.toHaveBeenCalled();
   });
 
+  it("shows the server's rate-limit explanation in the chat instead of the generic failure", async () => {
+    // The seller hasn't broken anything — they've spent their hourly agent budget. Both the alert
+    // and the assistant bubble have to say so, since the generic "Sorry, I ran into a problem" sent
+    // sellers clearing browser data and emailing support over a limit that clears itself.
+    const explanation =
+      "You've used all 30 agent requests for this hour (sending a message and confirming a change both count). " +
+      "You can continue in 15 minutes — nothing is wrong with your account or your store.";
+    streamAgentMessage.mockRejectedValue(new RateLimitError(explanation, 900));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("what does my bio say");
+
+    await waitFor(() => expect(screen.getByText(explanation)).toBeTruthy());
+    expect(showAlert).toHaveBeenCalledWith(explanation, "warning");
+    expect(screen.queryByText("Sorry, I ran into a problem. Please try again.")).toBeNull();
+    // A refused request never started a turn server-side, so there is nothing to recover.
+    expect(fetchAgentTurnStatus).not.toHaveBeenCalled();
+  });
+
   it("sends a fresh client turn id with every turn", async () => {
     streamAgentMessage.mockResolvedValue({
       reply: "ok",
@@ -427,6 +448,51 @@ describe("AgentChat custom-html proposal cards", () => {
     expect(fetchCustomHtmlProposalPreview).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByText("Hide"));
     expect(screen.queryByTitle("Preview of your page after this change")).toBeNull();
+  });
+
+  it("shows a rate-limited confirmation as a warning rather than a failed change", async () => {
+    // Confirming spends the same hourly budget as sending, so a 429 here is also a wait-it-out
+    // limit. Presenting it as an error (red) would tell the seller their change failed, when it
+    // simply hasn't been attempted yet.
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    const explanation =
+      "You've used all 30 agent requests for this hour (sending a message and confirming a change both count). " +
+      "You can continue in 15 minutes — nothing is wrong with your account or your store.";
+    executeAgentAction
+      .mockRejectedValueOnce(new RateLimitError(explanation, 900))
+      .mockResolvedValueOnce({ message: "Done.", object: null });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(showAlert).toHaveBeenCalledWith(explanation, "warning"));
+    // The proposal and its explanation remain together after the global toast disappears.
+    expect(screen.getByText(explanation)).toBeTruthy();
+    expect(screen.getByText("Confirm")).toBeTruthy();
+    expect(screen.queryByText("Applied")).toBeNull();
+
+    // Retrying clears the stale warning; a successful retry collapses the proposal as applied.
+    fireEvent.click(screen.getByText("Confirm"));
+    await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+    expect(screen.queryByText(explanation)).toBeNull();
+  });
+
+  it("still shows a genuinely failed confirmation as an error", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new Error("That change couldn't be applied."));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(showAlert).toHaveBeenCalledWith("That change couldn't be applied.", "error"));
   });
 
   it("refetches a dismissed page proposal's preview on Review when no snapshot is loaded", async () => {

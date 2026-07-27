@@ -15,7 +15,12 @@ const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | und
 // Captures the options the PaymentElement was last rendered with, plus its onChange handler so
 // tests can simulate the buyer selecting a payment-method row inside the element.
 const paymentElementRender = vi.hoisted<{
-  options: { fields?: { billingDetails?: unknown }; layout?: unknown; wallets?: unknown } | null;
+  options: {
+    fields?: { billingDetails?: unknown };
+    defaultValues?: unknown;
+    layout?: unknown;
+    wallets?: unknown;
+  } | null;
   onChange: ((event: { value: { type: string }; complete: boolean; empty: boolean }) => void) | null;
   onFocus: (() => void) | null;
 }>(() => ({ options: null, onChange: null, onFocus: null }));
@@ -88,6 +93,7 @@ const props = {
   disabled: false,
   defaultEmail: "buyer@example.com",
   defaultName: "Buyer",
+  defaultCountry: "IN",
   hasShippingCart: false,
   invalid: false,
   onReady: vi.fn<(controller: PaymentElementController | null) => void>(),
@@ -179,30 +185,74 @@ describe("PaymentElementInput", () => {
     });
   });
 
-  it("renders only the street-address fields inside the UPI pane on a digital cart", () => {
+  it("has the element collect the street address (not name or email) inside the UPI pane on a digital cart", () => {
     render(<PaymentElementInput {...props} walletsEnabled flatLayout amount={100_000} mountCurrency="inr" />);
 
     // The buyer selects the UPI row. Stripe requires billing_details.name + a full street
     // address to confirm UPI, and the digital checkout form has no street-address fields — so
-    // the element's address fields open up. Name/email/country stay "never": checkout's own
-    // form already collects those and must remain the only place asking for them
-    // (gumroad-private#933 — the UI should not repeat questions the form already asked).
+    // Stripe's pane collects the address itself (localized + validated) while checkout's
+    // Country/ZIP fields hide for the selection (see SharedInputs in PaymentForm.tsx) so
+    // nothing is asked for twice. Name and email stay "never": both remain checkout's own
+    // fields — moving name into the pane would lose a name typed before switching (the pane
+    // only applies defaultValues present when its fields first render — PR #6191 review) —
+    // and tokenization passes them alongside (gumroad-private#933).
     act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
     expect(paymentElementRender.options?.fields).toEqual({
       billingDetails: {
         name: "never",
         email: "never",
         phone: "never",
-        address: {
-          country: "never",
-          postalCode: "auto",
-          state: "auto",
-          city: "auto",
-          line1: "auto",
-          line2: "auto",
-        },
+        address: "auto",
       },
     });
+  });
+
+  it("prefills the UPI pane's address form with the country checkout already knows", () => {
+    render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
+
+    // The GeoIP-detected country and the buyer's known name/email ride along as defaultValues
+    // from mount, so the pane's address form opens on the right country's format. (Name and
+    // email render nothing in the pane — both fields are pinned to "never" — but Stripe ignores
+    // defaults for unrendered fields, so passing them is harmless and keeps Link's email
+    // prefill working.)
+    act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
+    expect(paymentElementRender.options?.defaultValues).toEqual({
+      billingDetails: { email: "buyer@example.com", name: "Buyer", address: { country: "IN" } },
+    });
+  });
+
+  it("keeps tracking a name typed AFTER the buyer touched the element", () => {
+    // Regression (PR #6191 review): the buyer clicks into the element (Card row) first, THEN
+    // types their name into checkout's Full name field. Link's email prefill deliberately
+    // freezes once the element is touched — but the name default must keep tracking the live
+    // form value rather than freeze with it.
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(
+        <PaymentElementInput {...props} defaultName="" walletsEnabled amount={100_000} mountCurrency="inr" />,
+      );
+
+      // Buyer interacts with the element first — this freezes the Link email prefill.
+      act(() => paymentElementRender.onFocus?.());
+      // Then types their name into checkout's Full name field.
+      rerender(
+        <PaymentElementInput
+          {...props}
+          defaultName="Priya Sharma"
+          walletsEnabled
+          amount={100_000}
+          mountCurrency="inr"
+        />,
+      );
+      act(() => vi.advanceTimersByTime(1_000)); // past the prefill debounce
+      // The element's options must carry the just-typed name, not a frozen snapshot.
+      act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
+      expect(paymentElementRender.options?.defaultValues).toEqual({
+        billingDetails: { email: "buyer@example.com", name: "Priya Sharma", address: { country: "IN" } },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps every UPI billing field on the checkout form for shippable carts", () => {
@@ -229,6 +279,21 @@ describe("PaymentElementInput", () => {
         },
       },
     });
+  });
+
+  it("reports a null controller when the element unmounts, even mid-UPI-selection", () => {
+    // PaymentForm relies on this contract to un-hide its Country/ZIP fields when the buyer
+    // switches away from the element while UPI is selected — e.g. clicking "Use saved card"
+    // unmounts this whole subtree, and the resulting onReady(null) is what resets the
+    // mirrored paymentElementType back to "card" (see handlePaymentElementReady in
+    // PaymentForm.tsx). Without the unmount notification the UPI field-hiding would strand.
+    const { unmount } = render(<PaymentElementInput {...props} walletsEnabled amount={100_000} mountCurrency="inr" />);
+
+    act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
+    expect(props.onReady.mock.lastCall?.[0]).not.toBeNull();
+
+    unmount();
+    expect(props.onReady).toHaveBeenLastCalledWith(null);
   });
 
   it("forwards element focus to onFocus, alongside the Link-prefill touch tracking", () => {

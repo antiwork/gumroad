@@ -109,6 +109,72 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(@user.stripe_account).to be_present
     end
 
+    it "names the missing required fields when the save is blocked client-side" do
+      visit settings_payments_path
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      fill_in("Address", with: "address_full_match")
+      select("California", from: "State")
+      fill_in("Phone number", with: "(502) 254-1982")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      # City, ZIP code and the date of birth are left blank on purpose.
+      expect do
+        click_on("Update settings")
+        expect(page).to have_status(text: "Please complete the required fields below:")
+        expect(page).to have_status(text: "City")
+        # The banner names the label a US seller actually sees, not the generic "Postal code".
+        expect(page).to have_status(text: "ZIP code")
+        expect(page).to have_status(text: "Date of birth")
+      end.to_not change { @user.alive_user_compliance_info.reload.first_name }
+
+      # Filling one of the named fields must not yank the seller away from it: the scroll-to-field
+      # effect fires once per save attempt, not on every keystroke.
+      fill_in("City", with: "barnabasville")
+      expect(page).to have_field("City", with: "barnabasville", focused: true)
+
+      fill_in("ZIP code", with: "12345")
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+
+      click_on("Update settings")
+      expect(page).to have_alert(text: "Thanks! You're all set.")
+      expect(@user.alive_user_compliance_info.reload.first_name).to eq("barnabas")
+    end
+
+    it "keeps the specific validation message when one applies instead of the generic field list" do
+      visit settings_payments_path
+
+      fill_in("First name", with: "barnabas")
+      fill_in("Last name", with: "barnabastein")
+      fill_in("Address", with: "P.O. Box 123, Smith street")
+      fill_in("City", with: "barnabasville")
+      select("California", from: "State")
+      fill_in("ZIP code", with: "12345")
+      fill_in("Phone number", with: "(502) 254-1982")
+      select("1", from: "Day")
+      select("January", from: "Month")
+      select("1980", from: "Year")
+      fill_in("Last 4 digits of SSN", with: "1235")
+
+      fill_in("Pay to the order of", with: "barnabas ngagy")
+      fill_in("Routing number", with: "110000000")
+      fill_in("Account number", with: "000123456789")
+      fill_in("Confirm account number", with: "000123456789")
+
+      click_on("Update settings")
+
+      expect(page).to have_status(text: "We cannot accept a P.O. Box as a valid address.")
+      expect(page).not_to have_status(text: "Please complete the required fields below:")
+    end
+
     it "allows the creator to switch to debit card as payout method" do
       visit settings_payments_path
 
@@ -839,6 +905,30 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_field("PayPal Email")
     end
 
+    it "warns a Zambian creator that PayPal cannot receive payouts there" do
+      old_user_compliance_info = @user.alive_user_compliance_info
+      new_user_compliance_info = old_user_compliance_info.dup
+      new_user_compliance_info.country = "Zambia"
+      ActiveRecord::Base.transaction do
+        old_user_compliance_info.mark_deleted!
+        new_user_compliance_info.save!
+      end
+
+      visit settings_payments_path
+
+      expect(page).to have_field("PayPal Email")
+      expect(page).to have_content("PayPal does not let accounts registered in Zambia receive money")
+      expect(page).to have_content("Bank payouts are not available in Zambia either")
+    end
+
+    it "does not show the Zambia PayPal warning to creators in other countries" do
+      @user.update(payment_address: "barny@paypal.com")
+      visit settings_payments_path
+
+      expect(page).to have_field("PayPal Email")
+      expect(page).to_not have_content("PayPal does not let accounts registered in Zambia receive money")
+    end
+
     it "allows US creator to switch to ACH" do
       @user.update(payment_address: "barny@paypal.com")
       visit settings_payments_path
@@ -934,6 +1024,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         within_modal do
           expect(page).to have_content "Confirm country change"
+          expect(page).to have_content "Your payout and identity details are tied to your country, so changing it clears your bank account, name, date of birth and address."
           expect(page).to have_content "You are about to change your country. Please click \"Confirm\" to continue."
           expect(page).to have_button "Cancel"
           expect(page).to have_button "Confirm"
@@ -941,6 +1032,28 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         end
         wait_for_ajax
         expect(page).to have_alert(text: "Your country has been updated!")
+      end
+
+      # The reported bug: the page is one form with one save button, so a seller who corrects
+      # their country and enters their bank details in the same pass gets only the country
+      # change. That used to be reported as a plain success, leaving the seller to conclude the
+      # bank account had saved when no BankAccount row was ever created (issue #1411).
+      it "says the bank details were not saved when they were entered in the same save" do
+        visit settings_payments_path
+        click_on "Add bank account" if has_button?("Add bank account", wait: 0)
+        click_on "Change account" if has_button?("Change account", wait: 0)
+        fill_in("Pay to the order of", with: "barnabas ngagy")
+        fill_in("Routing number", with: "110000000")
+        fill_in("Account number", with: "000123456789")
+        fill_in("Confirm account number", with: "000123456789")
+        select(@update_country, from: "Country")
+
+        within_modal { click_on "Confirm" }
+        wait_for_ajax
+
+        expect(page).to have_alert(text: "Your country has been updated to United Kingdom")
+        expect(page).to have_alert(text: "please re-enter your bank account and personal details")
+        expect(@user.reload.active_bank_account).to be_nil
       end
 
       context "when creator has balance" do
@@ -2293,7 +2406,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Bank Code", with: "060")
         fill_in("Account #", with: "000123456789")
         fill_in("Confirm account #", with: "000123456789")
-        fill_in("Cédula de Ciudadanía (CC)", with: "1.123.123.123")
+        # A seven-digit value: the shape of a Cédula de Extranjería, the ID issued to foreign
+        # residents of Colombia. It used to be rejected by the field's exact 13-character length.
+        fill_in("Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)", with: "1234567")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in COP.")
@@ -2303,6 +2418,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.individual_tax_id.decrypt("1234")).to eq("1234567")
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
         expect(compliance_info.street_address).to eq("address_full_match")
@@ -4615,6 +4731,59 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("00001234567890123456789")
         expect(@user.reload.active_bank_account.routing_number).to eq("AAAAGAGAXXX")
+      end
+    end
+
+    describe "Gambia creator" do
+      before do
+        old_user_compliance_info = @user.alive_user_compliance_info
+        new_user_compliance_info = old_user_compliance_info.dup
+        new_user_compliance_info.country = "Gambia"
+        ActiveRecord::Base.transaction do
+          old_user_compliance_info.mark_deleted!
+          new_user_compliance_info.save!
+        end
+      end
+
+      it "allows to enter bank account details" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "Gambian")
+        fill_in("Last name", with: "Creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Banjul")
+        fill_in("Phone number", with: "3123456")
+
+        # Gambia has no postal codes in its official addressing format, so the field is not shown
+        # and saving without one has to work.
+        expect(page).to have_no_field("Postal code")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Pay to the order of", with: "Gambian Creator")
+        fill_in("SWIFT / BIC Code", with: "AAAAGMGMXYZ")
+        fill_in("Account #", with: "000123000456000789")
+        fill_in("Confirm account #", with: "000123000456000789")
+
+        expect(page).to have_content("Must exactly match the name on your bank account")
+        expect(page).to have_content("Payouts will be made in GMD.")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(page).to have_content("SWIFT / BIC code")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.first_name).to eq("Gambian")
+        expect(compliance_info.last_name).to eq("Creator")
+        expect(compliance_info.street_address).to eq("address_full_match")
+        expect(compliance_info.city).to eq("Banjul")
+        expect(compliance_info.zip_code).to be_blank
+        expect(compliance_info.phone).to eq("+2203123456")
+        expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123000456000789")
+        expect(@user.reload.active_bank_account.routing_number).to eq("AAAAGMGMXYZ")
       end
     end
 

@@ -1680,6 +1680,195 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(session[:inertia_errors][:base]).to include("You have a payout in progress. You can change your country once it has been processed.")
         expect(user.reload.alive_user_compliance_info.legal_entity_country_code).not_to eq("GB")
       end
+
+      # The page is a single form with one save button, so sellers routinely change their country
+      # and fill in their bank/identity details in the same submission. Only the country change is
+      # applied; everything else is discarded because it belongs to the old country. The seller has
+      # to be told that, otherwise the save looks successful and nothing persists (issue #1411).
+      context "when the same request also carries payout or identity details" do
+        it "tells the seller the bank details were not saved" do
+          put :update, params: {
+            user: { updated_country_code: "GB" },
+            bank_account: {
+              type: AchAccount.name,
+              account_number: "0123456789",
+              account_number_confirmation: "0123456789",
+              routing_number: "110000000",
+              account_holder_full_name: "barnabas barnabastein",
+            },
+          }
+
+          expect(response).to redirect_to(settings_payments_path)
+          expect(user.reload.alive_user_compliance_info.legal_entity_country_code).to eq("GB")
+          expect(user.active_bank_account).to be_nil
+          expect(flash[:notice]).to include("Your country has been updated to United Kingdom")
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        # `params` also carries a tax ID, which trips its own branch — exclude it so this case can
+        # only pass through the identity-field comparison it is named for.
+        it "tells the seller the identity details were not saved" do
+          put :update, params: { user: params.except(:ssn_last_four).merge(updated_country_code: "GB") }
+
+          expect(user.reload.alive_user_compliance_info.first_name).to be_nil
+          expect(flash[:notice]).to include("please re-enter your bank account and personal details")
+        end
+
+        it "tells the seller the PayPal payout address was not saved" do
+          put :update, params: { user: { updated_country_code: "GB" }, payment_address: "barnabas@example.com" }
+
+          expect(user.reload.payment_address).to be_blank
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a renamed bank account holder was not saved" do
+          create(:ach_account, user:, account_holder_full_name: "barnabas barnabastein")
+
+          put :update, params: {
+            user: { updated_country_code: "GB" },
+            bank_account: { type: AchAccount.name, account_holder_full_name: "barnabas barnabastein jr" },
+          }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a compliance field outside the common set was not saved" do
+          put :update, params: { user: { updated_country_code: "GB", nationality: "GB", job_title: "Director" } }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a newly typed tax ID was not saved" do
+          put :update, params: { user: { updated_country_code: "GB", individual_tax_id: "123456789" } }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        # The form renders a stored tax ID as bullets, and those bullets come back on save. That
+        # is the stored value echoing, not the seller retyping their tax ID.
+        it "keeps the plain message when the tax ID comes back masked" do
+          put :update, params: { user: { updated_country_code: "GB", individual_tax_id: "•••••6789" } }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
+        it "keeps the plain message when the bank account holder name is echoed unchanged" do
+          create(:ach_account, user:, account_holder_full_name: "barnabas barnabastein")
+
+          put :update, params: {
+            user: { updated_country_code: "GB" },
+            bank_account: { type: AchAccount.name, account_holder_full_name: "barnabas barnabastein" },
+          }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
+        it "tells the seller a switch to a business account was not saved" do
+          put :update, params: { user: { updated_country_code: "GB", is_business: "on" } }
+
+          expect(user.reload.alive_user_compliance_info.is_business?).to eq(false)
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a switch back to an individual account was not saved" do
+          user.alive_user_compliance_info.mark_deleted!
+          create(:user_compliance_info_business, user:)
+
+          put :update, params: { user: { updated_country_code: "GB", is_business: "off" } }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        # A business account changes its country through the `country` param rather than
+        # `updated_country_code`, and that param is only persisted while the account is a business.
+        it "tells the seller a business country change alongside the country change was not saved" do
+          user.alive_user_compliance_info.mark_deleted!
+          create(:user_compliance_info_business, user:, country: "United States", business_country: "United States")
+
+          put :update, params: { user: { updated_country_code: "GB", is_business: "on", business_country: "CA" } }
+
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "keeps the plain message when the business country is echoed unchanged" do
+          user.alive_user_compliance_info.mark_deleted!
+          create(:user_compliance_info_business, user:, country: "United States", business_country: "United States")
+
+          put :update, params: { user: { updated_country_code: "GB", is_business: "on", country: "US", business_country: "US" } }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
+        # Payout preferences are saved on the seller lower down the same action, so the country
+        # change discards them along with everything else on the page.
+        it "tells the seller a new payout schedule was not saved" do
+          put :update, params: { user: { updated_country_code: "GB" }, payout_frequency: User::PayoutSchedule::MONTHLY }
+
+          expect(user.reload.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a new payout threshold was not saved" do
+          put :update, params: { user: { updated_country_code: "GB" }, payout_threshold_cents: 20_000 }
+
+          expect(user.reload.payout_threshold_cents).not_to eq(20_000)
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        it "tells the seller a paused-payouts switch was not saved" do
+          put :update, params: { user: { updated_country_code: "GB" }, payouts_paused_by_user: true }
+
+          expect(user.reload.payouts_paused_by_user?).to eq(false)
+          expect(flash[:notice]).to include("nothing else on this page was saved")
+        end
+
+        # The page posts every payout preference back on each save, so the stored values coming
+        # back unchanged are not something the seller just typed.
+        it "keeps the plain message when the payout preferences only echo what is already stored" do
+          put :update, params: {
+            user: { updated_country_code: "GB" },
+            payouts_paused_by_user: user.payouts_paused_by_user?,
+            payout_frequency: user.payout_frequency,
+            payout_threshold_cents: user.payout_threshold_cents,
+            disable_buyer_local_currency: user.disable_buyer_local_currency,
+            disable_buyer_currency_rounding: user.disable_buyer_currency_rounding,
+          }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
+        it "keeps the plain message when only the country was submitted" do
+          put :update, params: { user: { updated_country_code: "GB", is_business: "off" } }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+
+        # The form loads every stored compliance value and posts them all back on save, so a
+        # seller who only touches the country dropdown still submits their name, address and date
+        # of birth. Those are not new input, so they must not trigger the longer warning.
+        it "keeps the plain message when the submitted details only echo what is already stored" do
+          user.alive_user_compliance_info.mark_deleted!
+          stored = create(:user_compliance_info, user:, country: "United States")
+
+          put :update, params: {
+            user: {
+              updated_country_code: "GB",
+              first_name: stored.first_name,
+              last_name: stored.last_name,
+              street_address: stored.street_address,
+              city: stored.city,
+              state: stored.state,
+              zip_code: stored.zip_code,
+              phone: stored.phone,
+              dob_year: stored.birthday.year.to_s,
+              dob_month: stored.birthday.month.to_s,
+              dob_day: stored.birthday.day.to_s,
+            },
+          }
+
+          expect(flash[:notice]).to eq("Your country has been updated!")
+        end
+      end
     end
   end
 

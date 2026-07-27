@@ -497,6 +497,67 @@ describe CheckoutController, type: :controller, inertia: true do
         )
       end
 
+      # Regression: some clients post a cart item that omits `url_parameters` (and `referrer`)
+      # entirely. Assigning nil over the empty-hash default made the JSON-schema validation fail,
+      # which aborted the whole transaction and left the buyer with a "something went wrong" toast
+      # and an empty cart on every save attempt.
+      it "saves a new cart product when the item omits url_parameters" do
+        product = create(:product)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: product.external_id },
+                  option_id: nil,
+                  recurrence: nil,
+                  price: 100,
+                  quantity: 1,
+                  rent: false,
+                  referrer: "direct"
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.to change(CartProduct, :count).by(1)
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to be_nil
+        expect(CartProduct.last).to have_attributes(product:, url_parameters: {}, referrer: "direct")
+      end
+
+      it "keeps the stored url_parameters and referrer when the item omits them" do
+        product = create(:product)
+        cart = create(:cart, user: controller.logged_in_user)
+        create(:cart_product, cart:, product:, url_parameters: { "utm_source" => "google" }, referrer: "https://example.com")
+
+        patch :update, params: {
+          cart: {
+            items: [
+              {
+                product: { id: product.external_id },
+                option_id: nil,
+                recurrence: nil,
+                price: 100,
+                quantity: 1,
+                rent: false
+              }
+            ],
+            discountCodes: []
+          }
+        }, as: :json
+
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:alert]).to be_nil
+        expect(cart.cart_products.alive.sole).to have_attributes(
+          url_parameters: { "utm_source" => "google" },
+          referrer: "https://example.com"
+        )
+      end
+
       it "removes an existing cart product when its quantity is zero" do
         product1 = create(:product, user: seller)
         product2 = create(:product, user: seller)

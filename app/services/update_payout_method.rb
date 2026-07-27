@@ -106,6 +106,7 @@ class UpdatePayoutMethod
     MacaoBankAccount.name => { class: MacaoBankAccount, permitted_params: [:bank_code] },
     BeninBankAccount.name => { class: BeninBankAccount, permitted_params: [] },
     CoteDIvoireBankAccount.name => { class: CoteDIvoireBankAccount, permitted_params: [] },
+    GambiaBankAccount.name => { class: GambiaBankAccount, permitted_params: [:bank_code] },
   }.freeze
   private_constant :BANK_ACCOUNT_TYPES
 
