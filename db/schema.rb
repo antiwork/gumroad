@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000012) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000013) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2459,6 +2459,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000012) do
     t.datetime "notified_subscriber_at"
     t.index ["base_variant_id"], name: "index_subscription_plan_changes_on_base_variant_id"
     t.index ["subscription_id"], name: "index_subscription_plan_changes_on_subscription_id"
+  end
+
+  create_table "subscription_presentments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "subscription_id", null: false
+    t.string "presentment_currency", null: false
+    t.bigint "presentment_price_cents", null: false
+    t.decimal "signup_exchange_rate", precision: 20, scale: 10, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["subscription_id"], name: "index_subscription_presentments_on_subscription_id", unique: true
   end
 
   create_table "subscriptions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

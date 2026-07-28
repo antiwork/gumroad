@@ -62,6 +62,9 @@ class Subscription < ApplicationRecord
   has_one :original_purchase, -> { is_original_subscription_purchase.not_is_archived_original_subscription_purchase }, class_name: "Purchase"
   has_one :true_original_purchase, -> { is_original_subscription_purchase.order(:id) }, class_name: "Purchase"
   has_one :last_successful_purchase, -> { successful.order(created_at: :desc) }, class_name: "Purchase"
+  # Set once at signup when the buyer is billed in their own currency; absent for the
+  # USD-billed majority. See SubscriptionPresentment for why the amount is fixed.
+  has_one :subscription_presentment
   has_many :url_redirects
   has_many :payment_options
   has_many :subscription_plan_changes
