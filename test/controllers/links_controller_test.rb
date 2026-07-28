@@ -7020,6 +7020,52 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert_equal [paragraph], @product.reload.alive_rich_contents.sole.description
   end
 
+  test "flag on: a page ID kept in its source and destination scopes is rejected before mutation" do
+    enable_contract!
+    source_version = create_variant(variant_category: @category, name: "Source")
+    destination_version = create_variant(variant_category: @category, name: "Destination")
+    foreign_product = create_product(user: @seller)
+    dead_foreign_file = create_product_file(link: foreign_product, deleted_at: Time.current)
+    dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep both" }] }
+    source = create_rich_content(entity: source_version, description: [paragraph])
+    source.update_column(:description, [dead_foreign_embed, paragraph])
+    @product.update!(has_same_rich_content_for_all_variants: false)
+
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: false,
+      rich_content: [],
+      variants: [
+        {
+          id: source_version.external_id,
+          name: source_version.name,
+          rich_content: [{
+            id: source.external_id,
+            title: "Source page",
+            description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+          }]
+        },
+        {
+          id: destination_version.external_id,
+          name: destination_version.name,
+          rich_content: [{
+            id: source.external_id,
+            title: "Copied page",
+            description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+          }]
+        }
+      ],
+      editor_revision: current_revision,
+    ), format: :json
+
+    assert_response :conflict
+    assert_equal "ambiguous_rich_content_id_conflict", response.parsed_body["error_code"]
+    assert_includes response.parsed_body["error_message"], "Reload the editor"
+    assert source.reload.alive?
+    assert_equal [dead_foreign_embed, paragraph], source.description
+    assert_empty destination_version.reload.alive_rich_contents
+  end
+
   test "flag on: an explicit clear-all plus a fresh revision deletes every variant" do
     enable_contract!
     first = create_variant(variant_category: @category, name: "First version")

@@ -45,11 +45,13 @@ sleep 2
 
 printf "%b\n" ""
 printf "%b\n" "=== Tabs opened before provenance shipped still move and copy safely ==="
-printf "%b\n" "Marker-less moves are inferred only when a stored page changes owner scope."
+printf "%b\n" "Marker-less moves are inferred only when one submitted reference to a stored"
+printf "%b\n" "page changes owner scope. A repeated page ID cannot fit the response's global ID"
+printf "%b\n" "mapping, so the server rejects it before mutation and tells the seller to reload."
 printf "%b\n" "Marker-less copies can remove only dead IDs proven to exist in this product's stored pages."
 printf "%b\n" "A provenance-aware request without that proof still fails ownership validation."
 bundle exec rails test test/controllers/links_controller_test.rb \
-  -n '/(infers a stale-embed move from an already-open editor tab|repairs a stale embed copied by an already-open editor tab|does not apply old-tab copy fallback|moving a shared page to a version|moving a version page to shared content)/' 2>&1 \
+  -n '/(infers a stale-embed move from an already-open editor tab|repairs a stale embed when copying a page between versions|repairs a stale embed copied by an already-open editor tab|does not apply old-tab copy fallback|does not accept stale-embed provenance from another product|moving a shared page to a version|moving a version page to shared content|page ID kept in its source and destination)/' 2>&1 \
   | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 2
 

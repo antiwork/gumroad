@@ -411,6 +411,14 @@ class LinksController < ApplicationController
         # describe the committed pre-save state.
         deletion_guard_diagnostics
 
+        # A save response has one global submitted-id => stored-id mapping for
+        # content pages. The same submitted id cannot safely address two rows:
+        # the editor would remap both references to one row and create another
+        # duplicate on its next save. Old tabs can produce this while a page is
+        # still present at its source and destination. Refuse it before any
+        # cleanup, deletion, or product mutation and ask the seller to reload.
+        ensure_rich_content_ids_are_unambiguous!
+
         # A later page move/copy needs provenance from the committed state,
         # even if this same transaction repairs or deletes its source first.
         legacy_dead_file_embed_ids_by_rich_content_id
@@ -600,6 +608,14 @@ class LinksController < ApplicationController
         error_message: e.message,
         error_code: "stale_content_conflict",
         stale_records: e.stale_records,
+      }, status: :conflict
+    rescue Product::SaveContract::AmbiguousRichContentIdConflict => e
+      # Raised under the product lock before any mutation. The current response
+      # mapping has no scope dimension, so the client must reload rather than
+      # guess which stored row a repeated submitted page id should address.
+      return render json: {
+        error_message: e.message,
+        error_code: "ambiguous_rich_content_id_conflict",
       }, status: :conflict
     rescue Product::SaveContract::StaleDeletionConflict => e
       # Raised before any mutation, so the transaction rolls back with nothing
@@ -959,6 +975,16 @@ class LinksController < ApplicationController
       return if contract.may_delete?
 
       raise Product::SaveContract::StaleDeletionConflict
+    end
+
+    def ensure_rich_content_ids_are_unambiguous!
+      duplicate_id = submitted_rich_content_page_references
+        .filter_map { _1[:page][:id].presence }
+        .tally
+        .find { |_id, count| count > 1 }
+      return if duplicate_id.nil?
+
+      raise Product::SaveContract::AmbiguousRichContentIdConflict
     end
 
     def check_banned
@@ -1445,11 +1471,18 @@ class LinksController < ApplicationController
         if rich_content_provenance_aware_request?
           []
         else
-          submitted_rich_content_page_references.filter_map do |reference|
-            page = reference[:page]
-            next if page[:source_id].present?
+          references_by_page_id = submitted_rich_content_page_references
+            .select { _1[:page][:source_id].blank? && _1[:page][:id].present? }
+            .group_by { _1[:page][:id] }
 
-            stored_page = owned_submitted_rich_content_pages_by_external_id[page[:id]]
+          references_by_page_id.filter_map do |page_id, references|
+            # The pre-save ambiguity guard rejects repeated ids before this
+            # helper can be reached. Keep this check local too because the
+            # method's result grants deletion authority to an old editor tab.
+            next unless references.one?
+
+            reference = references.sole
+            stored_page = owned_submitted_rich_content_pages_by_external_id[page_id]
             next if stored_page.nil?
             next if stored_page.entity_type == reference[:destination_entity_type] &&
               stored_page.entity_id == reference[:destination_entity_id]
