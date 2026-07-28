@@ -126,10 +126,12 @@ module User::Stats
   #    check after the join, so MySQL fetches each joined purchase row from the
   #    clustered index, and the cost grows with the affiliate's whole credit
   #    history even though partial refunds are rare — roughly 70% of this
-  #    page's request time (Sentry GUMROAD-H8). It also double-counted: a
-  #    partial refund leaves the credit in the `paid` scope, so the first term
-  #    of that sum already counted the credit in full and the second term added
-  #    the same amount again.
+  #    page's request time (Sentry GUMROAD-H8). What that adjustment does is
+  #    narrower than the name suggests: any refund at all, partial included,
+  #    stamps a refund or chargeback balance onto the credit and drops it out of
+  #    the `paid` scope, so the sum below adds back the slice of a partially
+  #    refunded commission the affiliate still keeps. This method skips all of
+  #    that on purpose and reports the gross figure.
   # 3. It reads HIGHER than the per-product Revenue column on the same page,
   #    which excludes credits carrying a refund or chargeback balance. That is
   #    the difference between a lifetime gross figure and a currently-earning
