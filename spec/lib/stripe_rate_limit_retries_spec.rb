@@ -8,6 +8,11 @@ require "spec_helper"
 # build. These examples pin that behaviour down: the decision itself
 # (should_retry?) and the sleep budget it is allowed to spend.
 describe "Stripe rate-limit retries in the test environment" do
+  # should_retry? records its verdict on the current thread so that sleep_time
+  # can see it. Calling should_retry? directly here leaves that flag set, so
+  # clear it rather than letting it leak into whatever runs next.
+  after { Thread.current[StripeTestRateLimitRetries::BACKING_OFF_FOR_RATE_LIMIT] = nil }
+
   def stripe_error(klass, message, status: nil, code: nil, headers: {})
     # Stripe::InvalidRequestError takes the offending parameter name as a
     # positional argument; the other error classes take the message alone.
@@ -55,7 +60,9 @@ describe "Stripe rate-limit retries in the test environment" do
     it "stops once the retry budget is used up" do
       error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
 
-      expect(Stripe::StripeClient.should_retry?(error, num_retries: Stripe.max_network_retries)).to be false
+      expect(
+        Stripe::StripeClient.should_retry?(error, num_retries: StripeTestRateLimitRetries::MAX_RETRIES)
+      ).to be_falsey
     end
 
     it "does not retry a rate limit that came out of a VCR cassette" do
@@ -87,10 +94,55 @@ describe "Stripe rate-limit retries in the test environment" do
 
   describe "the retry budget" do
     it "allows eight attempts capped at sixteen seconds each" do
-      # Pinned literally rather than read back from Stripe's config, so that
-      # changing the budget has to change this spec deliberately.
-      expect(Stripe.max_network_retries).to eq(8)
-      expect(Stripe.max_network_retry_delay).to eq(16)
+      # Pinned literally rather than derived, so that changing the budget has to
+      # change this spec deliberately.
+      expect(StripeTestRateLimitRetries::MAX_RETRIES).to eq(8)
+      expect(StripeTestRateLimitRetries::MAX_RETRY_DELAY).to eq(16)
+    end
+
+    it "keeps that budget off Stripe's global configuration" do
+      # A global bump would also widen the gem's own retries for timeouts, 409
+      # conflicts and 500s, letting an unrelated failure hold a spec in backoff
+      # for a minute. The values here are the ones
+      # config/initializers/003_stripe.rb and the gem set.
+      expect(Stripe.max_network_retries).to eq(3)
+      expect(Stripe.config.max_network_retry_delay).to eq(2)
+    end
+
+    it "retries a rate limit past the point where the global budget would stop" do
+      error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
+
+      expect(Stripe::StripeClient.should_retry?(error, num_retries: Stripe.max_network_retries + 1)).to be true
+    end
+
+    it "sleeps past the global delay cap while backing off a rate limit" do
+      rate_limit = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
+      Stripe::StripeClient.should_retry?(rate_limit, num_retries: 5)
+
+      # Sixth attempt: 0.5 * 2**5 = 16s, which the global cap of 2s would have
+      # clamped. The gem jitters the value into (sleep/2, sleep], so assert the
+      # range rather than the literal.
+      sleep_seconds = Stripe::StripeClient.sleep_time(6)
+
+      expect(sleep_seconds).to be > Stripe.config.max_network_retry_delay
+      expect(sleep_seconds).to be <= StripeTestRateLimitRetries::MAX_RETRY_DELAY
+    end
+
+    it "does not let the wider cap outlive the sleep it was granted for" do
+      rate_limit = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
+      Stripe::StripeClient.should_retry?(rate_limit, num_retries: 5)
+      Stripe::StripeClient.sleep_time(6)
+
+      # A second sleep with no fresh rate limit behind it — a timeout retry on
+      # the next request, say — is back on the gem's own cap.
+      expect(Stripe::StripeClient.sleep_time(6)).to be <= Stripe.config.max_network_retry_delay
+    end
+
+    it "leaves the delay cap alone for failures that are not rate limits" do
+      server_error = stripe_error(Stripe::APIError, "Something went wrong", status: 500)
+      Stripe::StripeClient.should_retry?(server_error, num_retries: 0)
+
+      expect(Stripe::StripeClient.sleep_time(6)).to be <= Stripe.config.max_network_retry_delay
     end
 
     it "leaves enough room to outlast account-creation throttling" do
@@ -98,8 +150,11 @@ describe "Stripe rate-limit retries in the test environment" do
       # account-creation throttling has a longer window than the per-second
       # request-rate bucket. Sum the gem's own backoff schedule to prove the
       # replacement stays in that ballpark rather than expiring early.
-      worst_case = (1..Stripe.max_network_retries).sum do |attempt|
-        [Stripe.initial_network_retry_delay * (2**(attempt - 1)), Stripe.max_network_retry_delay].min
+      worst_case = (1..StripeTestRateLimitRetries::MAX_RETRIES).sum do |attempt|
+        [
+          Stripe.config.initial_network_retry_delay * (2**(attempt - 1)),
+          StripeTestRateLimitRetries::MAX_RETRY_DELAY,
+        ].min
       end
 
       expect(worst_case).to be > 60
