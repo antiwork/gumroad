@@ -66,7 +66,7 @@ class Subscription::PresentmentRenewal
     return fallback(:quote_unavailable) if quote.blank?
 
     # The stored price is charged as-is. Tax and shipping ride on today's rate.
-    fixed_price_cents = presentment.fixed_presentment_price_cents
+    fixed_price_cents = presentment.presentment_price_cents
     variable_canonical_cents = variable_component_canonical_cents(purchase)
     variable_presentment_cents = presentment_cents_for(variable_canonical_cents, quote.fx_rate, currency)
     presentment_total_cents = fixed_price_cents + variable_presentment_cents
@@ -123,6 +123,10 @@ class Subscription::PresentmentRenewal
     # Only a single-purchase renewal is in this lane. A renewal charge carries exactly one
     # purchase (RecurringChargeWorker charges one subscription), so anything else is a shape
     # this service has not reasoned about and must not guess at.
+    #
+    # Reads current_subscription_presentment, not the whole collection: fixings are immutable
+    # and effective-dated, so the newest one that has taken effect is the amount to charge. A
+    # future-dated fixing (a scheduled price change) deliberately does not apply yet.
     def stored_presentment
       return if purchases.blank? || !purchases.one?
 
@@ -130,7 +134,7 @@ class Subscription::PresentmentRenewal
       return if purchase.subscription.blank?
       return if purchase.is_original_subscription_purchase?
 
-      purchase.subscription.subscription_presentment
+      purchase.subscription.current_subscription_presentment
     end
 
     # Everything on the renewal except the price: tax and shipping, which are recomputed each

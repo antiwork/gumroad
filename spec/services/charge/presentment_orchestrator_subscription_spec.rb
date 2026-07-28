@@ -34,11 +34,15 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     record(signup)
 
-    stored = subscription.reload.subscription_presentment
+    stored = subscription.reload.current_subscription_presentment
     expect(stored).to be_present
     expect(stored.presentment_currency).to eq("eur")
     expect(stored.presentment_price_cents).to eq(899)
-    expect(stored.signup_exchange_rate).to eq(0.9)
+    # Stored as the reciprocal of the quote's fx_rate: fx_rate 0.9 is USD per EUR, so the
+    # column (EUR per USD) must hold 1/0.9. Storing 0.9 directly would invert drift.
+    expect(stored.signup_currency_units_per_usd).to be_within(BigDecimal("0.000001")).of(BigDecimal(1) / BigDecimal("0.9"))
+    expect(stored.processor).to eq(StripeChargeProcessor.charge_processor_id)
+    expect(stored.effective_from).to be_present
   end
 
   it "stores the PRICE component, not the total, because tax and shipping move per renewal" do
@@ -50,7 +54,7 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     described_class.record_subscription_presentment!(allocation:, presentment_currency: "eur", fx_rate: 0.9)
 
-    expect(subscription.reload.subscription_presentment.presentment_price_cents).to eq(899)
+    expect(subscription.reload.current_subscription_presentment.presentment_price_cents).to eq(899)
   end
 
   it "is idempotent so a retried charge does not violate the unique index" do
@@ -61,7 +65,7 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
     expect { record(signup, price_cents: 1234) }.not_to raise_error
 
     # The first write wins: a retry must not silently reprice an existing subscription.
-    expect(subscription.reload.subscription_presentment.presentment_price_cents).to eq(899)
+    expect(subscription.reload.current_subscription_presentment.presentment_price_cents).to eq(899)
   end
 
   it "does not write for a renewal, which reuses the stored amount rather than setting it" do
@@ -74,7 +78,7 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     record(renewal)
 
-    expect(subscription.reload.subscription_presentment).to be_nil
+    expect(subscription.reload.current_subscription_presentment).to be_nil
   end
 
   it "does not write for a non-subscription purchase" do
@@ -89,7 +93,7 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     record(signup, fx_rate: nil)
 
-    expect(subscription.reload.subscription_presentment).to be_nil
+    expect(subscription.reload.current_subscription_presentment).to be_nil
   end
 
   it "does not write a non-positive price, which the model would reject anyway" do
@@ -98,6 +102,6 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     record(signup, price_cents: 0)
 
-    expect(subscription.reload.subscription_presentment).to be_nil
+    expect(subscription.reload.current_subscription_presentment).to be_nil
   end
 end

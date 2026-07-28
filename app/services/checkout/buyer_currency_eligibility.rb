@@ -498,7 +498,7 @@ class Checkout::BuyerCurrencyEligibility
       return false unless purchases.one?
 
       subscription = purchases.first.subscription
-      subscription.present? && subscription.subscription_presentment.present?
+      subscription.present? && subscription.current_subscription_presentment.present?
     end
 
     # Commission deposits and installment payments charge less than the locked cart total

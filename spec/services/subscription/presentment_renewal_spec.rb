@@ -20,10 +20,13 @@ describe Subscription::PresentmentRenewal do
   end
   let(:charge) { create(:charge, seller:, merchant_account:) }
 
-  # EUR 8.99 stored at signup, signup rate 0.9 EUR per USD.
+  # EUR 8.99 stored at signup, signup rate 1.111... EUR per USD (the reciprocal of a 0.9
+  # USD-per-EUR quote). Dated in the past so the newest-effective ordering is deterministic.
   let!(:stored) do
     create(:subscription_presentment, subscription:, presentment_currency: "eur",
-                                      presentment_price_cents: 899, signup_exchange_rate: 0.9)
+                                      presentment_price_cents: 899,
+                                      signup_currency_units_per_usd: BigDecimal("1.111111111111111"),
+                                      effective_from: 30.days.ago)
   end
 
   let(:quote) { double(id: "fxq_test_1", fx_rate: 0.8, expires_at: 1.day.from_now) }
@@ -46,6 +49,22 @@ describe Subscription::PresentmentRenewal do
     expect(result.processor_currency).to eq("eur")
     # The rate moved from 0.9 to 0.8; the member still pays exactly what they agreed to.
     expect(result.processor_amount_cents).to eq(899)
+  end
+
+  it "reads the newest fixing that has taken effect, so a price change is honoured" do
+    create(:subscription_presentment, subscription:, presentment_currency: "eur",
+                                      presentment_price_cents: 1299,
+                                      effective_from: 1.hour.ago)
+
+    expect(service.perform.processor_amount_cents).to eq(1299)
+  end
+
+  it "ignores a future-dated fixing, so a scheduled price change does not bill early" do
+    create(:subscription_presentment, subscription:, presentment_currency: "eur",
+                                      presentment_price_cents: 1299,
+                                      effective_from: 3.days.from_now)
+
+    expect(service.perform.processor_amount_cents).to eq(899)
   end
 
   it "does not move the charged amount when the rate moves" do
