@@ -173,7 +173,7 @@ describe FollowersController, inertia: true do
         # spec in this file exercises the pass path. These stub it to prove the
         # gate exists and that it only applies to sellers we haven't reviewed.
         def fail_the_captcha
-          allow_any_instance_of(described_class).to receive(:valid_recaptcha_response?).and_return(false)
+          allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
         end
 
         it "refuses the follow and sends the visitor back to the subscribe page" do
@@ -207,15 +207,15 @@ describe FollowersController, inertia: true do
 
         it "asks for no CAPTCHA at all for a compliant seller" do
           seller.update!(user_risk_state: "compliant")
-          expect_any_instance_of(described_class).to_not receive(:valid_recaptcha_response?)
+          expect_any_instance_of(described_class).to_not receive(:valid_recaptcha_response_and_hostname?)
 
           expect do
             post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
           end.to change { Follower.count }.by(1)
         end
 
-        it "verifies the CAPTCHA against the same key the follow form executes" do
-          expect_any_instance_of(described_class).to receive(:valid_recaptcha_response?)
+        it "verifies the CAPTCHA against the same key the follow form executes, and checks the hostname" do
+          expect_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?)
             .with(site_key: FollowRecaptcha.site_key, surface: FollowRecaptcha::SURFACE)
             .and_return(true)
 

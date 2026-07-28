@@ -173,7 +173,13 @@ class FollowersController < ApplicationController
     def follow_needs_captcha?(followed_user)
       return false unless FollowRecaptcha.required?(followed_user)
 
-      !valid_recaptcha_response?(site_key: FollowRecaptcha.site_key, surface: FollowRecaptcha::SURFACE)
+      # Hostname-verifying variant, same as checkout. A site key is public, so
+      # without it a token minted on a page the attacker controls verifies fine
+      # here — which is the token-farming lane this gate exists to close. The
+      # allowlist (`hostname_allowed?`) already covers every host a follow form
+      # legitimately renders on: gumroad.com, seller subdomains, and registered
+      # custom domains.
+      !valid_recaptcha_response_and_hostname?(site_key: FollowRecaptcha.site_key, surface: FollowRecaptcha::SURFACE)
     end
 
     def followed_user_from_params
