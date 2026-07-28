@@ -59,7 +59,10 @@ describe "Buyer-currency quote recovery after the stored rate moves (#6484)", ty
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
 
-    fill_checkout_form(@product, email: "buyer@example.com")
+    # The quote currency comes from the GeoIP lookup (France), not the billing country, so
+    # checking out with a US billing address keeps this spec off the EU-VAT and SCA paths while
+    # still quoting in EUR.
+    fill_checkout_form(@product, email: "buyer@example.com", country: "United States")
 
     # Stand in for the hourly UpdateCurrenciesWorker tick landing while this checkout is open.
     # The page keeps the rate it rendered with, so the total it has already signed no longer
@@ -81,7 +84,9 @@ describe "Buyer-currency quote recovery after the stored rate moves (#6484)", ty
 
     purchase = @product.sales.successful.last
     # The charge went through at the refreshed rate, which is the whole point: a purchase created
-    # on the stale rate would carry the pre-tick USD total.
-    expect(purchase.total_transaction_cents).to eq((10_00 / charge_time_eur_rate).round)
+    # on the stale rate would carry the pre-tick USD total (€10.00 at 0.9 is US$11.11, at 0.8 it
+    # is US$12.50). One cent of tolerance keeps this off float-rounding trivia.
+    expect(purchase.total_transaction_cents).to be_within(1).of((10_00 / charge_time_eur_rate).round)
+    expect(purchase.total_transaction_cents).not_to be_within(1).of((10_00 / render_time_eur_rate).round)
   end
 end
