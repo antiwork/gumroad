@@ -54,6 +54,46 @@ describe StripeBalanceEnforcer do
       described_class.ensure_sufficient_balance_once
       expect(described_class.balance_ensured?).to be true
     end
+
+    # Running per example rather than at suite start means the top-up now arrives
+    # while VCR and WebMock are configured for the current example. A non-`:js`
+    # example blocks outbound HTTP, which would make the live balance read fail
+    # and get swallowed by the warn above — the top-up would silently never
+    # happen. The enforcer opens the connection for the duration of the call.
+    it "reaches Stripe even from an example where outbound HTTP is blocked" do
+      expect(WebMock::Config.instance.allow_net_connect).to be_falsey
+
+      allowed_during_call = nil
+      vcr_on_during_call = nil
+      allow(described_class).to receive(:ensure_sufficient_balance) do
+        allowed_during_call = WebMock::Config.instance.allow_net_connect
+        vcr_on_during_call = VCR.turned_on?
+      end
+
+      described_class.ensure_sufficient_balance_once
+
+      expect(allowed_during_call).to be true
+      expect(vcr_on_during_call).to be false
+    end
+
+    it "restores the example's HTTP settings afterwards" do
+      allow(described_class).to receive(:ensure_sufficient_balance)
+
+      expect { described_class.ensure_sufficient_balance_once }
+        .to not_change { WebMock::Config.instance.allow_net_connect }
+        .and not_change { VCR.turned_on? }
+    end
+
+    it "restores the example's HTTP settings even when the top-up raises" do
+      allow(described_class).to receive(:ensure_sufficient_balance)
+        .and_raise(Stripe::APIError.new("boom"))
+
+      expect do
+        expect { described_class.ensure_sufficient_balance_once }
+          .to output(/Stripe balance check failed/).to_stderr
+      end.to not_change { WebMock::Config.instance.allow_net_connect }
+        .and not_change { VCR.turned_on? }
+    end
   end
 
   describe "the trigger lives on the example, not on the suite" do

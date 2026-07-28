@@ -59,7 +59,16 @@ class StripeBalanceEnforcer
       @balance_ensured = true
 
       begin
-        ensure_sufficient_balance(minimum_balance_cents)
+        # The top-up has to reach Stripe for real. It used to run from a suite
+        # hook where net connections were already open; now it runs per example,
+        # and a non-`:js` example arrives with VCR on and WebMock blocking
+        # outbound requests (see `setup_js` in spec_helper). Without this, the
+        # request would be blocked, the rescue below would swallow it as a
+        # warning, and the top-up would silently never happen. The only tagged
+        # example today is `:js`, so this is guarding the next one.
+        with_live_http do
+          ensure_sufficient_balance(minimum_balance_cents)
+        end
       rescue StandardError => e
         warn "Stripe balance check failed: #{e.class} #{e.message}"
       end
@@ -70,6 +79,31 @@ class StripeBalanceEnforcer
   def self.balance_ensured?
     MUTEX.synchronize { !!@balance_ensured }
   end
+
+  # Runs the block with VCR off and outbound HTTP allowed, then puts both back
+  # exactly as they were. The previous WebMock setting is read from WebMock's own
+  # config rather than reconstructed, so a `:js` example (net already open) is
+  # left open and a non-`:js` one is left blocked.
+  def self.with_live_http
+    webmock_config = WebMock::Config.instance
+    previous_allow_net_connect = webmock_config.allow_net_connect
+    previous_allow_localhost = webmock_config.allow_localhost
+    previous_allow = webmock_config.allow
+    vcr_was_on = VCR.turned_on?
+
+    VCR.turn_off! if vcr_was_on
+    WebMock.allow_net_connect!(net_http_connect_on_start: true)
+
+    yield
+  ensure
+    if previous_allow_net_connect
+      WebMock.allow_net_connect!(net_http_connect_on_start: true)
+    else
+      WebMock.disable_net_connect!(allow_localhost: previous_allow_localhost, allow: previous_allow)
+    end
+    VCR.turn_on! if vcr_was_on
+  end
+  private_class_method :with_live_http
 
   def self.ensure_sufficient_balance(minimum_balance_cents = DEFAULT_MINIMUM_BALANCE_CENTS)
     new(minimum_balance_cents).ensure_sufficient_balance
