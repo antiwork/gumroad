@@ -122,6 +122,23 @@ class Checkout::BuyerCurrencyQuote
 
   TOKEN_PURPOSE = :buyer_currency_quote
 
+  # How many sellers a cart may span before this lane stops quoting it and lets it check out in
+  # canonical US dollars.
+  #
+  # Each seller costs one Stripe FX quote, and they are minted one after another on the
+  # surcharge request the buyer is waiting on (StripeFxQuote allows 2s to connect and 5s to
+  # read, with no retry). A cart may hold up to Cart::MAX_ALLOWED_CART_PRODUCTS products, so
+  # without a limit here a wide cart of one-product sellers could keep the buyer, and a request
+  # thread, waiting through fifty round trips — and pay that cost again on every edit that
+  # changes the total, because the checkout re-requests surcharges when the cart, tip, address,
+  # or VAT id changes.
+  #
+  # Four covers the multi-seller carts this lane is being ramped for while keeping the worst
+  # case in the same range a single-seller checkout already accepts. A cart above the limit is
+  # not refused: it simply falls back to canonical US dollars, exactly as it did before
+  # multi-seller quoting existed.
+  MAX_QUOTED_CHARGES = 4
+
   def self.create(line_items:, canonical_total_cents:, ip:)
     new(line_items:, canonical_total_cents:, ip:).create
   end
@@ -228,6 +245,10 @@ class Checkout::BuyerCurrencyQuote
     # local-currency lines with dollar lines, and no single figure could then be both the
     # amount displayed and the amount charged.
     line_items_by_seller = self.line_items_by_seller
+    # Checked before any Stripe call, because the cost this bounds is the FX round trips below
+    # (see MAX_QUOTED_CHARGES).
+    return if line_items_by_seller.length > MAX_QUOTED_CHARGES
+
     sellers_by_id = User.where(id: line_items_by_seller.keys).index_by(&:id)
     return unless sellers_by_id.length == line_items_by_seller.length
 

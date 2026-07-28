@@ -333,6 +333,35 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
+  it "falls back to CardElement for a cart holding more sellers than the lane quotes" do
+    # The surcharge endpoint withholds the quote past this many sellers, so mounting the element
+    # in the buyer's currency would only make the browser drop back to dollars a moment later.
+    sellers = Array.new(Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES + 1) { create(:user, disable_buyer_local_currency: false) }
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    buyer_currency_display = {
+      display_mode: "buyer_local",
+      buyer_currency_shown: Currency::CAD,
+    }
+    add_products = sellers.map do |seller|
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+      checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
+    end
+
+    props = stripe_payment_props(add_products:)
+
+    expect(props[:integration]).to eq(described_class::STRIPE_CARD_ELEMENT_INTEGRATION)
+    expect(props[:fallback_reason]).to eq("buyer_currency_presentment_unsupported")
+  ensure
+    (sellers || []).each do |seller|
+      Feature.deactivate_user(:buyer_local_currency, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+    end
+  end
+
   it "selects the buyer-currency presentment Payment Element for a cart priced in a currency other than the buyer's" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)

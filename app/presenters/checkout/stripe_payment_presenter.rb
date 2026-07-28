@@ -431,6 +431,11 @@ class Checkout::StripePaymentPresenter
     # which is the same predicate the quote service and the charge path apply, so the surface
     # the buyer sees and the charge the server will accept cannot disagree.
     #
+    # The seller count is capped for the same reason the quote service caps it
+    # (Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES): past that many sellers the endpoint
+    # withholds the quote, and mounting the element for a currency no quote will arrive for
+    # would only make the browser fall back to canonical US dollars a moment later.
+    #
     # There is deliberately no condition on the currency the SELLER priced in. The quote
     # converts the cart's canonical USD total into the buyer's currency, which works the same
     # whether the seller listed in dollars, euros or reais. The one
@@ -448,6 +453,7 @@ class Checkout::StripePaymentPresenter
       return false if items.empty?
 
       cart_sellers = items.map { _1[:seller] }.uniq
+      return false if cart_sellers.length > Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES
       return false if cart_sellers.many? && !Checkout::BuyerCurrencyEligibility.multi_seller_enabled?(cart_sellers)
 
       # Each charge's quote locks that charge's total, so every item must individually pass the

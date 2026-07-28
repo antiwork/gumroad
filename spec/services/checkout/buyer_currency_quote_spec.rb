@@ -399,6 +399,61 @@ describe Checkout::BuyerCurrencyQuote do
         expect(result).to be_nil
       end
 
+      it "quotes a cart holding as many sellers as the lane will quote" do
+        # One FX round trip per seller, right at the limit.
+        extra_sellers = Array.new(described_class::MAX_QUOTED_CHARGES - 2) do
+          create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true).tap do |extra_seller|
+            Feature.activate_user(:buyer_local_currency, extra_seller)
+            Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+            Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
+          end
+        end
+        extra_products = extra_sellers.map { create(:product, user: _1, price_cents: 1_00, price_currency_type: Currency::USD) }
+        products = [product, other_seller_product, *extra_products]
+        expect(StripeFxQuote).to receive(:create).exactly(described_class::MAX_QUOTED_CHARGES).times.and_return(stripe_fx_quote)
+
+        result = described_class.create(line_items: line_items_for(*products),
+                                        canonical_total_cents: products.sum(&:price_cents),
+                                        ip: "24.48.0.1")
+
+        expect(result.charges.length).to eq(described_class::MAX_QUOTED_CHARGES)
+      ensure
+        extra_sellers&.each do |extra_seller|
+          Feature.deactivate_user(:buyer_local_currency, extra_seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
+        end
+      end
+
+      it "falls back to canonical USD without asking Stripe when the cart holds more sellers than the lane quotes" do
+        # Each seller costs one sequential FX round trip on the request the buyer is waiting on,
+        # so a cart wider than the limit takes dollars instead of making them wait through the
+        # whole chain. No quote is minted at all: the limit is checked before the first call.
+        extra_sellers = Array.new(described_class::MAX_QUOTED_CHARGES - 1) do
+          create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true).tap do |extra_seller|
+            Feature.activate_user(:buyer_local_currency, extra_seller)
+            Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+            Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
+          end
+        end
+        extra_products = extra_sellers.map { create(:product, user: _1, price_cents: 1_00, price_currency_type: Currency::USD) }
+        products = [product, other_seller_product, *extra_products]
+        expect(products.map(&:user_id).uniq.length).to be > described_class::MAX_QUOTED_CHARGES
+        expect(StripeFxQuote).not_to receive(:create)
+
+        result = described_class.create(line_items: line_items_for(*products),
+                                        canonical_total_cents: products.sum(&:price_cents),
+                                        ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      ensure
+        extra_sellers&.each do |extra_seller|
+          Feature.deactivate_user(:buyer_local_currency, extra_seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
+        end
+      end
+
       it "still quotes a single-seller cart when the multi-seller ramp is off" do
         # The ramp gates only multi-seller carts; pulling it must not touch the checkouts
         # that have been live since 2026-07-23.
