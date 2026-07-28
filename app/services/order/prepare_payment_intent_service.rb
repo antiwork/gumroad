@@ -584,12 +584,6 @@ class Order::PreparePaymentIntentService
     # Nothing reported at all means an older client, so fall back to inferring the mount currency
     # server-side exactly as before.
     def intent_forced_currency
-      return @intent_forced_currency if defined?(@intent_forced_currency)
-
-      @intent_forced_currency = resolve_intent_forced_currency
-    end
-
-    def resolve_intent_forced_currency
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
 
@@ -770,6 +764,13 @@ class Order::PreparePaymentIntentService
       # would fail the whole cart, card buyers included, so drop any method whose forced currency
       # is not the intent's. A buyer who actually picked one of those methods never reaches here:
       # the method decides the intent's currency for itself, so the intent is in its currency.
+      #
+      # One residual difference this leaves, deliberately: on a cart the page rendered as
+      # forced-currency-eligible, the element may have offered a method the intent no longer lists,
+      # so the intent's method list can be a strict subset of what the buyer saw. Stripe rejects a
+      # payment_method_types-scoped ConfirmationToken only when the CONFIRMED method is missing, so
+      # a card buyer confirming against this list is fine — and a subset that Stripe accepts is
+      # strictly better than a list Stripe refuses to create at all.
       intent_currency = presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       method_types = method_types.reject do |method_type|
         forced = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)

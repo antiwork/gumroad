@@ -1669,9 +1669,11 @@ describe Order::PreparePaymentIntentService, :vcr do
         # The method list follows the intent, not the cart's pricing. iDEAL can only charge euros,
         # so listing it on the dollar intent above would make Stripe reject the intent CREATE
         # ("Payments with ideal support the following currencies: eur") and fail the whole cart —
-        # including this buyer, who paid by card.
+        # including this buyer, who paid by card. Run against a live key so the resolver offers
+        # iDEAL because the seller's launch flag is on, not because test mode lists every method.
         it "drops the EUR-only local method from that USD intent so Stripe accepts the create" do
           Feature.activate_user(:checkout_local_method_ideal, seller)
+          allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
           order, params = build_order
           params[:payment_element_mount_currency] = Currency::USD
 
@@ -1686,10 +1688,21 @@ describe Order::PreparePaymentIntentService, :vcr do
         end
 
         # The other direction of the same divergence, and the remaining 1 of the 57 orders: the
-        # element mounted in euros while prepare would have concluded dollars. Following the
-        # browser here means building the euro intent its euro token can confirm.
+        # element mounted in euros while the pay-time recomputation concluded dollars. Staged the
+        # way that really happens — the connected account's capability snapshot lost
+        # ideal_payments after the element mounted, so the resolver no longer offers a euro-forcing
+        # method and the old server-side inference gave up. Before this change that made the euro
+        # token fail closed; now we honor the report and build the euro intent it can confirm,
+        # because the presentment machinery gates on the seller's launch flag rather than on the
+        # capability snapshot the drift touched.
         it "creates the EUR intent when the browser reports a EUR-mounted element" do
           expect(StripeFxQuote).not_to receive(:create)
+          connect_account.update!(stripe_capabilities_snapshot: {
+                                    "capabilities" => { "link_payments" => "active" },
+                                    "refreshed_at" => Time.current.iso8601,
+                                  })
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
 
           order, params = build_order
           params[:payment_element_mount_currency] = Currency::EUR
@@ -1700,6 +1713,8 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(create_args[:amount_cents]).to eq(15_00)
           expect(responses["unique-id-0"][:success]).to eq(true)
           expect(order.charges.last.charge_presentment.presentment_currency).to eq(Currency::EUR)
+        ensure
+          Feature.deactivate_user(:checkout_local_method_ideal, seller)
         end
 
         # The browser is trusted about WHICH currency its element used, never about whether that
@@ -1719,7 +1734,10 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         # A method that can only charge in one currency still decides for itself: the buyer picked
         # iDEAL, so the intent must be in euros no matter what the element reported, because that
-        # is the only currency an iDEAL confirmation can settle in.
+        # is the only currency an iDEAL confirmation can settle in. This example cannot fail
+        # against the old code — the old code never consulted the report for such a method either.
+        # It pins the BRANCH ORDER of the new decision: an implementation that let the report
+        # override the method's own forced currency would build a dollar intent here and fail.
         it "keeps the forced-currency intent for an iDEAL token even when the browser reports USD" do
           order, params = build_order
           params[:payment_element_mount_currency] = Currency::USD
@@ -1747,6 +1765,34 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:success]).to eq(true)
         expect(charge.charge_presentment).to be_nil
         expect(order.purchases.first.reload.purchase_presentment).to be_nil
+      end
+
+      # The one flags-off shape this change DOES move: a euro-mounted element whose seller had
+      # buyer-currency charging turned off in between. There is no presentment machinery available
+      # to build a euro intent for a seller who is not enabled, and the canonical dollar intent is
+      # not a fallback — the euro token can never confirm against it, which is the dead end this
+      # whole change exists to remove. So fail the order cleanly instead. Requests that report
+      # nothing, or report dollars, are unchanged (the example above).
+      it "fails a EUR-mounted token closed rather than building an unconfirmable USD intent when the flag is off" do
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+
+        order, params = build_order
+        params[:payment_element_mount_currency] = Currency::EUR
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "NL" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          instance_double(StripeChargeIntent, id: "pi_flag_off_eur", client_secret: "secret")
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_flag_off_eur_mount").perform
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
       end
 
       it "keeps today's canonical USD behavior for a non-method-forced payment method even with the flag on" do
