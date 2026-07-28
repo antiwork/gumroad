@@ -127,12 +127,17 @@ module Purchase::Blockable
     volume_rate = chargeback_volume_percentage.to_f
     return if volume_rate <= User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS
 
-    seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-    seller.comments.create(
-      content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
-      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-      author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
-    )
+    # Flag and comment must land together — see the same note in Payment. Both automatic checks
+    # write source "system", so the comment is the only thing that says which one holds this
+    # account, and a gap between the two writes is a window where the hold is misattributed.
+    User.transaction do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      seller.comments.create(
+        content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
+        comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+        author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+      )
+    end
   end
 
   # Called when a dispute (chargeback) lands on one of this seller's purchases.
