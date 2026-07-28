@@ -142,10 +142,19 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
   // validation: the click would set a fresh "Must be present" error and the queued clear would then
   // wipe it, so the field never turned red. That interleaving is the flake in
   // spec/requests/analytics/utm_links_spec.rb "shows validation errors" (issue #6487).
+  //
+  // Read the errors through a ref rather than the closed-over value, because one caller (the
+  // permalink refresh below) runs in an async callback whose closure was captured before the
+  // request started, and by then the error state may have moved on.
+  const errorsRef = React.useRef(errors);
+  errorsRef.current = errors;
+
+  // Skipping the call when nothing is set matters: clearErrors always produces a new errors object,
+  // which would re-fire the scroll effect below on every keystroke.
   const clearFieldErrors = (...attrNames: FieldAttrName[]) => {
     const keys = attrNames
       .map((attrName) => `utm_link.${attrName}` as const)
-      .filter((key) => errors[key] !== undefined);
+      .filter((key) => errorsRef.current[key] !== undefined);
     if (keys.length > 0) form.clearErrors(...keys);
   };
 
