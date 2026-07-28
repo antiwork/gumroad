@@ -74,6 +74,18 @@ module CapybaraHelpers
     field.execute_script("Object.getOwnPropertyDescriptor(Object.getPrototypeOf(this), 'value').set.call(this, arguments[0]); this.dispatchEvent(new Event('input', { bubbles: true }))", color)
   end
 
+  # Put text into a field the way a clipboard paste does: the whole value lands at once and one
+  # input event fires. `fill_in` types character by character, which is a different thing and will
+  # not reproduce bugs that depend on the entire pasted string being present in one go. Going
+  # through the prototype's value setter rather than assigning `this.value` is what makes React
+  # notice the change.
+  def paste_into(field, text)
+    find_field(field).execute_script(
+      "Object.getOwnPropertyDescriptor(Object.getPrototypeOf(this), 'value').set.call(this, arguments[0]); this.dispatchEvent(new Event('input', { bubbles: true }))",
+      text
+    )
+  end
+
   def have_nth_table_row_record(n, text, exact_text: true)
     have_selector("tbody tr:nth-child(#{n}) > td", text:, exact_text:, normalize_ws: true)
   end

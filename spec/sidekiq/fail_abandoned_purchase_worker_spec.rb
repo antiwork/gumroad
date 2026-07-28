@@ -218,6 +218,86 @@ describe FailAbandonedPurchaseWorker, :vcr do
         end
       end
 
+      describe "abandoned client-confirm Pix charge with an outstanding QR key" do
+        let(:seller) { create(:user) }
+        let(:purchase) { create(:purchase_in_progress, link: create(:product, user: seller), merchant_account: create(:merchant_account, user: seller)) }
+        let(:charge) { create(:charge, seller:, stripe_payment_intent_id: "pi_abandoned_pix", client_confirmed: true) }
+
+        before do
+          charge.purchases << purchase
+          purchase.create_processor_payment_intent!(intent_id: "pi_abandoned_pix")
+          travel ChargeProcessor::TIME_TO_COMPLETE_SCA
+          allow(ChargeProcessor).to receive(:cancel_payment_intent!)
+        end
+
+        def stub_intent_retrieve(next_action:)
+          allow(Stripe::PaymentIntent).to receive(:retrieve).with("pi_abandoned_pix")
+            .and_return(Stripe::PaymentIntent.construct_from(id: "pi_abandoned_pix", status: "requires_action", next_action:))
+        end
+
+        context "when the Pix key is still payable" do
+          # The QR key outlives the SCA window this worker runs on: the buyer can still pay it in
+          # their banking app, so cancelling now would kill a live payment (and orphan the money if
+          # they paid a moment later). The worker must wait for the key's own expiry instead.
+          it "reschedules itself to just after the key's expiry instead of cancelling the intent" do
+            expires_at = 15.minutes.from_now.to_i
+            stub_intent_retrieve(next_action: { type: "pix_display_qr_code", pix_display_qr_code: { expires_at: } })
+
+            described_class.new.perform(purchase.id)
+
+            expect(ChargeProcessor).not_to have_received(:cancel_payment_intent!)
+            expect(purchase.reload).to be_in_progress
+            expect(FailAbandonedPurchaseWorker.jobs.size).to eq(1)
+            job = FailAbandonedPurchaseWorker.jobs.sole
+            expect(job["args"]).to eq([purchase.id])
+            expect(Time.zone.at(job["at"])).to eq(Time.zone.at(expires_at) + 1.minute)
+          end
+        end
+
+        context "when the Pix key has already expired" do
+          # After expiry the key can no longer be paid, so the intent is abandoned like any other;
+          # normally Stripe's own expiry webhook resolves the purchase first, and this cancel is
+          # the fallback for a lost webhook.
+          it "cancels the intent and fails the purchase as usual" do
+            stub_intent_retrieve(next_action: { type: "pix_display_qr_code", pix_display_qr_code: { expires_at: 1.minute.ago.to_i } })
+
+            described_class.new.perform(purchase.id)
+
+            expect(ChargeProcessor).to have_received(:cancel_payment_intent!)
+            expect(purchase.reload).to be_failed
+            expect(FailAbandonedPurchaseWorker.jobs.size).to eq(0)
+          end
+        end
+
+        context "when Stripe omits the key's expiry" do
+          # Without an expiry to wait for, rescheduling would loop forever — treat the intent like
+          # any other abandoned one.
+          it "cancels the intent instead of rescheduling forever" do
+            stub_intent_retrieve(next_action: { type: "pix_display_qr_code", pix_display_qr_code: {} })
+
+            described_class.new.perform(purchase.id)
+
+            expect(ChargeProcessor).to have_received(:cancel_payment_intent!)
+            expect(purchase.reload).to be_failed
+            expect(FailAbandonedPurchaseWorker.jobs.size).to eq(0)
+          end
+        end
+
+        context "when the intent awaits a non-Pix action (card SCA)" do
+          # Only the asynchronous customer-initiated actions (Pix) get the expiry grace; an
+          # abandoned card SCA keeps today's behaviour of being cancelled at the SCA deadline.
+          it "cancels the intent as before" do
+            stub_intent_retrieve(next_action: { type: "use_stripe_sdk" })
+
+            described_class.new.perform(purchase.id)
+
+            expect(ChargeProcessor).to have_received(:cancel_payment_intent!)
+            expect(purchase.reload).to be_failed
+            expect(FailAbandonedPurchaseWorker.jobs.size).to eq(0)
+          end
+        end
+      end
+
       describe "client-confirm charge that succeeded but was never finalized" do
         let(:seller) { create(:user) }
         let(:product) { create(:product, user: seller) }

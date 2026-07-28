@@ -980,6 +980,47 @@ describe "Purchase Process", :vcr do
         expect(@purchase.fee_cents).to eq(30)
       end
     end
+
+    describe "Pix IOF fee" do
+      # Every Pix payment to Gumroad is cross-border, so Stripe deducts Brazil's 3.5% IOF tax from
+      # what settles to us while the buyer pays exactly the listed price (amount_includes_iof).
+      # That cost is recovered from the seller as a fee component
+      # (Purchase::PIX_IOF_FEE_PER_THOUSAND, the gumroad-private#1305 ruling) — it must land in
+      # fee_cents, reducing seller proceeds, never in the buyer's total.
+      it "folds the IOF into the Gumroad fee for a Pix purchase, reducing seller proceeds" do
+        purchase = build(:purchase, price_cents: 10_00, card_type: CardType::PIX)
+
+        purchase.send(:calculate_fees)
+
+        # 10% flat + 2.9% processor + 3.5% IOF on $10.00, plus the $0.50 + $0.30 fixed fees.
+        expect(purchase.fee_cents).to eq(244)
+        expect(purchase.payment_cents).to eq(10_00 - 244)
+      end
+
+      it "charges no IOF component for a non-Pix purchase" do
+        purchase = build(:purchase, price_cents: 10_00, card_type: CardType::VISA)
+
+        purchase.send(:calculate_fees)
+
+        # 10% flat + 2.9% processor on $10.00, plus the $0.50 + $0.30 fixed fees — no IOF.
+        expect(purchase.fee_cents).to eq(209)
+      end
+
+      # On a direct charge the money settles into the seller's own Stripe account and Stripe deducts
+      # the IOF from that balance, so the seller has already absorbed it. Recovering it again through
+      # fee_cents would bill them for the same Brazilian tax twice. Same reasoning as the processor
+      # fee, which is gated on the identical condition.
+      it "charges no IOF component on a direct charge, where the seller already absorbs it" do
+        purchase = build(:purchase, price_cents: 10_00, card_type: CardType::PIX)
+        allow(purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(false)
+
+        purchase.send(:calculate_fees)
+
+        # 10% flat only: no processor fee and no IOF, plus the $0.50 fixed Gumroad fee.
+        expect(purchase.fee_cents).to eq(150)
+        expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(0)
+      end
+    end
   end
 
   describe "process" do

@@ -107,21 +107,73 @@ module User::Stats
     affiliate_credit_sum_from_scope(paid_scope, all_scope)
   end
 
-  def affiliate_credits_sum_total
-    paid_scope = affiliate_credits.paid
-    all_scope = affiliate_credits
-    affiliate_credit_sum_from_scope(paid_scope, all_scope)
+  # Lifetime affiliate revenue shown on the affiliated products dashboard: the
+  # gross sum of every affiliate credit the user has earned.
+  #
+  # "Gross" is meant literally here — no filtering at all. Every credit counts
+  # its full amount_cents, whether or not the sale was later refunded or
+  # charged back, and whether or not the credit's balance rows have been
+  # written yet. Three things follow from that, and they are all intentional:
+  #
+  # 1. It pairs with the "Total sales" stat next to it, which is likewise an
+  #    unfiltered count of the same rows. Before this, the two headline numbers
+  #    were drawn from different populations, so a refunded sale was counted in
+  #    one and not the other, and the pair could not be reconciled by eye.
+  # 2. It does NOT adjust for partial refunds, unlike
+  #    #affiliate_credit_sum_from_scope below. That adjustment joins every one
+  #    of the affiliate's credit rows to purchases just to read the
+  #    purchases.stripe_partially_refunded boolean. No index can serve that
+  #    check after the join, so MySQL fetches each joined purchase row from the
+  #    clustered index, and the cost grows with the affiliate's whole credit
+  #    history even though partial refunds are rare — roughly 70% of this
+  #    page's request time (Sentry GUMROAD-H8). What that adjustment does is
+  #    narrower than the name suggests: any refund at all, partial included,
+  #    stamps a refund or chargeback balance onto the credit and drops it out of
+  #    the `paid` scope, so the sum below adds back the slice of a partially
+  #    refunded commission the affiliate still keeps. This method skips all of
+  #    that on purpose and reports the gross figure.
+  # 3. It reads HIGHER than the per-product Revenue column on the same page,
+  #    which excludes credits carrying a refund or chargeback balance. That is
+  #    the difference between a lifetime gross figure and a currently-earning
+  #    breakdown, and it is the behaviour asked for on #6420.
+  #
+  # Nothing about money movement reads this method — payouts go through
+  # #affiliate_credit_cents_for_balances. This is a dashboard stat only.
+  def affiliate_credits_total_revenue_cents
+    affiliate_credits.sum(:amount_cents).to_i
   end
 
+  # Sums the affiliate credit a user has actually earned, adding back the part of a
+  # partially refunded credit the affiliate still keeps.
+  #
+  # The add-back is needed because refunding a purchase — even partially — always stamps
+  # a refund or chargeback balance onto the affiliate credit (see
+  # Purchase#process_refund_or_chargeback_for_affiliate_credit_balance), which drops the
+  # row out of the `paid` scope entirely. Without the second term, an affiliate who kept
+  # $15 of a $25 commission on a partially refunded sale would be credited $0.
+  #
+  # The add-back is restricted to credits that have an affiliate_partial_refunds row,
+  # because that row is only created when the affiliate credit was reversed by LESS than
+  # its full value. When the credit is clawed back in full the row is never created, so
+  # adding it back with nothing to subtract would credit the affiliate for money they no
+  # longer have. Measured against production, that was overstating 22 credits by $52.58
+  # across 18 affiliates while the 382 genuinely-partial credits were already exact.
+  #
+  # The restriction uses EXISTS rather than a join because a credit can carry several
+  # affiliate_partial_refunds rows — 56 in the table do, one with four. Joining would sum
+  # amount_cents once per row and credit that affiliate 2-4x their commission. The
+  # subtraction below still joins, because there it is the refund rows' own amounts being
+  # summed and one row per refund is exactly right.
   def affiliate_credit_sum_from_scope(paid_scope, all_scope)
+    partially_refunded = all_scope.joins(:purchase).where("purchases.stripe_partially_refunded": true)
+    with_remaining_value = partially_refunded.where(
+      AffiliatePartialRefund.where("affiliate_partial_refunds.affiliate_credit_id = affiliate_credits.id").arel.exists
+    )
+
     aff_credit_cents = paid_scope.sum("amount_cents").to_i
-    aff_credit_cents += all_scope
-                            .joins(:purchase).where("purchases.stripe_partially_refunded": true)
-                            .sum("amount_cents")
-    aff_credit_cents -= all_scope
-                            .joins(:purchase).where("purchases.stripe_partially_refunded": true)
-                            .joins(:affiliate_partial_refunds)
-                            .sum("affiliate_partial_refunds.amount_cents")
+    aff_credit_cents += with_remaining_value.sum("affiliate_credits.amount_cents")
+    aff_credit_cents -= partially_refunded.joins(:affiliate_partial_refunds)
+                                         .sum("affiliate_partial_refunds.amount_cents")
     aff_credit_cents
   end
 
