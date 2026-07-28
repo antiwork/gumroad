@@ -38,6 +38,19 @@ class Checkout::BuyerCurrencyQuote
     # the buyer's tip share, so the tip is carved back out here; the tax lands in the same
     # bucket Purchase#calculate_taxes will use at charge time (seller-responsible lookup
     # rates vs Gumroad-collected VAT / marketplace-facilitator tax).
+    #
+    # UNITS: `tax_result.price_cents` is ALREADY canonical USD cents, for every cart,
+    # whatever currency the seller priced the product in. The browser converts before it
+    # posts — getProducts in pages/Checkout/Show.tsx sends
+    # `price: convertToUSD(item, price)` — and Purchase#set_price_and_rate independently
+    # derives the USD figure for total_transaction_cents the same way, which is what
+    # charge-time verification compares this token against. (The two figures agree only
+    # while the stored rate still equals the exchange_rate baked into the page props at
+    # render; the hourly rate refresh can move the stored rate under an open checkout,
+    # in which case verification rejects the token.) Do NOT convert by price_currency_type here:
+    # that double-converts (a €10.00 product posts 1233 USD cents, converting again gives
+    # 1520) and makes every non-USD-priced checkout fail quote verification. Covered by the
+    # units-invariant example in the spec.
     def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:)
       price_cents = tax_result.price_cents.to_i
       # The submitted price and tip are buyer-controlled request params. A crafted
@@ -161,10 +174,6 @@ class Checkout::BuyerCurrencyQuote
 
     seller = products.first.user
     return unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-    # The quote locks the whole cart total, so every item must individually support
-    # presentment; one unsupported item (whose charge amount could differ from the total
-    # the quote locked) means the whole cart falls back to canonical USD.
-    return unless products.all? { |product| quotable_product?(product) }
 
     merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
                        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
@@ -173,6 +182,61 @@ class Checkout::BuyerCurrencyQuote
     buyer_currency = buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    # The quote locks the whole cart total, so every item must individually support
+    # presentment; one unsupported item (whose charge amount could differ from the total
+    # the quote locked) means the whole cart falls back to canonical USD. The buyer's
+    # currency is known by this point because one of the product gates depends on it.
+    return unless products.all? { |product| quotable_product?(product, buyer_currency:) }
+    # On a non-USD listing, a tip or a shipping charge is not yet safe to quote.
+    #
+    # Both are computed twice on the way to a purchase: once by the surcharge request that
+    # mints this quote, and again by the code that builds the order. The two arrive at the
+    # canonical USD figure by converting at different points, and for a non-USD listing the
+    # roundings land on either side of a division by the same rate. They then disagree by a
+    # cent often enough to matter, `verify!` rejects the token on "total mismatch", and the
+    # buyer's payment fails outright. For a USD listing there is no conversion, both sides
+    # agree, and none of this bites, which is why it never mattered before: this change is
+    # what first lets a non-USD listing reach the quote at all.
+    #
+    # The tip. The surcharge request splits it over each line's canonical USD price
+    # (`state.products[].price` is already run through `convertToUSD`), whereas the order
+    # submitted later splits it over each line's *listed* price, and the server then runs
+    # that figure back through `get_usd_cents` using the product's own currency
+    # (Purchase::CreateService, where the tip is built).
+    #
+    # Shipping. CustomerSurchargeController asks ShippingDestination#calculate_shipping_rate
+    # for a rate with no currency, so it sums the listed one-item and multiple-items rates and
+    # converts that sum once. Purchase#calculate_shipping passes the product's currency to the
+    # same method, which converts each of the two terms separately and adds them afterwards.
+    # Convert-then-sum and sum-then-convert differ by a cent whenever both terms round the same
+    # way: a EUR listing at a stored rate of 0.879624 with 250 one-item and 200 multiple-items
+    # shipping, quantity 2, signs a token for 3922 against a charge that computes 3921.
+    # Shipping also feeds the tax calculation, and there the two sides differ by more than a
+    # rounding cent: the surcharge endpoint hands SalesTaxCalculator the listed-unit figure
+    # while Purchase#calculate_taxes hands it the converted USD one, so any tax that moves as a
+    # result fails the same total check.
+    #
+    # Note either one needs only ONE non-USD listing to go wrong, not a mixed-currency cart:
+    # a single-line EUR cart with a tip reproduces it, as does one with shipping.
+    #
+    # The gate is cart-level (any tip or shipping anywhere + any non-USD listing anywhere),
+    # not per-line, because the tip allocation can also move the tip BETWEEN lines: the
+    # largest-remainder split hands leftover cents to different lines depending on the
+    # price basis, so a cent that lands on a USD line at quote time can land on the
+    # non-USD line at submit. A per-line check (tip on a non-USD line) would mint a
+    # token for that cart and the changed per-line totals would then fail verification.
+    #
+    # Withholding the quote is the conservative answer: the cart simply falls back to the
+    # canonical USD checkout, exactly as it does on main today, so nothing regresses and no
+    # payment can fail verification. The real fixes are to make both sides allocate the tip
+    # from the same figures (a checkout-wide change to `computeTipsForLines` and its two call
+    # sites) and to make both sides convert shipping and its tax base at the same point. Both
+    # ship separately so this gate can be lifted deliberately, with a regression that
+    # completes exactly the payment it currently withholds.
+    if products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD } &&
+       line_items.any? { |line| line.tip_cents.to_i.positive? || line.shipping_cents.to_i.positive? }
+      return
+    end
     # Checked last because the marker is scoped to the presentment currency: a mismatch
     # learned for EUR must not suppress quoting for GBP buyers of the same seller.
     return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency, seller:)
@@ -305,8 +369,22 @@ class Checkout::BuyerCurrencyQuote
       end
     end
 
-    def quotable_product?(product)
-      return false unless product.price_currency_type.to_s.downcase == Currency::USD
+    # What the seller priced the product in has no bearing on what the buyer should be
+    # quoted: the quote converts the cart's canonical USD total into the buyer's own
+    # currency, and USD is only the unit our money flows are normalized to internally.
+    # A euro-priced product bought from Brazil is quoted in reais exactly like a
+    # dollar-priced one.
+    #
+    # The one product currency that must NOT go through this lane is the buyer's own.
+    # Converting a R$49.90 listing to USD and back through a Stripe FX quote returns
+    # something near but not equal to R$49.90 (two conversions, two rates, two
+    # roundings), so the buyer would be charged an amount that differs from the price
+    # on the page. That cart is withheld from quoting so it is never mispriced by the
+    # round trip. It only pays its listed price on the method-forced local-method lane
+    # (Charge::MethodForcedPresentment, for EUR/INR listings paid via iDEAL, Bancontact
+    # or UPI); a plain card checkout for that cart falls back to canonical USD today.
+    def quotable_product?(product, buyer_currency:)
+      return false if product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
       return false if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?
       # Commissions charge only a deposit now and installment plans charge only the first
       # payment, so a quote locked against the full cart total can never match the charged

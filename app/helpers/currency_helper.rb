@@ -186,14 +186,17 @@ module CurrencyHelper
     # A buyer whose own currency is USD is the one case where converting a non-USD-priced
     # product is safe, because USD is what the charge uses anyway: a plain card charge is
     # created in USD and the listed price is converted with the same cached rate this display
-    # path reads, so the preview equals the amount charged. Allow it before the USD-pricing
+    # path reads, so the preview equals the amount charged. Allow it before the listed-currency
     # guard below, which would otherwise hide the one converted price we do honour.
     return true if buyer_currency.to_s.downcase == Currency::USD
-    # Past this point the buyer's currency is not USD, and the charge path only presents in it
-    # for USD-priced products. A product priced in anything else is charged its listed price
-    # converted to USD (only the method-forced lanes such as iDEAL charge in the listed
-    # currency), so a price converted into the buyer's currency is never what is charged.
-    return false unless product_currency.to_s.downcase == Currency::USD
+    # The charge presents in the buyer's currency for any listing currency except the buyer's
+    # own, so what the seller priced in does not decide this. The excluded case is a product
+    # already listed in the buyer's currency: converting it to USD and back through an FX
+    # quote returns something near but not equal to the listed price, so that cart is withheld
+    # from quoting and charged canonical USD on a card checkout (only the method-forced lanes
+    # such as iDEAL charge the listed price directly). Same rule as
+    # Checkout::BuyerCurrencyQuote#quotable_product?.
+    return false if product_currency.to_s.downcase == buyer_currency.to_s.downcase
     # The same product shapes Checkout::BuyerCurrencyQuote#quotable_product? refuses to quote.
     # Each of these charges an amount that can differ from the cart total a quote would lock
     # (nothing yet for a preorder, one period for a membership, $0 for a free trial, a deposit
