@@ -68,10 +68,20 @@ const reloaderReturning =
   (props: unknown | "error") => (callbacks: { onSuccess: (props: unknown) => void; onError: () => void }) =>
     props === "error" ? callbacks.onError() : callbacks.onSuccess(props);
 
+// A reload that does not answer until the test says so, which is how the real one behaves: the
+// checkout is editable again while the request is in flight.
+const pendingReloader = () => {
+  let finish: ((props: unknown) => void) | null = null;
+  const reload = (callbacks: { onSuccess: (props: unknown) => void; onError: () => void }) => {
+    finish = callbacks.onSuccess;
+  };
+  return { reload, respondWith: (props: unknown) => finish?.(props) };
+};
+
 const run = (cart: CartState, reload: ReturnType<typeof reloaderReturning>) => {
   const setCart = vi.fn();
   const requote = vi.fn();
-  recoverFromInvalidBuyerCurrencyQuote({ reloadCartProps: reload, cart, setCart, requote });
+  recoverFromInvalidBuyerCurrencyQuote({ reloadCartProps: reload, getCart: () => cart, setCart, requote });
   return { setCart, requote };
 };
 
@@ -182,5 +192,29 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
     expect(items[1].product.exchange_rate).toBe(0.95);
     // The untouched item keeps its identity, so nothing downstream re-renders it needlessly.
     expect(items[0]).toBe(usd);
+  });
+
+  // The reload is a real network round trip and the checkout is editable again while it is in
+  // flight, so the buyer can bump a quantity or change an option before the rates come back. The
+  // recovery has to merge into whatever they are holding when the reload lands, not into the cart
+  // from the render that kicked it off — otherwise it saves the older selections back and quotes
+  // them, quietly undoing the edit.
+  it("merges into the cart the buyer holds when the reload lands, not the one it started with", () => {
+    let cart = cartWith([cartItem({ quantity: 1 })]);
+    const setCart = vi.fn<(cart: CartState) => void>();
+    const requote = vi.fn<(cart: CartState) => void>();
+    const { reload, respondWith } = pendingReloader();
+
+    recoverFromInvalidBuyerCurrencyQuote({ reloadCartProps: reload, getCart: () => cart, setCart, requote });
+
+    // The buyer changes the quantity while the reload is still out.
+    cart = cartWith([cartItem({ quantity: 3 })]);
+
+    respondWith({ cart: cartWith([cartItem({ product: cartProduct({ exchange_rate: 0.9 }) })]) });
+
+    expect(setCart.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
+    expect(setCart.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.9);
+    expect(requote.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
+    expect(requote.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.9);
   });
 });

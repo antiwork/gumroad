@@ -378,6 +378,17 @@ const CheckoutIndexPage = () => {
   const [showLargeTipConfirmation, setShowLargeTipConfirmation] = React.useState(false);
   const largeTipConfirmedRef = React.useRef(false);
 
+  // The recovery below re-fetches the cart from the server, and the checkout goes back to being
+  // editable while that request is in flight, so the buyer can change a quantity, an option, or a
+  // pay-what-you-want price before it comes back. Keep the current cart in a ref so the completion
+  // callback works from whatever the buyer is holding at that moment instead of the snapshot from
+  // the render that started the recovery, which would write the older selections back and quote
+  // them.
+  const latestCartRef = React.useRef(cartForm.data.cart);
+  React.useEffect(() => {
+    latestCartRef.current = cartForm.data.cart;
+  }, [cartForm.data.cart]);
+
   // Recovers a checkout whose local-currency quote the server refused at charge time. The
   // reasoning lives with the helper in buyerCurrencyQuoteRecovery.ts.
   function recoverFromInvalidBuyerCurrencyQuote() {
@@ -389,7 +400,7 @@ const CheckoutIndexPage = () => {
           onSuccess: (page) => onSuccess(page.props),
           onError,
         }),
-      cart: cartForm.data.cart,
+      getCart: () => latestCartRef.current,
       setCart: (cart) => cartForm.setData({ cart }),
       requote: (cart) => dispatch({ type: "update-products", products: getProducts(cart) }),
     });

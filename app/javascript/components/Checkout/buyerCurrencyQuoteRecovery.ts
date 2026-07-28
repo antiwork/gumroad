@@ -20,8 +20,12 @@ export type BuyerCurrencyQuoteRecoveryDeps = {
   // Partially reloads the page's `cart` prop. Calls back with the server's response props on
   // success, or with nothing when the reload itself failed.
   reloadCartProps: (callbacks: { onSuccess: (props: unknown) => void; onError: () => void }) => void;
-  // The cart the buyer is currently holding, with their choices in it.
-  cart: CartState;
+  // Reads the cart the buyer is currently holding, with their choices in it. This is a getter
+  // rather than a value because the reload is asynchronous and the checkout stays editable while
+  // it is in flight: the buyer can change a quantity, an option, or a pay-what-you-want price in
+  // that window. Merging into a cart captured when the recovery started would write that older
+  // snapshot back and quote it, silently undoing the edit they just made.
+  getCart: () => CartState;
   // Persists a cart whose rates changed. Only called when a rate actually moved.
   setCart: (cart: CartState) => void;
   // Re-requests a surcharge quote for the given cart.
@@ -30,7 +34,7 @@ export type BuyerCurrencyQuoteRecoveryDeps = {
 
 export const recoverFromInvalidBuyerCurrencyQuote = ({
   reloadCartProps,
-  cart,
+  getCart,
   setCart,
   requote,
 }: BuyerCurrencyQuoteRecoveryDeps) => {
@@ -42,12 +46,13 @@ export const recoverFromInvalidBuyerCurrencyQuote = ({
       // into a crash. Without usable refreshed rates the recovery degrades to a plain re-quote.
       const validated = typia.validate<{ cart: CartState | null }>(props);
       const refreshed = validated.success ? validated.data.cart : null;
+      const cart = getCart();
       const updated = refreshed ? withRefreshedExchangeRates(cart, refreshed) : cart;
       if (updated !== cart) setCart(updated);
       requote(updated);
     },
     // Still re-request a quote if the reload failed, so the checkout returns to a usable state
     // rather than sitting disabled. That retry can fail the same way, but it fails visibly.
-    onError: () => requote(cart),
+    onError: () => requote(getCart()),
   });
 };
