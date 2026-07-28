@@ -80,11 +80,25 @@ class Rack::Attack
   end
 
   # Throttle by request parameters
-  def self.throttle_by_params(path:, requests:, period:, throttle_params:, method: nil)
-    block_proc = proc { |req| throttle_identifier(path:, method:, request: req, identifier: "#{throttle_params.call(req)}") }
+  #
+  # `max_level` mirrors `throttle_by_ip`: the default adds exponential-backoff
+  # tiers on top of the base limit, but a long base `period` makes those tiers
+  # *stricter* than the limit you asked for (the `rpm * level` arithmetic rounds
+  # down to single digits), so pass `max_level: 1` for hour-scale limits to get
+  # exactly the base rule and nothing else.
+  def self.throttle_by_params(path:, requests:, period:, throttle_params:, max_level: 6, method: nil)
+    block_proc = proc do |req|
+      value = throttle_params.call(req)
+      # A blank extracted value would make every request that omits the param
+      # share a single throttle bucket, so real traffic would be blocked by
+      # unrelated malformed requests. Skip the rule instead.
+      next if value.blank?
+
+      throttle_identifier(path:, method:, request: req, identifier: "#{value}")
+    end
     name = throttle_name(prefix: "/params", path:, method:)
 
-    throttle_with_exponential_backoff(name:, requests:, period:, max_level: 6, &block_proc)
+    throttle_with_exponential_backoff(name:, requests:, period:, max_level:, &block_proc)
   end
 
   # Throttle by IP with exponential backoff
@@ -127,6 +141,29 @@ class Rack::Attack
     throttle_by_ip path: "/signup.json",                    requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/follow", method: :post,          requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/follow_from_embed_form",         requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
+
+    # Cap follow requests per TARGET SELLER, not just per source IP.
+    #
+    # Every follow creates a "Please confirm your follow request" email to
+    # whatever address was submitted, so /follow is an email-sending endpoint
+    # aimed at arbitrary third parties. The per-IP limits above are the wrong
+    # key against a distributed sender: a ring that harvested addresses and
+    # pointed them at its own storefronts ran one account per proxy IP at a few
+    # follows per minute each, which is orders of magnitude under 3-per-20s and
+    # so never tripped anything, while delivering hundreds of thousands of
+    # phishing lures from our sending domain.
+    #
+    # The seller being followed is the one identifier the sender cannot rotate:
+    # the whole point of the abuse is to drive victims to a specific storefront.
+    # 60/hour is far above organic demand (a viral launch is a burst of page
+    # views, and each visitor follows at most once) while making bulk relay
+    # impossible regardless of how many IPs the sender controls.
+    #
+    # `max_level: 1` skips the exponential-backoff tiers: with a 1-hour base
+    # period the `rpm * level` arithmetic rounds below 1 and would start
+    # blocking well under the intended limit.
+    throttle_by_params path: "/follow", method: :post, requests: 60, period: 1.hour, max_level: 1,
+                       throttle_params: ->(req) { req.params["seller_id"].presence }
     throttle_by_ip path: "/forgot_password.json",           requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/forgot_password",                requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/users/auth/facebook",            requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
