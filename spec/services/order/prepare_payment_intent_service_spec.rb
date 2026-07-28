@@ -1640,6 +1640,96 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(responses["unique-id-0"][:success]).to eq(false)
           expect(order.purchases.first.reload).to be_failed
         end
+
+        # gumroad-private#1382, the dominant shape (54 of 57 affected orders). The checkout page
+        # computes the element's currency when it renders and this service recomputes it when the
+        # buyer pays, so a cart that becomes uniformly EUR-priced mid-session (or a seller whose
+        # local-method flag turns on in between) leaves the element mounted in dollars while
+        # prepare would independently conclude euros. The buyer's ConfirmationToken was minted on
+        # the dollar element, so a EUR intent is one Stripe can never confirm it against: it
+        # rejected the confirm in the browser with "The provided currency (eur) does not match the
+        # expected currency (usd)", leaving no charge and no payment_failed webhook. The browser's
+        # report is the authority — build the dollar intent it can actually pay.
+        it "creates the canonical USD intent when the browser reports a USD-mounted element on this EUR cart" do
+          expect(StripeFxQuote).not_to receive(:create)
+
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::USD
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_usd_mount_eur_cart")
+
+          expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+          expect(create_args[:amount_cents]).to eq(order.purchases.sum { _1.reload.total_transaction_cents })
+          expect(create_args[:stripe_fx_quote_id]).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment).to be_nil
+          expect(order.purchases.first.reload.purchase_presentment).to be_nil
+        end
+
+        # The method list follows the intent, not the cart's pricing. iDEAL can only charge euros,
+        # so listing it on the dollar intent above would make Stripe reject the intent CREATE
+        # ("Payments with ideal support the following currencies: eur") and fail the whole cart —
+        # including this buyer, who paid by card.
+        it "drops the EUR-only local method from that USD intent so Stripe accepts the create" do
+          Feature.activate_user(:checkout_local_method_ideal, seller)
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::USD
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_usd_mount_strips_ideal")
+
+          expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+          expect(create_args[:payment_method_types]).to include("card")
+          expect(create_args[:payment_method_types]).not_to include("ideal")
+          expect(responses["unique-id-0"][:success]).to eq(true)
+        ensure
+          Feature.deactivate_user(:checkout_local_method_ideal, seller)
+        end
+
+        # The other direction of the same divergence, and the remaining 1 of the 57 orders: the
+        # element mounted in euros while prepare would have concluded dollars. Following the
+        # browser here means building the euro intent its euro token can confirm.
+        it "creates the EUR intent when the browser reports a EUR-mounted element" do
+          expect(StripeFxQuote).not_to receive(:create)
+
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::EUR
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_eur_mount_reported")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(15_00)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment.presentment_currency).to eq(Currency::EUR)
+        end
+
+        # The browser is trusted about WHICH currency its element used, never about whether that
+        # currency is chargeable. A currency no payment method forces could only come from a stale
+        # or crafted client, and we have no presentment machinery to build an intent in it — fail
+        # the order cleanly rather than create an intent nobody can confirm.
+        it "fails closed when the reported mount currency is one we can't build an intent in" do
+          order, params = build_order
+          params[:payment_element_mount_currency] = "gbp"
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_unsupported_mount")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
+        end
+
+        # A method that can only charge in one currency still decides for itself: the buyer picked
+        # iDEAL, so the intent must be in euros no matter what the element reported, because that
+        # is the only currency an iDEAL confirmation can settle in.
+        it "keeps the forced-currency intent for an iDEAL token even when the browser reports USD" do
+          order, params = build_order
+          params[:payment_element_mount_currency] = Currency::USD
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_ideal_usd_report")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:payment_method_types]).to include("ideal")
+          expect(responses["unique-id-0"][:success]).to eq(true)
+        end
       end
 
       it "keeps today's canonical USD behavior byte-for-byte when the flag is off" do
