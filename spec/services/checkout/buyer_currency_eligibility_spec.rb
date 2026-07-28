@@ -284,16 +284,23 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:multi_seller_checkout)
   end
 
-  it "falls back when any purchase on the charge fails a product gate" do
+  it "allows a purchase priced in a currency that is neither USD nor the buyer's own" do
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+  end
+
+  it "falls back when a purchase is priced in the buyer's own currency" do
     purchases << create(:purchase,
-                        link: create(:product, user: seller, price_currency_type: Currency::EUR),
+                        link: create(:product, user: seller, price_currency_type: Currency::CAD),
                         seller:,
                         merchant_account:,
                         purchase_state: "in_progress",
                         ip_address: "203.0.113.1")
 
     expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:unsupported_product_currency)
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
   end
 
   it "falls back when any purchase on the charge is an installment payment" do
