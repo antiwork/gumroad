@@ -1189,6 +1189,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000013) do
     t.string "presentment_currency", null: false
     t.bigint "presentment_price_cents", null: false
     t.decimal "signup_currency_units_per_usd", precision: 30, scale: 15, null: false
+    t.bigint "canonical_price_cents", null: false
     t.datetime "effective_from", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
