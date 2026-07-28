@@ -107,6 +107,48 @@ describe HelpCenter::ArticleText do
       expect(described_class.search("What's on your profile page?").map { |a| a[:slug] }).to include("124-your-gumroad-profile-page")
     end
 
+    # Found on preview QA: the store agent is told to search the help center in the creator's own
+    # words, and every term has to match, so one question word missing from an article's prose hid
+    # the article that answered the question. "how do I change my store colors" returned nothing
+    # while "change store colors" returned the right article — and the agent reads no results as
+    # "Gumroad cannot do this".
+    it "drops question words so a full natural-language question matches what its keywords match" do
+      keywords = described_class.search("change store colors").map { |a| a[:slug] }
+      expect(keywords).to include("124-your-gumroad-profile-page")
+
+      expect(described_class.search("how do I change my store colors?").map { |a| a[:slug] }).to eq(keywords)
+      expect(described_class.search("Can I change the font on my product page?").map { |a| a[:slug] })
+        .to include("124-your-gumroad-profile-page")
+    end
+
+    # Stopwords must not widen a search: dropping them still leaves every topical term required.
+    it "still narrows on the meaningful terms after dropping question words" do
+      broad = described_class.search("How do I get paid?").map { |a| a[:slug] }
+      narrow = described_class.search("How do I get paid by PayPal?").map { |a| a[:slug] }
+
+      expect(narrow.length).to be <= broad.length
+      expect(broad).to include(*narrow)
+    end
+
+    # Short product vocabulary must survive the stopword pass — "VAT" is a topic on Gumroad, and
+    # stripping it would turn a real question into a match against everything. Asserted as a subset
+    # rather than an equality: "charge" is a meaningful word and is rightly still required, so the
+    # question narrows within the VAT results instead of reproducing them exactly.
+    it "keeps short product terms that carry meaning" do
+      vat = described_class.search("VAT").map { |a| a[:slug] }
+      question = described_class.search("Do I have to charge VAT?").map { |a| a[:slug] }
+
+      expect(question).not_to be_empty
+      expect(vat).to include(*question)
+      expect(question).to include("10-dealing-with-vat")
+    end
+
+    # A query with nothing but function words has no topic. Dropping them all would leave no terms
+    # and quietly return the entire help center, which is noise dressed up as an answer.
+    it "does not return everything for a query made only of question words" do
+      expect(described_class.search("how do I").length).to be < HelpCenter::Article.count
+    end
+
     it "returns the full index for a blank query" do
       expect(described_class.search("  ").length).to eq(HelpCenter::Article.count)
     end
@@ -142,10 +184,15 @@ describe HelpCenter::ArticleText do
       stub_const("REVISION", "no-revision")
       before = described_class.cache_version
 
-      edited = Dir[Rails.root.join(described_class::CONTENTS_GLOB)].first
+      # Age the file that is CURRENTLY newest. The version is the newest mtime across the articles,
+      # so bumping an arbitrary file proves nothing: on a checkout where some other article was
+      # touched more recently (an edit in the working tree, say), that file still sets the maximum
+      # and the key would be unchanged for reasons unrelated to the behavior under test.
+      paths = Dir[Rails.root.join(described_class::CONTENTS_GLOB)]
       real_mtime = File.method(:mtime)
+      edited = paths.max_by { |path| real_mtime.call(path) }
       allow(File).to receive(:mtime) do |path|
-        path.to_s == edited ? real_mtime.call(path) + 1.hour : real_mtime.call(path)
+        path.to_s == edited.to_s ? real_mtime.call(path) + 1.hour : real_mtime.call(path)
       end
 
       expect(described_class.cache_version).not_to eq(before)

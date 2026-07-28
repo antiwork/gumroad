@@ -29,6 +29,22 @@ module HelpCenter::ArticleText
   # Where the article partials live. Used to date them for the cache key (see #cache_version).
   CONTENTS_GLOB = "app/views/help_center/articles/contents/*.html.erb"
 
+  # Words dropped from a query before matching. Callers here are programs writing questions — the
+  # store agent is told to search the help center in the creator's own words — and a question
+  # carries function words that say nothing about the topic. Because a result has to match EVERY
+  # term (see #search), one such word that happens to be absent from an article's text rules the
+  # article out: "how do I change my store colors" found nothing while "change store colors" found
+  # the article that answers it. Zero results is the one answer this endpoint exists to prevent,
+  # since the agent reads it as "Gumroad cannot do this" and tells the creator so.
+  #
+  # Deliberately limited to function words with no topical meaning. Product vocabulary is never
+  # listed, and short words that matter on Gumroad ("VAT", "tax", "PDF") are not touched.
+  STOPWORDS = %w[
+    a an and any are as at be been by can could do does doing for from get got had has have how
+    i if in into is it its me my of on or our so that the their them then there these this to
+    us was were what when where which who why will with would you your
+  ].to_set.freeze
+
   module_function
 
   # The article as plain text for a reader, capped at MAX_LENGTH with a pointer to the live page.
@@ -74,14 +90,21 @@ module HelpCenter::ArticleText
     HelpCenter::Article.all.map { |article| summary(article) }
   end
 
-  # Articles matching every word in `query` (case-insensitively), so "product page colors"
-  # narrows rather than widens the result.
+  # Articles matching every meaningful word in `query` (case-insensitively), so "product page
+  # colors" narrows rather than widens the result.
   #
   # The query is split on anything that is not a letter or digit rather than on whitespace,
   # because callers write questions, not keyword lists. Splitting on whitespace kept the
   # punctuation inside the term, so "store colors?" searched for the literal "colors?" and matched
   # nothing — the caller would conclude Gumroad has no documentation on store colors, which is the
   # exact wrong answer this endpoint was added to prevent.
+  #
+  # Function words are then dropped (see STOPWORDS) for the same reason. Every remaining term has
+  # to match, so a single question word absent from an article's prose is enough to hide the
+  # article that answers the question: "how do I change my store colors" returned nothing while
+  # "change store colors" returned the right article. If a query is nothing but function words,
+  # the words are kept rather than matching everything — searching "how do I" narrowing to the
+  # whole help center would be noise, not an answer.
   #
   # Matching covers the article's full text, not just its title and description. That costs more —
   # it renders every article once, then reads them from the cache — but title-only matching made
@@ -90,8 +113,11 @@ module HelpCenter::ArticleText
   # conclude Gumroad has nothing to say about it, which is the exact wrong answer this endpoint was
   # added to prevent. Titles and descriptions still rank first so the closest match leads.
   def search(query)
-    terms = query.to_s.downcase.scan(/[[:alnum:]]+/)
-    return index if terms.empty?
+    words = query.to_s.downcase.scan(/[[:alnum:]]+/)
+    return index if words.empty?
+
+    terms = words.reject { |word| STOPWORDS.include?(word) }
+    terms = words if terms.empty?
 
     headline, body = HelpCenter::Article.all.each_with_object([[], []]) do |article, (headline_hits, body_hits)|
       heading = "#{article.title} #{article.description}".downcase
