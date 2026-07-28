@@ -40,6 +40,12 @@
   --color-backdrop: rgb(0 0 0 / 0.8);
   --color-accent: rgb(var(--accent));
   --color-accent-foreground: rgb(var(--contrast-accent));
+  /*
+   * The seller's accent exactly as they saved it, for accent areas that carry no text on the accent
+   * itself: borders, focus outlines, tinted panels. --color-accent may be a slightly brightness-
+   * adjusted version of it so that black or white text on top clears 4.5:1. See ContrastColor.
+   */
+  --color-accent-plain: rgb(var(--accent-plain));
   --color-primary: rgb(var(--primary));
   --color-primary-foreground: rgb(var(--contrast-primary));
   --color-active-bg: rgb(var(--color) / var(--gray-1));

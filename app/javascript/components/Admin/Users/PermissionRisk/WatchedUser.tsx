@@ -46,7 +46,8 @@ const WatchedBanner = ({ watch }: { watch: ActiveWatchedUser }) => {
           </div>
           <div className="h-2 w-full overflow-hidden rounded bg-muted/40">
             <div
-              className="h-full bg-accent"
+              // A filled bar with no text on it, so it uses the accent exactly as saved.
+              className="h-full bg-accent-plain"
               style={{ width: `${progressPercent}%` }}
               role="progressbar"
               aria-valuenow={progressPercent}

@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
 
-import { getContrastColor, hexToRgb } from "$app/utils/color";
+import {
+  WCAG_AA_NORMAL_TEXT,
+  getAccessibleAccent,
+  getContrastColor,
+  getContrastRatio,
+  hexToRgb,
+} from "$app/utils/color";
+
+// The shared server/browser fixture. It lives under spec/ because the Ruby suite asserts the same
+// file — see the "matches the server implementation" test below.
+import accentContrastPairs from "../../../spec/fixtures/accent_contrast_pairs.json";
 
 describe("getContrastColor", () => {
   it("picks black on a bright accent that HSL lightness misjudged as dark", () => {
@@ -82,5 +92,128 @@ describe("hexToRgb", () => {
   it("converts a hex colour to space-separated channel values for use in a CSS rgb()", () => {
     expect(hexToRgb("#19ff1d")).toBe("25 255 29");
     expect(hexToRgb("#000000")).toBe("0 0 0");
+  });
+});
+
+describe("getAccessibleAccent", () => {
+  const ratio = (pair: { accent: string; text: string }) => getContrastRatio(pair.accent, pair.text) ?? 0;
+
+  it("gives a saturated red pay button white text, by darkening the displayed red slightly", () => {
+    // The bug this function exists to fix. On #ff0000 black's WCAG ratio (5.25:1) marginally beats
+    // white's (4.00:1), so the plain two-way comparison picked black — which sellers read as broken.
+    // APCA agrees with them that white is the readable choice, and darkening the red slightly gets
+    // white over the 4.5:1 line.
+    const pair = getAccessibleAccent("#ff0000");
+
+    expect(pair.text).toBe("#ffffff");
+    expect(pair.accent).toBe("#ee0000");
+    expect(ratio(pair)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+  });
+
+  it("picks black on bright green and on orange", () => {
+    // The population the previous fix was for: white on these is invisible (1.37:1 and 1.54:1).
+    expect(getAccessibleAccent("#19ff1d")).toStrictEqual({ accent: "#19ff1d", text: "#000000" });
+    expect(getAccessibleAccent("#ffc900")).toStrictEqual({ accent: "#ffc900", text: "#000000" });
+  });
+
+  it("picks white on a saturated blue", () => {
+    expect(getAccessibleAccent("#0000ff")).toStrictEqual({ accent: "#0000ff", text: "#ffffff" });
+    expect(getAccessibleAccent("#1a4bff")).toStrictEqual({ accent: "#1a4bff", text: "#ffffff" });
+  });
+
+  it("leaves the accent untouched whenever the preferred text colour already clears the floor", () => {
+    for (const hex of ["#19ff1d", "#ffc900", "#0000ff", "#ff90e8", "#ffffff", "#000000", "#767676", "#ec0000"]) {
+      expect(getAccessibleAccent(hex).accent, `${hex} should be displayed unchanged`).toBe(hex);
+    }
+  });
+
+  it("changes the accent by the smallest amount that clears the floor", () => {
+    // One step less darkening must fail, so the result is provably minimal rather than sufficient.
+    for (const hex of ["#ff0000", "#009a49"]) {
+      const pair = getAccessibleAccent(hex);
+      expect(ratio(pair)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+
+      const channels = (value: string) =>
+        [value.substring(1, 3), value.substring(3, 5), value.substring(5, 7)].map((c) => parseInt(c, 16));
+      const original = channels(hex);
+      const oneStepLess = `#${channels(pair.accent)
+        .map((channel, index) => (channel === original[index] ? channel : channel + 1))
+        .map((channel) => channel.toString(16).padStart(2, "0"))
+        .join("")}`;
+
+      expect(
+        getContrastRatio(oneStepLess, pair.text) ?? 0,
+        `${oneStepLess} already passes, so ${pair.accent} is not minimal for ${hex}`,
+      ).toBeLessThan(WCAG_AA_NORMAL_TEXT);
+    }
+  });
+
+  it("never returns a pair below the WCAG AA minimum, and never shifts a colour far", () => {
+    // Both guarantees at once over a sweep of the sRGB space: the readability floor from the
+    // previous fix survives, and the price of holding it is never a visibly different colour.
+    let worstRatio = Infinity;
+    let worstRatioColor = "";
+    let worstShift = 0;
+    let worstShiftColor = "";
+
+    for (let r = 0; r < 256; r += 15) {
+      for (let g = 0; g < 256; g += 15) {
+        for (let b = 0; b < 256; b += 15) {
+          const color = `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+          const pair = getAccessibleAccent(color);
+          const contrast = ratio(pair);
+          if (contrast < worstRatio) {
+            worstRatio = contrast;
+            worstRatioColor = color;
+          }
+
+          const rendered = [pair.accent.substring(1, 3), pair.accent.substring(3, 5), pair.accent.substring(5, 7)].map(
+            (channel) => parseInt(channel, 16),
+          );
+          const shift = Math.max(...[r, g, b].map((channel, index) => Math.abs(channel - (rendered[index] ?? 0))));
+          if (shift > worstShift) {
+            worstShift = shift;
+            worstShiftColor = color;
+          }
+        }
+      }
+    }
+
+    expect(worstRatio, `${worstRatioColor} only reaches ${worstRatio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+      WCAG_AA_NORMAL_TEXT,
+    );
+    expect(worstShift, `${worstShiftColor} moved by ${worstShift} of 255`).toBeLessThanOrEqual(32);
+  });
+
+  it("resolves visually identical colours identically", () => {
+    // The failure mode this replaces: #ec0000 and #ed0000 are the same red to the eye but landed on
+    // opposite sides of the crossover, so one got white text and the other black.
+    for (const hex of ["#eb0000", "#ec0000", "#ed0000", "#ee0000", "#ef0000", "#f00000"]) {
+      expect(getAccessibleAccent(hex).text, `${hex} did not get white text`).toBe("#ffffff");
+    }
+  });
+
+  it("handles the 3-digit hex form the same way as its 6-digit equivalent", () => {
+    expect(getAccessibleAccent("#f0a")).toStrictEqual(getAccessibleAccent("#ff00aa"));
+    expect(getAccessibleAccent("#000")).toStrictEqual(getAccessibleAccent("#000000"));
+  });
+
+  it("falls back to a readable pair rather than throwing on a value that isn't a hex colour", () => {
+    for (const invalid of ["", "red", "#ffff", "#gggggg", "#19ff1d; }"]) {
+      expect(getAccessibleAccent(invalid)).toStrictEqual({ accent: "#000000", text: "#ffffff" });
+    }
+  });
+
+  it("matches the server implementation on every colour in the shared fixture", () => {
+    // lib/utilities/contrast_color.rb renders the live storefront CSS while this renders the editor
+    // preview, so any divergence shows a seller one colour while setting up and another on their
+    // store. Both suites assert this same file; contrast_color_spec.rb is the other half.
+    expect(accentContrastPairs.length).toBeGreaterThanOrEqual(40);
+    for (const expected of accentContrastPairs) {
+      expect(getAccessibleAccent(expected.input), `pair for ${expected.input}`).toStrictEqual({
+        accent: expected.accent,
+        text: expected.text,
+      });
+    }
   });
 });

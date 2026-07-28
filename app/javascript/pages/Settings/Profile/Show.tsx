@@ -6,7 +6,7 @@ import typia from "typia";
 
 import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile } from "$app/parsers/profile";
-import { getContrastColor, hexToRgb } from "$app/utils/color";
+import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -226,10 +226,15 @@ export default function SettingsPage() {
     postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
   }, [isMobileAppWebView, canSave]);
 
+  // The pay-button/offer-banner accent may be a slightly brightness-adjusted version of the saved
+  // colour so its text clears 4.5:1; --accent-plain keeps the saved colour for text-free areas.
+  const accentColors = getAccessibleAccent(currentSeller?.profileHighlightColor ?? "#000000");
+
   const profileColors = currentSeller
     ? {
-        "--accent": hexToRgb(currentSeller.profileHighlightColor),
-        "--contrast-accent": hexToRgb(getContrastColor(currentSeller.profileHighlightColor)),
+        "--accent": hexToRgb(accentColors.accent),
+        "--contrast-accent": hexToRgb(accentColors.text),
+        "--accent-plain": hexToRgb(currentSeller.profileHighlightColor),
         "--filled": hexToRgb(currentSeller.profileBackgroundColor),
         "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
       }
