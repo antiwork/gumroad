@@ -585,19 +585,44 @@ class Checkout::StripePaymentPresenter
           # CheckoutPresenter#product_common on every add_products entry.
           product_currency: product[:currency_code].to_s.downcase.presence,
           ppp_discounted: product[:ppp_details].present?,
-          # Whether the buyer can still name their own price, which fallback_reason_for must not
-          # read as "free". Two sources are needed because `pwyw` is NOT tier-aware: for a tiered
-          # membership `Product::Prices#set_customizable_price` returns early and never sets the
-          # product-level column (the TIER carries the flag via Variant::Prices), so
-          # CheckoutPresenter#product_common emits `pwyw: nil` for every membership. The options
-          # each carry `is_pwyw` from BaseVariant#to_option, so checking them too makes this agree
-          # with `Link#has_customizable_price_option?` — the predicate the cart path uses. Without
-          # the options check a $0 PWYW membership tier opened via /checkout?product=… still fell
-          # back to CardElement while the same product from a saved cart did not.
-          has_customizable_price: product[:pwyw].present? ||
-            product[:options].to_a.any? { _1[:is_pwyw] }
+          has_customizable_price: buyer_can_name_price?(checkout_product)
         )
       end
+    end
+
+    # Whether the buyer can still name their own price for this line, which fallback_reason_for
+    # must not read as "free" (see the zero-total comment there).
+    #
+    # The product-level `pwyw` field is not enough on its own, because it is not tier-aware. For a
+    # tiered membership, `Product::Prices#set_customizable_price` returns early and never sets the
+    # product's own `customizable_price` column — the TIER carries the flag instead, via
+    # `Variant::Prices`. So `CheckoutPresenter#product_common` emits `pwyw: nil` for every
+    # membership, and without a tier-level check a $0 pay-what-you-want membership opened through
+    # /checkout?product=… fell back to CardElement while the same product added from a saved cart
+    # did not.
+    #
+    # The tier-level check has to look at the tier the buyer actually SELECTED, not at every tier
+    # the product offers. `options` lists all of them, so asking "does any option allow naming a
+    # price" says yes for a membership that merely HAS a pay-what-you-want tier somewhere — which
+    # would suppress the "free" classification even when the buyer picked a genuinely free tier
+    # with no amount to charge, and mount the Payment Element on a checkout that charges nothing.
+    # `option_id` is the selected tier (CheckoutPresenter sets it from the accepted upsell or the
+    # cart item), so scope the check to that option and fall back to the whole list only when no
+    # option is selected — a non-tiered product, where `pwyw` is already authoritative anyway.
+    def buyer_can_name_price?(checkout_product)
+      product = checkout_product[:product]
+      return true if product[:pwyw].present?
+
+      options = product[:options].to_a
+      selected_option_id = checkout_product[:option_id]
+      if selected_option_id.present?
+        selected = options.find { _1[:id] == selected_option_id }
+        # An unrecognized option id means the payload and the product disagree; treat the price as
+        # known rather than assuming the buyer can name one, so the minimum/free checks still run.
+        return selected.present? && selected[:is_pwyw].present?
+      end
+
+      options.any? { _1[:is_pwyw].present? }
     end
 
     # quantity defaults to 1: price_cents is always the per-unit price, and the only current

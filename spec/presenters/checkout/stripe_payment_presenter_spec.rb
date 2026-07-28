@@ -5,7 +5,7 @@ describe Checkout::StripePaymentPresenter do
                            is_preorder: product.is_in_preorder_state, free_trial: product.free_trial_enabled,
                            native_type: product.native_type, buyer_currency_display: nil, ppp_details: nil,
                            pwyw: product.customizable_price? ? { suggested_price_cents: product.suggested_price_cents } : nil,
-                           options: product.options)
+                           options: product.options, option_id: nil)
     {
       product: {
         creator: { id: product.user.external_id },
@@ -33,6 +33,9 @@ describe Checkout::StripePaymentPresenter do
       price:,
       recurrence:,
       pay_in_installments:,
+      # The tier the buyer selected, set by CheckoutPresenter#checkout_product from the accepted
+      # upsell variant or the cart item's option. nil for a product with no options to pick.
+      option_id:,
     }
   end
 
@@ -678,8 +681,53 @@ describe Checkout::StripePaymentPresenter do
     expect(membership.customizable_price).to be_falsey
     expect(membership.has_customizable_price_option?).to be(true)
 
-    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0)]))
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: tier.external_id)]))
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
+  end
+
+  # The tier-aware read above must look at the tier the buyer SELECTED, not at every tier the
+  # membership offers. A membership can mix a free tier with a pay-what-you-want one, and asking
+  # "does any tier allow naming a price" answers yes for both — which would suppress the
+  # not_charged classification on the free tier and mount the Payment Element on a checkout that
+  # charges nothing. Pins the selected tier as the thing that decides.
+  it "still falls back to CardElement when the selected tier is free and only another tier is pay-what-you-want" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    free_tier = membership.tiers.first
+    # Variant::Prices#set_customizable_price forces the flag true on any tier whose alive prices
+    # are all zero, so clear the column directly to build the free non-pay-what-you-want tier a
+    # seller reaches by pricing the tier and then zeroing it.
+    free_tier.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    membership.reload
+
+    expect(free_tier.reload.customizable_price).to be(false)
+    expect(membership.has_customizable_price_option?).to be(true)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: free_tier.external_id)]))
+      .to eq(card_element_fallback("not_charged"))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
+  # The other half of the same rule: selecting the pay-what-you-want tier on that same mixed
+  # membership must still reach the Payment Element, so scoping to the selected tier does not
+  # undo the fix this PR exists for.
+  it "keeps the Payment Element when the selected tier is the pay-what-you-want one" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    membership.tiers.first.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    membership.reload
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: pwyw_tier.external_id)]))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
   # A cart mixing a free product with a pay-what-you-want one can still be paid, so the
