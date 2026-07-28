@@ -372,6 +372,18 @@ describe FollowersController, inertia: true do
           # has to be in the sentence — there is no link element to render.
           expect(response.parsed_body["message"]).to include(custom_domain_subscribe_url(host: unreviewed_seller.subdomain_with_protocol))
         end
+
+        # The refusal copy is built from name_or_username, which is never blank:
+        # User#username falls back to the account's external id, so a seller with
+        # no name and no claimed profile URL still names themselves by id.
+        it "names the seller by id when they have no name and no claimed username" do
+          nameless_seller = create(:user, name: nil, username: nil)
+
+          post :from_embed_form, params: { email: "follower@example.com", seller_id: nameless_seller.external_id }, format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["message"]).to start_with("Please subscribe from #{nameless_seller.external_id}'s subscribe page")
+        end
       end
     end
 

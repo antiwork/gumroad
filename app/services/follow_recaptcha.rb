@@ -13,27 +13,41 @@
 # stops the scripted submissions in the first place, because the whole scheme
 # depends on volume that nobody is sitting there clicking through.
 #
-# Only sellers we have positively reviewed and marked `compliant` are trusted to
-# take follows with no challenge. Everyone else — including `not_reviewed`, which
-# is where every brand-new account starts and where all 76 ring accounts sat —
-# gets the challenge. That is deliberately a wide net: the cost to a legitimate
-# new creator is one CAPTCHA on their subscribe form until review clears them,
-# and the cost of the alternative was ~364,000 unsolicited emails from our
-# domain. Suspended and deleted accounts are refused outright and never reach
-# this class.
+# Only sellers we have positively reviewed and marked `compliant`, whose account
+# is still active, are trusted to take follows with no challenge. Everyone else —
+# including `not_reviewed`, which is where every brand-new account starts and
+# where all 76 ring accounts sat — gets the challenge. That is deliberately a
+# wide net: the cost to a legitimate new creator is one CAPTCHA on their
+# subscribe form until review clears them, and the cost of the alternative was
+# ~364,000 unsolicited emails from our domain.
+#
+# Refusing follows for suspended and deleted accounts outright is a separate
+# change (antiwork/gumroad#6498) that is not merged yet, so this class does not
+# assume it: such a seller can still reach here today, and the `account_active?`
+# check below means they get a challenge rather than a free pass. Suspending an
+# account does not reset `user_risk_state` and deleting one does not touch it at
+# all, so without that check a seller who was marked compliant before being shut
+# down would keep sending confirmation email from our domain with no challenge.
 module FollowRecaptcha
   SURFACE = :follow
 
   class << self
-    # A challenge is required unless the followed seller has been reviewed and
-    # marked compliant. Also requires a configured key: with no key there is no
-    # challenge the browser could solve, so demanding one would just break the
-    # subscribe form outright.
+    # A challenge is required unless the followed seller has been reviewed, marked
+    # compliant, and still has an active (not suspended, not deleted) account.
+    # Also requires a configured key: with no key there is no challenge the
+    # browser could solve, so demanding one would just break the subscribe form
+    # outright — that case is logged, so a missing key is visible in the logs
+    # instead of silently turning the protection off.
     def required?(followed_user)
       return false if followed_user.blank?
-      return false if followed_user.compliant?
+      return false if followed_user.compliant? && followed_user.account_active?
+      return true if site_key.present?
 
-      site_key.present?
+      Rails.logger.warn(
+        "[follow_recaptcha] No reCAPTCHA site key is configured, so the follow CAPTCHA is off. " \
+        "Set RECAPTCHA_MONEY_SITE_KEY, or RECAPTCHA_FOLLOW_SITE_KEY for a follow-specific key."
+      )
+      false
     end
 
     # Defaults to the key checkout already uses. It is a challenge-type

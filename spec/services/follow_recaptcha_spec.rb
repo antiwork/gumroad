@@ -23,10 +23,34 @@ describe FollowRecaptcha do
       expect(described_class.required?(nil)).to be(false)
     end
 
+    # A deleted account keeps whatever user_risk_state it had, so a seller who
+    # was reviewed and marked compliant before deleting their account would
+    # otherwise keep taking follows — and every one of those still sends a
+    # confirmation email from our sending domain.
+    it "is true for a compliant seller whose account has been deleted" do
+      user = create(:compliant_user)
+      user.mark_deleted!
+
+      expect(user.compliant?).to be(true)
+      expect(described_class.required?(user)).to be(true)
+    end
+
+    it "is true for a suspended seller" do
+      expect(described_class.required?(create(:user, user_risk_state: "suspended_for_fraud"))).to be(true)
+      expect(described_class.required?(create(:user, user_risk_state: "suspended_for_tos_violation"))).to be(true)
+    end
+
     it "is false when no site key is configured, so the form is not left with an unsolvable challenge" do
       allow(described_class).to receive(:site_key).and_return(nil)
 
       expect(described_class.required?(create(:user))).to be(false)
+    end
+
+    it "says so in the log when no site key is configured, so a missing key is not silent" do
+      allow(described_class).to receive(:site_key).and_return(nil)
+      expect(Rails.logger).to receive(:warn).with(/No reCAPTCHA site key is configured/)
+
+      described_class.required?(create(:user))
     end
   end
 

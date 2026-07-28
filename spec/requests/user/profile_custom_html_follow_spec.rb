@@ -76,4 +76,28 @@ describe "Profile custom HTML page follow bridge", type: :system, js: true do
     expect(follower.user).to eq(seller)
     expect(follower.email).to eq("victim@example.com")
   end
+
+  # The whole point of putting the destination URL in the message text (rather
+  # than a link) is that the sandboxed page can only be handed plain text. This
+  # drives the refusal in a real browser to prove the visitor actually sees
+  # where to go, instead of a dead end.
+  context "when the seller has not been reviewed yet" do
+    let(:seller) { create(:user, username: "unreviewedstudio", name: "Unreviewed Studio") }
+
+    it "shows the refusal and the subscribe page URL inside the sandboxed page" do
+      expect(seller.user_risk_state).to eq("not_reviewed")
+
+      visit seller.subdomain_with_protocol
+
+      within_frame(find("iframe#gumroad-landing-frame")) do
+        fill_in "Your email", with: "fan@example.com"
+        click_on "Subscribe"
+        expect(page).to have_text("Please subscribe from Unreviewed Studio's subscribe page", wait: 10)
+        expect(page).to have_text(custom_domain_subscribe_url(host: seller.subdomain_with_protocol))
+        expect(page).to have_css('form[data-gumroad-follow-state="error"]')
+      end
+
+      expect(seller.followers.count).to eq(0)
+    end
+  end
 end

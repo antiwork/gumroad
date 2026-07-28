@@ -49,7 +49,7 @@ class FollowersController < ApplicationController
     if follow_needs_captcha?(followed_user_from_params)
       message = ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE
       respond_to do |format|
-        format.html { redirect_to custom_domain_subscribe_path, alert: message }
+        format.html { redirect_to custom_domain_subscribe_path, alert: message, status: :see_other }
         format.json { render json: { success: false, message: }, status: :unprocessable_entity }
       end
       return
@@ -100,6 +100,9 @@ class FollowersController < ApplicationController
       # seller's own subscribe page, which does render a challenge, so a real
       # person can still finish subscribing in one more click.
       subscribe_url = custom_domain_subscribe_url(host: followed_user.subdomain_with_protocol) if followed_user.subdomain.present?
+      # name_or_username is never blank: User#username falls back to the account's
+      # external id when the column is empty, so a seller with no name and no
+      # claimed profile URL still names themselves by id here.
       message = "Please subscribe from #{followed_user.name_or_username}'s subscribe page so we can confirm you're not a bot."
       # The JSON callers render the message as plain text with no link element:
       # the custom-HTML follow bridge relays it into a sandboxed page that can't
@@ -117,7 +120,7 @@ class FollowersController < ApplicationController
 
     if @follower.nil? || @follower.errors.present?
       message = @follower&.errors&.full_messages&.to_sentence || "Something went wrong. Please try to follow the creator again."
-      user = User.find_by_external_id(params[:seller_id])
+      user = followed_user
       if request.format.json?
         return e404_json unless user.try(:username)
         return render json: { success: false, message: }, status: :unprocessable_entity
@@ -195,9 +198,10 @@ class FollowersController < ApplicationController
         "Check your inbox to confirm your follow request."
     end
 
+    # Reuses the memoized lookup rather than re-querying: both actions have
+    # already resolved the seller to decide whether a CAPTCHA was needed.
     def create_follower(params, source: nil)
-      followed_user = User.find_by_external_id(params[:seller_id])
-
+      followed_user = followed_user_from_params
       return if followed_user.nil?
 
       follower_email = params[:email]
