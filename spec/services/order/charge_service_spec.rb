@@ -2043,7 +2043,12 @@ describe Order::ChargeService, :vcr do
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount_type]).to eq("maximum")
     end
 
-    it "returns mandate options with sporadic interval and amount as maximum of the price of included purchases" do
+    it "returns mandate options with sporadic interval and amount as the largest single renewal the mandate can be asked to authorize" do
+      # Renewals are charged one subscription at a time (RecurringChargeWorker runs per
+      # subscription), so no future charge is ever the cart's combined total. The cap is a
+      # per-charge ceiling, so it tracks the biggest individual renewal (10_00 here) rather than
+      # the 13_00 sum, which would let either renewal grow to the whole cart before Stripe asks
+      # the buyer to authenticate again.
       order = create(:order)
       purchase = create(:purchase_in_progress, link: membership_product, is_original_subscription_purchase: true,
                                                total_transaction_cents: 3_00, card_country: "IN", charge_processor_id: StripeChargeProcessor.charge_processor_id)
@@ -2061,6 +2066,29 @@ describe Order::ChargeService, :vcr do
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:interval_count]).to be nil
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(10_00)
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount_type]).to eq("maximum")
+    end
+
+    it "covers a temporarily-discounted subscription's later undiscounted renewal, even when another line is charged more today" do
+      # This is what a multi-item cart was missing. The discounted line is charged only 3_00
+      # today but renews at 12_00 once its discount's billing cycles run out, so comparing
+      # today's charged totals would cap the mandate at the other line's 10_00 and the eventual
+      # 12_00 renewal would be declined with no way for the buyer to recover it. Each line
+      # contributes its own mandate_maximum_amount_cents, so the cap follows the real ceiling.
+      order = create(:order)
+      discounted = create(:purchase_in_progress, link: membership_product, is_original_subscription_purchase: true,
+                                                 total_transaction_cents: 3_00, card_country: "IN", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      plain = create(:purchase_in_progress, link: membership_product_2, is_original_subscription_purchase: true,
+                                            total_transaction_cents: 10_00, card_country: "IN", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      order.purchases << discounted
+      order.purchases << plain
+
+      allow(discounted).to receive(:mandate_maximum_amount_cents).and_return(12_00)
+      allow(plain).to receive(:mandate_maximum_amount_cents).and_return(10_00)
+
+      charge_service = Order::ChargeService.new(order:, params: nil)
+      mandate_options = charge_service.mandate_options_for_stripe(purchases: [discounted, plain])
+
+      expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(12_00)
     end
   end
 

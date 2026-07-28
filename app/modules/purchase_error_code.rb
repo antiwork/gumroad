@@ -56,6 +56,11 @@ module PurchaseErrorCode
   CARD_DECLINED_FRAUDULENT = "card_declined_fraudulent"
   BRAZILIAN_MERCHANT_ACCOUNT_WITH_AFFILIATE = "brazilian_merchant_account_with_affiliate"
   BUYER_CURRENCY_QUOTE_INVALID = "buyer_currency_quote_invalid"
+  # A Pix payment we refused before creating the intent because the charged total is outside
+  # Stripe's Pix transaction window (see Checkout::PaymentMethodResolver::PIX_MIN/MAX_*). Stripe
+  # would reject the confirm deterministically, so failing it here with its own code keeps the
+  # rejection visible in monitoring instead of hiding inside generic processing errors.
+  PIX_AMOUNT_OUTSIDE_WINDOW = "pix_amount_outside_window"
   # Off-session renewal on an Indian card that has no registered RBI e-mandate to reference.
   # We fail these ourselves instead of submitting them to Stripe, because Indian issuers
   # decline mandate-less recurring charges (as transaction_not_allowed) every time.

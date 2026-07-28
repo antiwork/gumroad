@@ -28,6 +28,25 @@ class Purchase < ApplicationRecord
   GUMROAD_FIXED_FEE_CENTS = 50
   PROCESSOR_FEE_PER_THOUSAND = 29
   PROCESSOR_FIXED_FEE_CENTS = 30
+  # IOF is a Brazilian consumer tax on any transaction that involves foreign exchange, currently
+  # 3.5% of the transaction value. It applies whenever the Pix payment leaves Brazil, which is
+  # every Pix charge except one created directly on a Brazilian seller's own Stripe account.
+  #
+  # This constant is the RECOVERY half, and it is narrower than the tax itself: it is billed only
+  # when Gumroad actually bore the cost. On a charge created on a Gumroad-held account, Gumroad
+  # tells Stripe to bill the buyer exactly the price they agreed to
+  # (`amount_includes_iof=always`, see Order::PreparePaymentIntentService#pix_payment_method_options)
+  # and Stripe deducts the IOF from what settles to us — so the cost has to be charged back to the
+  # seller as a fee component, or it would silently come out of Gumroad's own margin instead (the
+  # decision on gumroad-private#1305 was that the seller absorbs it).
+  #
+  # On a direct charge to a seller's own connected account the money never passes through a
+  # Gumroad-held balance, so there is no Gumroad cost to recover and this fee is not billed —
+  # whether or not the tax itself applied. That makes this gate deliberately DIFFERENT from
+  # Order::PreparePaymentIntentService#pix_iof_applies?, which decides whether the tax exists at
+  # all (a border question, keyed on the account's country) rather than who paid it. See the
+  # comment on that method.
+  PIX_IOF_FEE_PER_THOUSAND = 35
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
 
@@ -605,13 +624,20 @@ class Purchase < ApplicationRecord
   scope :successful, -> { where(purchase_state: "successful") }
   scope :test_successful, -> { where(purchase_state: "test_successful") }
   scope :in_progress, -> { where(purchase_state: "in_progress") }
-  # A payment the processor has confirmed but that hasn't settled yet — e.g. an ACH bank
-  # debit that takes several business days to clear. Both conditions matter: `stripe_status`
-  # is only ever written once Stripe acknowledges a real payment (the checkout return page
-  # sets it to "processing", and every subsequent Stripe webhook updates it), so an attempt
-  # the buyer abandoned before confirming payment keeps it nil and is NOT settling. And a
-  # purchase must still be in_progress — once it reaches a terminal state (failed,
-  # successful), stripe_status remains set but the payment is no longer in flight.
+  # A payment that can still complete without the buyer returning to checkout, but hasn't
+  # settled yet. Two shapes reach this state: a payment the processor already confirmed and
+  # is clearing (e.g. an ACH bank debit, several business days), and a Pix payment where
+  # Stripe issued a QR code / copy-paste key the buyer can pay from their banking app for up
+  # to half an hour (Purchase::FinalizeConfirmedChargeService writes "requires_action" for
+  # that case). Both conditions matter: `stripe_status` is only ever written once Stripe has
+  # a live payment to report on, so an attempt the buyer dropped before reaching a payment
+  # method keeps it nil and is NOT settling. And a purchase must still be in_progress — once
+  # it reaches a terminal state (failed, successful), stripe_status remains set but the
+  # payment is no longer in flight.
+  #
+  # The Pix case is deliberately included: an outstanding QR key is exactly the window where
+  # a buyer could pay again by another method and end up paying twice, which is what the
+  # double-charge guards built on this scope exist to prevent.
   scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
   scope :in_progress_or_successful_including_test, -> { where(purchase_state: %w(in_progress successful test_successful)) }
   scope :not_in_progress, -> { where.not(purchase_state: "in_progress") }
@@ -3085,7 +3111,7 @@ class Purchase < ApplicationRecord
     Purchase.where(email:, seller_id:, can_contact: true).find_each do |purchase|
       purchase.update!(can_contact: false)
     rescue ActiveRecord::RecordInvalid
-      Rails.logger.info "Could not update purchase (#{id}) with validations turned on. Unsubscribing the buyer without running validations."
+      Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Unsubscribing the buyer without running validations."
 
       purchase.can_contact = false
       purchase.save(validate: false)
@@ -4463,7 +4489,27 @@ class Purchase < ApplicationRecord
 
     def calculate_gumroad_fee_per_thousand
       calculate_custom_fee_per_thousand
-      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) +
+        (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0) +
+        pix_iof_fee_per_thousand
+    end
+
+    # The Brazilian IOF tax Gumroad absorbs on the buyer's behalf and recovers from the seller
+    # (see PIX_IOF_FEE_PER_THOUSAND). Keyed on card_type because that is where the purchase records
+    # which payment method it is being paid with — set from the buyer's Payment Element selection at
+    # intent-prepare time, before fees are computed, and re-confirmed from Stripe's own
+    # payment_method_details once the charge exists. Only Pix carries it; every other method reads 0.
+    #
+    # Gated on the charge riding Gumroad's own Stripe account, for the same reason
+    # PROCESSOR_FEE_PER_THOUSAND above is: we can only recover a cost we actually paid. On a direct
+    # charge the money never touches a Gumroad account — Stripe settles into the seller's own
+    # account and deducts the IOF from that balance itself — so the seller has already absorbed it.
+    # Adding it to fee_cents there would bill them for the same tax a second time.
+    def pix_iof_fee_per_thousand
+      return 0 unless card_type == CardType::PIX
+      return 0 unless charged_using_gumroad_merchant_account?
+
+      PIX_IOF_FEE_PER_THOUSAND
     end
 
     def calculate_custom_fee_per_thousand
@@ -5206,6 +5252,13 @@ class Purchase < ApplicationRecord
       return unless new_record?
       return unless can_contact?
       return unless Purchase.where(email:, seller_id:, can_contact: false).exists?
+      # A subscription's contactability lives on its original purchase: that is the only row
+      # `should_be_audience_member?` accepts for a subscription, so it is what decides whether
+      # the buyer hears from the creator at all. If the buyer re-subscribed, the original
+      # purchase is contactable again, and this new renewal charge must not be stamped
+      # uncontactable just because some older sibling row is still marked false. Doing so used to
+      # silently drop a paying member back out of the creator's audience on their next renewal.
+      return if subscription&.original_purchase&.can_contact?
 
       self.can_contact = false
     end

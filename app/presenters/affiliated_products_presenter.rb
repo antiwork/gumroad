@@ -8,14 +8,6 @@ class AffiliatedProductsPresenter
 
   PER_PAGE = 20
 
-  # How long the expensive revenue/sales aggregates on this page are cached.
-  # These sums scan the user's entire affiliate_credits / purchases history on
-  # every page load (they were the two slowest queries in traced requests), but
-  # they only change when a new affiliate sale, refund, or chargeback lands —
-  # a few minutes of staleness on a dashboard stat is an acceptable trade for
-  # not re-scanning the tables on every request.
-  STATS_CACHE_TTL = 5.minutes
-
   def initialize(user, query: nil, page: nil, sort: nil)
     @user = user
     @query = query.presence
@@ -81,7 +73,12 @@ class AffiliatedProductsPresenter
 
     def stats
       {
-        total_revenue: cached_total_revenue,
+        # A plain indexed gross sum of every affiliate credit the user has
+        # earned — the same population as `total_sales` right below, so the two
+        # headline numbers reconcile with each other. See
+        # User#affiliate_credits_total_revenue_cents for why this figure is
+        # gross and skips the partial-refund adjustment.
+        total_revenue: user.affiliate_credits_total_revenue_cents,
         total_sales: user.affiliate_credits.count,
         # Count distinct products with a single SQL COUNT instead of executing
         # the full grouped affiliated-products query (which joins against
@@ -104,22 +101,12 @@ class AffiliatedProductsPresenter
       }
     end
 
-    # The lifetime affiliate revenue sum scans every affiliate_credits row for
-    # the user (with partial-refund adjustment joins) — the single slowest
-    # query on this page in production traces. Cache it briefly; see
-    # STATS_CACHE_TTL for why short staleness is fine here.
-    def cached_total_revenue
-      Rails.cache.fetch("affiliated_products/total_revenue/#{user.id}", expires_in: STATS_CACHE_TTL) do
-        user.affiliate_credits_sum_total
-      end
-    end
-
-    # Same idea for the global affiliate's lifetime earnings, but that aggregate
-    # is heavy enough that it cannot be computed inside the request at all for
-    # affiliates with a long history — see AffiliateEarningsCache, which serves a
-    # cached value and pushes the computation to a background job otherwise. A
-    # nil amount means "not computed yet", which the page renders as a
-    # calculating state; it must not be shown as $0.
+    # The global affiliate's lifetime earnings is the one stat here that cannot
+    # be computed inside the request for affiliates with a long history — see
+    # AffiliateEarningsCache, which serves a cached value and pushes the
+    # computation to a background job otherwise. A nil amount means "not
+    # computed yet", which the page renders as a calculating state; it must not
+    # be shown as $0.
     #
     # Only the raw cents amount is cached — formatting also depends on the
     # user's currency-display preference, which can change at any time, so it
