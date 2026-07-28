@@ -168,20 +168,50 @@ describe ContrastColor do
     end
 
     it "changes the accent by the smallest amount that clears the floor" do
-      # One step less darkening must fail, so the result is provably minimal rather than merely
-      # sufficient. Checked on the reported colour and on a mid-green with the same problem.
+      # Provably minimal rather than merely sufficient: the step below the one chosen must fail.
+      # Uses the same mixing function the implementation uses, so "one step less" is genuinely the
+      # candidate the search rejected rather than a nearby colour that happens to fail.
       { "#ff0000" => "#ffffff", "#009a49" => "#ffffff" }.each do |hex, text|
+        rgb = [hex[1, 2], hex[3, 2], hex[5, 2]].map { _1.to_i(16) }
+        chosen_step = described_class.brightness_shift_for(rgb, white_text: text == "#ffffff")
+        expect(chosen_step).to be > 0, "#{hex} needed no adjustment, so this case proves nothing"
+
         accent = described_class.accessible_accent(hex).fetch(:accent)
+        expect(accent).to eq(described_class.to_hex(described_class.shift_brightness(rgb, white_text: text == "#ffffff", step: chosen_step)))
         expect(described_class.ratio_between(accent, text)).to be >= ContrastColor::WCAG_AA_NORMAL_TEXT
 
-        # Rebuild the colour one step further from the text colour: the previous candidate.
-        original = [hex[1, 2], hex[3, 2], hex[5, 2]].map { _1.to_i(16) }
-        rendered = [accent[1, 2], accent[3, 2], accent[5, 2]].map { _1.to_i(16) }
-        step_back = rendered.each_with_index.map { |channel, index| channel == original[index] ? channel : channel + 1 }
-        one_step_less = format("#%02x%02x%02x", *step_back)
-
+        one_step_less = described_class.to_hex(described_class.shift_brightness(rgb, white_text: text == "#ffffff", step: chosen_step - 1))
         expect(described_class.ratio_between(one_step_less, text)).to be < ContrastColor::WCAG_AA_NORMAL_TEXT,
                                                                       "#{one_step_less} already passes, so #{accent} is not minimal for #{hex}"
+      end
+    end
+
+    it "leaves the seller's saved colour alone" do
+      # The reviewer's hard constraint: this is a display-time adjustment only, so calling it must
+      # not be able to write anything back.
+      profile = create(:seller_profile, highlight_color: "#ff0000")
+
+      expect(described_class.accessible_accent(profile.highlight_color)[:accent]).to eq("#ee0000")
+      expect(profile.reload.highlight_color).to eq("#ff0000")
+    end
+
+    it "moves the contrast ratio in one direction only, so the search's answer is the minimum" do
+      # The binary search assumes monotonicity: mixing steadily toward black (with white text) or
+      # toward white (with black text) only ever increases contrast against that text colour.
+      # Channel flooring could in principle break that; this walks every step on a handful of colours
+      # spanning the space and asserts it does not.
+      %w[#ff0000 #009a49 #0087ff #7b2ff7 #123456 #abcdef].each do |hex|
+        rgb = [hex[1, 2], hex[3, 2], hex[5, 2]].map { _1.to_i(16) }
+
+        [true, false].each do |white_text|
+          text = white_text ? "#ffffff" : "#000000"
+          ratios = (0..255).map do |step|
+            described_class.ratio_between(described_class.to_hex(described_class.shift_brightness(rgb, white_text:, step:)), text)
+          end
+
+          drops = ratios.each_cons(2).filter_map { |before, after| "#{before.round(4)} -> #{after.round(4)}" if after < before - 1e-9 }
+          expect(drops).to be_empty, "#{hex} with #{text} text is not monotone: #{drops.first(3).join(', ')}"
+        end
       end
     end
 
@@ -252,7 +282,10 @@ describe ContrastColor do
     it "matches the browser implementation on every colour in the shared fixture" do
       # app/javascript/utils/color.ts renders the editor preview while this renders the live
       # storefront, so any divergence shows a seller one colour while setting up and another on
-      # their store. Both suites assert this same file; color.test.ts is the other half.
+      # their store. The fixture was generated from THIS implementation, so the load-bearing half of
+      # the pair is color.test.ts asserting the same file — this side is the regression guard that
+      # stops a Ruby change from silently editing the contract the browser is held to. Each pair is
+      # also re-checked against the WCAG floor here, so a wrong fixture value cannot pass both.
       fixture = JSON.parse(File.read(Rails.root.join("spec", "fixtures", "accent_contrast_pairs.json")))
       expect(fixture.size).to be >= 40
 
@@ -260,6 +293,8 @@ describe ContrastColor do
         result = described_class.accessible_accent(expected.fetch("input"))
         expect(result[:accent]).to eq(expected.fetch("accent")), "accent for #{expected['input']}"
         expect(result[:text]).to eq(expected.fetch("text")), "text for #{expected['input']}"
+        expect(described_class.ratio_between(expected.fetch("accent"), expected.fetch("text")))
+          .to be >= ContrastColor::WCAG_AA_NORMAL_TEXT, "fixture pair for #{expected['input']} is below the floor"
       end
     end
   end

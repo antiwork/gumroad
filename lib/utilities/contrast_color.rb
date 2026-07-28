@@ -48,6 +48,10 @@ module ContrastColor
 
   # The largest brightness shift `accessible_accent` ever applies, measured by sweeping the sRGB
   # space (see the spec, which pins it). Expressed in 0-255 steps of the mix toward black/white.
+  # Note this is a MEASURED bound, not one MAX_BRIGHTNESS_SHIFT enforces: that constant only decides
+  # when to prefer the cheaper text colour, so on a colour where both choices are expensive the
+  # result is the cheaper of the two rather than something capped at 32. It happens that the cheaper
+  # option never exceeds 32 anywhere in the space, and the spec is what keeps that true.
   WORST_CASE_BRIGHTNESS_SHIFT = 32
 
   # Returns "#ffffff" or "#000000", whichever is more readable on top of the given colour.
@@ -203,6 +207,9 @@ module ContrastColor
   # Smallest number of 0-255 steps toward black (for white text) or toward white (for black text)
   # that brings the pair to the WCAG AA floor. Binary search is safe because mixing steadily toward
   # black or white moves the contrast ratio in one direction only.
+  #
+  # Public because it is one of the two building blocks a caller needs to check the result is
+  # minimal: the spec asserts one step less than this fails.
   def self.brightness_shift_for(rgb, white_text:)
     text = parse(white_text ? WHITE : BLACK)
     return 0 if contrast_ratio(relative_luminance(rgb), relative_luminance(text)) >= WCAG_AA_NORMAL_TEXT
@@ -221,22 +228,21 @@ module ContrastColor
 
     low
   end
-  private_class_method :brightness_shift_for
 
   # Mixes the colour `step`/255 of the way toward black (when the text will be white) or toward
   # white (when the text will be black). `floor` rather than `round` because the browser
   # implementation has to land on the identical byte and Ruby and JavaScript round halves
-  # differently.
+  # differently. Public alongside brightness_shift_for, for the same reason.
   def self.shift_brightness(rgb, white_text:, step:)
     target = white_text ? 0 : 255
     rgb.map { (_1 + ((target - _1) * step / 255.0)).floor }
   end
-  private_class_method :shift_brightness
 
+  # Formats [r, g, b] as #rrggbb. Public because callers that interpolate a colour into a <style>
+  # block need to be able to state where the string came from.
   def self.to_hex(rgb)
     "#%02x%02x%02x" % rgb
   end
-  private_class_method :to_hex
 
   # Returns [r, g, b] with each channel 0-255, or nil if the value isn't a hex colour.
   #
@@ -252,6 +258,4 @@ module ContrastColor
 
     nil
   end
-
-  private_class_method :parse
 end
