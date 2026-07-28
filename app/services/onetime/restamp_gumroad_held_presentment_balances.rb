@@ -2,22 +2,35 @@
 
 # Relabels the Gumroad-held seller balances that buyer-currency presentment charges stamped with
 # the buyer's currency instead of USD (gumroad-private#1471), so that the sellers' payouts stop
-# hard-failing.
+# being blocked.
 #
 # ## What went wrong
 #
 # `BalanceTransaction::Amount.create_holding_amount_for_seller` picked the balance's holding
 # currency from `flow_of_funds.settled_amount`, which on a buyer-presentment charge is the currency
-# the *buyer* was charged in (EUR). For funds Gumroad holds itself the money physically arrives in
-# Gumroad's own USD platform account no matter what the buyer paid in, so those balances were
-# labelled with a currency Gumroad does not hold. The forward fix is #6505; this service repairs the
-# rows written before it.
+# the *buyer* was charged in (EUR).
 #
-# The mislabelling blocks money. `StripePayoutProcessor.prepare_payment_and_set_amount` refuses to
-# sum a Gumroad-held balance whose `holding_currency` is not USD, and `is_balance_payable` returns
-# true for *every* Gumroad-held balance regardless of currency — so a mislabelled row is always
-# pulled into the payout it then fails. One bad row therefore fails the seller's whole payment,
-# including their correctly-labelled USD balances.
+# For funds Gumroad holds, `holding_*` is Gumroad's canonical record of what it owes the seller — a
+# liability, always denominated in USD, because USD is the currency every Gumroad-held payout is
+# computed and wired in. It is deliberately not a record of which currency Stripe is physically
+# sitting on. Stripe's platform account genuinely does hold foreign-currency balances (an audit of
+# this cohort found all 50 sampled charges settled in EUR and stayed there), but that is an
+# account-level treasury position spanning every seller, and nothing about paying one seller
+# follows from it. So the settled currency was the wrong source even where it was factually what
+# Stripe settled. The forward fix is #6505; this service repairs the rows written before it.
+#
+# The mislabelling blocks money, and it does so differently on each payout processor:
+#
+#   - `StripePayoutProcessor.prepare_payment_and_set_amount` refuses to sum a Gumroad-held balance
+#     whose `holding_currency` is not USD, and its `is_balance_payable` returns true for *every*
+#     Gumroad-held balance regardless of currency — so a mislabelled row is always pulled into the
+#     payout it then fails. One bad row fails the seller's whole payment, including their
+#     correctly-labelled USD balances. This is loud: it leaves a `failed` payment with
+#     `currency_mismatch`, which is how the incident was noticed at all.
+#   - `PaypalPayoutProcessor.is_balance_payable` requires USD, so it drops the bad row *before* a
+#     payment object exists. No failed payment, no failure reason, nothing in Sentry — the seller
+#     is quietly short-paid and the only trace is a balance that stays unpaid while newer ones get
+#     paid. This is the majority of the affected sellers.
 #
 # ## Why no money is at risk, and where the corrected values come from
 #
@@ -41,10 +54,12 @@
 #         net_cents: issued_net_cents)
 #
 # So what the fix *would* have written is exactly this row's own `issued_amount_*` fields. This
-# service copies them across rather than recomputing them, which is why it needs no calls to the
-# charge processor: the answer is already stored, and it is the same answer the deployed fix now
-# produces for new charges. `assert_amounts_unchanged!` below re-derives the balance total from
-# those fields and refuses to proceed if it would move by even one cent.
+# service copies all three across rather than recomputing them, which is why it needs no calls to
+# the charge processor: the answer is already stored, and it is the same answer the deployed fix now
+# produces for new charges. Copying the gross matters as much as the currency — relabelling the
+# currency alone would leave an EUR figure in `holding_amount_gross_cents` under a USD label, which
+# is a worse row than the one we started with. `assert_amounts_unchanged!` below re-derives the
+# balance total from those fields and refuses to proceed if it would move by even one cent.
 #
 # ## Usage, and the run order that matters
 #
@@ -61,29 +76,49 @@
 # fresh mislabelled row. That is not hypothetical — the affected set already contains one such row, a
 # chargeback leg booked about 100 minutes after the ramp-down.
 #
-# So the set is only frozen once #6505 is live, and even then chargebacks on those purchases can
-# arrive for weeks, past the late edge of REGRESSION_WINDOW below. This service stays safe in both
-# cases — a straggler inside the window is restamped correctly, and one outside it causes the whole
-# balance to be refused rather than quietly relabelled — but two operational consequences follow:
-# running this before #6505 deploys can leave a repaired seller re-broken by a later refund leg, and
-# a clean run is not grounds for calling the incident closed. Re-enumerate before declaring it done.
+# The service enforces that order rather than trusting it: `REGRESSION_WINDOW` closes at #6505's
+# actual production deployment time (see the constant below), so a row written after the fix shipped
+# causes its whole balance to be refused rather than quietly relabelled. If the enumeration hands us
+# one, the fix is not doing its job and that is the thing to investigate.
+#
+# Two further operational consequences follow, and neither is fixable from inside this service:
+# running it before #6505 deploys can leave a repaired seller re-broken by a later refund leg, and a
+# clean run is not grounds for calling the incident closed, because chargebacks on these purchases
+# can keep arriving for weeks. Re-enumerate before declaring it done.
 #
 class Onetime::RestampGumroadHeldPresentmentBalances
-  # The window in which a mislabelled row could have been written, measured from the affected rows
-  # themselves rather than assumed from the ramp timeline: the earliest is 2026-07-23 21:07:18 UTC
-  # (buyer-currency charging had reached 100% of sellers) and the latest 2026-07-28 15:18:05 UTC,
-  # which is after the 13:37 ramp-down because a dispute leg can still be booked against a purchase
-  # that was charged while the lane was live. A day of padding either side absorbs a straggler of
-  # that kind without widening this to "any transaction at all".
+  # The earliest a mislabelled row could exist, measured from the affected rows themselves rather
+  # than assumed from the ramp timeline: the earliest is 2026-07-23 21:07:18 UTC, when
+  # buyer-currency charging had reached 100% of sellers. A day of padding absorbs a straggler
+  # without widening this to "any transaction at all".
+  REGRESSION_WINDOW_START = Time.utc(2026, 7, 22, 0, 0)
+
+  # The late edge is #6505's actual production deployment time, which is the moment the code stopped
+  # being able to write one of these rows. It has to be passed in rather than hardcoded, because at
+  # the time this service was written #6505 had not deployed and any constant here would have been a
+  # guess — and a guessed cutoff that is too late is exactly the failure this bound exists to catch.
   #
-  # A transaction outside the window did not come from this regression, so this service refuses to
-  # touch it. If the enumeration hands us one, that is a signal to investigate rather than relabel.
-  REGRESSION_WINDOW = Time.utc(2026, 7, 22, 0, 0)..Time.utc(2026, 7, 29, 23, 59, 59)
+  # Get it from the release that contains the fix, not from when the pull request merged (merging is
+  # not deploying):
+  #
+  #   gh api repos/antiwork/gumroad/releases --jq '.[] | select(.body | contains("#6505")) | .published_at'
+  #
+  # A transaction written after that instant did not come from this regression — the deployed code
+  # cannot produce one — so its presence means either the cutoff is wrong or the fix is not working.
+  # Either way it is a signal to investigate, and this service refuses the balance rather than
+  # relabelling it.
+  def self.regression_window(fix_deployed_at)
+    REGRESSION_WINDOW_START..fix_deployed_at
+  end
 
   attr_reader :stats, :corrected, :skipped
 
-  def initialize(balance_ids:, dry_run: true, logger: Rails.logger)
+  def initialize(balance_ids:, fix_deployed_at:, dry_run: true, logger: Rails.logger)
+    raise ArgumentError, "fix_deployed_at is required: pass #6505's production deployment time" if fix_deployed_at.blank?
+    raise ArgumentError, "fix_deployed_at #{fix_deployed_at} precedes the regression window start" if fix_deployed_at <= REGRESSION_WINDOW_START
+
     @balance_ids = balance_ids
+    @regression_window = self.class.regression_window(fix_deployed_at)
     @dry_run = dry_run
     @logger = logger
     @stats = Hash.new(0)
@@ -93,6 +128,7 @@ class Onetime::RestampGumroadHeldPresentmentBalances
 
   def process
     log "Starting #{self.class.name} (#{@dry_run ? 'DRY RUN' : 'LIVE'}) for #{@balance_ids.size} balances"
+    log "Regression window: #{@regression_window.first} .. #{@regression_window.last} (#6505 deployment)"
 
     @balance_ids.each do |balance_id|
       ReplicaLagWatcher.watch unless @dry_run
@@ -226,11 +262,43 @@ class Onetime::RestampGumroadHeldPresentmentBalances
         # mislabelled balance should share its label. A row that does not means something other than
         # this regression is involved.
         return :bt_currency_disagrees_with_balance unless bt.holding_amount_currency.to_s.downcase == balance.holding_currency.to_s.downcase
-        return :bt_outside_regression_window unless REGRESSION_WINDOW.cover?(bt.created_at)
+        return :bt_outside_regression_window unless @regression_window.cover?(bt.created_at)
         return :bt_wrong_merchant_account unless bt.merchant_account_id == balance.merchant_account_id
+        # Positive proof that this row came from the buyer-presentment path, rather than inference
+        # from "non-USD label on a Gumroad-held account".
+        #
+        # The broken branch only fired when `canonical_issued_amount` was present, and that value
+        # comes from `Purchase#presentment_canonical_issued_amount`, which returns nil unless the
+        # purchase has a `PurchasePresentment`. So a row from this regression always traces back to a
+        # purchase with presentment records — no quote required, which is what makes this the right
+        # check rather than looking for a `stripe_fx_quote_id` (the majority of the affected rows are
+        # from forced-currency local methods that take no quote at all).
+        #
+        # A non-USD Gumroad-held row *without* presentment records was mislabelled by something else
+        # and is not this service's business.
+        reason = presentment_backed?(bt)
+        return reason unless reason == :ok
       end
 
       :eligible
+    end
+
+    # Whether this balance transaction traces back to a purchase with presentment records, which is
+    # the signature of the branch this service repairs.
+    #
+    # Refund and dispute legs carry no `purchase_id` of their own — they hang off the refund or
+    # dispute — so the purchase is resolved through whichever association is present. Anything with
+    # no reachable purchase at all (a credit leg, say) cannot be shown to come from this regression
+    # and is refused.
+    def presentment_backed?(balance_transaction)
+      purchase = balance_transaction.purchase ||
+                 balance_transaction.refund&.purchase ||
+                 balance_transaction.dispute&.purchase
+
+      return :bt_no_related_purchase if purchase.nil?
+      return :bt_purchase_not_presentment if purchase.purchase_presentment.blank?
+
+      :ok
     end
 
     def usd?(currency)
