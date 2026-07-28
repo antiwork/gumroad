@@ -32,6 +32,34 @@ describe LaterChargePresentment do
       expect(presentment.errors[:presentment_currency]).to include("cannot be charged in minor units by Stripe")
     end
 
+    # Korean won is the one currency where Gumroad's stored minor unit disagrees with Stripe's:
+    # Gumroad stores 1/100 won (config/initializers/money.rb) while Stripe charges whole won, so
+    # it must never reach a stored fixing at all. Pinned because a KRW row would ALSO read back
+    # wrong: KRW is not flagged single_unit in config/currencies.json, so CurrencyHelper would
+    # treat a whole-won amount as hundredths and understate the USD figures by a factor of 100.
+    # Rejecting the row is what keeps that unreachable, and this asserts the rejection directly.
+    it "rejects Korean won, whose stored minor unit disagrees with Stripe's" do
+      presentment = build(:later_charge_presentment, owner: subscription, presentment_currency: Currency::KRW)
+
+      expect(presentment).not_to be_valid
+      expect(presentment.errors[:presentment_currency]).to include("cannot be charged in minor units by Stripe")
+    end
+
+    # Japanese yen is the only currency Gumroad both allows and stores in whole units, so it is
+    # the one case where the USD conversion has to scale differently. It is accepted (Stripe also
+    # charges whole yen) and CurrencyHelper reads it as single-unit, so both ends agree.
+    it "accepts Japanese yen and reads it back in whole units" do
+      presentment = create(:later_charge_presentment,
+                           owner: subscription,
+                           presentment_currency: Currency::JPY,
+                           presentment_price_cents: 1_500,
+                           signup_currency_units_per_usd: 157)
+
+      expect(presentment).to be_valid
+      # 1,500 yen at 157 yen per dollar is 9.55 dollars — 955 USD cents, not 10.
+      expect(presentment.usd_cents_when_fixed).to eq(955)
+    end
+
     # A mixed-case row would fail to match a lowercase charge_presentments row in any comparison,
     # so the currency is normalized rather than merely accepted.
     it "stores the currency lowercase however it was given" do

@@ -137,6 +137,15 @@ class LaterChargePresentment < ApplicationRecord
       # Stripe's minor-unit convention has to match ours or the amount we send is off by a factor
       # of 100 — the same gate Checkout::BuyerCurrencyEligibility#decision applies before it will
       # quote a currency at all.
+      #
+      # This gate is also what keeps the USD figures above correct. Korean won is the one
+      # supported currency where Gumroad's stored minor unit (1/100 won, see
+      # config/initializers/money.rb) disagrees with both Stripe (whole won) and
+      # config/currencies.json (which does not flag KRW single_unit, so CurrencyHelper reads a
+      # KRW amount as hundredths). A stored KRW fixing would therefore be unchargeable AND
+      # report a USD value 100x too small; rejecting the row here is what makes both impossible.
+      # Japanese yen, the only supported currency stored in whole units, is flagged single_unit
+      # and so converts correctly.
       unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
         errors.add(:presentment_currency, "cannot be charged in minor units by Stripe")
       end
