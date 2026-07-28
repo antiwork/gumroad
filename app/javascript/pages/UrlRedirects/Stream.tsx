@@ -9,7 +9,6 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 
 import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoticeModal";
-import { useRunOnce } from "$app/components/useRunOnce";
 
 const FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION = "ef64f2fef0d6c776a337050020423fc0";
 const LOCATION_TRACK_EVENT_DELAY_MS = 10_000;
@@ -51,7 +50,18 @@ function Stream() {
 
   const containerRef = React.useRef<HTMLDivElement>(null);
 
-  useRunOnce(() => {
+  // Deliberately a plain useEffect rather than useRunOnce: this creates a JW Player instance and a
+  // throttled tracking callback that both have to be torn down when the component unmounts, and
+  // useRunOnce ignores a returned cleanup (it now warns in development when a callback returns one).
+  // The effect body still runs only once per mount because it depends on nothing that changes.
+  React.useEffect(() => {
+    // Player setup is async, so the component can unmount before createJWPlayer resolves. Without
+    // this flag the resolved player would be installed into a dead component and never removed,
+    // leaving the video element and its listeners attached for the rest of the page's life.
+    let isCancelled = false;
+    let playerToRemove: jwplayer.JWPlayer | undefined;
+    let cancelTracking: (() => void) | undefined;
+
     const createPlayer = async () => {
       if (!containerRef.current) return;
 
@@ -62,7 +72,7 @@ function Stream() {
       let isInitialSeekDone = false;
       const playlist = initialPlaylist;
 
-      const player = await createJWPlayer(playerId, {
+      const createdPlayer = await createJWPlayer(playerId, {
         width: "100%",
         height: "100%",
         playlist: playlist.map((video) => ({
@@ -73,6 +83,15 @@ function Stream() {
           title: video.title,
         })),
       });
+
+      // Unmounted while the player was being set up: remove it immediately rather than wiring up
+      // handlers that would fire against a component that no longer exists.
+      if (isCancelled) {
+        createdPlayer.remove();
+        return;
+      }
+      playerToRemove = createdPlayer;
+      const player = createdPlayer;
 
       const updateLocalMediaLocation = (position: number, duration: number) => {
         const videoFile = playlist[player.getPlaylistIndex()];
@@ -100,6 +119,7 @@ function Stream() {
       };
 
       const throttledTrackMediaLocation = throttle(trackMediaLocation, LOCATION_TRACK_EVENT_DELAY_MS);
+      cancelTracking = () => throttledTrackMediaLocation.cancel();
 
       player.on("ready", () => {
         player.playlistItem(index_to_play);
@@ -152,7 +172,17 @@ function Stream() {
     };
 
     void createPlayer();
-  });
+
+    return () => {
+      isCancelled = true;
+      // Cancel first: a pending throttled call would otherwise fire a tracking request for a
+      // player that is about to be destroyed.
+      cancelTracking?.();
+      // remove() detaches JW Player's own event handlers and DOM, which is what stops the
+      // "time" handler from continuing to run against an unmounted component.
+      playerToRemove?.remove();
+    };
+  }, []);
 
   return (
     <>

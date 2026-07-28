@@ -20,7 +20,6 @@ import { Button } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Range } from "$app/components/ui/Range";
-import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 
@@ -197,7 +196,16 @@ const PdfReader = ({
     pdfViewerRef.current.currentScaleValue = newScale.toString();
   };
 
-  useRunOnce(() => {
+  // Deliberately a plain useEffect rather than useRunOnce: this registers event-bus handlers and
+  // starts async document loading that both have to be undone on unmount, and useRunOnce ignores a
+  // returned cleanup (it now warns in development when a callback returns one).
+  React.useEffect(() => {
+    // getDocument is async, so the reader can be closed before the PDF resolves. Without this flag
+    // the continuation would setPageCount/setIsLoading on an unmounted component and hand the
+    // document to a viewer nobody can see, keeping the whole parsed PDF in memory.
+    let isCancelled = false;
+    let teardown: (() => void) | undefined;
+
     const resumeFromLastLocation = (pageCount: number) => {
       const storedCookieLocation = getMediaLocationFromCookies(read_id);
       const latestMediaLocationFromCookies = canResumePdfFromLocation(storedCookieLocation) ? storedCookieLocation : {};
@@ -235,25 +243,56 @@ const PdfReader = ({
       pdfLinkService.setViewer(pdfSinglePageViewer);
       pdfViewerRef.current = pdfSinglePageViewer;
 
-      eventBus.on("pagesinit", () => {
+      const onPagesInit = () => {
         pdfSinglePageViewer.currentScaleValue = "page-fit";
         setIsLoading(false);
         resumeFromLastLocation(pdfViewerRef.current?.pdfDocument?.numPages ?? 1);
-      });
-      eventBus.on("pagerender", () => {
+      };
+      const onPageRender = () => {
         const page = container.querySelector(".page");
         if (page instanceof HTMLElement) {
           page.style.border = "revert";
         }
-      });
+      };
+
+      eventBus.on("pagesinit", onPagesInit);
+      eventBus.on("pagerender", onPageRender);
+
+      // Named handlers so they can be removed by reference — eventBus.off is a no-op against an
+      // anonymous function, which is why these were extracted above.
+      teardown = () => {
+        eventBus.off("pagesinit", onPagesInit);
+        eventBus.off("pagerender", onPageRender);
+        pdfSinglePageViewer.cleanup();
+      };
 
       const pdf = await pdfjs.getDocument(url).promise;
+      // Closed while the document was downloading and parsing: release it instead of handing it to
+      // a viewer that is already gone.
+      if (isCancelled) {
+        void pdf.destroy();
+        return;
+      }
+
+      // The document itself has to be destroyed on unmount, not just detached from the viewer.
+      const previousTeardown = teardown;
+      teardown = () => {
+        previousTeardown();
+        void pdf.destroy();
+      };
+
       setPageCount(pdf.numPages);
       pdfSinglePageViewer.setDocument(pdf);
       pdfLinkService.setDocument(pdf, null);
     };
     void showDocument();
-  });
+
+    return () => {
+      isCancelled = true;
+      teardown?.();
+      pdfViewerRef.current = null;
+    };
+  }, []);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
