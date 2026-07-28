@@ -14,7 +14,6 @@ import {
   RatingsSummary,
   useSelectionFromUrl,
   Props as ProductProps,
-  getStandalonePrice,
 } from "$app/components/Product";
 import {
   applySelection,
@@ -23,6 +22,7 @@ import {
 } from "$app/components/Product/ConfigurationSelector";
 import { CtaButton } from "$app/components/Product/CtaButton";
 import { PriceTag } from "$app/components/Product/PriceTag";
+import { getBundleComparisonPriceCents } from "$app/components/Product/pricing";
 import {
   Action,
   AddSectionButton,
@@ -230,8 +230,14 @@ const CtaBar = ({
 }) => {
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { priceCents } = selectionAttributes;
-  const { discountedPriceCents, isPWYW, hasRentOption, hasMultipleRecurrences, hasConfigurableQuantity } =
-    selectionAttributes;
+  const {
+    discountedPriceCents,
+    isPWYW,
+    hasRentOption,
+    hasMultipleRecurrences,
+    hasConfigurableQuantity,
+    selectedOption,
+  } = selectionAttributes;
 
   const [visible, setVisible] = React.useState(false);
   const ref = React.useRef<null | HTMLDivElement>(null);
@@ -251,7 +257,10 @@ const CtaBar = ({
 
   const height = ref.current?.getBoundingClientRect().height ?? 0;
 
-  if (product.bundle_products.length) priceCents = getStandalonePrice(product);
+  // Same comparison rule as the main price tag: only a tier that adds nothing to
+  // the bundle's price can honestly be compared against the standalone sum.
+  const bundleComparisonPriceCents = getBundleComparisonPriceCents(product, selectedOption);
+  if (bundleComparisonPriceCents !== null) priceCents = bundleComparisonPriceCents;
 
   return (
     <section
