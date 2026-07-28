@@ -925,6 +925,38 @@ describe("reduceCheckoutState", () => {
       expect(next.checkoutPayment).toBe(starting.checkoutPayment);
       expect(next.status).toEqual({ type: "starting" });
     });
+
+    it("releases the stale hold when the refresh request fails", () => {
+      // A transient failure — a dropped connection, a timeout, a 500 — means no refreshed
+      // configuration is ever coming. Without this the hold never lifts and Pay stays disabled for
+      // the rest of the checkout, with no way out but editing the cart again or reloading.
+      const stale = reduceCheckoutState(state(), { type: "invalidate-checkout-payment" });
+      expect(isSubmitDisabled(stale)).toBe(true);
+
+      const recovered = reduceCheckoutState(stale, { type: "checkout-payment-refresh-failed" });
+
+      expect(recovered.checkoutPaymentStale).toBe(false);
+      expect(isSubmitDisabled(recovered)).toBe(false);
+      // The configuration on screen is left exactly as it was. A failed save did not persist the
+      // edit, so the server still holds the cart this configuration was computed for — and that
+      // is the cart the order gets built from.
+      expect(recovered.checkoutPayment).toBe(stale.checkoutPayment);
+    });
+
+    it("does not roll back a configuration a later refresh already delivered", () => {
+      // The failure path must not carry a configuration to restore. Re-applying a value captured
+      // from an earlier render would overwrite a newer one that already landed.
+      const stale = reduceCheckoutState(state(), { type: "invalidate-checkout-payment" });
+      const refreshed = reduceCheckoutState(stale, {
+        type: "update-checkout-payment",
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      });
+
+      const afterLateFailure = reduceCheckoutState(refreshed, { type: "checkout-payment-refresh-failed" });
+
+      expect(afterLateFailure.checkoutPayment).toEqual(buyerCurrencyPresentmentPaymentElementConfig);
+      expect(afterLateFailure.checkoutPaymentStale).toBe(false);
+    });
   });
 
   it("stores the save-card intent without invalidating loaded surcharges", () => {

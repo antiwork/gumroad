@@ -319,6 +319,11 @@ type PublicAction =
   // The recomputed payment configuration for the edited cart, from a partial reload of the
   // checkout page's props.
   | { type: "update-checkout-payment"; checkoutPayment: CheckoutPaymentConfig }
+  // The request that was going to bring back the recomputed configuration finished without
+  // delivering one — a network drop, a 500, a validation error. Releases the stale hold so the
+  // checkout is not left permanently unable to submit; see the reducer case for why that is the
+  // right direction to fail.
+  | { type: "checkout-payment-refresh-failed" }
   | { type: "cancel" };
 
 type Action =
@@ -1004,6 +1009,26 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // lands in "input", which is the fail-closed direction.
       if (state.status.type !== "input") return;
       state.checkoutPayment = action.checkoutPayment;
+      state.checkoutPaymentStale = false;
+      break;
+    case "checkout-payment-refresh-failed":
+      // The save that was going to bring back the recomputed configuration finished without one.
+      // Left alone, the stale hold never lifts and Pay stays disabled for the rest of the
+      // checkout — the buyer's only way out is to edit the cart again or reload the page.
+      //
+      // Releasing the hold is safe because a save that failed also means the edit did not
+      // persist: the server still has the cart the configuration on screen was computed for, and
+      // that is the cart the order will be built from, since the purchase is created from the
+      // persisted cart rather than the client's copy. So the element and the charge still agree,
+      // which is the property the hold exists to protect.
+      //
+      // Deliberately does not carry a configuration to restore. The value from the props closure
+      // is a snapshot from an arbitrarily earlier render, and re-applying it could overwrite a
+      // newer configuration that a later save already delivered. The configuration on screen is
+      // already the last one the server sent, so clearing the flag is all that is needed.
+      //
+      // A cart edit that follows will invalidate again, so this does not strand a genuinely
+      // out-of-date configuration in the "not stale" state for long.
       state.checkoutPaymentStale = false;
       break;
     case "surcharges-fetch-succeeded":
