@@ -333,7 +333,16 @@ describe BalanceTransaction, :vcr do
           # The Gumroad-held platform account is the userless merchant account — that is exactly
           # what StripeChargeProcessor#holder_of_funds keys on to return GUMROAD (in production
           # this is merchant_accounts.id = 1, currency USD).
-          let(:merchant_account) { create(:merchant_account, user: nil, currency: Currency::USD) }
+          #
+          # The processor merchant id is given explicitly rather than left to the factory sequence.
+          # Gumroad-managed Stripe accounts are uniqueness-validated on that column, the sequence
+          # restarts at "000000001" in every process, and the Minitest fixture suite keeps a
+          # permanent `gumroad_stripe` row on exactly that id in the same database — so whichever
+          # example draws the first sequence value collides with it.
+          let(:merchant_account) do
+            create(:merchant_account, user: nil, currency: Currency::USD,
+                                      charge_processor_merchant_id: "acct_gumroad_held_#{SecureRandom.hex(6)}")
+          end
           let(:amount) do
             BalanceTransaction::Amount.create_holding_amount_for_seller(
               flow_of_funds:,
@@ -373,7 +382,9 @@ describe BalanceTransaction, :vcr do
             # The plain :merchant_account factory, not :merchant_account_stripe — the latter calls the
             # live Stripe test API to provision and verify a real Connect account, which this test has
             # no need for. All that matters is that the seller resolves to a USD payout destination.
-            create(:merchant_account, user: seller, currency: Currency::USD)
+            # Explicit processor merchant id for the same uniqueness-collision reason as above.
+            create(:merchant_account, user: seller, currency: Currency::USD,
+                                      charge_processor_merchant_id: "acct_seller_#{SecureRandom.hex(6)}")
 
             as_booked = create(:balance, user: seller, merchant_account:, date: Date.yesterday,
                                          currency: Currency::USD, holding_currency: amount.currency,
@@ -419,7 +430,10 @@ describe BalanceTransaction, :vcr do
         end
 
         context "when a Stripe-held account holds the funds" do
-          let(:merchant_account) { create(:merchant_account, currency: Currency::EUR) }
+          let(:merchant_account) do
+            create(:merchant_account, currency: Currency::EUR,
+                                      charge_processor_merchant_id: "acct_stripe_held_#{SecureRandom.hex(6)}")
+          end
           let(:amount) do
             BalanceTransaction::Amount.create_holding_amount_for_seller(
               flow_of_funds:,
