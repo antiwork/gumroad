@@ -977,6 +977,28 @@ describe("reduceCheckoutState", () => {
         expect(refreshed.status).toEqual({ type: "input", errors: new Set() });
       });
 
+      it("keeps a pending resume when the same cart's invalidation is repeated", () => {
+        // acceptOffer invalidates eagerly and then dispatches "validate" in the same tick, and the
+        // passive effect watching the cart fires for that same cart change afterwards. If that echo
+        // reached the reducer it would read as a fresh buyer edit and drop the resume, leaving the
+        // buyer on the checkout page with no purchase and no feedback. Show.tsx suppresses the echo
+        // by remembering which cart it already invalidated; this pins the reducer behaviour that
+        // makes the suppression necessary — a genuine second invalidation must still drop it.
+        const refused = reduceCheckoutState(
+          reduceCheckoutState(state({ status: { type: "offering" } }), { type: "invalidate-checkout-payment" }),
+          { type: "validate" },
+        );
+        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(true);
+
+        // No echo: the refreshed configuration resumes the submit the buyer confirmed.
+        const refreshed = reduceCheckoutState(refused, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+
+        expect(refreshed.status).toEqual({ type: "validating" });
+      });
+
       it("drops a pending resume when the cart is edited again", () => {
         // The resume is only ever meant to finish the submit the buyer confirmed. If they changed
         // the cart after that, finishing it later would place an order they never pressed Pay for.
