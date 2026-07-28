@@ -10842,7 +10842,11 @@ describe StripeMerchantAccountManager, :vcr do
               }
             end
 
-            it "pauses payouts, records the Stripe reason as a comment, and notifies the creator by email if payouts are disabled due to info requirement" do
+            # Time is frozen because the assertion below checks the exact timestamp the
+            # debounced email job is scheduled for. Without freezing, the clock can tick
+            # between the code enqueueing the job and the matcher recomputing the expected
+            # time, so the two sub-second timestamps disagree and the test fails at random.
+            it "pauses payouts, records the Stripe reason as a comment, and notifies the creator by email if payouts are disabled due to info requirement", :freeze_time do
               expect(user.reload.payouts_paused_internally?).to be false
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
 
@@ -11146,7 +11150,9 @@ describe StripeMerchantAccountManager, :vcr do
                 stripe_event["data"]["object"]["requirements"]["past_due"] = []
               end
 
-              it "sends the under-review email for a non-rejected reason with no outstanding requirements" do
+              # Frozen for the same reason as the past_due case above: the matcher compares
+              # the job's scheduled-at timestamp against a freshly computed one.
+              it "sends the under-review email for a non-rejected reason with no outstanding requirements", :freeze_time do
                 stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
 
                 described_class.handle_stripe_event(stripe_event)
