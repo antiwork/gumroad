@@ -352,6 +352,23 @@ describe Charge::Disputable, :vcr do
           expect(purchase.subscription.cancelled_at).to_not be(nil)
           expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
         end
+
+        context "when the seller has since converted the product away from a membership" do
+          before do
+            # A seller can turn a membership product into a one-off product after the sale.
+            # The subscription bought under the old type is still live and still billing, so
+            # the chargeback must still cancel it.
+            product.is_recurring_billing = false
+            product.native_type = Link::NATIVE_TYPE_COURSE
+            product.save!(validate: false)
+          end
+
+          it "still cancels the subscription" do
+            Purchase.handle_charge_event(event)
+
+            expect(purchase.reload.subscription.cancelled_at).to be_present
+          end
+        end
       end
 
       it "sends emails to admin, creator, and customer" do
@@ -1106,6 +1123,22 @@ describe Charge::Disputable, :vcr do
             Purchase.handle_charge_event(@event)
 
             expect(CustomerMailer).to have_received(:subscription_restarted).with(@subscription.id, Subscription::ResubscriptionReason::PAYMENT_ISSUE_RESOLVED)
+          end
+
+          context "when the seller has since converted the product away from a membership" do
+            before do
+              product = @subscription.link
+              product.is_recurring_billing = false
+              product.native_type = Link::NATIVE_TYPE_COURSE
+              product.save!(validate: false)
+            end
+
+            it "still restarts the subscription" do
+              Purchase.handle_charge_event(@event)
+
+              expect(@subscription.reload).to be_alive
+              expect(@subscription.cancelled_at).to be_nil
+            end
           end
         end
 

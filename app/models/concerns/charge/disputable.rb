@@ -203,9 +203,16 @@ module Charge::Disputable
 
       purchase.mark_product_purchases_as_chargeback_reversed!
 
-      if purchase.link.is_recurring_billing?
-        logger.info("Chargeback event won; re-activating subscription: #{purchase.subscription_id}")
-        subscription = Subscription.find_by(id: purchase.subscription_id)
+      # Read the purchase's own subscription rather than asking the product whether it is a
+      # membership today. A seller can convert a membership product into a one-off product
+      # after the fact, and when they do, link.is_recurring_billing flips to false for every
+      # past sale — including subscriptions that are still live and still billing. Deciding
+      # a historical subscription purchase's fate from the product's current type is what
+      # left subscription purchases un-cancelled after their charges were charged back
+      # (gumroad-private#1456).
+      subscription = Subscription.find_by(id: purchase.subscription_id)
+      if subscription.present?
+        logger.info("Chargeback event won; re-activating subscription: #{subscription.id}")
         terminated_or_scheduled_for_termination = subscription.termination_date.present?
         subscription.resubscribe!
         subscription.send_restart_notifications!(Subscription::ResubscriptionReason::PAYMENT_ISSUE_RESOLVED) if terminated_or_scheduled_for_termination
@@ -294,15 +301,19 @@ module Charge::Disputable
         # has a purchase_chargeback_balance, so a replay never debits the seller twice.
         purchase.decrement_balance_for_refund_or_chargeback!(flow_of_funds, dispute:)
 
-        if purchase.link.is_recurring_billing
-          subscription = Subscription.find_by(id: purchase.subscription_id)
-          # Only cancel a live subscription: re-cancelling one that a previous attempt already
-          # deactivated would re-fire the cancellation webhooks and customer emails on replay.
-          # The review exclusion stays inside this guard because it is tied to the cancellation.
-          if subscription.present? && subscription.deactivated_at.nil?
-            subscription.cancel_effective_immediately!(by_buyer: true)
-            subscription.original_purchase.update!(should_exclude_product_review: true) if subscription.should_exclude_product_review_on_charge_reversal?
-          end
+        # Read the purchase's own subscription rather than asking the product whether it is a
+        # membership today. A seller can convert a membership product into a one-off product
+        # after the fact, and when they do, link.is_recurring_billing flips to false for every
+        # past sale — so this gate stopped cancelling subscriptions that were still live and
+        # still billing, even after every charge on them had been charged back
+        # (gumroad-private#1456).
+        subscription = Subscription.find_by(id: purchase.subscription_id)
+        # Only cancel a live subscription: re-cancelling one that a previous attempt already
+        # deactivated would re-fire the cancellation webhooks and customer emails on replay.
+        # The review exclusion stays inside this guard because it is tied to the cancellation.
+        if subscription.present? && subscription.deactivated_at.nil?
+          subscription.cancel_effective_immediately!(by_buyer: true)
+          subscription.original_purchase.update!(should_exclude_product_review: true) if subscription.should_exclude_product_review_on_charge_reversal?
         end
 
         purchase.enqueue_update_sales_related_products_infos_job(false)
