@@ -67,6 +67,54 @@ RSpec.describe Purchase::AudienceMember do
     end
   end
 
+  describe ".deferring_audience_member_rebuilds" do
+    let!(:original_purchase) { create(:membership_purchase, link: product, seller:) }
+
+    it "rebuilds once for the buyer instead of once per purchase row" do
+      4.times { create(:purchase, link: create(:product, user: seller), seller:, email: original_purchase.email) }
+      original_purchase.unsubscribe_buyer
+
+      allow(AudienceMember).to receive(:find_or_initialize_by).and_call_original
+
+      Purchase.deferring_audience_member_rebuilds do
+        Purchase.where(email: original_purchase.email, seller_id: seller.id, can_contact: false).find_each do |purchase|
+          purchase.update!(can_contact: true)
+        end
+        # Nothing is rebuilt until the block finishes.
+        expect(audience_member_for(original_purchase)).to be_nil
+      end
+
+      member = audience_member_for(original_purchase)
+      expect(member.details["purchases"].size).to eq(5)
+      expect(AudienceMember).to have_received(:find_or_initialize_by).once
+    end
+
+    it "rebuilds immediately when there is no block in progress" do
+      original_purchase.unsubscribe_buyer
+
+      original_purchase.reload.update!(can_contact: true)
+
+      expect(audience_member_for(original_purchase)).to be_present
+    end
+
+    it "still rebuilds when the block raises partway through" do
+      other = create(:purchase, link: create(:product, user: seller), seller:, email: original_purchase.email)
+      original_purchase.unsubscribe_buyer
+
+      expect do
+        Purchase.deferring_audience_member_rebuilds do
+          original_purchase.reload.update!(can_contact: true)
+          raise "boom"
+        end
+      end.to raise_error("boom")
+
+      # The block bailed out, so the rebuild did not run — but the deferral state must not leak
+      # into later saves, which have to rebuild immediately again.
+      other.reload.update!(can_contact: true)
+      expect(audience_member_for(original_purchase)).to be_present
+    end
+  end
+
   describe "a new purchase for a buyer who unsubscribed" do
     it "stays uncontactable for one-off purchases" do
       first = create(:purchase, link: create(:product, user: seller), seller:)

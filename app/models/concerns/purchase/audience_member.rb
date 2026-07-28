@@ -8,6 +8,37 @@ module Purchase::AudienceMember
     after_destroy :remove_from_audience_member_details
   end
 
+  class_methods do
+    # Collects the buyers needing an audience rebuild inside the current
+    # `deferring_audience_member_rebuilds` block, or nil when there is no block in progress.
+    def pending_audience_member_rebuilds
+      Thread.current[:pending_audience_member_rebuilds]
+    end
+
+    # Coalesces audience rebuilds for callers that flip can_contact on many purchase rows in a
+    # loop. Each rebuild re-reads all of a buyer's purchases, so doing one per row is quadratic
+    # in the number of rows. Inside this block rebuilds are recorded and de-duplicated, then run
+    # once per buyer at the end. Nesting is safe: only the outermost block does the work.
+    def deferring_audience_member_rebuilds
+      return yield if pending_audience_member_rebuilds
+
+      Thread.current[:pending_audience_member_rebuilds] = Set.new
+      begin
+        result = yield
+        # Read the pending set before clearing it so the rebuilds below, which save records and
+        # can re-enter this callback, run in normal immediate mode.
+        buyers = Thread.current[:pending_audience_member_rebuilds]
+        Thread.current[:pending_audience_member_rebuilds] = nil
+        buyers.each do |email, seller_id|
+          AudienceMember.find_or_initialize_by(email:, seller_id:).refresh!
+        end
+        result
+      ensure
+        Thread.current[:pending_audience_member_rebuilds] = nil
+      end
+    end
+  end
+
   def should_be_audience_member?
     result = can_contact?
     result &= purchase_state.in?(%w[successful gift_receiver_purchase_successful not_charged])
@@ -58,7 +89,15 @@ module Purchase::AudienceMember
 
   # Rebuilds the buyer's whole audience_members row from live purchase/follower/affiliate
   # state, instead of just adding or removing this one purchase from it.
+  #
+  # Inside a `Purchase.deferring_audience_member_rebuilds` block this only records that the
+  # buyer needs rebuilding; the block does one rebuild per buyer when it finishes. Callers that
+  # flip many purchase rows for the same buyer in a loop would otherwise pay for a full rebuild
+  # per row, and each rebuild re-reads every one of that buyer's purchases.
   def rebuild_audience_member_details
+    pending = Purchase.pending_audience_member_rebuilds
+    return pending << [email, seller_id] if pending
+
     AudienceMember.find_or_initialize_by(email:, seller:).refresh!
   end
 
