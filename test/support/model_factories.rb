@@ -1294,10 +1294,11 @@ module ModelFactories
     Taxonomy.create!({ slug: "taxonomy-#{unique_suffix}" }.merge(attrs))
   end
 
-  # A subtitle track for a video file (mirrors :subtitle_file).
+  # A subtitle track (mirrors :subtitle_file, whose default parent is a plain
+  # product file).
   def create_subtitle_file(product_file: nil, **attrs)
     SubtitleFile.create!({
-      product_file: product_file || create_streamable_video,
+      product_file: product_file || create_product_file,
       url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{SecureRandom.hex}.srt",
       language: "English",
     }.merge(attrs))

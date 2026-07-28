@@ -11,7 +11,7 @@ require "test_helper"
 # Split into two classes: the sorting method needs a real Elasticsearch cluster
 # (`display_price_cents` is one of the two keys Product::Sorting routes through
 # Elasticsearch rather than SQL), so it lives on its own with the bridge
-# installed and leaves the other ~15 tests on the fast stubbed client.
+# installed and leaves the rest of the tests on the fast stubbed client.
 class ProductsHelperTest < ActionView::TestCase
   tests ProductsHelper
 
@@ -134,6 +134,8 @@ class ProductsHelperTest < ActionView::TestCase
 
     assert_equal product.long_url(recommended_by: "test"),
                  url_for_product_page(product, request: nil, recommended_by: "test")
+    assert_equal product.long_url(recommended_by: "test", code: "BLACKFRIDAY2025"),
+                 url_for_product_page(product, request: nil, recommended_by: "test", offer_code: "BLACKFRIDAY2025")
   end
 
   test "#url_for_product_page returns the long URL on the main Gumroad domain" do
