@@ -82,6 +82,55 @@ describe PdfStampingService::Stamp do
       end
     end
 
+    context "with a PDF that has heading bookmarks (a document outline)" do
+      # Regression coverage for a creator report: stamping was rebuilding the PDF by splitting it and
+      # concatenating the pieces back together, which silently discarded the document outline (the
+      # heading bookmarks readers use to navigate) and the Title/Author metadata. Long technical books
+      # lost their whole navigation tree, so the only workaround was turning stamping off.
+      let(:fixture_path) { Rails.root.join("spec", "support", "fixtures", "pdf-with-bookmarks.pdf") }
+
+      before do
+        # Yield the local fixture instead of hitting S3, so the assertions below are about stamping.
+        allow(product_file).to receive(:download_original) do |&block|
+          File.open(fixture_path, "rb") { |file| block.call(file) }
+        end
+        allow(product_file).to receive(:s3_url).and_return("#{S3_BASE_URL}specs/pdf-with-bookmarks.pdf")
+      end
+
+      def outline_entry_count(path)
+        reader = PDF::Reader.new(path)
+        catalog = reader.objects.deref(reader.objects.trailer[:Root])
+        return 0 if catalog[:Outlines].nil?
+
+        outlines = reader.objects.deref(catalog[:Outlines])
+        outlines[:Count].to_i
+      end
+
+      it "preserves the bookmarks and the document metadata" do
+        expect(outline_entry_count(fixture_path.to_s)).to eq(5)
+
+        stamped_path = described_class.perform!(product_file:, watermark_text:)
+
+        expect(outline_entry_count(stamped_path)).to eq(5)
+
+        info = PDF::Reader.new(stamped_path).info
+        expect(info[:Title]).to eq("Book With Bookmarks")
+        expect(info[:Author]).to eq("Test Author")
+      end
+
+      it "still stamps the first page only" do
+        stamped_path = described_class.perform!(product_file:, watermark_text:)
+        reader = PDF::Reader.new(stamped_path)
+
+        expect(reader.page_count).to eq(5)
+        expect(reader.page(1).text).to include("Sold to")
+        expect(reader.page(1).text).to include(watermark_text)
+        (2..reader.page_count).each do |page_number|
+          expect(reader.page(page_number).text).not_to include("Sold to")
+        end
+      end
+    end
+
     context "with an encrypted PDF that opens without a password" do
       let(:pdf_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/encrypted_pdf.pdf" }
 

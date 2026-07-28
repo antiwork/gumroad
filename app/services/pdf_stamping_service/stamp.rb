@@ -24,7 +24,7 @@ module PdfStampingService::Stamp
       original_pdf_path = decrypted_pdf_path || original_pdf.path
       original_pdf_path_shellescaped = Shellwords.shellescape(original_pdf_path)
 
-      watermark_pdf_path, page_count = create_watermark_pdf!(original_pdf_path:, watermark_text:)
+      watermark_pdf_path = create_watermark_pdf!(original_pdf_path:, watermark_text:)
       watermark_pdf_path_shellescaped = Shellwords.shellescape(watermark_pdf_path)
 
       stamped_pdf_file_name = build_stamped_pdf_file_name(product_file)
@@ -34,8 +34,7 @@ module PdfStampingService::Stamp
       apply_watermark!(
         original_pdf_path_shellescaped,
         watermark_pdf_path_shellescaped,
-        stamped_pdf_path_shellescaped,
-        page_count:
+        stamped_pdf_path_shellescaped
       )
 
       stamped_pdf_path
@@ -105,30 +104,29 @@ module PdfStampingService::Stamp
 
       pdf.image("#{Rails.root}/public/images/pdf_stamp.png", at: [watermark_x + 305, watermark_y], width: 24)
 
+      # We only want the buyer's details on page 1, but we still generate a watermark with one page
+      # per page of the original document: pages 2..N are deliberately left blank.
+      #
+      # Why: `pdftk multistamp` overlays stamp-page-N onto document-page-N, so blank filler pages
+      # leave pages 2..N visually untouched. That lets us stamp in a SINGLE pdftk pass over the whole
+      # document. The alternative (splitting the PDF, stamping page 1, then concatenating the pieces
+      # back with `cat`) destroys the document outline, i.e. the heading bookmarks, along with the
+      # Title/Author metadata, because pdftk's `cat` does not carry those structures across. That
+      # regression was reported by a creator whose technical book lost its whole navigation tree
+      # (see PR #4206, which introduced the split for performance reasons).
+      #
+      # Padding here keeps both properties: only page 1 is marked, and bookmarks/metadata survive.
+      (reader.page_count - 1).times { pdf.start_new_page }
+
       pdf.render_file(watermark_pdf_path)
-      [watermark_pdf_path, reader.page_count]
+      watermark_pdf_path
     end
 
-    def apply_watermark!(original_pdf_path_shellescaped, watermark_pdf_path_shellescaped, stamped_pdf_path_shellescaped, page_count:)
-      if page_count <= 1
-        run_pdftk!("pdftk #{original_pdf_path_shellescaped} multistamp #{watermark_pdf_path_shellescaped} output #{stamped_pdf_path_shellescaped}")
-        return
-      end
-
-      first_page_path = "#{Dir.tmpdir}/first_page_#{SecureRandom.hex}.pdf"
-      stamped_first_page_path = "#{Dir.tmpdir}/stamped_first_#{SecureRandom.hex}.pdf"
-      remaining_pages_path = "#{Dir.tmpdir}/remaining_#{SecureRandom.hex}.pdf"
-
-      begin
-        run_pdftk!("pdftk #{original_pdf_path_shellescaped} cat 1 output #{Shellwords.shellescape(first_page_path)}")
-        run_pdftk!("pdftk #{Shellwords.shellescape(first_page_path)} multistamp #{watermark_pdf_path_shellescaped} output #{Shellwords.shellescape(stamped_first_page_path)}")
-        run_pdftk!("pdftk #{original_pdf_path_shellescaped} cat 2-end output #{Shellwords.shellescape(remaining_pages_path)}")
-        run_pdftk!("pdftk #{Shellwords.shellescape(stamped_first_page_path)} #{Shellwords.shellescape(remaining_pages_path)} cat output #{stamped_pdf_path_shellescaped}")
-      ensure
-        [first_page_path, stamped_first_page_path, remaining_pages_path].each do |path|
-          File.unlink(path) if File.exist?(path)
-        end
-      end
+    def apply_watermark!(original_pdf_path_shellescaped, watermark_pdf_path_shellescaped, stamped_pdf_path_shellescaped)
+      # A single multistamp pass over the whole document. The watermark has a blank page for every
+      # page after the first, so only page 1 ends up marked (see create_watermark_pdf! for why we
+      # must avoid splitting and re-concatenating the document here).
+      run_pdftk!("pdftk #{original_pdf_path_shellescaped} multistamp #{watermark_pdf_path_shellescaped} output #{stamped_pdf_path_shellescaped}")
     end
 
     def run_pdftk!(command)
