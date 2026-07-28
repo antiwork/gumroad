@@ -81,6 +81,24 @@ describe StripeDeferredPaymentIntent do
       expect(captured_params.last[:opts][:stripe_version]).to eq(StripeFxQuote::API_VERSION)
     end
 
+    # Pix needs per-method configuration at intent CREATE time: amount_includes_iof keeps the
+    # buyer's charge at exactly the listed price (Stripe's default would mark it up 3.5% for
+    # Brazil's IOF tax), and expires_after_seconds bounds how long the QR key stays payable.
+    it "passes payment_method_options through to the intent create when provided (Pix)" do
+      pix_options = { pix: { amount_includes_iof: "always", expires_after_seconds: 30.minutes.to_i } }
+
+      create_deferred_intent(payment_method_types: ["pix"], currency: "brl", payment_method_options: pix_options)
+
+      expect(captured_params.last[:params][:payment_method_options]).to eq(pix_options)
+      expect(captured_params.last[:params][:payment_method_types]).to eq(["pix"])
+    end
+
+    it "omits payment_method_options entirely when none are given, keeping non-Pix intents byte-for-byte" do
+      create_deferred_intent
+
+      expect(captured_params.last[:params]).not_to have_key(:payment_method_options)
+    end
+
     it "routes a Gumroad-managed account through a destination transfer" do
       seller = create(:user)
       merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_managed")

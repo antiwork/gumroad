@@ -33,6 +33,7 @@ class StripeConnectPaymentMethodAvailabilityService
     "ideal" => "ideal_payments",
     "bancontact" => "bancontact_payments",
     "upi" => "upi_payments",
+    "pix" => "pix_payments",
     "sepa_debit" => "sepa_debit_payments",
     # Alipay's account gate lives in the resolver (US-based accounts only, because this lane's
     # intents are USD and Stripe ties Alipay presentment currencies to the account's business

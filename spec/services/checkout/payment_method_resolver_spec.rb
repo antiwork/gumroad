@@ -24,7 +24,7 @@ describe Checkout::PaymentMethodResolver do
 
       it "resolves the full inline dynamic method set as eligible" do
         expect(resolve.eligible_payment_method_types)
-          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account alipay])
+          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay])
       end
 
       it "enables the launched methods on Stripe for a US buyer, gating the rest behind later units" do
@@ -82,7 +82,7 @@ describe Checkout::PaymentMethodResolver do
       end
 
       it "still gates the remaining redirect methods behind later units" do
-        expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact", "upi")
+        expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact", "upi", "pix")
       end
 
       context "with the Klarna launch flag (checkout_local_method_klarna) active for the seller" do
@@ -96,7 +96,7 @@ describe Checkout::PaymentMethodResolver do
 
         it "keeps the eligible policy set unchanged — the flag only widens the launched set" do
           expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).eligible_payment_method_types)
-            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account alipay])
+            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay])
         end
 
         it "drops Klarna for a non-US buyer — v1 offers it on the USD lane to US buyers only" do
@@ -214,7 +214,7 @@ describe Checkout::PaymentMethodResolver do
 
         it "keeps the eligible policy set unchanged — the flag only widens the launched set" do
           expect(resolve(buyer_country: "US").eligible_payment_method_types)
-            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account alipay])
+            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay])
         end
 
         it "offers Alipay to a non-US buyer — unlike Klarna it carries no buyer-country lock, and most of the target cohort buys from outside mainland China" do
@@ -442,6 +442,51 @@ describe Checkout::PaymentMethodResolver do
           Feature.activate_user(:checkout_local_method_upi, seller)
 
           expect(resolve(buyer_country: "IN", cart_product_currency: "inr", ppp_discounted: true).payment_method_types).to include("upi")
+        end
+
+        it "launches Pix in live mode when its per-method launch flag is on for a Brazilian buyer, without pulling other local methods along" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          methods = resolve(buyer_country: "BR", cart_product_currency: "brl").payment_method_types
+          expect(methods).to include("pix")
+          expect(methods).not_to include("ideal", "bancontact", "upi")
+        end
+
+        it "keeps launched Pix off non-Brazil buyers even when the cart is priced in BRL" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          expect(resolve(buyer_country: "US", cart_product_currency: "brl").payment_method_types).not_to include("pix")
+        end
+
+        it "keeps launched Pix off a Brazilian buyer whose cart is not priced in BRL — Stripe only accepts Pix on BRL intents" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          expect(resolve(buyer_country: "BR", cart_product_currency: "usd").payment_method_types).not_to include("pix")
+        end
+
+        it "keeps Pix off a BRL cart from Brazil while its launch flag is off, even with other local methods launched" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_upi, seller)
+
+          expect(resolve(buyer_country: "BR", cart_product_currency: "brl").payment_method_types).not_to include("pix")
+        end
+
+        it "retains launched Pix on a PPP-discounted BRL checkout from Brazil — region-locked methods pass the U13 matrix" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          expect(resolve(buyer_country: "BR", cart_product_currency: "brl", ppp_discounted: true).payment_method_types).to include("pix")
+        end
+
+        it "never offers Pix on a recurring cart — Pix is buyer-present, one-time only" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          resolution = resolve(buyer_country: "BR", cart_product_currency: "brl", recurring: true)
+          expect(resolution.eligible_payment_method_types).not_to include("pix")
         end
 
         it "keeps a launched method off carts not priced in its forced currency, even in live mode" do

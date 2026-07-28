@@ -381,10 +381,29 @@ class Order::ChargeService
     purchase.update!(purchase_success_balance: seller_balance_transaction.balance)
   end
 
+  # The India e-mandate registered with this charge caps every future off-session charge made
+  # against the saved card (RBI rules; see Purchase#mandate_options_for_stripe). The cap is a
+  # PER-CHARGE ceiling, not a total budget: Stripe authorizes each off-session charge whose
+  # amount is at or under `amount`, and anything above it needs the buyer to authenticate again.
+  #
+  # Renewals are charged one subscription at a time — `Subscription#schedule_charge` enqueues
+  # RecurringChargeWorker per subscription id, and each run charges exactly one purchase — so
+  # even when one cart creates several subscriptions sharing this mandate, no single future
+  # charge is ever the cart's combined total. The cap therefore has to cover the LARGEST
+  # individual renewal, and sizing it to the sum of the cart would authorize any one renewal to
+  # silently grow to the whole cart's worth before re-authentication kicks in.
+  #
+  # What each purchase contributes is its own `mandate_maximum_amount_cents` rather than the
+  # amount charged today, which is the part a multi-item cart was missing: when a subscription
+  # is bought with a limited-duration discount, its renewals bill the undiscounted price once
+  # the discount's billing cycles run out. Taking the max over charged totals (what this used
+  # to do) sizes the cap below that later, higher renewal and the buyer gets an unrecoverable
+  # decline. Single-purchase carts already get this headroom from
+  # Purchase#mandate_options_for_stripe; this gives multi-item carts the same treatment.
   def mandate_options_for_stripe(purchases:, with_currency: false)
     return purchases.first.mandate_options_for_stripe(with_currency:) if purchases.count == 1
 
-    mandate_amount = purchases.max_by(&:total_transaction_cents).total_transaction_cents
+    mandate_amount = purchases.map(&:mandate_maximum_amount_cents).max
 
     mandate_options = {
       payment_method_options: {
