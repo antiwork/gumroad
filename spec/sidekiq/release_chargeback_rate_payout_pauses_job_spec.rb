@@ -6,7 +6,7 @@ describe ReleaseChargebackRatePayoutPausesJob do
   def pause_for_chargeback_rate!(user)
     user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
     user.comments.create!(
-      content: "Payouts automatically paused due to chargeback rate (4.2%) exceeding 3.0% volume.",
+      content: "Payouts automatically paused due to chargeback rate (#{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS * 4}%) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
       comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
       author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
     )

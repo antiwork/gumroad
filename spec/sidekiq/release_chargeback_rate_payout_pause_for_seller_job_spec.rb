@@ -5,10 +5,21 @@ require "spec_helper"
 describe ReleaseChargebackRatePayoutPauseForSellerJob do
   let(:seller) { create(:user) }
 
+  # The threshold is a policy number that has already moved once (3% to 1%). These specs derive
+  # their rates from the constant so that the next move keeps them meaningful: a spec that spells
+  # out "1.2% is recovered" silently stops testing recovery the day the limit drops below 1.2%.
+  def recovered_rate
+    format("%.1f%%", User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS / 2)
+  end
+
+  def still_high_rate
+    format("%.1f%%", User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS * 4)
+  end
+
   def pause_for_chargeback_rate!(user = seller)
     user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
     user.comments.create!(
-      content: "Payouts automatically paused due to chargeback rate (4.2%) exceeding 3.0% volume.",
+      content: "Payouts automatically paused due to chargeback rate (#{still_high_rate}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
       comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
       author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
     )
@@ -21,7 +32,7 @@ describe ReleaseChargebackRatePayoutPauseForSellerJob do
   context "when the rate has recovered" do
     before do
       pause_for_chargeback_rate!
-      stub_rate("1.2%")
+      stub_rate(recovered_rate)
     end
 
     it "resumes payouts and clears the pause source" do
@@ -37,7 +48,7 @@ describe ReleaseChargebackRatePayoutPauseForSellerJob do
 
       comment = seller.comments.with_type_payouts_resumed.last
       expect(comment.author_name).to eq(User::CHARGEBACK_RATE_PAYOUT_RESUME_COMMENT_AUTHOR)
-      expect(comment.content).to include("1.2%")
+      expect(comment.content).to include(recovered_rate)
     end
 
     it "does nothing on a second run once the hold is gone" do
@@ -51,7 +62,7 @@ describe ReleaseChargebackRatePayoutPauseForSellerJob do
 
   it "keeps the hold when the rate is still above the limit" do
     pause_for_chargeback_rate!
-    stub_rate("4.2%")
+    stub_rate(still_high_rate)
 
     described_class.new.perform(seller.id)
 
