@@ -332,15 +332,25 @@ class InstallmentTest < ActiveSupport::TestCase
   end
 
   test "message_with_inline_abandoned_cart_products honors a custom checkout_url" do
-    # Documented skip: the method rewrites the rendered checkout links by
-    # matching them against `Rails.application.routes.url_helpers.checkout_url`,
-    # which in the test env keeps the DOMAIN port (":31337") while the rendered
-    # markup (built through ApplicationController.renderer) drops it. So the
-    # rewrite that swaps in a custom checkout_url never matches here — it works
-    # in the full request environment (and in the RSpec suite), where the two
-    # URL builders agree. Left as a marked skip; the default-URL path above
-    # covers the rest of the rendering.
-    skip "custom checkout_url rewrite depends on route/renderer URL agreement not present in bare model tests"
+    creator = create_user
+    workflow = create_abandoned_cart_workflow(seller: creator)
+    installment = workflow.installments.first
+    installment.update!(message: abandoned_cart_message(checkout_url_for))
+    4.times { create_product(user: creator) }
+    # A cart-specific checkout link, as the abandoned-cart mailer passes for a
+    # known cart. Every checkout link in the post — the seller's own and the two
+    # in the rendered product list — has to come back pointing at it.
+    custom_checkout_url = Rails.application.routes.url_helpers.checkout_url(host: UrlService.domain_with_protocol, cart_id: "abc123")
+
+    message = installment.message_with_inline_abandoned_cart_products(
+      products: workflow.abandoned_cart_products, checkout_url: custom_checkout_url
+    )
+    parsed = Nokogiri::HTML(message)
+
+    assert_includes message, "cart_id=abc123"
+    assert_equal "complete checking out", parsed.at_css("a[href='#{custom_checkout_url}']").text
+    assert_equal "and 1 more product", parsed.at_css("a[href='#{custom_checkout_url}'][target='_blank']").text
+    assert_equal "Complete checkout", parsed.at_css("a.button.primary[href='#{custom_checkout_url}'][target='_blank']").text
   end
 
   # --- #message_with_inline_syntax_highlighting_and_upsells ------------------
@@ -1152,10 +1162,11 @@ const b = 2;</code></pre>
   end
 
   private
-    # The abandoned-cart list is rendered through ApplicationController.renderer,
-    # whose checkout_url(host: …) drops the port embedded in the test DOMAIN
-    # (":31337"); the bare route url_helpers keep it. Render the URL the same way
-    # the app does so the expected value matches the emitted markup.
+    # The checkout links in an abandoned-cart post are emitted by
+    # ApplicationController.renderer, so build the expected URL through the same
+    # renderer rather than assembling it by hand. (It matches what the bare route
+    # helpers produce — `Installment#message_with_inline_abandoned_cart_products`
+    # relies on that when it rewrites these links to a cart-specific URL.)
     def checkout_url_for
       ApplicationController.renderer.render(inline: "<%= checkout_url(host: UrlService.domain_with_protocol) %>")
     end
