@@ -165,12 +165,18 @@ class Api::V2::SalesController < Api::V2::BaseController
     # back by the SAME listed currency and converts to canonical USD cents; for
     # buyer-presentment purchases the refund path then separately derives the amount to send
     # to Stripe in the buyer's currency via Purchase::PresentmentRefund
-    # (app/modules/purchase/refundable.rb, refund_and_save!). So listed-currency input is
-    # unambiguous today because at most one of listed/presentment currency is non-USD. If
-    # both can be non-USD (see gumroad-private#1321), a caller reading the buyer's receipt
-    # could reasonably send the presentment amount instead, and this line would silently
-    # misinterpret it — the API contract ("amount is in the listed currency") would need to
-    # be made explicit or the param re-specified.
+    # (app/modules/purchase/refundable.rb, refund_and_save!). Listed-currency input is
+    # unambiguous today because the two denominations can never DIFFER while both being
+    # non-USD: buyer presentment (the card path) only applies to USD-priced products, and
+    # the local-method path that does charge in a non-USD currency (iDEAL/Bancontact in
+    # euros, UPI in rupees — see Checkout::BuyerCurrencyEligibility) either charges a
+    # product already priced in that same currency or converts from a USD-priced one. So
+    # the caller always sees one non-USD amount at most, and the listed currency is the
+    # only sensible reading of it. Once a product listed in one non-USD currency can be
+    # charged in a DIFFERENT non-USD presentment currency (see gumroad-private#1321), a
+    # caller reading the buyer's receipt could reasonably send the presentment amount
+    # instead, and this line would silently misinterpret it — the API contract ("amount is
+    # in the listed currency") would need to be made explicit or the param re-specified.
     amount = params[:amount_cents].to_i / unit_scaling_factor(purchase.displayed_price_currency_type).to_f if params[:amount_cents].present?
 
     if purchase.refund!(refunding_user_id: current_resource_owner.id, amount:)
