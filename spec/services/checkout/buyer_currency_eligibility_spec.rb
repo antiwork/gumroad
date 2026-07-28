@@ -703,4 +703,28 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(krw_decision.fallback_reason).to eq(:unsupported_forced_currency)
     end
   end
+
+  describe ".buyer_presentment_display?" do
+    it "treats a local currency other than USD as presentment" do
+      expect(described_class.buyer_presentment_display?(display_mode: "buyer_local", buyer_currency_shown: "eur")).to be(true)
+    end
+
+    # A USD display is the converted price of a non-USD-priced product shown to a US buyer, and
+    # that is the amount the charge already uses, so no quote is ever minted for it. Callers
+    # disable wallet buttons for presentment carts, and doing that here would cost the buyer
+    # Apple Pay and Google Pay for nothing.
+    it "does not treat a USD local currency as presentment" do
+      expect(described_class.buyer_presentment_display?(display_mode: "buyer_local", buyer_currency_shown: "usd")).to be(false)
+    end
+
+    it "reads string keys the same way as symbol keys" do
+      expect(described_class.buyer_presentment_display?("display_mode" => "buyer_local", "buyer_currency_shown" => "usd")).to be(false)
+      expect(described_class.buyer_presentment_display?("display_mode" => "buyer_local", "buyer_currency_shown" => "gbp")).to be(true)
+    end
+
+    it "is false for a default display and for a blank payload" do
+      expect(described_class.buyer_presentment_display?(display_mode: "default", buyer_currency_shown: "eur")).to be(false)
+      expect(described_class.buyer_presentment_display?(nil)).to be(false)
+    end
+  end
 end

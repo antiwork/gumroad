@@ -90,7 +90,14 @@ class Checkout::BuyerCurrencyEligibility
     display_mode = buyer_currency_display[:display_mode] || buyer_currency_display["display_mode"]
     buyer_currency = buyer_currency_display[:buyer_currency_shown] || buyer_currency_display["buyer_currency_shown"]
 
-    display_mode == "buyer_local" && buyer_currency.present?
+    return false if display_mode != "buyer_local" || buyer_currency.blank?
+
+    # A USD display is not presentment. A product priced in another currency shows a converted
+    # USD price to a US buyer, and that is simply the amount the charge already uses, so no
+    # quote is minted for it (#decision falls back on :canonical_buyer_currency, and
+    # BuyerCurrencyQuote returns nothing). Treating it as a candidate would only cost the buyer
+    # their wallet buttons, which callers disable whenever the cart displays a presentment total.
+    buyer_currency.to_s.downcase != Currency::USD
   end
 
   def self.buyer_presentment_candidate?(seller:, buyer_currency_display:)
