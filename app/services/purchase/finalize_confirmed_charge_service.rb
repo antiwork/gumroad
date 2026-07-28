@@ -26,6 +26,17 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
       elsif charge_intent.processing?
         purchase.update!(stripe_status: StripeIntentStatus::PROCESSING)
         :pending
+      elsif charge_intent.awaiting_customer_initiated_payment?
+        # Pix: Stripe gave the buyer a QR code / copy-paste key to pay in their banking app, and
+        # the intent stays in requires_action until they do. The browser's confirm call returning
+        # only means the buyer closed the QR modal, so failing the purchase here would kill a
+        # payment they can still make (and, once they paid, would leave the money unmatched to any
+        # purchase). Keep it in progress and report it as pending; the payment_intent.succeeded /
+        # payment_intent.payment_failed webhooks decide the real outcome, and the abandonment
+        # worker only cancels intents that are neither succeeded nor processing after the SCA
+        # window — see the Pix expiry note there.
+        purchase.update!(stripe_status: StripeIntentStatus::REQUIRES_ACTION)
+        :pending
       else
         fail_purchase
       end

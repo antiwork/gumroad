@@ -64,6 +64,59 @@ describe Purchase::FinalizeConfirmedChargeService do
       end
     end
 
+    context "when the intent is waiting on an asynchronous customer-initiated payment (Pix)" do
+      let(:purchase) { create(:purchase_in_progress) }
+
+      # Real StripeChargeIntent rather than a double: the pending-vs-failed routing hangs on how
+      # the intent classifies its next action, so the classification must be exercised, not stubbed.
+      def stripe_charge_intent(next_action_type:, payment_method_types:)
+        payment_intent = Stripe::PaymentIntent.construct_from(
+          id: "pi_next_action_test",
+          status: StripeIntentStatus::REQUIRES_ACTION,
+          next_action: { type: next_action_type, next_action_type.to_sym => { expires_at: 30.minutes.from_now.to_i } },
+          payment_method_types:
+        )
+        StripeChargeIntent.new(payment_intent:)
+      end
+
+      it "keeps a Pix purchase in progress and reports pending — the buyer can still pay the QR key in their banking app" do
+        charge_intent = stripe_charge_intent(next_action_type: "pix_display_qr_code", payment_method_types: ["pix"])
+
+        result = described_class.new(purchase:, charge_intent:).perform
+
+        expect(result).to eq(:pending)
+        expect(purchase.reload.stripe_status).to eq(StripeIntentStatus::REQUIRES_ACTION)
+        expect(purchase).to be_in_progress
+      end
+
+      # Cash App Pay's QR is scanned during checkout and resolves in the same session, so a confirm
+      # that returns with the intent still in requires_action really does mean the buyer gave up —
+      # it must keep failing, not start reporting pending because Pix taught us a new QR action.
+      it "still fails a Cash App Pay purchase whose same-session QR was abandoned" do
+        charge_intent = stripe_charge_intent(next_action_type: "cashapp_handle_redirect_or_display_qr_code", payment_method_types: ["cashapp"])
+
+        result = described_class.new(purchase:, charge_intent:).perform
+
+        expect(result).to eq("Sorry, something went wrong.")
+        expect(purchase.reload).to be_failed
+      end
+
+      it "still fails a card purchase abandoned mid-SCA (use_stripe_sdk next action)" do
+        payment_intent = Stripe::PaymentIntent.construct_from(
+          id: "pi_sca_test",
+          status: StripeIntentStatus::REQUIRES_ACTION,
+          next_action: { type: StripeIntentStatus::ACTION_TYPE_USE_SDK },
+          payment_method_types: ["card"]
+        )
+        charge_intent = StripeChargeIntent.new(payment_intent:)
+
+        result = described_class.new(purchase:, charge_intent:).perform
+
+        expect(result).to eq("Sorry, something went wrong.")
+        expect(purchase.reload).to be_failed
+      end
+    end
+
     context "when the purchase is already successful" do
       let(:purchase) { create(:purchase_in_progress).tap { _1.update_column(:purchase_state, "successful") } }
 

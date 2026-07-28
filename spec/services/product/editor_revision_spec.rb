@@ -105,12 +105,101 @@ describe Product::EditorRevision do
       expect(described_class.current(product.reload)).not_to eq(before)
     end
 
-    it "changes the token when the product's own updated_at moves" do
+    it "keeps the token when the product's own updated_at moves for an unrelated reason" do
       before = described_class.current(product)
 
       travel_to(1.minute.from_now) { product.touch }
 
+      expect(described_class.current(product.reload)).to eq(before)
+    end
+
+    it "keeps the token when the seller edits the price" do
+      before = described_class.current(product)
+      updated_at_before = product.updated_at.to_fs(:usec)
+
+      # `price_cents` is delegated to the default variant/price row, so writing
+      # it does not dirty the product itself. Write `customizable_price` too:
+      # it is a real Link column, so this genuinely moves the product's
+      # updated_at and the assertion below can actually fail.
+      travel_to(1.minute.from_now) do
+        product.update!(price_cents: product.price_cents.to_i + 500, customizable_price: true)
+      end
+
+      expect(product.reload.updated_at.to_fs(:usec)).not_to eq(updated_at_before)
+      expect(described_class.current(product)).to eq(before)
+      expect(described_class.fresh?(product:, token: before)).to eq(true)
+    end
+
+    it "keeps the token when the seller edits tags, name or description" do
+      before = described_class.current(product)
+
+      product.tag!("a-brand-new-tag")
+      product.update!(name: "A different name", description: "A different description")
+
+      expect(described_class.current(product.reload)).to eq(before)
+      expect(described_class.fresh?(product: product.reload, token: before)).to eq(true)
+    end
+
+    it "changes the token when the shared-content flag flips, because it changes which pages a save may delete" do
+      product.update!(has_same_rich_content_for_all_variants: false)
+      before = described_class.current(product.reload)
+
+      product.update!(has_same_rich_content_for_all_variants: true)
+
       expect(described_class.current(product.reload)).not_to eq(before)
+      expect(described_class.fresh?(product: product.reload, token: before)).to eq(false)
+    end
+
+    it "changes the token when is_tiered_membership flips, because it selects the variant deletion route" do
+      # Link#valid_tier_version_structure rejects flipping this on a product
+      # that has no Tier category, so start from a real membership and turn it
+      # off — the digest only cares that the value moved.
+      membership = create(:membership_product_with_preset_tiered_pricing)
+      before = described_class.current(membership.reload)
+
+      membership.update_attribute(:is_tiered_membership, false)
+
+      expect(described_class.current(membership.reload)).not_to eq(before)
+      expect(described_class.fresh?(product: membership.reload, token: before)).to eq(false)
+    end
+
+    it "changes the token when is_physical flips, because it changes which content pages are authoritative" do
+      # A physical product always resolves to the product-level pages and ignores
+      # per-version ones, so this flip changes which pages the editor loads and
+      # therefore which pages a deletion built from that load would remove.
+      product.update_attribute(:is_physical, false)
+      before = described_class.current(product.reload)
+
+      product.update_attribute(:is_physical, true)
+
+      expect(described_class.current(product.reload)).not_to eq(before)
+      expect(described_class.fresh?(product: product.reload, token: before)).to eq(false)
+    end
+
+    it "keeps the token when skus_enabled flips or a SKU changes, because this save cannot delete SKUs" do
+      # Product::SkusUpdaterService is the only code that deletes SKU rows, and
+      # VariantsUpdaterService only calls it `if skus_enabled` — while
+      # LinksController#update sets skus_enabled = false before that point on
+      # every editor save. Fingerprinting SKU state would therefore invalidate
+      # tokens over state no deletion on this path can touch. The reachability
+      # side of this is pinned in
+      # test/controllers/links_controller_test.rb ("cannot delete a SKU").
+      sku = Sku.create!(link: product, name: "A sku", price_difference_cents: 0)
+      before = described_class.current(product.reload)
+
+      product.update_attribute(:skus_enabled, !product.skus_enabled?)
+      sku.mark_deleted!
+      Sku.create!(link: product, name: "Added elsewhere", price_difference_cents: 0)
+
+      expect(described_class.current(product.reload)).to eq(before)
+      expect(described_class.fresh?(product: product.reload, token: before)).to eq(true)
+    end
+
+    it "raises rather than silently ignoring a deletion-relevant attribute that no longer exists" do
+      stub_const("Product::EditorRevision::DELETION_RELEVANT_ATTRIBUTES", %w[no_such_attribute])
+
+      expect { described_class.current(product) }
+        .to raise_error(ArgumentError, /no such attribute/)
     end
 
     it "changes the token when VERSION is bumped, invalidating every outstanding token" do

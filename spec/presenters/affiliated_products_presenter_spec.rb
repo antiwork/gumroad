@@ -167,7 +167,11 @@ describe AffiliatedProductsPresenter do
     it "returns affiliated products details, stats, and global affiliates data" do
       props = described_class.new(affiliate_user).affiliated_products_page_props
       stats = {
-        total_revenue: successful_not_reversed_purchases.sum(&:affiliate_credit_cents),
+        # total_revenue is a gross figure: it sums every affiliate credit the
+        # user has, including the ones for the refunded and chargedback
+        # purchases, so it lines up with total_sales below (which counts the
+        # same rows). See User#affiliate_credits_total_revenue_cents.
+        total_revenue: (successful_not_reversed_purchases + [refunded_purchase, chargedback_purchase]).sum(&:affiliate_credit_cents),
         total_sales: 10,
         total_products: 7,
         total_affiliated_creators: 3,
@@ -618,22 +622,54 @@ describe AffiliatedProductsPresenter do
     end
   end
 
-  describe "revenue stats caching" do
+  describe "revenue stats" do
     let(:user) { create(:affiliate_user) }
 
-    it "caches total_revenue per user and expires it after the TTL" do
-      expect(user).to receive(:affiliate_credits_sum_total).once.and_return(1234)
-
-      presenter = described_class.new(user)
-      expect(presenter.affiliated_products_page_props[:stats][:total_revenue]).to eq 1234
-      # A second render within the TTL serves the aggregate from the cache
-      # rather than re-running the expensive sum (hence `.once` above).
-      expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 1234
-
-      travel_to(described_class::STATS_CACHE_TTL.from_now + 1.second) do
-        expect(user).to receive(:affiliate_credits_sum_total).once.and_return(5678)
-        expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 5678
+    it "reports total_revenue as the gross sum of every credit, including refunded and chargebacked ones" do
+      # The headline revenue figure is deliberately gross: it counts the same
+      # rows the "Total sales" stat counts, so the two numbers on the page
+      # reconcile with each other. Refunds, chargebacks and missing balance
+      # rows do not remove a credit from it.
+      # `purchase_in_progress` rather than the bare purchase factory: a plain
+      # `create(:purchase)` runs the charge validations, which is unrelated
+      # machinery for a spec about summing credit rows.
+      credit = ->(cents) do
+        create(:affiliate_credit, affiliate_user: user, amount_cents: cents,
+                                  purchase: create(:purchase_in_progress))
       end
+
+      plain_credit = credit.call(500)
+      partially_refunded_credit = credit.call(300)
+      # This flag is the column the old partial-refund adjustment joined
+      # purchases to read. Setting it is what proves that adjustment no longer
+      # runs: under the old shape this credit's amount was counted twice.
+      partially_refunded_credit.purchase.update_column(:stripe_partially_refunded, true)
+      fully_refunded_credit = credit.call(700)
+      chargebacked_credit = credit.call(900)
+
+      # The balance ids are what mark a credit as refunded or charged back. They
+      # are set directly rather than through the balance factory because this
+      # spec only cares that the ids are present — which balance row they point
+      # at makes no difference to a sum that ignores them.
+      fully_refunded_credit.update_column(:affiliate_credit_refund_balance_id, 1)
+      chargebacked_credit.update_column(:affiliate_credit_chargeback_balance_id, 2)
+
+      props = described_class.new(user).affiliated_products_page_props
+
+      expect(props[:stats][:total_revenue]).to eq 500 + 300 + 700 + 900
+      # Same population as the sales count beside it.
+      expect(props[:stats][:total_sales]).to eq 4
+      expect([plain_credit, partially_refunded_credit, fully_refunded_credit,
+              chargebacked_credit].sum(&:amount_cents)).to eq props[:stats][:total_revenue]
+      # Guard against the old `paid`-scoped shape quietly coming back: under it
+      # the refunded and chargebacked credits would have been excluded.
+      expect(user.affiliate_credits.paid.sum(:amount_cents)).to be < props[:stats][:total_revenue]
+    end
+
+    it "does not run the partial-refund adjustment query for the revenue stat" do
+      expect(user).not_to receive(:affiliate_credit_sum_from_scope)
+
+      described_class.new(user).affiliated_products_page_props
     end
 
     it "caches the raw global affiliate earnings but formats them fresh on every request" do
@@ -675,10 +711,10 @@ describe AffiliatedProductsPresenter do
       expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
     end
 
-    it "does not share cached revenue between users" do
+    it "reports revenue per user" do
       other_user = create(:affiliate_user)
-      expect(user).to receive(:affiliate_credits_sum_total).and_return(100)
-      expect(other_user).to receive(:affiliate_credits_sum_total).and_return(200)
+      expect(user).to receive(:affiliate_credits_total_revenue_cents).and_return(100)
+      expect(other_user).to receive(:affiliate_credits_total_revenue_cents).and_return(200)
 
       expect(described_class.new(user).affiliated_products_page_props[:stats][:total_revenue]).to eq 100
       expect(described_class.new(other_user).affiliated_products_page_props[:stats][:total_revenue]).to eq 200

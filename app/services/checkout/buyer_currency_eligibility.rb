@@ -5,6 +5,18 @@ class Checkout::BuyerCurrencyEligibility
 
   FEATURE_NAME = :buyer_currency_charging
 
+  # The two per-seller rollout flags that decide whether a wallet (Apple Pay / Google Pay)
+  # may pay a buyer-currency checkout. They live here, next to FEATURE_NAME, because this
+  # service is what the charge path consults — the presenter reads the same constants for
+  # its render-time decision, so the surface a buyer sees and the charge the server accepts
+  # can never be gated on different flags.
+  #
+  # PAYMENT_ELEMENT_WALLETS_FEATURE_NAME is checkout's general "wallets render inside the
+  # Payment Element" flag; WALLETS_FEATURE_NAME is this lane's own ramp, so wallets can be
+  # pulled from buyer-currency checkouts alone without taking them off every other checkout.
+  PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
+  WALLETS_FEATURE_NAME = :buyer_currency_wallets
+
   # Some local payment methods only work in a single currency: iDEAL and Bancontact
   # charges must be made in euros; UPI charges must be made in rupees. When a checkout wants one of these
   # methods, the payment method itself decides the presentment currency — there is
@@ -15,6 +27,10 @@ class Checkout::BuyerCurrencyEligibility
     "ideal" => Currency::EUR,
     "bancontact" => Currency::EUR,
     "upi" => Currency::INR,
+    # Pix is Brazil's instant-payment scheme and Stripe only accepts it on BRL payment
+    # intents — creating one in any other currency is rejected outright ("Payments with pix
+    # support the following currencies: brl", verified against our live platform account).
+    "pix" => Currency::BRL,
   }.freeze
 
   # Per-method production launch flags for the forced-currency local methods. Stripe test
@@ -27,6 +43,7 @@ class Checkout::BuyerCurrencyEligibility
     "ideal" => :checkout_local_method_ideal,
     "bancontact" => :checkout_local_method_bancontact,
     "upi" => :checkout_local_method_upi,
+    "pix" => :checkout_local_method_pix,
   }.freeze
 
   # `direct_listed_amount` is only set by the method-forced mode: true means the
@@ -79,13 +96,29 @@ class Checkout::BuyerCurrencyEligibility
       !seller.disable_buyer_local_currency?
   end
 
+  # Whether this seller's buyer-currency checkouts may take wallet payments at all. Seller must
+  # be in the general Payment Element wallet rollout AND in this lane's own ramp; pulling either
+  # flag stops wallets here, and pulling only the lane flag leaves every other checkout alone.
+  def self.wallets_enabled?(seller)
+    seller.present? &&
+      Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller) &&
+      Feature.active?(WALLETS_FEATURE_NAME, seller)
+  end
+
   def self.buyer_presentment_display?(buyer_currency_display)
     return false if buyer_currency_display.blank?
 
     display_mode = buyer_currency_display[:display_mode] || buyer_currency_display["display_mode"]
     buyer_currency = buyer_currency_display[:buyer_currency_shown] || buyer_currency_display["buyer_currency_shown"]
 
-    display_mode == "buyer_local" && buyer_currency.present?
+    return false if display_mode != "buyer_local" || buyer_currency.blank?
+
+    # A USD display is not presentment. A product priced in another currency shows a converted
+    # USD price to a US buyer, and that is simply the amount the charge already uses, so no
+    # quote is minted for it (#decision falls back on :canonical_buyer_currency, and
+    # BuyerCurrencyQuote returns nothing). Treating it as a candidate would only cost the buyer
+    # their wallet buttons, which callers disable whenever the cart displays a presentment total.
+    buyer_currency.to_s.downcase != Currency::USD
   end
 
   def self.buyer_presentment_candidate?(seller:, buyer_currency_display:)
@@ -101,7 +134,8 @@ class Checkout::BuyerCurrencyEligibility
     return false unless usd_holding_merchant_account?(merchant_account)
 
     # Deliberately asked of the SELLER's account rather than the account the intent is
-    # created on (unlike usd_holding_settlement_account?). This predicate guards the
+    # created on (those differ for a destination charge, where the intent is created on
+    # the Gumroad platform account). This predicate guards the
     # FX-quote paths, and StripeFxQuote mints the quote with the seller's connected
     # account as `Stripe-Account`, so the seller's own settlement configuration is the
     # one that decides whether the quote is accepted.
@@ -134,39 +168,22 @@ class Checkout::BuyerCurrencyEligibility
     merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
   end
 
-  # The account a PaymentIntent for this seller is actually CREATED on — which is the
-  # account whose settlement currency Stripe applies to the intent.
+  # The account a PaymentIntent for this seller is actually CREATED on.
   #
   # Gumroad charges sellers two different ways (see StripeChargeProcessor):
   #
   #   Stripe Connect sellers (direct charges): the intent is created ON the seller's own
-  #   connected account, so that account's settlement currency is the one that matters.
+  #   connected account.
   #
   #   Everyone else (destination charges): the intent is created on the GUMROAD PLATFORM
-  #   account, which holds USD, and the seller's account only appears as
-  #   `transfer_data[destination]` — it receives a transfer after the charge settles. The
-  #   destination account's own balance currency does not constrain what currency the
-  #   intent may be created in, so reading it here withholds payment methods a checkout
-  #   could complete perfectly well. Reading it hid UPI from the seller in
-  #   gumroad-private#1409 — an Indian seller pricing in rupees for an Indian buyer, the
-  #   exact shape UPI exists for.
+  #   account, and the seller's account only appears as `transfer_data[destination]` — it
+  #   receives a transfer after the charge settles.
   #
-  # Returns nil only if the platform account row is missing, which callers treat as
-  # "cannot verify settlement" and fail closed.
+  # Returns nil only if the platform account row is missing.
   def self.settlement_merchant_account(merchant_account)
     return merchant_account if merchant_account.blank? || merchant_account.is_a_stripe_connect_account?
 
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-  end
-
-  # usd_holding_merchant_account? asked of the account the intent is created on, rather
-  # than of whichever account happens to be attached to the purchase. See
-  # settlement_merchant_account above for why those differ for destination charges.
-  def self.usd_holding_settlement_account?(merchant_account)
-    settlement_account = settlement_merchant_account(merchant_account)
-    return false if settlement_account.blank?
-
-    usd_holding_merchant_account?(settlement_account)
   end
 
   def self.stripe_test_mode?
@@ -188,7 +205,7 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
-    return fallback(:wallet_payment_request) if wallet_type.present?
+    return fallback(:wallet_payment_request) if wallet_type.present? && !wallet_lane_allowed?
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
     return fallback(:no_purchases) if purchases.empty?
@@ -262,21 +279,29 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:method_not_launched) unless method_forced_mode_allowed?(payment_method, forced_currency)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_forced_currency_charge_model?
-    # Only the stored-currency (USD-holding) half of the settlement question is a
-    # blanket gate here. The learned per-currency mismatch marker is NOT: it predicts
-    # FX-quote rejection, which only matters on the quoted (USD-priced) case below.
-    # The direct-listed-amount case charges the listed price with no FX quote at all,
-    # and the marker being set for the forced currency is in fact the EXPECTED state
-    # once that method's capabilities make the account settle the currency in itself
-    # (2026-07-23 iDEAL dark-ramp, gumroad-private#933) — so it must not withhold the
-    # method.
+    # No settlement gate applies to this lane as a whole. The only settlement question
+    # left is asked further down, and only of the quoted (USD-priced) case, which is the
+    # one that actually needs a Stripe FX quote to succeed.
     #
-    # The question is asked of the account the intent is CREATED on, which for a
-    # destination charge is the Gumroad platform account, not the seller's own account
-    # (see settlement_merchant_account). Asking it of the seller's account instead used
-    # to hide UPI from every seller whose Stripe balance settles in rupees — the exact
-    # seller UPI exists for (gumroad-private#1409).
-    return fallback(:unsupported_settlement_currency) unless self.class.usd_holding_settlement_account?(merchant_account)
+    # The direct-listed-amount case — an EUR-priced product paid with iDEAL or Bancontact,
+    # an INR-priced product paid with UPI — charges the product's listed price in the
+    # currency it is already priced in. There is no FX quote anywhere in that flow, so
+    # nothing about the charging account's balance currency can make it fail: Stripe
+    # accepts a EUR intent on an account whose balance is EUR (indeed that is the simplest
+    # case — the payment settles natively with no conversion at all), and the per-account
+    # capability intersection in Checkout::PaymentMethodResolver separately guarantees the
+    # account has the method activated. Requiring the charging account to HOLD US dollars
+    # was inherited from the FX-quote lane, where it genuinely matters, and it was the last
+    # thing capping this lane: it withheld iDEAL/Bancontact from every Stripe Connect seller
+    # settling in euros — precisely the sellers those methods exist for (gumroad-private#1442).
+    #
+    # Gumroad's own ledger stays correct without it. For a Stripe Connect seller the money
+    # never passes through a Gumroad-held balance at all: the charge lands directly in the
+    # seller's own Stripe account, and Purchase#increment_sellers_balance! /
+    # #process_refund_or_chargeback_for_purchase_balance both return early unless
+    # `charged_using_gumroad_merchant_account?` (Purchase#1178), so no seller Balance row in
+    # any currency is written for these charges — there is nothing for a non-USD settlement
+    # currency to corrupt. Payouts for such sellers are made by Stripe itself, not by us.
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
     return fallback(:no_purchases) if purchases.empty?
@@ -370,6 +395,29 @@ class Checkout::BuyerCurrencyEligibility
 
       merchant_account.is_a_stripe_connect_account? ||
         self.class.settlement_merchant_account(merchant_account)&.is_managed_by_gumroad? || false
+    end
+
+    # True when this wallet payment is one the server is willing to price in the buyer's
+    # currency. Two conditions, and both are things the client cannot assert for itself:
+    #
+    #   1. The seller is in both wallet rollout flags. Without this the kill switch is
+    #      render-time only — a checkout page loaded while the flags were on would keep its
+    #      wallet rows and still complete a buyer-currency wallet charge after the flags were
+    #      pulled, which is exactly what an emergency ramp-down needs to stop.
+    #
+    #   2. The wallet came from the Payment Element, not the deprecated Payment Request
+    #      Button. The element's wallet sheet quotes the locked buyer-currency total the cart
+    #      shows (both are mounted from the same FX quote), while the Payment Request Button's
+    #      sheet is built from the canonical USD total — charging that buyer in local currency
+    #      would charge an amount they never saw. The Payment Request Button cannot reach this
+    #      path today (it is suppressed at render and selecting it withholds the quote token),
+    #      so this is the server-side backstop for a client that stops honoring either rule.
+    #
+    # PurchasePaymentFlow#payment_details_source_for treats the same param as the wallet
+    # surface signal, so the recorded surface and the charge decision read one input.
+    def wallet_lane_allowed?
+      self.class.wallets_enabled?(seller) &&
+        params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
     end
 
     def wallet_type

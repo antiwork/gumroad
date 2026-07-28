@@ -19,6 +19,7 @@ import {
   createPaymentElementConfirmationToken,
   isWalletPaymentElementType,
   paymentElementBillingDetailsCollection,
+  paymentElementRequiresFullName,
   preparePaymentRequestPaymentMethodData,
 } from "$app/data/card_payment_method_data";
 import {
@@ -833,6 +834,18 @@ const CreditCardContent = ({
       // validatePaymentMethodIndependentFields) and Stripe's element-side validation blocks
       // submission until the pane's address is complete — elements.submit() inside
       // tokenization surfaces any missing pane field as a field-level error.
+      // UPI and Pix (see paymentElementRequiresFullName) cannot be confirmed without the
+      // checkout form's billing_details.name. Require it here instead of letting Stripe reject
+      // the confirm later with a generic failure the buyer cannot act on.
+      if (
+        !useSavedCard &&
+        usesPaymentElement &&
+        paymentElementRequiresFullName(paymentElementTypeRef.current) &&
+        !state.fullName
+      ) {
+        showAlert("Please enter your full name — it's required for this payment method.", "warning");
+        return dispatch({ type: "cancel" });
+      }
 
       // Client-confirm checkout mints a ConfirmationToken; saved cards stay on server-confirm.
       if (useStripePaymentElementClientConfirm && !useSavedCard) {

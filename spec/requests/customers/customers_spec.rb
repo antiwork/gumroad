@@ -132,6 +132,24 @@ describe "Sales page", type: :system, js: true do
       expect(page).to have_section("No sales found")
     end
 
+    it "ignores a mailto: prefix pasted into the search field" do
+      login_as seller
+      visit customers_path
+
+      # Copying an email address out of a mail client often puts the whole link on the clipboard
+      # ("mailto:someone@example.com") rather than the bare address, so the search has to look past
+      # the prefix or the seller sees no results for a customer they definitely have.
+      select_disclosure "Toggle Search" do
+        paste_into "Search sales", "mailto:customer1@gumroad.com"
+      end
+      wait_for_ajax
+
+      expect(page).to have_field("Search sales", with: "customer1@gumroad.com")
+      expect(page).to have_text("All sales (1)")
+      expect(page).to have_table_row({ "Email" => "customer1@gumroad.com", "Name" => "Customer 1" })
+      expect(page).not_to have_section("No sales found")
+    end
+
     it "includes the transaction URL link" do
       allow_any_instance_of(Purchase).to receive(:transaction_url_for_seller).and_return("https://www.google.com")
       visit customers_path
@@ -892,6 +910,23 @@ describe "Sales page", type: :system, js: true do
 
         within_section "Seats", section_element: :section do
           expect(page).to have_text("3")
+        end
+      end
+
+      it "offers a copy button for the license key" do
+        visit customer_sale_path(purchase2.external_id)
+
+        within_section "License key", section_element: :section do
+          expect(page).to have_text(purchase2.license.serial)
+
+          # The clipboard contents themselves cannot be read back here (`navigator.clipboard` is not
+          # available to the test driver), so we assert the button is present and its tooltip flips
+          # to the copied state, which only happens on a successful ClipboardJS copy.
+          copy_button = find_button("Copy license key")
+          copy_button.hover
+          expect(copy_button).to have_tooltip(text: "Copy license key")
+          copy_button.click
+          expect(copy_button).to have_tooltip(text: "Copied")
         end
       end
     end

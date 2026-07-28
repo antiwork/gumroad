@@ -1229,6 +1229,44 @@ describe("reduceCheckoutState", () => {
       expect(next.status).toEqual({ type: "input", errors: new Set(["zipCode"]) });
     });
   });
+
+  // Bancontact needs billing_details.name for Stripe's authorization to succeed, but unlike UPI
+  // it leaves the address to checkout's own form ("form" collection mode), so the element-full
+  // rules above never fire for it. Without its own gate a digital-cart buyer reached Stripe's
+  // confirm with a blank name and got an un-actionable failure — no Bancontact purchase could
+  // ever complete (gumroad-private#1306).
+  describe("Bancontact billing-name validation", () => {
+    const bancontactState = (overrides: Partial<State> = {}) =>
+      state({
+        checkoutPayment: paymentElementClientConfirmConfig,
+        paymentElementType: "bancontact",
+        ...overrides,
+      });
+
+    it("requires a full name when Bancontact is the selected method", () => {
+      const next = reduceCheckoutState(bancontactState({ fullName: "" }), { type: "offer" });
+      expect(next.status).toEqual({ type: "input", errors: new Set(["fullName"]) });
+    });
+
+    it("offers normally once the full name is present", () => {
+      const next = reduceCheckoutState(bancontactState({ fullName: "Marie Peeters" }), { type: "offer" });
+      expect(next.status).toEqual({ type: "offering" });
+    });
+
+    it("still requires the US ZIP — Bancontact leaves the address to checkout's own form", () => {
+      const next = reduceCheckoutState(bancontactState({ fullName: "Marie Peeters", zipCode: "" }), {
+        type: "offer",
+      });
+      expect(next.status).toEqual({ type: "input", errors: new Set(["zipCode"]) });
+    });
+
+    it("releases the requirement when the buyer switches away to PayPal", () => {
+      const next = reduceCheckoutState(bancontactState({ fullName: "", paymentMethod: "paypal" }), {
+        type: "offer",
+      });
+      expect(next.status).toEqual({ type: "offering" });
+    });
+  });
 });
 
 const loadedSurcharges = (

@@ -171,4 +171,54 @@ describe("createPurchasesRequestData wallet_type threading", () => {
 
     expect(data).not.toHaveProperty("wallet_type");
   });
+
+  // Buyer-currency presentment: an eligible wallet purchase must carry the quote token, or the
+  // charge silently falls back to canonical USD and the buyer is charged a total that isn't the
+  // one their wallet sheet showed. Pinned per lane because the two lanes build their params
+  // through different branches of createPurchasesRequestData.
+  describe("with a buyer-currency quote", () => {
+    const walletPayloadWithQuote = (paymentMethod: PurchasePaymentMethod) => ({
+      ...payloadWith(paymentMethod),
+      buyerCurrencyQuote: "quote-token-abc",
+    });
+
+    it("sends the quote token alongside a server-confirm element wallet payment", () => {
+      const data = createPurchasesRequestData(
+        walletPayloadWithQuote({
+          type: "new",
+          cardParamsResult: {
+            type: "cc",
+            keepOnFile: false,
+            zipCode: null,
+            cardParams: {
+              ...cardParams,
+              wallet: { type: "apple_pay", billingAddress: { country: "US", postal_code: "10001", state: "NY" } },
+            },
+          },
+        }),
+        {},
+      );
+
+      expect(data.buyer_currency_quote).toBe("quote-token-abc");
+      expect(data.wallet_type).toBe("apple_pay");
+      expect(data.payment_details_source).toBe("payment_element");
+    });
+
+    it("sends the quote token alongside a client-confirm wallet payment", () => {
+      const data = createPurchasesRequestData(
+        walletPayloadWithQuote({
+          type: "payment-element-client-confirm",
+          confirmationTokenId: "ctoken_123",
+          cardCountry: "US",
+          walletType: "google_pay",
+          mountCurrency: "usd",
+        }),
+        {},
+      );
+
+      expect(data.buyer_currency_quote).toBe("quote-token-abc");
+      expect(data.wallet_type).toBe("google_pay");
+      expect(data.payment_details_source).toBe("payment_element");
+    });
+  });
 });
