@@ -16,6 +16,14 @@
 class TaxRemittance < ApplicationRecord
   include ExternalId
 
+  # Raised when a reviewer submits a draft for approval but the amount they
+  # were looking at is no longer the amount on the row — the staging service
+  # recomputed it in between (late sales, refunds, chargebacks land while a
+  # quarter is still settling). Callers should show the reviewer the new
+  # amount and make them submit again rather than letting an unreviewed
+  # number enter the approval flow.
+  class AmountChangedSinceReview < StandardError; end
+
   RAILS = %w[wise stripe_global_payouts mercury].freeze
   STATUSES = %w[draft pending_approval funded sent completed failed cancelled].freeze
   TERMINAL_STATUSES = %w[completed failed cancelled].freeze
@@ -93,6 +101,40 @@ class TaxRemittance < ApplicationRecord
 
   def terminal?
     status.in?(TERMINAL_STATUSES)
+  end
+
+  # Moves a draft to pending_approval, but only if the amount is still the one
+  # the reviewer was shown.
+  #
+  # Why the check exists: the staging service (TaxRemittances::StageQuarterlyDrafts)
+  # is meant to be re-run while a quarter is still settling, and it rewrites an
+  # untouched draft's amount when the liability moves. So between the moment a
+  # reviewer loads a draft and the moment they submit it, the number on the row
+  # can legitimately change. Submitting without re-checking would carry an
+  # amount into the approval flow that nobody reviewed — the reviewer approves
+  # "the row", and the row now says something else.
+  #
+  # `reviewed_amount_cents` is the amount the reviewer actually saw. It is
+  # compared inside the same SELECT ... FOR UPDATE + UPDATE transaction the
+  # staging refresh uses, so the two orderings both end safely: if the refresh
+  # commits first we raise here and the reviewer re-reads; if this commits
+  # first the refresh sees a non-draft row and backs off.
+  #
+  # Raises AmountChangedSinceReview if it moved, ArgumentError if the row is
+  # not a draft.
+  def submit_for_approval!(reviewed_amount_cents:)
+    with_lock do
+      raise ArgumentError, "can only submit a draft for approval (status is #{status})" unless status == "draft"
+
+      if usd_amount_cents != reviewed_amount_cents
+        raise AmountChangedSinceReview,
+              "amount is now #{usd_amount_cents} cents, not the #{reviewed_amount_cents} reviewed"
+      end
+
+      update!(status: "pending_approval")
+    end
+
+    self
   end
 
   # Builds (does not save) the next attempt for a failed or cancelled
