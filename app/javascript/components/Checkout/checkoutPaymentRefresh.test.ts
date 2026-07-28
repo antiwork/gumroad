@@ -41,15 +41,54 @@ describe("buildCartSaveRefreshCallbacks", () => {
   });
 
   it("re-issues the save when the response came back without a configuration", () => {
-    // A validation error is a valid Inertia response, but it carries no recomputed configuration,
-    // which leaves the same question open: which cart does the server hold now?
+    // A transport-level truncation or a response that simply omitted the prop leaves the same
+    // question open: which cart does the server hold now?
     const save = vi.fn(neverAnswers);
     const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
 
-    callbacks.onSuccess({ props: { errors: { cart: "is invalid" } } });
+    callbacks.onSuccess({ props: {} });
     callbacks.onFinish({});
 
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-issues the save when the server reported the edit failed, even though a configuration came back", () => {
+    // The shape CheckoutController#update actually produces on a handled failure. Every one of its
+    // outcomes is a redirect to checkout_path, so the reloaded page always carries a well-formed
+    // checkout_payment — but on a failure the edit did not persist, so that configuration
+    // describes the PRE-edit cart while the buyer is still looking at the edited one. Adopting it
+    // would clear the hold and re-enable Pay against an element mounted for a different cart.
+    const save = vi.fn(neverAnswers);
+    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
+
+    callbacks.onSuccess({
+      props: {
+        checkout_payment: { integration: "payment_element" },
+        flash: { message: "Sorry, something went wrong. Please try again.", status: "danger" },
+      },
+    });
+    callbacks.onFinish({});
+
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a configuration delivered alongside a non-error flash", () => {
+    // Only an error flash means the edit was rejected. A notice or warning riding along with a
+    // successful save must not send the hold into a pointless recovery round trip.
+    const save = vi.fn(neverAnswers);
+    const onUnrecoverable = vi.fn();
+    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+
+    callbacks.onSuccess({
+      props: {
+        checkout_payment: { integration: "payment_element" },
+        flash: { message: "Discount applied.", status: "success" },
+      },
+    });
+    callbacks.onFinish({});
+
+    expect(save).not.toHaveBeenCalled();
+    expect(onUnrecoverable).not.toHaveBeenCalled();
   });
 
   it("does not recover when a newer save interrupted this one", () => {
