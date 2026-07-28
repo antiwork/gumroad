@@ -4,8 +4,13 @@ import { AssetPreview } from "$app/parsers/product";
 
 import { DEFAULT_IMAGE_WIDTH } from "./";
 
-type Props = { cover: AssetPreview; dimensions: { width: number; height: number } | null };
-const Embed = ({ cover, dimensions }: Props) => {
+type Props = {
+  cover: AssetPreview;
+  dimensions: { width: number; height: number } | null;
+  // See Covers/Video: `height: 100%` only works inside a frame with a definite height.
+  frameIsShaped: boolean;
+};
+const Embed = ({ cover, dimensions, frameIsShaped }: Props) => {
   const iframeRef = React.useRef<null | HTMLIFrameElement>(null);
 
   // Same shape as Covers/Video: when the embed's real dimensions are known, size the
@@ -13,7 +18,12 @@ const Embed = ({ cover, dimensions }: Props) => {
   // padding below derives height from width alone, so a portrait embed would overflow
   // the frame and be cropped top and bottom. Embeds with no recorded dimensions keep
   // the percentage box exactly as before.
-  const knowsShape = cover.native_width != null && cover.native_height != null && cover.native_height > 0;
+  const knowsShape =
+    frameIsShaped &&
+    cover.native_width != null &&
+    cover.native_height != null &&
+    cover.native_width > 0 &&
+    cover.native_height > 0;
 
   return (
     <div

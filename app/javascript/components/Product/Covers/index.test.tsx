@@ -109,6 +109,18 @@ describe("Covers", () => {
     expect(createJWPlayer.mock.calls[0]?.[1]).toMatchObject({ aspectratio: "1080:1920" });
   });
 
+  // JW Player's docs are explicit that `aspectratio` is ignored when the player has a
+  // static pixel size, and that `height` should be omitted alongside it. Passing both
+  // left the fix depending on undocumented precedence.
+  it("does not also pin the player to a fixed pixel size when it sends a ratio", async () => {
+    renderCovers([portrait()]);
+
+    await waitFor(() => expect(createJWPlayer).toHaveBeenCalled());
+    const options = createJWPlayer.mock.calls[0]?.[1];
+    expect(options).toMatchObject({ width: "100%" });
+    expect(options).not.toHaveProperty("height");
+  });
+
   it("sizes the video box by ratio so it shrinks to fit the capped frame", () => {
     const { container } = renderCovers([portrait()]);
     const box = container.querySelector<HTMLElement>("[role=tabpanel] > div");
@@ -132,6 +144,43 @@ describe("Covers", () => {
     renderCovers([cover(), portrait({ id: "cover-2" })]);
 
     expect(screen.getByRole("button", { name: "Show next cover" })).toBeTruthy();
+  });
+
+  // The panel has to fill the frame's capped height, or the cover overflows past the
+  // bottom of the figure — but only when the frame HAS a definite height to fill.
+  it("gives the cover panel the frame's height only when the frame is shaped", () => {
+    const { container: shaped } = renderCovers([portrait()]);
+    expect(shaped.querySelector("[role=tabpanel]")?.className).toContain("h-full");
+
+    cleanup();
+    const { container: unshaped } = renderCovers([cover({ native_width: null, native_height: null })]);
+    expect(unshaped.querySelector("[role=tabpanel]")?.className).not.toContain("h-full");
+  });
+
+  // Once the frame is shaped, the cover can be narrower than it (the height cap), so
+  // the decorative tiled artwork behind it becomes visible and reads as a glitch.
+  it("drops the tiled placeholder artwork behind a shaped frame and keeps it otherwise", () => {
+    renderCovers([portrait()]);
+    expect(screen.getByLabelText("Product preview").className).toContain("bg-background");
+    expect(screen.getByLabelText("Product preview").className).not.toContain("product-cover-placeholder");
+
+    cleanup();
+    renderCovers([cover({ native_width: null, native_height: null })]);
+    expect(screen.getByLabelText("Product preview").className).toContain("product-cover-placeholder");
+  });
+
+  // A `height: 100%` box inside a frame with no definite height resolves to auto and,
+  // with only an aspect ratio to go on, collapses to nothing. That happens to a sibling
+  // cover whenever the ACTIVE cover has no recorded dimensions.
+  it("keeps the width-derived box for a sibling cover while the frame is unshaped", () => {
+    const { container } = renderCovers(
+      [cover({ id: "no-dimensions", native_width: null, native_height: null }), cover({ id: "sibling" })],
+      "no-dimensions",
+    );
+    const siblingBox = container.querySelector<HTMLElement>("#sibling > div");
+
+    expect(siblingBox?.style.paddingBottom).not.toBe("");
+    expect(siblingBox?.style.height).toBe("");
   });
 
   // Capping the frame's height affects every cover TYPE, not just video. An image or

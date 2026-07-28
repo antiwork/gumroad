@@ -9,10 +9,23 @@ import { DEFAULT_IMAGE_WIDTH } from "./";
 type Props = {
   cover: AssetPreview;
   dimensions: { width: number; height: number } | null;
+  // Whether the frame around this cover has a definite height (i.e. it was shaped to
+  // the ACTIVE cover's ratio). `height: 100%` needs that; in an unshaped frame it
+  // resolves to auto and, with only an aspect ratio to go on, the box collapses.
+  frameIsShaped: boolean;
 };
 
-const Video = ({ cover, dimensions }: Props) => {
+const Video = ({ cover, dimensions, frameIsShaped }: Props) => {
   const id = React.useId();
+  // Whether we know the video's real shape. When we do, the box below is sized by that
+  // ratio and the player is told the same ratio; when we don't, both keep the old
+  // width-derived behaviour.
+  const knowsShape =
+    frameIsShaped &&
+    cover.native_width != null &&
+    cover.native_height != null &&
+    cover.native_width > 0 &&
+    cover.native_height > 0;
 
   // The player is initialized once when this component renders for the first time.
   // I think it's fine _not_ to react to changes to `cover` prop after the component has been initialized,
@@ -21,12 +34,6 @@ const Video = ({ cover, dimensions }: Props) => {
     const url = dimensions == null || dimensions.width > DEFAULT_IMAGE_WIDTH ? cover.original_url : cover.url;
 
     const options: JWPlayerOptions = {
-      // Tell the player the video's real shape. Without a ratio JW Player assumes
-      // 16:9 and letterboxes a phone-filmed portrait video inside our (now
-      // correctly shaped) container, which is the bug this fixes; when we have no
-      // recorded dimensions nothing is passed and the player keeps its default.
-      // See https://github.com/antiwork/gumroad-private/issues/1437
-      ...videoPlayerAspectRatio({ width: cover.native_width, height: cover.native_height }),
       // "image" is JW Player's poster frame — the still shown before playback
       // starts. Without it the player idles as a solid black rectangle (the
       // subject of gumroad-private#1074). For uploaded videos the backend
@@ -37,7 +44,16 @@ const Video = ({ cover, dimensions }: Props) => {
         { image: cover.thumbnail ?? undefined, sources: [{ file: url, type: cover.filetype?.toLowerCase() }] },
       ],
     };
-    if (dimensions != null) {
+    if (knowsShape) {
+      // Responsive sizing: JW Player's docs are explicit that `aspectratio` is ignored
+      // when the player has a static pixel size, and that `height` should be omitted
+      // when `aspectratio` is set. So on this path the player gets a percentage width
+      // and the ratio, and no pixel height — it then fills the box we shaped above
+      // rather than being a fixed rectangle that overflows a height-capped frame.
+      // See https://github.com/antiwork/gumroad-private/issues/1437
+      options.width = "100%";
+      Object.assign(options, videoPlayerAspectRatio({ width: cover.native_width, height: cover.native_height }));
+    } else if (dimensions != null) {
       options.height = `${dimensions.height}px`;
       options.width = `${dimensions.width}px`;
     }
@@ -45,17 +61,14 @@ const Video = ({ cover, dimensions }: Props) => {
     void createJWPlayer(id, options);
   }, [id]);
 
-  // When we know the video's real shape, size the box by aspect ratio and let it
-  // shrink to fit the frame in BOTH axes. The old percentage padding derives height
-  // from width alone, so a portrait video ignored the frame's height cap and spilled
-  // out of the bottom of the figure. Videos with no recorded dimensions keep the
-  // percentage-padding box exactly as before.
-  const knowsShape = cover.native_width != null && cover.native_height != null && cover.native_height > 0;
-
   return (
     <div
       onClick={(e) => e.preventDefault()}
       style={
+        // When we know the shape, size the box by aspect ratio and let it shrink to fit
+        // the frame in BOTH axes. The percentage padding below derives height from width
+        // alone, so a portrait video ignored the frame's height cap and spilled out of
+        // the bottom of the figure. Videos with no recorded dimensions keep it as before.
         knowsShape
           ? {
               position: "relative",

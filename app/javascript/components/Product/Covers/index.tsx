@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { AssetPreview } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
-import { MAX_PORTRAIT_FRAME_HEIGHT, videoFrameIsPortrait } from "$app/utils/videoFrame";
+import { MAX_PORTRAIT_FRAME_HEIGHT } from "$app/utils/videoFrame";
 
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useOnChange } from "$app/components/useOnChange";
@@ -71,16 +71,16 @@ export const Covers = ({
         };
   const prevCover = covers[activeCoverIndex - 1];
   const nextCover = covers[activeCoverIndex + 1];
-  // A portrait cover no longer fills the frame horizontally, so for the first time
-  // something behind it is visible. The decorative tiled artwork is meant for products
-  // with no cover at all, and tiling it either side of a video reads as a rendering
-  // glitch — fall back to the plain page background there.
-  const isPortraitCover =
-    !isThumbnail &&
-    videoFrameIsPortrait({
-      width: activeCover?.native_width ?? null,
-      height: activeCover?.native_height ?? null,
-    });
+  // Whether the frame is shaped to the cover also decides the backdrop. Once the frame
+  // has the cover's own ratio, the cover fills it exactly UNLESS the height cap bites,
+  // in which case the cover narrows and whatever is behind it becomes visible for the
+  // first time. The decorative tiled artwork is meant for products with no cover at
+  // all, and tiling it either side of a cover reads as a rendering glitch, so a shaped
+  // frame uses the plain page background instead. Keying on "the frame is shaped"
+  // rather than "the cover is portrait" matters because the cap can bite on a square
+  // or 4:3 cover in a short window too; behind a cover that does fill the frame the
+  // backdrop is invisible either way, so this is a no-op there.
+  const frameIsShaped = frameStyle !== undefined;
 
   const { itemsRef, handleScroll } = useScrollableCarousel(activeCoverIndex, (index) =>
     setActiveCoverId(covers[index]?.id ?? null),
@@ -90,7 +90,7 @@ export const Covers = ({
     <figure
       className={classNames(
         "group relative col-span-full overflow-hidden rounded-t border-b border-border bg-cover",
-        isPortraitCover ? "bg-background" : "bg-(image:--product-cover-placeholder)",
+        frameIsShaped ? "bg-background" : "bg-(image:--product-cover-placeholder)",
         className,
       )}
       aria-label="Product preview"
@@ -105,7 +105,7 @@ export const Covers = ({
         onScroll={handleScroll}
       >
         {covers.map((cover) => (
-          <CoverItem cover={cover} key={cover.id} />
+          <CoverItem cover={cover} frameIsShaped={frameIsShaped} key={cover.id} />
         ))}
       </div>
       {covers.length > 1 && activeCover?.type !== "oembed" && activeCover?.type !== "video" ? (
@@ -159,7 +159,7 @@ const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; 
   );
 };
 
-const CoverItem = ({ cover }: { cover: AssetPreview }) => {
+const CoverItem = ({ cover, frameIsShaped }: { cover: AssetPreview; frameIsShaped: boolean }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dimensions = useElementDimensions(containerRef);
   const width = dimensions?.width;
@@ -186,11 +186,11 @@ const CoverItem = ({ cover }: { cover: AssetPreview }) => {
             height: cover.native_height * ratio,
           };
     if (cover.type === "image") {
-      coverComponent = <Image cover={cover} dimensions={dimensions} />;
+      coverComponent = <Image cover={cover} dimensions={dimensions} frameIsShaped={frameIsShaped} />;
     } else if (cover.type === "oembed") {
-      coverComponent = <Embed cover={cover} dimensions={dimensions} />;
+      coverComponent = <Embed cover={cover} dimensions={dimensions} frameIsShaped={frameIsShaped} />;
     } else {
-      coverComponent = <Video cover={cover} dimensions={dimensions} />;
+      coverComponent = <Video cover={cover} dimensions={dimensions} frameIsShaped={frameIsShaped} />;
     }
   }
 
@@ -202,8 +202,13 @@ const CoverItem = ({ cover }: { cover: AssetPreview }) => {
       id={cover.id}
       // h-full lets a cover fill the (possibly height-capped) frame instead of
       // overflowing it: a portrait cover's natural height is far greater than the cap,
-      // and without this the video would spill past the bottom of the figure.
-      className="mt-0! flex h-full min-h-[1px] flex-[1_0_100%] snap-start items-center justify-center border-0! p-0!"
+      // and without this the cover would spill past the bottom of the figure. It is
+      // only applied when the frame has a definite height to fill; in an unshaped frame
+      // it would resolve to auto and collapse the panel.
+      className={classNames(
+        "mt-0! flex min-h-[1px] flex-[1_0_100%] snap-start items-center justify-center border-0! p-0!",
+        frameIsShaped && "h-full",
+      )}
     >
       {coverComponent}
     </div>
