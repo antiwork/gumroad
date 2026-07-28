@@ -74,9 +74,11 @@ For Gumroad-specific scopes and associations (`alive`, `successful`, `unpaid_bal
 
 ### Stale bastion host keys look like unhealthy instances
 
-EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale keys and refuses the onward hop with `REMOTE HOST IDENTIFICATION HAS CHANGED` / `Offending ECDSA key`. From outside this is indistinguishable from a hung instance, and it silently shrinks the usable pool each time instances are replaced.
+EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale keys and refuses the onward hop with `REMOTE HOST IDENTIFICATION HAS CHANGED` / `Offending ECDSA key`. From outside this is easy to mistake for a hung instance, and it silently shrinks the usable pool each time instances are replaced.
 
-`prod_query.sh` self-heals: after picking a working host it routes `ssh-keygen -R` for every failed candidate through that host (they share the bastion's `known_hosts`). Two things to know:
+`prod_query.sh` self-heals: after picking a working host it routes `ssh-keygen -R` through that host (they share the bastion's `known_hosts`), in a single hop for all the addresses it needs to clear. Three things to know:
+
+- **Only genuinely outdated keys are removed.** A candidate is cleared only when SSH's own error names that address and says the identification changed. A plain timeout, a container that is still starting, or a network blip leaves the recorded key alone — throwing away a correct host key would give up real protection against someone impersonating that address.
 
 - **You cannot run a command on the bastion itself.** It auto-jumps to whatever `LC_PAPER` names; omitting `LC_PAPER` fails with `ssh: Could not resolve hostname`. Always route through a working instance IP.
 - **The warning text is often noise.** A run can print the whole man-in-the-middle banner for a *previous* hop and still succeed. Judge by exit code and `MARK` output, not the banner.

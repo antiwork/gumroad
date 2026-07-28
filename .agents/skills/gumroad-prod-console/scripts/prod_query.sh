@@ -99,22 +99,36 @@ else
   # exec never returned). A hung/recycling instance previously burned the full
   # outer timeout; now it costs <=20s and we fail over to the next-oldest.
   instance_ip=""
-  failed_ips=""
+  stale_key_ips=""
+  probe_err=$(mktemp)
   for ip in $candidate_ips; do
     if LC_PAPER="$ip" probe_timeout 20 ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
         -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
-        >/dev/null 2>&1; then
+        >/dev/null 2>"$probe_err"; then
       instance_ip="$ip"
       break
     fi
-    failed_ips="$failed_ips $ip"
-    >&2 echo "Instance $ip failed health probe, trying next..."
+    # A probe can fail for many reasons — the container is still starting, the host is
+    # hung, the network blipped, we timed out. In all of those the bastion's recorded host
+    # key is still correct and deleting it would throw away a real protection against
+    # someone impersonating that address. Only treat the key as stale when SSH itself says
+    # so, AND the complaint names the address we just probed: the bastion can print the
+    # whole man-in-the-middle banner about an earlier hop, so the banner alone is not proof
+    # that THIS candidate is the one with the outdated key.
+    if grep -qE "REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed" "$probe_err" \
+       && grep -qF "$ip" "$probe_err"; then
+      stale_key_ips="$stale_key_ips $ip"
+      >&2 echo "Instance $ip refused: bastion holds an outdated host key, trying next..."
+    else
+      >&2 echo "Instance $ip failed health probe, trying next..."
+    fi
   done
+  rm -f "$probe_err"
 
   # EC2 recycles private IPs, so the BASTION's known_hosts accumulates stale keys and refuses
   # the onward hop with "REMOTE HOST IDENTIFICATION HAS CHANGED" / "Offending ECDSA key". From
-  # out here that is indistinguishable from an unhealthy instance, and it silently shrinks the
+  # out here that is easy to mistake for an unhealthy instance, and it silently shrinks the
   # usable pool every time instances are replaced — several consecutive candidates became
   # unusable until the entries were cleared by hand.
   #
@@ -125,15 +139,25 @@ else
   # instance we are using already works), it stops the pool from silently decaying for the
   # next one.
   #
+  # All removals go in ONE hop, however many candidates were stale, so this costs at most a
+  # single connection instead of one per address. That matters because callers only get a
+  # couple of minutes of wall clock for the whole run, and this work happens before the query
+  # they actually asked for has started.
+  #
   # Safe: removing a key for a recycled internal IP means the next connect re-learns it via
   # accept-new, exactly like a first-ever connect. ssh-keygen -R is a no-op with no entry.
-  if [ -n "$instance_ip" ] && [ -n "${failed_ips// /}" ]; then
-    for stale_ip in $failed_ips; do
-      LC_PAPER="$instance_ip" probe_timeout 20 ssh -o SendEnv=LC_PAPER \
-        -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "admin@$PROD_BASTION" \
-        "ssh-keygen -f ~/.ssh/known_hosts -R '$stale_ip'" >/dev/null 2>&1 \
-        && >&2 echo "Cleared any stale bastion host key for $stale_ip."
+  if [ -n "$instance_ip" ] && [ -n "${stale_key_ips// /}" ]; then
+    keygen_cmd=""
+    for stale_ip in $stale_key_ips; do
+      keygen_cmd="$keygen_cmd ssh-keygen -f ~/.ssh/known_hosts -R '$stale_ip';"
     done
+    if LC_PAPER="$instance_ip" probe_timeout 20 ssh -o SendEnv=LC_PAPER \
+        -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "admin@$PROD_BASTION" \
+        "$keygen_cmd" >/dev/null 2>&1; then
+      >&2 echo "Cleared outdated bastion host keys for:$stale_key_ips"
+    else
+      >&2 echo "Could not clear outdated bastion host keys for:$stale_key_ips (continuing anyway)."
+    fi
   fi
 
   if [ -z "$instance_ip" ]; then
