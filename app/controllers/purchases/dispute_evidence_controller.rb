@@ -3,6 +3,21 @@
 class Purchases::DisputeEvidenceController < ApplicationController
   layout "inertia"
 
+  # Sellers reach this page from a one-off emailed link and have only 72 hours
+  # (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS) to send us their
+  # side of a chargeback before we forward whatever we have to the card network.
+  # A suspension that lands inside that window is not a reason to throw the
+  # evidence away: whether the seller keeps their account is a separate question
+  # from whether this particular charge was legitimate, and losing the dispute
+  # by default costs the buyer's bank fee and our win rate too. The generic
+  # `check_suspended` filter blocks every non-GET request for a suspended user,
+  # which silently turns the submit button into "You can't perform this action
+  # because your account has been suspended" and drops their evidence, so we opt
+  # this one action out. Nothing here grants account access: the page is scoped
+  # to a single disputed purchase, and `check_if_needs_redirect` still enforces
+  # the contacted/not-yet-submitted/not-resolved window.
+  skip_before_action :check_suspended
+
   before_action :set_purchase, :set_dispute_evidence
   before_action :check_if_needs_redirect, except: [:success]
 
