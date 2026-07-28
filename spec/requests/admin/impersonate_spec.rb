@@ -8,7 +8,7 @@ describe "Impersonate", type: :system, js: true do
   let(:admin) { create(:admin_user, name: "Gumlord") }
   let(:seller) do
     user = create(:named_seller)
-    create(:merchant_account, user:, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+    create(:merchant_account, user:)
     user
   end
 

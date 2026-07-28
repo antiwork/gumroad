@@ -1037,7 +1037,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
       let(:payout_processor_type) { PayoutProcessorType::STRIPE }
 
       before do
-        create(:merchant_account, user: seller, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+        create(:merchant_account, user: seller)
 
         affiliate_product = create :product, price_cents: 1500
         creator_as_affiliate = create :direct_affiliate, affiliate_user: seller, seller: affiliate_product.user, affiliate_basis_points: 4000, products: [affiliate_product]
