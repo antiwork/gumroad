@@ -83,6 +83,29 @@ module Charge::Chargeable
     end
   end
 
+  # Gumroad's own share of the charge, in the buyer-presentment currency, or nil for
+  # canonical charges. Same reason as the sibling above: anything that has to express
+  # Gumroad's cut in the currency Stripe actually charged (dispute flow-of-funds legs,
+  # application-fee arithmetic) must read it from the presentment snapshot rather than
+  # subtracting canonical USD cents from a non-USD Stripe amount.
+  def presentment_gumroad_amount_cents
+    if is_a?(Charge)
+      charge_presentment&.presentment_gumroad_amount_cents
+    else
+      purchase_presentment&.presentment_gumroad_amount_cents
+    end
+  end
+
+  # The currency the buyer was actually charged in, or nil when this charge was made in
+  # canonical USD.
+  def presentment_currency
+    if is_a?(Charge)
+      charge_presentment&.presentment_currency
+    else
+      purchase_presentment&.presentment_currency
+    end
+  end
+
   def purchaser
     is_a?(Charge) ? order.purchaser : super
   end

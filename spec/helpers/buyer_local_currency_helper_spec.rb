@@ -183,4 +183,161 @@ describe CurrencyHelper do
       expect(props[:display_mode]).to eq("default")
     end
   end
+
+  describe "settleable-currencies-only display gate" do
+    # Only offer a local currency the checkout could actually be settled in: a shown local
+    # price the charge path refuses becomes a USD charge with no explanation of why the
+    # number changed between the product page and the total.
+    let(:seller) { create(:user, disable_buyer_local_currency: false) }
+    let(:product) { create(:product, user: seller, price_cents: 1000, price_currency_type: "usd") }
+    # A Gumroad-managed Stripe account for the seller: this is the account the charge path
+    # resolves (Purchase#prepare_merchant_account), so it is the one whose settlement
+    # capabilities decide whether a shown local price can be honoured.
+    let!(:merchant_account) { create(:merchant_account_stripe_connect, user: seller, currency: Currency::USD) }
+
+    before do
+      # A Stripe Connect account only becomes the seller's charging account once merchant
+      # migration is on for them (User#merchant_account), which is what the charge path
+      # resolves — so the display gate must read the same account.
+      seller.update!(check_merchant_account_is_linked: true)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("eur")
+      allow(helper).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+    end
+
+    after do
+      Feature.deactivate_user(:buyer_local_currency, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    end
+
+    it "shows the buyer currency when the seller's account can settle it" do
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
+    end
+
+    it "hides the buyer currency when the account settles that currency in itself rather than USD" do
+      merchant_account.record_settlement_currency_mismatch!("eur")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+    end
+
+    it "keeps showing another currency the same account can still settle" do
+      merchant_account.record_settlement_currency_mismatch!("eur")
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("gbp")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "gbp")
+    end
+
+    it "hides the buyer currency when Gumroad and Stripe disagree on its minor units" do
+      # HUF is charged by Stripe only in amounts divisible by 100, so the charge path
+      # refuses it — see StripeChargeProcessor.charge_minor_units_compatible?.
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("huf")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: "usd")
+    end
+
+    it "hides the buyer currency for a product not priced in USD, which the charge path never presents" do
+      product.alive_prices.update_all(currency: "gbp")
+      product.update!(price_currency_type: "gbp")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: "gbp", rate: nil)
+    end
+
+    it "still shows the preview while charging in the buyer's currency is not enabled for the seller" do
+      # Display and charging are separate rollouts. With charging off every buyer is charged
+      # canonical USD anyway, so the display is an approximate preview rather than a promise —
+      # applying the settlement gate there would switch the display feature off wholesale.
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      merchant_account.record_settlement_currency_mismatch!("eur")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
+    end
+
+    it "resolves the seller's charging account once per request when many cards are rendered" do
+      expect(seller).to receive(:merchant_account).once.and_call_original
+
+      3.times { helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4") }
+    end
+
+    # A US buyer looking at a product priced in another currency is charged in USD, converted
+    # with the same cached rate this display path reads, so the converted USD price shown is
+    # the amount charged. That is the one conversion the non-USD-pricing guard must let past.
+    it "still shows a US buyer the converted USD price of a product priced in another currency" do
+      product.alive_prices.update_all(currency: "gbp")
+      product.update!(price_currency_type: "gbp")
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("usd")
+      allow(helper).to receive(:buyer_local_currency_rate).and_call_original
+      allow(helper).to receive(:cached_usd_rate).with("usd").and_return(BigDecimal("1"))
+      allow(helper).to receive(:cached_usd_rate).with("gbp").and_return(BigDecimal("0.8"))
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "usd")
+      # 1000 GBP cents at 0.8 GBP per USD is 1250 USD cents, which is also what
+      # get_usd_cents computes for the charge.
+      expect(props[:buyer_local_price_cents]).to eq(helper.get_usd_cents("gbp", 1000, rate: BigDecimal("0.8")))
+    end
+
+    # Checkout refuses to quote these product shapes (Checkout::BuyerCurrencyQuote#quotable_product?),
+    # so it charges canonical USD for them. Showing a converted price here would put the same
+    # unexplained change between the product page and the total that this gate exists to prevent.
+    context "for a product shape the checkout refuses to quote" do
+      it "hides the buyer currency for a membership, which is charged one period rather than the cart total" do
+        membership = create(:membership_product, user: seller, price_cents: 1000)
+
+        props = helper.buyer_currency_display_props(product: membership, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "hides the buyer currency for a preorder, which charges nothing at checkout time" do
+        preorder = create(:product, user: seller, price_cents: 1000, price_currency_type: "usd", is_in_preorder_state: true)
+
+        props = helper.buyer_currency_display_props(product: preorder, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "hides the buyer currency for a free trial, which charges nothing up front" do
+        free_trial = create(:membership_product, user: seller, price_cents: 1000, free_trial_enabled: true,
+                                                 free_trial_duration_unit: :week, free_trial_duration_amount: 1)
+
+        props = helper.buyer_currency_display_props(product: free_trial, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "hides the buyer currency for a commission, which charges only a deposit at checkout" do
+        # Commission products are only allowed once the seller's account is old enough
+        # (User#eligible_for_service_products?), so age this seller past that threshold.
+        seller.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+        commission = create(:product, user: seller, price_cents: 1000, price_currency_type: "usd",
+                                      native_type: Link::NATIVE_TYPE_COMMISSION)
+
+        props = helper.buyer_currency_display_props(product: commission, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "hides the buyer currency for a product offering an installment plan, which charges one installment" do
+        create(:product_installment_plan, link: product)
+
+        props = helper.buyer_currency_display_props(product: product.reload, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+    end
+  end
 end

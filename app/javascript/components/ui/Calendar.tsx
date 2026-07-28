@@ -32,8 +32,25 @@ export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof
         week: classNames("grid grid-cols-[repeat(7,1fr)] not-last:border-b", defaultClassNames.week),
         // react-day-picker doesn't render cells at all if they fall outside `endMonth`, so can't use not-last here
         day: classNames("not-[&:nth-child(7)]:border-r", defaultClassNames.day),
-        day_button: classNames("py-2 w-full text-center", defaultClassNames.day_button),
+        // Each day is a real <button>, and this calendar renders on the public product page, which is
+        // outside `.scoped-tailwind-preflight` and so never gets Tailwind's preflight reset. Without a
+        // reset, the browser paints its own default button styling: on Chrome that is the `ButtonFace`
+        // system colour, which is a light grey in light mode and a mid grey (#6B6B6B) in dark mode.
+        // That opaque background sits on top of the cell, so a seller on a dark storefront sees every
+        // day filled grey, the selected day's accent highlight hidden underneath it, and disabled days
+        // tinted by the system colour rather than simply faded. Forcing a transparent background and
+        // inheriting the surrounding text colour puts the day back under our own theme's control.
+        day_button: classNames(
+          "py-2 w-full text-center appearance-none bg-transparent text-inherit disabled:cursor-not-allowed",
+          defaultClassNames.day_button,
+        ),
+        // The selected background belongs on the cell rather than the button: react-day-picker puts the
+        // `selected` class on the <td>, and the button stretches over it, so anything opaque on the
+        // button would cover this.
         selected: classNames("bg-accent text-accent-foreground", defaultClassNames.selected),
+        // Disabled days should read as "unavailable" by fading out, matching how every other disabled
+        // control in the app is styled (see Button/Input/Checkbox, all opacity-30).
+        disabled: classNames("opacity-30", defaultClassNames.disabled),
       }}
       components={{
         Chevron: ({ className, orientation, disabled }) => (

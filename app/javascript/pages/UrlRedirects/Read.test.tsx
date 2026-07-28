@@ -10,11 +10,49 @@ const mocks = vi.hoisted(() => ({
   createEpub: vi.fn(),
   trackMediaLocationChanged: vi.fn(),
   usePage: vi.fn(),
+  getDocument: vi.fn(),
+  // Shared pdfjs harness state. The module mocks below are hoisted above any test, so the
+  // constructors have to read these lazily rather than close over a per-test object.
+  on: vi.fn<(type: string, listener: () => void) => void>(),
+  off: vi.fn<(type: string, listener: () => void) => void>(),
+  viewer: {
+    cleanup: vi.fn(),
+    setDocument: vi.fn(),
+    currentScaleValue: "",
+    currentScale: 1,
+    pdfDocument: { numPages: 3 },
+  },
 }));
 
 vi.mock("@inertiajs/react", () => ({ usePage: mocks.usePage }));
 vi.mock("$app/data/media_location", () => ({ trackMediaLocationChanged: mocks.trackMediaLocationChanged }));
 vi.mock("epubjs", () => ({ default: mocks.createEpub }));
+// The reader imports pdfjs lazily inside the effect; stub both dynamic modules so the tests never
+// fetch a real worker or parse a real PDF. EventBus / PDFLinkService / PDFSinglePageViewer are
+// called with `new`, so they are declared as classes here and each one hands back the shared
+// harness object the assertions inspect.
+vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
+  getDocument: mocks.getDocument,
+  GlobalWorkerOptions: { workerSrc: "" },
+}));
+vi.mock("pdfjs-dist/legacy/build/pdf.worker.mjs?url", () => ({ default: "worker.js" }));
+vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
+  EventBus: class {
+    on = mocks.on;
+    off = mocks.off;
+  },
+  PDFLinkService: class {
+    setViewer = vi.fn();
+    setDocument = vi.fn();
+  },
+  PDFSinglePageViewer: class {
+    cleanup = mocks.viewer.cleanup;
+    setDocument = mocks.viewer.setDocument;
+    currentScaleValue = "";
+    currentScale = 1;
+    pdfDocument = { numPages: 3 };
+  },
+}));
 
 type Listener = (...args: unknown[]) => void;
 
@@ -99,6 +137,107 @@ describe("PDF progress compatibility", () => {
     expect(canResumePdfFromLocation({ location: 4, cfi: "epubcfi(/6/8!/4/2/1:0)" })).toBe(false);
     expect(canResumePdfFromLocation({ location: 42, unit: "percentage" })).toBe(false);
     expect(canResumePdfFromLocation({ location: 120, unit: "seconds" })).toBe(false);
+  });
+});
+
+describe("PDF reader teardown", () => {
+  // The reader imports pdfjs lazily; the EventBus/viewer constructors are declared in the hoisted
+  // vi.mock above and hand back the shared mocks.* spies. This only builds the per-test document,
+  // whose resolution the tests drive by hand to exercise the unmount-during-load race.
+  const buildPdfDocument = () => {
+    const destroy = vi.fn(() => Promise.resolve());
+    let resolveDocument: ((value: { numPages: number; destroy: typeof destroy }) => void) | undefined;
+    const promise = new Promise<{ numPages: number; destroy: typeof destroy }>((resolve) => {
+      resolveDocument = resolve;
+    });
+    return {
+      destroy,
+      resolve: () => resolveDocument?.({ numPages: 3, destroy }),
+      getDocument: vi.fn(() => ({ promise })),
+    };
+  };
+
+  let pdf: ReturnType<typeof buildPdfDocument>;
+
+  beforeEach(() => {
+    pdf = buildPdfDocument();
+    mocks.getDocument.mockImplementation(pdf.getDocument);
+    mocks.usePage.mockReturnValue({ props: readerProps({ file_type: "pdf", latest_media_location: null }) });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("removes its event-bus handlers and cleans up the viewer on unmount", async () => {
+    // Regression for #6433: the handlers and the viewer were created inside useRunOnce with no
+    // teardown, so navigating away from the reader left them attached for the page's lifetime.
+    const { unmount } = render(<Read />);
+
+    await waitFor(() => expect(mocks.on).toHaveBeenCalledWith("pagesinit", expect.any(Function)));
+    expect(mocks.off).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(mocks.off).toHaveBeenCalledWith("pagesinit", expect.any(Function));
+    expect(mocks.off).toHaveBeenCalledWith("pagerender", expect.any(Function));
+    expect(mocks.viewer.cleanup).toHaveBeenCalled();
+  });
+
+  it("removes each handler by the same reference it registered", async () => {
+    // eventBus.off is a no-op against a different function object, so anonymous handlers could
+    // never actually be removed.
+    render(<Read />);
+
+    await waitFor(() => expect(mocks.on).toHaveBeenCalledWith("pagesinit", expect.any(Function)));
+    const registered = new Set<unknown>();
+    for (const [type, listener] of mocks.on.mock.calls) {
+      if (type === "pagesinit") registered.add(listener);
+    }
+
+    cleanup();
+
+    // Every removed handler must be one of the exact function objects that was registered.
+    const removed: unknown[] = [];
+    for (const [type, listener] of mocks.off.mock.calls) {
+      if (type === "pagesinit") removed.push(listener);
+    }
+    expect(removed).toHaveLength(1);
+    expect(registered.has(removed[0])).toBe(true);
+  });
+
+  it("destroys a document that finishes loading after the reader closed", async () => {
+    // getDocument resolves after unmount: without the cancellation flag the parsed PDF would be
+    // handed to a dead viewer and never released.
+    const { unmount } = render(<Read />);
+
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+    unmount();
+
+    await act(async () => {
+      pdf.resolve();
+      await Promise.resolve();
+    });
+
+    expect(pdf.destroy).toHaveBeenCalled();
+    expect(mocks.viewer.setDocument).not.toHaveBeenCalled();
+  });
+
+  it("destroys the document on unmount once it has been loaded", async () => {
+    const { unmount } = render(<Read />);
+
+    await waitFor(() => expect(mocks.getDocument).toHaveBeenCalled());
+    await act(async () => {
+      pdf.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.viewer.setDocument).toHaveBeenCalled();
+    expect(pdf.destroy).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(pdf.destroy).toHaveBeenCalled();
   });
 });
 
