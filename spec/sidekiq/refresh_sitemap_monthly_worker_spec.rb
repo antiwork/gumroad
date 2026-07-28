@@ -4,7 +4,10 @@ require "spec_helper"
 
 describe RefreshSitemapMonthlyWorker do
   describe "#perform" do
-    it "enqueues jobs to generate sitemaps for products updated in last month" do
+    # Frozen because the assertion below checks the exact time the second job is scheduled
+    # for, and the matcher truncates both that time and its own expected time to whole
+    # seconds — so a clock tick across a second boundary in between fails the test at random.
+    it "enqueues jobs to generate sitemaps for products updated in last month", :freeze_time do
       product_1 = create(:product, created_at: 3.months.ago, updated_at: 1.month.ago)
       product_2 = create(:product, created_at: 2.months.ago, updated_at: 1.month.ago)
       described_class.new.perform
