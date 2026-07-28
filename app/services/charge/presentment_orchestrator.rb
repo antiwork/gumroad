@@ -88,51 +88,10 @@ class Charge::PresentmentOrchestrator
           presentment_total_cents: allocation.presentment_total_cents,
           presentment_gumroad_amount_cents: allocation.presentment_gumroad_amount_cents
         )
-        record_later_charge_presentment!(allocation:, presentment_currency:, fx_rate:)
       end
 
       charge_presentment
     end
-  end
-
-  # Records the fixed buyer-currency amount a membership's later charges must reuse.
-  #
-  # Written inside #persist!'s transaction so a subscription can never end up with a
-  # presented signup charge but no stored amount to renew with — the renewal reader treats a
-  # missing row as "not in the lane" and charges canonical USD, so a half-written signup
-  # would silently switch the member's currency at the first renewal.
-  #
-  # Only the SIGNUP writes here. Rows are immutable and effective-dated (one per fixing), so
-  # this writes at most once per subscription: a later price change re-fixes the amount by
-  # appending a new row, which is not this path's job. The guard is "a fixing already exists"
-  # rather than a unique index, which also makes a retried charge idempotent.
-  #
-  # `presentment_price_cents` deliberately stores the PRICE component, not the total: tax and
-  # shipping are recomputed per renewal from the member's current address, so storing a total
-  # would freeze figures that are supposed to move.
-  def self.record_later_charge_presentment!(allocation:, presentment_currency:, fx_rate:)
-    purchase = allocation.purchase
-    subscription = purchase.subscription
-    return if subscription.blank?
-    return if fx_rate.blank?
-    return unless fx_rate.to_d.positive?
-    # A renewal reuses the stored amount; only the first charge establishes it.
-    return unless purchase.is_original_subscription_purchase?
-    return if allocation.presentment_price_cents.to_i <= 0
-    return if subscription.later_charge_presentments.exists?
-
-    # DIRECTION MATTERS. The Stripe quote's fx_rate is USD per unit of the presentment
-    # currency (minted from_currency: EUR, to_currency: USD), while this column stores units
-    # of the presentment currency per US dollar — the reciprocal, matching what
-    # CurrencyHelper#get_rate returns. Storing fx_rate directly would invert every drift
-    # figure computed from these rows.
-    subscription.later_charge_presentments.create!(
-      processor: StripeChargeProcessor.charge_processor_id,
-      presentment_currency:,
-      presentment_price_cents: allocation.presentment_price_cents,
-      signup_currency_units_per_usd: 1 / fx_rate.to_d,
-      effective_from: Time.current
-    )
   end
 
   def perform

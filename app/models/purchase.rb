@@ -4228,6 +4228,63 @@ class Purchase < ApplicationRecord
       end
     end
 
+    # Processor args billing this renewal the buyer-currency amount fixed at signup, or {} to let
+    # the caller charge canonical US dollars.
+    #
+    # Only a genuine off-session renewal of a subscription that already stored a fixing takes this
+    # path. Deliberately does NOT consult the subscription ramp flag: a member whose amount was
+    # already fixed must keep being billed it even after the flag is pulled, because the
+    # alternative is silently switching their currency mid-subscription. The parent lane gates
+    # (seller_enabled?) still apply — a seller who turns buyer-local currency off entirely is
+    # asking for dollars.
+    def later_charge_presentment_processor_args
+      return {} unless charge_processor_id == StripeChargeProcessor.charge_processor_id
+      return {} unless merchant_account&.stripe_charge_processor?
+      return {} if subscription.blank?
+      return {} if is_original_subscription_purchase?
+      return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+
+      result = Subscription::PresentmentRenewal.new(
+        merchant_account:,
+        purchases: [self],
+        amount_cents: total_transaction_cents,
+        gumroad_amount_cents: total_transaction_amount_for_gumroad_cents
+      ).perform
+      return {} if result.blank?
+
+      {
+        processor_amount_cents: result.processor_amount_cents,
+        processor_currency: result.processor_currency,
+        processor_gumroad_amount_cents: result.processor_gumroad_amount_cents,
+        stripe_fx_quote_id: result.stripe_fx_quote_id,
+      }
+    end
+
+    # Converts the RBI e-mandate cap into the currency this charge will actually settle in. See
+    # Charge::CreateService#mandate_options_in_charge_currency for the full reasoning; this is the
+    # renewal-path counterpart, kept deliberately identical in behaviour.
+    def mandate_options_in_charge_currency(mandate_options, presentment_args, canonical_amount_cents)
+      return mandate_options if mandate_options.blank?
+
+      presentment_currency = presentment_args[:processor_currency]
+      return mandate_options if presentment_currency.blank? || presentment_currency == Currency::USD
+
+      canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
+      return mandate_options if canonical_cap_cents.blank?
+      return mandate_options unless canonical_amount_cents.to_i.positive?
+
+      presentment_cap_cents = (Rational(canonical_cap_cents * presentment_args[:processor_amount_cents].to_i,
+                                        canonical_amount_cents)).ceil
+      # A cap below the amount being charged would decline this very renewal.
+      presentment_cap_cents = [presentment_cap_cents, presentment_args[:processor_amount_cents].to_i].max
+
+      inner = mandate_options[:payment_method_options][:card][:mandate_options]
+                .merge(amount: presentment_cap_cents, currency: presentment_currency)
+      mandate_options.deep_merge(
+        payment_method_options: { card: { mandate_options: inner } }
+      )
+    end
+
     def create_charge_intent(chargeable, off_session: true)
       with_charge_processor_error_handler do
         amount_cents = total_transaction_cents
@@ -4241,6 +4298,23 @@ class Purchase < ApplicationRecord
         # off-session (multi-seller carts) but must not be treated that way.
         mandate_expected = is_a_saved_card_rebill?
 
+        # A membership renewal bills the buyer-currency amount fixed at signup rather than
+        # canonical dollars (gumroad-private#1322). This is the renewal charge site — renewals
+        # reach here via RecurringChargeWorker -> Subscription#charge! -> #process! and never
+        # pass through Charge::CreateService, which only serves checkout.
+        #
+        # Empty hash means "no fixing applies": the subscription predates the ramp, its plan
+        # moved since the fixing, the currency is no longer chargeable, or the quote could not be
+        # minted. In every one of those cases this charge proceeds in canonical US dollars, which
+        # is exactly what it billed before this feature existed.
+        presentment_args = later_charge_presentment_processor_args
+        # The RBI e-mandate cap is registered in US dollars, but Stripe reads mandate_options
+        # amounts in the mandate's own currency and the mandate inherits the intent's currency.
+        # An unconverted cap on a presentment charge registers as (say) ₹10.00 instead of $10.00
+        # and every subsequent renewal is declined off-session. Same conversion the checkout lane
+        # applies in Charge::CreateService#mandate_options_in_charge_currency.
+        mandate_options = mandate_options_in_charge_currency(mandate_options, presentment_args, amount_cents)
+
         charge_intent = ChargeProcessor.create_payment_intent_or_charge!(self.merchant_account,
                                                                          chargeable,
                                                                          amount_cents,
@@ -4252,7 +4326,8 @@ class Purchase < ApplicationRecord
                                                                          off_session:,
                                                                          setup_future_charges:,
                                                                          mandate_options:,
-                                                                         mandate_expected:)
+                                                                         mandate_expected:,
+                                                                         **presentment_args)
 
         if charge_intent.id.present?
           if processor_payment_intent.present?

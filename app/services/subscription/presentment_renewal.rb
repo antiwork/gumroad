@@ -2,23 +2,13 @@
 
 # Charges a membership renewal the fixed buyer-currency amount stored at signup.
 #
-# ⛔ NOT WIRED UP YET — THIS SERVICE IS UNREACHABLE FROM A REAL RENEWAL. Verified 2026-07-28
-# by an adversarial pre-merge review, then confirmed by tracing the entry points. A renewal
-# runs RecurringChargeWorker -> Subscription#charge! (subscription.rb:404) ->
-# #process_purchase! -> Purchase#process! -> Purchase#create_charge_intent
-# (purchase.rb:4244), which calls ChargeProcessor.create_payment_intent_or_charge! DIRECTLY.
-# It never touches Charge::CreateService, whose only caller is Order::ChargeService:216 —
-# the checkout path. So every renewal still charges canonical US dollars today no matter what
-# is stored, and the read below only runs for a multi-seller checkout cart, whose purchases
-# are all original signups and are rejected by #stored_presentment.
+# Wired in at Purchase#create_charge_intent (purchase.rb), which is where renewals actually
+# charge: RecurringChargeWorker -> Subscription#charge! -> #process_purchase! -> Purchase#process!
+# -> #create_charge_intent -> ChargeProcessor. Renewals never pass through Charge::CreateService,
+# whose only caller is Order::ChargeService (checkout) — an earlier version of this service hooked
+# there and was unreachable dead code as a result.
 #
-# Do NOT flip :buyer_currency_subscriptions until this is hooked into
-# Purchase#create_charge_intent (or renewals are routed through the combined-charge
-# pipeline): the signup gates ARE live, so a member would confirm a EUR price at checkout
-# and then be billed a floating dollar amount every period — worse than not presenting at
-# all, because the local price becomes a promise Gumroad does not keep.
-#
-# The lane this is meant to fill. A card checkout presents in the buyer's currency by
+# The lane this fills. A card checkout presents in the buyer's currency by
 # verifying a signed quote the buyer confirmed in the browser
 # (Charge::PresentmentOrchestrator). A renewal has no browser and no quote token, so there is
 # nothing for the buyer to confirm and nothing to verify against.
@@ -48,7 +38,7 @@ class Subscription::PresentmentRenewal
 
   attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :fallback_reason
 
-  def initialize(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:)
+  def initialize(merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, charge: nil)
     @charge = charge
     @merchant_account = merchant_account
     @purchases = purchases
@@ -80,6 +70,21 @@ class Subscription::PresentmentRenewal
 
     # The stored price is charged as-is. Tax and shipping ride on today's rate.
     fixed_price_cents = presentment.presentment_price_cents
+
+    # STALENESS GATE. The fixed amount is only valid while the plan it was agreed against has not
+    # moved. A subscription's canonical price legitimately changes mid-life — a limited-duration
+    # discount runs out (see Purchase#mandate_maximum_amount_cents, which exists because renewals
+    # bill the undiscounted price), Subscription#update_current_plan! applies an upgrade,
+    # downgrade or quantity change, a SubscriptionPlanChange lands. The fixing cannot follow those
+    # on its own, so billing it anyway would silently under-charge (Gumroad pays the seller money
+    # it never collected) or over-charge (billing more than the member agreed, which is a consent
+    # and card-network problem, not just an accounting one).
+    #
+    # Falling back to canonical dollars is the safe answer: the member is billed exactly what the
+    # current plan says, which is what they would have been billed before this feature existed.
+    # Re-fixing the amount at the new price belongs to the plan-change paths and is not built yet.
+    return fallback(:stale_fixing) unless presentment.canonical_price_cents == purchase.price_cents
+
     variable_canonical_cents = variable_component_canonical_cents(purchase)
     variable_presentment_cents = presentment_cents_for(variable_canonical_cents, quote.fx_rate, currency)
     presentment_total_cents = fixed_price_cents + variable_presentment_cents
@@ -107,17 +112,23 @@ class Subscription::PresentmentRenewal
     # about — rather than on a tax figure that has to stay truthful.
     reconcile_price_component!(allocation)
 
-    Charge::PresentmentOrchestrator.persist!(
-      charge:,
-      presentment_currency: currency,
-      presentment_total_cents:,
-      presentment_gumroad_amount_cents:,
-      allocations: [allocation],
-      stripe_fx_quote_id: quote.id,
-      stripe_fx_quote_expires_at: quote.expires_at,
-      fx_rate: quote.fx_rate,
-      rounding_delta_cents: 0
-    )
+    # Snapshot rows hang off a Charge, which only exists for a checkout combined charge. A
+    # standalone renewal (RecurringChargeWorker -> Purchase#create_charge_intent) has no Charge:
+    # the amounts are returned to the caller and recorded on the purchase once the charge
+    # succeeds, so there is nothing to persist here and nothing to roll back if Stripe declines.
+    if charge.present?
+      Charge::PresentmentOrchestrator.persist!(
+        charge:,
+        presentment_currency: currency,
+        presentment_total_cents:,
+        presentment_gumroad_amount_cents:,
+        allocations: [allocation],
+        stripe_fx_quote_id: quote.id,
+        stripe_fx_quote_expires_at: quote.expires_at,
+        fx_rate: quote.fx_rate,
+        rounding_delta_cents: 0
+      )
+    end
 
     Result.new(
       processor_amount_cents: presentment_total_cents,
@@ -128,7 +139,7 @@ class Subscription::PresentmentRenewal
   rescue StandardError => e
     # An unexpected failure must not cost the seller a renewal, so notify and let the caller
     # charge canonical USD.
-    ErrorNotifier.notify(e, context: { charge_id: charge.id, charge_external_id: charge.external_id })
+    ErrorNotifier.notify(e, context: { charge_id: charge&.id, purchase_id: purchases.first&.id })
     fallback(:"#{e.class}")
   end
 
@@ -197,7 +208,7 @@ class Subscription::PresentmentRenewal
 
     def fallback(reason)
       @fallback_reason = reason
-      Rails.logger.info("Subscription renewal presentment fallback for charge #{charge.external_id}: #{reason}")
+      Rails.logger.info("Subscription renewal presentment fallback for #{charge.present? ? "charge #{charge.external_id}" : "purchase #{purchases.first&.id}"}: #{reason}")
       nil
     end
 end

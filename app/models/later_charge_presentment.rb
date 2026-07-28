@@ -51,6 +51,7 @@ class LaterChargePresentment < ApplicationRecord
   validates :processor, presence: true
   validates :presentment_currency, presence: true
   validates :presentment_price_cents, numericality: { greater_than: 0, only_integer: true }
+  validates :canonical_price_cents, numericality: { greater_than: 0, only_integer: true }
   validates :signup_currency_units_per_usd, numericality: { greater_than: 0 }
   validates :effective_from, presence: true
   validate :presentment_currency_is_chargeable

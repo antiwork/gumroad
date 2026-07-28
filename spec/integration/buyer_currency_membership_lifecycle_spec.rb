@@ -1,0 +1,158 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+# INTEGRATION coverage for the two halves of gumroad-private#1322. These exist because the unit
+# specs could not see the defect that mattered: an earlier version of this feature stored the
+# fixing from Charge::PresentmentOrchestrator (where purchase.subscription is still nil) and read
+# it back from Charge::CreateService (which renewals never enter), so both halves were dead code
+# while every unit example stayed green. Each example here drives a REAL entry point.
+describe "Buyer-currency memberships, signup through renewal", :vcr do
+  let(:seller) { create(:user) }
+  let(:merchant_account) { create(:merchant_account_stripe_connect, user: seller) }
+  let(:product) { create(:membership_product, user: seller, price_cents: 1000) }
+
+  # For the cases that are NOT about write ordering, invoke the writer through a real service
+  # instance rather than rebuilding the whole success path.
+  def subject_service(purchase)
+    Purchase::MarkSuccessfulService.new(purchase)
+  end
+
+  before do
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+    merchant_account
+  end
+
+  describe "the signup fixes the amount" do
+    # Drives Purchase::MarkSuccessfulService — the real success path — rather than calling the
+    # writer directly, because the whole point is WHEN the subscription exists relative to the
+    # write. A direct call would pass against the broken ordering too.
+    it "stores a fixing once the subscription exists, reading the price off the purchase presentment" do
+      # A membership signup mid-charge: the Subscription does not exist yet (that is the whole
+      # point — the earlier broken version wrote the fixing before this moment), but the purchase
+      # carries the recurring price the payment option is built from.
+      purchase = build(:membership_purchase, link: product, seller:, price_cents: 1000,
+                                             purchase_state: "in_progress", subscription: nil)
+      purchase.price = product.prices.alive.first || product.prices.first
+      purchase.variant_attributes = []
+      purchase.save!(validate: false)
+      charge_presentment = create(:charge_presentment, presentment_currency: "eur", fx_rate: 0.9)
+      create(:purchase_presentment, purchase:, charge_presentment:,
+                                    presentment_currency: "eur", presentment_price_cents: 899,
+                                    presentment_gumroad_tax_cents: 0, presentment_total_cents: 899)
+
+      expect { Purchase::MarkSuccessfulService.new(purchase).perform }
+        .to change(LaterChargePresentment, :count).by(1)
+
+      fixing = purchase.reload.subscription.current_later_charge_presentment
+      expect(fixing.presentment_currency).to eq("eur")
+      expect(fixing.presentment_price_cents).to eq(899)
+      expect(fixing.canonical_price_cents).to eq(1000)
+      # Stored as the reciprocal of the quote's fx_rate: 0.9 USD per EUR means 1/0.9 EUR per USD.
+      expect(fixing.signup_currency_units_per_usd).to be_within(BigDecimal("0.000001")).of(BigDecimal(1) / BigDecimal("0.9"))
+    end
+
+    it "writes nothing when the signup charged canonical dollars" do
+      # A normal membership signup with no purchase_presentment: nothing to fix, so later charges
+      # keep billing canonical dollars exactly as they did before this feature.
+      purchase = create(:membership_purchase, link: product, seller:, price_cents: 1000)
+
+      expect { subject_service(purchase).send(:fix_later_charge_presentment) }
+        .not_to change(LaterChargePresentment, :count)
+    end
+
+    it "writes nothing for a gift, whose subscription belongs to someone who never saw the price" do
+      purchase = create(:membership_purchase, link: product, seller:, price_cents: 1000)
+      charge_presentment = create(:charge_presentment, presentment_currency: "eur", fx_rate: 0.9)
+      create(:purchase_presentment, purchase:, charge_presentment:,
+                                    presentment_currency: "eur", presentment_price_cents: 899,
+                                    presentment_gumroad_tax_cents: 0, presentment_total_cents: 899)
+      allow(purchase).to receive(:is_gift_sender_purchase?).and_return(true)
+
+      expect { subject_service(purchase).send(:fix_later_charge_presentment) }
+        .not_to change(LaterChargePresentment, :count)
+    end
+  end
+
+  describe "the renewal bills the fixed amount" do
+    let(:subscription) { create(:subscription, link: product, user: create(:user)) }
+    let!(:original) do
+      create(:membership_purchase, link: product, seller:, subscription:,
+                                   is_original_subscription_purchase: true, price_cents: 1000)
+    end
+    let!(:fixing) do
+      create(:later_charge_presentment, owner: subscription, presentment_currency: "eur",
+                                        presentment_price_cents: 899, canonical_price_cents: 1000,
+                                        signup_currency_units_per_usd: BigDecimal("1.111111111111111"),
+                                        effective_from: 30.days.ago)
+    end
+    let(:renewal) do
+      create(:membership_purchase, link: product, seller:, subscription:, price_cents: 1000,
+                                   is_original_subscription_purchase: false,
+                                   purchase_state: "in_progress")
+    end
+
+    before do
+      allow(StripeFxQuote).to receive(:create)
+        .and_return(double(id: "fxq_renewal", fx_rate: 0.8, expires_at: 1.day.from_now))
+      allow(Checkout::BuyerCurrencyEligibility).to receive(:usd_settling_merchant_account?).and_return(true)
+      allow(StripeChargeProcessor).to receive(:charge_minor_units_compatible?).and_return(true)
+      allow(renewal).to receive(:merchant_account).and_return(merchant_account)
+      allow(renewal).to receive(:charge_processor_id).and_return(StripeChargeProcessor.charge_processor_id)
+    end
+
+    # THE test whose absence hid the dead renewal read. Asserts on the args handed to the
+    # processor from Purchase#create_charge_intent, the site renewals really use.
+    it "hands the stored EUR amount to the processor instead of canonical dollars" do
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
+        expect(kwargs[:processor_currency]).to eq("eur")
+        expect(kwargs[:processor_amount_cents]).to eq(899)
+        expect(kwargs[:stripe_fx_quote_id]).to eq("fxq_renewal")
+        double(id: "pi_renewal", succeeded?: true, requires_action?: false, get_charge: nil)
+      end
+
+      renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+    end
+
+    it "falls back to canonical dollars when the plan moved since the fixing" do
+      # A limited-duration discount expiring, an upgrade, a quantity change: the canonical price
+      # no longer matches what the fixing was agreed against, so the stored amount is stale.
+      renewal.update!(price_cents: 1500)
+
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
+        expect(kwargs).not_to include(:processor_currency)
+        expect(kwargs).not_to include(:processor_amount_cents)
+        double(id: "pi_renewal", succeeded?: true, requires_action?: false, get_charge: nil)
+      end
+
+      renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+    end
+
+    it "falls back to canonical dollars for a subscription with no fixing" do
+      fixing.destroy!
+
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
+        expect(kwargs).not_to include(:processor_currency)
+        double(id: "pi_renewal", succeeded?: true, requires_action?: false, get_charge: nil)
+      end
+
+      renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+    end
+
+    it "keeps billing a fixed member after the ramp flag is pulled" do
+      # The never-orphan invariant: pulling the ramp stops NEW memberships entering the lane, it
+      # must not switch an existing member's currency mid-subscription.
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
+        expect(kwargs[:processor_currency]).to eq("eur")
+        expect(kwargs[:processor_amount_cents]).to eq(899)
+        double(id: "pi_renewal", succeeded?: true, requires_action?: false, get_charge: nil)
+      end
+
+      renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+    end
+  end
+end
