@@ -1930,6 +1930,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
         expect(create_args[:currency]).to eq(Currency::BRL)
+        expect(create_args[:payment_method_types]).to include("pix")
         expect(create_args[:payment_method_options]).to eq(
           pix: {
             expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS,
