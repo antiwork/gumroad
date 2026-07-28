@@ -4,8 +4,11 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
+import type { CartPurchaseResult } from "$app/data/purchase";
+
 import {
   recoverFromInvalidBuyerCurrencyQuote,
+  refreshedRatesFromLineItems,
   useLatestCartGetter,
 } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
 import type { CartItem, CartState, Product as CartProduct } from "$app/components/Checkout/cartState";
@@ -69,44 +72,62 @@ const cartItem = (overrides: Partial<CartItem> = {}): CartItem => ({
 });
 
 const cartWith = (items: CartItem[]): CartState => ({ items, discountCodes: [] });
+// A refused line item as the server actually sends it: `Order::ResponseHelpers#error_response`
+// attaches a freshly built `updated_product` whose `exchange_rate` is today's stored rate.
+// Pass `null` for the product to model the shape the server sends when it has no purchase to
+// build one from, which is a refusal the recovery has to survive without a rate to read.
+const refusedLine = (product: CartProduct | null): CartPurchaseResult["lineItems"][string] => ({
+  success: false,
+  error_message: "The local-currency price changed or expired.",
+  name: product?.name ?? null,
+  formatted_price: "$20",
+  error_code: "buyer_currency_quote_invalid",
+  is_tax_mismatch: false,
+  card_country: null,
+  ip_country: null,
+  updated_product: product
+    ? {
+        product,
+        recurrence: null,
+        price: 2_000,
+        option_id: null,
+        rent: false,
+        quantity: 1,
+        affiliate_id: null,
+        recommended_by: null,
+        call_start_time: null,
+        accepted_offer: null,
+        pay_in_installments: false,
+        force_new_subscription: false,
+      }
+    : null,
+});
 
-// A reload that answers with the given props, or fails when `props` is the string "error".
-const reloaderReturning =
-  (props: unknown | "error") => (callbacks: { onSuccess: (props: unknown) => void; onError: () => void }) =>
-    props === "error" ? callbacks.onError() : callbacks.onSuccess(props);
+const linesFor = (products: CartProduct[]): CartPurchaseResult["lineItems"] =>
+  Object.fromEntries(products.map((product) => [`${product.permalink} `, refusedLine(product)]));
 
-// A reload that does not answer until the test says so, which is how the real one behaves: the
-// checkout is editable again while the request is in flight.
-const pendingReloader = () => {
-  let finish: ((props: unknown) => void) | null = null;
-  const reload = (callbacks: { onSuccess: (props: unknown) => void; onError: () => void }) => {
-    finish = callbacks.onSuccess;
-  };
-  return { reload, respondWith: (props: unknown) => finish?.(props) };
-};
-
-const run = (cart: CartState, reload: ReturnType<typeof reloaderReturning>) => {
-  const setCart = vi.fn();
-  const requote = vi.fn();
-  recoverFromInvalidBuyerCurrencyQuote({ reloadCartProps: reload, getCart: () => cart, setCart, requote });
+const run = (cart: CartState, lineItems: CartPurchaseResult["lineItems"]) => {
+  const setCart = vi.fn<(cart: CartState) => void>();
+  const requote = vi.fn<(cart: CartState) => void>();
+  recoverFromInvalidBuyerCurrencyQuote({ lineItems, getCart: () => cart, setCart, requote });
   return { setCart, requote };
 };
 
 // This is the whole point of the recovery: the buyer's cart carries the exchange rate that was
 // current when the page rendered, and the charge was refused because the server's rate has since
 // moved. Re-quoting on the stale rate would mint the same rejected total again, so the rate has to
-// be refreshed from the server before the retry.
+// be refreshed before the retry — and it is read out of the refusal response, because creating the
+// order soft-deletes the buyer's cart, so there is no cart left on the server to re-read it from.
 describe("recoverFromInvalidBuyerCurrencyQuote", () => {
   it("re-quotes on the server's current rate, not the one the page rendered with", () => {
     const cart = cartWith([cartItem()]);
-    const refreshed = cartWith([cartItem({ product: cartProduct({ exchange_rate: 0.881_5 }) })]);
 
-    const { setCart, requote } = run(cart, reloaderReturning({ cart: refreshed }));
+    const { setCart, requote } = run(cart, linesFor([cartProduct({ exchange_rate: 0.881_5 })]));
 
     expect(setCart).toHaveBeenCalledTimes(1);
-    expect(setCart.mock.calls[0]?.[0].items[0].product.exchange_rate).toBe(0.881_5);
+    expect(setCart.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.881_5);
     expect(requote).toHaveBeenCalledTimes(1);
-    expect(requote.mock.calls[0]?.[0].items[0].product.exchange_rate).toBe(0.881_5);
+    expect(requote.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.881_5);
     // The refreshed cart is a new object, so the retry cannot be quoting the stale one.
     expect(requote.mock.calls[0]?.[0]).not.toBe(cart);
   });
@@ -115,15 +136,14 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
     const cart = cartWith([
       cartItem({ quantity: 3, price: 2_500, option_id: "variant-1", accepted_offer: { id: "offer-1" } }),
     ]);
-    const refreshed = cartWith([cartItem({ product: cartProduct({ exchange_rate: 0.9 }) })]);
 
-    const { requote } = run(cart, reloaderReturning({ cart: refreshed }));
+    const { requote } = run(cart, linesFor([cartProduct({ exchange_rate: 0.9 })]));
 
     const item = requote.mock.calls[0]?.[0].items[0];
-    expect(item.quantity).toBe(3);
-    expect(item.price).toBe(2_500);
-    expect(item.option_id).toBe("variant-1");
-    expect(item.accepted_offer).toEqual({ id: "offer-1" });
+    expect(item?.quantity).toBe(3);
+    expect(item?.price).toBe(2_500);
+    expect(item?.option_id).toBe("variant-1");
+    expect(item?.accepted_offer).toEqual({ id: "offer-1" });
   });
 
   // Saving the cart back to the server on every rejected quote would be a pointless write, and
@@ -131,54 +151,47 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
   it("does not re-save the cart when the rate has not moved", () => {
     const cart = cartWith([cartItem()]);
 
-    const { setCart, requote } = run(cart, reloaderReturning({ cart: cartWith([cartItem()]) }));
+    const { setCart, requote } = run(cart, linesFor([cartProduct()]));
 
     expect(setCart).not.toHaveBeenCalled();
     expect(requote).toHaveBeenCalledWith(cart);
   });
 
-  // The buyer must never be left on a disabled Pay button. A failed reload still gets a re-quote:
-  // it can fail the same way, but visibly, with the alert already shown.
-  it("still re-quotes when the reload itself fails", () => {
+  // The buyer must never be left on a disabled Pay button. A refusal that carries no usable
+  // product still gets a re-quote: it can fail the same way, but visibly, with the alert shown.
+  it("still re-quotes when the response carries no product to read a rate from", () => {
     const cart = cartWith([cartItem()]);
 
-    const { setCart, requote } = run(cart, reloaderReturning("error"));
+    // A refusal with no line items at all, one shaped like the server's short error form
+    // (`error_message` and `updated_product` are both optional on it), and one that carries the
+    // full error shape but an explicitly null product.
+    const cases: CartPurchaseResult["lineItems"][] = [
+      {},
+      { "eur ": { success: false } },
+      { "eur ": refusedLine(null) },
+    ];
 
-    expect(setCart).not.toHaveBeenCalled();
-    expect(requote).toHaveBeenCalledWith(cart);
-  });
-
-  // A partial reload merges into the page's existing props. If an unrelated prop ever changes
-  // shape, the recovery must degrade to a plain re-quote rather than throwing and stranding the
-  // buyer mid-checkout.
-  it("degrades to a plain re-quote when the reloaded props are not the shape it expects", () => {
-    const cart = cartWith([cartItem()]);
-
-    for (const props of [{}, { cart: null }, { cart: "not a cart" }, undefined]) {
-      const { setCart, requote } = run(cart, reloaderReturning(props));
+    for (const lineItems of cases) {
+      const { setCart, requote } = run(cart, lineItems);
       expect(setCart).not.toHaveBeenCalled();
       expect(requote).toHaveBeenCalledWith(cart);
     }
   });
 
-  // An unusable rate (zero, negative, or absent because the item is gone from the server's cart)
-  // would make the browser's price conversion produce Infinity or NaN and render a garbage total.
+  // An unusable rate (zero, negative, non-finite, or absent because the product is not in the
+  // response) would make the browser's price conversion produce Infinity or NaN and render a
+  // garbage total.
   it("keeps the existing rate rather than adopting an unusable one", () => {
     const cart = cartWith([cartItem()]);
 
-    for (const exchange_rate of [0, -1]) {
-      const { requote } = run(
-        cart,
-        reloaderReturning({ cart: cartWith([cartItem({ product: cartProduct({ exchange_rate }) })]) }),
-      );
-      expect(requote.mock.calls[0]?.[0].items[0].product.exchange_rate).toBe(0.879624);
+    for (const exchange_rate of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const { setCart, requote } = run(cart, linesFor([cartProduct({ exchange_rate })]));
+      expect(setCart).not.toHaveBeenCalled();
+      expect(requote.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.879624);
     }
 
-    const { requote } = run(
-      cart,
-      reloaderReturning({ cart: cartWith([cartItem({ product: cartProduct({ permalink: "other" }) })]) }),
-    );
-    expect(requote.mock.calls[0]?.[0].items[0].product.exchange_rate).toBe(0.879624);
+    const { requote } = run(cart, linesFor([cartProduct({ permalink: "other", exchange_rate: 0.5 })]));
+    expect(requote.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.879624);
   });
 
   // Rates are per listed currency, so a mixed cart must pick up each product's own rate and only
@@ -187,60 +200,53 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
     const usd = cartItem({ product: cartProduct({ permalink: "usd", currency_code: "usd", exchange_rate: 1 }) });
     const eur = cartItem();
     const cart = cartWith([usd, eur]);
-    const refreshed = cartWith([
-      cartItem({ product: cartProduct({ permalink: "usd", currency_code: "usd", exchange_rate: 1 }) }),
-      cartItem({ product: cartProduct({ exchange_rate: 0.95 }) }),
-    ]);
 
-    const { requote } = run(cart, reloaderReturning({ cart: refreshed }));
+    const { requote } = run(
+      cart,
+      linesFor([
+        cartProduct({ permalink: "usd", currency_code: "usd", exchange_rate: 1 }),
+        cartProduct({ exchange_rate: 0.95 }),
+      ]),
+    );
 
     const items = requote.mock.calls[0]?.[0].items;
-    expect(items[0].product.exchange_rate).toBe(1);
-    expect(items[1].product.exchange_rate).toBe(0.95);
+    expect(items?.[0]?.product.exchange_rate).toBe(1);
+    expect(items?.[1]?.product.exchange_rate).toBe(0.95);
     // The untouched item keeps its identity, so nothing downstream re-renders it needlessly.
-    expect(items[0]).toBe(usd);
+    expect(items?.[0]).toBe(usd);
   });
 
-  // The reload is a real network round trip and the checkout is editable again while it is in
-  // flight, so the buyer can bump a quantity or change an option before the rates come back. The
-  // recovery has to merge into whatever they are holding when the reload lands, not into the cart
-  // from the render that kicked it off — otherwise it saves the older selections back and quotes
-  // them, quietly undoing the edit.
-  it("merges into the cart the buyer holds when the reload lands, not the one it started with", () => {
-    let cart = cartWith([cartItem({ quantity: 1 })]);
-    const setCart = vi.fn<(cart: CartState) => void>();
-    const requote = vi.fn<(cart: CartState) => void>();
-    const { reload, respondWith } = pendingReloader();
+  // Only refused lines carry an `updated_product`, so a rate must never be collected from a line
+  // that is missing one — that is what keeps a partly-succeeded cart's successful lines out.
+  it("collects a rate only from lines that carry a product", () => {
+    const rates = refreshedRatesFromLineItems({
+      "eur ": refusedLine(cartProduct({ exchange_rate: 0.9 })),
+      "usd ": { success: false, error_message: "no product on this line" },
+    });
 
-    recoverFromInvalidBuyerCurrencyQuote({ reloadCartProps: reload, getCart: () => cart, setCart, requote });
-
-    // The buyer changes the quantity while the reload is still out.
-    cart = cartWith([cartItem({ quantity: 3 })]);
-
-    respondWith({ cart: cartWith([cartItem({ product: cartProduct({ exchange_rate: 0.9 }) })]) });
-
-    expect(setCart.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
-    expect(setCart.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.9);
-    expect(requote.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
-    expect(requote.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.9);
+    expect([...rates.entries()]).toEqual([["eur", 0.9]]);
   });
 
-  // The test above hands the recovery a getter backed by a plain mutable variable, which is always
-  // current the instant the "edit" happens. Production is not that generous: the getter reads a
-  // value React keeps in sync, and the reload lands in a network callback React does not sequence
-  // — it can arrive after a re-render has been computed but before React has flushed that
-  // render's effects. Synchronizing the getter in an effect leaves exactly that window open, and
-  // the recovery would then merge into, save, and quote the cart from before the edit. Reproduce
-  // the window by answering the reload from inside the re-render itself.
-  it("reads the edited cart even when the reload lands before React flushes effects", () => {
+  // Charging is a network round trip, and the checkout is editable while it is in flight: the
+  // buyer can bump a quantity or change an option between clicking Pay and the refusal arriving.
+  // The recovery has to merge into whatever they are holding when it runs, not into the cart from
+  // the render that kicked off the charge — otherwise it saves the older selections back and
+  // quotes them, quietly undoing the edit. useLatestCartGetter is what supplies that, and the
+  // window it closes is React's effect flush, so answering from inside a re-render reproduces it.
+  it("reads the edited cart even when the refusal lands before React flushes effects", () => {
     const setCart = vi.fn<(cart: CartState) => void>();
     const requote = vi.fn<(cart: CartState) => void>();
-    const { reload, respondWith } = pendingReloader();
 
-    let start: () => void = () => {};
+    let recover: () => void = () => {};
     const Checkout = ({ cart, onRender }: { cart: CartState; onRender?: () => void }) => {
       const getCart = useLatestCartGetter(cart);
-      start = () => recoverFromInvalidBuyerCurrencyQuote({ reloadCartProps: reload, getCart, setCart, requote });
+      recover = () =>
+        recoverFromInvalidBuyerCurrencyQuote({
+          lineItems: linesFor([cartProduct({ exchange_rate: 0.9 })]),
+          getCart,
+          setCart,
+          requote,
+        });
       onRender?.();
       return null;
     };
@@ -248,15 +254,13 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
     const root = createRoot(document.createElement("div"));
     flushSync(() => root.render(React.createElement(Checkout, { cart: cartWith([cartItem({ quantity: 1 })]) })));
 
-    start();
-
-    // The buyer bumps the quantity while the reload is in flight, and the reload answers while
+    // The buyer bumps the quantity while the charge is in flight, and the refusal is handled while
     // that render is still in progress — before any effect it queued has run.
     flushSync(() =>
       root.render(
         React.createElement(Checkout, {
           cart: cartWith([cartItem({ quantity: 3 })]),
-          onRender: () => respondWith({ cart: cartWith([cartItem({ product: cartProduct({ exchange_rate: 0.9 }) })]) }),
+          onRender: () => recover(),
         }),
       ),
     );

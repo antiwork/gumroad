@@ -4,6 +4,7 @@ import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
 import { PaymentConfirmedError, startClientConfirmOrderCreation, startOrderCreation } from "$app/data/order";
+import { type CartPurchaseResult } from "$app/data/purchase";
 import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
 import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
@@ -391,15 +392,9 @@ const CheckoutIndexPage = () => {
 
   // Recovers a checkout whose local-currency quote the server refused at charge time. The
   // reasoning lives with the helper in buyerCurrencyQuoteRecovery.ts.
-  function recoverFromInvalidBuyerCurrencyQuote() {
+  function recoverFromInvalidBuyerCurrencyQuote(lineItems: CartPurchaseResult["lineItems"]) {
     recoverBuyerCurrencyQuote({
-      reloadCartProps: ({ onSuccess, onError }) =>
-        router.reload({
-          only: ["cart"],
-          preserveUrl: true,
-          onSuccess: (page) => onSuccess(page.props),
-          onError,
-        }),
+      lineItems,
       getCart: getLatestCart,
       setCart: (cart) => cartForm.setData({ cart }),
       requote: (cart) => dispatch({ type: "update-products", products: getProducts(cart) }),
@@ -575,7 +570,7 @@ const CheckoutIndexPage = () => {
       ) {
         showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
         dispatch({ type: "cancel" });
-        recoverFromInvalidBuyerCurrencyQuote();
+        recoverFromInvalidBuyerCurrencyQuote(result.lineItems);
         return;
       }
 

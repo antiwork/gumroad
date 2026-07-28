@@ -149,8 +149,7 @@ export const convertToUSD = (item: CartItem, price: number) => price / item.prod
 // the buyer chose (quantity, pay-what-you-want price, option, accepted offers, discounts)
 // untouched. Returns the original cart object when no rate actually moved, so an unchanged
 // cart doesn't trigger a needless save round-trip.
-export const withRefreshedExchangeRates = (cart: CartState, refreshed: CartState): CartState => {
-  const refreshedRates = new Map(refreshed.items.map((item) => [item.product.permalink, item.product.exchange_rate]));
+export const withRefreshedExchangeRates = (cart: CartState, refreshedRates: ReadonlyMap<string, number>): CartState => {
   let changed = false;
   const items = cart.items.map((item) => {
     const rate = refreshedRates.get(item.product.permalink);

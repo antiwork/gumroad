@@ -1,5 +1,6 @@
 import * as React from "react";
-import typia from "typia";
+
+import { type CartPurchaseResult } from "$app/data/purchase";
 
 import { type CartState, withRefreshedExchangeRates } from "$app/components/Checkout/cartState";
 
@@ -12,20 +13,26 @@ import { type CartState, withRefreshedExchangeRates } from "$app/components/Chec
 // the same rejected total again — the buyer would retry forever with nothing telling them that
 // only a manual page refresh can help.
 //
-// So the recovery re-fetches the cart props (the rate lives there), merges the current rates
-// into the cart the buyer is holding, and only then asks for a fresh quote.
+// So the recovery needs the server's *current* rate. It reads it out of the refusal response
+// itself, which already carries a freshly built product for every failed line
+// (`Order::ResponseHelpers#error_response` sets `updated_product`, and CheckoutPresenter puts
+// today's `exchange_rate` on it), then merges those rates into the cart the buyer is holding and
+// asks for a fresh quote.
 //
-// The caller injects its Inertia and form plumbing so this stays a plain function that can be
-// exercised without mounting the checkout page.
+// Reading the rate from the response rather than re-fetching the cart is what makes this work at
+// all. Creating the order persists a `failed` purchase and attaches it to the order, so
+// `Order::CreateService` sees `order.persisted?` and soft-deletes the buyer's cart before
+// responding. A partial reload of the `cart` prop after that point returns `cart: null` — there
+// is no cart left to read a rate from — so a reload-based recovery silently degraded to
+// re-quoting on the stale rate, which is exactly the behaviour it was meant to fix. Verified
+// failing on the hosted preview app; see the PR body.
+//
+// The caller injects its form plumbing so this stays a plain function that can be exercised
+// without mounting the checkout page.
 export type BuyerCurrencyQuoteRecoveryDeps = {
-  // Partially reloads the page's `cart` prop. Calls back with the server's response props on
-  // success, or with nothing when the reload itself failed.
-  reloadCartProps: (callbacks: { onSuccess: (props: unknown) => void; onError: () => void }) => void;
   // Reads the cart the buyer is currently holding, with their choices in it. This is a getter
-  // rather than a value because the reload is asynchronous and the checkout stays editable while
-  // it is in flight: the buyer can change a quantity, an option, or a pay-what-you-want price in
-  // that window. Merging into a cart captured when the recovery started would write that older
-  // snapshot back and quote it, silently undoing the edit they just made.
+  // rather than a value because the caller starts the recovery from one particular render while
+  // the buyer may edit the cart before it completes; see useLatestCartGetter.
   getCart: () => CartState;
   // Persists a cart whose rates changed. Only called when a rate actually moved.
   setCart: (cart: CartState) => void;
@@ -36,13 +43,13 @@ export type BuyerCurrencyQuoteRecoveryDeps = {
 // Hands back a getter that always reads the cart from the most recent render.
 //
 // The recovery needs this because the function that starts it — and any plain closure over `cart`
-// — belongs to one particular render, while the reload lands later, after the buyer may have
-// edited the cart. The subtlety is *when* the stored value is refreshed. Synchronizing it in an
-// effect leaves a window: effects are flushed on React's own schedule, and the callback that
-// resolves the reload is free to run before that happens, so the getter would still be holding
-// the cart from before the edit — the exact overwrite this indirection exists to prevent.
-// Assigning during render closes the window, because a render always precedes the commit that
-// makes the edit visible to the buyer, and therefore precedes anything they can do next.
+// — belongs to one particular render, while the buyer may edit the cart before the recovery runs
+// its merge. The subtlety is *when* the stored value is refreshed. Synchronizing it in an effect
+// leaves a window: effects are flushed on React's own schedule, so the getter could still be
+// holding the cart from before the edit — the exact overwrite this indirection exists to
+// prevent. Assigning during render closes the window, because a render always precedes the
+// commit that makes the edit visible to the buyer, and therefore precedes anything they can do
+// next.
 export const useLatestCartGetter = (cart: CartState): (() => CartState) => {
   const latest = React.useRef(cart);
   // Writing a ref while rendering is normally something to avoid, since a render React throws
@@ -53,27 +60,38 @@ export const useLatestCartGetter = (cart: CartState): (() => CartState) => {
   return React.useCallback(() => latest.current, []);
 };
 
+// Collects the server's current exchange rate per product out of the refused line items.
+//
+// Keyed by permalink because that is what the cart merges on, and because a cart can hold two
+// lines of the same product (different options) whose rate is necessarily the same. Anything
+// without a usable rate is left out entirely rather than defaulted: adopting a 0, a negative, or
+// a non-finite rate would make convertToUSD produce Infinity/NaN and break price conversion for
+// the rest of the checkout, which is worse than re-quoting on the rate the cart already has.
+export const refreshedRatesFromLineItems = (lineItems: CartPurchaseResult["lineItems"]): Map<string, number> => {
+  const rates = new Map<string, number>();
+  for (const result of Object.values(lineItems)) {
+    if (result.success) continue;
+    const product = result.updated_product?.product;
+    if (!product) continue;
+    const rate = product.exchange_rate;
+    if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) continue;
+    rates.set(product.permalink, rate);
+  }
+  return rates;
+};
+
 export const recoverFromInvalidBuyerCurrencyQuote = ({
-  reloadCartProps,
+  lineItems,
   getCart,
   setCart,
   requote,
-}: BuyerCurrencyQuoteRecoveryDeps) => {
-  reloadCartProps({
-    onSuccess: (props) => {
-      // Validate only the prop being read, and tolerate it being missing or malformed rather
-      // than throwing: a partial reload merges into the page's existing props, so asserting the
-      // whole page shape here would let an unrelated prop change turn a recoverable checkout
-      // into a crash. Without usable refreshed rates the recovery degrades to a plain re-quote.
-      const validated = typia.validate<{ cart: CartState | null }>(props);
-      const refreshed = validated.success ? validated.data.cart : null;
-      const cart = getCart();
-      const updated = refreshed ? withRefreshedExchangeRates(cart, refreshed) : cart;
-      if (updated !== cart) setCart(updated);
-      requote(updated);
-    },
-    // Still re-request a quote if the reload failed, so the checkout returns to a usable state
-    // rather than sitting disabled. That retry can fail the same way, but it fails visibly.
-    onError: () => requote(getCart()),
-  });
+}: BuyerCurrencyQuoteRecoveryDeps & { lineItems: CartPurchaseResult["lineItems"] }) => {
+  const cart = getCart();
+  const rates = refreshedRatesFromLineItems(lineItems);
+  const updated = withRefreshedExchangeRates(cart, rates);
+  // Persist only when a rate actually moved, so a refusal that had nothing to do with rates
+  // doesn't cost a pointless cart save. Either way the checkout re-quotes, so the buyer is never
+  // left looking at a disabled Pay button.
+  if (updated !== cart) setCart(updated);
+  requote(updated);
 };
