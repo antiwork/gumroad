@@ -52,6 +52,42 @@ export type CartSaveCallbacks = {
 export const deliveredCheckoutPayment = (page: ResponseProps) => CHECKOUT_PAYMENT_PROP in page.props;
 
 /**
+ * Tracks the one payment-lane invalidation that accepting a cross-sell offer performs itself, so
+ * the passive effect watching the lane key can skip its echo of that same change without ever
+ * skipping a real one.
+ *
+ * Accepting an offer changes the cart and dispatches the invalidation synchronously, because the
+ * "validate" it dispatches in the same tick has to see the hold. The effect that normally notices
+ * lane-key changes then fires for that change too, and a second invalidation reads as "the buyer
+ * edited again" and drops the resume the refused validate armed — leaving the checkout with no
+ * purchase and no feedback.
+ *
+ * Suppressing that echo means remembering the key, but only until the echo arrives. Remembering it
+ * for longer exempts that cart permanently: a buyer who edits away from the accepted cart and back
+ * to it returns to a key the effect refuses to invalidate, so no hold is placed even though the
+ * configuration on screen was computed for the cart they detoured through. Quantity and price are
+ * part of the key and feed the served configuration, so such a detour really can change the lane.
+ *
+ * Hence claim-once semantics: `shouldSuppressLaneInvalidation` consumes the claim as it honours it.
+ */
+export const createLaneInvalidationSuppressor = () => {
+  let claimedKey: string | null = null;
+
+  return {
+    /** Records that the caller has already invalidated for `key` itself. */
+    claim: (key: string) => {
+      claimedKey = key;
+    },
+    /** True when `key` is the claimed one — and consumes the claim, so only the echo is skipped. */
+    shouldSuppressLaneInvalidation: (key: string) => {
+      if (claimedKey !== key) return false;
+      claimedKey = null;
+      return true;
+    },
+  };
+};
+
+/**
  * Builds the callbacks for a cart save so that a save which does not deliver a payment
  * configuration recovers by saving again.
  *

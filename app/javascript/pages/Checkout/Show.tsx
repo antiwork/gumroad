@@ -34,7 +34,11 @@ import {
   type ProductToAdd,
   type Result,
 } from "$app/components/Checkout/cartState";
-import { buildCartSaveRefreshCallbacks, type CartSaveCallbacks } from "$app/components/Checkout/checkoutPaymentRefresh";
+import {
+  buildCartSaveRefreshCallbacks,
+  createLaneInvalidationSuppressor,
+  type CartSaveCallbacks,
+} from "$app/components/Checkout/checkoutPaymentRefresh";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
@@ -303,10 +307,10 @@ const CheckoutIndexPage = () => {
     [currentOffer],
   );
 
-  // The cart key whose payment-configuration invalidation has already been dispatched eagerly by
-  // acceptOffer, so the passive effect that watches the same key can tell "I already did this one"
-  // from "the buyer edited the cart again".
-  const invalidatedLaneKeyRef = React.useRef<string | null>(null);
+  // Lets acceptOffer tell the passive lane-key effect "I already invalidated for this exact cart",
+  // for that one echo only. See createLaneInvalidationSuppressor for why the claim is consumed
+  // rather than kept.
+  const laneInvalidation = React.useRef(createLaneInvalidationSuppressor()).current;
   const completeOffer = () => {
     if (!currentOffer) return;
     completedOfferIds.add(currentOffer.id);
@@ -326,7 +330,7 @@ const CheckoutIndexPage = () => {
     // Record which cart this invalidation covers so the passive effect, which fires for this same
     // cart change, does not repeat it. A repeat would look like a fresh buyer edit and cancel the
     // resume that the "validate" below arms.
-    invalidatedLaneKeyRef.current = paymentLaneCartKeyFor(newCart);
+    laneInvalidation.claim(paymentLaneCartKeyFor(newCart));
     dispatch({ type: "invalidate-checkout-payment" });
     // Unconditionally, including when the accepted cart's quote has not arrived yet. The products
     // have to be in state before completeOffer's "validate" runs, because that "validate" is the
@@ -789,7 +793,10 @@ const CheckoutIndexPage = () => {
     // and armed for resume. A second invalidation here would read as "the buyer edited the cart
     // again" and drop the resume, stranding the checkout with no purchase and no feedback — the
     // deadlock this echo caused before.
-    if (invalidatedLaneKeyRef.current === paymentLaneCartKey) return;
+    //
+    // The claim covers only that one echo: it is consumed here, so a later edit that returns the
+    // cart to the accepted key is invalidated normally. See createLaneInvalidationSuppressor.
+    if (laneInvalidation.shouldSuppressLaneInvalidation(paymentLaneCartKey)) return;
     dispatch({ type: "invalidate-checkout-payment" });
   }, [paymentLaneCartKey]);
   // The recomputed configuration, from the save's partial reload. Inertia builds a fresh props
