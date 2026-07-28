@@ -64,6 +64,7 @@ import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
+import { getBundleComparisonPriceCents } from "$app/components/Product/pricing";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { SubscriptionChoiceModal } from "$app/components/Product/SubscriptionChoiceModal";
@@ -214,12 +215,6 @@ export type WishlistForProduct = Wishlist & {
   selections_in_wishlist: { variant_id: string | null; recurrence: string | null; rent: boolean; quantity: number }[];
 };
 
-export const getStandalonePrice = (product: Product) =>
-  product.bundle_products.reduce(
-    (totalStandalonePrice, bundleProduct) => totalStandalonePrice + bundleProduct.price,
-    0,
-  );
-
 const formatDiscountAmount = (discount: Discount, buyerLocalContext: BuyerLocalCurrencyContext) => {
   if (discount.type === "percent") {
     return discount.tiered && discount.min_percents !== undefined && discount.max_percents !== undefined
@@ -320,7 +315,7 @@ export const Product = ({
 
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
-  const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity } = selectionAttributes;
+  const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity, selectedOption } = selectionAttributes;
   React.useEffect(() => {
     if (maxQuantity !== null && selection.quantity > maxQuantity)
       setSelection?.({ ...selection, quantity: maxQuantity });
@@ -356,7 +351,15 @@ export const Product = ({
   });
 
   const isBundle = product.bundle_products.length > 0;
-  if (isBundle) basePriceCents = getStandalonePrice(product);
+  // On a bundle, the price to compare against is what its contents cost bought
+  // separately — but only when the buyer has picked a tier that adds nothing to
+  // the bundle's price. The standalone sum is fixed by the child variants the
+  // seller pinned when building the bundle, so it does not describe a paid tier
+  // (see getBundleComparisonPriceCents). null means "no honest comparison", and
+  // leaving basePriceCents at the bundle's own price is what suppresses the
+  // strikethrough everywhere it is derived from below.
+  const bundleComparisonPriceCents = getBundleComparisonPriceCents(product, selectedOption);
+  if (bundleComparisonPriceCents !== null) basePriceCents = bundleComparisonPriceCents;
 
   const validate = () => {
     if (isPWYW && (selection.price.value === null || selection.price.value < discountedPriceCents)) {
