@@ -29,6 +29,36 @@ class User
         !active_preorders?(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
     end
 
+    # True when disconnecting the PayPal Connect account would leave the seller with no way to be
+    # paid at all.
+    #
+    # A seller who has never saved a bank account or a PayPal payout email is still paid out:
+    # User#paypal_payout_email falls back to the primary email on the connected PayPal account, and
+    # PayoutSchedule#current_payout_processor then routes them to PayPal. That fallback disappears
+    # the moment the account is disconnected, and because connecting PayPal requires payout
+    # information to already exist (paypal_connect_allowed?), the seller cannot reconnect to undo
+    # it. Support has had to restore the payout email by hand, so warn before the click instead.
+    #
+    # The cheap attribute check comes first so sellers who already have a payout email saved — the
+    # common case — never pay for the merchant account lookups.
+    def paypal_disconnect_removes_payout_rail?
+      payment_address.blank? &&
+        active_bank_account.blank? &&
+        !has_stripe_account_connected? &&
+        has_paypal_account_connected?
+    end
+
+    # True when that same disconnect would also stop the seller publishing products. Publishing
+    # accepts a couple of things payouts do not (a Gumroad-managed Stripe account, or being a team
+    # member), so it is a strictly narrower group than the one above and the warning should only
+    # claim it when it holds. Mirrors can_publish_products? with the PayPal term removed.
+    def paypal_disconnect_blocks_publishing?
+      paypal_disconnect_removes_payout_rail? &&
+        !is_team_member? &&
+        stripe_account.blank? &&
+        stripe_connect_account.blank?
+    end
+
     def can_setup_bank_payouts?
       active_bank_account.present? || (native_payouts_supported? && !signed_up_from_india?) || signed_up_from_united_arab_emirates?
     end
