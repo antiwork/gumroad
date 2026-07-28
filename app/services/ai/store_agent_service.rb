@@ -52,6 +52,52 @@ class Ai::StoreAgentService
   # with an honest ask to scope the request down instead of streaming garbage or raising.
   TRUNCATED_REPLY = "That's too much for me to handle in one go — try asking me to change or " \
                     "summarize a smaller section, and I'll take it from there."
+  # Phrases a reply uses when it asserts a change is staged and waiting for the creator to confirm.
+  # A reply like this is only TRUE when this same turn produced a proposed action: the confirmation
+  # card the creator is told to click is rendered from that action, so with no action there is no
+  # card and the creator is hunting a button that cannot exist. The model does occasionally write
+  # the claim without calling api_write (roughly one staging claim in seven, measured in
+  # production), which reads to the creator as the agent lying to them.
+  #
+  # Each pattern deliberately requires an ASSERTION that a staged change or its card exists — an
+  # offer ("want me to prepare that?") or an explanation of how confirming works must not match,
+  # because in those replies the absence of a card is correct. NOTHING_STAGED_REPLY below must
+  # never match either, so the recovery reply can't be detected as a phantom claim itself.
+  STAGED_CLAIM_PATTERNS = [
+    # "Staged." / "Staged now." / "I've staged that" / "the staged change card"
+    /\bstaged\b/i,
+    # "I've prepared that discount for your confirmation", "I've set it up — confirm it and I'll
+    # apply it". Only counts when confirmation language rides along in the same sentence: "I've
+    # prepared a summary of your sales" is a legitimate reply with nothing to confirm.
+    /\bi'?ve (?:prepared|queued|set up|lined up)\b[^.!?]*\bconfirm/i,
+    # "ready for you to confirm", "ready to confirm"
+    /\bready (?:for you )?to confirm\b/i,
+    /\bawaiting your confirmation\b/i,
+    # "the confirm button is already there", "a confirm card should appear in this chat",
+    # "the confirmation card sits underneath that message"
+    /\bconfirm(?:ation)? (?:card|button)\b[^.!?]*\b(?:is|are|was|should|will|appears?|shows?|sits|there|above|below|in this chat|on (?:that|this|the) message)\b/i,
+    # "Fresh confirm card on this message." — no verb, but still asserts the card exists
+    /\bconfirm(?:ation)? (?:card|button)\b[^.!?]*\b(?:on|under|underneath|beneath) (?:that|this|the)\b/i,
+    /\bconfirm (?:it|that|this|the change) (?:below|above|in this chat|on the card)\b/i,
+  ].freeze
+
+  # How many times we re-ask the model to actually stage the change it claimed to have staged
+  # before giving up and telling the creator the truth. One retry is enough in practice and keeps
+  # the worst-case turn cost bounded.
+  MAX_STAGED_CLAIM_RETRIES = 1
+  # Fed back to the model when it claimed a staged change without calling api_write, so it can
+  # either make the call for real or correct itself. Phrased as the tool-protocol fact it is.
+  STAGED_CLAIM_CORRECTION = <<~TEXT.strip
+    Your last reply told the creator a change is staged and waiting for their confirmation, but you
+    did not call api_write in that reply, so nothing is staged and no confirmation card exists for
+    them to click. If the change should be staged, call api_write now with the exact change. If you
+    cannot stage it, say plainly that nothing is staged and do not refer the creator to a card.
+  TEXT
+  # What the creator sees when the model still won't stage the change it keeps claiming to have
+  # staged. Better an honest failure they can retry than a confident instruction to click a button
+  # that was never rendered. Must not itself match STAGED_CLAIM_PATTERNS above.
+  NOTHING_STAGED_REPLY = "Something went wrong on my end and that change never got prepared, so " \
+                         "there's nothing here for you to approve yet. Ask me again and I'll redo it."
   # How many prior turns of context we forward to the model. Keeps token usage bounded and avoids
   # echoing an unbounded client-supplied history back to the model.
   MAX_HISTORY_MESSAGES = 20
@@ -191,6 +237,11 @@ class Ai::StoreAgentService
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation
       again.
+    - If the creator says they cannot see a confirmation card or button, believe them and call
+      api_write again to stage the change fresh in this reply. Never send them back to an earlier
+      message to look for a card, never tell them the card is already there, and never refuse to
+      re-stage a change — you cannot see their screen, and a card that failed to save is exactly
+      what this looks like.
     - Custom HTML pages only display images hosted by Gumroad — external file
       urls are blocked by the page's security policy and render broken. When the creator wants
       their image (logo, photo, banner) on a page, first upload it with
@@ -236,6 +287,7 @@ class Ai::StoreAgentService
     proposed_action = nil
     # Display objects collected from the read calls this turn, rendered inline as cards in the chat.
     @objects = []
+    staged_claim_retries = 0
 
     MAX_TOOL_ITERATIONS.times do
       result = client.messages(
@@ -253,7 +305,24 @@ class Ai::StoreAgentService
       end
 
       if result.tool_uses.blank?
-        return { reply: result.text.to_s.strip, proposed_action: proposed_action&.as_json, objects: deduped_objects }
+        reply = result.text.to_s.strip
+
+        # The reply claims a change is staged but nothing was: there is no card to confirm, so the
+        # claim is false. Re-ask the model to actually stage it; if it still won't, tell the
+        # creator the truth rather than sending them after a button that does not exist.
+        if phantom_staged_claim?(reply:, proposed_action:)
+          if staged_claim_retries < MAX_STAGED_CLAIM_RETRIES
+            staged_claim_retries += 1
+            log_phantom_staged_claim(reply:, retrying: true)
+            append_staged_claim_correction(conversation, reply)
+            next
+          end
+
+          log_phantom_staged_claim(reply:, retrying: false)
+          return { reply: NOTHING_STAGED_REPLY, proposed_action: nil, objects: deduped_objects }
+        end
+
+        return { reply:, proposed_action: proposed_action&.as_json, objects: deduped_objects }
       end
 
       proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
@@ -283,6 +352,7 @@ class Ai::StoreAgentService
     last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
     proposed_action = nil
     @objects = []
+    staged_claim_retries = 0
 
     MAX_TOOL_ITERATIONS.times do
       # Stream this turn's text deltas live. We don't yet know if the turn is final (text-only) or an
@@ -321,6 +391,26 @@ class Ai::StoreAgentService
 
       if result.tool_uses.blank?
         reply = result.text.to_s.strip
+
+        # Same phantom-staging guard as #respond. The claim already streamed to the seller, so tell
+        # the UI to discard it before either replaying the turn (the model gets one chance to
+        # actually call api_write) or streaming the honest "nothing staged" line — otherwise the
+        # false claim stays on screen next to a card that will never appear.
+        if phantom_staged_claim?(reply:, proposed_action:)
+          emit.call(:reset, {}) if streamed_any
+
+          if staged_claim_retries < MAX_STAGED_CLAIM_RETRIES
+            staged_claim_retries += 1
+            log_phantom_staged_claim(reply:, retrying: true)
+            append_staged_claim_correction(conversation, reply)
+            next
+          end
+
+          log_phantom_staged_claim(reply:, retrying: false)
+          emit.call(:token, { text: NOTHING_STAGED_REPLY })
+          return finish_stream(reply: NOTHING_STAGED_REPLY, proposed_action: nil, last_user_message:, emit:, on_reply_complete:)
+        end
+
         return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:)
       end
 
@@ -371,6 +461,43 @@ class Ai::StoreAgentService
       conversation << { role: "user", content: tool_results }
 
       proposed_action
+    end
+
+    # True when the finished reply tells the creator a change is staged and waiting for their
+    # confirmation while no proposed action exists for this turn. The confirmation card is rendered
+    # purely from the proposed action, so in that state the creator is told to click a button that
+    # was never created — the failure this guard exists for.
+    def phantom_staged_claim?(reply:, proposed_action:)
+      return false if proposed_action.present?
+      return false if reply.blank?
+
+      STAGED_CLAIM_PATTERNS.any? { |pattern| reply.match?(pattern) }
+    end
+
+    # Replay the model's own false claim back at it as an assistant turn, followed by a user turn
+    # stating the tool-protocol fact, so the next iteration can either call api_write for real or
+    # correct itself. Using the normal message roles (rather than mutating the system prompt) keeps
+    # the correction visible in exactly the place the model reads context from.
+    def append_staged_claim_correction(conversation, reply)
+      conversation << { role: "assistant", content: reply }
+      conversation << { role: "user", content: STAGED_CLAIM_CORRECTION }
+    end
+
+    # Before this, a phantom staging claim was invisible outside a database read: no metric, no log
+    # line, nothing to alert on. Log it (and report the retry-exhausted case as an error) so the
+    # rate is trackable and a regression shows up without anyone querying ai_messages by hand. The
+    # reply text is truncated and no creator data is included beyond the reply's opening words.
+    def log_phantom_staged_claim(reply:, retrying:)
+      outcome = retrying ? "retrying" : "gave up, told the seller nothing was staged"
+      Rails.logger.warn("Store agent claimed a staged change with no proposed action (#{outcome}): #{reply.to_s.truncate(200)}")
+      return if retrying
+
+      # A fixed message string keeps every occurrence grouped as one Sentry issue (the reply text
+      # would otherwise split it into hundreds); the sample reply rides along as context.
+      ErrorNotifier.notify(
+        "Store agent claimed a staged change with no proposed action",
+        reply: reply.to_s.truncate(200),
+      )
     end
 
     # The model kept calling tools past our cap. Return a message that matches reality: only mention

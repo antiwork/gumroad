@@ -557,6 +557,91 @@ describe Ai::StoreAgentService do
       end
     end
 
+    context "when the reply claims a change is staged but nothing was proposed" do
+      # The confirmation card is rendered purely from the proposed action, so a reply asserting
+      # "Staged. Confirm that card" with no action tells the seller to click a button that does not
+      # exist. The service must retry the turn and, failing that, be honest.
+      let(:write_use) do
+        tool_result("api_write", {
+                      "endpoint" => "create_offer_code",
+                      "path_params" => { "link_id" => "p1" },
+                      "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+                    })
+      end
+
+      it "re-asks the model to stage it for real and returns the recovered turn" do
+        replies = [text_result("Staged. Confirm that card and the discount goes live."), write_use, text_result("Staged now — confirm the card.")]
+        allow(client).to receive(:messages) { replies.shift }
+
+        result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
+
+        expect(result[:proposed_action]).to include(type: "api_write")
+        expect(result[:reply]).to eq("Staged now — confirm the card.")
+        expect(replies).to be_empty
+      end
+
+      it "tells the model exactly what went wrong so it can correct itself" do
+        captured = []
+        replies = [text_result("Staged. Confirm that card."), text_result("Nothing is staged — want me to prepare it?")]
+        allow(client).to receive(:messages) do |args|
+          captured = args[:messages]
+          replies.shift
+        end
+
+        service.respond(messages: [{ role: "user", content: "make a 20% code" }])
+
+        expect(captured.last[:role]).to eq("user")
+        expect(captured.last[:content]).to eq(described_class::STAGED_CLAIM_CORRECTION)
+        # The model's own false claim is replayed as the assistant turn it is, so the correction
+        # reads as a response to it.
+        expect(captured[-2]).to eq(role: "assistant", content: "Staged. Confirm that card.")
+      end
+
+      it "gives up honestly rather than repeating the false claim" do
+        allow(client).to receive(:messages).and_return(text_result("Staged. The confirm button is already there — click it."))
+
+        result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
+
+        expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
+        expect(result[:proposed_action]).to be_nil
+        # The honest fallback must not itself read as a staging claim, or the guard would flag its
+        # own output on the next turn.
+        expect(described_class::STAGED_CLAIM_PATTERNS.any? { |p| described_class::NOTHING_STAGED_REPLY.match?(p) }).to be(false)
+      end
+
+      it "reports the give-up case so the rate is visible outside a database read" do
+        allow(client).to receive(:messages).and_return(text_result("Staged. Confirm that card."))
+        expect(ErrorNotifier).to receive(:notify).with(/claimed a staged change with no proposed action/, hash_including(:reply))
+
+        service.respond(messages: [{ role: "user", content: "make a 20% code" }])
+      end
+
+      it "leaves a legitimate staging claim alone when the action really was proposed" do
+        replies = [write_use, text_result("Staged. Confirm that card and it's live.")]
+        allow(client).to receive(:messages) { replies.shift }
+
+        result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
+
+        expect(result[:reply]).to eq("Staged. Confirm that card and it's live.")
+        expect(result[:proposed_action]).to include(type: "api_write")
+      end
+
+      it "does not flag replies that merely discuss confirming or offer to prepare something" do
+        innocuous = [
+          "Want me to prepare that discount for you?",
+          "I've prepared a summary of your sales for the month.",
+          "Any change I make needs your confirmation before it takes effect.",
+          "You have 3 products.",
+        ]
+
+        innocuous.each do |reply|
+          allow(client).to receive(:messages).and_return(text_result(reply))
+          result = service.respond(messages: [{ role: "user", content: "hi" }])
+          expect(result[:reply]).to eq(reply)
+        end
+      end
+    end
+
     context "when the model never finishes within the tool-iteration cap" do
       it "does not claim there is a change to confirm when none was staged" do
         allow(api_client).to receive(:get).and_return({ "success" => true, "http_status" => 200 })
@@ -758,6 +843,49 @@ describe Ai::StoreAgentService do
       final_tokens = events.filter_map { |event, payload| payload[:text] if event == :token }
       expect(final_tokens.last).to eq(described_class::TRUNCATED_REPLY)
       expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
+    end
+
+    it "discards a phantom staging claim from the UI and streams the honest line instead" do
+      # The model says a change is staged but never called api_write, so no confirmation card will
+      # render. The claim has already streamed to the seller, so the UI must be told to discard it
+      # before the honest reply arrives — otherwise the false claim stays on screen.
+      claim = "Staged. Confirm that card and the header updates."
+      stub_stream_turns(
+        { stream: [claim], result: text_result(claim) },
+        { stream: [claim], result: text_result(claim) },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "fix my header" }])
+
+      event_names = events.map(&:first)
+      fallback_index = events.index { |event, payload| event == :token && payload[:text] == described_class::NOTHING_STAGED_REPLY }
+      expect(fallback_index).not_to be_nil
+      expect(event_names.index(:reset)).to be < fallback_index
+      expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
+      expect(result[:proposed_action]).to be_nil
+      expect(events.any? { |event, _| event == :proposed_action }).to be(false)
+    end
+
+    it "recovers a phantom staging claim by replaying the turn into a real proposal" do
+      claim = "Staged. Confirm that card."
+      write_turn = tool_result("api_write", {
+                                 "endpoint" => "create_offer_code",
+                                 "path_params" => { "link_id" => "p1" },
+                                 "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+                               })
+      stub_stream_turns(
+        { stream: [claim], result: text_result(claim) },
+        { stream: [], result: write_turn },
+        { stream: ["Staged now — confirm the card."], result: text_result("Staged now — confirm the card.") },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "make a 20% code" }])
+
+      expect(result[:reply]).to eq("Staged now — confirm the card.")
+      expect(result[:proposed_action]).to include(type: "api_write")
+      expect(events.any? { |event, _| event == :proposed_action }).to be(true)
     end
   end
 end
