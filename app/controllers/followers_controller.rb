@@ -144,7 +144,19 @@ class FollowersController < ApplicationController
     def create_follower(params, source: nil)
       followed_user = User.find_by_external_id(params[:seller_id])
 
-      return if followed_user.nil?
+      # Treat a suspended or deleted seller exactly like an unknown one. Creating
+      # a follow makes Gumroad email a "Please confirm your follow request"
+      # message to whatever address was posted here — and this is a public,
+      # unauthenticated endpoint, so for a banned seller that turns our own
+      # sending domain into a relay for mail they can no longer legitimately
+      # trigger (a phishing ring abused exactly this after its accounts were
+      # suspended). Follower::CreateService applies the same `account_active?`
+      # check; it is duplicated here so the request is rejected at the first
+      # entry point and so callers can't reach the service for an inactive
+      # seller at all. Falling through to the nil path (rather than a dedicated
+      # error) keeps the response identical to an unknown seller_id, so the
+      # endpoint doesn't disclose whether an account is suspended.
+      return if followed_user.nil? || !followed_user.account_active?
 
       follower_email = params[:email]
       follower_user_id = User.find_by(email: follower_email)&.id
