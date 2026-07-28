@@ -34,7 +34,7 @@ describe PostSendgridApi, :freeze_time do
     end
 
     it "includes them as CSS" do
-      expect(sent_email_content).to include("body {\nbackground-color: #000000; color: #fff; font-family: \"Roboto Mono\", \"ABC Favorit\", monospace;\n}")
+      expect(sent_email_content).to include("body {\nbackground-color: #000000; color: #ffffff; font-family: \"Roboto Mono\", \"ABC Favorit\", monospace;\n}")
       expect(sent_email_content).to include("body {\nheight: auto; min-height: 100%;\n}")
     end
   end
