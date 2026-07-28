@@ -72,6 +72,30 @@ See `lib/utilities/dev_tools.rb`:
 
 For Gumroad-specific scopes and associations (`alive`, `successful`, `unpaid_balance_cents`, `payments`, `products`, Flipper checks, Sidekiq introspection), see [references/common-queries.md](references/common-queries.md).
 
+### Stale bastion host keys look like unhealthy instances
+
+EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale keys and refuses the onward hop with `REMOTE HOST IDENTIFICATION HAS CHANGED` / `Offending ECDSA key`. From outside this is indistinguishable from a hung instance, and it silently shrinks the usable pool each time instances are replaced.
+
+`prod_query.sh` self-heals: after picking a working host it routes `ssh-keygen -R` for every failed candidate through that host (they share the bastion's `known_hosts`). Two things to know:
+
+- **You cannot run a command on the bastion itself.** It auto-jumps to whatever `LC_PAPER` names; omitting `LC_PAPER` fails with `ssh: Could not resolve hostname`. Always route through a working instance IP.
+- **The warning text is often noise.** A run can print the whole man-in-the-middle banner for a *previous* hop and still succeed. Judge by exit code and `MARK` output, not the banner.
+
+### Grepping only for `^MARK` can hide a total failure
+
+`... | grep "^MARK"` on a run that never reached Rails returns empty with **exit 0**, which reads as "query worked, no rows". Capture to files and echo the exit code:
+
+```bash
+timeout 560 prod_query.sh /tmp/q.rb > /tmp/q.out 2>/tmp/q.err; echo "exit=$?"
+grep -a "^MARK" /tmp/q.out
+```
+
+Exit `124` = outer timeout (query too heavy); `255` = SSH failed before Rails started.
+
+### Keep Stripe API calls out of loops
+
+The DB is fast; `Stripe::Transfer.list` / `Charge.retrieve` per record is what blows the timeout — even ~5 accounts with one Stripe call each can hit exit `124`. Use raw SQL via `ActiveRecord::Base.connection.select_all` for population questions, and fetch at most 1–2 Stripe objects per run when you need live processor state.
+
 ## Requirements
 
 - An AWS profile with `ec2:DescribeInstances` on the prod account. The script defaults to the profile `gumroad-prod` (created by `scripts/setup.sh`). Override by exporting `AWS_PROFILE` or setting `PROD_AWS_PROFILE` in your config file.

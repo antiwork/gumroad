@@ -99,6 +99,7 @@ else
   # exec never returned). A hung/recycling instance previously burned the full
   # outer timeout; now it costs <=20s and we fail over to the next-oldest.
   instance_ip=""
+  failed_ips=""
   for ip in $candidate_ips; do
     if LC_PAPER="$ip" probe_timeout 20 ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
         -o ConnectTimeout=10 "admin@$PROD_BASTION" \
@@ -107,8 +108,33 @@ else
       instance_ip="$ip"
       break
     fi
+    failed_ips="$failed_ips $ip"
     >&2 echo "Instance $ip failed health probe, trying next..."
   done
+
+  # EC2 recycles private IPs, so the BASTION's known_hosts accumulates stale keys and refuses
+  # the onward hop with "REMOTE HOST IDENTIFICATION HAS CHANGED" / "Offending ECDSA key". From
+  # out here that is indistinguishable from an unhealthy instance, and it silently shrinks the
+  # usable pool every time instances are replaced — several consecutive candidates became
+  # unusable until the entries were cleared by hand.
+  #
+  # Clean up now that a working hop is known. The bastion auto-jumps to whatever LC_PAPER
+  # names, so a command cannot be run on the bastion directly (omitting LC_PAPER just fails
+  # with "Could not resolve hostname") — route ssh-keygen through the host that answered,
+  # which shares the same bastion known_hosts file. This does not rescue the current run (the
+  # instance we are using already works), it stops the pool from silently decaying for the
+  # next one.
+  #
+  # Safe: removing a key for a recycled internal IP means the next connect re-learns it via
+  # accept-new, exactly like a first-ever connect. ssh-keygen -R is a no-op with no entry.
+  if [ -n "$instance_ip" ] && [ -n "${failed_ips// /}" ]; then
+    for stale_ip in $failed_ips; do
+      LC_PAPER="$instance_ip" probe_timeout 20 ssh -o SendEnv=LC_PAPER \
+        -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "admin@$PROD_BASTION" \
+        "ssh-keygen -f ~/.ssh/known_hosts -R '$stale_ip'" >/dev/null 2>&1 \
+        && >&2 echo "Cleared any stale bastion host key for $stale_ip."
+    done
+  fi
 
   if [ -z "$instance_ip" ]; then
     echo "Error: No instance in $PROD_SECURITY_GROUP passed the health probe. Set PROD_INSTANCE_IP to force one." >&2
