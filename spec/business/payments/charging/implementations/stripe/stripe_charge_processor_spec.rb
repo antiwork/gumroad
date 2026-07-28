@@ -3820,6 +3820,29 @@ describe StripeChargeProcessor, :vcr do
           @stripe_balance = double(available: [stripe_object_available_double], pending: [stripe_object_pending_double])
         end
 
+        it "does not debit when the balance clears the local-currency check but not the converted USD check" do
+          # 1350 Canadian cents is more than the 1330 Canadian cents owed, so the first
+          # check passes. Converted at 1.33 it is about 1015 US cents, and after the 5%
+          # conversion buffer about 964 — less than the 1000 US cents owed, so the creator
+          # does not actually have the funds and nothing should be reversed.
+          credit = create(:credit, user: @merchant_account.user, amount_cents: -1000, merchant_account_id: @merchant_account.id, backtax_agreement: create(:backtax_agreement))
+          create(:payment_completed, user: @merchant_account.user,
+                                     stripe_connect_account_id: @merchant_account.charge_processor_merchant_id,
+                                     stripe_internal_transfer_id: "tr_123")
+
+          stripe_balance = double(available: [double(currency: "cad", amount: 1350)],
+                                  pending: [double(currency: "cad", amount: 0)])
+          expect(Stripe::Balance).to receive(:retrieve).with(hash_including({ stripe_account: @merchant_account.charge_processor_merchant_id })).and_return(stripe_balance)
+          expect(Stripe::Transfer).to_not receive(:retrieve)
+          expect(Stripe::Transfer).to_not receive(:create_reversal)
+
+          expect do
+            described_class.debit_stripe_account_for_australia_backtaxes(credit:)
+          end.to_not change { BacktaxCollection.count }
+
+          expect(credit.backtax_agreement.reload.collected).to eq(false)
+        end
+
         it "creates a reversal from a single past internal transfer" do
           credit = create(:credit, user: @merchant_account.user, amount_cents: -1000, merchant_account_id: @merchant_account.id, backtax_agreement: create(:backtax_agreement))
           create(:payment_completed, user: @merchant_account.user,

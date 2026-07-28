@@ -671,9 +671,13 @@ class StripeChargeProcessor
       return unless stripe_balance_amount > owed_amount_in_currency
 
       # Determine the stripe balance amount in usd.
+      # stripe_balance_amount was summed from the balance entries whose currency is the
+      # merchant account's own currency (stripe_currency) a few lines above, so it has to be
+      # converted from that currency — passing "usd" here would return the local-currency
+      # figure unchanged and treat, say, 84,000 rupees as 84,000 US cents.
       # Reduce that amount by 5%, as a buffer for possible currency conversion inaccuracies.
       # Then, avoid debiting the customer's bank account if they haven't accumulated enough balance in their Gumroad-controlled Stripe account.
-      stripe_balance_amount_cents_usd = get_usd_cents("usd", stripe_balance_amount)
+      stripe_balance_amount_cents_usd = get_usd_cents(stripe_currency, stripe_balance_amount)
       stripe_balance_amount_cents_usd_reduced_by_five_percent = (stripe_balance_amount_cents_usd - (5.0 / 100) * stripe_balance_amount_cents_usd).round
       return unless stripe_balance_amount_cents_usd_reduced_by_five_percent > owed_amount_cents_usd
 
