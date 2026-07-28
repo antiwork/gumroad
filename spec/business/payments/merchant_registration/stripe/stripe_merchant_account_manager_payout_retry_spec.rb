@@ -53,6 +53,105 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  # A seller with no connected account yet fails in create_account, which is the path the
+  # payments settings page uses once a bank account exists. Every rejection there used to leave
+  # nothing behind but a merchant-account row created and soft-deleted in the same second, so
+  # support could not tell which field Stripe objected to (gumroad-private#1429).
+  describe "account rejection breadcrumb during account creation" do
+    let(:zip_code) { "94107" }
+
+    def rejection_notes
+      payout_notes(StripeMerchantAccountManager::ACCOUNT_REJECTION_NOTE_PREFIX)
+    end
+
+    context "when Stripe rejects a field we do not handle specifically" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "Invalid value for individual[id_number]", "individual[id_number]", code: "invalid_request_error"
+          )
+        )
+      end
+
+      it "records the rejected field and code as a private payout note, and re-raises" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        note = rejection_notes.last
+        expect(note).to be_present
+        expect(note.content).to include("code=invalid_request_error")
+        expect(note.content).to include("param=individual[id_number]")
+        expect(note.content).to include("Invalid value for individual[id_number]")
+      end
+
+      it "keeps the note private to staff" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(rejection_notes.last.json_data["seller_visible"]).to be false
+      end
+
+      it "does not record a note when notify is false" do
+        expect do
+          described_class.create_account(user, passphrase:, notify: false)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(rejection_notes).to be_empty
+      end
+    end
+
+    context "when Stripe rejects the postal code" do
+      let(:zip_code) { "not-a-zip" }
+
+      it "leaves only the dedicated postal-code note, which drives the automatic retry" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(rejection_notes).to be_empty
+        expect(payout_notes(StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX).count).to eq(1)
+      end
+    end
+
+    context "when Stripe rejects the bank account" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new(
+            "We couldn't find the bank for that routing number", "bank_account[routing_number]", code: "routing_number_invalid"
+          )
+        )
+      end
+
+      it "leaves only the dedicated bank sync note" do
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        expect(rejection_notes).to be_empty
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+      end
+    end
+
+    context "when the breadcrumb itself fails to save" do
+      before do
+        allow(Stripe::Account).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("Invalid value for individual[id_number]", "individual[id_number]")
+        )
+        allow_any_instance_of(User).to receive(:add_payout_note).and_raise(StandardError, "note write failed")
+      end
+
+      it "still raises Stripe's error rather than ours" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError, /individual\[id_number\]/)
+      end
+    end
+  end
+
   describe "bank account rejection during account creation" do
     let(:zip_code) { "94107" }
 

@@ -240,7 +240,24 @@ module StripeMerchantAccountManager
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
+    # A seller who has no connected account yet fails here, not in update_account: the settings
+    # page calls create_account once the bank account exists, and every rejection used to leave
+    # nothing behind except a merchant-account row created and soft-deleted in the same second.
+    # Record which field Stripe objected to unless the rejection already has its own dedicated
+    # breadcrumb above, so support can read the cause off the account instead of reproducing it.
+    record_account_rejection_note(user, e) if notify && undiagnosed_stripe_rejection?(e)
     raise
+  end
+
+  # True for Stripe rejections that would otherwise leave no trace. Postal-code and bank-account
+  # rejections are excluded because they each already record a more specific note (and the
+  # postal-code one drives the weekly automatic retry), so adding a second note for them would
+  # only duplicate what support already sees.
+  private_class_method
+  def self.undiagnosed_stripe_rejection?(error)
+    return false unless error.is_a?(Stripe::StripeError)
+
+    !postal_code_invalid_error?(error) && !bank_account_invalid_error?(error)
   end
 
   def self.delete_account(merchant_account)
