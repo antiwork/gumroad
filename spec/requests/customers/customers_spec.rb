@@ -133,22 +133,14 @@ describe "Sales page", type: :system, js: true do
     end
 
     it "ignores a mailto: prefix pasted into the search field" do
-      index_model_records(Purchase)
-
       login_as seller
       visit customers_path
 
       # Copying an email address out of a mail client often puts the whole link on the clipboard
       # ("mailto:someone@example.com") rather than the bare address, so the search has to look past
-      # the prefix or the seller sees no results for a customer they definitely have. Setting the
-      # value in one shot and firing a single input event is what a real paste does — typing the
-      # same text key by key would never put the whole prefix in the field at once, so it would not
-      # exercise the case the seller hits.
+      # the prefix or the seller sees no results for a customer they definitely have.
       select_disclosure "Toggle Search" do
-        find_field("Search sales").execute_script(
-          "Object.getOwnPropertyDescriptor(Object.getPrototypeOf(this), 'value').set.call(this, arguments[0]); this.dispatchEvent(new Event('input', { bubbles: true }))",
-          "mailto:customer1@gumroad.com"
-        )
+        paste_into "Search sales", "mailto:customer1@gumroad.com"
       end
       wait_for_ajax
 

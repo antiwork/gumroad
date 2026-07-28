@@ -49,6 +49,7 @@ export type LayoutProps = {
     email: string | null;
     email_digest: string;
     is_archived: boolean;
+    has_invoice: boolean;
     product_id: string | null;
     product_permalink: string | null;
     product_name: string | null;
@@ -201,6 +202,27 @@ export const Layout = ({
                       <Button onClick={() => handleResendReceipt(receiptPurchaseId)} disabled={isResendingReceipt}>
                         {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                       </Button>
+                      {/*
+                        Buyers could always reach their invoice, but only by going Receipt →
+                        View receipt → Generate invoice, and enough of them failed to find it
+                        that sellers were fielding the support requests. Surfacing it here
+                        alongside the other receipt actions removes that indirection.
+
+                        Gated on has_invoice so it matches the receipt: a free purchase or a
+                        membership still in its free trial has no amount to invoice, and the
+                        invoice page would have nothing to render.
+                      */}
+                      {purchase.has_invoice ? (
+                        <NavigationButton
+                          href={
+                            purchase.email
+                              ? Routes.new_purchase_invoice_url(receiptPurchaseId, { email: purchase.email })
+                              : Routes.new_purchase_invoice_url(receiptPurchaseId)
+                          }
+                        >
+                          Generate invoice
+                        </NavigationButton>
+                      ) : null}
                     </div>
                   </Details>
                 </CardContent>

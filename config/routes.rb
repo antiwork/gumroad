@@ -90,6 +90,9 @@ Rails.application.routes.draw do
         end
         resources :skus, only: [:index]
         resources :subscribers, only: [:index]
+        # Documented read access to the reviews shown on the product's public page, including the
+        # submission date the public page-data endpoint never returned.
+        resources :product_reviews, path: "reviews", only: [:index]
         put "bundle_contents", to: "bundle_contents#update"
         resource :thumbnail, only: [:create, :destroy]
         resources :covers, only: [:create, :destroy]
