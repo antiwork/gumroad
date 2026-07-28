@@ -97,8 +97,22 @@ describe HelpCenter::ArticleText do
       expect(results.first).to eq(headline_match.slug)
     end
 
+    # Callers write questions, not keyword lists. When the punctuation stayed glued to the word,
+    # "store colors?" searched for the literal "colors?", matched nothing, and read as "Gumroad has
+    # no documentation on this".
+    it "ignores punctuation so a natural-language question still matches" do
+      plain = described_class.search("profile page").map { |a| a[:slug] }
+
+      expect(described_class.search("profile page?").map { |a| a[:slug] }).to eq(plain)
+      expect(described_class.search("What's on your profile page?").map { |a| a[:slug] }).to include("124-your-gumroad-profile-page")
+    end
+
     it "returns the full index for a blank query" do
       expect(described_class.search("  ").length).to eq(HelpCenter::Article.count)
+    end
+
+    it "returns the full index for a query that is only punctuation" do
+      expect(described_class.search("???").length).to eq(HelpCenter::Article.count)
     end
 
     it "returns nothing for a query that matches no article" do
@@ -115,10 +129,26 @@ describe HelpCenter::ArticleText do
       expect(described_class.cache_version).to eq("abc123def")
     end
 
-    it "falls back to the content directory's mtime when there is no deployed revision" do
+    it "falls back to the article files' mtimes when there is no deployed revision" do
       stub_const("REVISION", "no-revision")
 
       expect(described_class.cache_version).to start_with("dev-")
+    end
+
+    # A directory's mtime only moves when an entry is added, removed, or renamed. Keying on it meant
+    # editing the prose of an article that already existed left the key unchanged, and the cache
+    # kept serving the pre-edit text — the staleness these endpoints exist to remove.
+    it "changes when an existing article's file is edited, not only when one is added or removed" do
+      stub_const("REVISION", "no-revision")
+      before = described_class.cache_version
+
+      edited = Dir[Rails.root.join(described_class::CONTENTS_GLOB)].first
+      real_mtime = File.method(:mtime)
+      allow(File).to receive(:mtime) do |path|
+        path.to_s == edited ? real_mtime.call(path) + 1.hour : real_mtime.call(path)
+      end
+
+      expect(described_class.cache_version).not_to eq(before)
     end
 
     it "keys the cached text by version, so two revisions cannot share an entry" do

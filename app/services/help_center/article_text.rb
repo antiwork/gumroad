@@ -26,6 +26,9 @@ module HelpCenter::ArticleText
   # Elements whose text is noise (or enormous) once the page is reduced to prose.
   IGNORED_SELECTORS = "script, style, figure, img, svg, iframe, video, source"
 
+  # Where the article partials live. Used to date them for the cache key (see #cache_version).
+  CONTENTS_GLOB = "app/views/help_center/articles/contents/*.html.erb"
+
   module_function
 
   # The article as plain text for a reader, capped at MAX_LENGTH with a pointer to the live page.
@@ -48,12 +51,19 @@ module HelpCenter::ArticleText
 
   # Identifies the deployed code, so a deploy that edits an article invalidates its cached text.
   # REVISION is the deployed git sha in staging and production; elsewhere it is a fixed sentinel
-  # ("no-revision"), so development and test fall back to the content directory's own mtime and
-  # pick up a local edit at once.
+  # ("no-revision"), so development and test fall back to the newest mtime among the article
+  # partials themselves and pick up a local edit at once.
+  #
+  # It has to be the files' mtimes and not the containing directory's: a directory's mtime only
+  # moves when an entry is added, removed, or renamed, so editing the text of an article that
+  # already exists would leave the key unchanged and keep serving the pre-edit prose — the exact
+  # staleness these endpoints exist to remove. Reading a few dozen mtimes is cheap, and this path
+  # never runs in production.
   def cache_version
     return REVISION if defined?(REVISION) && REVISION.present? && REVISION != "no-revision"
 
-    "dev-#{File.mtime(Rails.root.join('app/views/help_center/articles/contents')).to_i}"
+    newest = Dir[Rails.root.join(CONTENTS_GLOB)].map { |path| File.mtime(path).to_i }.max
+    newest ? "dev-#{newest}" : "dev"
   rescue SystemCallError
     "dev"
   end
@@ -64,8 +74,14 @@ module HelpCenter::ArticleText
     HelpCenter::Article.all.map { |article| summary(article) }
   end
 
-  # Articles matching every whitespace-separated term in `query` (case-insensitively), so
-  # "product page colors" narrows rather than widens the result.
+  # Articles matching every word in `query` (case-insensitively), so "product page colors"
+  # narrows rather than widens the result.
+  #
+  # The query is split on anything that is not a letter or digit rather than on whitespace,
+  # because callers write questions, not keyword lists. Splitting on whitespace kept the
+  # punctuation inside the term, so "store colors?" searched for the literal "colors?" and matched
+  # nothing — the caller would conclude Gumroad has no documentation on store colors, which is the
+  # exact wrong answer this endpoint was added to prevent.
   #
   # Matching covers the article's full text, not just its title and description. That costs more —
   # it renders every article once, then reads them from the cache — but title-only matching made
@@ -74,7 +90,7 @@ module HelpCenter::ArticleText
   # conclude Gumroad has nothing to say about it, which is the exact wrong answer this endpoint was
   # added to prevent. Titles and descriptions still rank first so the closest match leads.
   def search(query)
-    terms = query.to_s.downcase.split(/\s+/).reject(&:blank?)
+    terms = query.to_s.downcase.scan(/[[:alnum:]]+/)
     return index if terms.empty?
 
     headline, body = HelpCenter::Article.all.each_with_object([[], []]) do |article, (headline_hits, body_hits)|
