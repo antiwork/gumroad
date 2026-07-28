@@ -468,10 +468,19 @@ class Checkout::BuyerCurrencyEligibility
     # whole order for the same reason multi_seller_order? is: the ramp is a decision about
     # the cart the buyer saw, so one seller in the cart being unramped must withhold the
     # lane from all of it, not only from their own charge.
+    #
+    # The seller rows are loaded in one query rather than one per purchase, because this runs
+    # on the synchronous charge path once for every charge the order produces. Mapping the
+    # distinct ids back through the lookup (instead of returning only the rows that came back)
+    # keeps a purchase whose seller row is missing as a nil, which
+    # multi_seller_enabled? rejects — a missing seller must withhold the lane, not silently
+    # shrink the set being checked.
     def order_sellers
       return [] if order.blank?
 
-      order.purchases.map(&:seller).uniq
+      seller_ids = order.purchases.map(&:seller_id).uniq
+      sellers_by_id = User.where(id: seller_ids.compact).index_by(&:id)
+      seller_ids.map { sellers_by_id[_1] }
     end
 
     def multi_seller_lane_allowed?
