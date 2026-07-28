@@ -365,7 +365,7 @@ class Checkout::BuyerCurrencyQuote
     # quoted: the quote converts the cart's canonical USD total into the buyer's own
     # currency, and USD is only the unit our money flows are normalized to internally.
     # A euro-priced product bought from Brazil is quoted in reais exactly like a
-    # dollar-priced one (gumroad-private#1371).
+    # dollar-priced one.
     #
     # The one product currency that must NOT go through this lane is the buyer's own.
     # Converting a R$49.90 listing to USD and back through a Stripe FX quote returns

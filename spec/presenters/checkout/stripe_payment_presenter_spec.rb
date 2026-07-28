@@ -1499,7 +1499,7 @@ describe Checkout::StripePaymentPresenter do
       # Without the client-confirm flag the iDEAL surface is unreachable, but this Canadian
       # buyer of a EUR-priced product is still an ordinary quote candidate: the cart's
       # canonical USD total converts into CAD exactly as a USD-priced cart's would
-      # (gumroad-private#1371). It used to dead-end on CardElement because quoting refused
+      # It used to dead-end on CardElement because quoting refused
       # any non-USD listing.
       expect(stripe_payment_props(add_products:)).to eq(
         payment_element_props(buyer_currency_presentment: true, disable_wallets: true)

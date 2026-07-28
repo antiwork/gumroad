@@ -429,7 +429,7 @@ class Checkout::StripePaymentPresenter
     #
     # There is deliberately no condition on the currency the SELLER priced in. The quote
     # converts the cart's canonical USD total into the buyer's currency, which works the same
-    # whether the seller listed in dollars, euros or reais (gumroad-private#1371). The one
+    # whether the seller listed in dollars, euros or reais. The one
     # excluded case — a product priced in the buyer's own currency, which is withheld from
     # quoting so an FX round trip cannot misprice it — is already excluded by
     # buyer_currency_presentment_candidate?: the buyer-local display only turns on when the
