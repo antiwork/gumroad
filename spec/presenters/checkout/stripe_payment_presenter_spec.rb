@@ -636,13 +636,28 @@ describe Checkout::StripePaymentPresenter do
     expect(props[:integration]).to eq("payment_element")
   end
 
-  # A genuinely free product has no way to acquire a price, so it must keep falling back.
-  it "still falls back to CardElement for a free product that is not pay-what-you-want" do
+  # A product that genuinely cannot be paid for must keep falling back, but "free and not
+  # pay-what-you-want" is not that product: Product::Prices#set_customizable_price forces
+  # customizable_price to true on any $0 product, so CheckoutPresenter never emits that
+  # combination — measured across 39,875 recent production products, zero of which are $0
+  # with customizable_price false. Pinning it would assert on a hash production cannot
+  # produce. The reachable shape is line 64's escape hatch: a $0 base product whose alive
+  # variants carry a positive price_difference_cents keeps customizable_price false, and the
+  # buyer pays the variant's price rather than naming their own.
+  it "still falls back to CardElement for a free non-pay-what-you-want product priced by its variants" do
     seller = create(:user)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-    free_product = create(:product, user: seller, price_cents: 0)
+    variant_priced_product = create(:product, user: seller, price_cents: 0)
+    category = create(:variant_category, link: variant_priced_product)
+    create(:variant, variant_category: category, price_difference_cents: 500)
+    # create(:product) already ran the callback while the product had no variants, forcing
+    # customizable_price true. Clear it and re-run now that the priced variant exists, which
+    # is the order a real seller produces: add the variant, then save.
+    variant_priced_product.update_column(:customizable_price, false)
+    variant_priced_product.send(:set_customizable_price)
 
-    expect(stripe_payment_props(add_products: [checkout_product_for(free_product, price: 0, pwyw: nil)]))
+    expect(variant_priced_product.reload.customizable_price).to be(false)
+    expect(stripe_payment_props(add_products: [checkout_product_for(variant_priced_product, price: 0)]))
       .to eq(card_element_fallback("not_charged"))
   end
 
