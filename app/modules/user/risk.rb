@@ -12,7 +12,15 @@ module User::Risk
   INCREMENTAL_ENQUEUE_BALANCE = 100_00
   PROBATION_WITH_REMINDER_DAYS = 30
   PROBATION_REVIEW_DAYS = 2
-  MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
+  # Above this share of lifetime unrefunded sales volume lost to standing chargebacks, we hold the
+  # seller's payouts automatically. 1% is the rate card networks treat as the healthy ceiling — Visa
+  # and Mastercard both start monitoring a merchant around there — so it is the number we actually
+  # want sellers to stay under, and holding at 3% meant a seller could sit at triple the healthy
+  # rate indefinitely with payouts flowing.
+  #
+  # This is the same 1% used for automatic refund-policy enforcement below, but measured
+  # differently: this one is a share of DOLLAR VOLUME, that one is a share of unique BUYERS.
+  MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 1.0
 
   # Thresholds for automatically forcing a buyer-friendly refund policy on a seller.
   # The dispute rate here is a rate of UNIQUE BUYERS (buyers with a standing chargeback /

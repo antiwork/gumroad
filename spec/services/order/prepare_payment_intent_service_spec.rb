@@ -1881,6 +1881,11 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
 
       it "creates the BRL intent with Pix's create-time options, charging the buyer exactly the listed price and adding no IOF on this direct charge" do
+        # A genuinely Brazilian connected account — the domestic case. The factory leaves country
+        # nil, which is a DIFFERENT lane (see the non-Brazilian example below), so set it here
+        # rather than relying on the default.
+        connect_account.update!(country: "BR")
+
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "Brazil") }
 
@@ -1890,10 +1895,11 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:currency]).to eq(Currency::BRL)
         expect(create_args[:payment_method_types]).to include("pix")
         expect(create_args[:amount_cents]).to eq(100_00)
-        # The charge is created on the seller's own Brazilian Stripe account, so the payment is
-        # domestic: no foreign exchange, therefore no IOF for Stripe to price. amount_includes_iof
-        # is left off entirely rather than sent — the fee side already declines to bill it (asserted
-        # below), and the two must agree.
+        # The charge is created on the seller's own Brazilian Stripe account, so the payment never
+        # leaves Brazil: no foreign exchange, therefore no IOF for Stripe to price.
+        # amount_includes_iof is left off entirely rather than sent — asking Stripe to price a tax
+        # that does not apply is at best meaningless, and an option Stripe does not accept fails
+        # the whole intent create, taking card down with it for that checkout.
         expect(create_args[:payment_method_options]).to eq(
           pix: { expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS }
         )
@@ -1903,19 +1909,49 @@ describe Order::PreparePaymentIntentService, :vcr do
         purchase = order.purchases.first.reload
         expect(purchase.card_type).to eq(CardType::PIX)
 
-        # This seller is a Stripe Connect (direct charge) seller, so Stripe settles into their own
-        # account and deducts Brazil's IOF from that balance itself. Recovering it again through
-        # fee_cents would bill them for the same tax twice, so pix_iof_fee_per_thousand is gated off
-        # here — as is the processor fee, on the identical condition. What is left is the 10% flat
-        # Gumroad fee plus the $0.50 fixed fee. The IOF-charging path is covered on a
-        # Gumroad-managed account in spec/models/purchase/purchase_process_spec.rb ("Pix IOF fee").
+        # Gumroad charges a Brazilian connected account no fee at all (calculate_fees returns early
+        # for is_a_brazilian_stripe_connect_account?), so there is no IOF component to look for and
+        # nothing else either. The IOF-charging path is covered on a Gumroad-managed account in
+        # spec/models/purchase/purchase_process_spec.rb ("Pix IOF fee").
         expect(purchase.charged_using_gumroad_merchant_account?).to eq(false)
         expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(0)
-        expected_variable_fee_cents = (purchase.price_cents * Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND / 1000.0).round
-        expect(purchase.fee_cents).to eq(expected_variable_fee_cents + Purchase::GUMROAD_FIXED_FEE_CENTS)
+        expect(purchase.fee_cents).to eq(0)
       end
 
-      # The counterpart to the direct-charge case above: on a Gumroad-held account the money leaves
+      # The other direct-charge lane, and the reason the option's gate is keyed on the account's
+      # COUNTRY rather than on who owns it. Nothing restricts Pix to Brazilian connected accounts —
+      # the resolver's BR lock is on the buyer, and the only per-account condition is the Stripe
+      # capability snapshot — so a non-Brazilian connected account with pix_payments active takes a
+      # payment that DOES leave Brazil. IOF applies, so the option must still be sent, even though
+      # the money never touches a Gumroad-held balance and there is no Gumroad cost to bill back.
+      it "still sends amount_includes_iof on a direct charge to a NON-Brazilian connected account, but bills no IOF fee" do
+        connect_account.update!(country: "US")
+
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_non_br")
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::BRL)
+        expect(create_args[:payment_method_types]).to include("pix")
+        expect(create_args[:payment_method_options]).to eq(
+          pix: {
+            expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS,
+            amount_includes_iof: described_class::PIX_AMOUNT_INCLUDES_IOF,
+          }
+        )
+
+        purchase = order.purchases.first.reload
+        expect(purchase.card_type).to eq(CardType::PIX)
+        # Cross-border, so the tax exists and the option is sent — but the charge settles into the
+        # seller's own account, so Gumroad absorbed nothing and recovers nothing. The two gates
+        # answering differently here is the intended behaviour, not a drift.
+        expect(purchase.charged_using_gumroad_merchant_account?).to eq(false)
+        expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(0)
+      end
+
+      # The counterpart to the direct-charge cases above: on a Gumroad-held account the money leaves
       # Brazil, the payment is cross-border, IOF applies, and the option must be sent — otherwise
       # Stripe's default marks the buyer's amount up by the tax and the banking-app total stops
       # matching the price checkout quoted. This is what all Pix traffic looks like today.
