@@ -112,12 +112,26 @@ class Order::CreateService
     end
 
     if (cart = Cart.fetch_by(user: buyer, browser_guid: params[:browser_guid]))
-      all_items_handled = purchase_responses.any? && purchase_responses.values.all? { _1[:success] }
+      # The cart is emptied once the checkout got far enough that the buyer has something to show
+      # for it, and kept otherwise so they can retry without rebuilding it by hand.
+      #
+      # `order.persisted?` alone was not that test. A declined purchase is still saved (so the
+      # attempt stays auditable) and then appended to the order, which persists the order — so a
+      # checkout where *every* item was declined took this branch and destroyed the cart anyway.
+      # A declined card on a multi-item cart is the everyday way to reach that; nothing exotic is
+      # needed. `all_items_handled` is not the right test either: it demands every response be a
+      # success, but a card that needs 3-D Secure comes back as a not-yet-successful response on a
+      # purchase that is perfectly on track, and the buyer is mid-authentication on it.
+      #
+      # So the question asked here is the narrow one: did anything survive? If the order holds no
+      # purchase that is still live, nothing was bought and nothing is pending, and the cart stays.
+      nothing_survived = order.persisted? && order.purchases.any? && order.purchases.all?(&:failed?)
 
       if order.persisted?
         cart.order = order
-        cart.mark_deleted!
-      elsif all_items_handled
+        cart.mark_deleted! unless nothing_survived
+        cart.save! if cart.changed?
+      elsif purchase_responses.any? && purchase_responses.values.all? { _1[:success] }
         cart.mark_deleted!
       end
     end
