@@ -229,9 +229,28 @@ class Charge::MethodForcedPresentment
       # charges have never minted an FX quote (0 of 463 charge_presentments in 14 days carry
       # a stripe_fx_quote_id, against 3,577 of 4,328 overall), so the first time this lane
       # quotes a destination charge is the first time the platform-minted-quote-plus-declared-
-      # destination pairing is exercised against real money. Returning nil falls back to the
-      # canonical USD intent, which is exactly what these charges do today, so with the flag
-      # off this lane behaves as it does on main and the ramp is reversible without a revert.
+      # destination pairing is exercised against real money.
+      #
+      # Be precise about what returning nil means HERE, because it is not the graceful
+      # canonical-USD fallback it is on the card lane. This method only runs for the QUOTED
+      # case — a USD-priced product bought with a currency-forcing method — and by the time
+      # a token for that shape exists the Payment Element was mounted in the forced currency,
+      # so Order::PreparePaymentIntentService#method_forced_presentment_required? turns a nil
+      # presentment into a clean synchronous failure rather than a USD intent the token could
+      # never confirm. So the flag being off does not silently downgrade such a checkout: it
+      # refuses it up front, before any Stripe call.
+      #
+      # That is still the safe direction, because the checkout it refuses cannot succeed today
+      # either: on main the quote for a destination charge is minted on the seller's Custom
+      # account while the intent is created on the platform account, and Stripe rejects that
+      # pairing at intent creation — the same buyer-visible failure, only later and after two
+      # network round trips. And no live traffic reaches here anyway: a cart has to be priced
+      # in USD to take the quoted branch, while a currency-forcing method is only ever offered
+      # on a cart already priced in that method's own currency (Checkout::PaymentMethodResolver
+      # #forced_currency_methods, mirrored by the presenter's #method_forced_shape?), and that
+      # cart takes the direct-listed-amount branch, which never quotes and is untouched by this
+      # flag. This branch is reachable only from a stale or hand-crafted token.
+      #
       # The ROUTING above is deliberately not gated (see fx_quote_merchant_account) — gating
       # which account a quote is minted on would preserve a cross-account pairing Stripe
       # rejects; what is gated here is whether to attempt the quote at all.

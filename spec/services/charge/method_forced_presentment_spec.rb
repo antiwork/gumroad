@@ -348,9 +348,14 @@ describe Charge::MethodForcedPresentment do
 
     # Destination charges have never minted an FX quote in production, so quoting one is new
     # behaviour against real money and is gated on the same ramp flag as the card lane. With
-    # the flag off this lane must keep doing exactly what it does today: fall back to the
-    # canonical USD intent without calling Stripe at all.
-    it "falls back to the canonical USD intent while the ramp flag is off" do
+    # the flag off this lane withholds the quote without calling Stripe at all.
+    #
+    # Returning nil is NOT the card lane's quiet canonical-USD fallback: this is the quoted
+    # case, whose caller (Order::PreparePaymentIntentService#method_forced_presentment_required?)
+    # turns a nil presentment into a clean synchronous failure, because the buyer's token was
+    # minted on a forced-currency element and could never confirm a USD intent. That end of the
+    # contract is pinned in the prepare-service spec; here we only pin that no quote is minted.
+    it "withholds the quote without calling Stripe while the ramp flag is off" do
       allow(StripeFxQuote).to receive(:create)
 
       expect(result).to be_nil
