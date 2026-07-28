@@ -1125,6 +1125,22 @@ describe Purchase::Blockable do
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_chargeback_rate")
       end
+
+      # The pause flag alone says "system" without saying WHICH automatic check holds the account —
+      # only the comment does. If the flag could land without its comment,
+      # ReleaseChargebackRatePayoutPauseForSellerJob could read an older comment as the current
+      # reason and lift a hold that was just applied, so the two writes have to be one unit.
+      it "rolls the pause flag back when its identifying comment cannot be written" do
+        relation = seller.comments
+        allow(seller).to receive(:comments).and_return(relation)
+        allow(relation).to receive(:create).and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
+
+        expect do
+          purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+        end.to raise_error(ActiveRecord::RecordInvalid)
+
+        expect(seller.reload.payouts_paused_internally?).to be(false)
+      end
     end
 
     context "when chargeback volume is far above the threshold" do
